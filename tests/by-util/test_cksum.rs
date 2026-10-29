@@ -3960,7 +3960,7 @@ fn test_check_improperly_formatted_line_does_not_select_format() {
     // same names with a leading space.
     for f in ["a", "c"] {
         at.write(f, "tampered\n");
-        at.write(&format!(" {f}"), &format!("{f}\n"));
+        at.write(format!(" {f}"), &format!("{f}\n"));
     }
     at.write(
         "check.md5sum",
