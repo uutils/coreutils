@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) Passwd cstr fnam gecos ngroups egid
+// spell-checker:ignore (vars) Passwd cstr fnam gecos ngroups egid rgid
 
 //! Get password/group file entry
 //!
@@ -54,15 +54,14 @@ unsafe extern "C" {
     ) -> c_int;
 }
 
-/// The list of group IDs returned from GNU's `groups` and GNU's `id --groups`
-/// starts with the effective group ID (egid).
-/// This is a wrapper for `get_groups()` to mimic this behavior.
+/// The `groups=` list in `id`'s default output starts with the effective
+/// group ID (egid). This wrapper for `getgroups()` mimics that behavior.
+/// For `groups` and `id --groups`, see [`get_groups_real_gid_first`].
 ///
 /// If `arg_id` is `None` (default), `get_groups_gnu` moves the effective
 /// group id (egid) to the first entry in the returned Vector.
 /// If `arg_id` is `Some(x)`, `get_groups_gnu` moves the id with value `x`
-/// to the first entry in the returned Vector. This might be necessary
-/// for `id --groups --real` if `gid` and `egid` are not equal.
+/// to the first entry in the returned Vector.
 ///
 /// From: `<https://www.man7.org/linux/man-pages/man3/getgroups.3p.html>`
 /// > As implied by the definition of supplementary groups, the
@@ -82,6 +81,32 @@ pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<rustix::process::RawG
         .map(|g| g.into_iter().map(rustix::fs::Gid::as_raw).collect())?;
     let egid = arg_id.unwrap_or_else(|| rustix::process::getegid().as_raw());
     Ok(sort_groups(groups, egid))
+}
+
+/// The group list for `groups` and `id --groups`: real GID first, then the
+/// effective GID if different, then supplementary groups without duplicates.
+/// The `id --real` option does not affect this list.
+#[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
+pub fn get_groups_real_gid_first() -> IOResult<Vec<rustix::process::RawGid>> {
+    Ok(sort_real_gid_first(
+        rustix::process::getgid().as_raw(),
+        rustix::process::getegid().as_raw(),
+        get_groups_gnu(None)?,
+    ))
+}
+
+#[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
+fn sort_real_gid_first(rgid: gid_t, egid: gid_t, supplementary: Vec<gid_t>) -> Vec<gid_t> {
+    let mut ordered = vec![rgid];
+    if egid != rgid {
+        ordered.push(egid);
+    }
+    for group in supplementary {
+        if !ordered.contains(&group) {
+            ordered.push(group);
+        }
+    }
+    ordered
 }
 
 #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
@@ -345,6 +370,25 @@ mod test {
         assert_eq!(sort_groups(vec![1, 2, 3], 2), vec![2, 1, 3]);
         assert_eq!(sort_groups(vec![1, 2, 3], 1), vec![1, 2, 3]);
         assert_eq!(sort_groups(vec![1, 2, 3], 0), vec![0, 1, 2, 3]);
+    }
+
+    #[test]
+    #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
+    fn test_sort_real_gid_first() {
+        // The real GID must be included even when no supplementary groups exist.
+        assert_eq!(sort_real_gid_first(0, 65534, vec![]), vec![0, 65534]);
+        assert_eq!(sort_real_gid_first(0, 65534, vec![65534]), vec![0, 65534]);
+        assert_eq!(
+            sort_real_gid_first(0, 65534, vec![3, 65534, 0, 2]),
+            vec![0, 65534, 3, 2]
+        );
+        assert_eq!(sort_real_gid_first(5, 5, vec![]), vec![5]);
+        assert_eq!(sort_real_gid_first(5, 5, vec![3, 5, 4]), vec![5, 3, 4]);
+        // Both primary and supplementary group duplicates are removed.
+        assert_eq!(
+            sort_real_gid_first(1, 7, vec![7, 3, 7, 2, 3, 1, 2]),
+            vec![1, 7, 3, 2]
+        );
     }
 
     #[test]
