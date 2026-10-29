@@ -4529,9 +4529,6 @@ fn test_cp_overriding_arguments() {
         #[cfg(not(windows))]
         ("--force", "--remove-destination"),
         ("--interactive", "--no-clobber"),
-        ("--link", "--symbolic-link"),
-        #[cfg(not(target_os = "android"))]
-        ("--symbolic-link", "--link"),
         ("--dereference", "--no-dereference"),
         ("--no-dereference", "--dereference"),
     ] {
@@ -9872,4 +9869,15 @@ fn test_progressbar_inexistent_source() {
         .arg("inexistent2")
         .fails_with_code(1)
         .stderr_contains("cp: cannot stat 'inexistent1': No such file or directory");
+}
+
+#[test]
+fn test_symbolic_link_and_link_conflict() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a.txt", "a\n");
+    ucmd.args(&["-s", "-l", "a.txt", "b"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("cannot make both hard and symbolic links");
+    assert!(!at.file_exists("b"));
 }
