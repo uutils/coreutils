@@ -2938,3 +2938,20 @@ du: invalid suffix in --block-size argument '1fb'
             .stderr_is("du: invalid suffix in --block-size argument '1fb'\n");
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn test_last_of_dereference_args_no_dereference_wins() {
+    let scene = TestScenario::new(util_name!());
+    std::os::unix::fs::symlink("missing", scene.fixtures.plus("dangling")).unwrap();
+    // -P last wins: the dangling symlink argument is not dereferenced, so du succeeds.
+    scene
+        .ucmd()
+        .args(&["--dereference-args", "-P", "dangling"])
+        .succeeds();
+    // --dereference-args last wins: dereferencing the dangling argument fails.
+    scene
+        .ucmd()
+        .args(&["-P", "--dereference-args", "dangling"])
+        .fails();
+}
