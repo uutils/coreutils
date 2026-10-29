@@ -10,3 +10,4 @@ paste-help-zero-terminated = line delimiter is NUL, not newline
 # Error messages
 paste-error-delimiter-unescaped-backslash = delimiter list ends with an unescaped backslash: { $delimiters }
 paste-error-stdin-borrow = failed to access standard input: { $error }
+paste-error-file = { $file }: { $error }
