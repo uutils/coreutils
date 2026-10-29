@@ -1253,3 +1253,12 @@ fn test_header_quotes_name_with_control_char() {
         .succeeds()
         .stdout_only("==> 'tab'$'\\t''here' <==\nt\n");
 }
+
+#[test]
+fn test_invalid_overridden_byte_count_is_rejected() {
+    new_ucmd!()
+        .args(&["-c1-3", "-n1"])
+        .pipe_in("a\n")
+        .fails_with_code(1)
+        .stderr_is("head: invalid number of bytes: '1-3'\n");
+}

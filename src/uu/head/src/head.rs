@@ -20,6 +20,7 @@ use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use uucore::line_ending::LineEnding;
+use uucore::parser::count_option::{CountOption, count_option_arguments};
 use uucore::parser::parse_signed_num::number_offset;
 use uucore::parser::parse_size::ParseSizeError;
 use uucore::quoting_style::locale_aware_shell_escape;
@@ -106,22 +107,36 @@ impl SizeError {
     }
 }
 
+fn failed(
+    value: &str,
+    short: char,
+    long: &'static str,
+    key: &'static str,
+) -> impl FnOnce(ParseSizeError) -> SizeError {
+    let option = OptionValue::new(value, short, long);
+    move |error| SizeError {
+        message: translate!(key, "err" => &error),
+        option,
+        error,
+    }
+}
+
+fn validate_count_options(raw_args: &[OsString], diag_args: Option<&[OsString]>) -> UResult<()> {
+    for argument in count_option_arguments(raw_args) {
+        if let Err(error) = parse::parse_num(&argument.value) {
+            let (short, long, key) = match argument.option {
+                CountOption::Bytes => ('c', "bytes", "head-error-invalid-bytes"),
+                CountOption::Lines => ('n', "lines", "head-error-invalid-lines"),
+            };
+            let size_error = failed(&argument.value, short, long, key)(error);
+            return Err(size_error.into_error(diag_args));
+        }
+    }
+    Ok(())
+}
+
 impl Mode {
     fn from(matches: &ArgMatches) -> Result<Self, SizeError> {
-        fn failed(
-            value: &str,
-            short: char,
-            long: &'static str,
-            key: &'static str,
-        ) -> impl FnOnce(ParseSizeError) -> SizeError {
-            let option = OptionValue::new(value, short, long);
-            move |error| SizeError {
-                message: translate!(key, "err" => &error),
-                option,
-                error,
-            }
-        }
-
         if let Some(v) = matches.get_one::<String>(options::BYTES) {
             let (n, all_but_last) =
                 parse::parse_num(v).map_err(failed(v, 'c', "bytes", "head-error-invalid-bytes"))?;
@@ -578,6 +593,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let raw_args: Vec<_> = args.collect();
     // Capture before obsolete options such as `-5` are rewritten to `-n 5`.
     let diag_args = uucore::diagnostics::capture(&raw_args);
+    validate_count_options(&raw_args, diag_args.as_deref())?;
     let args: Vec<_> = arg_iterate(raw_args.into_iter())?.collect();
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let options =

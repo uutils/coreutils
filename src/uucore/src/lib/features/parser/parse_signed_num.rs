@@ -106,7 +106,9 @@ pub fn parse_signed_num_max(src: &str) -> Result<SignedNum, ParseSizeError> {
 
     // Empty string after stripping sign is an error
     if size_string.is_empty() {
-        return Err(ParseSizeError::ParseFailure(src.to_string()));
+        return Err(ParseSizeError::ParseFailure(
+            size_string.quote().to_string(),
+        ));
     }
 
     // Remove leading zeros so size is interpreted as decimal, not octal
