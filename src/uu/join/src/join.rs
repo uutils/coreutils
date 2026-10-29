@@ -1016,13 +1016,15 @@ pub fn uu_app() -> Command {
             Arg::new("check-order")
                 .long("check-order")
                 .help(translate!("join-help-check-order"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with("nocheck-order"),
         )
         .arg(
             Arg::new("nocheck-order")
                 .long("nocheck-order")
                 .help(translate!("join-help-nocheck-order"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with("check-order"),
         )
         .arg(
             Arg::new("header")
