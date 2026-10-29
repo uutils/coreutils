@@ -331,19 +331,23 @@ fn find_nth_line_from_end<R>(input: &mut R, n: u64, separator: u8) -> io::Result
 where
     R: Read + Seek,
 {
+    // Only search the data after the current position, so a partly consumed
+    // seekable input (such as a regular file used as stdin) is handled
+    // relative to where the descriptor currently stands.
+    let start_offset = input.stream_position()?;
     let file_size = input.seek(SeekFrom::End(0))?;
 
     let mut buffer = [0u8; BUF_SIZE];
 
     let mut lines = 0u64;
     let mut check_last_byte_first_loop = true;
-    let mut bytes_remaining_to_search = file_size;
+    let mut bytes_remaining_to_search = file_size - start_offset;
 
     loop {
         // the casts here are ok, `buffer.len()` should never be above a few k
         let bytes_to_read_this_loop =
             bytes_remaining_to_search.min(buffer.len().try_into().unwrap());
-        let read_start_offset = bytes_remaining_to_search - bytes_to_read_this_loop;
+        let read_start_offset = start_offset + bytes_remaining_to_search - bytes_to_read_this_loop;
         let buffer = &mut buffer[..bytes_to_read_this_loop.try_into().unwrap()];
         bytes_remaining_to_search -= bytes_to_read_this_loop;
 
@@ -359,8 +363,8 @@ where
             check_last_byte_first_loop = false;
             if buffer.last().is_some_and(|&b| b != separator) {
                 if n == 0 {
-                    input.rewind()?;
-                    return Ok(file_size);
+                    input.seek(SeekFrom::Start(start_offset))?;
+                    return Ok(file_size - start_offset);
                 }
                 assert_eq!(lines, 0);
                 lines = 1;
@@ -370,14 +374,15 @@ where
         for separator_offset in memrchr_iter(separator, &buffer[..]) {
             lines += 1;
             if lines > n {
-                input.rewind()?;
+                input.seek(SeekFrom::Start(start_offset))?;
                 return Ok(read_start_offset
                     + TryInto::<u64>::try_into(separator_offset).unwrap()
-                    + 1);
+                    + 1
+                    - start_offset);
             }
         }
-        if read_start_offset == 0 {
-            input.rewind()?;
+        if read_start_offset == start_offset {
+            input.seek(SeekFrom::Start(start_offset))?;
             return Ok(0);
         }
     }
@@ -412,11 +417,14 @@ fn head_backwards_without_seek_file(input: &mut File, options: &HeadOptions) -> 
 fn head_backwards_on_seekable_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
     match options.mode {
         Mode::AllButLastBytes(n) => {
-            let size = input.metadata()?.len();
-            if n >= size {
+            let start_offset = input.stream_position()?;
+            let size = input.seek(SeekFrom::End(0))?;
+            let remaining = size - start_offset;
+            input.seek(SeekFrom::Start(start_offset))?;
+            if n >= remaining {
                 Ok(0)
             } else {
-                print_n_bytes(input, size - n)
+                print_n_bytes(input, remaining - n)
             }
         }
         Mode::AllButLastLines(n) => {
@@ -767,6 +775,19 @@ mod tests {
             find_nth_line_from_end(&mut input, lines_in_input_file + 1000, b'\n').unwrap(),
             0
         );
+    }
+
+    #[test]
+    fn test_find_nth_line_from_end_respects_current_position() {
+        let mut input = Cursor::new(b"header\nx\ny\n".to_vec());
+        input.seek(SeekFrom::Start(7)).unwrap();
+
+        assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 4);
+        assert_eq!(input.stream_position().unwrap(), 7);
+        assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 2);
+        assert_eq!(input.stream_position().unwrap(), 7);
+        assert_eq!(find_nth_line_from_end(&mut input, 2, b'\n').unwrap(), 0);
+        assert_eq!(input.stream_position().unwrap(), 7);
     }
 
     #[test]
