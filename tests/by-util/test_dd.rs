@@ -1554,7 +1554,7 @@ fn test_seekable_stdout_without_of_is_not_truncated() {
 fn test_failed_truncate_is_reported_and_copy_goes_on() {
     use rustix::fs::{MemfdFlags, SealFlags, fcntl_add_seals, memfd_create};
 
-    // A memfd sealed against shrinking to a smaller size fails
+    // A memfd sealed against shrinking: truncating it to a smaller size fails
     // with EPERM, while writes inside the existing size still work.
     let fd = memfd_create("out", MemfdFlags::ALLOW_SEALING).unwrap();
     let memfd = File::from(fd);
