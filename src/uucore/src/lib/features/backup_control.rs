@@ -402,11 +402,29 @@ pub fn get_backup_path<S: AsRef<OsStr>>(
     backup_path: &Path,
     suffix: S,
 ) -> Option<PathBuf> {
+    // `symlink_metadata`, not `exists()`: a dangling symlink still takes the
+    // name, and a live one whose target cannot be stat'd is not missing.
+    get_backup_path_with_exists(backup_mode, backup_path, suffix, |path| {
+        fs::symlink_metadata(path).is_ok()
+    })
+}
+
+/// [`get_backup_path`], with `exists` telling whether a candidate name is taken.
+pub fn get_backup_path_with_exists<S: AsRef<OsStr>>(
+    backup_mode: BackupMode,
+    backup_path: &Path,
+    suffix: S,
+    mut exists: impl FnMut(&Path) -> bool,
+) -> Option<PathBuf> {
     match backup_mode {
         BackupMode::None => None,
         BackupMode::Simple => Some(simple_backup_path(backup_path, suffix.as_ref())),
-        BackupMode::Numbered => Some(numbered_backup_path(backup_path)),
-        BackupMode::Existing => Some(existing_backup_path(backup_path, suffix.as_ref())),
+        BackupMode::Numbered => Some(numbered_backup_path(backup_path, &mut exists)),
+        BackupMode::Existing => Some(existing_backup_path(
+            backup_path,
+            suffix.as_ref(),
+            &mut exists,
+        )),
     }
 }
 
@@ -416,25 +434,25 @@ fn simple_backup_path<S: AsRef<OsStr>>(path: &Path, suffix: S) -> PathBuf {
     path.with_file_name(file_name)
 }
 
-fn numbered_backup_path(path: &Path) -> PathBuf {
+fn numbered_backup_path(path: &Path, exists: &mut impl FnMut(&Path) -> bool) -> PathBuf {
     let mut i: u64 = 1;
     loop {
         let new_path = simple_backup_path(path, OsString::from(format!(".~{i}~")));
-        // Use `symlink_metadata` rather than `exists()` so that a dangling
-        // symlink still counts as an existing backup (avoiding a silent
-        // overwrite), and so we do not report a live symlink as missing when
-        // the target cannot be stat'd.
-        if fs::symlink_metadata(&new_path).is_err() {
+        if !exists(&new_path) {
             return new_path;
         }
         i += 1;
     }
 }
 
-fn existing_backup_path<S: AsRef<OsStr>>(path: &Path, suffix: S) -> PathBuf {
+fn existing_backup_path<S: AsRef<OsStr>>(
+    path: &Path,
+    suffix: S,
+    exists: &mut impl FnMut(&Path) -> bool,
+) -> PathBuf {
     let test_path = simple_backup_path(path, OsString::from(".~1~"));
-    if fs::symlink_metadata(&test_path).is_ok() {
-        return numbered_backup_path(path);
+    if exists(&test_path) {
+        return numbered_backup_path(path, exists);
     }
     simple_backup_path(path, suffix.as_ref())
 }
@@ -676,14 +694,21 @@ mod tests {
 
     #[test]
     fn test_numbered_backup_path() {
-        assert_eq!(numbered_backup_path(Path::new("")), PathBuf::from(".~1~"));
-        assert_eq!(numbered_backup_path(Path::new("/")), PathBuf::from("/.~1~"));
+        let mut exists = |path: &Path| fs::symlink_metadata(path).is_ok();
         assert_eq!(
-            numbered_backup_path(Path::new("/hello/world")),
+            numbered_backup_path(Path::new(""), &mut exists),
+            PathBuf::from(".~1~")
+        );
+        assert_eq!(
+            numbered_backup_path(Path::new("/"), &mut exists),
+            PathBuf::from("/.~1~")
+        );
+        assert_eq!(
+            numbered_backup_path(Path::new("/hello/world"), &mut exists),
             PathBuf::from("/hello/world.~1~")
         );
         assert_eq!(
-            numbered_backup_path(Path::new("/hello/world/")),
+            numbered_backup_path(Path::new("/hello/world/"), &mut exists),
             PathBuf::from("/hello/world.~1~")
         );
     }

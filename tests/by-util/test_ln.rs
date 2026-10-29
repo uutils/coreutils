@@ -141,6 +141,35 @@ fn test_symlink_overwrite_force() {
     assert_eq!(at.resolve_link(link), file_b);
 }
 
+/// Replacing a link needs write and search permission on its directory, like
+/// creating one, not read permission.
+#[test]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "netbsd"
+))]
+fn test_symlink_overwrite_force_in_write_search_only_dir() {
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::PermissionsExt;
+
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.symlink_file("old", "dir/link");
+    set_permissions(at.plus("dir"), Permissions::from_mode(0o300)).unwrap();
+
+    let result = ucmd.args(&["-sf", "new", "dir/link"]).run();
+
+    set_permissions(at.plus("dir"), Permissions::from_mode(0o755)).unwrap();
+    result.success();
+    assert_eq!(at.resolve_link("dir/link"), "new");
+}
+
 /// A forced replace must be atomic, so a concurrent creator always loses.
 /// Fails reliably if unlink-then-create ever comes back.
 #[test]
@@ -632,6 +661,96 @@ fn test_symlink_target_dir_non_utf8_source_name() {
     let created_link_target = fs::read_link(&created_link_path)
         .expect("reading created symlink target in target directory");
     assert_eq!(created_link_target.as_os_str().as_bytes(), source_bytes);
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: ln makes links by path, not through the open directory"
+)]
+fn test_target_dir_renamed_during_prompt() {
+    use std::process::Stdio;
+
+    for (flags, backup) in [
+        (vec!["-s", "-i"], None),
+        #[cfg(not(target_os = "android"))] // no hard links on Android
+        (vec!["-i"], None),
+        (vec!["-s", "-r", "-i"], None),
+        (vec!["-s", "-i", "--backup=simple"], Some("~")),
+        (vec!["-s", "-i", "--backup=numbered"], Some(".~2~")),
+        (vec!["-s", "-i", "--backup=existing"], Some(".~2~")),
+    ] {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir("dir");
+        at.mkdir("other");
+        at.write("a", "new a");
+        at.write("b", "new b");
+        at.write("c", "new c");
+        at.write("dir/a", "old a");
+        at.write("dir/b", "old b");
+        at.write("dir/b.~1~", "first backup");
+        at.write("other/b", "untouched");
+
+        let mut child = scene
+            .ucmd()
+            .args(&flags)
+            .args(&["-t", "dir", "a", "b", "c"])
+            .set_stdin(Stdio::piped())
+            .set_stderr(Stdio::piped())
+            .run_no_wait();
+        let prompt = "ln: replace 'dir/a'? ";
+        assert_eq!(child.stderr_exact_bytes(prompt.len()), prompt.as_bytes());
+
+        // Change the pathname while ln is waiting, then process another source.
+        at.rename("dir", "moved");
+        at.relative_symlink_dir("other", "dir");
+        child.write_in("y\n");
+        let prompt = "ln: replace 'dir/b'? ";
+        assert_eq!(child.stderr_exact_bytes(prompt.len()), prompt.as_bytes());
+        child.write_in("y\n");
+        child.wait().unwrap().success();
+
+        for name in ["a", "b", "c"] {
+            if flags.contains(&"-s") {
+                let expected = if flags.contains(&"-r") {
+                    format!("../{name}")
+                } else {
+                    name.to_owned()
+                };
+                assert_eq!(at.resolve_link(&format!("moved/{name}")), expected);
+            } else {
+                assert_eq!(at.read(&format!("moved/{name}")), format!("new {name}"));
+            }
+        }
+        if let Some(suffix) = backup {
+            assert_eq!(at.read(&format!("moved/b{suffix}")), "old b");
+            assert_eq!(at.read("moved/b.~1~"), "first backup");
+        }
+        assert_eq!(at.read("other/b"), "untouched");
+        assert!(!at.file_exists("other/a"));
+        assert_eq!(std::fs::read_dir(at.plus("other")).unwrap().count(), 1);
+    }
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_target_dir_backup_source_without_basename() {
+    for source in [".", "..", "nested/.."] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("destination");
+        at.mkdir("nested");
+        at.write("destination/kept", "unchanged");
+        ucmd.args(&["-s", "--backup=existing", source, "destination"])
+            .timeout(Duration::from_secs(10))
+            .fails();
+        assert_eq!(at.read("destination/kept"), "unchanged");
+        assert_eq!(
+            std::fs::read_dir(at.plus("destination")).unwrap().count(),
+            1
+        );
+    }
 }
 
 #[test]
