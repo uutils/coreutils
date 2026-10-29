@@ -15,6 +15,7 @@ use crate::options::{
     FROM_UNIT_DEFAULT, FormatOptions, GROUPING, HEADER, HEADER_DEFAULT, INVALID, InvalidModes,
     NUMBER, NumfmtOptions, OptionValueError, PADDING, ParseError, ROUND, RoundMethod, SUFFIX, TO,
     TO_DEFAULT, TO_UNIT, TO_UNIT_DEFAULT, TransformOptions, UNIT_SEPARATOR, ZERO_TERMINATED,
+    match_enum_value,
 };
 use crate::units::{Result, Unit};
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, parser::ValueSource};
@@ -236,22 +237,42 @@ fn handle_buffer_to<R: BufRead>(
 }
 
 fn parse_unit(s: &str, opt: &'static str) -> std::result::Result<Unit, ParseError> {
-    match s {
-        "auto" if opt != TO => Ok(Unit::Auto),
-        "si" => Ok(Unit::Si),
-        "iec" => Ok(Unit::Iec(false)),
-        "iec-i" => Ok(Unit::Iec(true)),
-        "none" => Ok(Unit::None),
-        value => Err(OptionValueError {
-            message: translate!("numfmt-error-invalid-unit-argument", "arg" => value, "opt" => format!("--{opt}")),
+    let units: &[(&str, Unit)] = if opt == TO {
+        &[
+            ("si", Unit::Si),
+            ("iec", Unit::Iec(false)),
+            ("iec-i", Unit::Iec(true)),
+            ("none", Unit::None),
+        ]
+    } else {
+        &[
+            ("auto", Unit::Auto),
+            ("si", Unit::Si),
+            ("iec", Unit::Iec(false)),
+            ("iec-i", Unit::Iec(true)),
+            ("none", Unit::None),
+        ]
+    };
+
+    match match_enum_value(s, units) {
+        Some(unit) => Ok(unit),
+        None => Err(OptionValueError {
+            message: translate!("numfmt-error-invalid-unit-argument", "arg" => s, "opt" => format!("--{opt}")),
             option: opt,
-            value: value.to_string(),
+            value: s.to_string(),
             // `auto` is a real unit, just not one --to can scale to.
-            label: (value == "auto").then_some("numfmt-diag-label-auto-from-only"),
+            label: (s == "auto").then_some("numfmt-diag-label-auto-from-only"),
             help: "numfmt-diag-help-unit",
         }
         .into()),
     }
+}
+
+/// Resolve an `--invalid` value, accepting any unambiguous prefix.
+fn parse_invalid_mode(s: &str) -> std::result::Result<String, String> {
+    InvalidModes::canonical(s)
+        .map(str::to_string)
+        .ok_or_else(|| translate!("numfmt-error-unknown-invalid-mode", "mode" => s.to_lowercase()))
 }
 
 /// Parses a unit size. Suffixes are turned into their integer representations. For example, 'K'
@@ -697,7 +718,7 @@ pub fn uu_app() -> Command {
                 .long(INVALID)
                 .help(translate!("numfmt-help-invalid"))
                 .default_value("abort")
-                .value_parser(["abort", "fail", "warn", "ignore"])
+                .value_parser(ValueParser::new(parse_invalid_mode))
                 .value_name("INVALID")
                 .allow_hyphen_values(true),
         )
