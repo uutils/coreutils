@@ -90,7 +90,12 @@ impl Iterator for ReverseChunks<'_> {
             .file
             .seek(SeekFrom::Current(-(block_size as i64)))
             .unwrap();
-        self.file.read_exact(&mut buf).unwrap();
+        // The file may have been truncated after its size was measured. In
+        // that case treat the end of the data as the start of the file instead
+        // of panicking; GNU tail exits successfully in the same situation.
+        if self.file.read_exact(&mut buf).is_err() {
+            return None;
+        }
         let pos2 = self
             .file
             .seek(SeekFrom::Current(-(block_size as i64)))
@@ -623,7 +628,39 @@ impl LinesChunkBuffer {
 
 #[cfg(test)]
 mod tests {
-    use crate::chunks::{BUFFER_SIZE, BytesChunk};
+    use crate::chunks::{BLOCK_SIZE, BUFFER_SIZE, BytesChunk, ReverseChunks};
+    use std::io::Write;
+
+    #[test]
+    fn test_reverse_chunks_stops_gracefully_when_file_is_truncated() {
+        let path = std::env::temp_dir().join(format!(
+            "uutils-tail-reverse-chunks-truncated-{}",
+            std::process::id()
+        ));
+        {
+            let mut file = std::fs::File::create(&path).unwrap();
+            file.write_all(&vec![b'a'; BLOCK_SIZE as usize + 1])
+                .unwrap();
+        }
+
+        let mut file = std::fs::File::open(&path).unwrap();
+        let mut chunks = ReverseChunks::new(&mut file);
+        assert!(chunks.next().is_some());
+
+        // Truncate through a second handle while the iterator still holds its
+        // previously measured size, then make sure the next read stops instead
+        // of panicking.
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_len(0)
+            .unwrap();
+        assert!(chunks.next().is_none());
+
+        drop(chunks);
+        let _ = std::fs::remove_file(&path);
+    }
 
     #[test]
     fn test_bytes_chunk_from_when_offset_is_zero() {
