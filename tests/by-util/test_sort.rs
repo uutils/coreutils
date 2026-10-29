@@ -2192,7 +2192,7 @@ fn test_separator_attached_equals_double() {
     new_ucmd!()
         .args(&["-t==", "-k", "2"])
         .fails()
-        .stderr_contains("separator must be exactly one character long: '=='");
+        .stderr_only("sort: multi-character tab '=='\n");
 }
 
 #[test]
@@ -2201,7 +2201,7 @@ fn test_separator_attached_equals_multi_char() {
     new_ucmd!()
         .args(&["-t=a", "-k", "2"])
         .fails()
-        .stderr_contains("separator must be exactly one character long: '=a'");
+        .stderr_only("sort: multi-character tab '=a'\n");
 }
 
 #[rstest]
@@ -4279,4 +4279,28 @@ fn test_debug_incompatible_with_output() {
         .fails_with_code(2)
         .stderr_only("sort: options '-o --debug' are incompatible\n");
     assert!(!at.file_exists("out"));
+}
+
+#[test]
+fn test_separator_errors_match_gnu() {
+    // Found with behave (https://github.com/emirmrkaljevic/behave): GNU prints
+    // these without the "Try --help" hint.
+    new_ucmd!()
+        .args(&["-t", "ab"])
+        .fails_with_code(2)
+        .stderr_only("sort: multi-character tab 'ab'\n");
+    new_ucmd!()
+        .args(&["-t", ""])
+        .fails_with_code(2)
+        .stderr_only("sort: empty tab\n");
+}
+
+#[test]
+fn test_check_extra_operand_has_no_usage_hint() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "x\n");
+    at.write("b", "y\n");
+    ucmd.args(&["-c", "a", "b"])
+        .fails_with_code(2)
+        .stderr_only("sort: extra operand 'b' not allowed with -c\n");
 }
