@@ -938,6 +938,49 @@ fn test_empty_tmpdir_env_var() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+fn test_empty_tmpdir_env_var_with_template() {
+    #[cfg(not(any(windows, target_os = "android")))]
+    {
+        let scene = TestScenario::new(util_name!());
+        let pathname = scene.fixtures.as_string();
+
+        // An empty `$TMPDIR` must be treated as unset, so `-t` and
+        // `--tmpdir` fall back to the system default temporary directory.
+        for args in [
+            vec!["-t", TEST_TEMPLATE1],
+            vec!["--tmpdir", TEST_TEMPLATE1],
+            vec!["-d", "-t", TEST_TEMPLATE1],
+        ] {
+            let result = scene.ucmd().env(TMPDIR, "").args(&args).succeeds();
+            let path = PathBuf::from(result.stdout_str().trim());
+            assert!(
+                path.starts_with("/tmp"),
+                "expected a path under /tmp, got {path:?}",
+            );
+            if args.contains(&"-d") {
+                let _ = std::fs::remove_dir(&path);
+            } else {
+                let _ = std::fs::remove_file(&path);
+            }
+        }
+
+        // `-p` must take precedence over the empty `$TMPDIR`.
+        let result = scene
+            .ucmd()
+            .env(TMPDIR, "")
+            .args(&["-p", &pathname, "-t", TEST_TEMPLATE1])
+            .succeeds();
+        let path = PathBuf::from(result.stdout_str().trim());
+        assert!(
+            path.starts_with(&pathname),
+            "expected a path under {pathname}, got {path:?}",
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+}
+
+#[test]
 fn test_nonexistent_dir_prefix() {
     #[cfg(not(windows))]
     new_ucmd!().arg("d/XXX").fails().stderr_only(
