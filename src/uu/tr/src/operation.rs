@@ -219,8 +219,12 @@ pub enum Sequence {
 
 /// Initialise the process locale from the environment, so the C library
 /// classification functions below see the locale the user asked for. This
-/// follows the pattern `dd` already uses for its case tables.
-#[cfg(not(target_os = "wasi"))]
+/// follows the pattern `dd` already uses for its case tables. Windows is
+/// left out on purpose: there setlocale with an empty string selects the
+/// user's ANSI code page, which makes the C library classify high bytes
+/// and changes long standing ASCII only behaviour, breaking existing
+/// tests. Windows therefore keeps the previous behaviour.
+#[cfg(not(any(target_os = "wasi", target_os = "windows")))]
 fn init_locale() {
     // SAFETY: setlocale is called with a valid C string, as in `dd`.
     unsafe {
@@ -228,7 +232,7 @@ fn init_locale() {
     }
 }
 
-#[cfg(target_os = "wasi")]
+#[cfg(any(target_os = "wasi", target_os = "windows"))]
 fn init_locale() {}
 
 /// Whether a high byte belongs to a class in the current locale, using the
