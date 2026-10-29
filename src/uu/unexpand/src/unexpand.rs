@@ -511,10 +511,13 @@ fn unexpand_buf(
     // We can only fast forward if we don't need to calculate col/scol
     if let Some(b'\n') = buf.last() {
         // Fast path: if we're not converting all spaces (-a flag not set)
-        // and the line doesn't start with spaces, just write it directly
+        // and the line doesn't start with spaces, just write it directly. In
+        // UTF-8 mode a leading multibyte char may be a blank, so it needs the
+        // general loop.
         if !options.aflag
             && !buf.is_empty()
-            && ((buf[0] != b' ' && buf[0] != b'\t') || !print_state.leading)
+            && (!print_state.leading
+                || (buf[0] != b' ' && buf[0] != b'\t' && (buf[0].is_ascii() || !options.utf8)))
         {
             write_tabs(output, tab_config, print_state, options.aflag)?;
             print_state.scol = print_state.col;
