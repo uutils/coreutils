@@ -31,7 +31,7 @@ use crate::input_decoder::{InputDecoder, MemoryDecoder};
 use crate::input_offset::{InputOffset, Radix};
 use crate::multifile_reader::{HasError, InputSource, MultifileReader};
 use crate::output_info::OutputInfo;
-use crate::parse_formats::{ParsedFormatterItemInfo, parse_format_flags};
+use crate::parse_formats::{ParsedFormatterItemInfo, has_type_option, parse_format_flags};
 use crate::parse_inputs::{CommandLineInputs, parse_inputs};
 use crate::parse_nrofbytes::{parse_number_of_bytes, parse_width};
 use crate::partial_reader::PartialReader;
@@ -195,6 +195,13 @@ impl OdOptions {
         let read_bytes = parse_bytes_option(matches, args, diag_args, options::READ_BYTES, 'N')?;
 
         let strings = parse_bytes_option(matches, args, diag_args, options::STRINGS, 'S')?;
+        if strings.is_some() && has_type_option(args) {
+            return Err(USimpleError::new(
+                1,
+                translate!("od-error-no-type-with-strings"),
+            ));
+        }
+
         let string_min_length = match strings {
             None => None,
             Some(n) => Some(usize::try_from(n).map_err(|_| {

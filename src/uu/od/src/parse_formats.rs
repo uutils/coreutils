@@ -164,6 +164,32 @@ pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo
     Ok(formats)
 }
 
+/// Returns whether any output type was requested on the command line, either via
+/// \`-t\`/\`--format\` or one of the traditional format flags (\`-c\`, \`-x\`, ...).
+pub fn has_type_option(args: &[String]) -> bool {
+    for arg in args.iter().skip(1) {
+        if arg.starts_with("--") {
+            if arg.len() == 2 {
+                break;
+            }
+            if arg.starts_with("--format") {
+                return true;
+            }
+        } else if arg.starts_with('-') {
+            for c in arg.chars().skip(1) {
+                if od_argument_with_option(c) {
+                    break;
+                }
+                if c == 't' || od_argument_traditional_format(c).is_some() {
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
+}
+
 #[derive(PartialEq, Eq, Debug, Copy, Clone)]
 enum FormatType {
     Ascii,
