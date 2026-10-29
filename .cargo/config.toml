@@ -10,6 +10,9 @@ linker = "x86_64-unknown-redox-gcc"
 linker = "aarch64-linux-gnu-gcc"
 [target.riscv64gc-unknown-linux-musl]
 rustflags = ["-C", "target-feature=+crt-static"]
+[target.i686-unknown-linux-musl]
+linker = "musl-gcc"
+rustflags = ["-C", "target-feature=+crt-static"]
 [target.'cfg(target_env = "msvc")']
 rustflags = ["-C", "target-feature=+crt-static"]
 
