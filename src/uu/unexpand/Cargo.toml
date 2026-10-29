@@ -21,7 +21,7 @@ fluent = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true }
 
-[target.'cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))'.dependencies]
+[target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["fs"] }
 
 [dev-dependencies]

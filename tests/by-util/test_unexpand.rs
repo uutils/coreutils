@@ -469,3 +469,21 @@ fn test_buffered_read_edgecase_behaviour() {
             .stdout_only(String::from_utf8(expected).unwrap());
     }
 }
+
+/// Interactive / line-at-a-time stdin must show each unexpanded line before the
+/// next input arrives.
+#[cfg(unix)]
+#[test]
+fn test_stdin_tty_flushes_each_line() {
+    let mut child = new_ucmd!()
+        .args(&["-t3"])
+        .set_stdin(std::process::Stdio::piped())
+        .set_stdout(std::process::Stdio::piped())
+        .run_no_wait();
+
+    // three leading spaces -> one tab at tabstop 3
+    child.write_in(b"   a\n");
+    assert_eq!(&child.stdout_exact_bytes(3), b"\ta\n");
+
+    child.wait().unwrap().success();
+}

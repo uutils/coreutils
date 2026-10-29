@@ -468,3 +468,23 @@ fn test_buffered_reads_new_line_no_tabs_in_first_chunk() {
         .succeeds()
         .stdout_is_fixture("new_line_in_chunk_expected.txt");
 }
+
+/// Interactive / line-at-a-time stdin must show each expanded line before the
+/// next input arrives. `BufWriter` alone only flushes on exit.
+#[cfg(unix)]
+#[test]
+fn test_stdin_tty_flushes_each_line() {
+    let mut child = new_ucmd!()
+        .args(&["-t3"])
+        .set_stdin(std::process::Stdio::piped())
+        .set_stdout(std::process::Stdio::piped())
+        .run_no_wait();
+
+    child.write_in(b"\ta\n");
+    assert_eq!(&child.stdout_exact_bytes(5), b"   a\n");
+
+    child.write_in(b"b\tc\n");
+    assert_eq!(&child.stdout_exact_bytes(5), b"b  c\n");
+
+    child.wait().unwrap().success();
+}
