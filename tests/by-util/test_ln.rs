@@ -1511,3 +1511,12 @@ fn test_hard_link_force_failed_link_keeps_destination() {
     assert!(at.file_exists("dst"));
     assert_eq!(at.read("dst"), "keep\n");
 }
+
+#[test]
+fn test_verbose_hard_link_uses_double_arrow() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    ucmd.args(&["-v", "a", "l"])
+        .succeeds()
+        .stdout_only("'l' => 'a'\n");
+}

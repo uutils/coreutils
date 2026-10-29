@@ -517,7 +517,9 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
 
     if settings.verbose {
         let mut out = stdout();
-        write!(out, "{} -> {}", dst.quote(), source.quote())?;
+        // GNU uses `=>` for hard links and `->` only for symbolic links.
+        let arrow = if settings.symbolic { "->" } else { "=>" };
+        write!(out, "{} {arrow} {}", dst.quote(), source.quote())?;
         match backup_path {
             Some(path) => writeln!(
                 out,
