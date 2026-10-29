@@ -183,14 +183,18 @@ pub fn uu_app() -> Command {
             Arg::new(options::BSD_COMPATIBLE)
                 .short('r')
                 .help(translate!("sum-help-bsd-compatible"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                // GNU: whichever of -r/-s comes last wins.
+                .overrides_with(options::SYSTEM_V_COMPATIBLE),
         )
         .arg(
             Arg::new(options::SYSTEM_V_COMPATIBLE)
                 .short('s')
                 .long(options::SYSTEM_V_COMPATIBLE)
                 .help(translate!("sum-help-sysv-compatible"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                // GNU: whichever of -r/-s comes last wins.
+                .overrides_with(options::BSD_COMPATIBLE),
         )
 }
 

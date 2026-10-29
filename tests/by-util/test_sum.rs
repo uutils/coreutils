@@ -149,3 +149,19 @@ fn test_repeated_flags_are_accepted() {
         .succeeds()
         .stdout_only("1126 1\n");
 }
+
+#[test]
+fn test_last_of_r_s_wins() {
+    // https://github.com/uutils/coreutils/issues/15986
+    // GNU uses whichever of -r (BSD) and -s (System V) comes last.
+    new_ucmd!()
+        .args(&["-s", "-r"])
+        .pipe_in("hello world\n")
+        .succeeds()
+        .stdout_only("03762     1\n");
+    new_ucmd!()
+        .args(&["-r", "-s"])
+        .pipe_in("hello world\n")
+        .succeeds()
+        .stdout_only("1126 1\n");
+}
