@@ -7,6 +7,7 @@
 
 use rstest::rstest;
 use uucore::display::Quotable;
+use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
 #[test]
@@ -429,7 +430,6 @@ fn test_read_error() {
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_expand_non_utf8_paths() {
     use std::os::unix::ffi::OsStringExt;
-    use uutests::at_and_ucmd;
 
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -467,4 +467,68 @@ fn test_buffered_reads_new_line_no_tabs_in_first_chunk() {
         .args(&["new_line_in_chunk.txt"])
         .succeeds()
         .stdout_is_fixture("new_line_in_chunk_expected.txt");
+}
+
+#[test]
+fn test_line_continues_into_next_file() {
+    // The first file does not end in a newline, so the tab in the second
+    // file is at column 1 of the same line.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f1", "a");
+    at.write("f2", "\tb\n");
+    ucmd.args(&["f1", "f2"]).succeeds().stdout_is("a       b\n");
+
+    // With -i, that tab follows a non-blank, so it is not converted.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f1", "a");
+    at.write("f2", "\tb\n");
+    ucmd.args(&["-i", "f1", "f2"])
+        .succeeds()
+        .stdout_is("a\tb\n");
+}
+
+#[test]
+fn test_tab_after_chunk_without_newline() {
+    // The first 8 KiB read has no tab and no newline. The tab after it must
+    // be expanded from its real column (8193), not from the read boundary.
+    let line = "a".repeat(8190) + "bcd";
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", &format!("{line}\tx\n"));
+    ucmd.args(&["-t3", "in"])
+        .succeeds()
+        .stdout_is(format!("{line}   x\n"));
+
+    // With -i, a tab starting the second read still follows non-blanks on
+    // the same line, so it is not converted.
+    let line = "a".repeat(8192);
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", &format!("{line}\tx\n"));
+    ucmd.args(&["-i", "in"])
+        .succeeds()
+        .stdout_is(format!("{line}\tx\n"));
+}
+
+#[test]
+fn test_tab_after_chunk_ending_in_wide_chars() {
+    // The first 8 KiB read has no tab and ends with three U+4E2D (3 bytes,
+    // width 2 each). The tab after them is at column 6, not 9.
+    let first = "x".repeat(8192 - 1 - 9);
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", &format!("{first}\n\u{4E2D}\u{4E2D}\u{4E2D}\t|\n"));
+    ucmd.arg("in")
+        .succeeds()
+        .stdout_is(format!("{first}\n\u{4E2D}\u{4E2D}\u{4E2D}  |\n"));
+}
+
+#[test]
+fn test_line_continues_past_unreadable_file() {
+    // A file that cannot be read does not end the line started before it.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f1", "a");
+    at.mkdir("dir");
+    at.write("f2", "\tb\n");
+    ucmd.args(&["f1", "dir", "f2"])
+        .fails()
+        .stdout_is("a       b\n")
+        .stderr_contains("expand: dir: Is a directory");
 }
