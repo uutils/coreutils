@@ -7,9 +7,9 @@
 
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
-use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd};
 
 #[test]
 fn test_invalid_arg() {
@@ -318,4 +318,12 @@ mod diagnostics {
         assert!(stderr.starts_with("mkfifo: "), "{stderr}");
         assert!(!stderr.contains(":1:"), "{stderr}");
     }
+}
+
+#[test]
+fn test_mode_negative_value() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-m", "-1", "f"]).succeeds();
+    // A FIFO is not a regular file, so check plain path existence.
+    assert!(at.plus("f").exists());
 }
