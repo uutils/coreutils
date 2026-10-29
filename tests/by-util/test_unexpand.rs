@@ -498,3 +498,12 @@ fn test_buffered_read_edgecase_behaviour() {
             .stdout_only(String::from_utf8(expected).unwrap());
     }
 }
+
+#[test]
+fn test_first_only_given_twice() {
+    new_ucmd!()
+        .args(&["--first-only", "--first-only"])
+        .pipe_in("a\n")
+        .succeeds()
+        .stdout_is("a\n");
+}
