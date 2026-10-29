@@ -678,6 +678,35 @@ fn test_validate_stdin_offset_lines() {
         .set_stdin(file_shadow)
         .succeeds()
         .stdout_only_fixture(seq_1001_20000_file_name);
+
+    // Test 4 - All but the last n lines of a large file whose stdin offset is
+    // already past the first line.
+    scene
+        .cmd("seq")
+        .args(&["2", "1000"])
+        .set_stdout(fixtures.make_file("seq_2_1000"))
+        .succeeds();
+    scene
+        .cmd("seq")
+        .args(&["1001", "20000"])
+        .set_stdout(fixtures.make_file("seq_1001_20000_offset"))
+        .succeeds();
+    let file = fixtures.open(seq_20000_file_name);
+    let mut file_shadow = file.try_clone().unwrap();
+    let mut first_line = [0u8; 2];
+    file_shadow.read_exact(&mut first_line).unwrap();
+    assert_eq!(&first_line, b"1\n");
+    scene
+        .ucmd()
+        .args(&["-n", "-19000"])
+        .set_stdin(file)
+        .succeeds()
+        .stdout_only_fixture("seq_2_1000");
+    scene
+        .cmd("cat")
+        .set_stdin(file_shadow)
+        .succeeds()
+        .stdout_only_fixture("seq_1001_20000_offset");
 }
 
 #[cfg(all(
@@ -807,6 +836,36 @@ fn test_validate_stdin_offset_bytes() {
         .set_stdin(file_shadow)
         .succeeds()
         .stdout_only_fixture(seq_19001_20000_file_name);
+
+    // Test 5 - All but the last n bytes of a large file whose stdin offset is
+    // already past the first line.
+    scene
+        .cmd("seq")
+        .args(&["2", "10000"])
+        .set_stdout(fixtures.make_file("seq_2_10000"))
+        .succeeds();
+    scene
+        .cmd("seq")
+        .args(&["10001", "20000"])
+        .set_stdout(fixtures.make_file("seq_10001_20000"))
+        .succeeds();
+    let file = fixtures.open(seq_20000_file_name);
+    let mut file_shadow = file.try_clone().unwrap();
+    let mut first_line = [0u8; 2];
+    file_shadow.read_exact(&mut first_line).unwrap();
+    assert_eq!(&first_line, b"1\n");
+    let suffix_length = fixtures.open("seq_10001_20000").metadata().unwrap().len();
+    scene
+        .ucmd()
+        .args(&["-c", &format!("-{suffix_length}")])
+        .set_stdin(file)
+        .succeeds()
+        .stdout_only_fixture("seq_2_10000");
+    scene
+        .cmd("cat")
+        .set_stdin(file_shadow)
+        .succeeds()
+        .stdout_only_fixture("seq_10001_20000");
 }
 
 #[cfg(all(
