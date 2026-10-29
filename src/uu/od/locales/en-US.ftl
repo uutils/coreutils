@@ -45,6 +45,7 @@ od-error-invalid-endian = Invalid argument --endian={$endian}
 od-error-invalid-inputs = Invalid inputs: {$msg}
 od-error-too-large = value is too large
 od-error-radix-invalid = Radix must be one of [o, d, x, n], got: {$radix}
+od-error-no-type-with-strings = no type may be specified when dumping strings
 od-error-radix-empty = Radix cannot be empty, and must be one of [o, d, x, n]
 od-error-invalid-width = invalid width {$width}; using {$min} instead
 od-error-missing-format-spec = missing format specification after '--format' / '-t'
