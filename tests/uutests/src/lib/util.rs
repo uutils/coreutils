@@ -3,9 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty openpt grantpt unlockpt ptsname tcsetwinsize CLOEXEC RDWR SETFD
-// spell-checker:ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV SIGXFSZ EFBIG sigbus tmpfs mksocket
-// spell-checker:ignore (ToDO) ttyname
+// spell-checker:ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized SETFD
+// spell-checker:ignore (linux) setrlimit ttyname FSIZE SIGBUS SIGSEGV SIGXFSZ EFBIG sigbus tmpfs mksocket
 
 #![allow(dead_code)]
 #![allow(
@@ -17,8 +16,6 @@
 use core::str;
 #[cfg(unix)]
 use libc::mode_t;
-#[cfg(all(unix, not(target_os = "redox")))]
-use nix::pty::OpenptyResult;
 #[cfg(unix)]
 use nix::sys;
 #[cfg(not(windows))]
@@ -26,6 +23,8 @@ use nix::sys::stat::{self, SFlag};
 use pretty_assertions::assert_eq;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use rlimit::{Resource, setrlimit};
+#[cfg(unix)]
+pub use rustix_openpty::rustix::termios::Winsize;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, VecDeque};
 use std::ffi::{OsStr, OsString};
@@ -1492,7 +1491,7 @@ impl Drop for TestScenario {
 #[cfg(unix)]
 #[derive(Debug, Default)]
 pub struct TerminalSimulation {
-    pub size: Option<libc::winsize>,
+    pub size: Option<Winsize>,
     pub stdin: bool,
     pub stdout: bool,
     pub stderr: bool,
@@ -2005,7 +2004,7 @@ impl UCommand {
 
         #[cfg(all(unix, not(target_os = "redox")))]
         if let Some(simulated_terminal) = &self.terminal_simulation {
-            let terminal_size = simulated_terminal.size.unwrap_or(libc::winsize {
+            let terminal_size = simulated_terminal.size.unwrap_or(Winsize {
                 ws_col: 80,
                 ws_row: 30,
                 ws_xpixel: 80 * 8,
@@ -2013,42 +2012,33 @@ impl UCommand {
             });
 
             if simulated_terminal.stdin {
-                let OpenptyResult {
-                    slave: pi_slave,
-                    master: pi_master,
-                } = open_pty(Some(&terminal_size));
+                let pty_in = rustix_openpty::openpty(None, Some(&terminal_size)).unwrap();
                 // Read the echo, as a terminal would. This also keeps the PTY
                 // open until the child closes it, so closing stdin doesn't hang it up.
-                let mut echo = File::from(pi_master.try_clone().unwrap());
+                let mut echo = File::from(pty_in.controller.try_clone().unwrap());
                 thread::spawn(move || io::copy(&mut echo, &mut io::sink()));
-                stdin_pty = Some(File::from(pi_master));
-                command.stdin(pi_slave);
+                stdin_pty = Some(File::from(pty_in.controller));
+                command.stdin(pty_in.user);
             }
 
             if simulated_terminal.stdout {
-                let OpenptyResult {
-                    slave: po_slave,
-                    master: po_master,
-                } = open_pty(Some(&terminal_size));
+                let pty_out = rustix_openpty::openpty(None, Some(&terminal_size)).unwrap();
                 captured_stdout = Self::spawn_reader_thread(
                     captured_stdout,
-                    po_master,
+                    pty_out.controller,
                     "stdout_reader".to_string(),
                 );
-                command.stdout(po_slave);
+                command.stdout(pty_out.user);
             }
 
             if simulated_terminal.stderr {
-                let OpenptyResult {
-                    slave: pe_slave,
-                    master: pe_master,
-                } = open_pty(Some(&terminal_size));
+                let pty_err = rustix_openpty::openpty(None, Some(&terminal_size)).unwrap();
                 captured_stderr = Self::spawn_reader_thread(
                     captured_stderr,
-                    pe_master,
+                    pty_err.controller,
                     "stderr_reader".to_string(),
                 );
-                command.stderr(pe_slave);
+                command.stderr(pty_err.user);
             }
         }
 
@@ -3014,78 +3004,20 @@ pub fn whoami() -> String {
         })
 }
 
-/// Open a PTY whose two ends are close-on-exec, so that commands started by
-/// other tests in the meantime don't inherit them.
-#[cfg(all(unix, not(target_os = "redox")))]
-fn open_pty(size: Option<&libc::winsize>) -> OpenptyResult {
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "freebsd",
-        target_os = "netbsd"
-    ))]
-    {
-        use rustix::fs::{Mode, OFlags, open};
-        use rustix::pty::{OpenptFlags, grantpt, openpt, ptsname, unlockpt};
-        use rustix::termios::{Winsize, tcsetwinsize};
-
-        let master =
-            openpt(OpenptFlags::RDWR | OpenptFlags::NOCTTY | OpenptFlags::CLOEXEC).unwrap();
-        grantpt(&master).unwrap();
-        unlockpt(&master).unwrap();
-        let name = ptsname(&master, Vec::new()).unwrap();
-        let slave = open(
-            name,
-            OFlags::RDWR | OFlags::NOCTTY | OFlags::CLOEXEC,
-            Mode::empty(),
-        )
-        .unwrap();
-        if let Some(size) = size {
-            let size = Winsize {
-                ws_row: size.ws_row,
-                ws_col: size.ws_col,
-                ws_xpixel: size.ws_xpixel,
-                ws_ypixel: size.ws_ypixel,
-            };
-            tcsetwinsize(&slave, size).unwrap();
-        }
-        OpenptyResult { master, slave }
-    }
-
-    // Elsewhere a PTY can't be opened close-on-exec, so a command started
-    // between openpty and fcntl can still inherit it.
-    #[cfg(not(any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "freebsd",
-        target_os = "netbsd"
-    )))]
-    {
-        use nix::fcntl::{FcntlArg, FdFlag, fcntl};
-
-        let pty = nix::pty::openpty(size, None).unwrap();
-        for fd in [&pty.master, &pty.slave] {
-            fcntl(fd, FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC)).unwrap();
-        }
-        pty
-    }
-}
-
 /// Create a PTY (pseudo-terminal) for testing utilities that require a TTY.
 ///
 /// Returns a tuple of (path, controller, replica) where:
 /// - path: The filesystem path to the PTY replica device
 /// - controller: The controller file
 /// - replica: The replica file
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(unix)]
 pub fn pty_path() -> (String, File, File) {
-    use nix::unistd::ttyname;
-    let pty = open_pty(None);
-    let path = ttyname(&pty.slave)
+    let pty = rustix_openpty::openpty(None, None).unwrap();
+    let path = rustix_openpty::rustix::termios::ttyname(&pty.user, Vec::new())
         .expect("Failed to get PTY path")
         .to_string_lossy()
         .to_string();
-    (path, pty.master.into(), pty.slave.into())
+    (path, pty.controller.into(), pty.user.into())
 }
 
 /// Add prefix 'g' for `util_name` if not on linux
