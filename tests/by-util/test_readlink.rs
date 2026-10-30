@@ -576,7 +576,7 @@ fn test_last_of_canonicalize_flags_wins() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a");
     let actual = ucmd.args(&["-e", "-f", "a/b"]).succeeds().stdout_move_str();
-    let expect = path_concat!(at.root_dir_resolved(), "a/b") + "\n";
+    let expect = path_concat!(at.root_dir_resolved(), "a", "b") + "\n";
     assert_eq!(actual, expect);
 
     let (at, mut ucmd) = at_and_ucmd!();
