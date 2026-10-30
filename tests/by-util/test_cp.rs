@@ -9883,6 +9883,8 @@ fn test_symbolic_link_and_link_conflict() {
 }
 
 #[test]
+// Android's app-private filesystem refuses hard links.
+#[cfg(not(target_os = "android"))]
 fn test_link_with_target_directory_attached_to_the_flag() {
     // "./backups" ends with an "s", but it is the value of -t, not --symbolic-link.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -9895,6 +9897,8 @@ fn test_link_with_target_directory_attached_to_the_flag() {
 }
 
 #[test]
+// Android's app-private filesystem refuses hard links.
+#[cfg(not(target_os = "android"))]
 fn test_link_with_backup_suffix_attached_to_the_flag() {
     // ".s" is the suffix given to -S, not a further flag in the cluster.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -9906,6 +9910,8 @@ fn test_link_with_backup_suffix_attached_to_the_flag() {
 }
 
 #[test]
+// Android's app-private filesystem refuses hard links.
+#[cfg(not(target_os = "android"))]
 fn test_link_with_an_operand_that_looks_like_a_flag() {
     // Everything after "--" is an operand, even when it starts with a dash.
     let (at, mut ucmd) = at_and_ucmd!();
