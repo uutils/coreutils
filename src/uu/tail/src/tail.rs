@@ -347,6 +347,8 @@ fn tail_stdin(
         )?;
     } else {
         // pipe
+        // Taken before the header, which may be appended to standard input.
+        let limit = stdin_limit();
         header_printer.print_input(input)?;
         if paths::stdin_is_bad_fd() {
             set_exit_code(1);
@@ -361,7 +363,7 @@ fn tail_stdin(
                 );
             }
         } else {
-            let mut reader = BufReader::new(stdin().take(stdin_limit()));
+            let mut reader = BufReader::new(stdin().take(limit));
             unbounded_tail(&mut reader, settings)?;
         }
     }
@@ -455,18 +457,18 @@ fn forwards_thru_file(
 }
 
 /// Iterate over bytes in the file, in reverse, until we find the
-/// `num_delimiters` instance of `delimiter`. The `file` is left seek'd to the
-/// position just after that delimiter.
-fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
+/// `num_delimiters` instance of `delimiter`, starting from `end`. The `file` is
+/// left seek'd to the position just after that delimiter.
+fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8, end: SeekFrom) {
     if num_delimiters == 0 {
-        file.seek(SeekFrom::End(0)).unwrap();
+        file.seek(end).unwrap();
         return;
     }
     // This variable counts the number of delimiters found in the file
     // so far (reading from the end of the file toward the beginning).
     let mut counter = 0;
     let mut first_slice = true;
-    for slice in ReverseChunks::new(file) {
+    for slice in ReverseChunks::new(file, end) {
         // Iterate over each byte in the slice in reverse order.
         let mut iter = memrchr_iter(delimiter, &slice);
 
@@ -508,24 +510,31 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
 fn bounded_tail(file: &mut File, settings: &Settings, end: Option<u64>) -> UResult<()> {
     debug_assert!(!settings.presume_input_pipe);
     let mut limit = None;
+    // Counting from the end starts at `end`: our own output, such as the
+    // header, may already have been appended beyond it.
+    let eof = end.map_or(SeekFrom::End(0), SeekFrom::Start);
 
     // Find the position in the file to start printing from.
     match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), delimiter) => {
-            backwards_thru_file(file, *count, *delimiter);
+            backwards_thru_file(file, *count, *delimiter, eof);
         }
         FilterMode::Lines(Signum::Positive(count), delimiter) if count > &1 => {
             let i = forwards_thru_file(file, *count - 1, *delimiter).unwrap();
             file.seek(SeekFrom::Start(i as u64)).unwrap();
         }
         FilterMode::Lines(Signum::MinusZero, _) | FilterMode::Bytes(Signum::MinusZero) => {
-            file.seek(SeekFrom::End(0)).unwrap();
+            file.seek(eof).unwrap();
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
             // A count that does not fit into an `i64` cannot be negated for
             // the seek; like a seek before the start, it means the whole file.
             match i64::try_from(*count) {
-                Ok(count) if file.seek(SeekFrom::End(-count)).is_ok() => {}
+                Ok(count)
+                    if file
+                        .seek(eof)
+                        .and_then(|_| file.seek(SeekFrom::Current(-count)))
+                        .is_ok() => {}
                 _ => {
                     file.seek(SeekFrom::Start(0)).unwrap();
                 }

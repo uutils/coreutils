@@ -194,10 +194,12 @@ fn run_appending_to_input(at: &uutests::util::AtPath, ucmd: &mut uutests::util::
 }
 
 // `tail f >> f` must print what `f` held when tail started, and stop there
-// rather than read back its own output. A file above one block takes the
-// seeking path, a smaller one the streaming path.
+// rather than read back its own output, the header included. A file above
+// one block takes the seeking path, a smaller one the streaming path.
 #[rstest]
 #[case::last_line_of_large_file(&["-n1"], true, Some("last\n"))]
+#[case::last_line_of_large_file_after_header(&["-v", "-n1"], true, Some("==> f <==\nlast\n"))]
+#[case::last_bytes_of_large_file_after_header(&["-v", "-c5"], true, Some("==> f <==\nlast\n"))]
 #[case::large_file_from_start(&["-c+1"], true, None)]
 #[case::small_file_from_second_line(&["-n+2"], false, Some("b\nc\n"))]
 #[cfg(any(unix, windows))]
@@ -231,6 +233,11 @@ fn test_output_appended_to_input(
 fn test_output_appended_to_stdin() {
     use std::fs::OpenOptions;
 
+    let header = new_ucmd!()
+        .args(&["-v", "-c1"])
+        .pipe_in("")
+        .succeeds()
+        .stdout_move_str();
     let (at, mut ucmd) = at_and_ucmd!();
     let content = format!("{}\nlast\n", "x".repeat(100 * 1024));
     at.write("f", &content);
@@ -238,11 +245,11 @@ fn test_output_appended_to_stdin() {
 
     run_appending_to_input(
         &at,
-        ucmd.arg("-c+1")
+        ucmd.args(&["-v", "-c+1"])
             .set_stdin(File::open(at.plus("f")).unwrap())
             .set_stdout(out),
     );
-    assert_eq!(at.read("f"), content.repeat(2));
+    assert_eq!(at.read("f"), format!("{content}{header}{content}"));
 }
 
 #[test]
