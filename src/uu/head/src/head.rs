@@ -255,7 +255,24 @@ fn print_n_lines(input: &mut impl io::BufRead, n: u64, separator: u8) -> io::Res
     Ok(bytes_written)
 }
 
-fn print_but_last_n_bytes(mut input: impl Read, n: u64) -> io::Result<u64> {
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn print_but_last_n_bytes(input: &mut File, n: u64) -> io::Result<u64> {
+    if let Ok(tail) = usize::try_from(n)
+        && tail > 0
+        && let Ok(Some(copied)) = uucore::pipes::copy_all_but_n_splice(input, &io::stdout(), tail)
+    {
+        io::stdout().flush().map_err(wrap_in_stdout_error)?;
+        return Ok(copied);
+    }
+    print_but_last_n_bytes_copy(input, n)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn print_but_last_n_bytes(input: impl Read, n: u64) -> io::Result<u64> {
+    print_but_last_n_bytes_copy(input, n)
+}
+
+fn print_but_last_n_bytes_copy(mut input: impl Read, n: u64) -> io::Result<u64> {
     let mut bytes_written: u64 = 0;
     if let Ok(n) = usize::try_from(n) {
         let stdout = io::stdout();

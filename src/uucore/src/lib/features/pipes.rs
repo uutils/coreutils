@@ -217,6 +217,54 @@ pub fn discard_n_bytes(fd: impl AsFd, n: usize) -> Result<usize, usize> {
     Ok(discarded)
 }
 
+/// Copy all but the last `n` bytes from `input` to `output` with `splice`.
+///
+/// Returns `Ok(None)` when splice cannot be used and nothing has been read, so
+/// the caller can fall back to a normal copy. A pipe always keeps the last `n`
+/// bytes, and those bytes are never written.
+pub fn copy_all_but_n_splice(
+    input: &impl AsFd,
+    output: &impl AsFd,
+    n: usize,
+) -> std::io::Result<Option<u64>> {
+    if n == 0 {
+        return Ok(None);
+    }
+    let (hold_read, hold_write) = std::io::pipe()?;
+    let capacity = match fcntl_setpipe_size(&hold_read, MAX_ROOTLESS_PIPE_SIZE) {
+        Ok(size) => size,
+        Err(_) => KERNEL_DEFAULT_PIPE_SIZE,
+    };
+    if n >= capacity {
+        return Ok(None);
+    }
+
+    let mut filled = 0;
+    while filled < n {
+        match splice(input, &hold_write, n - filled) {
+            Ok(0) => return Ok(Some(0)),
+            Ok(got) => filled += got,
+            Err(_) if filled == 0 => return Ok(None),
+            Err(error) => return Err(error.into()),
+        }
+    }
+
+    let chunk = capacity - n;
+    let mut written = 0u64;
+    loop {
+        match splice(input, &hold_write, chunk) {
+            Ok(0) => return Ok(Some(written)),
+            Ok(got) => {
+                // `Ok(Err(()))` is the read/write fallback. The bytes were still moved.
+                match drain_pipe(&hold_read, output, got)? {
+                    Ok(()) | Err(()) => written += got as u64,
+                }
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
+
 /// Return verified /dev/null
 ///
 /// `splice` to /dev/null is faster than `read` when we skip or count the non-seekable input
@@ -235,4 +283,28 @@ pub fn dev_null() -> Option<std::fs::File> {
 #[inline]
 pub fn tee(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io::Result<usize> {
     rustix::pipe::tee(source, target, len, SpliceFlags::empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{Read, Write};
+
+    #[test]
+    fn splice_keeps_the_last_byte() {
+        let (source_read, mut source_write) = std::io::pipe().unwrap();
+        let (mut output_read, output_write) = std::io::pipe().unwrap();
+        source_write.write_all(b"abcdef").unwrap();
+        drop(source_write);
+
+        let copied = super::copy_all_but_n_splice(&source_read, &output_write, 1)
+            .unwrap()
+            .unwrap();
+        drop(output_write);
+        drop(source_read);
+
+        let mut output = Vec::new();
+        output_read.read_to_end(&mut output).unwrap();
+        assert_eq!(copied, 5);
+        assert_eq!(output, b"abcde");
+    }
 }
