@@ -2100,6 +2100,59 @@ fn is_nonexistent_local_time(input: &str, now: &Zoned) -> bool {
     )
 }
 
+/// Parse `Sat Sep 20 22:11:30 2014`, the form `date -f` is usually given.
+///
+/// Anything else returns `None` so the general parser still handles it.
+fn try_parse_english_datetime(input: &str, now: &Zoned) -> Option<Zoned> {
+    let mut parts = input.split_whitespace();
+    let weekday = parts.next()?;
+    let month_name = parts.next()?;
+    let day = parts.next()?;
+    let time = parts.next()?;
+    let year = parts.next()?;
+    if parts.next().is_some()
+        || weekday.len() != 3
+        || !is_weekday_name(weekday)
+        || month_name.len() != 3
+    {
+        return None;
+    }
+    let month: i8 = match month_name.to_ascii_lowercase().as_str() {
+        "jan" => 1,
+        "feb" => 2,
+        "mar" => 3,
+        "apr" => 4,
+        "may" => 5,
+        "jun" => 6,
+        "jul" => 7,
+        "aug" => 8,
+        "sep" => 9,
+        "oct" => 10,
+        "nov" => 11,
+        "dec" => 12,
+        _ => return None,
+    };
+    if day.len() > 2 || year.len() != 4 || !day.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let mut clock = time.split(':');
+    let (hour, minute, second) = (clock.next()?, clock.next()?, clock.next()?);
+    if clock.next().is_some() || hour.len() != 2 || minute.len() != 2 || second.len() != 2 {
+        return None;
+    }
+    let local = jiff::civil::DateTime::new(
+        year.parse().ok()?,
+        month,
+        day.parse().ok()?,
+        hour.parse().ok()?,
+        minute.parse().ok()?,
+        second.parse().ok()?,
+        0,
+    )
+    .ok()?;
+    local.to_zoned(now.time_zone().clone()).ok()
+}
+
 /// Parse a string into either an in-range [`Zoned`] value or an extended date.
 fn parse_date<S: AsRef<str>>(
     s: S,
@@ -2109,6 +2162,10 @@ fn parse_date<S: AsRef<str>>(
     let input_str = s.as_ref();
     if dbg_opts.debug {
         let _ = writeln!(stderr(), "date: input string: {input_str}");
+    }
+
+    if let Some(zoned) = try_parse_english_datetime(input_str, now) {
+        return Ok(ParsedDateTime::InRange(zoned));
     }
 
     // Normalize parser-specific compatibility forms before parsing.
@@ -2333,6 +2390,24 @@ fn set_system_datetime(date: Zoned) -> UResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_english_datetime_matches_general_parser() {
+        let now = "2025-03-15T20:00:00+00:00[UTC]".parse::<Zoned>().unwrap();
+        for input in [
+            "Sat Sep 20 22:11:30 2014",
+            "Mon Sep 1 19:46:37 2014",
+            "Sat Sep 20 22:11:30 2014 ",
+        ] {
+            let fast = parse_date(input, &now, DebugOptions::new(false, false))
+                .unwrap()
+                .expect_in_range();
+            let slow = parse_datetime::parse_datetime_at_date(now.clone(), input.trim())
+                .unwrap()
+                .expect_in_range();
+            assert_eq!(fast.timestamp(), slow.timestamp(), "{input}");
+        }
+    }
 
     #[test]
     fn test_parse_military_timezone_with_offset() {
