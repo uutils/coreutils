@@ -31,6 +31,7 @@ use std::{
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::{
+    diagnostics::OptionValue,
     display::Quotable,
     error::{UError, UResult, set_exit_code, strip_errno},
     format_usage,
@@ -114,32 +115,51 @@ impl UError for LsError {
     }
 }
 
-/// Reject an invalid numeric value for `--block-size` even when a later
-/// `-h`/`--si`/another `--block-size` makes clap drop the value from the
-/// matches. GNU ls validates the argument as it is parsed, independent of
-/// option order (e.g. `ls --block-size=0 --si` is an error).
-fn validate_block_size_arguments(args: &[OsString]) -> UResult<()> {
+/// The numeric value of `--block-size` when it does not parse.
+///
+/// `--block-size` belongs to the size mode group, so a later `-h`/`--si` makes clap
+/// drop the value from the matches even though GNU ls still rejects it (e.g.
+/// `ls --block-size=0 --si` is an error). The raw arguments are scanned for the value,
+/// and the diagnostic is raised once clap has accepted the command line, so that the
+/// caret can point at the value as it was typed.
+fn invalid_block_size_argument(args: &[OsString]) -> Option<String> {
     let mut iter = args.iter().skip(1);
     while let Some(arg) = iter.next() {
         let Some(arg) = arg.to_str() else {
             continue;
         };
         let value = if let Some(value) = arg.strip_prefix("--block-size=") {
-            Some(value)
+            value
         } else if arg == "--block-size" {
-            iter.next().and_then(|value| value.to_str())
+            match iter.next().and_then(|value| value.to_str()) {
+                Some(value) => value,
+                None => continue,
+            }
         } else {
-            None
+            continue;
         };
-        if let Some(value) = value
-            && value != options::size::SI
+        if value != options::size::SI
             && value != options::size::HUMAN_READABLE
             && parse_size_non_zero_u64(value).is_err()
         {
-            return Err(LsError::BlockSizeParseError(value.to_string()).into());
+            return Some(value.to_string());
         }
     }
-    Ok(())
+    None
+}
+
+/// The report for an invalid `--block-size` value, with the caret under the value.
+fn block_size_error(value: &str, diag_args: Option<&[OsString]>) -> Box<dyn UError> {
+    let ls_error = LsError::BlockSizeParseError(value.to_string());
+    let message = ls_error.to_string();
+    let parse_error = parse_size_non_zero_u64(value).expect_err("the value was rejected above");
+    parse_error.size_value_error(
+        diag_args,
+        &OptionValue::with_names(value, None, Some(options::size::BLOCK_SIZE)),
+        0,
+        &message,
+        ls_error,
+    )
 }
 
 #[uucore::main]
@@ -147,9 +167,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // The arguments are kept for the caret in SIZE diagnostics, which echoes
     // the command line.
     let args: Vec<OsString> = args.collect();
-    validate_block_size_arguments(&args)?;
+    let invalid_block_size = invalid_block_size_argument(&args);
     let (matches, diag_args) =
         uucore::clap_localization::handle_clap_result_with_diagnostics(uu_app(), args, 2)?;
+
+    if let Some(value) = invalid_block_size {
+        return Err(block_size_error(&value, diag_args.as_deref()));
+    }
 
     uucore::i18n::collator::init_locale_collation();
 
