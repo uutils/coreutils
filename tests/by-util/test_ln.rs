@@ -703,6 +703,7 @@ fn test_symlink_errors() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
 fn test_hard_link_verbose() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
