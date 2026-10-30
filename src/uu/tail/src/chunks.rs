@@ -654,6 +654,8 @@ mod tests {
         }
     }
 
+    // WASI has no temporary directory, so this file-backed case is skipped there.
+    #[cfg(not(target_os = "wasi"))]
     #[test]
     fn test_reverse_chunks_stops_gracefully_when_file_is_truncated() {
         let path = std::env::temp_dir().join(format!(
