@@ -11,6 +11,7 @@
 //! when moving files across different filesystems/partitions.
 
 use rustc_hash::FxHashMap;
+use std::cell::{Cell, RefCell};
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
@@ -27,11 +28,13 @@ pub struct HardlinkTracker {
 #[derive(Debug, Default)]
 pub struct HardlinkGroupScanner {
     /// Maps (device, inode) -> list of source paths that are hardlinked together
-    hardlink_groups: FxHashMap<(u64, u64), Vec<PathBuf>>,
+    hardlink_groups: RefCell<FxHashMap<(u64, u64), Vec<PathBuf>>>,
     /// List of source files/directories being moved (for destination mapping)
-    source_files: Vec<PathBuf>,
+    source_files: RefCell<Vec<PathBuf>>,
     /// Whether scanning has been performed
-    scanned: bool,
+    scanned: Cell<bool>,
+    /// Verbose flag captured with the pending sources
+    scan_verbose: Cell<bool>,
 }
 
 /// Configuration options for hardlink preservation
@@ -144,6 +147,7 @@ impl HardlinkTracker {
             // Check if this file is part of a hardlink group from the scanner
             let has_hardlinks = scanner
                 .hardlink_groups
+                .borrow()
                 .get(&key)
                 .is_some_and(|group| group.len() > 1);
 
@@ -172,14 +176,33 @@ impl HardlinkGroupScanner {
         Self::default()
     }
 
+    /// Remember the paths that may be copied. Walking them waits until a rename
+    /// fails and the copy fallback actually needs hardlink groups.
+    pub fn set_pending_sources(&self, files: &[PathBuf], verbose: bool) {
+        if !self.scanned.get() {
+            *self.source_files.borrow_mut() = files.to_vec();
+            self.scan_verbose.set(verbose);
+        }
+    }
+
+    /// Scan the pending sources once, if that has not already happened.
+    pub fn ensure_scanned(&self) {
+        if self.scanned.get() {
+            return;
+        }
+        let files = self.source_files.borrow().clone();
+        let verbose = self.scan_verbose.get();
+        self.scan_files(&files, &HardlinkOptions { verbose });
+    }
+
     /// Scan files and group them by hardlinks, including recursive directory scanning
-    pub fn scan_files(&mut self, files: &[PathBuf], options: &HardlinkOptions) {
-        if self.scanned {
+    pub fn scan_files(&self, files: &[PathBuf], options: &HardlinkOptions) {
+        if self.scanned.get() {
             return;
         }
 
         // Store the source files for destination mapping
-        self.source_files = files.to_vec();
+        *self.source_files.borrow_mut() = files.to_vec();
 
         for file in files {
             if let Err(e) = self.scan_single_path(file)
@@ -197,7 +220,7 @@ impl HardlinkGroupScanner {
             }
         }
 
-        self.scanned = true;
+        self.scanned.set(true);
 
         if options.verbose {
             let stats = self.stats();
@@ -213,7 +236,7 @@ impl HardlinkGroupScanner {
     }
 
     /// Scan a single path (file or directory)
-    fn scan_single_path(&mut self, path: &Path) -> io::Result<()> {
+    fn scan_single_path(&self, path: &Path) -> io::Result<()> {
         use std::os::unix::fs::MetadataExt;
 
         let metadata = path.symlink_metadata()?;
@@ -223,6 +246,7 @@ impl HardlinkGroupScanner {
         } else if metadata.is_file() && metadata.nlink() > 1 {
             let key = (metadata.dev(), metadata.ino());
             self.hardlink_groups
+                .borrow_mut()
                 .entry(key)
                 .or_default()
                 .push(path.to_path_buf());
@@ -231,7 +255,7 @@ impl HardlinkGroupScanner {
     }
 
     /// Recursively scan a directory for hardlinked files
-    fn scan_directory_recursive(&mut self, dir: &Path) -> io::Result<()> {
+    fn scan_directory_recursive(&self, dir: &Path) -> io::Result<()> {
         use std::os::unix::fs::MetadataExt;
 
         let entries = std::fs::read_dir(dir)?;
@@ -245,6 +269,7 @@ impl HardlinkGroupScanner {
                 if metadata.is_file() && metadata.nlink() > 1 {
                     let key = (metadata.dev(), metadata.ino());
                     self.hardlink_groups
+                        .borrow_mut()
                         .entry(key)
                         .or_default()
                         .push(entry.path());
@@ -260,8 +285,8 @@ impl HardlinkGroupScanner {
         files: &[PathBuf],
         _options: &HardlinkOptions,
     ) -> HardlinkResult<()> {
-        self.source_files = files.to_vec();
-        self.scanned = true;
+        *self.source_files.borrow_mut() = files.to_vec();
+        self.scanned.set(true);
         Ok(())
     }
 
@@ -276,8 +301,9 @@ impl HardlinkGroupScanner {
     /// Get statistics about scanned hardlinks
     #[cfg(unix)]
     pub fn stats(&self) -> ScannerStats {
-        let total_groups = self.hardlink_groups.len();
-        let total_files = self.hardlink_groups.values().map(Vec::len).sum();
+        let groups = self.hardlink_groups.borrow();
+        let total_groups = groups.len();
+        let total_files = groups.values().map(Vec::len).sum();
 
         ScannerStats {
             total_groups,
@@ -339,5 +365,26 @@ mod tests {
         let stats = scanner.stats();
         assert_eq!(stats.total_groups, 0);
         assert_eq!(stats.total_files, 0);
+    }
+
+    #[test]
+    fn pending_sources_are_not_walked_until_a_copy_needs_them() {
+        let root =
+            std::env::temp_dir().join(format!("uutils-mv-hardlink-scan-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        let original = root.join("src/a");
+        std::fs::write(&original, b"same").unwrap();
+        std::fs::hard_link(&original, root.join("src/b")).unwrap();
+
+        let scanner = HardlinkGroupScanner::new();
+        scanner.set_pending_sources(&[root.join("src")], false);
+        assert_eq!(scanner.stats().total_files, 0);
+
+        scanner.ensure_scanned();
+        assert_eq!(scanner.stats().total_groups, 1);
+        assert_eq!(scanner.stats().total_files, 2);
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

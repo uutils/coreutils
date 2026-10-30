@@ -39,8 +39,7 @@ use std::path::{Path, PathBuf, absolute};
 
 #[cfg(unix)]
 use crate::hardlink::{
-    HardlinkGroupScanner, HardlinkOptions, HardlinkTracker, create_hardlink_context,
-    with_optional_hardlink_context,
+    HardlinkGroupScanner, HardlinkTracker, create_hardlink_context, with_optional_hardlink_context,
 };
 use uucore::backup_control::{self, backup_would_destroy_source};
 use uucore::display::Quotable;
@@ -691,16 +690,10 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
     // Create hardlink tracking context
     #[cfg(unix)]
     let (mut hardlink_tracker, hardlink_scanner) = {
-        let (tracker, mut scanner) = create_hardlink_context();
-
-        // Use hardlink options
-        let hardlink_options = HardlinkOptions {
-            verbose: options.verbose || options.debug,
-        };
-
-        // Pre-scan files if needed
-        scanner.scan_files(files, &hardlink_options);
-
+        let (tracker, scanner) = create_hardlink_context();
+        // A same-filesystem rename does not need hardlink groups. The scan runs
+        // from the copy fallback, after rename fails with EXDEV.
+        scanner.set_pending_sources(files, options.verbose || options.debug);
         (tracker, scanner)
     };
 
@@ -737,7 +730,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         }
 
         if let Some(ref pb) = count_progress {
-            let msg = format!("{} (scanning hardlinks)", sourcepath.to_string_lossy());
+            let msg = sourcepath.to_string_lossy().into_owned();
             pb.set_message(msg);
         }
 
@@ -968,6 +961,10 @@ fn rename_with_fallback(
             || (from.is_file() && can_delete_file(from));
         if !should_fallback {
             return Err(err);
+        }
+        #[cfg(unix)]
+        if let Some(scanner) = hardlink_scanner {
+            scanner.ensure_scanned();
         }
         // Get metadata without following symlinks
         let metadata = from.symlink_metadata()?;
