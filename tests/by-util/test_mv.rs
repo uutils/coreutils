@@ -2729,6 +2729,103 @@ fn test_mv_cross_device_permission_denied() {
         .expect("Unable to restore directory permissions");
 }
 
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+fn test_mv_cross_device_source_unreadable() {
+    use std::fs::set_permissions;
+    use std::os::unix::fs::PermissionsExt;
+    use tempfile::TempDir;
+    use uutests::util::TestScenario;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("unreadable_src", "source content");
+    set_permissions(at.plus("unreadable_src"), PermissionsExt::from_mode(0o000))
+        .expect("Unable to set permissions");
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let target = other_fs_tempdir.path().join("target");
+
+    scene
+        .ucmd()
+        .arg(at.plus("unreadable_src"))
+        .arg(&target)
+        .fails()
+        .stderr_contains("cannot open")
+        .stderr_contains("for reading: Permission denied");
+
+    set_permissions(at.plus("unreadable_src"), PermissionsExt::from_mode(0o644))
+        .expect("Unable to restore permissions");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+fn test_mv_cross_device_dest_directory_unwritable() {
+    use std::fs::set_permissions;
+    use std::os::unix::fs::PermissionsExt;
+    use tempfile::TempDir;
+    use uutests::util::TestScenario;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("src_file", "source content");
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    set_permissions(other_fs_tempdir.path(), PermissionsExt::from_mode(0o555))
+        .expect("Unable to set directory permissions");
+    let target = other_fs_tempdir.path().join("nonexistent_target");
+
+    scene
+        .ucmd()
+        .arg(at.plus("src_file"))
+        .arg(&target)
+        .fails()
+        .stderr_contains("cannot create regular file")
+        .stderr_contains("Permission denied");
+
+    set_permissions(other_fs_tempdir.path(), PermissionsExt::from_mode(0o755))
+        .expect("Unable to restore directory permissions");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+fn test_mv_cross_device_source_directory_unwritable() {
+    use std::fs::set_permissions;
+    use std::os::unix::fs::PermissionsExt;
+    use tempfile::TempDir;
+    use uutests::util::TestScenario;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("readonly_dir");
+    at.write("readonly_dir/src", "source content");
+    set_permissions(at.plus("readonly_dir"), PermissionsExt::from_mode(0o555))
+        .expect("Unable to set directory permissions");
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let target = other_fs_tempdir.path().join("target");
+
+    scene
+        .ucmd()
+        .arg(at.plus("readonly_dir/src"))
+        .arg(&target)
+        .fails()
+        .stderr_contains("cannot remove")
+        .stderr_contains("Permission denied");
+
+    set_permissions(at.plus("readonly_dir"), PermissionsExt::from_mode(0o755))
+        .expect("Unable to restore directory permissions");
+}
+
 /// Regression for #10015. The cross-device fallback unlinks the destination
 /// and then creates a new file at the same path. An attacker who can write
 /// to the destination directory could race to plant a symlink in that
