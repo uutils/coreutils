@@ -215,6 +215,26 @@ If you edit a piece of code, make sure to update any comments that need to
 change as a result. The only thing worse than having no comments is having
 outdated comments!
 
+### Tests use `#[rstest]`
+
+Tests in `tests/by-util/` use [`rstest`](https://crates.io/crates/rstest) for
+parameterized test cases. Prefer `#[rstest]` with `#[case(...)]` over writing
+multiple near-identical `#[test]` functions or hand-rolled loops:
+
+```
+#[rstest]
+#[case("input", "expected")]
+#[case("other input", "other expected")]
+fn my_test(#[case] input: &str, #[case] expected: &str) {
+    assert_eq!(my_func(input), expected);
+}
+```
+
+This keeps related cases together and makes each case easy to read and extend.
+Simple single-case tests can stay as plain `#[test]` — there is no need to
+convert existing tests. Just reach for `#[rstest]` when a test naturally has
+multiple cases.
+
 ## AI policy
 
 AI-assisted contributions are allowed, but the same standards apply as for
