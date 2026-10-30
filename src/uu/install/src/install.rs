@@ -9,7 +9,6 @@
 
 mod mode;
 
-use clap::parser::ValueSource;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use rustix::process::{getegid, geteuid};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -193,6 +192,23 @@ static OPT_UNPRIVILEGED: &str = "unprivileged";
 
 static ARG_FILES: &str = "files";
 
+/// Whether the command line asks for the default context with a bare `--context`.
+///
+/// An empty value passed as `--context=` still has to be reported, but clap
+/// hands both spellings to us the same way, so the arguments are inspected.
+fn has_bare_context(args: &[OsString]) -> bool {
+    for arg in args {
+        let text = arg.to_string_lossy();
+        if text == "--" {
+            break;
+        }
+        if text == "--context" {
+            return true;
+        }
+    }
+    false
+}
+
 /// Main install utility function, called from main.rs.
 ///
 /// Returns a program return code.
@@ -202,6 +218,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<OsString> = args.collect();
     // Kept for the caret in mode diagnostics, which needs the mode as typed.
     let diag_args = uucore::diagnostics::operands(&args);
+    let bare_context = has_bare_context(&args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let paths: Vec<OsString> = matches
@@ -209,7 +226,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.cloned().collect())
         .unwrap_or_default();
 
-    let behavior = behavior(&matches, diag_args.as_deref())?;
+    let behavior = behavior(&matches, diag_args.as_deref(), bare_context)?;
 
     // Like GNU, work with the umask cleared: new ancestor directories get
     // exactly DEFAULT_MODE and the strip program sees a umask of 0.
@@ -379,7 +396,11 @@ fn resolve_id(value: &str, lookup: impl Fn(&str) -> std::io::Result<u32>) -> Opt
 ///
 /// In event of failure, returns an integer intended as a program return code.
 ///
-fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Behavior> {
+fn behavior(
+    matches: &ArgMatches,
+    diag_args: Option<&[OsString]>,
+    bare_context: bool,
+) -> UResult<Behavior> {
     let main_function = if matches.get_flag(OPT_DIRECTORY) {
         MainFunction::Directory
     } else {
@@ -467,10 +488,11 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
 
     // A bare `--context` means "use the default context", while an explicit
     // `--context=` is an empty context that still has to be reported.
-    let raw_context = matches.get_one::<String>(OPT_CONTEXT).cloned();
-    let bare_context = raw_context.as_deref() == Some("")
-        && matches.value_source(OPT_CONTEXT) != Some(ValueSource::CommandLine);
-    let mut context = if bare_context { None } else { raw_context };
+    let mut context = if bare_context {
+        None
+    } else {
+        matches.get_one::<String>(OPT_CONTEXT).cloned()
+    };
     if context.is_some() && !selinux_enabled {
         show_warning!("{}", translate!("install-warning-context-ignored"));
         context = None;
