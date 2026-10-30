@@ -692,3 +692,30 @@ fn test_shred_dash_rejects_stdout_pipe() {
         .stderr_contains("shred: -:")
         .stderr_does_not_contain("/dev/fd/1");
 }
+
+#[test]
+#[cfg(all(unix, feature = "chmod"))]
+fn test_shred_truncates_before_unlink_readonly_parent() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let dir = "truncate_test";
+    let file_path = "truncate_test/file";
+
+    at.mkdir(dir);
+    // Create a 4KB file
+    at.make_file(file_path).set_len(4096).unwrap();
+
+    // Remove write permission from parent (unlink will fail)
+    scene.ccmd("chmod").arg("a-w").arg(dir).succeeds();
+
+    // shred -u will fail to unlink but must still truncate
+    scene.ucmd().arg("-u").arg(file_path).fails();
+
+    // Restore directory permissions
+    scene.ccmd("chmod").arg("u+w").arg(dir).succeeds();
+
+    // File still exists (couldn't unlink) but must have been truncated to 0
+    assert!(at.file_exists(file_path));
+    assert_eq!(at.metadata(file_path).len(), 0);
+}
