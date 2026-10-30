@@ -146,7 +146,8 @@ fn test_kill_after_preserves_timeout_exit_without_preserve_status() {
 }
 
 /// A timeout signal of KILL reports 128 + 9 rather than 124, with or
-/// without `--kill-after`; other signals keep reporting 124.
+/// without `--kill-after`; other signals keep reporting 124. On Unix,
+/// timeout is in the killed process group, so it dies of the signal itself.
 #[test]
 fn test_kill_signal_reports_signal_exit_code() {
     let (ts, bin) = scenario_with_bin();
@@ -154,15 +155,22 @@ fn test_kill_signal_reports_signal_exit_code() {
         &["-s", "KILL", ".05"][..],
         &["--signal=9", ".05"],
         &["-s", "SIGKILL", "--kill-after=3", ".05"],
-        // Only the child is signaled here, but the status is still 128+9.
-        &["--foreground", "-s", "KILL", ".05"],
     ] {
-        ts.ucmd()
+        let result = ts
+            .ucmd()
             .args(args)
             .args(&[bin.as_str(), "sleep", "20"])
-            .fails_with_code(128 + 9)
-            .no_output();
+            .run();
+        #[cfg(unix)]
+        result.signal_is(9).no_output();
+        #[cfg(not(unix))]
+        result.code_is(128 + 9).no_output();
     }
+    // Only the child is signaled here, so timeout exits with 128+9.
+    ts.ucmd()
+        .args(&["--foreground", "-s", "KILL", ".05", &bin, "sleep", "20"])
+        .fails_with_code(128 + 9)
+        .no_output();
     ts.ucmd()
         .args(&["-s", "HUP", ".05", &bin, "sleep", "20"])
         .fails_with_code(124)
@@ -367,6 +375,31 @@ fn test_sigchld_ignored_by_parent() {
             &format!("trap '' CHLD; exec {bin_path} timeout 1 true"),
         ])
         .succeeds();
+}
+
+/// KILL, whether sent directly or after `--kill-after`, must reach the whole
+/// process group, not just the direct child.
+#[rstest]
+#[cfg(unix)]
+fn test_kill_signal_reaches_process_group(
+    #[values(&["-s", "KILL", ".3"][..], &["-k", ".3", ".3"][..])] args: &[&str],
+) {
+    let (ts, bin) = scenario_with_bin();
+    ts.ucmd()
+        .args(args)
+        .args(&[
+            "sh",
+            "-c",
+            &format!("trap '' TERM; ('{bin}' sleep 1; '{bin}' touch marker) & wait"),
+        ])
+        .run()
+        .signal_is(9);
+    // Give a surviving grandchild ample time to reach the `touch`.
+    std::thread::sleep(Duration::from_millis(1500));
+    assert!(
+        !ts.fixtures.file_exists("marker"),
+        "grandchild survived the KILL"
+    );
 }
 
 #[test]
