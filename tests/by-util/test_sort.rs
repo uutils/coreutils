@@ -4235,9 +4235,7 @@ fn test_numeric_looking_file_names_are_kept_verbatim(
 }
 
 #[test]
-fn test_separator_errors_match_gnu() {
-    // Found with behave (https://github.com/emirmrkaljevic/behave): GNU prints
-    // these without the "Try --help" hint.
+fn test_separator_errors() {
     new_ucmd!()
         .args(&["-t", "ab"])
         .fails_with_code(2)
