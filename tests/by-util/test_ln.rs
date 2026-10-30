@@ -10,10 +10,8 @@
 use std::path::{MAIN_SEPARATOR_STR, PathBuf};
 #[cfg(all(unix, not(target_os = "android")))]
 use std::time::Duration;
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
 use uutests::util::TestScenario;
-use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd, path, path_concat, util_name};
 
 #[test]
 fn test_invalid_arg() {
@@ -1130,21 +1128,21 @@ fn test_backup_force_interactive_refuse_directory() {
 fn test_backup_symlink_to_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir_all("site");
-    at.mkdir_all("src/static");
+    at.mkdir_all(path!("src", "static"));
     at.mkdir("other");
-    at.relative_symlink_dir("../other", "site/static");
+    at.relative_symlink_dir(path!("..", "other"), path!("site", "static"));
 
-    ucmd.args(&["-s", "-b", "-t", "site", "src/static"])
+    ucmd.args(&["-s", "-b", "-t", "site", &path_concat!("src", "static")])
         .succeeds()
         .no_stderr();
 
     assert_eq!(
-        at.read_symlink("site/static"),
-        "src/static".replace('/', MAIN_SEPARATOR_STR)
+        at.read_symlink(path!("site", "static")),
+        path_concat!("src", "static")
     );
     assert_eq!(
-        at.read_symlink("site/static~"),
-        "../other".replace('/', MAIN_SEPARATOR_STR)
+        at.read_symlink(path!("site", "static~")),
+        path_concat!("..", "other")
     );
 }
 
