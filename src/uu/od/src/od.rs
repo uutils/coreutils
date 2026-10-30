@@ -536,6 +536,7 @@ where
 {
     let mut duplicate_line = false;
     let mut previous_bytes: Vec<u8> = Vec::new();
+    let mut input_was_read = false;
     let line_bytes = output_info.byte_size_line;
 
     loop {
@@ -546,11 +547,16 @@ where
                 let length = memory_decoder.length();
 
                 if length == 0 {
-                    // GNU prints the final offset even when one of the inputs
-                    // failed, so always emit it before stopping.
-                    input_offset.write_final_offset(writer)?;
+                    // GNU prints the final offset for an input it managed to read,
+                    // even if a later input failed, but stays silent when no input
+                    // could be opened at all (e.g. `od missing-file`).
+                    if input_was_read || !input_decoder.has_error() {
+                        input_offset.write_final_offset(writer)?;
+                    }
                     break;
                 }
+
+                input_was_read = true;
 
                 // not enough byte for a whole element, this should only happen on the last line.
                 if length != line_bytes {
