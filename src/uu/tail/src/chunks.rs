@@ -643,22 +643,23 @@ mod tests {
                 .unwrap();
         }
 
-        let mut file = std::fs::File::open(&path).unwrap();
-        let mut chunks = ReverseChunks::new(&mut file);
-        assert!(chunks.next().is_some());
+        {
+            let mut file = std::fs::File::open(&path).unwrap();
+            let mut chunks = ReverseChunks::new(&mut file);
+            assert!(chunks.next().is_some());
 
-        // Truncate through a second handle while the iterator still holds its
-        // previously measured size, then make sure the next read stops instead
-        // of panicking.
-        std::fs::OpenOptions::new()
-            .write(true)
-            .open(&path)
-            .unwrap()
-            .set_len(0)
-            .unwrap();
-        assert!(chunks.next().is_none());
+            // Truncate through a second handle while the iterator still holds its
+            // previously measured size, then make sure the next read stops instead
+            // of panicking.
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open(&path)
+                .unwrap()
+                .set_len(0)
+                .unwrap();
+            assert!(chunks.next().is_none());
+        }
 
-        drop(chunks);
         let _ = std::fs::remove_file(&path);
     }
 
