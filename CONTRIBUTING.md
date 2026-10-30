@@ -217,23 +217,10 @@ outdated comments!
 
 ### Tests use `#[rstest]`
 
-Tests in `tests/by-util/` use [`rstest`](https://crates.io/crates/rstest) for
-parameterized test cases. Prefer `#[rstest]` with `#[case(...)]` over writing
-multiple near-identical `#[test]` functions or hand-rolled loops:
-
-```
-#[rstest]
-#[case("input", "expected")]
-#[case("other input", "other expected")]
-fn my_test(#[case] input: &str, #[case] expected: &str) {
-    assert_eq!(my_func(input), expected);
-}
-```
-
-This keeps related cases together and makes each case easy to read and extend.
-Simple single-case tests can stay as plain `#[test]` — there is no need to
-convert existing tests. Just reach for `#[rstest]` when a test naturally has
-multiple cases.
+Tests use [`rstest`](https://crates.io/crates/rstest) with `#[case(...)]` for
+parameterized test cases. Prefer `#[rstest]` over writing multiple near-identical
+`#[test]` functions when a test has multiple cases. Plain `#[test]` is fine for
+single-case tests; there is no need to convert existing tests.
 
 ## AI policy
 
