@@ -9,8 +9,7 @@ static UUDOC_BINARY_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 fn get_uudoc_command() -> Command {
     let uudoc_binary = UUDOC_BINARY_PATH.get_or_init(|| {
-        let coreutils_binary = PathBuf::from(uutests::util::get_tests_binary());
-        coreutils_binary.parent().unwrap().join("uudoc")
+        uutests::util::find_binary("uudoc").expect("Could not find the uudoc binary")
     });
     Command::new(uudoc_binary)
 }

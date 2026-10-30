@@ -95,7 +95,12 @@ pub fn try_get_tests_binary() -> Option<&'static str> {
 }
 
 fn find_tests_binary() -> Option<PathBuf> {
-    let name = DEFAULT_TESTS_BINARY.get().copied().unwrap_or("coreutils");
+    find_binary(DEFAULT_TESTS_BINARY.get().copied().unwrap_or("coreutils"))
+}
+
+/// Find the binary `name` (e.g. `coreutils` or `uudoc`) the same way as
+/// [`get_tests_binary`], the other binaries being next to `UUTESTS_BINARY_PATH`.
+pub fn find_binary(name: &str) -> Option<PathBuf> {
     resolve_tests_binary(
         name,
         env::var_os("UUTESTS_BINARY_PATH"),
