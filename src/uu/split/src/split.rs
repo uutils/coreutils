@@ -1156,6 +1156,7 @@ fn n_chunks_by_line(
     }
 
     let mut chunk_number = 1;
+    let mut file_index = 0;
     let sep = settings.separator;
     let mut num_bytes_should_be_written = chunk_size_base + (chunk_size_reminder > 0) as u64;
     let mut num_bytes_written = 0;
@@ -1176,8 +1177,7 @@ fn n_chunks_by_line(
             }
         } else {
             // Should write into a file
-            let idx = (chunk_number - 1) as usize;
-            let writer = out_files.get_writer(idx, settings)?;
+            let writer = out_files.get_writer(file_index, settings)?;
             custom_write_all(bytes, writer, settings)?;
         }
 
@@ -1204,12 +1204,11 @@ fn n_chunks_by_line(
             chunk_number += 1;
         }
 
-        // If a chunk was skipped and `elide_empty_files` flag is set,
-        // roll chunk_number back to preserve sequential continuity
-        // of file names for files written to,
-        // except for Kth chunk of N mode
-        if settings.elide_empty_files && kth_chunk.is_none() {
-            chunk_number = chunk_number.min(first_chunk_number + 1);
+        // Keep output names consecutive without changing the chunk boundaries.
+        if settings.elide_empty_files {
+            file_index += usize::from(chunk_number > first_chunk_number);
+        } else {
+            file_index = (chunk_number - 1) as usize;
         }
         if kth_chunk.is_some_and(|k| chunk_number > k) {
             break;

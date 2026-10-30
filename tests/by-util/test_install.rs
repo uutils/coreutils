@@ -993,12 +993,9 @@ fn test_install_on_invalid_link_at_destination() {
     let dst_dir = at.plus("dest");
 
     at.touch("test.sh");
-    at.symlink_file(
-        "/opt/FakeDestination",
-        &dst_dir.join("test.sh").to_string_lossy(),
-    );
+    at.symlink_file("/opt/FakeDestination", dst_dir.join("test.sh"));
     scene.ccmd("chmod").arg("+x").arg("test.sh").succeeds();
-    at.symlink_file("test.sh", &src_dir.join("test.sh").to_string_lossy());
+    at.symlink_file("test.sh", src_dir.join("test.sh"));
 
     scene
         .ucmd()
@@ -1021,12 +1018,9 @@ fn test_install_on_invalid_link_at_destination_and_dev_null_at_source() {
     let dst_dir = at.plus("dest");
 
     at.touch("test.sh");
-    at.symlink_file(
-        "/opt/FakeDestination",
-        &dst_dir.join("test.sh").to_string_lossy(),
-    );
+    at.symlink_file("/opt/FakeDestination", dst_dir.join("test.sh"));
     scene.ccmd("chmod").arg("+x").arg("test.sh").succeeds();
-    at.symlink_file("test.sh", &src_dir.join("test.sh").to_string_lossy());
+    at.symlink_file("test.sh", src_dir.join("test.sh"));
 
     scene
         .ucmd()
@@ -1280,6 +1274,7 @@ fn test_install_non_utf8_dir() {
 #[case::suffix(&["-b", "--suffix=super-suffix-of-the-century"], Some("super-suffix-of-the-century"))]
 #[case::suffix_implies_backup(&["--suffix=super-suffix-of-the-century"], Some("super-suffix-of-the-century"))]
 #[case::suffix_hyphen_value(&["-b", "--suffix=-v"], Some("-v"))]
+#[case::empty_suffix(&["-b", "--suffix="], Some("~"))]
 #[case::numbered_t(&["--backup=t"], Some(".~1~"))]
 #[case::numbered(&["--backup=numbered"], Some(".~1~"))]
 #[case::existing(&["--backup=existing"], Some("~"))]
@@ -1300,7 +1295,7 @@ fn test_install_backup_control(#[case] args: &[&str], #[case] backup_suffix: Opt
     assert_eq!(at.read(source), "new");
     assert_eq!(at.read(dest), "new");
     match backup_suffix {
-        Some(suffix) => assert_eq!(at.read(&format!("{dest}{suffix}")), "old"),
+        Some(suffix) => assert_eq!(at.read(format!("{dest}{suffix}")), "old"),
         None => assert!(!at.file_exists(format!("{dest}~"))),
     }
 }
@@ -2125,7 +2120,7 @@ fn test_install_failing_copy_file_to_target_contain_subdir_with_same_name() {
     let dir1 = "dir1";
 
     at.touch(file);
-    at.mkdir_all(&format!("{dir1}/{file}"));
+    at.mkdir_all(format!("{dir1}/{file}"));
     ucmd.arg(file)
         .arg(dir1)
         .fails()
@@ -2160,6 +2155,40 @@ fn test_install_symlink_same_file() {
         .stderr_contains(format!(
             "'{target_dir}/{file}' and '{target_link}/{file}' are the same file"
         ));
+}
+
+#[test]
+fn test_install_create_leading_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+
+    at.write(file, "content");
+    ucmd.arg("-D")
+        .arg(file)
+        .arg(file)
+        .fails()
+        .stderr_contains("'file' and 'file' are the same file");
+    assert_eq!(at.read(file), "content");
+}
+
+#[test]
+fn test_install_create_leading_symlink_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+    let target_dir = "target_dir";
+    let target_link = "target_link";
+
+    at.mkdir(target_dir);
+    at.write(format!("{target_dir}/{file}"), "content");
+    at.symlink_file(target_dir, target_link);
+    ucmd.arg("-D")
+        .arg(format!("{target_dir}/{file}"))
+        .arg(format!("{target_link}/{file}"))
+        .fails()
+        .stderr_contains(format!(
+            "'{target_dir}/{file}' and '{target_link}/{file}' are the same file"
+        ));
+    assert_eq!(at.read(format!("{target_dir}/{file}")), "content");
 }
 
 #[test]
@@ -2388,8 +2417,8 @@ fn test_selinux() {
         new_ucmd!()
             .arg(arg)
             .arg("-v")
-            .arg(at.plus_as_string(src))
-            .arg(at.plus_as_string(dest))
+            .arg(at.plus(src))
+            .arg(at.plus(dest))
             .succeeds()
             .stdout_contains("orig' -> '");
 
@@ -2399,7 +2428,7 @@ fn test_selinux() {
 
         let Ok(context_value) = context_value else {
             println!("Skipping SELinux test: getfattr not available or failed");
-            at.remove(&at.plus_as_string(dest));
+            at.remove(at.plus(dest));
             continue;
         };
 
@@ -2407,7 +2436,7 @@ fn test_selinux() {
             context_value.contains("unconfined_u"),
             "Expected 'unconfined_u' not found in getfattr output:\n{context_value}"
         );
-        at.remove(&at.plus_as_string(dest));
+        at.remove(at.plus(dest));
     }
 }
 
@@ -2434,12 +2463,12 @@ fn test_selinux_invalid_args() {
         new_ucmd!()
             .arg(arg)
             .arg("-v")
-            .arg(at.plus_as_string(src))
-            .arg(at.plus_as_string(dest))
+            .arg(at.plus(src))
+            .arg(at.plus(dest))
             .fails()
             .stderr_contains("failed to set default file creation");
 
-        at.remove(&at.plus_as_string(dest));
+        at.remove(at.plus(dest));
     }
 }
 
@@ -2460,8 +2489,8 @@ fn test_selinux_default_context() {
     new_ucmd!()
         .arg("-Z")
         .arg("-v")
-        .arg(at.plus_as_string(src))
-        .arg(at.plus_as_string(dest))
+        .arg(at.plus(src))
+        .arg(at.plus(dest))
         .succeeds()
         .stdout_contains("orig' -> '");
     assert!(at.file_exists(dest));

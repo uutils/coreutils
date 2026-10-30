@@ -193,11 +193,12 @@ fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
     let mut processed_args = Vec::with_capacity(args.len());
 
     for arg in args {
-        if let Some(arg) = arg.to_str()
-            && arg.starts_with('-')
-            && arg[1..].chars().all(is_digit_or_comma)
+        if let Some(shortcut) = arg
+            .to_str()
+            .and_then(|arg| arg.strip_prefix('-'))
+            .filter(|shortcut| !shortcut.is_empty() && shortcut.chars().all(is_digit_or_comma))
         {
-            arg[1..]
+            shortcut
                 .split(',')
                 .filter(|s| !s.is_empty())
                 .for_each(|s| processed_args.push(OsString::from(format!("--tabs={s}"))));

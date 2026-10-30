@@ -395,6 +395,47 @@ fn test_squeeze_all_files_repeated() {
 }
 
 #[test]
+fn test_squeeze_keeps_blank_after_line_split_across_files() {
+    // the newline that finishes a line begun in the previous file is not a blank line
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input1", "a");
+    at.write("input2", "\n\nb\n");
+    ucmd.args(&["-s", "input1", "input2"])
+        .succeeds()
+        .stdout_only("a\n\nb\n");
+}
+
+#[test]
+fn test_squeeze_keeps_blank_after_line_split_across_file_and_stdin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input", "a");
+    ucmd.args(&["-s", "input", "-"])
+        .pipe_in("\n\nb\n")
+        .succeeds()
+        .stdout_only("a\n\nb\n");
+}
+
+#[test]
+fn test_squeeze_keeps_numbered_blank_after_line_split_across_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input1", "a");
+    at.write("input2", "\n\nb\n");
+    ucmd.args(&["-s", "-n", "input1", "input2"])
+        .succeeds()
+        .stdout_only("     1\ta\n     2\t\n     3\tb\n");
+}
+
+#[test]
+fn test_squeeze_blank_lines_repeated_across_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input1", "a\n\n");
+    at.write("input2", "\n\nb\n");
+    ucmd.args(&["-s", "input1", "input2"])
+        .succeeds()
+        .stdout_only("a\n\nb\n");
+}
+
+#[test]
 fn test_show_ends_crlf() {
     new_ucmd!()
         .arg("-E")
@@ -762,7 +803,7 @@ fn test_write_fast_read_error() {
     at.write("foo", "content");
 
     // Remove read permissions to cause a read error
-    let file_path = at.plus_as_string("foo");
+    let file_path = at.plus("foo");
     let mut perms = std::fs::metadata(&file_path).unwrap().permissions();
     perms.set_mode(0o000); // No permissions
     std::fs::set_permissions(&file_path, perms).unwrap();
@@ -803,7 +844,7 @@ fn test_appending_same_input_output() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.write("foo", "content");
-    let foo_file = at.plus_as_string("foo");
+    let foo_file = at.plus("foo");
 
     let file_read = File::open(&foo_file).unwrap();
     let file_write = OpenOptions::new().append(true).open(&foo_file).unwrap();

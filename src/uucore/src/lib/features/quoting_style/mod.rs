@@ -383,10 +383,8 @@ pub fn locale_aware_escape_dir_name(name: &OsStr, style: QuotingStyle) -> OsStri
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        i18n::UEncoding,
-        quoting_style::{QuotingStyle, escape_control_chars, escape_name_inner},
-    };
+    use crate::i18n::UEncoding;
+    use crate::quoting_style::{QuotingStyle, escape_control_chars, escape_name_inner};
 
     // spell-checker:ignore (tests/words) one\'two one'two
 
@@ -1187,6 +1185,14 @@ mod tests {
     }
 
     #[test]
+    fn test_lone_brace() {
+        check_names_both("{", &[("'{'", "shell"), ("'{'", "shell-escape")]);
+        check_names_both("}", &[("'}'", "shell"), ("'}'", "shell-escape")]);
+        check_names_both("{}", &[("{}", "shell"), ("{}", "shell-escape")]);
+        check_names_both("{a,b}", &[("{a,b}", "shell"), ("{a,b}", "shell-escape")]);
+    }
+
+    #[test]
     fn test_special_chars_in_double_quotes() {
         check_names_both(
             "can'$t",
@@ -1215,6 +1221,16 @@ mod tests {
                 ("'can'\\''\\t'", "shell-always"),
                 ("'can'\\''\\t'", "shell-escape"),
                 ("'can'\\''\\t'", "shell-escape-always"),
+            ],
+        );
+
+        check_names_both(
+            "can'!t",
+            &[
+                ("'can'\\''!t'", "shell"),
+                ("'can'\\''!t'", "shell-always"),
+                ("'can'\\''!t'", "shell-escape"),
+                ("'can'\\''!t'", "shell-escape-always"),
             ],
         );
     }

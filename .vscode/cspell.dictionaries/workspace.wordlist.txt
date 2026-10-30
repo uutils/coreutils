@@ -348,10 +348,14 @@ uutils
 # * function names
 sendfile
 execfn
+execveat
 fadvise
+fexecve
 ficlone
 fstatfs
+ftruncate
 getcwd
+memfd
 mkfifoat
 setpipe
 

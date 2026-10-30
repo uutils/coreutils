@@ -844,10 +844,8 @@ pub const fn sigpipe_was_ignored() -> bool {
 
 #[cfg(target_os = "linux")]
 pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
-    use nix::{
-        poll::{PollFd, PollFlags, PollTimeout, poll},
-        sys::stat::{SFlag, fstat},
-    };
+    use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
+    use nix::sys::stat::{SFlag, fstat};
     use std::io::stdout;
     use std::os::fd::AsFd;
 

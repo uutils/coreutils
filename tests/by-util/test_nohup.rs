@@ -9,7 +9,7 @@
 use std::thread::sleep;
 use uutests::new_ucmd;
 #[cfg(unix)]
-use uutests::{at_and_ucmd, util::TestScenario, util_name};
+use uutests::{util::TestScenario, util_name};
 
 // General observation: nohup.out will not be created in tests run by cargo test
 // because stdin/stdout is not attached to a TTY.
@@ -38,6 +38,8 @@ fn test_nohup_exit_codes() {
     target_os = "openbsd"
 ))]
 fn test_nohup_multiple_args_and_flags() {
+    use uutests::at_and_ucmd;
+
     let (at, mut ucmd) = at_and_ucmd!();
 
     ucmd.args(&["touch", "-t", "1006161200", "file1", "file2"])
@@ -95,14 +97,14 @@ fn test_nohup_replaced_stdin_is_not_readable() {
 
     ts.ucmd()
         .terminal_simulation(true)
-        .arg("cat")
+        .arg("tee")
         .fails_with_code(1)
         .stderr_contains("nohup: ignoring input and appending output to 'nohup.out'");
 
     sleep(std::time::Duration::from_millis(10));
 
     // cat's error message goes to stderr, which nohup redirected into nohup.out
-    let content = std::fs::read_to_string(at.plus_as_string("nohup.out")).unwrap();
+    let content = at.read("nohup.out");
     assert!(
         content.contains("Bad file descriptor"),
         "expected a read error from cat in nohup.out, got: {content:?}"

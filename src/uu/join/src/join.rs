@@ -23,6 +23,7 @@ use uucore::i18n::collator::{
     AlternateHandling, CollatorOptions, locale_cmp, should_use_locale_collation, try_init_collator,
 };
 use uucore::line_ending::LineEnding;
+use uucore::numeric_str_cmp::{NumInfo, NumInfoParseSettings, numeric_str_cmp};
 use uucore::{format_usage, show_error, translate};
 
 #[derive(Debug, thiserror::Error)]
@@ -193,6 +194,7 @@ struct Settings {
     print_unpaired2: bool,
     print_joined: bool,
     ignore_case: bool,
+    numeric: bool,
     line_ending: LineEnding,
     separator: SepSetting,
     autoformat: bool,
@@ -211,6 +213,7 @@ impl Default for Settings {
             print_unpaired2: false,
             print_joined: true,
             ignore_case: false,
+            numeric: false,
             line_ending: LineEnding::Newline,
             separator: SepSetting::Whitespaces,
             autoformat: false,
@@ -304,9 +307,9 @@ impl Ord for CaseInsensitiveSlice<'_> {
         if let Some((s, o)) =
             std::iter::zip(self.v.iter(), other.v.iter()).find(|(s, o)| !s.eq_ignore_ascii_case(o))
         {
-            // first characters that differ, return the case-insensitive comparison
-            let s = s.to_ascii_lowercase();
-            let o = o.to_ascii_lowercase();
+            // first characters that differ, compared folded to upper case like `sort -f`
+            let s = s.to_ascii_uppercase();
+            let o = o.to_ascii_uppercase();
             s.cmp(&o)
         } else {
             // one of the strings is a substring or equal of the other
@@ -331,39 +334,46 @@ impl PartialEq for CaseInsensitiveSlice<'_> {
 struct Input<Sep: Separator> {
     separator: Sep,
     ignore_case: bool,
+    numeric: Option<NumInfoParseSettings>,
     check_order: CheckOrder,
     use_locale: bool,
 }
 
 impl<Sep: Separator> Input<Sep> {
-    fn new(separator: Sep, ignore_case: bool, check_order: CheckOrder, use_locale: bool) -> Self {
+    fn new(
+        separator: Sep,
+        ignore_case: bool,
+        numeric: Option<NumInfoParseSettings>,
+        check_order: CheckOrder,
+        use_locale: bool,
+    ) -> Self {
         Self {
             separator,
             ignore_case,
+            numeric,
             check_order,
             use_locale,
         }
     }
 
+    /// Compare two join fields. Like `sort -k`, a field missing from a line
+    /// that is too short compares as an empty field.
     fn compare(&self, field1: Option<&[u8]>, field2: Option<&[u8]>) -> Ordering {
-        if let (Some(field1), Some(field2)) = (field1, field2) {
-            if self.ignore_case {
-                let field1 = CaseInsensitiveSlice { v: field1 };
-                let field2 = CaseInsensitiveSlice { v: field2 };
-                field1.cmp(&field2)
-            } else if self.use_locale {
-                locale_cmp(field1, field2)
-            } else {
-                field1.cmp(field2)
-            }
+        let field1 = field1.unwrap_or_default();
+        let field2 = field2.unwrap_or_default();
+
+        if let Some(parse_settings) = &self.numeric {
+            let (info1, range1) = NumInfo::parse(field1, parse_settings);
+            let (info2, range2) = NumInfo::parse(field2, parse_settings);
+            numeric_str_cmp((&field1[range1], &info1), (&field2[range2], &info2))
+        } else if self.ignore_case {
+            let field1 = CaseInsensitiveSlice { v: field1 };
+            let field2 = CaseInsensitiveSlice { v: field2 };
+            field1.cmp(&field2)
+        } else if self.use_locale {
+            locale_cmp(field1, field2)
         } else {
-            match field1 {
-                Some(_) => Ordering::Greater,
-                None => match field2 {
-                    Some(_) => Ordering::Less,
-                    None => Ordering::Equal,
-                },
-            }
+            field1.cmp(field2)
         }
     }
 }
@@ -811,6 +821,7 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
     settings.print_unpaired2 = print_unpaired2;
 
     settings.ignore_case = matches.get_flag("i");
+    settings.numeric = matches.get_flag("n");
     settings.key1 = get_field_number(keys, key1)?;
     settings.key2 = get_field_number(keys, key2)?;
     if let Some(value_os) = matches.get_one::<OsString>("t") {
@@ -990,6 +1001,13 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new("n")
+                .short('n')
+                .long("numeric-sort")
+                .help(translate!("join-help-n"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new("j")
                 .short('j')
                 .value_name("FIELD")
@@ -1102,6 +1120,7 @@ fn exec<Sep: Separator>(
     let input = Input::new(
         sep.clone(),
         settings.ignore_case,
+        settings.numeric.then(NumInfoParseSettings::from_locale),
         settings.check_order,
         should_use_locale_collation(),
     );

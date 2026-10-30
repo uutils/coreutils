@@ -82,20 +82,15 @@
 //! }
 //! ```
 
-use crate::{
-    display::Quotable,
-    error::{UError, UResult},
-    fs::FileInformation,
-};
+use crate::display::Quotable;
+use crate::error::{UError, UResult};
+use crate::fs::FileInformation;
 use clap::ArgMatches;
-use std::{
-    env,
-    error::Error,
-    ffi::{OsStr, OsString},
-    fmt::{Debug, Display},
-    fs,
-    path::{Path, PathBuf},
-};
+use std::error::Error;
+use std::ffi::{OsStr, OsString};
+use std::fmt::{Debug, Display};
+use std::path::{Path, PathBuf};
+use std::{env, fs};
 
 pub static BACKUP_CONTROL_VALUES: &[&str] = &[
     "simple", "never", "numbered", "t", "existing", "nil", "none", "off",
