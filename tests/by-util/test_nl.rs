@@ -1048,3 +1048,14 @@ fn test_negative_starting_line_and_increment() {
         .succeeds()
         .stdout_is("    -1\ta\n     0\tb\n");
 }
+
+#[test]
+fn test_negative_line_increment_as_a_separate_argument() {
+    for arg in ["-i", "--line-increment"] {
+        new_ucmd!()
+            .args(&[arg, "-1"])
+            .pipe_in("a\nb\nc\n")
+            .succeeds()
+            .stdout_is("     1\ta\n     0\tb\n    -1\tc\n");
+    }
+}
