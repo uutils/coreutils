@@ -1716,8 +1716,10 @@ fn test_final_offset_printed_when_an_input_fails() {
     at.write("a.txt", "a\n");
     at.mkdir("d");
 
+    // The message for an unreadable input differs between platforms (WASI says
+    // "Bad file descriptor"), so only the prefix is checked here.
     ucmd.args(&["a.txt", "d"])
         .fails_with_code(1)
         .stdout_contains("0000002")
-        .stderr_contains("d: Is a directory");
+        .stderr_contains("od: d:");
 }
