@@ -724,9 +724,8 @@ mod linux_only {
         let content: Vec<u8> = (0..3 * 1024 * 1024).map(|i| (i % 251) as u8).collect();
         at.write_bytes("in", &content);
 
-        // stdout and /dev/null are not limited by the file size. "capped" is written
-        // through tee's 2nd pipe, which stdout and /dev/null keep using after it fails;
-        // "capped2", the last output, through its 1st.
+        // stdout and /dev/null are not limited by the file size. A failed file
+        // must not receive bytes that belong in the other outputs.
         ucmd.args(&["capped", "/dev/null", "capped2"])
             .limit(Resource::FSIZE, CAP, CAP)
             .ignore_sigxfsz();
@@ -756,8 +755,8 @@ mod linux_only {
         check_failed_outputs_do_not_spill(None);
     }
 
-    // Just enough file descriptors for stdio, the 3 outputs and tee's 2 pipes: a
-    // failed output's pipe has to be freed before it is replaced.
+    // A tight descriptor limit still has to report the failed files and keep
+    // the bytes that did fit out of the other outputs.
     #[test]
     fn test_tee_failed_output_at_open_file_limit() {
         check_failed_outputs_do_not_spill(Some(10));
@@ -842,4 +841,49 @@ fn test_write_failure_reports_error_and_nonzero_exit() {
     let result = ucmd.arg("out_dir").pipe_in("data").fails();
 
     assert!(!result.stderr_str().is_empty());
+}
+
+/// Splice keeps references to the input pages. With a file and a pipe, those
+/// pages can change after tee exits and before the pipe is read, so the two
+/// outputs would disagree. Both must keep the bytes tee actually read.
+#[test]
+#[cfg(unix)]
+fn test_tee_file_and_stdout_keep_the_bytes_that_were_read() {
+    use std::io::{Read, Write};
+    use std::process::Command;
+    use uutests::util::TestScenario;
+
+    let scene = TestScenario::new("tee");
+    let at = &scene.fixtures;
+    let original = vec![b'a'; 32 * 1024];
+    at.write_bytes("upload", &original);
+
+    let mut child = Command::new(&scene.bin_path)
+        .arg(&scene.util_name)
+        .arg("snapshot")
+        .current_dir(at.plus(""))
+        .stdin(std::fs::File::open(at.plus("upload")).unwrap())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+
+    assert!(child.wait().unwrap().success());
+
+    let mut upload = std::fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus("upload"))
+        .unwrap();
+    upload.write_all(&vec![b'b'; original.len()]).unwrap();
+    drop(upload);
+
+    let mut stdout = Vec::new();
+    child
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_end(&mut stdout)
+        .unwrap();
+    assert_eq!(stdout, original);
+    assert_eq!(at.read_bytes("snapshot"), original);
 }
