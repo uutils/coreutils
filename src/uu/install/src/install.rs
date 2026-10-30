@@ -9,6 +9,7 @@
 
 mod mode;
 
+use clap::parser::ValueSource;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use rustix::process::{getegid, geteuid};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -464,11 +465,12 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
     #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
     let selinux_enabled = false;
 
-    // A bare `--context` means "use the default context"; an empty value is
-    // treated as no explicit context string.
+    // A bare `--context` means "use the default context", while an explicit
+    // `--context=` is an empty context that still has to be reported.
     let raw_context = matches.get_one::<String>(OPT_CONTEXT).cloned();
-    let bare_context = raw_context.as_deref() == Some("");
-    let mut context = raw_context.filter(|value| !value.is_empty());
+    let bare_context = raw_context.as_deref() == Some("")
+        && matches.value_source(OPT_CONTEXT) != Some(ValueSource::CommandLine);
+    let mut context = if bare_context { None } else { raw_context };
     if context.is_some() && !selinux_enabled {
         show_warning!("{}", translate!("install-warning-context-ignored"));
         context = None;
