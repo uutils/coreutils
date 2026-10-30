@@ -5445,7 +5445,6 @@ fn test_ls_selinux_context_indicator() {
             Some('+'),
             "Expected '+' indicator for an ACL plus SELinux context, got: {first_line}",
         );
-    } else {
     }
 
     // Test that ls -lnZ properly shows the context
