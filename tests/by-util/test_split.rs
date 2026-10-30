@@ -7,9 +7,9 @@
 
 use rand::{RngExt as _, SeedableRng, rng};
 use regex::Regex;
-use rstest::rstest;
 #[cfg(target_os = "linux")]
 use rlimit::Resource;
+use rstest::rstest;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::path::Path;
