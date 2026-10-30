@@ -1548,13 +1548,14 @@ fn test_seekable_stdout_without_of_is_not_truncated() {
 }
 
 /// An `oflag=` on a seekable stdout must keep the flags it was opened with,
-/// so output redirected with `>>` is still appended.
+/// so output redirected with `>>` is still appended, with or without
+/// `conv=notrunc`.
 #[rstest]
-#[case::dsync("oflag=dsync")]
-#[case::sync("oflag=sync")]
-#[case::nonblock("oflag=nonblock")]
 #[cfg(target_os = "linux")]
-fn test_oflag_keeps_append_mode_of_stdout(#[case] oflag: &str) {
+fn test_oflag_keeps_append_mode_of_stdout(
+    #[values("oflag=dsync", "oflag=sync", "oflag=nonblock")] oflag: &str,
+    #[values(&[][..], &["conv=notrunc"][..])] conv: &[&str],
+) {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.write("out", "old\n");
@@ -1566,6 +1567,7 @@ fn test_oflag_keeps_append_mode_of_stdout(#[case] oflag: &str) {
 
     ts.ucmd()
         .args(&[oflag, "status=none"])
+        .args(conv)
         .pipe_in("new\n")
         .set_stdout(Stdio::from(stdout))
         .succeeds();
