@@ -379,6 +379,13 @@ fn parse_options(args: &ArgMatches) -> std::result::Result<NumfmtOptions, ParseE
         Ok(0)
     }?;
 
+    // --field still conflicts with itself, like in GNU numfmt.
+    if args
+        .get_many::<String>(FIELD)
+        .is_some_and(|fields| fields.len() > 1)
+    {
+        return Err(translate!("numfmt-error-multiple-field-specifications").into());
+    }
     let fields = args.get_one::<String>(FIELD).unwrap().as_str();
     // a lone "-" means "all fields", even as part of a list of fields
     let fields = if fields.split(&[',', ' ']).any(|x| x == "-") {
@@ -569,6 +576,7 @@ pub fn uu_app() -> Command {
         .after_help(translate!("numfmt-after-help"))
         .override_usage(format_usage(&translate!("numfmt-usage")))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(DEBUG)
                 .long(DEBUG)
@@ -595,6 +603,7 @@ pub fn uu_app() -> Command {
                 .long(FIELD)
                 .help(translate!("numfmt-help-field"))
                 .value_name("FIELDS")
+                .action(ArgAction::Append)
                 .allow_hyphen_values(true)
                 .default_value(FIELD_DEFAULT),
         )

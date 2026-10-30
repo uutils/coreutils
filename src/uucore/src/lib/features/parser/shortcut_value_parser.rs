@@ -8,10 +8,8 @@
 //! A parser that accepts shortcuts for values.
 //! `ShortcutValueParser` is similar to clap's `PossibleValuesParser`
 
-use clap::{
-    builder::{PossibleValue, TypedValueParser},
-    error::{ContextKind, ContextValue, ErrorKind},
-};
+use clap::builder::{PossibleValue, TypedValueParser};
+use clap::error::{ContextKind, ContextValue, ErrorKind};
 use std::fmt::Write as _;
 
 /// A parser that accepts shortcuts for values.
@@ -138,7 +136,9 @@ where
 mod tests {
     use std::ffi::OsStr;
 
-    use clap::{Command, builder::PossibleValue, builder::TypedValueParser, error::ErrorKind};
+    use clap::Command;
+    use clap::builder::{PossibleValue, TypedValueParser};
+    use clap::error::ErrorKind;
 
     use super::ShortcutValueParser;
 

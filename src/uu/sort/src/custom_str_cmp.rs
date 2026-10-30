@@ -8,11 +8,7 @@
 //! The goal is to compare strings without transforming them first (i.e. not allocating new strings)
 
 use std::cmp::Ordering;
-
-// Newlines also act as blanks inside NUL-terminated records.
-pub fn is_blank(c: u8) -> bool {
-    matches!(c, b' ' | b'\t' | b'\n')
-}
+use uucore::numeric_str_cmp::is_blank;
 
 fn filter_char(c: u8, ignore_non_printing: bool, ignore_non_dictionary: bool) -> bool {
     if ignore_non_dictionary && !(c.is_ascii_alphanumeric() || is_blank(c)) {

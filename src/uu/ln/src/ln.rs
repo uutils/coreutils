@@ -71,6 +71,9 @@ pub enum LnError {
 
     #[error("{}", translate!("ln-failed-to-create-hard-link-dir", "source" => _0.to_string_lossy()))]
     FailedToCreateHardLinkDir(PathBuf),
+
+    #[error("{}", translate!("ln-error-cannot-overwrite-directory", "dest" => _0.maybe_quote()))]
+    CannotOverwriteDirectory(PathBuf),
 }
 
 impl UError for LnError {
@@ -405,6 +408,13 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
     };
 
     if dst.is_symlink() || dst.exists() {
+        // Never move a directory aside or replace it to make room for a link,
+        // matching GNU. A symlink to a directory is a link and is replaced.
+        if (settings.backup != BackupMode::None || settings.overwrite != OverwriteMode::NoClobber)
+            && dst.symlink_metadata().is_ok_and(|m| m.is_dir())
+        {
+            return Err(LnError::CannotOverwriteDirectory(dst.to_owned()));
+        }
         backup_path = backup_control::get_backup_path(settings.backup, dst, &settings.suffix);
         if settings.backup != BackupMode::None && !settings.symbolic {
             // `ln --backup f f`: the backup would move `f` away before the
@@ -507,7 +517,9 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
 
     if settings.verbose {
         let mut out = stdout();
-        write!(out, "{} -> {}", dst.quote(), source.quote())?;
+        // Like GNU, `->` marks a symbolic link and `=>` a hard link.
+        let arrow = if settings.symbolic { "->" } else { "=>" };
+        write!(out, "{} {arrow} {}", dst.quote(), source.quote())?;
         match backup_path {
             Some(path) => writeln!(
                 out,

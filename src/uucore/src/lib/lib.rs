@@ -39,16 +39,9 @@ mod mods; // core cross-platform modules
 pub use uucore_procs::*;
 
 // * cross-platform modules
-pub use crate::mods::clap_localization;
-pub use crate::mods::display;
-pub use crate::mods::error;
 #[cfg(all(feature = "fs", any(unix, windows, target_os = "wasi")))]
 pub use crate::mods::io;
-pub use crate::mods::line_ending;
-pub use crate::mods::locale;
-pub use crate::mods::os;
-pub use crate::mods::panic;
-pub use crate::mods::posix;
+pub use crate::mods::{clap_localization, display, error, line_ending, locale, os, panic, posix};
 
 // * feature-gated modules
 #[cfg(feature = "backup-control")]
@@ -57,12 +50,10 @@ pub use crate::features::backup_control;
 pub use crate::features::benchmark;
 #[cfg(feature = "buf-copy")]
 pub use crate::features::buf_copy;
-pub use crate::features::char_width;
 #[cfg(feature = "checksum")]
 pub use crate::features::checksum;
 #[cfg(feature = "colors")]
 pub use crate::features::colors;
-pub use crate::features::diagnostics;
 #[cfg(feature = "encoding")]
 pub use crate::features::encoding;
 #[cfg(feature = "extendedbigdecimal")]
@@ -79,6 +70,8 @@ pub use crate::features::hardware;
 pub use crate::features::i18n;
 #[cfg(feature = "lines")]
 pub use crate::features::lines;
+#[cfg(feature = "numeric-str-cmp")]
+pub use crate::features::numeric_str_cmp;
 #[cfg(any(
     feature = "parser",
     feature = "parser-num",
@@ -104,6 +97,7 @@ pub use crate::features::update_control;
 pub use crate::features::uptime;
 #[cfg(feature = "version-cmp")]
 pub use crate::features::version_cmp;
+pub use crate::features::{char_width, diagnostics};
 
 // * (platform-specific) feature-gated modules
 // ** non-windows (i.e. Unix + Fuchsia)
@@ -190,14 +184,14 @@ use nix::sys::signal::{
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader};
-use std::iter;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 #[cfg(all(target_os = "wasi", target_env = "p1"))]
 use std::os::wasi::ffi::{OsStrExt, OsStringExt};
-use std::str;
 use std::str::Utf8Chunk;
-use std::sync::{LazyLock, atomic::Ordering};
+use std::sync::LazyLock;
+use std::sync::atomic::Ordering;
+use std::{iter, str};
 
 /// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
 /// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.

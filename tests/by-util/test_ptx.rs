@@ -500,3 +500,23 @@ fn test_nullable_word_regexp_no_empty_matches() {
         .succeeds()
         .stdout_only(expected);
 }
+
+#[test]
+fn test_repeated_flags_are_accepted() {
+    new_ucmd!()
+        .args(&["-G", "-A", "-A"])
+        .pipe_in("hello world\n")
+        .succeeds()
+        .stdout_only(concat!(
+            ".xx \"\" \"\" \"hello world\" \"\" \":1\"\n",
+            ".xx \"\" \"hello\" \"world\" \"\" \":1\"\n"
+        ));
+    new_ucmd!()
+        .args(&["-f", "-f"])
+        .pipe_in("hello world\n")
+        .succeeds()
+        .stdout_only(concat!(
+            "                                       hello world\n",
+            "                               hello   world\n"
+        ));
+}

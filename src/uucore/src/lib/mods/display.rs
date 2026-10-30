@@ -25,11 +25,10 @@
 //! # Ok::<(), std::io::Error>(())
 //! ```
 
-use std::env;
 use std::ffi::OsStr;
-use std::fmt;
 use std::fs::File;
 use std::io::{self, BufWriter, Stdout, StdoutLock, Write as _};
+use std::{env, fmt};
 
 // These used to be defined here, but they live in their own crate now.
 pub use os_display::{Quotable, Quoted};

@@ -220,7 +220,7 @@ fn test_realpath_symlink_follow_limit() {
     at.touch("target");
     at.relative_symlink_file("target", "link1");
     for i in 2..=41 {
-        at.relative_symlink_file(&format!("link{}", i - 1), &format!("link{i}"));
+        at.relative_symlink_file(format!("link{}", i - 1), format!("link{i}"));
     }
     let expect = path_concat!(at.root_dir_resolved(), "target") + "\n";
     scene.ucmd().arg("link40").succeeds().stdout_only(expect);

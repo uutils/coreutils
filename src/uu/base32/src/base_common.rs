@@ -752,6 +752,8 @@ pub mod fast_decode {
                 ));
             }
 
+            // Encodings without partial decode (base58) are one big number, so
+            // they are decoded in one go after the loop, never in chunks.
             if supports_partial_decode {
                 flush_ready_chunks(
                     &mut buffer,
@@ -761,14 +763,6 @@ pub mod fast_decode {
                     &mut decoded_buffer,
                     output,
                 )?;
-            } else if buffer.len() == decode_in_chunks_of_size {
-                decode_in_chunks_to_buffer(
-                    supports_fast_decode_and_encode,
-                    &buffer,
-                    &mut decoded_buffer,
-                )?;
-                write_to_output(&mut decoded_buffer, output)?;
-                buffer.clear();
             }
         }
 

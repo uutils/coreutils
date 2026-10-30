@@ -13,6 +13,35 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+#[test]
+fn test_bare_dash_reads_stdin_in_file_list() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("file", "file\n");
+
+    ucmd.args(&["-", "file"])
+        .pipe_in("stdin\n")
+        .succeeds()
+        .stdout_is("stdin\nfile\n");
+}
+
+#[test]
+fn test_bare_dash_does_not_force_first_only() {
+    new_ucmd!()
+        .args(&["-t", "3", "-"])
+        .pipe_in("a  b\n")
+        .succeeds()
+        .stdout_is("a\tb\n");
+}
+
+#[test]
+fn test_first_only_with_bare_stdin_operand() {
+    new_ucmd!()
+        .args(&["--first-only", "-"])
+        .pipe_in("        A     B\n")
+        .succeeds()
+        .stdout_is("\tA     B\n");
+}
+
 #[rstest]
 #[case::unexpand_init_0(&["-t4"], " 1\n  2\n   3\n    4\n", " 1\n  2\n   3\n\t4\n")]
 #[case::unexpand_init_1(&["-t4"], "     5\n      6\n       7\n        8\n", "\t 5\n\t  6\n\t   7\n\t\t8\n")]
@@ -312,6 +341,25 @@ fn unexpand_wide_multibyte_char_width() {
         .pipe_in("\u{FF0D}      X\n")
         .succeeds()
         .stdout_is("\u{FF0D}\tX\n");
+}
+
+#[test]
+fn test_leading_unicode_blanks_with_final_newline() {
+    // Leading multibyte blanks must be converted whether or not the line ends
+    // in a newline. Four U+3000 (width 2 each) fill the first tab stop.
+    for args in [&[][..], &["--first-only"][..]] {
+        for (input, expected) in [
+            ("\u{3000}\u{3000}\u{3000}\u{3000}X\n", "\tX\n"),
+            ("\u{3000}\u{3000}\u{3000}\u{3000}X", "\tX"),
+        ] {
+            new_ucmd!()
+                .args(args)
+                .env("LC_ALL", "en_US.UTF-8")
+                .pipe_in(input)
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
 }
 
 #[test]

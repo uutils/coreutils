@@ -17,18 +17,16 @@ mod custom_str_cmp;
 mod diagnostics;
 mod ext_sort;
 mod merge;
-mod numeric_str_cmp;
 mod tmp_dir;
 
 use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use custom_str_cmp::{custom_str_cmp, is_blank};
+use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use foldhash::fast::FoldHasher;
 use foldhash::{HashMap, SharedSeed};
-use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{RngExt as _, rng};
 #[cfg(not(target_os = "wasi"))]
 use rayon::slice::ParallelSliceMut;
@@ -52,8 +50,11 @@ use uucore::extendedbigdecimal::ExtendedBigDecimal;
 #[cfg(feature = "i18n-collator")]
 use uucore::i18n::collator::{compute_sort_key_utf8, locale_cmp};
 use uucore::i18n::datetime::get_locale_months;
-use uucore::i18n::decimal::locale_decimal_separator;
 use uucore::line_ending::LineEnding;
+use uucore::numeric_str_cmp::{
+    NumInfo, NumInfoParseSettings, human_numeric_str_cmp, is_blank, locale_decimal_pt,
+    numeric_str_cmp,
+};
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
@@ -114,14 +115,6 @@ mod options {
 }
 
 const DECIMAL_PT: u8 = b'.';
-
-fn locale_decimal_pt() -> u8 {
-    match locale_decimal_separator().as_bytes().first().copied() {
-        Some(b'.') => b'.',
-        Some(b',') => b',',
-        _ => DECIMAL_PT,
-    }
-}
 
 const NEGATIVE: &u8 = &b'-';
 const POSITIVE: &u8 = &b'+';
@@ -184,6 +177,9 @@ pub enum SortError {
 
     #[error("{}", translate!("sort-multiple-output-files"))]
     MultipleOutputFiles,
+
+    #[error("{}", translate!("sort-multiple-compress-programs"))]
+    MultipleCompressPrograms,
 
     #[error("{}", translate!("sort-incompatible-tabs"))]
     IncompatibleTabs,
@@ -322,34 +318,8 @@ pub struct GlobalSettings {
     buffer_size_is_explicit: bool,
     compress_prog: Option<String>,
     merge_batch_size: usize,
-    numeric_locale: NumericLocaleSettings,
+    numeric_locale: NumInfoParseSettings,
     precomputed: Precomputed,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct NumericLocaleSettings {
-    thousands_sep: Option<u8>,
-    decimal_pt: Option<u8>,
-}
-
-impl Default for NumericLocaleSettings {
-    fn default() -> Self {
-        Self {
-            thousands_sep: None,
-            decimal_pt: Some(DECIMAL_PT),
-        }
-    }
-}
-
-impl NumericLocaleSettings {
-    fn num_info_settings(self, accept_si_units: bool, fold_si_units: bool) -> NumInfoParseSettings {
-        NumInfoParseSettings {
-            accept_si_units,
-            fold_si_units,
-            thousands_separator: self.thousands_sep,
-            decimal_pt: self.decimal_pt,
-        }
-    }
 }
 
 /// Data needed for sorting. Should be computed once before starting to sort
@@ -420,7 +390,7 @@ impl GlobalSettings {
             .any(|s| matches!(s.settings.mode, SortMode::HumanNumeric));
         self.precomputed.tokenize_blank_thousands_sep = self.separator.is_none()
             && uses_numeric
-            && self.numeric_locale.thousands_sep == Some(b' ');
+            && self.numeric_locale.thousands_separator == Some(b' ');
         self.precomputed.tokenize_allow_unit_after_blank =
             self.precomputed.tokenize_blank_thousands_sep && uses_human_numeric;
 
@@ -520,7 +490,7 @@ impl Default for GlobalSettings {
             buffer_size_is_explicit: false,
             compress_prog: None,
             merge_batch_size: default_merge_batch_size(),
-            numeric_locale: NumericLocaleSettings::default(),
+            numeric_locale: NumInfoParseSettings::default(),
             precomputed: Precomputed::default(),
         }
     }
@@ -566,6 +536,31 @@ struct ModeFlags {
 }
 
 impl ModeFlags {
+    fn from_matches(matches: &ArgMatches) -> Self {
+        let mut flags = Self {
+            human_numeric: matches.get_flag(options::modes::HUMAN_NUMERIC),
+            month: matches.get_flag(options::modes::MONTH),
+            general_numeric: matches.get_flag(options::modes::GENERAL_NUMERIC),
+            numeric: matches.get_flag(options::modes::NUMERIC),
+            version: matches.get_flag(options::modes::VERSION),
+            random: matches.get_flag(options::modes::RANDOM),
+        };
+        if let Some(sort_args) = matches.get_many::<String>(options::modes::SORT) {
+            for sort_arg in sort_args {
+                match sort_arg.as_str() {
+                    "human-numeric" => flags.human_numeric = true,
+                    "month" => flags.month = true,
+                    "general-numeric" => flags.general_numeric = true,
+                    "numeric" => flags.numeric = true,
+                    "version" => flags.version = true,
+                    "random" => flags.random = true,
+                    _ => {}
+                }
+            }
+        }
+        flags
+    }
+
     fn from_mode(mode: SortMode) -> Self {
         let mut flags = Self::default();
         match mode {
@@ -736,7 +731,7 @@ impl<'a> Line<'a> {
         for (selector, selection) in settings.selectors.iter().map(|selector| {
             (
                 selector,
-                selector.get_selection(line, token_buffer, settings.numeric_locale),
+                selector.get_selection(line, token_buffer, &settings.numeric_locale),
             )
         }) {
             match selection {
@@ -799,9 +794,11 @@ impl<'a> Line<'a> {
                 SortMode::Numeric | SortMode::HumanNumeric => {
                     // find out which range is used for numeric comparisons
                     // GNU marks a lowercase unit as not part of the key, even with -f.
-                    let mut parse_settings = settings
-                        .numeric_locale
-                        .num_info_settings(selector.settings.mode == SortMode::HumanNumeric, false);
+                    let mut parse_settings = NumInfoParseSettings {
+                        accept_si_units: selector.settings.mode == SortMode::HumanNumeric,
+                        fold_si_units: false,
+                        ..settings.numeric_locale
+                    };
                     // Debug annotations should ignore thousands separators to match GNU output.
                     parse_settings.thousands_separator = None;
                     let (_, num_range) =
@@ -1367,7 +1364,7 @@ impl FieldSelector {
         &self,
         line: &'a [u8],
         tokens: &[Field],
-        numeric_locale: NumericLocaleSettings,
+        numeric_locale: &NumInfoParseSettings,
     ) -> Selection<'a> {
         // `get_range` expects `None` when we don't need tokens and would get confused by an empty vector.
         let tokens = if self.needs_tokens {
@@ -1380,10 +1377,11 @@ impl FieldSelector {
             // Parse NumInfo for this number.
             let (info, num_range) = NumInfo::parse(
                 range_str,
-                &numeric_locale.num_info_settings(
-                    self.settings.mode == SortMode::HumanNumeric,
-                    self.settings.ignore_case,
-                ),
+                &NumInfoParseSettings {
+                    accept_si_units: self.settings.mode == SortMode::HumanNumeric,
+                    fold_si_units: self.settings.ignore_case,
+                    ..*numeric_locale
+                },
             );
             // Shorten the range to what we need to pass to numeric_str_cmp later.
             range_str = &range_str[num_range];
@@ -1496,33 +1494,6 @@ impl FieldSelector {
     }
 }
 
-fn detect_numeric_locale() -> NumericLocaleSettings {
-    let numeric_locale = i18n::get_numeric_locale();
-    let locale = &numeric_locale.0;
-    let encoding = numeric_locale.1;
-    let is_c_locale = encoding == i18n::UEncoding::Ascii && locale.to_string() == "und";
-
-    if is_c_locale {
-        return NumericLocaleSettings {
-            decimal_pt: Some(DECIMAL_PT),
-            thousands_sep: None,
-        };
-    }
-
-    let grouping = i18n::decimal::locale_grouping_separator();
-    NumericLocaleSettings {
-        decimal_pt: Some(locale_decimal_pt()),
-        // Upstream GNU coreutils ignore multibyte thousands separators
-        // (FIXME in C source). We keep the same single-byte behavior.
-        thousands_sep: match grouping.as_bytes() {
-            [b] => Some(*b),
-            // ICU returns NBSP as UTF-8 (0xC2 0xA0). In non-UTF8 locales like ISO-8859-1,
-            // the input byte is 0xA0, so map it to a single-byte separator.
-            [0xC2, 0xA0] if encoding != i18n::UEncoding::Utf8 => Some(0xA0),
-            _ => None,
-        },
-    }
-}
 /// Creates an `Arg` for a sort mode flag.
 fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
     Arg::new(mode)
@@ -1532,7 +1503,7 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
         .action(ArgAction::SetTrue)
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 fn get_rlimit() -> UResult<usize> {
     use rlimit::{Resource, getrlimit};
 
@@ -1543,12 +1514,12 @@ fn get_rlimit() -> UResult<usize> {
         .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
     get_rlimit().ok()
 }
 
-#[cfg(not(unix))]
+#[cfg(not(all(unix, not(target_os = "fuchsia"))))]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
     None
 }
@@ -1655,19 +1626,11 @@ struct GlobalOptionFlags {
     ignore_case: bool,
     ignore_non_printing: bool,
     reverse: bool,
-    mode_numeric: bool,
-    mode_general: bool,
-    mode_human: bool,
-    mode_month: bool,
-    mode_random: bool,
-    mode_version: bool,
+    modes: ModeFlags,
 }
 
 impl GlobalOptionFlags {
     fn from_matches(matches: &ArgMatches) -> Self {
-        let sort_value = matches
-            .get_one::<String>(options::modes::SORT)
-            .map(String::as_str);
         Self {
             keys_specified: matches.contains_id(options::KEY),
             ignore_leading_blanks: matches.get_flag(options::IGNORE_LEADING_BLANKS),
@@ -1675,16 +1638,7 @@ impl GlobalOptionFlags {
             ignore_case: matches.get_flag(options::IGNORE_CASE),
             ignore_non_printing: matches.get_flag(options::IGNORE_NONPRINTING),
             reverse: matches.get_flag(options::REVERSE),
-            mode_human: matches.get_flag(options::modes::HUMAN_NUMERIC)
-                || sort_value == Some("human-numeric"),
-            mode_month: matches.get_flag(options::modes::MONTH) || sort_value == Some("month"),
-            mode_general: matches.get_flag(options::modes::GENERAL_NUMERIC)
-                || sort_value == Some("general-numeric"),
-            mode_numeric: matches.get_flag(options::modes::NUMERIC)
-                || sort_value == Some("numeric"),
-            mode_version: matches.get_flag(options::modes::VERSION)
-                || sort_value == Some("version"),
-            mode_random: matches.get_flag(options::modes::RANDOM) || sort_value == Some("random"),
+            modes: ModeFlags::from_matches(matches),
         }
     }
 }
@@ -2083,25 +2037,25 @@ fn emit_debug_warnings(
     if flags.ignore_non_printing && !uses_non_printing {
         ignored_opts.push('i');
     }
-    if flags.mode_general && !uses_mode(SortMode::GeneralNumeric) {
+    if flags.modes.general_numeric && !uses_mode(SortMode::GeneralNumeric) {
         ignored_opts.push('g');
     }
-    if flags.mode_human && !uses_mode(SortMode::HumanNumeric) {
+    if flags.modes.human_numeric && !uses_mode(SortMode::HumanNumeric) {
         ignored_opts.push('h');
     }
-    if flags.mode_month && !uses_mode(SortMode::Month) {
+    if flags.modes.month && !uses_mode(SortMode::Month) {
         ignored_opts.push('M');
     }
-    if flags.mode_numeric && !uses_mode(SortMode::Numeric) {
+    if flags.modes.numeric && !uses_mode(SortMode::Numeric) {
         ignored_opts.push('n');
     }
-    if flags.mode_random && !uses_mode(SortMode::Random) {
+    if flags.modes.random && !uses_mode(SortMode::Random) {
         ignored_opts.push('R');
     }
     if reverse_ignored {
         ignored_opts.push('r');
     }
-    if flags.mode_version && !uses_mode(SortMode::Version) {
+    if flags.modes.version && !uses_mode(SortMode::Version) {
         ignored_opts.push('V');
     }
 
@@ -2139,7 +2093,7 @@ where
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut settings = GlobalSettings {
-        numeric_locale: detect_numeric_locale(),
+        numeric_locale: NumInfoParseSettings::from_locale(),
         ..Default::default()
     };
 
@@ -2177,6 +2131,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Prevent -o/--output to be specified multiple times
     if has_conflicting_values::<OsString>(&matches, options::OUTPUT) {
         return Err(SortError::MultipleOutputFiles.into());
+    }
+
+    // Same as -o: repeating --compress-program is fine as long as the value is the same
+    if has_conflicting_values::<String>(&matches, options::COMPRESS_PROG) {
+        return Err(SortError::MultipleCompressPrograms.into());
     }
 
     // Prevent -t/--field-separator from being given different values. Raw
@@ -2236,25 +2195,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .unwrap_or_default()
     };
 
-    let mut mode_flags = ModeFlags {
-        human_numeric: matches.get_flag(options::modes::HUMAN_NUMERIC),
-        month: matches.get_flag(options::modes::MONTH),
-        general_numeric: matches.get_flag(options::modes::GENERAL_NUMERIC),
-        numeric: matches.get_flag(options::modes::NUMERIC),
-        version: matches.get_flag(options::modes::VERSION),
-        random: matches.get_flag(options::modes::RANDOM),
-    };
-    if let Some(sort_arg) = matches.get_one::<String>(options::modes::SORT) {
-        match sort_arg.as_str() {
-            "human-numeric" => mode_flags.human_numeric = true,
-            "month" => mode_flags.month = true,
-            "general-numeric" => mode_flags.general_numeric = true,
-            "numeric" => mode_flags.numeric = true,
-            "version" => mode_flags.version = true,
-            "random" => mode_flags.random = true,
-            _ => {}
-        }
-    }
+    let mode_flags = ModeFlags::from_matches(&matches);
 
     let dictionary_order = matches.get_flag(options::DICTIONARY_ORDER);
     let ignore_non_printing = matches.get_flag(options::IGNORE_NONPRINTING);
@@ -2382,21 +2323,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
     settings.merge = matches.get_flag(options::MERGE);
 
-    settings.check = matches.contains_id(options::check::CHECK);
-    if settings.check && matches.get_flag(options::check::CHECK_SILENT) {
+    let check_modes: Vec<&str> = matches
+        .get_many::<String>(options::check::CHECK)
+        .map(|modes| modes.map(String::as_str).collect())
+        .unwrap_or_default();
+    let check_silent = matches.get_flag(options::check::CHECK_SILENT)
+        || check_modes
+            .iter()
+            .any(|m| matches!(*m, options::check::SILENT | options::check::QUIET));
+    let check_diagnose = check_modes.contains(&options::check::DIAGNOSE_FIRST);
+    if check_silent && check_diagnose {
         return Err(incompatible_options_error("cC"));
     }
-    if matches.get_flag(options::check::CHECK_SILENT)
-        || matches!(
-            matches
-                .get_one::<String>(options::check::CHECK)
-                .map(String::as_str),
-            Some(options::check::SILENT | options::check::QUIET)
-        )
-    {
-        settings.check_silent = true;
-        settings.check = true;
-    }
+    settings.check = check_silent || check_diagnose;
+    settings.check_silent = check_silent;
 
     if matches.contains_id(options::OUTPUT) && settings.check {
         let opts = if settings.check_silent { "Co" } else { "co" };
@@ -2538,6 +2478,7 @@ pub fn uu_app() -> Command {
     .arg(
         Arg::new(options::modes::SORT)
             .long(options::modes::SORT)
+            .action(ArgAction::Append)
             .value_parser(ShortcutValueParser::new([
                 "general-numeric",
                 "human-numeric",
@@ -2605,6 +2546,8 @@ pub fn uu_app() -> Command {
             .long(options::check::CHECK)
             .require_equals(true)
             .num_args(0..)
+            .default_missing_value(options::check::DIAGNOSE_FIRST)
+            .action(ArgAction::Append)
             .value_parser(ShortcutValueParser::new([
                 options::check::SILENT,
                 options::check::QUIET,
@@ -2725,7 +2668,9 @@ pub fn uu_app() -> Command {
             .long(options::COMPRESS_PROG)
             .help(translate!("sort-help-compress-prog"))
             .value_name("PROG")
-            .value_hint(clap::ValueHint::CommandName),
+            .value_hint(clap::ValueHint::CommandName)
+            // To detect multiple occurrences and raise an error
+            .action(ArgAction::Append),
     )
     .arg(
         Arg::new(options::BATCH_SIZE)

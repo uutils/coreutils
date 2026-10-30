@@ -194,7 +194,7 @@ jobs:
 
   selinux:
     name: Run GNU tests (SELinux)
-    runs-on: ubuntu-latest # using VM's glibc
+    runs-on: ubuntu-24.04 # TODO: use ubuntu-latest, https://github.com/uutils/coreutils/issues/15955 # ubuntu-latest # using VM's glibc
     steps:
     #### Get the code
     - name: Checkout code (uutils)

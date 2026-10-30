@@ -726,9 +726,7 @@ mod tests {
     fn test_crlf_across_blocks() {
         use std::io::Write;
 
-        use super::Digest;
-        use super::DigestWriter;
-        use super::Md5;
+        use super::{Digest, DigestWriter, Md5};
 
         // Writing "\r" in one call to `write()`, and then "\n" in another.
         let mut digest = Box::new(Md5::default()) as Box<dyn Digest>;

@@ -2088,3 +2088,23 @@ fn test_write_error_is_reported_and_fatal() {
             .stderr_is("numfmt: write error: No space left on device\n");
     }
 }
+
+#[test]
+fn test_repeated_option_last_one_wins() {
+    new_ucmd!()
+        .args(&["--to=si", "--to=si", "1000"])
+        .succeeds()
+        .stdout_only("1.0k\n");
+    new_ucmd!()
+        .args(&["--to=si", "--to=iec", "2000"])
+        .succeeds()
+        .stdout_only("2.0K\n");
+}
+
+#[test]
+fn test_repeated_field_is_an_error() {
+    new_ucmd!()
+        .args(&["--field=1", "--field=1", "1000"])
+        .fails_with_code(1)
+        .stderr_only("numfmt: multiple field specifications\n");
+}

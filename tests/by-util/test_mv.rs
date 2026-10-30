@@ -426,6 +426,50 @@ fn test_mv_replace_symlink_with_symlink() {
 }
 
 #[rstest]
+#[case::into_directory(false)]
+#[case::no_target_directory(true)]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_symlink_to_directory_does_not_replace_empty_directory(#[case] no_target_dir: bool) {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("outside");
+    at.mkdir("incoming");
+    at.mkdir_all("spool/queue");
+    at.symlink_dir("outside", "incoming/queue");
+
+    if no_target_dir {
+        ucmd.arg("-T").arg("incoming/queue").arg("spool/queue");
+    } else {
+        ucmd.arg("incoming/queue").arg("spool");
+    }
+    ucmd.fails();
+
+    assert!(at.dir_exists("spool/queue"));
+    assert!(!at.is_symlink("spool/queue"));
+    assert!(at.is_symlink("incoming/queue"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_symlink_to_directory_with_trailing_slash_keeps_empty_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("outside");
+    at.mkdir("incoming");
+    at.mkdir_all("spool/queue");
+    at.symlink_dir("outside", "incoming/queue");
+
+    // rename(2) refuses a symlink named with a trailing slash, which must not
+    // leave the destination directory removed.
+    ucmd.arg("incoming/queue/")
+        .arg("spool")
+        .fails()
+        .stderr_contains("Not a directory");
+
+    assert!(at.dir_exists("spool/queue"));
+}
+
+#[rstest]
 #[case::existing_target(true)]
 #[case::dangling_target(false)]
 #[cfg(all(unix, not(target_os = "android")))]
@@ -881,7 +925,7 @@ fn test_mv_backup_control(#[case] args: &[&str], #[case] backup_suffix: Option<&
     assert!(!at.file_exists(source));
     assert_eq!(at.read(dest), "new");
     match backup_suffix {
-        Some(suffix) => assert_eq!(at.read(&format!("{dest}{suffix}")), "old"),
+        Some(suffix) => assert_eq!(at.read(format!("{dest}{suffix}")), "old"),
         None => assert!(!at.file_exists(format!("{dest}~"))),
     }
 }
@@ -983,13 +1027,13 @@ fn test_mv_update_option() {
     let times_later = FileTimes::new().set_accessed(now).set_modified(later);
     File::options()
         .write(true)
-        .open(at.plus_as_string(file_a))
+        .open(at.plus(file_a))
         .unwrap()
         .set_times(times_now)
         .unwrap();
     File::options()
         .write(true)
-        .open(at.plus_as_string(file_b))
+        .open(at.plus(file_b))
         .unwrap()
         .set_times(times_later)
         .unwrap();
@@ -1732,13 +1776,13 @@ fn test_acl() {
     let at = &scene.fixtures;
     let path1 = "a";
     let path2 = "b";
-    let file = "a/file";
     let file_target = "b/file";
     at.mkdir(path1);
     at.mkdir(path2);
-    at.touch(file);
+    let filename = "a/file";
+    at.touch(filename);
+    let path = at.plus(filename);
 
-    let path = at.plus_as_string(file);
     // calling the command directly. xattr requires some dev packages to be installed
     // and it adds a complex dependency just for a test
     match Command::new("setfacl")
@@ -1759,7 +1803,7 @@ fn test_acl() {
 
     scene.ucmd().arg(&path).arg(path2).succeeds();
 
-    assert!(compare_xattrs(&file, &file_target));
+    assert!(compare_xattrs(&path, file_target));
 }
 
 #[test]
@@ -2789,10 +2833,7 @@ fn test_mv_selinux_context() {
         let mut cmd = scene.ucmd();
         cmd.arg(arg);
 
-        let result = cmd
-            .arg(at.plus_as_string(src))
-            .arg(at.plus_as_string(dest))
-            .run();
+        let result = cmd.arg(at.plus(src)).arg(at.plus(dest)).run();
 
         // Skip test if SELinux is not enabled
         if result
@@ -2819,8 +2860,8 @@ fn test_mv_selinux_context() {
         }
 
         // Clean up files
-        let _ = std::fs::remove_file(at.plus_as_string(dest));
-        let _ = std::fs::remove_file(at.plus_as_string(src));
+        let _ = std::fs::remove_file(at.plus(dest));
+        let _ = std::fs::remove_file(at.plus(src));
     }
 }
 
@@ -2987,7 +3028,7 @@ fn test_mv_xattr_enotsup_silent() {
     {
         scene
             .ucmd()
-            .arg(at.plus_as_string("src"))
+            .arg(at.plus("src"))
             .arg("/dev/shm/mv_test")
             .succeeds()
             .no_stderr();
@@ -3031,7 +3072,7 @@ fn test_mv_cross_device_dir_xattr_preserved() {
 
     scene
         .ucmd()
-        .arg(at.plus_as_string("src_dir"))
+        .arg(at.plus("src_dir"))
         .arg(dst_path.to_str().unwrap())
         .succeeds()
         .no_stderr();
@@ -3069,7 +3110,7 @@ fn test_mv_cross_device_xattr_failure_keeps_the_rest() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let too_big = vec![b'x'; 8000];
+    let too_big = vec![b'x'; 128 * 1024];
     at.touch("probe");
     let probe = FxHashMap::from_iter([(OsString::from("user.probe"), too_big.clone())]);
     if apply_xattrs(at.plus("probe"), probe).is_ok() {
@@ -3144,7 +3185,7 @@ fn test_mv_cross_device_symlink_onto_existing() {
 
     scene
         .ucmd()
-        .arg(at.plus_as_string("src_link"))
+        .arg(at.plus("src_link"))
         .arg(dst_path.to_str().unwrap())
         .succeeds()
         .no_stderr();
@@ -3187,7 +3228,7 @@ fn test_mv_cross_device_symlink_onto_existing_dir() {
     scene
         .ucmd()
         .arg("-T")
-        .arg(at.plus_as_string("src_link"))
+        .arg(at.plus("src_link"))
         .arg(dst_dir.to_str().unwrap())
         .fails();
 

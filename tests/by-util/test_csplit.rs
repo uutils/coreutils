@@ -132,6 +132,35 @@ fn test_binary_input_regex() {
 }
 
 #[test]
+fn test_regex_does_not_ignore_carriage_return() {
+    for (pattern, stdout) in [("/^---$/", "9\n"), ("/^---$/-1", "9\n"), ("%^---$%", "")] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["-", pattern])
+            .pipe_in("x\n---\r\ny\n")
+            .fails_with_code(1)
+            .stdout_is(stdout)
+            .stderr_is(format!("csplit: '{pattern}': match not found\n"));
+
+        assert!(!at.file_exists("xx00"));
+    }
+}
+
+#[test]
+fn test_regex_matches_carriage_return() {
+    let input = "x\n---\r\ny\n";
+    for (pattern, split) in [("/^---.$/", 2), ("/^y$/-1", 2), ("/^---.$/+1", 7)] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["-", pattern])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(format!("{split}\n{}\n", input.len() - split));
+
+        assert_eq!(at.read("xx00"), &input[..split]);
+        assert_eq!(at.read("xx01"), &input[split..]);
+    }
+}
+
+#[test]
 fn test_binary_input_skip_regex() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-", "%match%"])

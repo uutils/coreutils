@@ -186,15 +186,17 @@ impl Uniq {
 
     fn skip_fields_offset(&self, line: &[u8]) -> usize {
         if let Some(skip_fields) = self.skip_fields {
+            // Fields end at a blank or a newline; \r and \f are ordinary bytes.
+            let is_blank = |byte: u8| matches!(byte, b' ' | b'\t' | b'\n');
             let mut idx = 0;
             for _ in 0..skip_fields {
-                while idx < line.len() && line[idx].is_ascii_whitespace() {
+                while idx < line.len() && is_blank(line[idx]) {
                     idx += 1;
                 }
                 if idx >= line.len() {
                     return line.len();
                 }
-                while idx < line.len() && !line[idx].is_ascii_whitespace() {
+                while idx < line.len() && !is_blank(line[idx]) {
                     idx += 1;
                 }
                 if idx >= line.len() {

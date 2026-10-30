@@ -814,6 +814,21 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     return Ok(());
                 }
 
+                // Check before the destination is removed below, which would
+                // remove the source if both are the same file.
+                let source_meta = metadata(source)?;
+                if let Ok(to_stat) =
+                    parent_fd.stat_at(filename.as_os_str(), SymlinkBehavior::Follow)
+                {
+                    // st_dev and st_ino types vary by platform (i32/u32 on macOS, u64 on Linux)
+                    #[allow(clippy::unnecessary_cast)]
+                    if source_meta.dev() == to_stat.st_dev as u64
+                        && source_meta.ino() == to_stat.st_ino as u64
+                    {
+                        return Err(InstallError::SameFile(source.clone(), target.clone()).into());
+                    }
+                }
+
                 let backup_path = perform_backup(source, &target, b)?;
 
                 if let Err(e) = parent_fd.unlink_at(filename.as_os_str(), false)
@@ -1009,19 +1024,6 @@ fn perform_backup(from: &Path, to: &Path, b: &Behavior) -> UResult<Option<PathBu
 /// - `copy_file` uses path-based `OpenOptions::new().create_new().open()`
 #[cfg(not(target_os = "redox"))]
 fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsStr) -> UResult<()> {
-    let from_meta = metadata(from)?;
-
-    // Check if source and destination are the same file
-    if let Ok(to_stat) = to_parent_fd.stat_at(to_filename, SymlinkBehavior::Follow) {
-        // st_dev and st_ino types vary by platform (i32/u32 on macOS, u64 on Linux)
-        #[allow(clippy::unnecessary_cast)]
-        if from_meta.dev() == to_stat.st_dev as u64 && from_meta.ino() == to_stat.st_ino as u64 {
-            return Err(
-                InstallError::SameFile(from.to_path_buf(), PathBuf::from(to_filename)).into(),
-            );
-        }
-    }
-
     let mut src = File::open(from)?;
     let mut dst = to_parent_fd.open_file_at(to_filename)?;
     copy_fast(&mut src, &mut dst)?;
