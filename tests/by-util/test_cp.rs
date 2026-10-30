@@ -9881,3 +9881,37 @@ fn test_symbolic_link_and_link_conflict() {
         .stderr_contains("cannot make both hard and symbolic links");
     assert!(!at.file_exists("b"));
 }
+
+#[test]
+fn test_link_with_target_directory_attached_to_the_flag() {
+    // "./backups" ends with an "s", but it is the value of -t, not --symbolic-link.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("backups");
+    at.write("a.txt", "a\n");
+    ucmd.args(&["-l", "-t./backups", "a.txt"])
+        .succeeds()
+        .no_stderr();
+    assert!(at.file_exists("backups/a.txt"));
+}
+
+#[test]
+fn test_link_with_backup_suffix_attached_to_the_flag() {
+    // ".s" is the suffix given to -S, not a further flag in the cluster.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a.txt", "a\n");
+    ucmd.args(&["-l", "-b", "-S.s", "a.txt", "b"])
+        .succeeds()
+        .no_stderr();
+    assert!(at.file_exists("b"));
+}
+
+#[test]
+fn test_link_with_an_operand_that_looks_like_a_flag() {
+    // Everything after "--" is an operand, even when it starts with a dash.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("-s.txt", "s\n");
+    ucmd.args(&["-l", "--", "-s.txt", "d"])
+        .succeeds()
+        .no_stderr();
+    assert!(at.file_exists("d"));
+}
