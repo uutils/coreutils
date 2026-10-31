@@ -1366,3 +1366,12 @@ fn test_mkdir_concurrent_non_recursive() {
         );
     }
 }
+
+#[test]
+fn test_context_without_value_does_not_consume_operand() {
+    // `at_and_ucmd` is only imported on non-Windows platforms, and the
+    // behaviour under test is platform independent.
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd().args(&["--context", "newdir"]).succeeds();
+    assert!(ts.fixtures.dir_exists("newdir"));
+}
