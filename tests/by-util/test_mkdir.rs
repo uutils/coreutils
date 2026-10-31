@@ -1306,8 +1306,12 @@ mod diagnostics {
             .fails_with_code(1);
         let stderr = result.stderr_str();
 
-        assert!(stderr.contains("--mode=a=\\001 some_dir"), "{stderr}");
-        assert_eq!(result.caret_column(), Some(14), "{stderr}");
+        assert!(
+            stderr.contains("1 │ $'a=\\x01' --mode=a=\\001 some_dir"),
+            "{stderr}"
+        );
+        assert_eq!(result.caret_column(), Some(20), "{stderr}");
+        assert!(!stderr.contains('\x01'), "{stderr:?}");
     }
 }
 
