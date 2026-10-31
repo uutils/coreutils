@@ -2504,11 +2504,10 @@ fn test_date_format_locale_date_and_time_no_pad_large_width() {
 /// `%p` and `%P` use the locale's AM/PM markers, also inside `%r`. The Linux
 /// values are GNU date's, the macOS ones follow its locale data.
 #[rstest]
-#[cfg(any(target_vendor = "apple", all(target_os = "linux", target_env = "gnu")))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: timezone/locale database not visible"
-)]
+#[cfg(all(
+    not(wasi_runner),
+    any(target_vendor = "apple", all(target_os = "linux", target_env = "gnu"))
+))]
 #[cfg_attr(
     target_os = "linux",
     case::spanish("es_ES.UTF-8", "%p", "p.\u{202f}m."),
@@ -2538,6 +2537,28 @@ fn test_date_format_locale_ampm_markers(
     if !is_locale_available(locale) {
         return;
     }
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-d")
+        .arg("1997-01-19 20:17:48")
+        .arg(format!("+{format}"))
+        .succeeds()
+        .stdout_only(format!("{expected}\n"));
+}
+
+/// The WASI guest has no locale data, so it uses the C locale markers for every locale.
+#[rstest]
+#[cfg(wasi_runner)]
+#[case::spanish("es_ES.UTF-8", "%p", "PM")]
+#[case::spanish_upper("es_ES.UTF-8", "%^p", "PM")]
+#[case::spanish_time("es_ES.UTF-8", "%r", "08:17:48 PM")]
+#[case::british_lower("en_GB.UTF-8", "%P", "pm")]
+#[case::japanese("ja_JP.UTF-8", "%p", "PM")]
+fn test_date_format_ampm_markers_use_c_locale_on_wasi(
+    #[case] locale: &str,
+    #[case] format: &str,
+    #[case] expected: &str,
+) {
     new_ucmd!()
         .env("LC_ALL", locale)
         .arg("-d")
