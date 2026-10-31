@@ -500,10 +500,39 @@ fn test_buffered_read_edgecase_behaviour() {
 }
 
 #[test]
-fn test_first_only_given_twice() {
-    new_ucmd!()
-        .args(&["--first-only", "--first-only"])
-        .pipe_in("a\n")
+fn test_repeated_flags_are_accepted() {
+    // clap treats a repeated boolean flag as a conflict unless the command
+    // allows an argument to override itself.
+    let input = "        A     B\n";
+
+    let all_once = new_ucmd!()
+        .args(&["-a"])
+        .pipe_in(input)
         .succeeds()
-        .stdout_is("a\n");
+        .stdout_move_str();
+    let all_twice = new_ucmd!()
+        .args(&["-a", "-a"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(all_twice, all_once);
+
+    let first_once = new_ucmd!()
+        .args(&["--first-only"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_move_str();
+    let first_twice = new_ucmd!()
+        .args(&["-f", "--first-only"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(first_twice, first_once);
+
+    let short_twice = new_ucmd!()
+        .args(&["-U", "-U"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(short_twice, first_once);
 }
