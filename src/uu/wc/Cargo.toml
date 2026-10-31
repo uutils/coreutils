@@ -24,6 +24,7 @@ thiserror = { workspace = true }
 unicode-width = { workspace = true }
 uucore = { workspace = true, features = [
   "hardware",
+  "i18n-charmap",
   "parser",
   "pipes",
   "quoting-style",
