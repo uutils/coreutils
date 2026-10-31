@@ -42,6 +42,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
 use std::sync::OnceLock;
+use uucore::char_width::char_width_at;
 use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
@@ -231,9 +232,31 @@ enum SortMode {
     Default,
 }
 
-/// Return the length of the byte slice while ignoring embedded NULs (used for debug underline alignment).
-fn count_non_null_bytes(bytes: &[u8]) -> usize {
-    bytes.iter().filter(|&&c| c != b'\0').count()
+/// Return the number of columns `bytes` takes up in the `--debug` output, so
+/// that the key underlines line up with the printed line.
+///
+/// Control characters, including NUL, take no column, and a tab, which is
+/// printed as `>`, takes one. In a UTF-8 locale every other character takes its
+/// display width, and a byte that is not valid UTF-8 takes one column.
+fn debug_width(bytes: &[u8]) -> usize {
+    if !matches!(i18n::get_ctype_encoding(), i18n::UEncoding::Utf8) {
+        return bytes
+            .iter()
+            .filter(|&&c| c == b'\t' || !c.is_ascii_control())
+            .count();
+    }
+    let mut width = 0;
+    let mut pos = 0;
+    while pos < bytes.len() {
+        let (char_width, len) = if bytes[pos] == b'\t' {
+            (1, 1)
+        } else {
+            char_width_at(bytes, pos)
+        };
+        width += char_width;
+        pos += len;
+    }
+    width
 }
 
 pub struct Output {
@@ -869,18 +892,15 @@ impl<'a> Line<'a> {
                 _ => {}
             }
 
-            // Don't let embedded NUL bytes influence column alignment in the
-            // debug underline output, since they are often filtered out (e.g.
-            // via `tr -d '\0'`) before inspection.
             let select = &line[..selection.start];
-            let indent = count_non_null_bytes(select);
+            let indent = debug_width(select);
             write!(writer, "{}", " ".repeat(indent))?;
 
             if selection.is_empty() {
                 writeln!(writer, "{}", translate!("sort-error-no-match-for-key"))?;
             } else {
                 let select = &line[selection];
-                let underline_len = count_non_null_bytes(select);
+                let underline_len = debug_width(select);
                 writeln!(writer, "{}", "_".repeat(underline_len))?;
             }
         }
@@ -902,7 +922,7 @@ impl<'a> Line<'a> {
             if self.line.is_empty() {
                 writeln!(writer, "{}", translate!("sort-error-no-match-for-key"))?;
             } else {
-                writeln!(writer, "{}", "_".repeat(self.line.len()))?;
+                writeln!(writer, "{}", "_".repeat(debug_width(self.line)))?;
             }
         }
         Ok(())
