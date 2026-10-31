@@ -63,6 +63,18 @@ fn test_invalid_group() {
 }
 
 #[test]
+fn test_invalid_group_with_colon_prefix() {
+    // The `:gid` format is only accepted by --from, not for the group operand
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    let gid = getegid().as_raw();
+    ucmd.arg(format!(":{gid}"))
+        .arg("file")
+        .fails_with_code(1)
+        .stderr_is(format!("chgrp: invalid group: ':{gid}'\n"));
+}
+
+#[test]
 fn test_error_1() {
     if !getegid().is_root() {
         new_ucmd!().arg("bin").arg(DIR).fails().stderr_contains(
@@ -604,11 +616,11 @@ fn test_numeric_group_formats() {
     let new_gid = at.plus("test_file").metadata().unwrap().gid();
     assert_eq!(new_gid, second_group.as_raw());
 
-    // Test :gid format in target group
+    // Test numeric gid in target group (the :gid format is only valid for --from)
     scene
         .ucmd()
         .arg(format!("--from={}", second_group.as_raw()))
-        .arg(format!(":{}", first_group.as_raw()))
+        .arg(first_group.as_raw().to_string())
         .arg("test_file")
         .succeeds()
         .no_stderr();
