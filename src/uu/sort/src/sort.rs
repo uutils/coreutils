@@ -262,22 +262,6 @@ impl Output {
         Ok(Self { file })
     }
 
-    fn into_write(self) -> UResult<BufWriter<Box<dyn Write>>> {
-        Ok(BufWriter::new(match self.file {
-            Some((name, file)) => {
-                // Only regular files can be truncated; there a failure leaves stale bytes.
-                if file.metadata().is_ok_and(|meta| meta.is_file()) {
-                    file.set_len(0).map_err(|error| SortError::TruncateFailed {
-                        path: PathBuf::from(name),
-                        error,
-                    })?;
-                }
-                Box::new(file)
-            }
-            None => Box::new(stdout()),
-        }))
-    }
-
     fn as_output_name(&self) -> Option<&OsStr> {
         match &self.file {
             Some((name, _file)) => Some(name.as_os_str()),
@@ -3308,7 +3292,47 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
     output: Output,
 ) -> UResult<()> {
     let ctx = output.write_failed_context();
-    let mut writer = output.into_write()?;
+    if let Some((name, file)) = output.file {
+        // Only regular files can be truncated; there a failure leaves stale bytes.
+        if file.metadata().is_ok_and(|meta| meta.is_file()) {
+            file.set_len(0).map_err(|error| SortError::TruncateFailed {
+                path: PathBuf::from(name),
+                error,
+            })?;
+        }
+        print_sorted_with_writer(iter, settings, BufWriter::new(file), ctx)
+    } else {
+        let writer = uucore::output::StdoutBuffer::new(stdout());
+        match writer {
+            uucore::output::StdoutBuffer::Block(writer) => {
+                print_sorted_with_writer(iter, settings, writer, ctx)
+            }
+            #[cfg(unix)]
+            uucore::output::StdoutBuffer::Unbuffered(writer) => print_sorted_with_writer(
+                iter,
+                settings,
+                uucore::output::StdoutBuffer::into_unbuffered(writer),
+                ctx,
+            ),
+            #[cfg(unix)]
+            uucore::output::StdoutBuffer::Line(writer) => {
+                print_sorted_with_writer(iter, settings, writer, ctx)
+            }
+        }
+    }
+}
+
+fn print_sorted_with_writer<'a, T, W, C>(
+    iter: T,
+    settings: &GlobalSettings,
+    mut writer: W,
+    ctx: C,
+) -> UResult<()>
+where
+    T: Iterator<Item = &'a Line<'a>>,
+    W: Write,
+    C: Fn() -> String,
+{
     for line in iter {
         line.write(&mut writer, settings).map_err_context(&ctx)?;
     }
