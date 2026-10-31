@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore udev pcent iuse itotal iused ipcent binfmt Utilisé Monté
+// spell-checker:ignore udev pcent iuse itotal iused ipcent binfmt Utilisé Monté rprivate virtiofs sshfs
 
 #![allow(
     clippy::similar_names,
@@ -1156,6 +1156,104 @@ fn run_df_with_masked_proc(args: &str) -> Option<(bool, String, String)> {
         String::from_utf8_lossy(&output.stdout).to_string(),
         String::from_utf8_lossy(&output.stderr).to_string(),
     ))
+}
+
+#[test]
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
+fn test_local_excludes_remote_filesystem_types() {
+    use std::fmt::Write;
+    use std::process::Command;
+
+    if !Command::new("unshare")
+        .args(["-rm", "true"])
+        .output()
+        .is_ok_and(|output| output.status.success())
+    {
+        eprintln!("Skipping: unshare -rm does not work");
+        return;
+    }
+
+    let ts = TestScenario::new("df");
+    let at = &ts.fixtures;
+    std::fs::create_dir_all(at.plus("proc/self")).unwrap();
+
+    // Classification checked against GNU 9.12 with the same synthetic mount table.
+    // spell-checker: disable
+    let fs_types = [
+        "ext4",
+        "tmpfs",
+        "9p",
+        "virtiofs",
+        "fuse.sshfs",
+        "acfs",
+        "afs",
+        "auristorfs",
+        "autofs",
+        "ceph",
+        "cifs",
+        "coda",
+        "fhgfs",
+        "gfs",
+        "gfs2",
+        "gpfs",
+        "ibrix",
+        "lustre",
+        "ncpfs",
+        "nfs",
+        "nfs4",
+        "ocfs2",
+        "panfs",
+        "smb",
+        "smb2",
+        "smb3",
+        "smbfs",
+        "snfs",
+        "vxfs",
+    ];
+    // spell-checker: enable
+    let mut mountinfo = String::new();
+    for (i, fs_type) in fs_types.iter().enumerate() {
+        let mount_id = i + 2;
+        writeln!(
+            mountinfo,
+            "{mount_id} 1 0:{mount_id} / / rw - {fs_type} none rw"
+        )
+        .unwrap();
+    }
+    at.write("proc/self/mountinfo", &mountinfo);
+
+    for local in [false, true] {
+        let mut command = ts.cmd("unshare");
+        command
+            .args(&[
+                "-rm",
+                "sh",
+                "-c",
+                r#"mount --make-rprivate / && mount --bind "$1" /proc || exit 77
+shift
+exec "$@""#,
+                "sh",
+            ])
+            .arg(at.plus("proc"))
+            .arg(&ts.bin_path)
+            .args(&["df", "--all", "--output=fstype"]);
+        if local {
+            command.arg("--local");
+        }
+        let result = command.run();
+        if result.code() == 77 {
+            eprintln!("Skipping: cannot bind mount /proc in the namespace");
+            return;
+        }
+        result.success().no_stderr();
+        let types: Vec<_> = result.stdout_str().lines().skip(1).map(str::trim).collect();
+        let expected: &[&str] = if local {
+            &["ext4", "tmpfs", "9p", "virtiofs", "fuse.sshfs"]
+        } else {
+            &fs_types
+        };
+        assert_eq!(types, expected);
+    }
 }
 
 /// Test df fallback when /proc is masked - should work with path, fail without or with filters.
