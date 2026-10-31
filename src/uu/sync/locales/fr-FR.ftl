@@ -3,7 +3,7 @@ sync-usage = sync [OPTION]... FICHIER...
 
 # Messages d'aide
 sync-help-file-system = synchroniser les systèmes de fichiers qui contiennent les fichiers (Linux et Windows uniquement)
-sync-help-data = synchroniser seulement les données des fichiers, pas les métadonnées inutiles (Linux uniquement)
+sync-help-data = synchroniser seulement les données des fichiers, pas les métadonnées inutiles
 
 # Messages d'erreur
 sync-error-data-needs-argument = --data nécessite au moins un argument
