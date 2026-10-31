@@ -1934,6 +1934,33 @@ fn test_large_bs_does_not_fault_in_copy_buffer() {
 }
 
 #[test]
+#[cfg(all(unix, not(wasi_runner)))]
+fn test_iflag_nonblock_stdin() {
+    // Keep the writer open so an empty pipe would block without O_NONBLOCK.
+    let (reader, _writer) = std::io::pipe().unwrap();
+    new_ucmd!()
+        .args(&["iflag=nonblock", "count=1", "status=none"])
+        .set_stdin(reader)
+        .timeout(Duration::from_secs(5))
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("Would block");
+}
+
+#[test]
+#[cfg(all(unix, not(wasi_runner)))]
+fn test_iflag_nonblock_fifo() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    // Opening a FIFO with no writer must not wait for a writer to appear.
+    ucmd.args(&["if=fifo", "iflag=nonblock", "status=none"])
+        .timeout(Duration::from_secs(5))
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+}
+
+#[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
     let ts = TestScenario::new(util_name!());
