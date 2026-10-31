@@ -19,7 +19,7 @@ use uucore::translate;
 
 use uucore::{
     error::{FromIo, UResult},
-    format_usage,
+    format_usage, os_str_as_bytes_lossy,
 };
 
 static OPT_DOMAIN: &str = "domain";
@@ -87,13 +87,10 @@ pub fn uu_app() -> Command {
 }
 
 fn display_hostname(matches: &ArgMatches) -> UResult<()> {
-    let hostname = hostname::get()
-        .map_err_context(|| "failed to get hostname".to_owned())?
-        .to_string_lossy()
-        .into_owned();
+    let hostname = hostname::get().map_err_context(|| "failed to get hostname".to_owned())?;
 
     if matches.get_flag(OPT_IP_ADDRESS) {
-        let addresses = (hostname, 1)
+        let addresses = (hostname.to_string_lossy().as_ref(), 1)
             .to_socket_addrs()
             .map_err_context(|| "failed to resolve socket addresses".to_owned())?;
 
@@ -118,22 +115,27 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
 
         Ok(())
     } else {
-        if matches.get_flag(OPT_SHORT) || matches.get_flag(OPT_DOMAIN) {
-            let mut it = hostname.char_indices().filter(|&ci| ci.1 == '.');
-            if let Some(ci) = it.next() {
+        let hostname_bytes = os_str_as_bytes_lossy(&hostname);
+        let hostname_bytes = hostname_bytes.as_ref();
+        let name = if matches.get_flag(OPT_SHORT) || matches.get_flag(OPT_DOMAIN) {
+            if let Some(dot) = hostname_bytes.iter().position(|&byte| byte == b'.') {
                 if matches.get_flag(OPT_SHORT) {
-                    writeln!(stdout(), "{}", &hostname[0..ci.0])?;
+                    &hostname_bytes[..dot]
                 } else {
-                    writeln!(stdout(), "{}", &hostname[ci.0 + 1..])?;
+                    &hostname_bytes[dot + 1..]
                 }
             } else if matches.get_flag(OPT_SHORT) {
-                writeln!(stdout(), "{hostname}")?;
+                hostname_bytes
+            } else {
+                return Ok(());
             }
-            return Ok(());
-        }
+        } else {
+            hostname_bytes
+        };
 
-        writeln!(stdout(), "{hostname}")?;
-
+        let mut output = stdout().lock();
+        output.write_all(name)?;
+        writeln!(output)?;
         Ok(())
     }
 }
