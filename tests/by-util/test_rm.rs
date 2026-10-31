@@ -504,6 +504,31 @@ fn test_no_operand() {
 }
 
 #[test]
+fn test_force_then_interactive_no_operand() {
+    // A later -i cancels -f, so the missing operand must be reported.
+    new_ucmd!()
+        .args(&["-f", "-i"])
+        .fails()
+        .usage_error("missing operand");
+}
+
+#[test]
+fn test_force_then_prompt_once_no_operand() {
+    new_ucmd!()
+        .args(&["--force", "-I"])
+        .fails()
+        .usage_error("missing operand");
+}
+
+#[test]
+fn test_force_then_interactive_always_no_operand() {
+    new_ucmd!()
+        .args(&["-f", "--interactive=always"])
+        .fails()
+        .usage_error("missing operand");
+}
+
+#[test]
 fn test_verbose_slash() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_verbose_slash_directory";

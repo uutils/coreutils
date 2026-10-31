@@ -248,12 +248,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let force_flag = matches.get_flag(OPT_FORCE);
 
-    if files.is_empty() && !force_flag {
-        // Still check by hand and not use clap
-        // Because "rm -f" is a thing
-        return Err(RmError::MissingOperand.into());
-    }
-
     // If -f(--force) is before any -i (or variants) we want prompts else no prompts
     let force_prompt_never = force_flag && {
         let force_index = matches.index_of(OPT_FORCE).unwrap_or(0);
@@ -264,6 +258,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     && matches.index_of(flag).unwrap_or(0) > force_index
             })
     };
+
+    if files.is_empty() && !force_prompt_never {
+        // Still check by hand and not use clap.
+        // Because "rm -f" is a thing, but a later -i/-I/--interactive cancels it.
+        return Err(RmError::MissingOperand.into());
+    }
 
     let preserve_root = !matches.get_flag(OPT_NO_PRESERVE_ROOT);
     let preserve_root_all = matches
