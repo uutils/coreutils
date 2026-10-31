@@ -459,6 +459,49 @@ fn test_total_only() {
 }
 
 #[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: byte counting reads sparse file contents")]
+fn test_total_bytes_overflow() {
+    let (at, ts) = uutests::at_and_ts!();
+    let path = "sparse";
+    let size = (1_u64 << 61) + 1;
+    // Not every filesystem supports sparse files this large.
+    if let Err(error) = at.make_file(path).set_len(size) {
+        eprintln!("Skipping test: cannot create a sparse file of size {size}: {error}");
+        return;
+    }
+    let files = vec![path; 9];
+    let diagnostic = "wc: total bytes: Value too large for defined data type\n";
+
+    ts.ucmd()
+        .args(&["-c", "--total=only"])
+        .args(&files)
+        .fails_with_code(1)
+        .stdout_is(format!("{}\n", u64::MAX))
+        .stderr_is(diagnostic);
+
+    // This also exercises the metadata sum used to choose the column width.
+    for total in ["--total=auto", "--total=always"] {
+        ts.ucmd()
+            .args(&["-c", total])
+            .args(&files)
+            .fails_with_code(1)
+            .stdout_is(format!(
+                "{}{} total\n",
+                format!("{size:20} {path}\n").repeat(files.len()),
+                u64::MAX,
+            ))
+            .stderr_is(diagnostic);
+    }
+
+    ts.ucmd()
+        .args(&["-c", "--total=never"])
+        .args(&files)
+        .succeeds()
+        .stdout_only(format!("{size:20} {path}\n").repeat(files.len()));
+}
+
+#[test]
 fn test_zero_length_files() {
     // A trailing zero is ignored, but otherwise empty file names are an error...
     const LIST: &str = "\0moby_dick.txt\0\0alice_in_wonderland.txt\0\0lorem_ipsum.txt\0";
