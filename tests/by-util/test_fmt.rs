@@ -685,3 +685,23 @@ fn test_fmt_anti_prefix_keeps_missing_final_newline() {
             .stdout_only(expected);
     }
 }
+
+#[test]
+fn test_fmt_first_word_ending_a_sentence() {
+    // A first word that ends a sentence at the end of its line gets two
+    // spaces after it, like any later word.
+    for (args, input, expected) in [
+        (&[][..], "Hello.\nWorld.\n", "Hello.  World.\n"),
+        (&["-u"], "Why?\nnot\n", "Why?  not\n"),
+        // --quick takes the greedy path
+        (&["-q"], "Hello!\nWorld.\n", "Hello!  World.\n"),
+        (&[], "A.\nB.\nC.\n", "A.  B.  C.\n"),
+        (&["-p", "x"], "x Hello.\nx World.\n", "x Hello.  World.\n"),
+    ] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
