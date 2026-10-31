@@ -68,9 +68,9 @@ pub fn parse_obsolete(src: &OsString) -> Option<Result<ObsoleteArgs, ParseError>
         'l'
     };
 
-    let follow = rest.contains('f');
-    if !rest.chars().all(|f| f == 'f') {
-        // GNU allows an arbitrary amount of following fs, but nothing else
+    let follow = rest == "f";
+    if !follow && !rest.is_empty() {
+        // At most one trailing 'f' is allowed
         if sign == '-' && has_num {
             return Some(Err(ParseError::Context));
         }
@@ -168,11 +168,17 @@ mod tests {
             parse_obsolete(&OsString::from("-1vzqvq")), // spell-checker:disable-line
             Some(Err(ParseError::Context))
         );
+        assert_eq!(
+            parse_obsolete(&OsString::from("-5ff")),
+            Some(Err(ParseError::Context))
+        );
     }
     #[test]
     fn test_parse_obsolete_no_match() {
         assert_eq!(parse_obsolete(&OsString::from("-k")), None);
         assert_eq!(parse_obsolete(&OsString::from("asd")), None);
         assert_eq!(parse_obsolete(&OsString::from("-cc")), None);
+        assert_eq!(parse_obsolete(&OsString::from("-cff")), None);
+        assert_eq!(parse_obsolete(&OsString::from("+ff")), None);
     }
 }
