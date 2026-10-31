@@ -12,6 +12,7 @@ use std::num::IntErrorKind;
 use os_display::Quotable;
 
 use crate::error::{UError, UResult, strip_errno};
+use crate::os_str_as_bytes_lossy;
 use crate::sum::{
     Blake2b, Blake3, Bsd, CRC32B, Crc, Digest, DigestOutput, DigestWriter, Md5, Sha1, Sha3_224,
     Sha3_256, Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3, SysV,
@@ -660,19 +661,26 @@ pub fn unescape_filename(filename: &[u8]) -> (Vec<u8>, &'static str) {
     (unescaped, prefix)
 }
 
-pub fn escape_filename(filename: &OsStr) -> (String, &'static str) {
-    let original = filename.to_string_lossy();
+pub fn escape_filename(filename: &OsStr) -> (Vec<u8>, &'static str) {
+    let original = os_str_as_bytes_lossy(filename);
+    let mut escaped = Vec::with_capacity(original.len());
+    for &byte in original.iter() {
+        match byte {
+            #[cfg(windows)]
+            b'\\' => escaped.push(b'/'),
+            #[cfg(not(windows))]
+            b'\\' => escaped.extend_from_slice(b"\\\\"),
+            b'\n' => escaped.extend_from_slice(b"\\n"),
+            b'\r' => escaped.extend_from_slice(b"\\r"),
+            _ => escaped.push(byte),
+        }
+    }
 
-    // On Windows, backslashes are path separators. Normalize them to forward
-    // slashes so that the checksum output is portable across platforms.
-    #[cfg(windows)]
-    let original = original.replace('\\', "/");
-
-    let escaped = original
-        .replace('\\', "\\\\")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r");
-    let prefix = if escaped == original { "" } else { "\\" };
+    let prefix = if escaped.len() == original.len() {
+        ""
+    } else {
+        "\\"
+    };
     (escaped, prefix)
 }
 
@@ -701,26 +709,36 @@ mod tests {
     #[test]
     fn test_escape_filename() {
         let (escaped, prefix) = escape_filename(OsStr::new("testfile.txt"));
-        assert_eq!(escaped, "testfile.txt");
+        assert_eq!(escaped, b"testfile.txt");
         assert_eq!(prefix, "");
 
         let (escaped, prefix) = escape_filename(OsStr::new("test\nfile.txt"));
-        assert_eq!(escaped, "test\\nfile.txt");
+        assert_eq!(escaped, b"test\\nfile.txt");
         assert_eq!(prefix, "\\");
 
         let (escaped, prefix) = escape_filename(OsStr::new("test\rfile.txt"));
-        assert_eq!(escaped, "test\\rfile.txt");
+        assert_eq!(escaped, b"test\\rfile.txt");
         assert_eq!(prefix, "\\");
 
         let (escaped, prefix) = escape_filename(OsStr::new("test\\file.txt"));
         #[cfg(windows)]
-        assert_eq!(escaped, "test/file.txt");
+        assert_eq!(escaped, b"test/file.txt");
         #[cfg(windows)]
         assert_eq!(prefix, "");
         #[cfg(not(windows))]
-        assert_eq!(escaped, "test\\\\file.txt");
+        assert_eq!(escaped, b"test\\\\file.txt");
         #[cfg(not(windows))]
         assert_eq!(prefix, "\\");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_escape_filename_non_utf8() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let (escaped, prefix) = escape_filename(OsStr::from_bytes(b"hook-\xff.so"));
+        assert_eq!(escaped, b"hook-\xff.so");
+        assert_eq!(prefix, "");
     }
 
     #[test]

@@ -2318,6 +2318,95 @@ mod check_encoding {
         wasi_runner,
         ignore = "WASI: preopened directories reject non-UTF-8 filenames"
     )]
+    fn test_compute_non_utf8_filename() {
+        use super::*;
+        use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let filename: OsString = OsStringExt::from_vec(b"funky\xffname".to_vec());
+        at.touch(&filename);
+
+        scene
+            .ucmd()
+            .arg("--untagged")
+            .arg("-a")
+            .arg("sha256")
+            .arg(&filename)
+            .succeeds()
+            .stdout_is_bytes(
+                b"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  funky\xffname\n",
+            );
+
+        scene
+            .ucmd()
+            .arg("--tag")
+            .arg("-a")
+            .arg("sha256")
+            .arg(&filename)
+            .succeeds()
+            .stdout_is_bytes(
+                b"SHA256 (funky\xffname) = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n",
+            );
+
+        scene
+            .ucmd()
+            .arg("--zero")
+            .arg("-a")
+            .arg("sha256")
+            .arg(&filename)
+            .succeeds()
+            .stdout_is_bytes(
+                b"SHA256 (funky\xffname) = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\0",
+            );
+
+        scene
+            .ucmd()
+            .arg("-a")
+            .arg("bsd")
+            .arg(&filename)
+            .succeeds()
+            .stdout_is_bytes(b"00000     0 funky\xffname\n");
+
+        scene
+            .ucmd()
+            .arg("-a")
+            .arg("sysv")
+            .arg(&filename)
+            .succeeds()
+            .stdout_is_bytes(b"0 0 funky\xffname\n");
+
+        scene
+            .ucmd()
+            .arg(&filename)
+            .succeeds()
+            .stdout_is_bytes(b"4294967295 0 funky\xffname\n");
+
+        // Verify that the output can be verified back with --check
+        let output = scene
+            .ucmd()
+            .arg("-a")
+            .arg("sha256")
+            .arg(&filename)
+            .succeeds()
+            .stdout_move_bytes();
+
+        at.write_bytes("baseline", &output);
+
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("baseline")
+            .succeeds()
+            .stdout_is_bytes(b"'funky'$'\\377''name': OK\n");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI: preopened directories reject non-UTF-8 filenames"
+    )]
     fn test_quoting_in_stderr() {
         use super::*;
         use std::{ffi::OsStr, os::unix::ffi::OsStrExt};

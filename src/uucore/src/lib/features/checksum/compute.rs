@@ -15,6 +15,7 @@ use crate::checksum::{
 };
 use crate::error::{FromIo, UResult, USimpleError};
 use crate::line_ending::LineEnding;
+use crate::os_str_as_bytes_lossy;
 use crate::quoting_style::locale_aware_shell_escape;
 use crate::sum::DigestOutput;
 use crate::{show, translate_text};
@@ -138,7 +139,7 @@ fn write_legacy_checksum(
     debug_assert!(matches!(sum, DigestOutput::U16(_) | DigestOutput::Crc(_)));
 
     let (escaped_filename, prefix) = if options.line_ending == LineEnding::Nul {
-        (filename.to_string_lossy().to_string(), "")
+        (os_str_as_bytes_lossy(filename).into_owned(), "")
     } else {
         escape_filename(filename)
     };
@@ -166,9 +167,9 @@ fn write_legacy_checksum(
     }
 
     // Print the filename after a space if not stdin
-    if escaped_filename != "-" {
+    if escaped_filename != b"-" {
         write!(w, " ")?;
-        w.write_all(escaped_filename.as_bytes())?;
+        w.write_all(&escaped_filename)?;
     }
     Ok(())
 }
@@ -180,7 +181,7 @@ fn write_tagged_checksum(
     sum: &String,
 ) -> io::Result<()> {
     let (escaped_filename, prefix) = if options.line_ending == LineEnding::Nul {
-        (filename.to_string_lossy().to_string(), "")
+        (os_str_as_bytes_lossy(filename).into_owned(), "")
     } else {
         escape_filename(filename)
     };
@@ -189,7 +190,7 @@ fn write_tagged_checksum(
     write!(w, "{prefix}{} (", options.algo_kind.to_tag())?;
 
     // Print filename
-    w.write_all(escaped_filename.as_bytes())?;
+    w.write_all(&escaped_filename)?;
 
     // Print closing parenthesis and sum
     write!(w, ") = {sum}")
@@ -203,7 +204,7 @@ fn write_untagged_checksum(
     reading_mode: ReadingMode,
 ) -> io::Result<()> {
     let (escaped_filename, prefix) = if options.line_ending == LineEnding::Nul {
-        (filename.to_string_lossy().to_string(), "")
+        (os_str_as_bytes_lossy(filename).into_owned(), "")
     } else {
         escape_filename(filename)
     };
@@ -212,7 +213,7 @@ fn write_untagged_checksum(
     write!(w, "{prefix}{sum} {}", reading_mode.as_char())?;
 
     // Print filename
-    w.write_all(escaped_filename.as_bytes())
+    w.write_all(&escaped_filename)
 }
 
 /// Calculate checksum
