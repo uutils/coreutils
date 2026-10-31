@@ -791,14 +791,13 @@ fn write_traditional_output(
     words: &BTreeSet<WordRef>,
     output_filename: &OsStr,
 ) -> UResult<()> {
-    let mut writer: BufWriter<Box<dyn Write>> =
-        BufWriter::new(if output_filename == OsStr::new("-") {
-            Box::new(stdout())
-        } else {
-            let file = File::create(output_filename)
-                .map_err_context(|| output_filename.quote().to_string())?;
-            Box::new(file)
-        });
+    let mut writer: Box<dyn Write> = if output_filename == OsStr::new("-") {
+        Box::new(uucore::output::StdoutBuffer::new(stdout()))
+    } else {
+        let file = File::create(output_filename)
+            .map_err_context(|| output_filename.quote().to_string())?;
+        Box::new(BufWriter::new(file))
+    };
 
     let context_reg = Regex::new(&config.context_regex).unwrap();
 
