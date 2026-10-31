@@ -3509,6 +3509,18 @@ mod debug_flag {
                     "glibc.cpu.hwcaps=-AVX2 ",
                     "cksum: using avx2 hardware support",
                 ), // trailing spaces invalidate AVX2 disabling
+                (
+                    "glibc.cpu.hwcaps= -AVX2",
+                    "cksum: using avx2 hardware support",
+                ), // leading spaces invalidate AVX2 disabling
+                (
+                    "glibc.cpu.hwcaps=-AVX2:x=y=z",
+                    "cksum: using avx2 hardware support",
+                ), // glibc ignores the whole variable
+                (
+                    "x:glibc.cpu.hwcaps=-AVX2",
+                    "cksum: avx2 support not detected",
+                ), // glibc skips a setting without '=' before the last one
             ] {
                 new_ucmd!()
                     .arg("--debug")

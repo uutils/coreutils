@@ -330,22 +330,29 @@ fn detect_pmull() -> bool {
 // GLIBC_TUNABLES parsing
 
 /// Parse the `glibc.cpu.hwcaps` setting of `GLIBC_TUNABLES` into the set of
-/// disabled features. Only the last setting counts and names are
-/// case-sensitive.
+/// disabled features, with the same rules as glibc: only the last setting
+/// counts, names are case-sensitive, and a malformed variable disables nothing.
 fn parse_disabled_features(tunables: &str) -> BTreeSet<HardwareFeature> {
-    let Some(value) = tunables
-        .split(':')
-        .filter_map(|setting| setting.split_once('='))
-        .filter(|(name, _)| name.trim_start() == "glibc.cpu.hwcaps")
-        .map(|(_, value)| value)
-        .next_back()
-    else {
+    // glibc ignores the whole variable when the last setting has no '='.
+    let last = tunables.rsplit(':').next().unwrap_or_default();
+    if !last.contains('=') {
         return BTreeSet::new();
-    };
+    }
 
-    value
+    let mut hwcaps = "";
+    for (name, value) in tunables.split(':').filter_map(|s| s.split_once('=')) {
+        // glibc also ignores the whole variable when a value contains '='.
+        if value.contains('=') {
+            return BTreeSet::new();
+        }
+        if name == "glibc.cpu.hwcaps" {
+            hwcaps = value;
+        }
+    }
+
+    hwcaps
         .split(',')
-        .filter_map(|token| token.trim_start().strip_prefix('-'))
+        .filter_map(|item| item.strip_prefix('-'))
         .filter_map(|name| HardwareFeature::try_from(name).ok())
         .collect()
 }
@@ -415,6 +422,8 @@ mod tests {
     fn test_parse_disabled_features_is_case_sensitive() {
         let result = parse_disabled_features("glibc.cpu.hwcaps=-avx2,-Avx512f");
         assert_eq!(result, BTreeSet::new());
+        let result = parse_disabled_features("glibc.cpu.hwcaps=-AVX2:GLIBC.CPU.HWCAPS=-SSE2");
+        assert_eq!(result, BTreeSet::from([HardwareFeature::Avx2]));
     }
 
     #[test]
@@ -426,23 +435,61 @@ mod tests {
 
     #[test]
     fn test_parse_disabled_features_whole_names_only() {
-        // A space after the name or after the dash is not a name.
-        let result = parse_disabled_features("glibc.cpu.hwcaps=-AVX2 ,- AVX512F");
-        assert_eq!(result, BTreeSet::new());
-        // A space before the dash is tolerated.
-        let result = parse_disabled_features("glibc.cpu.hwcaps= -AVX2, -AVX512F");
-        assert_eq!(
-            result,
-            BTreeSet::from([HardwareFeature::Avx2, HardwareFeature::Avx512])
-        );
+        // A blank anywhere in an item makes it a different, unknown name.
+        for tunables in [
+            "glibc.cpu.hwcaps=-AVX2 ,- AVX512F",
+            "glibc.cpu.hwcaps= -AVX2, -AVX512F",
+            "glibc.cpu.hwcaps=-AVX2\t",
+        ] {
+            assert_eq!(parse_disabled_features(tunables), BTreeSet::new());
+        }
     }
 
     #[test]
-    fn test_parse_disabled_features_ignores_invalid_last_setting() {
-        let result = parse_disabled_features("glibc.cpu.hwcaps=-AVX2:glibc.cpu.hwcaps =");
-        assert_eq!(result, BTreeSet::from([HardwareFeature::Avx2]));
-        let result = parse_disabled_features("glibc.cpu.hwcaps=-AVX2: glibc.cpu.hwcaps=-SSE2");
-        assert_eq!(result, BTreeSet::from([HardwareFeature::Sse2]));
+    fn test_parse_disabled_features_ignores_name_with_blank() {
+        // A blank in a setting name makes it a different, unknown setting.
+        for tunables in [
+            "glibc.cpu.hwcaps=-AVX2:glibc.cpu.hwcaps =",
+            "glibc.cpu.hwcaps=-AVX2: glibc.cpu.hwcaps=-SSE2",
+        ] {
+            assert_eq!(
+                parse_disabled_features(tunables),
+                BTreeSet::from([HardwareFeature::Avx2])
+            );
+        }
+    }
+
+    #[test]
+    fn test_parse_disabled_features_rejects_malformed_variable() {
+        // glibc ignores the whole variable when a value contains '=' or when
+        // the last setting has no '='.
+        for tunables in [
+            "glibc.cpu.hwcaps=-AVX2:x=y=z",
+            "glibc.cpu.hwcaps=-AVX2,glibc.cpu.hwcaps=",
+            "glibc.cpu.hwcaps=-AVX512F=x,-AVX2",
+            "x==y:glibc.cpu.hwcaps=-AVX2",
+            "glibc.cpu.hwcaps=-AVX2:x",
+            "glibc.cpu.hwcaps=-AVX2:",
+            "glibc.cpu.hwcaps=-AVX2:x=y:",
+            "glibc.cpu.hwcaps=-AVX2:glibc.cpu.hwcaps",
+        ] {
+            assert_eq!(parse_disabled_features(tunables), BTreeSet::new());
+        }
+    }
+
+    #[test]
+    fn test_parse_disabled_features_skips_setting_without_equal_sign() {
+        for tunables in [
+            ":glibc.cpu.hwcaps=-AVX2",
+            "::glibc.cpu.hwcaps=-AVX2",
+            "x:glibc.cpu.hwcaps=-AVX2",
+            "glibc.cpu.hwcaps=-AVX512F:x:glibc.cpu.hwcaps=-AVX2",
+        ] {
+            assert_eq!(
+                parse_disabled_features(tunables),
+                BTreeSet::from([HardwareFeature::Avx2])
+            );
+        }
     }
 
     #[test]
