@@ -2160,6 +2160,15 @@ fn test_separator_attached_equals() {
 }
 
 #[test]
+fn test_separator_like_file_operand_after_double_dash() {
+    // After `--`, a file named `-t=` is an operand and must not be rewritten
+    // to `--field-separator==`.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("-t=", "b\na\n");
+    ucmd.args(&["--", "-t="]).succeeds().stdout_only("a\nb\n");
+}
+
+#[test]
 fn test_separator_attached_equals_double() {
     // `-t==` selects the two-character separator `==`, which GNU rejects.
     new_ucmd!()
