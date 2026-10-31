@@ -45,12 +45,24 @@ fn test_create_one_fifo_with_invalid_mode() {
 
 #[test]
 fn test_comma_separated_numeric_mode_is_rejected() {
-    new_ucmd!()
-        .arg("abcd")
-        .arg("-m")
-        .arg("1,2")
-        .fails_with_code(1)
-        .stderr_contains("invalid mode: '1,2'");
+    // A numeric mode has to be the whole mode, so a FIFO is not created when
+    // it is mixed into a clause list.
+    for mode in ["1,2", "u=r,2", "1,u=w"] {
+        let ts = TestScenario::new(util_name!());
+        ts.ucmd()
+            .args(&["-m", mode, "fifo"])
+            .fails_with_code(1)
+            .stderr_contains("invalid mode");
+        assert!(!ts.fixtures.file_exists("fifo"), "{mode} made the FIFO");
+    }
+}
+
+#[test]
+fn test_comma_separated_symbolic_mode_is_accepted() {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd().args(&["-m", "u=rwx,g=rx,o=", "fifo"]).succeeds();
+    // A FIFO is not a regular file, so check the path itself.
+    assert!(ts.fixtures.plus("fifo").exists());
 }
 
 #[test]
