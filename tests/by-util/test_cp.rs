@@ -9873,3 +9873,49 @@ fn test_progressbar_inexistent_source() {
         .fails_with_code(1)
         .stderr_contains("cp: cannot stat 'inexistent1': No such file or directory");
 }
+
+#[cfg(unix)]
+#[rstest]
+fn test_progressbar_no_clobber(#[values("", "new contents")] content: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("source", content);
+    at.write("dest", "keep me");
+
+    ucmd.terminal_sim_stderr()
+        .env("TERM", "xterm")
+        .args(&[
+            "--no-clobber",
+            "--progress",
+            "--verbose",
+            "-T",
+            "source",
+            "dest",
+        ])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("dest"), "keep me");
+}
+
+#[cfg(unix)]
+#[rstest]
+fn test_progressbar_copied_file(#[values("", "new contents")] content: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("source", content);
+
+    ucmd.terminal_sim_stderr()
+        .env("TERM", "xterm")
+        .args(&[
+            "--no-clobber",
+            "--progress",
+            "--verbose",
+            "-T",
+            "source",
+            "dest",
+        ])
+        .succeeds()
+        .stdout_is("'source' -> 'dest'\n")
+        .stderr_contains("cp: [");
+
+    assert_eq!(at.read("dest"), content);
+}

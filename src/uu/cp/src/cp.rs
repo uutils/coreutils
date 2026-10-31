@@ -29,7 +29,7 @@ use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_parser};
 use filetime::FileTime;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 #[cfg(unix)]
 use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, mode_t};
 
@@ -1484,7 +1484,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 .unwrap(),
             )
             .with_message("cp");
-        pb.tick();
+        pb.set_draw_target(ProgressDrawTarget::hidden());
         Some(pb)
     } else {
         None
@@ -2963,6 +2963,14 @@ fn copy_file(
     );
 
     let source_is_stream = is_stream(&source_metadata);
+
+    // Show progress only after the destination passes the overwrite checks.
+    if let Some(pb) = progress_bar
+        && pb.is_hidden()
+    {
+        pb.set_draw_target(ProgressDrawTarget::stderr());
+        pb.tick();
+    }
 
     let performed_action = handle_copy_mode(
         source,
