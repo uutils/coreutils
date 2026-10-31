@@ -159,10 +159,25 @@ impl MultiWriter {
         let input = rustix::stdio::stdin();
         #[cfg(not(any(unix, target_os = "wasi")))]
         let mut input = io::stdin();
-        // needs 2 pipes to duplicate input multiple times
-        // freeze by max size since system allocates pipe smaller than default size when user has pages more than fs.pipe-user-pages-soft
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        if let Ok((mut pipe_read, mut pipe_write)) = uucore::pipes::pipe::<true>()
+        // use trivial splice for one writer.
+        if let [writer] = &mut self.writers[..] {
+            match uucore::pipes::splice_unbounded_auto(&input, writer) {
+                Ok(Ok(())) => return Ok(()),
+                Ok(Err(())) => {} // no splice support
+                Err(e) => {
+                    return process_error(
+                        self.output_error_mode,
+                        e.into(),
+                        writer,
+                        &mut self.ignored_errors,
+                    )
+                    .map_err(|_| ());
+                }
+            }
+        // needs 2 pipes to duplicate input multiple times
+        // freeze pipe size since system allocates different sizes when fs.pipe-user-pages-soft was changed between 2 pipe generations
+        } else if let Ok((mut pipe_read, mut pipe_write)) = uucore::pipes::pipe::<true>()
             && let Ok((mut pipe2_read, mut pipe2_write)) = uucore::pipes::pipe::<true>()
         {
             use uucore::pipes::MAX_ROOTLESS_PIPE_SIZE;
