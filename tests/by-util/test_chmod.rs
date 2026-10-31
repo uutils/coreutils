@@ -1446,6 +1446,33 @@ fn test_chmod_symlink_target_no_dereference() {
 }
 
 #[test]
+fn test_chmod_dereference_then_no_dereference() {
+    for (flags, expected_mode) in [
+        (["--dereference", "-h"], 0o100_600),
+        (["-h", "--dereference"], 0o100_755),
+    ] {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.touch("file");
+        set_permissions(at.plus("file"), Permissions::from_mode(0o600)).unwrap();
+        at.symlink_file("file", "symlink");
+
+        scene
+            .ucmd()
+            .args(&flags)
+            .arg("755")
+            .arg("symlink")
+            .succeeds()
+            .no_stderr();
+        assert_eq!(
+            at.metadata("file").permissions().mode(),
+            expected_mode,
+            "{flags:?}"
+        );
+    }
+}
+
+#[test]
 fn test_chmod_symlink_recursive_final_traversal_flag() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
