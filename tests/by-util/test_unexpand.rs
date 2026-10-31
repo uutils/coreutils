@@ -498,3 +498,19 @@ fn test_buffered_read_edgecase_behaviour() {
             .stdout_only(String::from_utf8(expected).unwrap());
     }
 }
+
+#[test]
+fn test_nul_has_zero_width() {
+    // The NUL takes no column, so the 7 spaces end at column 7, before the
+    // tab stop at 8, and stay as they are.
+    new_ucmd!()
+        .arg("-a")
+        .pipe_in("\0       x\n")
+        .succeeds()
+        .stdout_is("\0       x\n");
+    new_ucmd!()
+        .arg("-a")
+        .pipe_in("\0        x\n")
+        .succeeds()
+        .stdout_is("\0\tx\n");
+}

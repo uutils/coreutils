@@ -471,6 +471,23 @@ fn test_wide_multibyte_char_width() {
 }
 
 #[test]
+fn test_nul_has_zero_width() {
+    new_ucmd!()
+        .pipe_in("\0\t|\n")
+        .succeeds()
+        .stdout_is("\0        |\n");
+    new_ucmd!()
+        .pipe_in("ab\0\0cd\tx\n")
+        .succeeds()
+        .stdout_is("ab\0\0cd    x\n");
+    new_ucmd!()
+        .arg("--no-utf8")
+        .pipe_in("\0\t|\n")
+        .succeeds()
+        .stdout_is("\0        |\n");
+}
+
+#[test]
 fn test_buffered_reads_new_line_no_tabs_in_first_chunk() {
     // test includes tabs after 1 full chunk of no tabs with new line
     // checks that the tabstop calculation is done to correct column
