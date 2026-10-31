@@ -4115,6 +4115,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
+ "rustix",
  "tempfile",
  "thiserror 2.0.21",
  "uu_stdbuf_libstdbuf",
