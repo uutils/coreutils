@@ -27,6 +27,7 @@ use std::{
 };
 
 use uucore::error::{FromIo, UResult};
+use uucore::fs::paths_refer_to_same_file;
 
 use crate::{
     GlobalSettings, Output, SortError,
@@ -45,10 +46,9 @@ fn replace_output_file_in_input_files(
     let mut copy: Option<TmpPath> = None;
     if let Some(Ok(output_path)) = output.map(|path| Path::new(path).canonicalize()) {
         for file in files {
-            if Path::new(file)
-                .canonicalize()
-                .is_ok_and(|file_path| file_path == output_path)
-            {
+            // Different hard links have different canonical paths but still
+            // share the file that will be truncated when output begins.
+            if paths_refer_to_same_file(Path::new(file), output_path.as_path(), true) {
                 if let Some(copy) = &copy {
                     *file = copy.path().into();
                 } else {

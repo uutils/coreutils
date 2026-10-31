@@ -2220,6 +2220,68 @@ fn test_output_is_input() {
     assert_eq!(at.read("file"), input);
 }
 
+#[rstest]
+#[case::newline('\n', &[])]
+#[case::newline_unique('\n', &["-u"])]
+#[case::nul('\0', &["-z"])]
+#[case::nul_unique('\0', &["-z", "-u"])]
+// Android's app-private filesystem refuses hard links.
+#[cfg(not(target_os = "android"))]
+fn test_merge_output_is_hard_link_to_input(#[case] separator: char, #[case] args: &[&str]) {
+    // Exceed the merge reader's read-ahead so truncation cannot be hidden
+    // by input that has already been buffered.
+    let mut input = String::new();
+    for i in 0..10_000 {
+        write!(input, "{i:06}{separator}").unwrap();
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input", &input);
+    at.hard_link("input", "output");
+
+    ucmd.args(&["-m", "-o", "output", "input"])
+        .args(args)
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("input"), input);
+    assert_eq!(at.read("output"), input);
+}
+
+#[rstest]
+#[case::single_batch(&[])]
+#[case::multiple_batches(&["--batch-size=2"])]
+// Android's app-private filesystem refuses hard links.
+#[cfg(not(target_os = "android"))]
+fn test_merge_output_is_hard_link_to_multiple_inputs(#[case] args: &[&str]) {
+    let mut input = String::new();
+    let mut other = String::new();
+    let mut expected = String::new();
+    for i in 0..10_000 {
+        let even = 2 * i;
+        let odd = even + 1;
+        writeln!(input, "{even:06}").unwrap();
+        writeln!(other, "{odd:06}").unwrap();
+        write!(expected, "{even:06}\n{even:06}\n{odd:06}\n").unwrap();
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input", &input);
+    at.write("other", &other);
+    at.hard_link("input", "alias");
+    at.hard_link("input", "output");
+
+    ucmd.timeout(Duration::from_secs(30))
+        .args(&["-m", "-o", "output", "input", "alias", "other"])
+        .args(args)
+        .succeeds()
+        .no_output();
+
+    for file in ["input", "alias", "output"] {
+        assert_eq!(at.read(file), expected);
+    }
+    assert_eq!(at.read("other"), other);
+}
+
 #[test]
 fn test_output_file_is_truncated() {
     // The output file is opened without O_TRUNC (so it can also be an input),
