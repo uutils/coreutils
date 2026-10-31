@@ -9,13 +9,13 @@ use std::ffi::OsString;
 use std::fmt::Write;
 use std::io;
 
-use thiserror::Error;
 use uucore::display::Quotable;
+use uucore::error::strip_errno;
 use uucore::translate;
 
 pub(crate) type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     #[error("{}", translate!("chcon-error-no-context-specified"))]
     MissingContext,
@@ -32,21 +32,24 @@ pub(crate) enum Error {
     #[error(transparent)]
     CommandLine(#[from] clap::Error),
 
-    #[error("{}", translate!("chcon-error-operation-failed", "operation" => operation.clone()))]
+    #[error("{}", translate!("chcon-error-write", "error" => strip_errno(.0)))]
+    Write(io::Error),
+
+    #[error("{}", translate!("chcon-error-operation-failed", "operation" => operation))]
     SELinux {
         operation: String,
         #[source]
         source: selinux::errors::Error,
     },
 
-    #[error("{}", translate!("chcon-error-operation-failed", "operation" => operation.clone()))]
+    #[error("{}", translate!("chcon-error-operation-failed", "operation" => operation))]
     Io {
         operation: String,
         #[source]
         source: io::Error,
     },
 
-    #[error("{}", translate!("chcon-error-operation-failed-on", "operation" => operation.clone(), "operand" => operand1.quote()))]
+    #[error("{}", translate!("chcon-error-operation-failed-on", "operation" => operation, "operand" => operand1.quote()))]
     Io1 {
         operation: String,
         operand1: OsString,

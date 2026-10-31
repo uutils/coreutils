@@ -2,11 +2,13 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use crate::platform::Writer;
 use std::ffi::OsStr;
 use std::io::{Error, ErrorKind, Result};
 use std::path::Path;
 use uucore::display::Quotable;
+use uucore::error::strip_errno;
 use uucore::fs;
 use uucore::translate;
 
@@ -55,7 +57,7 @@ fn create_or_truncate_output_file(input: &OsStr, filename: &OsStr) -> Result<std
             let file = std::fs::OpenOptions::new()
                 .write(true)
                 .open(Path::new(filename))
-                .map_err(|err| open_file_error(filename, err.kind()))?;
+                .map_err(|e| open_file_error(filename, e))?;
 
             if input_and_output_refer_to_same_file(input, &file) {
                 return Err(Error::other(
@@ -63,23 +65,16 @@ fn create_or_truncate_output_file(input: &OsStr, filename: &OsStr) -> Result<std
                 ));
             }
 
-            file.set_len(0)
-                .map_err(|err| open_file_error(filename, err.kind()))?;
+            file.set_len(0).map_err(|e| open_file_error(filename, e))?;
             Ok(file)
         }
-        Err(e) => Err(open_file_error(filename, e.kind())),
+        Err(e) => Err(open_file_error(filename, e)),
     }
 }
 
-fn open_file_error(filename: &OsStr, kind: ErrorKind) -> Error {
-    match kind {
-        ErrorKind::IsADirectory => {
-            Error::other(translate!("split-error-is-a-directory", "dir" => filename.quote()))
-        }
-        _ => {
-            Error::other(translate!("split-error-unable-to-open-file", "file" => filename.quote()))
-        }
-    }
+fn open_file_error(filename: &OsStr, e: Error) -> Error {
+    let e = strip_errno(&e);
+    Error::other(format!("{}: {e}", filename.quote()))
 }
 
 fn input_and_output_refer_to_same_file(input: &OsStr, output: &std::fs::File) -> bool {

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # spell-checker:ignore (env/flags) Ccodegen Cinstrument Coverflow Cpanic Zpanic
-# spell-checker:ignore PROFDATA PROFRAW coreutil librairies nextest profdata profraw rustlib
+# spell-checker:ignore PROFDATA PROFRAW coreutil librairies nextest profdata profraw rustlib setfacl
 
 # This script will build, run and generate coverage reports for the whole
 # testsuite.
@@ -53,12 +53,39 @@ PROFDATA_DIR="${COVERAGE_DIR}/data"
 REPORT_DIR="${COVERAGE_DIR}/report"
 REPORT_PATH="${REPORT_DIR}/total.lcov.info"
 
-rm -rf "${PROFRAW_DIR}" && mkdir -p "${PROFRAW_DIR}"
+# Some tests set umask(0777) via uutests pre_exec. LLVM profile files created
+# under that umask can be mode 000; later writes fail with EACCES and the error
+# lands on utility stderr (breaks exact asserts, e.g. mkfifo).
+# Default ACL keeps new .profraw files owner-writable. Keep LLVM's bounded
+# online-merge pool (%4m) instead of one file per process (%p-%m).
+prepare_profraw_dir() {
+    rm -rf "${PROFRAW_DIR}"
+    mkdir -p "${PROFRAW_DIR}"
+    chmod 700 "${PROFRAW_DIR}"
+    if ! command -v setfacl >/dev/null 2>&1; then
+        if [ -n "${CI:-}" ]; then
+            echo "error: setfacl required for coverage profraw dir (install acl)" >&2
+            exit 1
+        fi
+        return 0
+    fi
+    if ! setfacl -d -m u::rw,g::---,o::---,m::rw "${PROFRAW_DIR}"; then
+        if [ -n "${CI:-}" ]; then
+            echo "error: setfacl default ACL failed on ${PROFRAW_DIR}" >&2
+            exit 1
+        fi
+    fi
+    if ! setfacl -m u::rwx,g::---,o::---,m::rwx "${PROFRAW_DIR}"; then
+        if [ -n "${CI:-}" ]; then
+            echo "error: setfacl access ACL failed on ${PROFRAW_DIR}" >&2
+            exit 1
+        fi
+    fi
+}
+
+prepare_profraw_dir
 rm -rf "${PROFDATA_DIR}" && mkdir -p "${PROFDATA_DIR}"
 rm -rf "${REPORT_DIR}" && mkdir -p "${REPORT_DIR}"
-
-#shellcheck disable=SC2086
-UTIL_LIST=$("${ME_dir}"/show-utils.sh ${FEATURES_OPTION})
 
 export RUSTC_BOOTSTRAP=1
 export CARGO_INCREMENTAL=0
@@ -78,7 +105,7 @@ run_test_and_aggregate() {
         --no-fail-fast \
         --color=always \
         2>&1 \
-        ${2} \
+        "${@:2}" \
     | grep -v 'SKIP'
     # Note: Do not print the skipped tests on the output as there will be many.
 
@@ -95,24 +122,19 @@ run_test_and_aggregate() {
     # We don't want an error in `llvm-profdata` to abort the whole program
 }
 
-for UTIL in ${UTIL_LIST}; do
-
-    if [ "${UTIL}" = "stty" ]; then
-        run_test_and_aggregate \
-            "${UTIL}" \
-            "-p coreutils -p uu_${UTIL} -E test(/^test_${UTIL}::/) ${FEATURES_OPTION}"
-    else
-        run_test_and_aggregate \
-            "${UTIL}" \
-            "-p coreutils -E test(/^test_${UTIL}::/) ${FEATURES_OPTION}"
-    fi
-
+UTIL_LIST_NO_STTY=$(cargo tree --depth 1 --format '{lib}' "${FEATURES_OPTION}" --prefix none | sed -n '/stty/! s/^uu_//p')
+for UTIL in ${UTIL_LIST_NO_STTY}; do
+    run_test_and_aggregate "${UTIL}" -p coreutils -E "test(/^test_${UTIL}::/)" "${FEATURES_OPTION}"
     echo "## Clear the trace directory to free up space"
-    rm -rf "${PROFRAW_DIR}" && mkdir -p "${PROFRAW_DIR}"
-done;
+    prepare_profraw_dir
+done
+
+run_test_and_aggregate stty -p coreutils -p uu_stty -E "test(/^test_stty::/)" "${FEATURES_OPTION}"
+echo "## Clear the trace directory to free up space"
+prepare_profraw_dir
 
 echo "Running coverage tests over uucore"
-run_test_and_aggregate "uucore" "-p uucore --all-features"
+run_test_and_aggregate uucore -p uucore --all-features
 
 echo "# Aggregating all the profraw files under ${REPORT_PATH}"
 grcov \

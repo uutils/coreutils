@@ -15,8 +15,9 @@ use crate::checksum::{
 };
 use crate::error::{FromIo, UResult, USimpleError};
 use crate::line_ending::LineEnding;
+use crate::quoting_style::locale_aware_shell_escape;
 use crate::sum::DigestOutput;
-use crate::{show, translate};
+use crate::{show, translate_text};
 
 /// Use the same buffer size as GNU when reading a file to create a checksum
 /// from it: 32 KiB.
@@ -80,7 +81,13 @@ impl OutputFormat {
     }
 
     /// Find the correct output format for cksum.
-    pub fn from_cksum(algo: AlgoKind, tag: bool, binary: bool, raw: bool, base64: bool) -> Self {
+    pub fn from_cksum(
+        algo: AlgoKind,
+        tag: bool,
+        reading_mode: ReadingMode,
+        raw: bool,
+        digest_format: DigestFormat,
+    ) -> Self {
         // Raw output format takes precedence over anything else.
         if raw {
             return Self::Raw;
@@ -91,21 +98,10 @@ impl OutputFormat {
             return Self::Legacy;
         }
 
-        let digest_format = if base64 {
-            DigestFormat::Base64
-        } else {
-            DigestFormat::Hexadecimal
-        };
-
         // After that, decide between tagged and untagged output
         if tag {
             Self::Tagged(digest_format)
         } else {
-            let reading_mode = if binary {
-                ReadingMode::Binary
-            } else {
-                ReadingMode::Text
-            };
             Self::Untagged(digest_format, reading_mode)
         }
     }
@@ -242,16 +238,8 @@ where
             return Err(Box::new(ChecksumError::RawMultipleFiles));
         }
 
-        let filepath = Path::new(filename);
         let stdin_buf;
         let file_buf;
-        if filepath.is_dir() {
-            show!(USimpleError::new(
-                1,
-                translate!("error-is-a-directory", "file" => filepath.display())
-            ));
-            continue;
-        }
 
         // Handle the file input
         let mut file = io::BufReader::with_capacity(
@@ -260,6 +248,17 @@ where
                 stdin_buf = io::stdin();
                 Box::new(stdin_buf) as Box<dyn io::Read>
             } else {
+                let filepath = Path::new(filename);
+                if filepath.is_dir() {
+                    show!(USimpleError::new(
+                        1,
+                        translate_text!(
+                            "error-is-a-directory",
+                            "file" => locale_aware_shell_escape(filepath)
+                        )
+                    ));
+                    continue;
+                }
                 file_buf = match File::open(filepath) {
                     Ok(file) => {
                         #[cfg(any(
@@ -271,7 +270,7 @@ where
                         file
                     }
                     Err(err) => {
-                        show!(err.map_err_context(|| filepath.to_string_lossy().into()));
+                        show!(err.map_err_context(|| locale_aware_shell_escape(filepath)));
                         continue;
                     }
                 };
@@ -283,8 +282,13 @@ where
 
         // Always compute the "binary" version of the digest, i.e. on Windows,
         // never handle CRLFs specifically.
-        let (digest_output, sz) = digest_reader(&mut digest, &mut file, ReadingMode::Binary)
-            .map_err_context(|| translate!("checksum-error-failed-to-read-input"))?;
+        let (digest_output, sz) = match digest_reader(&mut digest, &mut file, ReadingMode::Binary) {
+            Ok(result) => result,
+            Err(err) => {
+                show!(err.map_err_context(|| locale_aware_shell_escape(filename)));
+                continue;
+            }
+        };
 
         // Encodes the sum if df is Base64, leaves as-is otherwise.
         let encode_sum = |sum: DigestOutput, df: DigestFormat| {
@@ -301,7 +305,7 @@ where
                 digest_output
                     .write_raw(&mut w)
                     .map_err(ChecksumError::Write)?;
-                return Ok(());
+                break;
             }
             OutputFormat::Legacy => {
                 write_legacy_checksum(&mut w, &options, filename, &digest_output, sz)
@@ -327,8 +331,7 @@ where
         write!(w, "{}", options.line_ending).map_err(ChecksumError::Write)?;
     }
 
-    if options.line_ending != LineEnding::Newline {
-        w.flush().map_err(ChecksumError::Write)?;
-    }
+    // The drop of the writer ignores a flush error.
+    w.flush().map_err(ChecksumError::Write)?;
     Ok(())
 }

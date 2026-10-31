@@ -28,4 +28,4 @@ head-error-writing-stdout = erreur lors de l'écriture sur 'sortie standard' : {
 head-error-cannot-open = impossible d'ouvrir {$name} en lecture
 
 # En-têtes de sortie
-head-header-stdin = ==> entrée standard <==
+head-name-stdin = entrée standard

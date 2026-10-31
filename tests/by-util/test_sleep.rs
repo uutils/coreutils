@@ -2,10 +2,12 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore dont SIGBUS SIGSEGV sigsegv sigbus infd
+
 use rstest::rstest;
 
 use uucore::display::Quotable;
-// spell-checker:ignore dont SIGBUS SIGSEGV sigsegv sigbus infd
 use uutests::new_ucmd;
 
 #[cfg(unix)]
@@ -23,6 +25,17 @@ fn test_invalid_time_interval() {
         .args(&["--", "-1"])
         .fails()
         .usage_error("invalid time interval '-1'");
+}
+
+#[test]
+fn test_tiny_hex_duration_does_not_stall() {
+    // Windows command lines are limited to 32,767 UTF-16 code units.
+    let zeros = if cfg!(windows) { 10_000 } else { 100_000 };
+    new_ucmd!()
+        .arg(format!("0x.{}f321984", "0".repeat(zeros)))
+        .timeout(Duration::from_secs(5))
+        .succeeds()
+        .no_output();
 }
 
 #[test]
@@ -89,7 +102,9 @@ fn test_sleep_zero_duration() {
 
 #[test]
 fn test_sleep_no_argument() {
-    new_ucmd!().fails().usage_error("missing operand");
+    new_ucmd!()
+        .fails()
+        .stderr_contains("the following required arguments were not provided"); // clap provided message
 }
 
 #[test]
@@ -141,6 +156,7 @@ fn test_sleep_wrong_time() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no signal support")]
 fn test_sleep_stops_after_sigsegv() {
     let mut child = new_ucmd!()
         .arg("100")
@@ -158,6 +174,7 @@ fn test_sleep_stops_after_sigsegv() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no signal support")]
 fn test_sleep_stops_after_sigbus() {
     let mut child = new_ucmd!()
         .arg("100")
@@ -354,7 +371,7 @@ fn test_cmd_result_signal_when_kill_then_signal() {
 
 #[cfg(unix)]
 #[rstest]
-#[case::signal_only_part_of_name("IGKILL")] // spell-checker: disable-line
+#[case::signal_only_part_of_name("IGKILL")] // spell-checker:disable-line
 #[case::signal_just_sig("SIG")]
 #[case::signal_value_too_high("100")]
 #[case::signal_value_negative("-1")]

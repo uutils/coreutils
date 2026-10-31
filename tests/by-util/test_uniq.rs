@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore nabcd badoption schar
+// spell-checker:ignore nabcd badoption schar nosuchfile
+
 use uucore::posix::OBSOLETE;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -160,6 +161,23 @@ fn test_stdin_all_repeated() {
         .pipe_in_fixture(INPUT)
         .succeeds()
         .stdout_is_fixture("sorted-all-repeated.expected");
+}
+
+#[test]
+fn test_repeated_all_repeated_uses_final_delimiter() {
+    const DUPLICATE_RUNS: &str = "copper\ncopper\nsilver\ngold\ngold\nplatinum\n";
+
+    new_ucmd!()
+        .args(&["--all-repeated=prepend", "-D"])
+        .pipe_in(DUPLICATE_RUNS)
+        .succeeds()
+        .stdout_is("copper\ncopper\ngold\ngold\n");
+
+    new_ucmd!()
+        .args(&["-D", "--all-repeated=separate"])
+        .pipe_in(DUPLICATE_RUNS)
+        .succeeds()
+        .stdout_is("copper\ncopper\n\ngold\ngold\n");
 }
 
 #[test]
@@ -355,10 +373,10 @@ struct TestCase {
 
 #[test]
 #[allow(clippy::too_many_lines)]
-fn gnu_tests() {
+fn uniq_basic_dedup_cases() {
     let cases = [
         TestCase {
-            name: "1",
+            name: "tc_01",
             args: &[],
             input: "",
             stdout: Some(""),
@@ -366,58 +384,58 @@ fn gnu_tests() {
             exit: None,
         },
         TestCase {
-            name: "2",
+            name: "tc_02",
             args: &[],
-            input: "a\na\n",
-            stdout: Some("a\n"),
+            input: "x\nx\n",
+            stdout: Some("x\n"),
             stderr: None,
             exit: None,
         },
         TestCase {
-            name: "3",
+            name: "tc_03",
             args: &[],
-            input: "a\na",
-            stdout: Some("a\n"),
+            input: "x\nx",
+            stdout: Some("x\n"),
             stderr: None,
             exit: None,
         },
         TestCase {
-            name: "4",
+            name: "tc_04",
             args: &[],
-            input: "a\nb",
-            stdout: Some("a\nb\n"),
+            input: "p\nq",
+            stdout: Some("p\nq\n"),
             stderr: None,
             exit: None,
         },
         TestCase {
-            name: "5",
+            name: "tc_05",
             args: &[],
-            input: "a\na\nb",
-            stdout: Some("a\nb\n"),
+            input: "x\nx\ny",
+            stdout: Some("x\ny\n"),
             stderr: None,
             exit: None,
         },
         TestCase {
-            name: "6",
+            name: "tc_06",
             args: &[],
-            input: "b\na\na\n",
-            stdout: Some("b\na\n"),
+            input: "q\np\np\n",
+            stdout: Some("q\np\n"),
             stderr: None,
             exit: None,
         },
         TestCase {
-            name: "7",
+            name: "tc_07",
             args: &[],
-            input: "a\nb\nc\n",
-            stdout: Some("a\nb\nc\n"),
+            input: "r\ns\nt\n",
+            stdout: Some("r\ns\nt\n"),
             stderr: None,
             exit: None,
         },
         TestCase {
             name: "2z",
             args: &["-z"],
-            input: "a\na\n",
-            stdout: Some("a\na\n\0"),
+            input: "x\nx\n",
+            stdout: Some("x\nx\n\0"),
             stderr: None,
             exit: None,
         },
@@ -1172,6 +1190,7 @@ fn gnu_tests() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: locale database not visible")]
 fn test_stdin_w1_multibyte() {
     let input = "à\ná\n";
     new_ucmd!()
@@ -1202,4 +1221,133 @@ fn test_failed_write_is_reported() {
         .set_stdout(std::fs::File::create("/dev/full").unwrap())
         .fails()
         .stderr_is("uniq: write error: No space left on device\n");
+}
+
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
+mod read_errors {
+    use rustix::termios::{OptionalActions, OutputModes, tcgetattr, tcsetattr};
+    use std::io::Write;
+    use uutests::{new_ucmd, util::pty_path};
+
+    fn check_read_error(args: &[&str], input: &[u8], expected: &[u8]) {
+        let (_, controller, mut replica) = pty_path();
+        let mut termios = tcgetattr(&replica).unwrap();
+        // Preserve the input bytes, including newlines and NUL delimiters.
+        termios.output_modes.remove(OutputModes::OPOST);
+        tcsetattr(&replica, OptionalActions::Now, &termios).unwrap();
+        replica.write_all(input).unwrap();
+        // Linux reads the queued bytes before returning EIO once the replica closes.
+        drop(replica);
+
+        new_ucmd!()
+            .args(args)
+            .set_stdin(controller)
+            .fails_with_code(1)
+            .stdout_is_bytes(expected)
+            .stderr_contains("uniq: read error:");
+    }
+
+    #[test]
+    fn test_read_error_preserves_complete_lines() {
+        for (input, expected) in [
+            (&b"cedar\nmaple\n"[..], &b"cedar\nmaple\n"[..]),
+            (b"cedar\ncedar\n", b"cedar\n"),
+            (b"cedar\nmaple", b"cedar\n"),
+            (b"cedar\ncedar", b"cedar\n"),
+            (b"\n\n", b"\n"),
+            (b"partial", b""),
+            (b"", b""),
+        ] {
+            check_read_error(&[], input, expected);
+        }
+    }
+
+    #[test]
+    fn test_read_error_preserves_zero_terminated_lines() {
+        check_read_error(&["-z"], b"cedar\0maple\0partial", b"cedar\0maple\0");
+    }
+
+    #[test]
+    fn test_read_error_preserves_group_delimiters() {
+        for (arg, expected) in [
+            ("--group=separate", &b"cedar\ncedar\n\nmaple\n"[..]),
+            ("--group=prepend", b"\ncedar\ncedar\n\nmaple\n"),
+            ("--group=append", b"cedar\ncedar\n\nmaple\n\n"),
+            ("--group=both", b"\ncedar\ncedar\n\nmaple\n\n"),
+        ] {
+            check_read_error(&[arg], b"cedar\ncedar\nmaple\npartial", expected);
+        }
+    }
+
+    #[test]
+    fn test_read_error_does_not_finalize_counts_or_filtered_groups() {
+        for (arg, input, expected) in [
+            ("-c", &b"cedar\nmaple\n"[..], &b"      1 cedar\n"[..]),
+            ("-c", b"cedar\nmaple", b""),
+            ("-c", b"cedar\ncedar\n", b""),
+            ("-u", b"cedar\nmaple\n", b"cedar\n"),
+            ("-d", b"cedar\ncedar\nmaple\n", b"cedar\n"),
+            ("-d", b"cedar\ncedar\n", b""),
+            ("-D", b"cedar\ncedar\n", b"cedar\n"),
+        ] {
+            check_read_error(&[arg], input, expected);
+        }
+    }
+}
+
+#[test]
+fn test_repeated_skip_fields_takes_the_last() {
+    // GNU lets a later -f override an earlier one rather than erroring.
+    new_ucmd!()
+        .args(&["-f", "1", "-f", "2"])
+        .pipe_in("x y a\nz w a\n")
+        .succeeds()
+        .stdout_is("x y a\n");
+}
+
+#[test]
+fn test_skip_fields_carriage_return_is_not_a_separator() {
+    // Only space and tab separate fields, so each line is a single field.
+    new_ucmd!()
+        .args(&["-f1"])
+        .pipe_in("a\rb\nc\rd\n")
+        .succeeds()
+        .stdout_is("a\rb\n");
+}
+
+#[test]
+fn test_skip_fields_form_feed_is_not_a_separator() {
+    new_ucmd!()
+        .args(&["-c", "-f1"])
+        .pipe_in("a\x0cb\nc\x0cd\n")
+        .succeeds()
+        .stdout_is("      2 a\x0cb\n");
+}
+
+#[test]
+fn test_skip_fields_newline_inside_zero_terminated_record_still_separates() {
+    // GNU still ends a field at a newline with -z, so "b" and "d" are compared.
+    new_ucmd!()
+        .args(&["-z", "-c", "-f1"])
+        .pipe_in("a\nb\0c\nd\0")
+        .succeeds()
+        .stdout_is("      1 a\nb\0      1 c\nd\0");
+}
+
+#[test]
+fn test_nonexistent_input_file_error_matches_gnu() {
+    new_ucmd!()
+        .arg("nosuchfile.txt")
+        .fails_with_code(1)
+        .stderr_only("uniq: nosuchfile.txt: No such file or directory\n");
+}
+
+#[test]
+fn test_obsolete_skip_fields_not_read_after_double_dash() {
+    // After `--` there are no more options, so `-1` names a file rather than
+    // being taken as the obsolete "skip 1 field" spelling.
+    new_ucmd!()
+        .args(&["--", "-1"])
+        .fails()
+        .stderr_contains("-1");
 }

@@ -93,7 +93,6 @@ date-help-rfc-3339 = output date/time in RFC 3339 format.
 date-help-debug = annotate the parsed date, and warn about questionable usage to stderr
 date-help-reference = display the last modification time of FILE
 date-help-set = set time described by STRING
-date-help-set-macos = set time described by STRING (not available on mac yet)
 date-help-set-redox = set time described by STRING (not available on redox yet)
 date-help-universal = print or set Coordinated Universal Time (UTC)
 
@@ -101,12 +100,13 @@ date-error-invalid-date = invalid date '{$date}'
 date-error-invalid-format = invalid format '{$format}' ({$error})
 date-error-expected-file-got-directory = expected file, got directory {$path}
 date-error-date-overflow = date overflow '{$date}'
-date-error-setting-date-not-supported-macos = setting the date is not supported by macOS
 date-error-setting-date-not-supported-redox = setting the date is not supported by Redox
+date-error-setting-date-not-supported-wasi = setting the date is not supported by WASI
 date-error-cannot-set-date = cannot set date
 date-error-extra-operand = extra operand '{$operand}'
 date-error-write = write error: {$error}
 date-error-format-modifier-width-too-large = format modifier width '{$width}' is too large for specifier '%{$specifier}'
-date-error-format-missing-plus = the argument {$arg} lacks a leading '+';
+date-error-format-missing-plus = the argument '{$arg}' lacks a leading '+';
   when using an option to specify date(s), any non-option
   argument must be a format string beginning with '+'
+date-error-multiple-output-formats = multiple output formats specified

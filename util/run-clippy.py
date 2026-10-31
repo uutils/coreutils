@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-# spell-checker:ignore pcoreutils
+# spell-checker:ignore pcoreutils puucore
 """Run cargo clippy with appropriate flags and emit GitHub Actions annotations."""
 
 from __future__ import annotations
@@ -78,7 +78,10 @@ def build_clippy_command(
         # (show-utils.sh over-resolves due to default features)
         extra.append("-pcoreutils")
     else:
-        extra.extend(["--all-targets", "--tests", "--benches", "-pcoreutils"])
+        # -puucore is required: a dependency's own tests aren't compiled otherwise.
+        extra.extend(
+            ["--all-targets", "--tests", "--benches", "-pcoreutils", "-puucore"],
+        )
         utilities = get_utility_list(features)
         extra.extend(f"-puu_{u}" for u in utilities)
 

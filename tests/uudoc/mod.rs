@@ -39,6 +39,10 @@ fn test_manpage_generation() {
     assert!(output_str.contains("\n.TH LS"), "{output_str}");
     assert!(output_str.contains('1'), "{output_str}");
     assert!(output_str.contains("\n.SH NAME\nls"), "{output_str}");
+    assert!(
+        output_str.contains(&format!("\n.SH VERSION\nv{}\n", env!("CARGO_PKG_VERSION"))),
+        "{output_str}"
+    );
 }
 
 #[test]
@@ -65,6 +69,10 @@ fn test_manpage_coreutils() {
     assert!(output_str.contains("\n.TH COREUTILS"), "{output_str}");
     assert!(output_str.contains("coreutils"), "{output_str}");
     assert!(output_str.contains("\n.SH NAME\ncoreutils"), "{output_str}");
+    assert!(
+        output_str.contains(&format!("\n.SH VERSION\nv{}\n", env!("CARGO_PKG_VERSION"))),
+        "{output_str}"
+    );
 }
 
 #[test]
@@ -173,4 +181,32 @@ fn test_markdown_header_format() {
             );
         }
     }
+}
+
+#[test]
+fn test_source_date_epoch() {
+    let output = get_uudoc_command()
+        .arg("manpage")
+        .arg("ls")
+        .env("SOURCE_DATE_EPOCH", "123456")
+        .output()
+        .expect("Failed to execute command");
+
+    assert!(
+        output.status.success(),
+        "Command failed with status: {}",
+        output.status
+    );
+    assert!(
+        output.stderr.is_empty(),
+        "stderr should be empty but got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let output_str = String::from_utf8_lossy(&output.stdout);
+    let first_line = output_str
+        .lines()
+        .find(|line| line.starts_with(".TH"))
+        .unwrap();
+    assert_eq!(first_line, ".TH LS 1 \"1970-01-02\"");
 }

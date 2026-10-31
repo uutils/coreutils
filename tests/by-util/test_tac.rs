@@ -2,8 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore axxbxx bxxaxx axxx axxxx xxaxx xxax xxxxa axyz zyax zyxa bbaaa aaabc bcdddd cddddaaabc xyzabc abcxyzabc nbbaaa EISDIR
-#[cfg(target_os = "linux")]
+
+// spell-checker:ignore axxbxx bxxaxx axxx axxxx xxaxx xxax xxxxa axyz zyax zyxa bbaaa aaabc bcdddd cddddaaabc xyzabc abcxyzabc nbbaaa EISDIR SIGBUS mmap
+
+#[cfg(unix)]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -55,6 +57,21 @@ fn test_stdin_non_newline_separator_before() {
 }
 
 #[test]
+fn test_separator_starting_with_hyphen() {
+    for args in [
+        &["-s", "-1"][..],
+        &["--separator", "-1"],
+        &["--separator=-1"],
+    ] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("a-1b-1")
+            .succeeds()
+            .stdout_is("b-1a-1");
+    }
+}
+
+#[test]
 fn test_single_default() {
     new_ucmd!()
         .arg("prime_per_line.txt")
@@ -103,6 +120,23 @@ fn test_invalid_input() {
 }
 
 #[test]
+#[cfg(not(windows))]
+fn test_numeric_looking_file_names_are_kept_verbatim() {
+    // File names such as "007" or "1e3" must not be reformatted as numbers
+    // in error messages.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("007");
+    at.mkdir("1e3");
+    ucmd.args(&["007", "1e3", "2.50"])
+        .fails_with_code(1)
+        .stderr_is(
+            "tac: 007: read error: Is a directory\n\
+             tac: 1e3: read error: Is a directory\n\
+             tac: failed to open '2.50' for reading: No such file or directory\n",
+        );
+}
+
+#[test]
 fn test_no_line_separators() {
     new_ucmd!().pipe_in("a").succeeds().stdout_is("a");
 }
@@ -145,7 +179,7 @@ fn test_before_no_separator() {
 
 #[test]
 fn test_before_empty_file() {
-    new_ucmd!().arg("-b").pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().arg("-b").pipe_in("").succeeds().no_output();
 }
 
 #[test]
@@ -395,7 +429,7 @@ fn test_failed_write_is_reported() {
         .stderr_is("tac: failed to write to stdout: No space left on device\n");
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 #[test]
 fn test_stdin_bad_tmpdir_fallback() {
     // When TMPDIR is invalid, tac falls back to reading stdin directly into memory
@@ -474,4 +508,95 @@ fn test_regular_end_anchor() {
         .pipe_in("aaa\nbbb\nccc\n")
         .succeeds()
         .stdout_is("\nccc\nbbaaa\nb");
+}
+
+/// Regression test for <https://github.com/uutils/coreutils/issues/9748>.
+///
+/// `tac` used to mmap regular files, so truncating a file mid-read raised
+/// SIGBUS and killed the process. It now reads files into memory up front, so a
+/// concurrent truncation can no longer crash it. The assertion only checks that
+/// no signal killed `tac`, so it is stable regardless of how the race lands.
+#[test]
+#[cfg(unix)]
+fn test_tac_file_truncated_during_read_does_not_crash() {
+    use std::fs::OpenOptions;
+    use std::time::Duration;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // A large sparse file, so the read overlaps with the truncation below.
+    // `set_len` keeps it sparse, so creation stays cheap.
+    let name = "input";
+    at.make_file(name).set_len(64 * 1024 * 1024).unwrap();
+
+    let child = ucmd.arg(name).run_no_wait();
+
+    // Give tac a moment to start reading, then truncate the file out from
+    // under it.
+    std::thread::sleep(Duration::from_millis(2));
+    OpenOptions::new()
+        .write(true)
+        .open(at.plus(name))
+        .unwrap()
+        .set_len(0)
+        .unwrap();
+
+    let result = child.wait().unwrap();
+    assert!(
+        result.signal().is_none(),
+        "tac was killed by signal {:?} (SIGBUS regression, see #9748)",
+        result.signal()
+    );
+}
+
+/// Companion to the test above for the `tac < file` path. `tac` used to mmap the
+/// raw stdin fd, exposing a redirected file to the same SIGBUS-on-truncation
+/// race; it now copies stdin to an unlinked temp file before mapping.
+#[test]
+#[cfg(unix)]
+fn test_tac_stdin_redirected_file_truncated_during_read_does_not_crash() {
+    use std::fs::{File, OpenOptions};
+    use std::time::Duration;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // A large sparse file, so the read overlaps with the truncation below.
+    let name = "input";
+    at.make_file(name).set_len(64 * 1024 * 1024).unwrap();
+
+    // Redirect the regular file in as stdin (`tac < input`).
+    let child = ucmd
+        .set_stdin(File::open(at.plus(name)).unwrap())
+        .run_no_wait();
+
+    // Give tac a moment to start reading, then truncate the file out from
+    // under it.
+    std::thread::sleep(Duration::from_millis(2));
+    OpenOptions::new()
+        .write(true)
+        .open(at.plus(name))
+        .unwrap()
+        .set_len(0)
+        .unwrap();
+
+    let result = child.wait().unwrap();
+    assert!(
+        result.signal().is_none(),
+        "tac was killed by signal {:?} (SIGBUS regression, see #9748)",
+        result.signal()
+    );
+}
+
+#[test]
+fn test_repeated_option_last_one_wins() {
+    new_ucmd!()
+        .args(&["-b", "-b"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_only("\n\nc\nba");
+    new_ucmd!()
+        .args(&["-s", ",", "-s", ";"])
+        .pipe_in("a,b;c;")
+        .succeeds()
+        .stdout_only("c;a,b;");
 }

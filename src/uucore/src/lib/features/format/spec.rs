@@ -5,20 +5,20 @@
 
 // spell-checker:ignore (vars) intmax ptrdiff padlen
 
+use super::num_format::{
+    self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
+    UnsignedIntVariant,
+};
 use super::{
-    ExtendedBigDecimal, FormatChar, FormatError, OctalParsing,
-    num_format::{
-        self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
-        UnsignedIntVariant,
-    },
+    EscapeSet, ExtendedBigDecimal, FormatChar, FormatError, OctalParsing, check_precision,
     parse_escape_only,
 };
-use crate::{
-    format::FormatArguments,
-    os_str_as_bytes,
-    quoting_style::{QuotingStyle, locale_aware_escape_name},
-};
-use std::{io::Write, num::NonZero, ops::ControlFlow};
+use crate::format::FormatArguments;
+use crate::os_str_as_bytes;
+use crate::quoting_style::locale_aware_shell_escape;
+use std::io::Write;
+use std::num::NonZero;
+use std::ops::ControlFlow;
 
 /// A parsed specification for formatting a value
 ///
@@ -96,11 +96,11 @@ enum Length {
     Long,
     /// signed/unsigned long long int ("ll")
     LongLong,
-    /// intmax_t ("j")
+    /// `intmax_t` ("j")
     IntMaxT,
-    /// size_t ("z")
+    /// `size_t` ("z")
     SizeT,
-    /// ptrdiff_t ("t")
+    /// `ptrdiff_t` ("t")
     PtfDiffT,
     /// long double ("L")
     LongDouble,
@@ -343,7 +343,8 @@ impl Spec {
         &self,
         mut writer: impl Write,
         args: &mut FormatArguments,
-    ) -> Result<(), FormatError> {
+    ) -> Result<ControlFlow<()>, FormatError> {
+        let mut control_flow = ControlFlow::Continue(());
         match self {
             Self::Char {
                 width,
@@ -372,7 +373,7 @@ impl Spec {
                 // For now, we let printf panic when we truncate within a code point.
                 // TODO: We need to not use Rust's formatting for aligning the output,
                 // so that we can just write bytes to stdout without panicking.
-                let precision = resolve_asterisk_precision(*precision, args);
+                let precision = resolve_asterisk_precision(*precision, args)?;
                 let os_str = args.next_string(*position);
                 let bytes = os_str_as_bytes(os_str)?;
 
@@ -387,11 +388,17 @@ impl Spec {
                 let bytes = os_str_as_bytes(os_str)?;
                 let mut parsed = Vec::<u8>::new();
 
-                for c in parse_escape_only(bytes, OctalParsing::ThreeDigits) {
+                for c in parse_escape_only(
+                    bytes,
+                    OctalParsing::ThreeDigits,
+                    EscapeSet::WithUnicodeAndQuote,
+                ) {
                     match c.write(&mut parsed)? {
                         ControlFlow::Continue(()) => {}
                         ControlFlow::Break(()) => {
-                            // TODO: This should break the _entire execution_ of printf
+                            // A `\c` inside the argument stops output for the
+                            // rest of the printf invocation, not just this spec.
+                            control_flow = ControlFlow::Break(());
                             break;
                         }
                     }
@@ -399,12 +406,8 @@ impl Spec {
                 writer.write_all(&parsed).map_err(FormatError::IoError)
             }
             Self::QuotedString { position } => {
-                let s = locale_aware_escape_name(
-                    args.next_string(*position),
-                    QuotingStyle::SHELL_ESCAPE,
-                );
-                let bytes = os_str_as_bytes(&s)?;
-                writer.write_all(bytes).map_err(FormatError::IoError)
+                let s = locale_aware_shell_escape(args.next_string(*position));
+                writer.write_all(s.as_bytes()).map_err(FormatError::IoError)
             }
             Self::SignedInt {
                 width,
@@ -414,11 +417,11 @@ impl Spec {
                 position,
             } => {
                 let (width, neg_width) = resolve_asterisk_width(*width, args).unwrap_or((0, false));
-                let precision = resolve_asterisk_precision(*precision, args).unwrap_or_default();
+                let precision = resolve_asterisk_precision(*precision, args)?;
                 let i = args.next_i64(*position);
 
-                if precision as u64 > i32::MAX as u64 {
-                    return Err(FormatError::InvalidPrecision(precision.to_string()));
+                if let Some(precision) = precision {
+                    check_precision(precision)?;
                 }
 
                 num_format::SignedInt {
@@ -442,11 +445,11 @@ impl Spec {
                 position,
             } => {
                 let (width, neg_width) = resolve_asterisk_width(*width, args).unwrap_or((0, false));
-                let precision = resolve_asterisk_precision(*precision, args).unwrap_or_default();
+                let precision = resolve_asterisk_precision(*precision, args)?;
                 let i = args.next_u64(*position);
 
-                if precision as u64 > i32::MAX as u64 {
-                    return Err(FormatError::InvalidPrecision(precision.to_string()));
+                if let Some(precision) = precision {
+                    check_precision(precision)?;
                 }
 
                 num_format::UnsignedInt {
@@ -473,13 +476,11 @@ impl Spec {
                 position,
             } => {
                 let (width, neg_width) = resolve_asterisk_width(*width, args).unwrap_or((0, false));
-                let precision = resolve_asterisk_precision(*precision, args);
+                let precision = resolve_asterisk_precision(*precision, args)?;
                 let f: ExtendedBigDecimal = args.next_extended_big_decimal(*position);
 
-                if precision.is_some_and(|p| p as u64 > i32::MAX as u64) {
-                    return Err(FormatError::InvalidPrecision(
-                        precision.unwrap().to_string(),
-                    ));
+                if let Some(precision) = precision {
+                    check_precision(precision)?;
                 }
 
                 num_format::Float {
@@ -498,7 +499,8 @@ impl Spec {
                 .fmt(writer, &f)
                 .map_err(FormatError::IoError)
             }
-        }
+        }?;
+        Ok(control_flow)
     }
 }
 
@@ -513,7 +515,8 @@ fn resolve_asterisk_width(
         Some(CanAsterisk::Asterisk(loc)) => {
             let nb = args.next_i64(loc);
             if nb < 0 {
-                Some((usize::try_from(-(nb as isize)).ok().unwrap_or(0), true))
+                // Unsigned arithmetic, so `i64::MIN` (magnitude 2^63) doesn't overflow.
+                Some((usize::try_from(nb.unsigned_abs()).ok().unwrap_or(0), true))
             } else {
                 Some((usize::try_from(nb).ok().unwrap_or(0), false))
             }
@@ -524,18 +527,24 @@ fn resolve_asterisk_width(
 
 /// Determines the precision, which should (if defined)
 /// be a non-negative number.
+///
+/// A `*` precision is an int argument, so it is capped at `i32::MAX`; a
+/// precision written in the format is not capped here.
 fn resolve_asterisk_precision(
     option: Option<CanAsterisk<usize>>,
     args: &mut FormatArguments,
-) -> Option<usize> {
+) -> Result<Option<usize>, FormatError> {
     match option {
-        None => None,
+        None => Ok(None),
         Some(CanAsterisk::Asterisk(loc)) => match args.next_i64(loc) {
-            v if v >= 0 => usize::try_from(v).ok(),
-            v if v < 0 => Some(0usize),
-            _ => None,
+            // Compared as an i64, before any conversion to usize: on a 32-bit target
+            // a larger value does not fit and would pass for an omitted precision.
+            v if v > i64::from(i32::MAX) => Err(FormatError::InvalidPrecision(v.to_string())),
+            v if v >= 0 => Ok(usize::try_from(v).ok()),
+            // A negative precision is treated as if the precision were omitted.
+            _ => Ok(None),
         },
-        Some(CanAsterisk::Fixed(w)) => Some(w),
+        Some(CanAsterisk::Fixed(w)) => Ok(Some(w)),
     }
 }
 
@@ -552,12 +561,29 @@ fn write_padded(
 
     if left {
         writer.write_all(text)?;
-        write!(writer, "{: <padlen$}", "")
+        write_spaces(&mut writer, padlen)
     } else {
-        write!(writer, "{: >padlen$}", "")?;
+        write_spaces(&mut writer, padlen)?;
         writer.write_all(text)
     }
     .map_err(FormatError::IoError)
+}
+
+/// Write `n` space bytes directly to `writer`.
+///
+/// Unlike `write!(writer, "{: <n$}", "")`, this does not feed `n` into Rust's
+/// dynamic-width formatting, which panics with "Formatting argument out of
+/// range" once the width exceeds `u16::MAX`. A `%s`/`%c` field width above that
+/// bound is valid input for `printf`, so it must not panic (#12593, #12900).
+fn write_spaces(mut writer: impl Write, n: usize) -> std::io::Result<()> {
+    const SPACES: [u8; 64] = [b' '; 64];
+    let mut remaining = n;
+    while remaining > 0 {
+        let chunk = remaining.min(SPACES.len());
+        writer.write_all(&SPACES[..chunk])?;
+        remaining -= chunk;
+    }
+    Ok(())
 }
 
 /// Check for a number ending with a '$'
@@ -672,6 +698,26 @@ mod tests {
                 )
             );
         }
+
+        #[test]
+        fn asterisk_i64_min_width() {
+            // Regression test for https://github.com/uutils/coreutils/issues/13766
+            // |i64::MIN| = 2^63 overflows i64, so the magnitude of a negative
+            // `*` width must be computed in unsigned arithmetic.
+            let expected = usize::try_from(i64::MIN.unsigned_abs()).unwrap_or(0);
+            for arg in [
+                FormatArgument::SignedInt(i64::MIN),
+                FormatArgument::Unparsed(i64::MIN.to_string().into()),
+            ] {
+                assert_eq!(
+                    Some((expected, true)),
+                    resolve_asterisk_width(
+                        Some(CanAsterisk::Asterisk(ArgumentLocation::NextArgument)),
+                        &mut FormatArguments::new(&[arg]),
+                    )
+                );
+            }
+        }
     }
 
     mod resolve_asterisk_precision {
@@ -682,7 +728,7 @@ mod tests {
         fn no_width() {
             assert_eq!(
                 None,
-                resolve_asterisk_precision(None, &mut FormatArguments::new(&[]))
+                resolve_asterisk_precision(None, &mut FormatArguments::new(&[])).unwrap()
             );
         }
 
@@ -694,6 +740,7 @@ mod tests {
                     Some(CanAsterisk::Fixed(42)),
                     &mut FormatArguments::new(&[])
                 )
+                .unwrap()
             );
         }
 
@@ -705,6 +752,7 @@ mod tests {
                     Some(CanAsterisk::Asterisk(ArgumentLocation::NextArgument)),
                     &mut FormatArguments::new(&[FormatArgument::SignedInt(42)]),
                 )
+                .unwrap()
             );
             assert_eq!(
                 Some(42),
@@ -712,21 +760,24 @@ mod tests {
                     Some(CanAsterisk::Asterisk(ArgumentLocation::NextArgument)),
                     &mut FormatArguments::new(&[FormatArgument::Unparsed("42".into())]),
                 )
+                .unwrap()
             );
 
             assert_eq!(
-                Some(0),
+                None,
                 resolve_asterisk_precision(
                     Some(CanAsterisk::Asterisk(ArgumentLocation::NextArgument)),
                     &mut FormatArguments::new(&[FormatArgument::SignedInt(-42)]),
                 )
+                .unwrap()
             );
             assert_eq!(
-                Some(0),
+                None,
                 resolve_asterisk_precision(
                     Some(CanAsterisk::Asterisk(ArgumentLocation::NextArgument)),
                     &mut FormatArguments::new(&[FormatArgument::Unparsed("-42".into())]),
                 )
+                .unwrap()
             );
             assert_eq!(
                 Some(2),
@@ -740,6 +791,31 @@ mod tests {
                         FormatArgument::Unparsed("3".into())
                     ]),
                 )
+                .unwrap()
+            );
+        }
+
+        #[test]
+        fn asterisk_above_i32_max_is_rejected() {
+            // 2^32 is where converting an i64 to usize starts to fail on 32-bit targets.
+            for value in ["2147483648", "4294967296", "9223372036854775807"] {
+                let result = resolve_asterisk_precision(
+                    Some(CanAsterisk::Asterisk(ArgumentLocation::NextArgument)),
+                    &mut FormatArguments::new(&[FormatArgument::Unparsed(value.into())]),
+                );
+                match result {
+                    Err(FormatError::InvalidPrecision(reported)) => assert_eq!(reported, value),
+                    other => panic!("expected InvalidPrecision for {value}, got {other:?}"),
+                }
+            }
+
+            assert_eq!(
+                Some(2_147_483_647),
+                resolve_asterisk_precision(
+                    Some(CanAsterisk::Asterisk(ArgumentLocation::NextArgument)),
+                    &mut FormatArguments::new(&[FormatArgument::Unparsed("2147483647".into())]),
+                )
+                .unwrap()
             );
         }
     }

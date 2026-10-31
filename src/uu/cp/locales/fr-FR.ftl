@@ -12,9 +12,11 @@ cp-after-help = Ne pas copier un non-répertoire qui a une destination existante
   pour refléter les liens durs dans la source. ce qui donne plus de contrôle sur les fichiers existants dans la destination qui sont
   remplacés, et sa valeur peut être l'une des suivantes :
 
-  - all C'est l'opération par défaut lorsqu'une option --update n'est pas spécifiée, et entraîne le remplacement de tous les fichiers existants dans la destination.
-  - none Cela est similaire à l'option --no-clobber, en ce sens qu'aucun fichier dans la destination n'est remplacé, mais ignorer un fichier n'induit pas d'échec.
-  - older C'est l'opération par défaut lorsque --update est spécifié, et entraîne le remplacement des fichiers s'ils sont plus anciens que le fichier source correspondant.
+  - all : C'est l'opération par défaut lorsqu'une option --update n'est pas spécifiée, et entraîne le remplacement de tous les fichiers existants dans la destination.
+
+  - none : Cela est similaire à l'option --no-clobber, en ce sens qu'aucun fichier dans la destination n'est remplacé, mais ignorer un fichier n'induit pas d'échec.
+
+  - older : C'est l'opération par défaut lorsque --update est spécifié, et entraîne le remplacement des fichiers s'ils sont plus anciens que le fichier source correspondant.
 
 # Messages d'aide
 cp-help-target-directory = copier tous les arguments SOURCE dans le répertoire cible
@@ -48,14 +50,15 @@ cp-help-progress = Afficher une barre de progression. Note : cette fonctionnalit
 cp-help-copy-contents = Non implémenté : copier le contenu des fichiers spéciaux lors de la récursion
 
 # Messages d'erreur
+cp-error-relative-symlink-not-in-cwd = { $dest } : les liens symboliques relatifs ne peuvent être créés que dans le répertoire courant
 cp-error-missing-file-operand = opérande fichier manquant
 cp-error-missing-destination-operand = opérande fichier de destination manquant après { $source }
 cp-error-extra-operand = opérande supplémentaire { $operand }
 cp-error-same-file = { $source } et { $dest } sont le même fichier
 cp-error-backing-up-destroy-source = sauvegarder { $dest } pourrait détruire la source ; { $source } non copié
-cp-error-cannot-open-for-reading = impossible d'ouvrir { $source } en lecture
+cp-error-cannot-open-for-reading = impossible d'ouvrir { $source } en lecture : permission refusée
 cp-error-not-writing-dangling-symlink = ne pas écrire à travers le lien symbolique pendant { $dest }
-cp-error-failed-to-clone = échec du clonage de { $source } depuis { $dest } : { $error }
+cp-error-failed-to-clone = échec du clonage de { $dest } depuis { $source } : { $error }
 cp-error-cannot-change-attribute = impossible de changer l'attribut { $dest } : Le fichier source n'est pas un fichier régulier
 cp-error-cannot-stat = impossible de faire stat sur { $source } : Aucun fichier ou répertoire de ce type
 cp-error-cannot-create-symlink = impossible de créer le lien symbolique { $dest } vers { $source }
@@ -66,7 +69,7 @@ cp-error-will-not-copy-through-symlink = ne copiera pas { $source } à travers l
 cp-error-will-not-overwrite-just-created = n'écrasera pas le fichier tout juste créé { $dest } avec { $source }
 cp-error-target-not-directory = cible : { $target } n'est pas un répertoire
 cp-error-cannot-overwrite-directory-with-non-directory = impossible d'écraser le répertoire { $dir } avec un non-répertoire
-cp-error-cannot-overwrite-non-directory-with-directory = impossible d'écraser un non-répertoire avec un répertoire
+cp-error-cannot-overwrite-non-directory-with-directory = impossible d'écraser le non-répertoire { $dest } avec le répertoire { $source }
 cp-error-with-parents-dest-must-be-dir = avec --parents, la destination doit être un répertoire
 cp-error-not-replacing = ne remplace pas { $file }
 cp-error-failed-get-current-dir = échec de l'obtention du répertoire actuel { $error }
@@ -82,12 +85,13 @@ cp-error-reflink-not-supported = --reflink n'est pris en charge que sur linux et
 cp-error-sparse-not-supported = --sparse n'est pris en charge que sur linux
 cp-error-not-a-directory = { $path } n'est pas un répertoire
 cp-error-selinux-not-enabled = SELinux n'était pas activé lors de la compilation !
-cp-error-selinux-set-context = échec de la définition du contexte de sécurité de { $path } : { $error }
+cp-error-selinux-set-context = échec de la définition du contexte de sécurité de { $path }
 cp-error-selinux-get-context = échec de l'obtention du contexte de sécurité de { $path }
 cp-error-selinux-error = Erreur SELinux : { $error }
 cp-error-selinux-context-conflict = impossible de combiner --context (-Z) avec --preserve=context
 cp-error-cannot-create-fifo = impossible de créer le fifo { $path } : Le fichier existe
 cp-error-cannot-create-special-file = impossible de créer le fichier spécial { $path } : { $error }
+cp-error-cannot-create-regular-file = impossible de créer le fichier standard { $path }
 cp-error-invalid-attribute = attribut invalide { $value }
 cp-error-failed-to-create-whole-tree = échec de la création de l'arborescence complète
 cp-error-failed-to-create-directory = Échec de la création du répertoire : { $error }

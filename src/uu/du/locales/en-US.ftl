@@ -11,9 +11,10 @@ du-after-help = Display values are in units of the first available SIZE from --b
 
   PATTERN allows some advanced exclusions. For example, the following syntaxes
   are supported:
-  ? will match only one character
-  { "*" } will match zero or more characters
-  {"{"}a,b{"}"} will match a or b
+
+    - ? will match only one character
+    - { "*" } will match zero or more characters
+    - {"{"}a,b{"}"} will match a or b
 
 # Help messages
 du-help-print-help = Print help information.
@@ -63,7 +64,6 @@ du-error-cannot-open-for-reading = cannot open { $file } for reading: No such fi
 du-error-invalid-zero-length-file-name = { $file }:{ $line }: invalid zero-length file name
 du-error-extra-operand-with-files0-from = extra operand { $file }
   file operands cannot be combined with --files0-from
-du-error-invalid-block-size-argument = invalid --{ $option } argument { $value }
 du-error-cannot-access-no-such-file = cannot access { $path }: No such file or directory
 du-error-printing-thread-panicked = Printing thread panicked.
 du-error-invalid-suffix = invalid suffix in --{ $option } argument { $value }

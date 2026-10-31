@@ -11,20 +11,20 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/mktemp.rs"
 doctest = false
 
 [dependencies]
 clap = { workspace = true }
+fluent = { workspace = true }
 rand = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true }
-fluent = { workspace = true }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "mktemp"

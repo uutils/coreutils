@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 //! Exit status codes produced by `timeout`.
+
 use uucore::error::UError;
 
 /// Enumerates the exit statuses produced by `timeout`.

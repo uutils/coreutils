@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 //! Heuristics for determining buffer size for external sorting.
+
 use std::ffi::OsString;
 
 // Heuristics to size the external sort buffer without overcommit memory.

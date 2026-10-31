@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore rootlink dotdot rootfile deleteme keepme topfile
+
+// spell-checker:ignore rootlink dotdot rootfile deleteme keepme topfile mkdirat RDONLY FDCWD SIGSEGV rootbind submounts rprivate rbind overlayfs ENAMETOOLONG NAMETOOLONG unlinkat
+
 #![allow(clippy::stable_sort_primitive)]
 
 use std::process::Stdio;
@@ -195,6 +197,21 @@ fn test_recursive() {
     assert!(!at.file_exists(file_b));
 }
 
+#[cfg(unix)]
+#[test]
+fn test_recursive_large_sparse_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "large_sparse_dir";
+    let file = "large_sparse_dir/file";
+
+    at.mkdir(dir);
+    at.make_file(file).set_len(1u64 << 31).unwrap();
+
+    ucmd.arg("-r").arg(dir).succeeds().no_stderr();
+
+    assert!(!at.dir_exists(dir));
+}
+
 #[test]
 fn test_one_file_system_same_device() {
     // Cross-device skipping needs a mount point (root privileges), so here we
@@ -334,6 +351,94 @@ fn test_verbose() {
         .stdout_only(format!("removed '{file_a}'\nremoved '{file_b}'\n"));
 }
 
+// Regression test for issue #10551: `rm -v` must report a verbose output
+// write failure on stderr and exit 1 instead of panicking.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_verbose_write_error_does_not_panic() {
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_rm_verbose_write_error_file";
+
+    at.touch(file);
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    ucmd.arg("-v")
+        .arg(file)
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device")
+        .stderr_does_not_contain("panicked");
+
+    assert!(!at.file_exists(file));
+}
+
+// Directory variant of the #10551 regression test.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_verbose_write_error_does_not_panic_dir() {
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_verbose_write_error_dir";
+    let file = "test_rm_verbose_write_error_dir/a";
+
+    at.mkdir(dir);
+    at.touch(file);
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    ucmd.arg("-r")
+        .arg("-v")
+        .arg(dir)
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device")
+        .stderr_does_not_contain("panicked");
+
+    // A broken stdout must not stop the removal itself.
+    assert!(!at.file_exists(file));
+    assert!(!at.dir_exists(dir));
+}
+
+// A broken standard output must be reported once, not once per removed entry.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_verbose_write_error_reported_once() {
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_verbose_write_error_once";
+
+    at.mkdir(dir);
+    for name in ["alpha", "bravo", "charlie", "delta"] {
+        at.touch(format!("{dir}/{name}"));
+    }
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    let result = ucmd
+        .arg("-r")
+        .arg("-v")
+        .arg(dir)
+        .set_stdout(dev_full)
+        .fails();
+    result.code_is(1);
+    assert_eq!(
+        result
+            .stderr_str()
+            .matches("No space left on device")
+            .count(),
+        1
+    );
+
+    assert!(!at.dir_exists(dir));
+}
+
 #[test]
 #[cfg(not(windows))]
 // on unix symlink_dir is a file
@@ -357,9 +462,11 @@ fn test_symlink_dir() {
     let at = &scene.fixtures;
 
     let dir = "test_rm_symlink_dir_directory";
+    let file = "test_rm_symlink_dir_directory/file";
     let link = "test_rm_symlink_dir_link";
 
     at.mkdir(dir);
+    at.touch(file);
     at.symlink_dir(dir, link);
 
     scene
@@ -371,6 +478,9 @@ fn test_symlink_dir() {
     assert!(at.dir_exists(link));
 
     scene.ucmd().arg("-r").arg(link).succeeds();
+    assert!(!at.dir_exists(link));
+    assert!(at.dir_exists(dir));
+    assert!(at.file_exists(file));
 }
 
 #[test]
@@ -1129,13 +1239,10 @@ fn test_inaccessible_dir_recursive() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "wasi"))]
+#[cfg(target_os = "linux")]
 fn test_non_utf8_paths() {
     use std::ffi::OsStr;
-    #[cfg(target_os = "linux")]
     use std::os::unix::ffi::OsStrExt;
-    #[cfg(target_os = "wasi")]
-    use std::os::wasi::ffi::OsStrExt;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1182,7 +1289,7 @@ fn test_rm_recursive_long_path_safe_traversal() {
     }
 
     at.write("rm_deep/test1.txt", "content1");
-    at.write(&format!("{deep_path}/test2.txt"), "content2");
+    at.write(format!("{deep_path}/test2.txt"), "content2");
 
     ts.ucmd().arg("-rf").arg("rm_deep").succeeds();
 
@@ -1190,10 +1297,82 @@ fn test_rm_recursive_long_path_safe_traversal() {
     assert!(!at.dir_exists("rm_deep"));
 }
 
+/// A hierarchy thousands of levels deep used to make `rm -r` recurse until the
+/// stack ran out, which killed it with SIGSEGV and left the tree in place.
+///
+/// Linux only: building and removing 32768 levels is slow enough elsewhere to
+/// run out of patience before it runs out of stack, and should the removal
+/// fail, tearing the tree down again falls to `fs::remove_dir_all`, whose own
+/// recursion then overflows the test harness's stack.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_rm_recursive_very_deep_hierarchy() {
+    const DEPTH: u32 = 32 * 1024;
+
+    use std::time::Duration;
+
+    use rustix::fs::{CWD, Mode, OFlags, mkdirat, openat};
+    use rustix::io::Errno;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // The path of the deepest directory is far longer than PATH_MAX, so it has
+    // to be built one level at a time with openat/mkdirat.
+    at.mkdir("deep");
+    let flags = OFlags::RDONLY | OFlags::DIRECTORY;
+    let mut fd = openat(CWD, at.plus("deep"), flags, Mode::empty()).unwrap();
+    // The recursion only ran out of stack around 5000 levels unoptimized and
+    // 20000 optimized, so a shallower tree would not test anything. Some
+    // filesystems resolve the whole path internally and refuse to go past
+    // PATH_MAX, which caps the depth near 2000: there is nothing to test on
+    // those, so give up rather than pretend.
+    let mut depth = 0;
+    while depth < DEPTH {
+        match mkdirat(&fd, "a", Mode::from_bits_truncate(0o755)) {
+            Ok(()) => {}
+            Err(Errno::NAMETOOLONG) => break,
+            Err(e) => panic!("mkdirat at depth {depth} failed: {e}"),
+        }
+        fd = match openat(&fd, "a", flags, Mode::empty()) {
+            Ok(fd) => fd,
+            Err(Errno::NAMETOOLONG) => break,
+            Err(e) => panic!("openat at depth {depth} failed: {e}"),
+        };
+        depth += 1;
+    }
+
+    // Release the deepest descriptor, so nothing holds the tree open while rm
+    // walks it.
+    drop(fd);
+
+    if depth < DEPTH {
+        println!("this filesystem stops nesting at {depth} levels; skipping");
+        // Still tear the tree down here: the harness cleanup recurses too.
+        ts.ucmd()
+            .arg("-rf")
+            .arg("deep")
+            .timeout(Duration::from_secs(240))
+            .succeeds();
+        return;
+    }
+
+    // 32768 levels are 65536 metadata operations; the default 30s is not much
+    // once the binary under test is built with coverage instrumentation.
+    ts.ucmd()
+        .arg("-rf")
+        .arg("deep")
+        .timeout(Duration::from_secs(240))
+        .succeeds()
+        .no_output();
+
+    assert!(!at.dir_exists("deep"));
+}
+
 #[cfg(all(not(windows), feature = "chmod"))]
 #[test]
 fn test_rm_directory_not_executable() {
-    // Test from GNU rm/rm2.sh
+    // Test removing files with specific permission scenarios
     // Exercise code paths when directories have no execute permission
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1233,7 +1412,7 @@ fn test_rm_directory_not_executable() {
 #[cfg(all(not(windows), feature = "chmod"))]
 #[test]
 fn test_rm_directory_not_writable() {
-    // Test from GNU rm/rm1.sh
+    // Test basic recursive removal
     // Exercise code paths when directories have no write permission
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1387,6 +1566,22 @@ fn test_preserve_root_symlink_to_root() {
     assert!(at.symlink_exists("rootlink"));
 }
 
+/// Test that the "same as '/'" error escapes control characters in the name.
+#[cfg(unix)]
+#[test]
+fn test_preserve_root_symlink_to_root_escapes_name() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.symlink_dir("/", "root\x1blink");
+
+    ucmd.arg("-rf")
+        .arg("--preserve-root")
+        .arg("root\x1blink/")
+        .fails()
+        .stderr_contains("recursively on $'root\\x1Blink/' (same as '/')")
+        .stderr_does_not_contain("\x1b");
+}
+
 /// Test that --preserve-root properly detects nested symlinks pointing to root.
 #[cfg(unix)]
 #[test]
@@ -1423,6 +1618,78 @@ fn test_preserve_root_symlink_removal_without_trailing_slash() {
     assert!(!at.symlink_exists("rootlink"));
 }
 
+/// `--preserve-root` must refuse a bind mount of `/`.
+///
+/// A bind mount of `/` is an ordinary directory - not a symlink, not a cycle -
+/// so `canonicalize()` yields the mountpoint and every name-based check waves it
+/// through. Only `(st_dev, st_ino)` identifies it, and that is what the failsafe
+/// compares.
+///
+/// The mount is of the real root, so nothing here may be able to delete anything
+/// even with the guard gone: `-i` reads stdin at EOF and so answers "no" to the
+/// first "descend into directory?" prompt, before any unlink. **Never make this
+/// `-rf`.** The mount itself lives in a throwaway user + mount namespace.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_preserve_root_bind_mount_of_root() {
+    use std::process::Command;
+
+    let ts = TestScenario::new(util_name!());
+
+    // Unprivileged user namespaces are disabled in some kernels and sandboxes.
+    let can_unshare = Command::new("unshare")
+        .args(["--user", "--map-root-user", "--mount", "true"])
+        .status()
+        .is_ok_and(|status| status.success());
+    if !can_unshare {
+        println!("TEST SKIPPED: no unprivileged mount namespace available");
+        return;
+    }
+
+    // Mount point lives in this test's own temp dir, so parallel runs cannot
+    // collide and it goes away with the scenario.
+    let mount_point = ts.fixtures.plus_as_string("rootbind");
+
+    // `mount --bind /` is refused inside a user namespace because of locked
+    // submounts; --make-rprivate + --rbind produces the same (st_dev, st_ino).
+    // The mount setup can still be blocked (e.g. `mount(2)` denied in a cross
+    // container even though `unshare` starts); if it fails, exit 99 so the test
+    // skips instead of failing for the wrong reason.
+    let script = format!(
+        "mkdir -p {mp}
+         {{ mount --make-rprivate / && mount --rbind / {mp}; }} \
+             || {{ echo MOUNT_SETUP_FAILED >&2; exit 99; }}
+         exec {bin} rm -ri --preserve-root {mp} < /dev/null",
+        mp = shell_quote(&mount_point),
+        bin = shell_quote(&ts.bin_path.to_string_lossy())
+    );
+    let output = Command::new("unshare")
+        .args(["--user", "--map-root-user", "--mount", "sh", "-c", &script])
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("LANGUAGE", "C")
+        .output()
+        .expect("failed to spawn unshare");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if output.status.code() == Some(99) || stderr.contains("MOUNT_SETUP_FAILED") {
+        println!("TEST SKIPPED: could not set up a bind mount in the namespace: {stderr}");
+        return;
+    }
+    assert!(
+        stderr.contains("it is dangerous to operate recursively on")
+            && stderr.contains("(same as '/')"),
+        "--preserve-root did not refuse a bind mount of /: {stderr}"
+    );
+    assert!(!output.status.success());
+}
+
+/// Wrap `s` in single quotes for `sh -c`, escaping any single quote in it.
+#[cfg(target_os = "linux")]
+fn shell_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
+}
+
 /// Test that literal "/" is still properly protected.
 #[test]
 fn test_preserve_root_literal_root() {
@@ -1433,6 +1700,56 @@ fn test_preserve_root_literal_root() {
         .fails()
         .stderr_contains("it is dangerous to operate recursively on '/'")
         .stderr_contains("use --no-preserve-root to override this failsafe");
+}
+
+/// `rm -rf / --no-preserve-root` must get past the failsafe. `strace` fakes the
+/// removals and sends SIGINT on the first one, so nothing is deleted.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_no_preserve_root_literal_root() {
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::Command;
+
+    // One expression: separate `-e inject=` options for the same syscalls
+    // override each other instead of combining.
+    const INJECT: [&str; 4] = [
+        "-o",
+        "/dev/null",
+        "-e",
+        "inject=unlink,unlinkat,rmdir:retval=0:signal=SIGINT",
+    ];
+
+    // As root a failed injection could really wipe the system, so never run.
+    if rustix::process::getuid().is_root() {
+        eprintln!("TEST SKIPPED: refusing to run `rm -rf /` as root");
+        return;
+    }
+
+    let ts = TestScenario::new(util_name!());
+    let bin = ts.bin_path.to_string_lossy().into_owned();
+
+    // Probe: the injection must stop `rm -r a` (unlinkat, as below) with SIGINT
+    // and leave a/b in place, else skip.
+    ts.fixtures.mkdir("a");
+    ts.fixtures.touch("a/b");
+    let probe = Command::new("strace")
+        .args(INJECT)
+        .args([&bin, "rm", "-r", &ts.fixtures.plus_as_string("a")])
+        .status();
+    if !probe.is_ok_and(|s| s.signal() == Some(libc::SIGINT)) || !ts.fixtures.file_exists("a/b") {
+        eprintln!("TEST SKIPPED: strace syscall injection is not available");
+        return;
+    }
+
+    let output = Command::new("strace")
+        .args(INJECT)
+        .args([&bin, "rm", "-rf", "/", "--no-preserve-root"])
+        .output()
+        .expect("failed to spawn strace");
+
+    // A refusal exits 1; SIGINT means rm reached its first (faked) removal.
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.signal(), Some(libc::SIGINT), "{stderr}");
 }
 
 // Regression tests for Issue #9749: rm -rf ./ and variants silently delete

@@ -3,23 +3,229 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore (vars) fperm srwx
+
 //! Set of functions to parse modes
 
-// spell-checker:ignore (vars) fperm srwx
+use std::ffi::OsString;
+use std::fmt::{self, Display};
+use std::ops::Range;
 
 #[cfg(windows)]
 use libc::umask;
 
-pub fn parse_numeric(fperm: u32, mut mode: &str, considering_dir: bool) -> Result<u32, String> {
+use crate::quoting_style::escape_control_chars;
+use crate::translate;
+
+/// A mode string that does not parse, and the part of it that is at fault.
+///
+/// `span` is a byte range inside the mode string that was handed to the parser,
+/// so that a caller can point a caret at the one clause — often the one
+/// character — that broke it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModeError {
+    pub message: String,
+    pub span: Range<usize>,
+    pub kind: ModeErrorKind,
+}
+
+/// What went wrong, for callers that want to say more than the message does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModeErrorKind {
+    /// Something other than `+`, `-` or `=` where an operator was expected.
+    InvalidOperator,
+    /// Who the clause applies to, and then nothing.
+    MissingOperator,
+    /// A numeric mode that is not octal, or is out of range.
+    InvalidNumber,
+}
+
+impl ModeError {
+    fn new(message: String, span: Range<usize>, kind: ModeErrorKind) -> Self {
+        Self {
+            message,
+            span,
+            kind,
+        }
+    }
+
+    /// Move the range so that it is relative to a string starting `offset`
+    /// bytes earlier.
+    fn shift(self, offset: usize) -> Self {
+        Self {
+            span: self.span.start + offset..self.span.end + offset,
+            ..self
+        }
+    }
+
+    /// Render this error against `args`, where the mode is the value of the
+    /// `-m`/`--mode` option.
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - The argument list the mode came from, without the program
+    ///   name — as [`crate::diagnostics::operands`] returns it, since the other
+    ///   renderer here takes a positional index into the same list.
+    /// * `mode` - The whole mode operand.
+    /// * `clause_start` - Where the clause that failed begins inside `mode`,
+    ///   since a mode is parsed one comma-separated clause at a time.
+    /// * `message` - The headline, already localized.
+    ///
+    /// # Returns
+    ///
+    /// `false` when the mode cannot be found among the arguments, in which case
+    /// the caller should fall back to the plain one-line message.
+    pub fn render_mode_value(
+        &self,
+        args: &[OsString],
+        mode: &str,
+        clause_start: usize,
+        message: &str,
+    ) -> bool {
+        let (label, help) = self.describe();
+        let snapshot = crate::diagnostics::Snapshot::new(args);
+        let range = self.clause_span(clause_start);
+        if !mode.chars().any(char::is_control) && !message.chars().any(char::is_control) {
+            return snapshot.render_option_value(
+                mode,
+                Some('m'),
+                Some("mode"),
+                range,
+                message,
+                label.as_deref(),
+                help.as_deref(),
+            );
+        }
+
+        let Some(index) = snapshot.index_of_value(mode, Some('m'), Some("mode")) else {
+            return false;
+        };
+        let (Some(prefix), Some(fault), Some(suffix)) = (
+            mode.get(..range.start),
+            mode.get(range.clone()),
+            mode.get(range.end..),
+        ) else {
+            return false;
+        };
+        let escaped_prefix = escape_control_chars(prefix);
+        let escaped_fault = escape_control_chars(fault);
+        let escaped_mode = format!(
+            "{escaped_prefix}{escaped_fault}{}",
+            escape_control_chars(suffix)
+        );
+        let escaped_range = escaped_prefix.len()..escaped_prefix.len() + escaped_fault.len();
+
+        let Some(arg) = args[index].to_str() else {
+            return false;
+        };
+        let Some(arg_prefix) = arg.strip_suffix(mode) else {
+            return false;
+        };
+        let mut escaped_args = args.to_vec();
+        escaped_args[index] = format!("{arg_prefix}{escaped_mode}").into();
+
+        crate::diagnostics::Snapshot::new(&escaped_args).render_inside_at(
+            index,
+            &escaped_mode,
+            escaped_range,
+            &escape_control_chars(message),
+            label.as_deref(),
+            help.as_deref(),
+        )
+    }
+
+    /// Render this error against `args`, with the argument carrying the mode
+    /// already located by the caller.
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - The argument list the mode came from, without the program
+    ///   name.
+    /// * `index` - Position of the argument carrying the mode inside `args`.
+    /// * `mode` - The mode as it appears in that argument.
+    /// * `clause_start` - Where the clause that failed begins inside `mode`,
+    ///   since a mode is parsed one comma-separated clause at a time.
+    /// * `message` - The headline, already localized.
+    ///
+    /// # Returns
+    ///
+    /// `false` when nothing could be rendered, in which case the caller should
+    /// fall back to the plain one-line message.
+    pub fn render_at(
+        &self,
+        args: &[OsString],
+        index: usize,
+        mode: &str,
+        clause_start: usize,
+        message: &str,
+    ) -> bool {
+        let (label, help) = self.describe();
+        crate::diagnostics::Snapshot::new(args).render_inside_at(
+            index,
+            mode,
+            self.clause_span(clause_start),
+            message,
+            label.as_deref(),
+            help.as_deref(),
+        )
+    }
+
+    /// The caret label for this error, translated, and the advice that goes
+    /// under it.
+    ///
+    /// Labelled only where a label would add to the message, per the
+    /// convention in [`crate::diagnostics`].
+    fn describe(&self) -> (Option<String>, Option<String>) {
+        let label = match self.kind {
+            // The message already names the expected operators.
+            ModeErrorKind::InvalidOperator => None,
+            ModeErrorKind::MissingOperator => Some("mode-diag-label-missing-operator"),
+            ModeErrorKind::InvalidNumber => Some("mode-diag-label-invalid-number"),
+        };
+        (
+            label.map(|label| translate!(label)),
+            Some(translate!("mode-diag-help-syntax")),
+        )
+    }
+
+    /// Where this error sits inside the whole mode, given where the clause it
+    /// was raised in begins.
+    fn clause_span(&self, clause_start: usize) -> Range<usize> {
+        clause_start + self.span.start..clause_start + self.span.end
+    }
+}
+
+impl Display for ModeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for ModeError {}
+
+pub fn parse_numeric(fperm: u32, mode: &str, considering_dir: bool) -> Result<u32, ModeError> {
+    let original = mode;
     let (op, pos) = parse_op(mode).map_or_else(|_| (None, 0), |(op, pos)| (Some(op), pos));
-    mode = mode[pos..].trim();
+    let digits = mode[pos..].trim();
+    let mode = digits;
     let change = if mode.is_empty() {
         0
     } else {
-        u32::from_str_radix(mode, 8).map_err(|e| e.to_string())?
+        let at = original.len() - original.trim_end().len();
+        u32::from_str_radix(mode, 8).map_err(|e| {
+            ModeError::new(
+                e.to_string(),
+                pos..original.len() - at,
+                ModeErrorKind::InvalidNumber,
+            )
+        })?
     };
     if change > 0o7777 {
-        Err(format!("mode is too large ({change:o} > 7777)"))
+        Err(ModeError::new(
+            format!("mode is too large ({change:o} > 7777)"),
+            0..original.len(),
+            ModeErrorKind::InvalidNumber,
+        ))
     } else {
         Ok(match op {
             Some('+') => fperm | change,
@@ -35,18 +241,28 @@ pub fn parse_numeric(fperm: u32, mut mode: &str, considering_dir: bool) -> Resul
 
 pub fn parse_symbolic(
     mut fperm: u32,
-    mut mode: &str,
+    mode: &str,
     umask: u32,
     considering_dir: bool,
-) -> Result<u32, String> {
+) -> Result<u32, ModeError> {
+    let original = mode;
+    // Everything below is a suffix of `original`, so how much is left is also
+    // where we are.
+    let at = |rest: &str| original.len() - rest.len();
+
     let (mask, pos) = parse_levels(mode);
     if pos == mode.len() {
-        return Err(format!("invalid mode ({mode})"));
+        // Who the clause applies to, and then nothing: no operator followed.
+        return Err(ModeError::new(
+            format!("invalid mode ({mode})"),
+            0..mode.len(),
+            ModeErrorKind::MissingOperator,
+        ));
     }
     let respect_umask = pos == 0;
-    mode = &mode[pos..];
+    let mut mode = &mode[pos..];
     while !mode.is_empty() {
-        let (op, pos) = parse_op(mode)?;
+        let (op, pos) = parse_op(mode).map_err(|err| err.shift(at(mode)))?;
         mode = &mode[pos..];
         let (mut srwx, pos) = parse_change(mode, fperm, considering_dir);
         if respect_umask {
@@ -88,15 +304,20 @@ fn parse_levels(mode: &str) -> (u32, usize) {
     (mask, pos)
 }
 
-fn parse_op(mode: &str) -> Result<(char, usize), String> {
-    let ch = mode
-        .chars()
-        .next()
-        .ok_or_else(|| "unexpected end of mode".to_owned())?;
+fn parse_op(mode: &str) -> Result<(char, usize), ModeError> {
+    let Some(ch) = mode.chars().next() else {
+        return Err(ModeError::new(
+            translate!("mode-error-unexpected-end"),
+            0..0,
+            ModeErrorKind::MissingOperator,
+        ));
+    };
     match ch {
         '+' | '-' | '=' => Ok((ch, 1)),
-        _ => Err(format!(
-            "invalid operator (expected +, -, or =, but found {ch})"
+        _ => Err(ModeError::new(
+            translate!("mode-error-invalid-operator", "operator" => ch),
+            0..ch.len_utf8(),
+            ModeErrorKind::InvalidOperator,
         )),
     }
 }
@@ -145,29 +366,52 @@ pub fn parse_chmod(
     mode_string: &str,
     considering_dir: bool,
     umask: u32,
-) -> Result<u32, String> {
+) -> Result<u32, ModeError> {
     let mut new_mode: u32 = current_mode;
 
     // Split by commas and process each mode part sequentially
-    for mode_part in mode_string.split(',') {
-        let mode_part = mode_part.trim();
+    let mut offset = 0;
+    for raw_part in mode_string.split(',') {
+        let start = offset + (raw_part.len() - raw_part.trim_start().len());
+        // Past the part and the comma that followed it.
+        offset += raw_part.len() + 1;
+
+        let mode_part = raw_part.trim();
         if mode_part.is_empty() {
             continue;
         }
 
         new_mode = if mode_part.chars().any(|c| c.is_ascii_digit()) {
-            parse_numeric(new_mode, mode_part, considering_dir)?
+            parse_numeric(new_mode, mode_part, considering_dir)
         } else {
-            parse_symbolic(new_mode, mode_part, umask, considering_dir)?
-        };
+            parse_symbolic(new_mode, mode_part, umask, considering_dir)
+        }
+        .map_err(|err| err.shift(start))?;
     }
 
     Ok(new_mode)
 }
 
 /// Takes a user-supplied string and tries to parse to u32 mode bitmask.
-pub fn parse(mode_string: &str, considering_dir: bool, umask: u32) -> Result<u32, String> {
+pub fn parse(mode_string: &str, considering_dir: bool, umask: u32) -> Result<u32, ModeError> {
     parse_chmod(0, mode_string, considering_dir, umask)
+}
+
+#[cfg(unix)]
+static UMASK_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(unix)]
+thread_local! {
+    /// The umask set by a [`with_umask`] running on this thread, which holds
+    /// `UMASK_LOCK`.
+    static HELD_UMASK: std::cell::Cell<Option<u32>> = const { std::cell::Cell::new(None) };
+}
+
+#[cfg(unix)]
+fn lock_umask() -> std::sync::MutexGuard<'static, ()> {
+    UMASK_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 pub fn get_umask() -> u32 {
@@ -180,6 +424,10 @@ pub fn get_umask() -> u32 {
     {
         use rustix::fs::Mode;
         use rustix::process::umask;
+        if let Some(mask) = HELD_UMASK.get() {
+            return mask;
+        }
+        let _lock = lock_umask();
 
         let mask = umask(Mode::empty());
         let _ = umask(mask);
@@ -202,11 +450,51 @@ pub fn get_umask() -> u32 {
     }
 }
 
+#[cfg(unix)]
+struct UmaskGuard {
+    previous: rustix::fs::Mode,
+    held: Option<u32>,
+}
+
+#[cfg(unix)]
+impl UmaskGuard {
+    fn set(mask: u32) -> Self {
+        // `rustix::fs::RawMode` is u16 on some targets and u32 on others.
+        let mode = rustix::fs::Mode::from_bits_truncate(mask as rustix::fs::RawMode);
+        Self {
+            previous: rustix::process::umask(mode),
+            held: HELD_UMASK.replace(Some(mask & 0o777)),
+        }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for UmaskGuard {
+    fn drop(&mut self) {
+        rustix::process::umask(self.previous);
+        HELD_UMASK.set(self.held);
+    }
+}
+
+/// Run an operation with a temporary process umask.
+///
+/// The previous umask is restored when the operation returns or unwinds.
+/// Calls through this module are serialized because the umask is process-wide.
+/// They nest: inside `operation`, [`get_umask`] returns `mask`, and `with_umask`
+/// can be called again. Other threads wait until `operation` returns, so it
+/// must not wait for one of them.
+#[cfg(unix)]
+pub fn with_umask<T>(mask: u32, operation: impl FnOnce() -> T) -> T {
+    // Only the outermost call on this thread takes the lock.
+    let _lock = HELD_UMASK.get().is_none().then(lock_umask);
+    let _guard = UmaskGuard::set(mask);
+    operation()
+}
+
 #[cfg(test)]
 mod tests {
 
-    use super::parse;
-    use super::parse_chmod;
+    use super::{parse, parse_chmod};
 
     #[test]
     fn test_chmod_symbolic_modes() {
@@ -340,5 +628,33 @@ mod tests {
 
         // First add user write, then set to 755 (should override)
         assert_eq!(parse("u+w,755", false, 0).unwrap(), 0o755);
+    }
+
+    /// Reads the umask without going through the helpers under test.
+    #[cfg(unix)]
+    fn raw_umask() -> u32 {
+        let mask = rustix::process::umask(rustix::fs::Mode::empty());
+        rustix::process::umask(mask);
+        mask.bits() as u32
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_with_umask_sets_and_restores_mask() {
+        let before = super::get_umask();
+        assert_eq!(super::with_umask(0o027, raw_umask), 0o027);
+        assert_eq!(super::get_umask(), before);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_with_umask_nests() {
+        let before = super::get_umask();
+        super::with_umask(0o027, || {
+            assert_eq!(super::get_umask(), 0o027);
+            assert_eq!(super::with_umask(0o077, raw_umask), 0o077);
+            assert_eq!(raw_umask(), 0o027);
+        });
+        assert_eq!(super::get_umask(), before);
     }
 }

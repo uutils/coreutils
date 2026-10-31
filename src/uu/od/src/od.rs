@@ -4,15 +4,13 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (clap) dont
-// spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset mockstream nrofbytes partialreader odfunc multifile exitcode
+// spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset nrofbytes partialreader odfunc multifile exitcode
 // spell-checker:ignore Anone bfloat
 
 mod byteorder_io;
 mod formatter_item_info;
 mod input_decoder;
 mod input_offset;
-#[cfg(test)]
-mod mockstream;
 mod multifile_reader;
 mod output_info;
 mod parse_formats;
@@ -25,7 +23,6 @@ mod prn_float;
 mod prn_int;
 
 use std::cmp;
-use std::fmt::Write;
 use std::io::{BufReader, Read};
 
 use crate::byteorder_io::ByteOrder;
@@ -36,12 +33,14 @@ use crate::multifile_reader::{HasError, InputSource, MultifileReader};
 use crate::output_info::OutputInfo;
 use crate::parse_formats::{ParsedFormatterItemInfo, parse_format_flags};
 use crate::parse_inputs::{CommandLineInputs, parse_inputs};
-use crate::parse_nrofbytes::parse_number_of_bytes;
+use crate::parse_nrofbytes::{parse_number_of_bytes, parse_width};
 use crate::partial_reader::PartialReader;
 use crate::peek_reader::{PeekRead, PeekReader};
 use crate::prn_char::format_ascii_dump;
 use clap::ArgAction;
 use clap::{Arg, ArgMatches, Command, parser::ValueSource};
+use std::ffi::OsString;
+use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
@@ -71,7 +70,7 @@ struct OdOptions {
     skip_bytes: u64,
     read_bytes: Option<u64>,
     label: Option<u64>,
-    input_strings: Vec<String>,
+    input_strings: Vec<OsString>,
     formats: Vec<ParsedFormatterItemInfo>,
     line_bytes: usize,
     output_duplicates: bool,
@@ -83,23 +82,32 @@ struct OdOptions {
 fn parse_bytes_option(
     matches: &ArgMatches,
     args: &[String],
-    option_name: &str,
-    short: Option<char>,
+    diag_args: Option<&[OsString]>,
+    option_name: &'static str,
+    short: char,
 ) -> UResult<Option<u64>> {
     match matches.get_one::<String>(option_name) {
         None => Ok(None),
         Some(s) => match parse_number_of_bytes(s) {
             Ok(n) => Ok(Some(n)),
-            Err(e) => Err(USimpleError::new(
-                1,
-                format_error_message(&e, s, &option_display_name(args, option_name, short)),
-            )),
+            Err(e) => {
+                let message =
+                    format_error_message(&e, s, &option_display_name(args, option_name, short));
+                let option = OptionValue::with_names(s, Some(short), Some(option_name));
+                Err(e.size_value_error(
+                    diag_args,
+                    &option,
+                    0,
+                    &message,
+                    USimpleError::new(1, message.clone()),
+                ))
+            }
         },
     }
 }
 
 impl OdOptions {
-    fn new(matches: &ArgMatches, args: &[String]) -> UResult<Self> {
+    fn new(matches: &ArgMatches, args: &[String], diag_args: Option<&[OsString]>) -> UResult<Self> {
         let byte_order = if let Some(s) = matches.get_one::<String>(options::ENDIAN) {
             match s.as_str() {
                 "little" => ByteOrder::Little,
@@ -116,7 +124,7 @@ impl OdOptions {
         };
 
         let mut skip_bytes =
-            parse_bytes_option(matches, args, options::SKIP_BYTES, Some('j'))?.unwrap_or(0);
+            parse_bytes_option(matches, args, diag_args, options::SKIP_BYTES, 'j')?.unwrap_or(0);
 
         let mut label: Option<u64> = None;
 
@@ -136,15 +144,23 @@ impl OdOptions {
             matches.get_one::<String>(options::WIDTH),
             matches.value_source(options::WIDTH),
         ) {
-            let width_display = option_display_name(args, options::WIDTH, Some('w'));
-            let parsed = parse_number_of_bytes(s)
-                .map_err(|e| USimpleError::new(1, format_error_message(&e, s, &width_display)))?;
+            let width_display = option_display_name(args, options::WIDTH, 'w');
+            let parsed = parse_width(s).map_err(|e| {
+                let message = format_error_message(&e, s, &width_display);
+                e.size_value_error(
+                    diag_args,
+                    &OptionValue::new(s, 'w', options::WIDTH),
+                    0,
+                    &message,
+                    USimpleError::new(1, message.clone()),
+                )
+            })?;
             if parsed == 0 {
                 return Err(USimpleError::new(
                     1,
                     translate!(
                         "od-error-invalid-argument",
-                        "option" => width_display.clone(),
+                        "option" => width_display,
                         "value" => s.quote()
                     ),
                 ));
@@ -176,9 +192,10 @@ impl OdOptions {
 
         let output_duplicates = matches.get_flag(options::OUTPUT_DUPLICATES);
 
-        let read_bytes = parse_bytes_option(matches, args, options::READ_BYTES, Some('N'))?;
+        let read_bytes = parse_bytes_option(matches, args, diag_args, options::READ_BYTES, 'N')?;
 
-        let string_min_length = match parse_bytes_option(matches, args, options::STRINGS, Some('S'))? {
+        let strings = parse_bytes_option(matches, args, diag_args, options::STRINGS, 'S')?;
+        let string_min_length = match strings {
             None => None,
             Some(n) => Some(usize::try_from(n).map_err(|_| {
                 USimpleError::new(
@@ -236,13 +253,20 @@ impl OdOptions {
 /// opens the input and calls `odfunc` to process the input.
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
+    let raw_args: Vec<OsString> = args.collect();
+    // Keep a text view for option scanning, but parse filenames from the raw arguments.
+    let args: Vec<String> = raw_args
+        .iter()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
 
     let clap_opts = uu_app();
 
-    let clap_matches = uucore::clap_localization::handle_clap_result(clap_opts, &args)?;
+    let clap_matches = uucore::clap_localization::handle_clap_result(clap_opts, &raw_args)?;
 
-    let od_options = OdOptions::new(&clap_matches, &args)?;
+    // Kept for the caret in SIZE diagnostics, which echoes the command line.
+    let diag_args = uucore::diagnostics::capture(&raw_args);
+    let od_options = OdOptions::new(&clap_matches, &args, diag_args.as_deref())?;
     let mut out = std::io::stdout().lock();
 
     // Check if we're in strings mode
@@ -263,7 +287,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             &od_options.input_strings,
             od_options.skip_bytes,
             od_options.read_bytes,
-        );
+        )?;
         let mut input_decoder = InputDecoder::new(
             &mut input,
             od_options.line_bytes,
@@ -315,14 +339,16 @@ pub fn uu_app() -> Command {
                 .short('j')
                 .long(options::SKIP_BYTES)
                 .help(translate!("od-help-skip-bytes"))
-                .value_name("BYTES"),
+                .value_name("BYTES")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(options::READ_BYTES)
                 .short('N')
                 .long(options::READ_BYTES)
                 .help(translate!("od-help-read-bytes"))
-                .value_name("BYTES"),
+                .value_name("BYTES")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(options::ENDIAN)
@@ -371,8 +397,11 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            // undocumented alias `B` because it is implemented in GNU for compatibility with other
+            // coreutils e.g. https://man.netbsd.org/od.1
             Arg::new("o")
                 .short('o')
+                .short_alias('B')
                 .help(translate!("od-help-o"))
                 .action(ArgAction::SetTrue),
         )
@@ -487,6 +516,7 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::FILENAME)
+                .value_parser(clap::builder::OsStringValueParser::new())
                 .hide(true)
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
@@ -575,7 +605,7 @@ where
 
 /// Extract and display printable strings from input (od -S option)
 fn extract_strings_from_input(
-    input_strings: &[String],
+    input_strings: &[OsString],
     skip_bytes: u64,
     read_bytes: Option<u64>,
     min_length: usize,
@@ -585,26 +615,19 @@ fn extract_strings_from_input(
     let inputs = map_input_strings(input_strings);
     let mut mf = MultifileReader::new(inputs);
 
-    // Apply skip_bytes by reading and discarding
-    let mut skipped = 0u64;
-    while skipped < skip_bytes {
-        let to_skip = cmp::min(8192, skip_bytes - skipped);
-        let mut skip_buf = vec![0u8; to_skip as usize];
-        match mf.read(&mut skip_buf) {
-            Ok(0) => break, // EOF reached
-            Ok(n) => skipped += n as u64,
-            Err(_) => break,
-        }
-    }
+    // Skipping past the end of the input is an error, as without -S.
+    mf.skip(skip_bytes)
+        .map_err(|e| USimpleError::new(1, e.to_string()))?;
 
     // Helper function to format and print a string
     let mut print_string = |offset: u64, string: &[u8]| -> std::io::Result<()> {
         let string_content = String::from_utf8_lossy(string);
-        match radix {
-            Radix::NoPrefix => writeln!(writer, "{string_content}"),
-            Radix::Decimal => writeln!(writer, "{offset:07} {string_content}"),
-            Radix::Hexadecimal => writeln!(writer, "{offset:07x} {string_content}"),
-            Radix::Octal => writeln!(writer, "{offset:07o} {string_content}"),
+        if radix == Radix::NoPrefix {
+            writeln!(writer, "{string_content}")
+        } else {
+            // Same offset format as the normal dump
+            let offset = InputOffset::new(radix, offset, None);
+            writeln!(writer, "{offset} {string_content}")
         }
     };
 
@@ -671,6 +694,33 @@ fn extract_strings_from_input(
     }
 }
 
+/// Writes `n` spaces to `writer` without allocating a string for them.
+///
+/// The padding in front of an ascii dump grows with `-w`, which accepts huge
+/// values, so it has to be written in chunks rather than materialized.
+fn write_spaces(writer: &mut impl std::io::Write, n: usize) -> std::io::Result<()> {
+    const SPACES: [u8; 512] = [b' '; 512];
+
+    let mut remaining = n;
+    while remaining != 0 {
+        let chunk = cmp::min(remaining, SPACES.len());
+        writer.write_all(&SPACES[..chunk])?;
+        remaining -= chunk;
+    }
+    Ok(())
+}
+
+/// Writes `s` to `writer`, adding its width in characters to `line_width`.
+fn write_field(
+    writer: &mut impl std::io::Write,
+    s: &str,
+    line_width: &mut usize,
+) -> std::io::Result<()> {
+    writer.write_all(s.as_bytes())?;
+    *line_width += s.chars().count();
+    Ok(())
+}
+
 /// Outputs a single line of input, into one or more lines human readable output.
 fn write_bytes(
     writer: &mut impl std::io::Write,
@@ -680,56 +730,6 @@ fn write_bytes(
 ) -> std::io::Result<()> {
     let mut first = true; // First line of a multi-format raster.
     for f in output_info.spaced_formatters_iter() {
-        let mut output_text = String::new();
-
-        let mut b = 0;
-        while b < input_decoder.length() {
-            write!(
-                output_text,
-                "{:>width$}",
-                "",
-                width = f.spacing[b % output_info.byte_size_block]
-            )
-            .unwrap();
-
-            match f.formatter_item_info.formatter {
-                FormatWriter::IntWriter(func) => {
-                    let p = input_decoder.read_uint(b, f.formatter_item_info.byte_size);
-                    output_text.push_str(&func(p));
-                }
-                FormatWriter::FloatWriter(func) => {
-                    let p = input_decoder.read_float(b, f.formatter_item_info.byte_size);
-                    output_text.push_str(&func(p));
-                }
-                FormatWriter::LongDoubleWriter(func) => {
-                    let p = input_decoder.read_long_double(b);
-                    output_text.push_str(&func(p));
-                }
-                FormatWriter::BFloatWriter(func) => {
-                    let p = input_decoder.read_bfloat(b);
-                    output_text.push_str(&func(p));
-                }
-                FormatWriter::MultibyteWriter(func) => {
-                    output_text.push_str(&func(input_decoder.get_full_buffer(b)));
-                }
-            }
-
-            b += f.formatter_item_info.byte_size;
-        }
-
-        if f.add_ascii_dump {
-            let missing_spacing = output_info
-                .print_width_line
-                .saturating_sub(output_text.chars().count());
-            write!(
-                output_text,
-                "{:>missing_spacing$}  {}",
-                "",
-                format_ascii_dump(input_decoder.get_buffer(0)),
-            )
-            .unwrap();
-        }
-
         if first {
             write!(writer, "{prefix}")?; // print offset
             // if printing in multiple formats offset is printed only once
@@ -737,20 +737,68 @@ fn write_bytes(
         } else {
             // this takes the space of the file offset on subsequent
             // lines of multi-format rasters.
-            write!(writer, "{:>width$}", "", width = prefix.chars().count())?;
+            write_spaces(writer, prefix.chars().count())?;
         }
-        writeln!(writer, "{output_text}")?;
+
+        // The formatted fields are written out as they are produced: a line
+        // holds up to `-w` bytes of input, so buffering it would allocate
+        // several times the width, which can be huge.
+        let mut line_width = 0;
+        let mut b = 0;
+        while b < input_decoder.length() {
+            let spacing = f.spacing[b % output_info.byte_size_block];
+            write_spaces(writer, spacing)?;
+            line_width += spacing;
+
+            match f.formatter_item_info.formatter {
+                FormatWriter::IntWriter(func) => {
+                    let p = input_decoder.read_uint(b, f.formatter_item_info.byte_size);
+                    write_field(writer, &func(p), &mut line_width)?;
+                }
+                FormatWriter::FloatWriter(func) => {
+                    let p = input_decoder.read_float(b, f.formatter_item_info.byte_size);
+                    write_field(writer, &func(p), &mut line_width)?;
+                }
+                FormatWriter::LongDoubleWriter(func) => {
+                    let p = input_decoder.read_long_double(b);
+                    write_field(writer, &func(p), &mut line_width)?;
+                }
+                FormatWriter::BFloatWriter(func) => {
+                    let p = input_decoder.read_bfloat(b);
+                    write_field(writer, &func(p), &mut line_width)?;
+                }
+                FormatWriter::MultibyteWriter(func) => {
+                    write_field(
+                        writer,
+                        &func(input_decoder.get_full_buffer(b)),
+                        &mut line_width,
+                    )?;
+                }
+            }
+
+            b += f.formatter_item_info.byte_size;
+        }
+
+        if f.add_ascii_dump {
+            let missing_spacing = output_info.print_width_line.saturating_sub(line_width);
+            write_spaces(writer, missing_spacing + 2)?;
+            write!(writer, "{}", format_ascii_dump(input_decoder.get_buffer(0)))?;
+        }
+        writeln!(writer)?;
     }
     Ok(())
 }
 
-/// Helper function to convert input strings to InputSource
-fn map_input_strings(input_strings: &[String]) -> Vec<InputSource<'_>> {
+/// Helper function to convert input strings to [`InputSource`]
+fn map_input_strings(input_strings: &[OsString]) -> Vec<InputSource<'_>> {
     input_strings
         .iter()
-        .map(|w| match w as &str {
-            "-" => InputSource::Stdin,
-            x => InputSource::FileName(x),
+        .map(|w| {
+            if w == "-" {
+                InputSource::Stdin
+            } else {
+                InputSource::FileName(w)
+            }
         })
         .collect()
 }
@@ -760,20 +808,22 @@ fn map_input_strings(input_strings: &[String]) -> Vec<InputSource<'_>> {
 /// `skip_bytes` is the number of bytes skipped from the input
 /// `read_bytes` is an optional limit to the number of bytes to read
 fn open_input_peek_reader(
-    input_strings: &[String],
+    input_strings: &[OsString],
     skip_bytes: u64,
     read_bytes: Option<u64>,
-) -> PeekReader<BufReader<PartialReader<MultifileReader<'_>>>> {
+) -> UResult<PeekReader<BufReader<PartialReader<MultifileReader<'_>>>>> {
     // should return  "impl PeekRead + Read + HasError" when supported in (stable) rust
     let inputs = map_input_strings(input_strings);
-    let mf = MultifileReader::new(inputs);
-    let pr = PartialReader::new(mf, skip_bytes, read_bytes);
+    let mut mf = MultifileReader::new(inputs);
+    mf.skip(skip_bytes)
+        .map_err(|e| USimpleError::new(1, e.to_string()))?;
+    let pr = PartialReader::new(mf, read_bytes);
     // Add a BufReader over the top of the PartialReader. This will have the
     // effect of generating buffered reads to files/stdin, but since these reads
     // go through MultifileReader (which limits the maximum number of bytes read)
     // we won't ever read more bytes than were specified with the `-N` flag.
     let buf_pr = BufReader::new(pr);
-    PeekReader::new(buf_pr)
+    Ok(PeekReader::new(buf_pr))
 }
 
 impl<R: HasError> HasError for BufReader<R> {
@@ -782,25 +832,20 @@ impl<R: HasError> HasError for BufReader<R> {
     }
 }
 
-fn option_display_name(args: &[String], option_name: &str, short: Option<char>) -> String {
-    let long_form = format!("--{option_name}");
-    let long_form_with_eq = format!("{long_form}=");
-    if let Some(short_char) = short {
-        let short_form = format!("-{short_char}");
-        for arg in args.iter().skip(1) {
-            if !arg.starts_with("--") && arg.starts_with(&short_form) {
-                return short_form;
-            }
-        }
-        for arg in args.iter().skip(1) {
-            if arg == &long_form || arg.starts_with(&long_form_with_eq) {
+fn option_display_name(args: &[String], option_name: &str, short: char) -> String {
+    if let Some(args) = args.get(1..) {
+        let long_form = format!("--{option_name}");
+        for arg in args {
+            if arg == &long_form
+                || arg
+                    .strip_prefix(&long_form)
+                    .is_some_and(|rest| rest.starts_with('='))
+            {
                 return long_form;
             }
         }
-        short_form
-    } else {
-        long_form
     }
+    format!("-{short}")
 }
 
 fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {

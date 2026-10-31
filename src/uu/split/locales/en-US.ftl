@@ -8,12 +8,12 @@ split-after-help = Output fixed-size pieces of INPUT to PREFIXaa, PREFIXab, ...;
 
   CHUNKS may be:
 
-  - N split into N files based on size of input
-  - K/N output Kth of N to stdout
-  - l/N split into N files without splitting lines/records
-  - l/K/N output Kth of N to stdout without splitting lines/records
-  - r/N like 'l' but use round robin distribution
-  - r/K/N likewise but only output Kth of N to stdout
+    - N split into N files based on size of input
+    - K/N output Kth of N to stdout
+    - l/N split into N files without splitting lines/records
+    - l/K/N output Kth of N to stdout without splitting lines/records
+    - r/N like 'l' but use round robin distribution
+    - r/K/N likewise but only output Kth of N to stdout
 
 # messages
 split-creating-file = creating file { $file }
@@ -36,15 +36,13 @@ split-error-output-file-suffixes-exhausted = output file suffixes exhausted
 split-error-numerical-suffix-start-too-large = numerical suffix start value is too large for the suffix length
 split-error-cannot-open-for-reading = cannot open { $file } for reading
 split-error-would-overwrite-input = { $file } would overwrite input; aborting
-split-error-cannot-determine-input-size = { $input }: cannot determine input size
 split-error-cannot-determine-file-size = { $input }: cannot determine file size
-split-error-cannot-read-from-input = { $input }: cannot read from input : { $error }
+split-error-cannot-read-from-input = { $input }: cannot read from input: { $error }
 split-error-unable-to-open-file = unable to open { $file }; aborting
 split-error-unable-to-reopen-file = unable to re-open { $file }; aborting
 split-error-file-descriptor-limit = at file descriptor limit, but no file descriptor left to close. Closed { $count } writers before.
 split-error-shell-process-returned = Shell process returned { $code }
 split-error-shell-process-terminated = Shell process terminated by signal
-split-error-is-a-directory = { $dir }: Is a directory
 
 # Help messages for command-line options
 split-help-bytes = put SIZE bytes per output file

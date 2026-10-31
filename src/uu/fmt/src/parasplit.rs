@@ -8,22 +8,18 @@
 use std::io::BufRead;
 use std::iter::Peekable;
 use std::slice::Iter;
-use unicode_width::UnicodeWidthChar;
 
 use crate::FileOrStdReader;
 use crate::FmtOptions;
 
+/// Column contribution of a decoded character toward GNU `fmt` `-w`/`--width`.
+///
+/// Current GNU `fmt` (through at least 9.11) is not multibyte-aware: it measures
+/// line length in UTF-8 bytes (pointer differences in `fmt.c`), not Unicode
+/// display columns. Match that so wrapping agrees on CJK and other multibyte text.
+/// When GNU switches to display-column width, revisit this.
 fn char_width(c: char) -> usize {
-    if (c as usize) < 0xA0 {
-        // if it is ASCII, call it exactly 1 wide (including control chars)
-        // calling control chars' widths 1 is consistent with OpenBSD fmt
-        1
-    } else {
-        // otherwise, get the unicode width
-        // note that we shouldn't actually get None here because only c < 0xA0
-        // can return None, but for safety and future-proofing we do it this way
-        UnicodeWidthChar::width(c).unwrap_or(1)
-    }
+    c.len_utf8()
 }
 
 /// Return the UTF-8 sequence length implied by a leading byte, or `None` if invalid.
@@ -98,8 +94,9 @@ fn decode_char_info(bytes: &[u8], start: usize) -> DecodedCharInfo {
     }
 }
 
-/// Compute display width for a UTF-8 byte slice, treating invalid bytes as width 1.
-fn byte_display_width(bytes: &[u8]) -> usize {
+/// Compute GNU-compatible width for a UTF-8 byte slice (byte length).
+/// Invalid UTF-8 bytes are treated as width 1 each via `decode_char_info`.
+fn byte_width(bytes: &[u8]) -> usize {
     let mut width = 0;
     let mut idx = 0;
     while idx < bytes.len() {
@@ -127,7 +124,17 @@ fn is_fmt_whitespace_byte(b: u8) -> bool {
 #[derive(Debug)]
 pub enum Line {
     FormatLine(FileLine),
-    NoFormatLine(Vec<u8>, bool),
+    NoFormatLine(NoFormatLine),
+}
+
+/// A line that is copied as it is
+#[derive(Debug)]
+pub struct NoFormatLine {
+    pub line: Vec<u8>,
+    /// Whether the line is entirely blank
+    blank: bool,
+    /// Whether the line ends with a newline in the output
+    pub newline: bool,
 }
 
 impl Line {
@@ -140,9 +147,9 @@ impl Line {
     }
 
     /// when we know that it's a [`Line::NoFormatLine`], as in the [`ParagraphStream`] iterator
-    fn get_noformatline(self) -> (Vec<u8>, bool) {
+    fn get_noformatline(self) -> NoFormatLine {
         match self {
-            Self::NoFormatLine(s, b) => (s, b),
+            Self::NoFormatLine(nfl) => nfl,
             Self::FormatLine(..) => panic!("Found FormatLine when expecting NoFormatLine"),
         }
     }
@@ -157,7 +164,7 @@ pub struct FileLine {
     indent_end: usize,
     /// The end of the PREFIX's indent, that is, the spaces before the prefix
     prefix_indent_end: usize,
-    /// Display length of indent taking into account tabs
+    /// Printed length of indent taking into account tabs (GNU: byte-oriented)
     indent_len: usize,
     /// PREFIX indent length taking into account tabs
     prefix_len: usize,
@@ -255,12 +262,12 @@ impl Iterator for FileLines<'_> {
 
     fn next(&mut self) -> Option<Line> {
         let mut buf = Vec::new();
-        match self.reader.read_until(b'\n', &mut buf) {
-            Ok(0) => return None,
-            Ok(_) => {}
-            Err(_) => return None,
-        }
-        if buf.ends_with(b"\n") {
+        self.reader
+            .read_until(b'\n', &mut buf)
+            .ok()
+            .filter(|n| *n > 0)?;
+        let has_newline = buf.ends_with(b"\n");
+        if has_newline {
             buf.pop();
             if buf.ends_with(b"\r") {
                 buf.pop();
@@ -273,15 +280,24 @@ impl Iterator for FileLines<'_> {
         // Err(true) indicates that this was a linebreak,
         // which is important to know when detecting mail headers
         if n.iter().all(|&b| is_fmt_whitespace_byte(b)) {
-            return Some(Line::NoFormatLine(Vec::new(), true));
+            return Some(Line::NoFormatLine(NoFormatLine {
+                line: Vec::new(),
+                blank: true,
+                newline: true,
+            }));
         }
 
         let (pmatch, poffset) = self.match_prefix(&n[..]);
 
         // if this line does not match the prefix,
-        // emit the line unprocessed and iterate again
+        // emit the line unprocessed (even when it lacks a final newline)
+        // and iterate again
         if !pmatch {
-            return Some(Line::NoFormatLine(n, false));
+            return Some(Line::NoFormatLine(NoFormatLine {
+                line: n,
+                blank: false,
+                newline: has_newline,
+            }));
         }
 
         // if the line matches the prefix, but is blank after,
@@ -289,18 +305,25 @@ impl Iterator for FileLines<'_> {
         // treat it like a blank line, except that since it's
         // not truly blank we will not allow mail headers on the
         // following line)
-        if pmatch
-            && n[poffset + self.opts.prefix.as_ref().map_or(0, String::len)..]
-                .iter()
-                .all(|&b| is_fmt_whitespace_byte(b))
+        if n[poffset + self.opts.prefix.as_ref().map_or(0, String::len)..]
+            .iter()
+            .all(|&b| is_fmt_whitespace_byte(b))
         {
-            return Some(Line::NoFormatLine(n, false));
+            return Some(Line::NoFormatLine(NoFormatLine {
+                line: n,
+                blank: false,
+                newline: true,
+            }));
         }
 
         // skip if this line matches the anti_prefix
         // (NOTE definition of match_anti_prefix is TRUE if we should process)
         if !self.match_anti_prefix(&n[..]) {
-            return Some(Line::NoFormatLine(n, false));
+            return Some(Line::NoFormatLine(NoFormatLine {
+                line: n,
+                blank: false,
+                newline: has_newline,
+            }));
         }
 
         // figure out the indent, prefix, and prefixindent ending points
@@ -391,21 +414,21 @@ impl ParagraphStream<'_> {
 }
 
 impl Iterator for ParagraphStream<'_> {
-    type Item = Result<Paragraph, Vec<u8>>;
+    type Item = Result<Paragraph, NoFormatLine>;
 
     #[allow(clippy::cognitive_complexity)]
-    fn next(&mut self) -> Option<Result<Paragraph, Vec<u8>>> {
+    fn next(&mut self) -> Option<Result<Paragraph, NoFormatLine>> {
         // return a NoFormatLine in an Err; it should immediately be output
         let noformat = match self.lines.peek()? {
             Line::FormatLine(_) => false,
-            Line::NoFormatLine(_, _) => true,
+            Line::NoFormatLine(_) => true,
         };
 
         // found a NoFormatLine, immediately dump it out
         if noformat {
-            let (s, nm) = self.lines.next().unwrap().get_noformatline();
-            self.next_mail = nm;
-            return Some(Err(s));
+            let nfl = self.lines.next().unwrap().get_noformatline();
+            self.next_mail = nfl.blank;
+            return Some(Err(nfl));
         }
 
         // found a FormatLine, now build a paragraph
@@ -422,8 +445,6 @@ impl Iterator for ParagraphStream<'_> {
         let mut in_mail = false;
         let mut second_done = false; // for when we use crown or tagged mode
         while let Some(Line::FormatLine(fl)) = self.lines.peek() {
-            // peek ahead
-            // need to explicitly force fl out of scope before we can call self.lines.next()
             if p_lines.is_empty() {
                 // first time through the loop, get things set up
                 // detect mail header
@@ -562,7 +583,7 @@ impl<'a> ParaWords<'a> {
                     .map(|x| WordInfo {
                         word: x,
                         word_start: 0,
-                        word_nchars: byte_display_width(x),
+                        word_nchars: byte_width(x),
                         before_tab: None,
                         after_tab: 0,
                         sentence_start: false,

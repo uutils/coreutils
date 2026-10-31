@@ -9,7 +9,7 @@
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{Read, Write, stderr};
-use std::path::PathBuf;
+use std::iter;
 use std::sync::mpsc::{Receiver, SyncSender};
 use std::thread;
 
@@ -21,7 +21,7 @@ use crate::chunks::RecycledChunk;
 use crate::merge::WriteableCompressedTmpFile;
 use crate::merge::WriteablePlainTmpFile;
 use crate::merge::WriteableTmpFile;
-use crate::tmp_dir::TmpDirWrapper;
+use crate::tmp_dir::{TmpDirWrapper, TmpPath};
 use crate::{
     GlobalSettings, Line,
     chunks::{self, Chunk},
@@ -110,12 +110,12 @@ fn reader_writer<
 ) -> UResult<()> {
     let separator = settings.line_ending.into();
 
-    // Cap oversized buffer requests to avoid unnecessary allocations and give the automatic
-    // heuristic room to grow when the user does not provide an explicit value.
-    let mut buffer_size = match settings.buffer_size {
-        size if size <= 512 * 1024 * 1024 => size,
-        size => size / 2,
-    };
+    // Two chunks are kept in memory, so split an explicit limit between them.
+    // Keep the automatic sizing heuristic's cap and minimum growth allowance.
+    let mut buffer_size = settings.buffer_size;
+    if settings.buffer_size_is_explicit || buffer_size > 512 * 1024 * 1024 {
+        buffer_size /= 2;
+    }
     if !settings.buffer_size_is_explicit {
         buffer_size = buffer_size.max(8 * 1024 * 1024);
     }
@@ -175,7 +175,8 @@ fn reader_writer<
             }
         }
         ReadResult::EmptyInput => {
-            // don't output anything
+            // output empty too, as coreutils does
+            print_sorted(iter::empty::<&Line<'_>>(), settings, output)?;
         }
     }
     Ok(())
@@ -288,18 +289,54 @@ fn read_write_loop<I: WriteableTmpFile>(
 /// `compress_prog` is used to optionally compress file contents.
 fn write<I: WriteableTmpFile>(
     chunk: &Chunk,
-    file: (File, PathBuf),
+    file: (File, TmpPath),
     compress_prog: Option<&str>,
     separator: u8,
 ) -> UResult<I::Closed> {
     let mut tmp_file = I::create(file, compress_prog)?;
-    write_lines(chunk.lines(), tmp_file.as_write(), separator);
+    write_lines(chunk.lines(), tmp_file.as_write(), separator)?;
     tmp_file.finished_writing()
 }
 
-fn write_lines<T: Write>(lines: &[Line], writer: &mut T, separator: u8) {
+fn write_lines<T: Write>(lines: &[Line], writer: &mut T, separator: u8) -> std::io::Result<()> {
     for s in lines {
-        writer.write_all(s.line).unwrap();
-        writer.write_all(&[separator]).unwrap();
+        writer.write_all(s.line)?;
+        writer.write_all(&[separator])?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+
+    use super::*;
+
+    struct FailingWriter(io::ErrorKind);
+
+    impl Write for FailingWriter {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            Err(io::Error::from(self.0))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn write_lines_propagates_write_errors() {
+        let lines = [Line {
+            line: b"line",
+            index: 0,
+        }];
+
+        let result = write_lines(
+            &lines,
+            &mut FailingWriter(io::ErrorKind::StorageFull),
+            b'\n',
+        );
+
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::StorageFull);
     }
 }

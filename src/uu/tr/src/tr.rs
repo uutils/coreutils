@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+mod diagnostics;
 mod operation;
 mod simd;
 mod unicode_table;
@@ -14,6 +15,8 @@ use operation::{
 };
 use simd::process_input;
 use std::ffi::OsString;
+#[cfg(not(any(unix, target_os = "wasi")))]
+use std::io::Write;
 use std::io::{stdin, stdout};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
@@ -22,15 +25,20 @@ use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, show};
 
 mod options {
+    pub const ASCII: &str = "ascii";
     pub const COMPLEMENT: &str = "complement";
     pub const DELETE: &str = "delete";
     pub const SQUEEZE: &str = "squeeze-repeats";
     pub const TRUNCATE_SET1: &str = "truncate-set1";
+    pub const UNBUFFERED: &str = "unbuffered";
     pub const SETS: &str = "sets";
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let args: Vec<OsString> = args.collect();
+    // Kept for the caret in set diagnostics, which needs the sets as typed.
+    let set_args = uucore::diagnostics::capture(&args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let delete_flag = matches.get_flag(options::DELETE);
@@ -42,14 +50,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // pattern API on OsStr
     let sets: Vec<_> = matches
         .get_many::<OsString>(options::SETS)
-        .into_iter()
-        .flatten()
+        .ok_or_else(|| UUsageError::new(1, translate!("tr-error-missing-operand")))?
         .map(ToOwned::to_owned)
         .collect();
-
-    if sets.is_empty() {
-        return Err(UUsageError::new(1, translate!("tr-error-missing-operand")));
-    }
 
     let sets_len = sets.len();
 
@@ -98,19 +101,39 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let stdin = stdin();
     let mut locked_stdin = stdin.lock();
-    let mut locked_stdout = stdout().lock();
+    // Write straight to the file descriptor: `Stdout` is line buffered, which
+    // costs a search for the last newline and an extra write per chunk.
+    // Every chunk is written as soon as it is translated, so `-u` has nothing
+    // left to do here.
+    #[cfg(any(unix, target_os = "wasi"))]
+    let mut output = uucore::io::RawWriter(stdout());
+    #[cfg(not(any(unix, target_os = "wasi")))]
+    let mut output = FlushEachChunk {
+        inner: stdout().lock(),
+        enabled: matches.get_flag(options::UNBUFFERED),
+    };
 
     // According to the man page: translating only happens if deleting or if a second set is given
     let translating = !delete_flag && sets.len() > 1;
     let mut sets_iter = sets.iter().map(OsString::as_os_str);
-    let (set1, set2) = Sequence::solve_set_characters(
+    let solved = Sequence::solve_set_characters(
         os_str_as_bytes(sets_iter.next().unwrap_or_default())?,
         os_str_as_bytes(sets_iter.next().unwrap_or_default())?,
         complement_flag,
         // if we are not translating then we don't truncate set1
         truncate_set1_flag && translating,
         translating,
-    )?;
+    );
+    let (set1, set2) = match solved {
+        Ok(sets_solved) => sets_solved,
+        Err(error) => {
+            return Err(uucore::diagnostics::error_after_report(
+                set_args.as_deref(),
+                error,
+                |args, error| diagnostics::render(args, &sets, error),
+            ));
+        }
+    };
 
     if is_stdin_directory(&stdin) {
         return Err(USimpleError::new(1, translate!("tr-error-read-directory")));
@@ -122,29 +145,56 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let delete_op = DeleteOperation::new(set1);
             let squeeze_op = SqueezeOperation::new(set2);
             let op = delete_op.chain(squeeze_op);
-            translate_input(&mut locked_stdin, &mut locked_stdout, op)?;
+            translate_input(&mut locked_stdin, &mut output, op)?;
         } else {
             let op = DeleteOperation::new(set1);
-            process_input(&mut locked_stdin, &mut locked_stdout, &op)?;
+            process_input(&mut locked_stdin, &mut output, &op)?;
         }
     } else if squeeze_flag {
         if sets_len == 1 {
             let op = SqueezeOperation::new(set1);
-            translate_input(&mut locked_stdin, &mut locked_stdout, op)?;
+            translate_input(&mut locked_stdin, &mut output, op)?;
         } else {
             let translate_op = TranslateOperation::new(set1, set2.clone())?;
             let squeeze_op = SqueezeOperation::new(set2);
             let op = translate_op.chain(squeeze_op);
-            translate_input(&mut locked_stdin, &mut locked_stdout, op)?;
+            translate_input(&mut locked_stdin, &mut output, op)?;
         }
     } else {
         let op = TranslateOperation::new(set1, set2)?;
-        process_input(&mut locked_stdin, &mut locked_stdout, &op)?;
+        process_input(&mut locked_stdin, &mut output, &op)?;
     }
 
-    flush_output(&mut locked_stdout)?;
+    flush_output(&mut output)?;
 
     Ok(())
+}
+
+/// `Stdout` holds back what follows the last newline; with `-u`, flush it
+/// after every chunk so that a partial line is not held back either.
+#[cfg(not(any(unix, target_os = "wasi")))]
+struct FlushEachChunk<W: Write> {
+    inner: W,
+    enabled: bool,
+}
+
+#[cfg(not(any(unix, target_os = "wasi")))]
+impl<W: Write> Write for FlushEachChunk<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.inner.write(buf)
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        self.inner.write_all(buf)?;
+        if self.enabled {
+            self.inner.flush()?;
+        }
+        Ok(())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
 }
 
 pub fn uu_app() -> Command {
@@ -156,6 +206,15 @@ pub fn uu_app() -> Command {
         .after_help(translate!("tr-after-help"))
         .infer_long_args(true)
         .trailing_var_arg(true)
+        .arg(
+            // GNU's undocumented -A acts like LC_ALL=C. Our classes are
+            // ASCII-only anyway, so there is nothing to switch.
+            Arg::new(options::ASCII)
+                .short('A')
+                .hide(true)
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::ASCII),
+        )
         .arg(
             Arg::new(options::COMPLEMENT)
                 .visible_short_alias('C')
@@ -188,6 +247,13 @@ pub fn uu_app() -> Command {
                 .help(translate!("tr-help-truncate-set1"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::TRUNCATE_SET1),
+        )
+        .arg(
+            Arg::new(options::UNBUFFERED)
+                .short('u')
+                .hide(true)
+                .help(translate!("tr-help-unbuffered"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SETS)

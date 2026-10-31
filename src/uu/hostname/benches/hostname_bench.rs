@@ -10,14 +10,16 @@
 //!
 //! # Important Note on Large Hosts File Testing
 //!
-//! To properly test with large /etc/hosts files, NSS_WRAPPER library must be used:
+//! To properly test with large /etc/hosts files, `NSS_WRAPPER` library must be used:
 //!
 //! ```bash
 //! LD_PRELOAD=/usr/lib/libnss_wrapper.so NSS_WRAPPER_HOSTS=/tmp/large_hosts \
 //!   cargo bench --package uu_hostname hostname_ip_lookup
 //! ```
 //!
-//! Without NSS_WRAPPER, the benchmark tests with the system's real /etc/hosts.
+//! Without `NSS_WRAPPER`, the benchmark tests with the system's real /etc/hosts.
+
+#![cfg(any(all(unix, not(any(target_os = "aix", target_os = "redox"))), windows))]
 
 use divan::{Bencher, black_box};
 use std::io::Write;
@@ -67,7 +69,7 @@ fn generate_hosts_file(entries: usize) -> Vec<u8> {
 /// Benchmark hostname -i with large hosts file
 ///
 /// # Important
-/// Use NSS_WRAPPER to test with generated hosts file:
+/// Use `NSS_WRAPPER` to test with generated hosts file:
 /// `LD_PRELOAD=/usr/lib/libnss_wrapper.so NSS_WRAPPER_HOSTS=/path/to/hosts cargo bench`
 #[divan::bench(
     args = [100_000],

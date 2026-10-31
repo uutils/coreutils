@@ -2,9 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
-// spell-checker:ignore contenta edgecase behaviour
 
+// spell-checker:ignore contenta edgecase behaviour tcaf
+
+use rstest::rstest;
 use uutests::{at_and_ucmd, new_ucmd};
 
 #[test]
@@ -13,30 +14,54 @@ fn test_invalid_arg() {
 }
 
 #[test]
-fn unexpand_init_0() {
-    new_ucmd!()
-        .args(&["-t4"])
-        .pipe_in(" 1\n  2\n   3\n    4\n")
+fn test_bare_dash_reads_stdin_in_file_list() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("file", "file\n");
+
+    ucmd.args(&["-", "file"])
+        .pipe_in("stdin\n")
         .succeeds()
-        .stdout_is(" 1\n  2\n   3\n\t4\n");
+        .stdout_is("stdin\nfile\n");
 }
 
 #[test]
-fn unexpand_init_1() {
+fn test_bare_dash_does_not_force_first_only() {
     new_ucmd!()
-        .args(&["-t4"])
-        .pipe_in("     5\n      6\n       7\n        8\n")
+        .args(&["-t", "3", "-"])
+        .pipe_in("a  b\n")
         .succeeds()
-        .stdout_is("\t 5\n\t  6\n\t   7\n\t\t8\n");
+        .stdout_is("a\tb\n");
 }
 
 #[test]
-fn unexpand_init_list_0() {
+fn test_first_only_with_bare_stdin_operand() {
     new_ucmd!()
-        .args(&["-t2,4"])
-        .pipe_in(" 1\n  2\n   3\n    4\n")
+        .args(&["--first-only", "-"])
+        .pipe_in("        A     B\n")
         .succeeds()
-        .stdout_is(" 1\n\t2\n\t 3\n\t\t4\n");
+        .stdout_is("\tA     B\n");
+}
+
+#[rstest]
+#[case::unexpand_init_0(&["-t4"], " 1\n  2\n   3\n    4\n", " 1\n  2\n   3\n\t4\n")]
+#[case::unexpand_init_1(&["-t4"], "     5\n      6\n       7\n        8\n", "\t 5\n\t  6\n\t   7\n\t\t8\n")]
+#[case::unexpand_init_list_0(&["-t2,4"], " 1\n  2\n   3\n    4\n", " 1\n\t2\n\t 3\n\t\t4\n")]
+#[case::unexpand_flag_a_0(&["--"], "e     E\nf      F\ng       G\nh        H\n", "e     E\nf      F\ng       G\nh        H\n")]
+#[case::unexpand_flag_a_1(&["-a"], "e     E\nf      F\ng       G\nh        H\n", "e     E\nf      F\ng\tG\nh\t H\n")]
+#[case::unexpand_flag_a_2(&["-t8"], "e     E\nf      F\ng       G\nh        H\n", "e     E\nf      F\ng\tG\nh\t H\n")]
+#[case::unexpand_first_only_0(&["-t3"], "        A     B", "\t\t  A\t  B")]
+#[case::unexpand_first_only_1(&["-t3", "--first-only"], "        A     B", "\t\t  A     B")]
+#[case::unexpand_first_only_2(&["-t3", "-f"], "        A     B", "\t\t  A     B")]
+#[case::unexpand_first_only_3(&["-f", "-t8"], "        A     B", "\tA     B")]
+#[case::unexpand_spaces_after_fields(&["-a"], "   \t        A B C D             A\t\n", "\t\tA B C D\t\t    A\t\n")]
+#[case::tabs_shortcut(&["-3"], "   a   b", "\ta   b")]
+#[case::comma_separated_tabs_shortcut(&["-a", "-3,9"], "a  b     c", "a\tb\tc")]
+fn test_unexpand_stdin(#[case] args: &[&str], #[case] input: &str, #[case] expected: &str) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected);
 }
 
 #[test]
@@ -47,69 +72,6 @@ fn unexpand_init_list_1() {
         .pipe_in("     5\n      6\n       7\n        8\n")
         .succeeds()
         .stdout_is("\t\t 5\n\t\t  6\n\t\t   7\n\t\t    8\n");
-}
-
-#[test]
-fn unexpand_flag_a_0() {
-    new_ucmd!()
-        .args(&["--"])
-        .pipe_in("e     E\nf      F\ng       G\nh        H\n")
-        .succeeds()
-        .stdout_is("e     E\nf      F\ng       G\nh        H\n");
-}
-
-#[test]
-fn unexpand_flag_a_1() {
-    new_ucmd!()
-        .args(&["-a"])
-        .pipe_in("e     E\nf      F\ng       G\nh        H\n")
-        .succeeds()
-        .stdout_is("e     E\nf      F\ng\tG\nh\t H\n");
-}
-
-#[test]
-fn unexpand_flag_a_2() {
-    new_ucmd!()
-        .args(&["-t8"])
-        .pipe_in("e     E\nf      F\ng       G\nh        H\n")
-        .succeeds()
-        .stdout_is("e     E\nf      F\ng\tG\nh\t H\n");
-}
-
-#[test]
-fn unexpand_first_only_0() {
-    new_ucmd!()
-        .args(&["-t3"])
-        .pipe_in("        A     B")
-        .succeeds()
-        .stdout_is("\t\t  A\t  B");
-}
-
-#[test]
-fn unexpand_first_only_1() {
-    new_ucmd!()
-        .args(&["-t3", "--first-only"])
-        .pipe_in("        A     B")
-        .succeeds()
-        .stdout_is("\t\t  A     B");
-}
-
-#[test]
-fn unexpand_first_only_2() {
-    new_ucmd!()
-        .args(&["-t3", "-f"])
-        .pipe_in("        A     B")
-        .succeeds()
-        .stdout_is("\t\t  A     B");
-}
-
-#[test]
-fn unexpand_first_only_3() {
-    new_ucmd!()
-        .args(&["-f", "-t8"])
-        .pipe_in("        A     B")
-        .succeeds()
-        .stdout_is("\tA     B");
 }
 
 #[test]
@@ -159,12 +121,57 @@ fn unexpand_spaces_follow_tabs_1() {
 }
 
 #[test]
-fn unexpand_spaces_after_fields() {
+fn unexpand_leading_spaces_before_multibyte() {
+    // Leading whitespace is converted even in the default (UTF-8) mode, and the
+    // multibyte tail is copied verbatim.
     new_ucmd!()
-        .args(&["-a"])
-        .pipe_in("   \t        A B C D             A\t\n")
+        .pipe_in("        caf\u{e9}\n")
         .succeeds()
-        .stdout_is("\t\tA B C D\t\t    A\t\n");
+        .stdout_is("\tcaf\u{e9}\n");
+}
+
+#[test]
+fn unexpand_deep_indent_stops_at_last_tabstop() {
+    // With several tab stops, conversion stops past the last one: the extra
+    // leading spaces beyond column 4 stay as spaces.
+    new_ucmd!()
+        .args(&["-t", "2,4"])
+        .pipe_in("            x\n")
+        .succeeds()
+        .stdout_is("\t\t        x\n");
+}
+
+#[test]
+fn unexpand_wide_char_width_before_tab() {
+    // A 3-byte, double-width character advances the column by two, so the
+    // following tab lands on the next tab stop.
+    new_ucmd!()
+        .args(&["-a", "-t", "4"])
+        .pipe_in("   \u{3000}X\ty\n")
+        .succeeds()
+        .stdout_is("   \u{3000}X\ty\n");
+}
+
+#[test]
+fn unexpand_ideographic_space_absorbed_into_tab() {
+    // U+3000 is a width-2 blank: a run of them that reaches a tab stop is
+    // converted to a tab, just like a run of ASCII spaces.
+    new_ucmd!()
+        .arg("-a")
+        .pipe_in("\u{3000}\u{3000}\u{3000}\u{3000}Z\n")
+        .succeeds()
+        .stdout_is("\tZ\n");
+}
+
+#[test]
+fn unexpand_ideographic_space_preserved_when_not_converted() {
+    // A blank run that does not reach a tab stop is emitted verbatim, so the
+    // multibyte blank keeps its original bytes rather than becoming spaces.
+    new_ucmd!()
+        .arg("-a")
+        .pipe_in("a\u{3000}b\n")
+        .succeeds()
+        .stdout_is("a\u{3000}b\n");
 }
 
 #[test]
@@ -179,15 +186,6 @@ fn unexpand_read_from_two_file() {
         .arg("with_spaces.txt")
         .arg("-t4")
         .succeeds();
-}
-
-#[test]
-fn test_tabs_shortcut() {
-    new_ucmd!()
-        .arg("-3")
-        .pipe_in("   a   b")
-        .succeeds()
-        .stdout_is("\ta   b");
 }
 
 #[test]
@@ -208,12 +206,15 @@ fn test_tabs_shortcut_combined_with_all_arg() {
 }
 
 #[test]
-fn test_comma_separated_tabs_shortcut() {
-    new_ucmd!()
-        .args(&["-a", "-3,9"])
-        .pipe_in("a  b     c")
-        .succeeds()
-        .stdout_is("a\tb\tc");
+fn test_blank_separated_tabs() {
+    // GNU accepts a space or a tab as a tab-list separator, just like a comma.
+    for sep in [" ", "\t"] {
+        new_ucmd!()
+            .args(&["-a", "-t", &format!("3{sep}9")])
+            .pipe_in("a  b     c")
+            .succeeds()
+            .stdout_is("a\tb\tc");
+    }
 }
 
 #[test]
@@ -247,9 +248,19 @@ fn test_tabs_with_invalid_chars() {
 #[test]
 fn test_tabs_shortcut_with_too_large_size() {
     let arg = format!("-{}", u128::MAX);
-    let expected_error = "tab stop value is too large";
+    let expected_error = "tab stop is too large";
 
     new_ucmd!().arg(arg).fails().stderr_contains(expected_error);
+}
+
+#[test]
+fn test_extended_tabstop_increment_overflow() {
+    // `--tabs=N,+M` with N near usize::MAX must be rejected, not overflow the N+M stop.
+    let arg = format!("--tabs={},+1", usize::MAX);
+    new_ucmd!()
+        .arg(arg)
+        .fails()
+        .stderr_contains("tab stop is too large");
 }
 
 #[test]
@@ -309,19 +320,51 @@ fn test_non_utf8_filename() {
 
 #[test]
 fn unexpand_multibyte_utf8_gnu_compat() {
-    // Verifies GNU-compatible behavior: column position uses byte count, not display width
-    // "1ΔΔΔ5" is 8 bytes (1 + 2*3 + 1), already at tab stop 8
-    // So 3 spaces should NOT convert to tab (would need 8 more to reach tab stop 16)
+    // Column position uses display width, not byte count (matches GNU 9.11).
+    // "1ΔΔΔ5" is 5 columns wide (each Δ is a 2-byte char of display width 1),
+    // so the run of 3 spaces reaches tab stop 8 and collapses to a single tab.
     new_ucmd!()
         .args(&["-a"])
         .pipe_in("1ΔΔΔ5   99999\n")
         .succeeds()
-        .stdout_is("1ΔΔΔ5   99999\n");
+        .stdout_is("1ΔΔΔ5\t99999\n");
+}
+
+#[test]
+fn unexpand_wide_multibyte_char_width() {
+    // A 3-byte character of display width 2 must advance the column by 2, not by
+    // its byte length. U+FF0D (full-width hyphen, 3 bytes, width 2) at column 0
+    // reaches column 2; the following 6 spaces then collapse to one tab at
+    // column 8. Regression for the byte-length-as-width bug.
+    new_ucmd!()
+        .args(&["-a"])
+        .pipe_in("\u{FF0D}      X\n")
+        .succeeds()
+        .stdout_is("\u{FF0D}\tX\n");
+}
+
+#[test]
+fn test_leading_unicode_blanks_with_final_newline() {
+    // Leading multibyte blanks must be converted whether or not the line ends
+    // in a newline. Four U+3000 (width 2 each) fill the first tab stop.
+    for args in [&[][..], &["--first-only"][..]] {
+        for (input, expected) in [
+            ("\u{3000}\u{3000}\u{3000}\u{3000}X\n", "\tX\n"),
+            ("\u{3000}\u{3000}\u{3000}\u{3000}X", "\tX"),
+        ] {
+            new_ucmd!()
+                .args(args)
+                .env("LC_ALL", "en_US.UTF-8")
+                .pipe_in(input)
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
 }
 
 #[test]
 fn test_blanks_ext1() {
-    // Test case from GNU test suite: blanks-ext1
+    // Test unexpand with extended blank handling (blanks-ext1)
     // ['blanks-ext1', '-t', '3,+6', {IN=> "\t      "}, {OUT=> "\t\t"}],
     new_ucmd!()
         .args(&["-t", "3,+6"])
@@ -332,7 +375,7 @@ fn test_blanks_ext1() {
 
 #[test]
 fn test_blanks_ext2() {
-    // Test case from GNU test suite: blanks-ext2
+    // Test unexpand with extended blank handling (blanks-ext2)
     // ['blanks-ext2', '-t', '3,/9', {IN=> "\t      "}, {OUT=> "\t\t"}],
     new_ucmd!()
         .args(&["-t", "3,/9"])

@@ -23,25 +23,20 @@ concurrency:
 jobs:
   style:
     name: Style and Lint
-    runs-on: ${{ matrix.job.os }}
+    runs-on: ubuntu-latest
     timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-24.04 , features: unix }
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.3.9
+      uses: vmactions/freebsd-vm@v1.5.9
       with:
         usesh: true
         sync: rsync
         copyback: false
-        # We need jq and GNU coreutils to run show-utils.sh and bash to use inline shell string replacement
-        prepare: pkg install -y curl sudo jq coreutils bash python3
+        # We need bash for inline shell string replacement
+        prepare: pkg install -y rust sudo bash python3
         run: |
           ## Prepare, build, and test
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
@@ -61,9 +56,6 @@ jobs:
           sudo -i -u ${TEST_USER} bash << EOF
           set -e
           whoami
-          curl https://sh.rustup.rs -sSf --output rustup.sh
-          sh rustup.sh -y -c rustfmt,clippy --profile=minimal -t stable
-          . ${HOME}/.cargo/env
           ## VARs setup
           cd "${WORKSPACE}"
           unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
@@ -71,8 +63,6 @@ jobs:
           *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
           esac;
           FAULT_PREFIX=\$(echo "\${FAULT_TYPE}" | tr '[:lower:]' '[:upper:]')
-          # * determine sub-crate utility list
-          UTILITY_LIST="\$(./util/show-utils.sh --features ${{ matrix.job.features }})"
           ## Info
           # environment
           echo "## environment"
@@ -82,7 +72,6 @@ jobs:
           echo "WORKSPACE_PARENT='${WORKSPACE_PARENT}'"
           echo "WORKSPACE='${WORKSPACE}'"
           echo "FAULT_PREFIX='\${FAULT_PREFIX}'"
-          echo "UTILITY_LIST='\${UTILITY_LIST}'"
           env | sort
           # tooling info
           echo "## tooling info"
@@ -100,7 +89,7 @@ jobs:
           ## cargo clippy lint testing
           if [ -z "\${FAULT}" ]; then
             echo "## cargo clippy lint testing"
-            CLIPPY_ARGS="--features ${{ matrix.job.features }} --fault-type \${FAULT_TYPE}"
+            CLIPPY_ARGS="--features feat_os_unix --fault-type \${FAULT_TYPE}"
             if [ -n "\${FAIL_ON_FAULT}" ]; then CLIPPY_ARGS="\${CLIPPY_ARGS} --fail-on-fault"; fi
             python3 util/run-clippy.py \${CLIPPY_ARGS} || FAULT=true
           fi
@@ -111,17 +100,12 @@ jobs:
 
   test:
     name: Tests
-    runs-on: ${{ matrix.job.os }}
+    runs-on: ubuntu-latest
     timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-24.04 , features: unix }
     env:
       mem: 4096
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - name: Avoid no space left on device (Ubuntu runner)
@@ -133,7 +117,7 @@ jobs:
         usesh: true
         sync: rsync
         copyback: false
-        prepare: pkg install -y curl gmake sudo jq
+        prepare: pkg install -y gmake nextest rust sudo
         run: |
           ## Prepare, build, and test
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
@@ -156,12 +140,6 @@ jobs:
           sudo -i -u ${TEST_USER} sh << EOF
           set -e
           whoami
-          curl https://sh.rustup.rs -sSf --output rustup.sh
-          sh rustup.sh -y --profile=minimal
-          . $HOME/.cargo/env
-          # Install nextest
-          mkdir -p ~/.cargo/bin
-          curl -LsSf https://get.nexte.st/latest/freebsd | tar zxf - -C ~/.cargo/bin
           ## Info
           # environment
           echo "## environment"
@@ -183,16 +161,14 @@ jobs:
           unset FAULT
           export CARGO_INCREMENTAL=0
           export RUSTFLAGS="-C strip=symbols" # for disk space
+          # vendored OpenSSL takes many times to build. Use system one (LibreSSL is supported).
+          export OPENSSL_NO_VENDOR=1 OPENSSL_DIR=/usr
           cargo build || FAULT=1
           export PATH=~/.cargo/bin:${PATH}
           export RUST_BACKTRACE=1
           export CARGO_TERM_COLOR=always
-          if (test -z "\$FAULT"); then cargo nextest run --hide-progress-bar --profile ci --features '${{ matrix.job.features }}' || FAULT=1 ; fi
-          # There is no systemd-logind on FreeBSD, so test all features except feat_systemd_logind ( https://github.com/rust-lang/cargo/issues/3126#issuecomment-2523441905 )
-          if (test -z "\$FAULT"); then
-            UUCORE_FEATURES=\$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "uucore") | .features | keys | .[]' | grep -v "feat_systemd_logind" | paste -s -d "," -)
-            cargo nextest run --hide-progress-bar --profile ci --features "\$UUCORE_FEATURES" -p uucore || FAULT=1
-          fi
+          if (test -z "\$FAULT"); then cargo nextest run --hide-progress-bar --profile ci --features feat_os_unix || FAULT=1 ; fi
+          if (test -z "\$FAULT"); then cargo nextest run --hide-progress-bar --profile ci --all-features -p uucore || FAULT=1 ; fi
           # Test building with make
           if (test -z "\$FAULT"); then make || FAULT=1 ; fi
           # Clean to avoid to rsync back the files

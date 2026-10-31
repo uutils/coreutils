@@ -11,7 +11,7 @@ use std::fs::File;
 use std::io::{ErrorKind, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::{OsWrite, Quotable};
-use uucore::error::{FromIo, UResult, USimpleError, strip_errno};
+use uucore::error::{UResult, USimpleError, strip_errno};
 use uucore::translate;
 
 use uucore::{format_usage, show};
@@ -75,8 +75,8 @@ fn open(name: &OsString) -> UResult<Reader> {
         Ok(Reader::Stdin(stdin()))
     } else {
         let path = Path::new(name);
-
-        // Silent the warning as we want to the error message
+        // some platforms cannot catch those errors when open or read. needs additional cost
+        #[cfg(any(target_os = "wasi", windows))]
         match path.metadata() {
             Ok(_) => {
                 if path.is_dir() {
@@ -100,7 +100,9 @@ fn open(name: &OsString) -> UResult<Reader> {
                 }
             }
         }
-        let f = File::open(path).map_err_context(String::new)?;
+        let f = File::open(path).map_err(|e| {
+            USimpleError::new(1, format!("{}: {}", name.maybe_quote(), strip_errno(&e)))
+        })?;
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
         let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
         Ok(Reader::File(f))
@@ -135,12 +137,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 continue;
             }
         };
-        let (blocks, sum) = if sysv {
+        let result = if sysv {
             sysv_sum(reader)
         } else {
             bsd_sum(reader)
-        }
-        .map_err(|e| USimpleError::new(1, format!("{}: {1}", file.display(), strip_errno(&e))))?;
+        };
+        let (blocks, sum) = match result {
+            Ok(r) => r,
+            Err(e) => {
+                show!(USimpleError::new(
+                    1,
+                    format!("{}: {}", file.display(), strip_errno(&e))
+                ));
+                continue;
+            }
+        };
         let mut stdout = stdout().lock();
         if print_names {
             write!(stdout, "{sum:0width$} {blocks:width$} ")?;
@@ -160,6 +171,7 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(&translate!("sum-usage")))
         .about(translate!("sum-about"))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::FILE)
                 .action(ArgAction::Append)
@@ -171,14 +183,18 @@ pub fn uu_app() -> Command {
             Arg::new(options::BSD_COMPATIBLE)
                 .short('r')
                 .help(translate!("sum-help-bsd-compatible"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                // GNU: whichever of -r/-s comes last wins.
+                .overrides_with(options::SYSTEM_V_COMPATIBLE),
         )
         .arg(
             Arg::new(options::SYSTEM_V_COMPATIBLE)
                 .short('s')
                 .long(options::SYSTEM_V_COMPATIBLE)
                 .help(translate!("sum-help-sysv-compatible"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                // GNU: whichever of -r/-s comes last wins.
+                .overrides_with(options::BSD_COMPATIBLE),
         )
 }
 

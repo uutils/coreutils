@@ -19,7 +19,6 @@ chroot-error-missing-newroot = Missing operand: NEWROOT
 chroot-error-no-group-specified = no group specified for unknown uid: { $uid }
 chroot-error-no-such-user = invalid user
 chroot-error-no-such-group = invalid group
-chroot-error-no-such-directory = cannot change root directory to { $dir }: no such directory
 chroot-error-set-gid-failed = cannot set gid to { $gid }: { $err }
 chroot-error-set-groups-failed = cannot set groups: { $err }
 chroot-error-set-user-failed = cannot set user to { $user }: { $err }

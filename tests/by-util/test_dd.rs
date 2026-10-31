@@ -2,14 +2,18 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED
 
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED FSIZE SIGXFSZ rusage maxrss cdefg ncdefg cdefh
+
+use rstest::rstest;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
-#[cfg(all(unix, not(feature = "feat_selinux")))]
+#[cfg(all(unix, not(target_os = "redox")))]
+use uutests::util::pty_path;
+#[cfg(all(unix, not(feature = "selinux")))]
 use uutests::util::run_ucmd_as_root_with_stdin_stdout;
-#[cfg(all(not(windows), feature = "printf"))]
+#[cfg(not(windows))]
 use uutests::util::{UCommand, get_tests_binary};
 use uutests::util_name;
 
@@ -19,12 +23,7 @@ use uucore::io::OwnedFileDescriptorOrHandle;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
-#[cfg(all(
-    unix,
-    not(target_os = "macos"),
-    not(target_os = "freebsd"),
-    feature = "printf"
-))]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "freebsd"),))]
 use std::process::Command;
 use std::process::Stdio;
 #[cfg(not(windows))]
@@ -112,7 +111,13 @@ fn version() {
 
 #[test]
 fn help() {
-    new_ucmd!().args(&["--help"]).succeeds();
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("\nOperands:\n")
+        .stdout_contains("\nConversion options:\n")
+        .stdout_does_not_contain("###")
+        .stdout_does_not_contain("```");
 }
 
 #[test]
@@ -130,6 +135,60 @@ fn test_out_of_memory_skip() {
         .arg("skip=1")
         .fails_with_code(1)
         .stderr_contains("memory");
+}
+
+#[test]
+fn test_huge_block_size_is_rejected_without_panicking() {
+    // Regression test for #12844: a block size >= i64::MAX used to panic
+    // ("attempt to multiply with overflow"); it must be rejected cleanly.
+    for arg in [
+        "bs=9223372036854775807",      // i64::MAX
+        "ibs=99999999999999999999",    // larger than u64::MAX
+        "obs=18446744073709551616",    // u64::MAX + 1
+        "cbs=9223372036854775808",     // i64::MAX + 1
+        "ibs=1778172772721772786161B", // overflows via the 'B' suffix
+    ] {
+        new_ucmd!()
+            .arg(arg)
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("Value too large for defined data type");
+    }
+}
+
+#[test]
+fn test_count_past_u64_is_rejected() {
+    // A number past u64 used to saturate, so count= silently copied the whole
+    // input and exited 0 where GNU rejects the operand.
+    for arg in ["count=99999999999999999999", "skip=18446744073709551616"] {
+        new_ucmd!()
+            .args(&["if=/dev/null", arg])
+            .fails_with_code(1)
+            .stderr_contains("Value too large for defined data type");
+    }
+}
+
+#[test]
+fn test_huge_obs_reports_memory_error_instead_of_aborting() {
+    // Regression test for #12847: a valid but huge `obs` used to abort
+    // ("memory allocation of N bytes failed"); it must fail gracefully instead.
+    new_ucmd!()
+        .arg("obs=1PB")
+        .fails_with_code(1)
+        .stderr_contains("memory");
+}
+
+#[test]
+// A petabyte `cbs` does not fit in a 32-bit `usize`.
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+fn test_huge_cbs_pads_without_allocating() {
+    // Regression test for #14814: a valid but huge `cbs` used to abort; like GNU,
+    // the padding is written as it goes, until /dev/full refuses it.
+    new_ucmd!()
+        .args(&["conv=block", "cbs=1PB", "of=/dev/full"])
+        .pipe_in("x\n")
+        .fails_with_code(1)
+        .stderr_contains("No space left on device");
 }
 
 #[test]
@@ -679,6 +738,21 @@ fn test_seek_bytes() {
         .stdout_is("\0\0\0\0\0\0\0\0abcdefghijklm\n");
 }
 
+#[cfg(all(unix, not(target_os = "redox")))]
+#[test]
+fn test_seek_zero_on_non_seekable_output() {
+    for args in [&["status=none"][..], &["seek=0", "status=none"][..]] {
+        let (path, _controller, _replica) = pty_path();
+
+        new_ucmd!()
+            .arg(of!(path))
+            .args(args)
+            .pipe_in("hello\n")
+            .succeeds()
+            .no_output();
+    }
+}
+
 /// Test for skipping beyond the number of bytes in a file.
 #[test]
 fn test_skip_beyond_file() {
@@ -757,203 +831,72 @@ fn test_partial_records_out() {
 }
 
 #[test]
-fn test_block_cbs16() {
-    new_ucmd!()
-        .args(&["conv=block", "cbs=16"])
-        .pipe_in_fixture("dd-block-cbs16.test")
+fn test_block_record_across_reads() {
+    // With ibs=2, each record spans several reads.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "1234\n56\n123456789\n78");
+    ucmd.args(&["if=in", "conv=block", "cbs=6", "ibs=2", "obs=2"])
         .succeeds()
-        .stdout_is_fixture_bytes("dd-block-cbs16.spec");
+        .stdout_is("1234  56    12345678    ")
+        .stderr_contains("1 truncated record");
 }
 
 #[test]
-fn test_block_cbs16_as_cbs8() {
+fn test_block_keeps_trailing_record_of_spaces() {
     new_ucmd!()
-        .args(&["conv=block", "cbs=8"])
-        .pipe_in_fixture("dd-block-cbs16.test")
+        .args(&["conv=block", "cbs=4"])
+        .pipe_in("ab\n  ")
         .succeeds()
-        .stdout_is_fixture_bytes("dd-block-cbs8.spec");
+        .stdout_is("ab      ");
+}
+
+#[rstest]
+#[case::block_cbs16(&["conv=block", "cbs=16"], "dd-block-cbs16.test", "dd-block-cbs16.spec")]
+#[case::block_cbs16_as_cbs8(&["conv=block", "cbs=8"], "dd-block-cbs16.test", "dd-block-cbs8.spec")]
+#[case::block_consecutive_nl(&["conv=block", "cbs=16"], "dd-block-consecutive-nl.test", "dd-block-consecutive-nl-cbs16.spec")]
+#[case::unblock_multi_16(&["conv=unblock", "cbs=16"], "dd-unblock-cbs16.test", "dd-unblock-cbs16.spec")]
+#[case::unblock_multi_16_as_8(&["conv=unblock", "cbs=8"], "dd-unblock-cbs16.test", "dd-unblock-cbs8.spec")]
+#[case::atoe_conv_spec_test(&["conv=ebcdic"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "gnudd-conv-atoe-seq-byte-values.spec")]
+#[case::etoa_conv_spec_test(&["conv=ascii"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "gnudd-conv-etoa-seq-byte-values.spec")]
+#[case::atoibm_conv_spec_test(&["conv=ibm"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "gnudd-conv-atoibm-seq-byte-values.spec")]
+#[case::lcase_ascii_to_ucase_ascii(&["conv=ucase"], "lcase-ascii.test", "ucase-ascii.test")]
+#[case::ucase_ascii_to_lcase_ascii(&["conv=lcase"], "ucase-ascii.test", "lcase-ascii.test")]
+#[case::atoe_and_ucase_conv_spec_test(&["conv=ebcdic,ucase"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "ucase-ebcdic.test")]
+#[case::atoe_and_lcase_conv_spec_test(&["conv=ebcdic,lcase"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "lcase-ebcdic.test")]
+#[case::atoibm_and_ucase_conv_spec_test(&["conv=ibm,ucase"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "ucase-ibm.test")]
+#[case::atoibm_and_lcase_conv_spec_test(&["conv=ibm,lcase"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "lcase-ibm.test")]
+#[case::swab_256_test(&["conv=swab"], "seq-byte-values.test", "seq-byte-values-swapped.test")]
+#[case::swab_257_test(&["conv=swab"], "seq-byte-values-odd.test", "seq-byte-values-odd.spec")]
+#[case::block_lower(&["conv=block,lcase", "cbs=8"], "dd-block8-lowercase.test", "dd-block8-lowercase.spec")]
+#[case::lower_block(&["conv=lcase,block", "cbs=8"], "dd-block8-lowercase.test", "dd-block8-lowercase.spec")]
+#[case::unblock_lower(&["conv=unblock,lcase", "cbs=8"], "dd-unblock8-lowercase.test", "dd-unblock8-lowercase.spec")]
+#[case::zeros_4k_conv_sync_obs_gt_ibs(&["conv=sync", "ibs=521", "obs=1031"], "zeros-620f0b67a91f7f74151bc5be745b7110.test", "gnudd-conv-sync-ibs-521-obs-1031-zeros.spec")]
+#[case::zeros_4k_conv_sync_ibs_gt_obs(&["conv=sync", "ibs=1031", "obs=521"], "zeros-620f0b67a91f7f74151bc5be745b7110.test", "gnudd-conv-sync-ibs-1031-obs-521-zeros.spec")]
+fn test_dd_conv_fixtures(#[case] args: &[&str], #[case] input: &str, #[case] expected: &str) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in_fixture(input)
+        .succeeds()
+        .stdout_is_fixture_bytes(expected);
 }
 
 #[test]
-fn test_block_consecutive_nl() {
+fn test_etoa_and_lcase() {
+    // "Hello, World!" in EBCDIC.
     new_ucmd!()
-        .args(&["conv=block", "cbs=16"])
-        .pipe_in_fixture("dd-block-consecutive-nl.test")
+        .args(&["conv=ascii,lcase", "status=none"])
+        .pipe_in(b"\xc8\x85\x93\x93\x96\x6b\x40\xe6\x96\x99\x93\x84\x5a".to_vec())
         .succeeds()
-        .stdout_is_fixture_bytes("dd-block-consecutive-nl-cbs16.spec");
+        .stdout_only_bytes(b"hello, world!");
 }
 
 #[test]
-fn test_unblock_multi_16() {
+fn test_etoa_and_ucase() {
     new_ucmd!()
-        .args(&["conv=unblock", "cbs=16"])
-        .pipe_in_fixture("dd-unblock-cbs16.test")
+        .args(&["conv=ascii,ucase", "status=none"])
+        .pipe_in(b"\xc8\x85\x93\x93\x96\x6b\x40\xe6\x96\x99\x93\x84\x5a".to_vec())
         .succeeds()
-        .stdout_is_fixture_bytes("dd-unblock-cbs16.spec");
-}
-
-#[test]
-fn test_unblock_multi_16_as_8() {
-    new_ucmd!()
-        .args(&["conv=unblock", "cbs=8"])
-        .pipe_in_fixture("dd-unblock-cbs16.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("dd-unblock-cbs8.spec");
-}
-
-#[test]
-fn test_atoe_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ebcdic"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("gnudd-conv-atoe-seq-byte-values.spec");
-}
-
-#[test]
-fn test_etoa_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ascii"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("gnudd-conv-etoa-seq-byte-values.spec");
-}
-
-#[test]
-fn test_atoibm_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ibm"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("gnudd-conv-atoibm-seq-byte-values.spec");
-}
-
-#[test]
-fn test_lcase_ascii_to_ucase_ascii() {
-    new_ucmd!()
-        .args(&["conv=ucase"])
-        .pipe_in_fixture("lcase-ascii.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("ucase-ascii.test");
-}
-
-#[test]
-fn test_ucase_ascii_to_lcase_ascii() {
-    new_ucmd!()
-        .args(&["conv=lcase"])
-        .pipe_in_fixture("ucase-ascii.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("lcase-ascii.test");
-}
-
-#[test]
-fn test_atoe_and_ucase_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ebcdic,ucase"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("ucase-ebcdic.test");
-}
-
-#[test]
-fn test_atoe_and_lcase_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ebcdic,lcase"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("lcase-ebcdic.test");
-}
-
-// TODO I think uppercase and lowercase are unintentionally swapped in
-// the code that parses the command-line arguments. See this line from
-// `parseargs.rs`:
-//
-//     (ConvFlag::FmtAtoI, ConvFlag::UCase) => Some(&ASCII_TO_IBM_UCASE_TO_LCASE),
-//     (ConvFlag::FmtAtoI, ConvFlag::LCase) => Some(&ASCII_TO_IBM_LCASE_TO_UCASE),
-//
-// If my reading is correct and that is a typo, then the
-// UCASE_TO_LCASE and LCASE_TO_UCASE in those lines should be swapped,
-// and the expected output for the following two tests should be
-// updated accordingly.
-#[test]
-fn test_atoibm_and_ucase_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ibm,ucase"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("lcase-ibm.test");
-}
-
-#[test]
-fn test_atoibm_and_lcase_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ibm,lcase"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("ucase-ibm.test");
-}
-
-#[test]
-fn test_swab_256_test() {
-    new_ucmd!()
-        .args(&["conv=swab"])
-        .pipe_in_fixture("seq-byte-values.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("seq-byte-values-swapped.test");
-}
-
-#[test]
-fn test_swab_257_test() {
-    new_ucmd!()
-        .args(&["conv=swab"])
-        .pipe_in_fixture("seq-byte-values-odd.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("seq-byte-values-odd.spec");
-}
-
-#[test]
-fn test_block_lower() {
-    new_ucmd!()
-        .args(&["conv=block,lcase", "cbs=8"])
-        .pipe_in_fixture("dd-block8-lowercase.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("dd-block8-lowercase.spec");
-}
-
-#[test]
-fn test_lower_block() {
-    new_ucmd!()
-        .args(&["conv=lcase,block", "cbs=8"])
-        .pipe_in_fixture("dd-block8-lowercase.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("dd-block8-lowercase.spec");
-}
-
-#[test]
-fn test_unblock_lower() {
-    new_ucmd!()
-        .args(&["conv=unblock,lcase", "cbs=8"])
-        .pipe_in_fixture("dd-unblock8-lowercase.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("dd-unblock8-lowercase.spec");
-}
-
-#[test]
-fn test_zeros_4k_conv_sync_obs_gt_ibs() {
-    new_ucmd!()
-        .args(&["conv=sync", "ibs=521", "obs=1031"])
-        .pipe_in_fixture("zeros-620f0b67a91f7f74151bc5be745b7110.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("gnudd-conv-sync-ibs-521-obs-1031-zeros.spec");
-}
-
-#[test]
-fn test_zeros_4k_conv_sync_ibs_gt_obs() {
-    new_ucmd!()
-        .args(&["conv=sync", "ibs=1031", "obs=521"])
-        .pipe_in_fixture("zeros-620f0b67a91f7f74151bc5be745b7110.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("gnudd-conv-sync-ibs-1031-obs-521-zeros.spec");
+        .stdout_only_bytes(b"HELLO, WORLD!");
 }
 
 #[test]
@@ -1234,6 +1177,24 @@ fn test_block_sync() {
 }
 
 #[test]
+fn test_block_sync_small_ibs() {
+    // With ibs=3, "cdefg" spans two reads, and the last read "h" is padded
+    // with spaces by sync before being blocked.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "ab\ncdefg\nh");
+    ucmd.args(&[
+        "if=in",
+        "ibs=3",
+        "cbs=4",
+        "conv=block,sync",
+        "status=noxfer",
+    ])
+    .succeeds()
+    .stdout_is("ab  cdefh   ")
+    .stderr_is("3+1 records in\n0+1 records out\n1 truncated record\n");
+}
+
+#[test]
 fn test_bytes_iseek_bytes_iflag() {
     new_ucmd!()
         .args(&["iseek=10", "iflag=skip_bytes", "bs=2"])
@@ -1262,12 +1223,32 @@ fn test_bytes_oseek_bytes_oflag() {
 
 #[test]
 fn test_bytes_oseek_bytes_trunc_oflag() {
+    // The test harness hands stdout over as a regular file. Where dd detects
+    // that (Linux, OpenBSD), it seeks in the file and, like GNU, writes
+    // nothing. Elsewhere the seek on stdout is emulated by writing zeros.
+    let expected: &[u8] = if cfg!(any(target_os = "linux", target_os = "openbsd")) {
+        b""
+    } else {
+        &[0; 8]
+    };
     new_ucmd!()
         .args(&["oseek=8", "oflag=seek_bytes", "bs=2", "count=0"])
         .pipe_in("abcdefghijklm")
         .ignore_stdin_write_error()
         .succeeds()
-        .stdout_is_fixture_bytes("dd-bytes-null-trunc.spec");
+        .stdout_is_bytes(expected);
+}
+
+/// With `of=`, the output is truncated at the `oseek` offset, so a file
+/// opened for the first time is extended to that length.
+#[test]
+fn test_bytes_oseek_bytes_trunc_oflag_with_of() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["oseek=8", "oflag=seek_bytes", "bs=2", "count=0", "of=out"])
+        .pipe_in("abcdefghijklm")
+        .ignore_stdin_write_error()
+        .succeeds();
+    assert_eq!(at.read_bytes("out"), [0; 8]);
 }
 
 #[test]
@@ -1327,29 +1308,28 @@ fn test_invalid_number_arg_gnu_compatibility() {
         new_ucmd!()
             .args(&[format!("{command}=")])
             .fails()
-            .stderr_is("dd: invalid number: ‘’\n");
+            .stderr_is("dd: invalid number: ''\n");
 
         new_ucmd!()
             .args(&[format!("{command}=29d")])
             .fails()
-            .stderr_is("dd: invalid number: ‘29d’\n");
+            .stderr_is("dd: invalid number: '29d'\n");
     }
 }
 
 #[test]
 fn test_invalid_flag_arg_gnu_compatibility() {
-    let commands = vec!["iflag", "oflag"];
-
-    for command in commands {
+    // GNU names the direction the flag was given in.
+    for (command, direction) in [("iflag", "input"), ("oflag", "output")] {
         new_ucmd!()
             .args(&[format!("{command}=")])
             .fails()
-            .usage_error("invalid input flag: ‘’");
+            .usage_error(format!("invalid {direction} flag: ''"));
 
         new_ucmd!()
             .args(&[format!("{command}=29d")])
             .fails()
-            .usage_error("invalid input flag: ‘29d’");
+            .usage_error(format!("invalid {direction} flag: '29d'"));
     }
 }
 
@@ -1471,7 +1451,10 @@ fn test_sync_delayed_reader() {
             .unwrap();
         for _ in 0..8 {
             fifo.write_all(&[0xF; 8]).unwrap();
-            sleep(Duration::from_millis(10));
+            // Each write must be read as its own short record, so leave dd
+            // enough time to drain the pipe: if two writes pile up, it reads a
+            // full 16-byte block, pads nothing and the output no longer matches.
+            sleep(Duration::from_millis(100));
         }
     }
     // Expected output is 0xFFFFFFFF00000000FFFFFFFF00000000...
@@ -1512,6 +1495,81 @@ fn test_sparse() {
     // The number of bytes in the file should be accurate though the
     // number of blocks stored on disk may be zero.
     assert_eq!(at.metadata("infile").len(), at.metadata("outfile").len());
+}
+
+/// `conv=notrunc,sparse` must still extend the file over skipped zero blocks.
+#[test]
+fn test_sparse_notrunc_extends_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("infile", &[0; 1024]);
+    at.touch("outfile");
+    ucmd.args(&["bs=512", "if=infile", "of=outfile", "conv=notrunc,sparse"])
+        .succeeds();
+    assert_eq!(at.metadata("outfile").len(), 1024);
+}
+
+/// `conv=notrunc,sparse` must not shrink an output file longer than the copy.
+#[test]
+fn test_sparse_notrunc_does_not_shrink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("infile", &[0; 1024]);
+    at.write_bytes("outfile", &[b'x'; 4096]);
+    ucmd.args(&["bs=512", "if=infile", "of=outfile", "conv=notrunc,sparse"])
+        .succeeds();
+    assert_eq!(at.metadata("outfile").len(), 4096);
+}
+
+/// Without `of=`, a seekable stdout was not asked to be truncated, so the
+/// data after the written range must survive. Linux only: elsewhere dd does
+/// not detect a seekable stdout and emulates the seek by writing zeros.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_seekable_stdout_without_of_is_not_truncated() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write_bytes("out", &[b'x'; 2048]);
+    let stdout = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().write(true),
+        at.plus("out").as_path(),
+    )
+    .unwrap();
+
+    ts.ucmd()
+        .args(&["bs=512", "count=1", "seek=1"])
+        .pipe_in(vec![b'a'; 512])
+        .set_stdout(Stdio::from(stdout))
+        .succeeds();
+
+    let out = at.read_bytes("out");
+    assert_eq!(out.len(), 2048);
+    assert!(out[..512].iter().all(|&b| b == b'x'));
+    assert!(out[512..1024].iter().all(|&b| b == b'a'));
+    assert!(out[1024..].iter().all(|&b| b == b'x'));
+}
+
+/// A failed truncate of the output names the file and the size, the copy
+/// still runs and prints its statistics, and the exit status is 1.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_failed_truncate_is_reported_and_copy_goes_on() {
+    use rustix::fs::{MemfdFlags, SealFlags, fcntl_add_seals, memfd_create};
+
+    // A memfd sealed against shrinking: truncating it to a smaller size fails
+    // with EPERM, while writes inside the existing size still work.
+    let fd = memfd_create("out", MemfdFlags::ALLOW_SEALING).unwrap();
+    let memfd = File::from(fd);
+    memfd.set_len(2048).unwrap();
+    fcntl_add_seals(&memfd, SealFlags::SHRINK).unwrap();
+
+    new_ucmd!()
+        .args(&["bs=512", "count=1", "seek=1", "of=/dev/stdout"])
+        .pipe_in(vec![b'a'; 512])
+        .set_stdout(Stdio::from(memfd))
+        .fails_with_code(1)
+        .stderr_contains(
+            "dd: failed to truncate to 512 bytes in output file '/dev/stdout': Operation not permitted\n",
+        )
+        .stderr_contains("1+0 records in\n1+0 records out\n");
 }
 
 /// Test that a seek on an output FIFO results in a read.
@@ -1559,11 +1617,11 @@ fn test_skip_input_fifo() {
 }
 
 /// Test for reading part of stdin from each of two child processes.
-#[cfg(all(not(windows), feature = "printf"))]
+#[cfg(not(windows))]
 #[test]
 fn test_multiple_processes_reading_stdin() {
     // TODO Investigate if this is possible on Windows.
-    let printf = format!("{} printf 'abcdef\n'", get_tests_binary());
+    let printf = "printf 'abcdef\n'".to_string();
     let dd_skip = format!("{} dd bs=1 skip=3 count=0", get_tests_binary());
     let dd = format!("{} dd", get_tests_binary());
     UCommand::new()
@@ -1586,13 +1644,30 @@ fn test_nocache_stdin_error() {
         .stderr_only(format!("dd: failed to discard cache for: 'standard input': {detail}\n0+0 records in\n0+0 records out\n"));
 }
 
+/// Test that discarding system file cache fails for an output FIFO.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_nocache_output_fifo_error() {
+    #[cfg(not(target_env = "musl"))]
+    let detail = "Illegal seek";
+    #[cfg(target_env = "musl")]
+    let detail = "Invalid seek";
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    ucmd.args(&["oflag=nocache", "count=0", "of=fifo", "status=noxfer"])
+        .fails_with_code(1)
+        .stderr_only(format!(
+            "dd: failed to discard cache for: fifo: {detail}\n0+0 records in\n0+0 records out\n"
+        ));
+}
+
 /// Test that dd fails when no number in count.
 #[test]
 fn test_empty_count_number() {
     new_ucmd!()
         .args(&["count=B"])
         .fails_with_code(1)
-        .stderr_only("dd: invalid number: ‘B’\n");
+        .stderr_only("dd: invalid number: 'B'\n");
 }
 
 /// Test for discarding system file cache.
@@ -1608,7 +1683,7 @@ fn test_nocache_file() {
 
 #[test]
 #[cfg(unix)]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(feature = "selinux"))]
 // Disabled on SELinux for now
 fn test_skip_past_dev() {
     // NOTE: This test intends to trigger code which can only be reached with root permissions.
@@ -1633,7 +1708,7 @@ fn test_skip_past_dev() {
 
 #[test]
 #[cfg(unix)]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(feature = "selinux"))]
 fn test_seek_past_dev() {
     // NOTE: This test intends to trigger code which can only be reached with root permissions.
     let ts = TestScenario::new(util_name!());
@@ -1656,24 +1731,20 @@ fn test_seek_past_dev() {
 }
 
 #[test]
-#[cfg(all(
-    unix,
-    not(target_os = "macos"),
-    not(target_os = "freebsd"),
-    feature = "printf"
-))]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "freebsd"),))]
 fn test_reading_partial_blocks_from_fifo() {
     // Create the FIFO.
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkfifo("fifo");
-    let fifoname = at.plus_as_string("fifo");
+    let fifoname = at.plus("fifo");
+    let fifo_disp = fifoname.display();
 
     // Start a `dd` process that reads from the fifo (so it will wait
     // until the writer process starts).
     let mut reader_command = Command::new(get_tests_binary());
     let child = reader_command
-        .args(["dd", "ibs=3", "obs=3", &format!("if={fifoname}")])
+        .args(["dd", "ibs=3", "obs=3", &format!("if={fifo_disp}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
@@ -1688,7 +1759,7 @@ fn test_reading_partial_blocks_from_fifo() {
     let _ = writer_command
         .args([
             "-c",
-            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifoname}"),
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifo_disp}"),
         ])
         .spawn()
         .unwrap()
@@ -1701,18 +1772,14 @@ fn test_reading_partial_blocks_from_fifo() {
 }
 
 #[test]
-#[cfg(all(
-    unix,
-    not(target_os = "macos"),
-    not(target_os = "freebsd"),
-    feature = "printf"
-))]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "freebsd"),))]
 fn test_reading_partial_blocks_from_fifo_unbuffered() {
     // Create the FIFO.
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkfifo("fifo");
-    let fifoname = at.plus_as_string("fifo");
+    let fifoname = at.plus("fifo");
+    let fifo_disp = fifoname.display();
 
     // Start a `dd` process that reads from the fifo (so it will wait
     // until the writer process starts).
@@ -1720,7 +1787,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     // `bs=N` takes precedence over `ibs=N` and `obs=N`.
     let mut reader_command = Command::new(get_tests_binary());
     let child = reader_command
-        .args(["dd", "bs=3", "ibs=1", "obs=1", &format!("if={fifoname}")])
+        .args(["dd", "bs=3", "ibs=1", "obs=1", &format!("if={fifo_disp}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
@@ -1735,7 +1802,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     let _ = writer_command
         .args([
             "-c",
-            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifoname}"),
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifo_disp}"),
         ])
         .spawn()
         .unwrap()
@@ -1747,16 +1814,134 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     assert!(output.stderr.starts_with(expected));
 }
 
+/// Regression test for <https://github.com/uutils/coreutils/issues/13458>:
+/// two deliberately short reads (ibs=3 sees only 2 bytes each) must be
+/// gathered into a single obs=6 output block without pulling stale bytes
+/// from the ibs-aligned gap into the output.
+///
+/// The writer below runs `printf` inside `sh`, where it is a builtin, so this
+/// needs no `printf` feature.
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "freebsd")))]
+fn test_reading_partial_blocks_from_fifo_gathered_into_larger_obs() {
+    // Create the FIFO.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("fifo");
+    let fifoname = at.plus("fifo");
+    let fifo_disp = fifoname.display();
+
+    // Start a `dd` process that reads from the fifo (so it will wait
+    // until the writer process starts).
+    let mut reader_command = Command::new(get_tests_binary());
+    let child = reader_command
+        .args(["dd", "ibs=3", "obs=6", &format!("if={fifo_disp}")])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("LANGUAGE", "C")
+        .spawn()
+        .unwrap();
+
+    // Start different processes to write to the FIFO, with a small
+    // pause in between.
+    let mut writer_command = Command::new("sh");
+    let _ = writer_command
+        .args([
+            "-c",
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifo_disp}"),
+        ])
+        .spawn()
+        .unwrap()
+        .wait();
+
+    let output = child.wait_with_output().unwrap();
+    assert_eq!(output.stdout, b"abcd");
+    let expected = b"0+2 records in\n0+1 records out\n4 bytes copied";
+    assert!(output.stderr.starts_with(expected));
+}
+
+// `O_DIRECT` requires the read buffer to satisfy the device's DMA alignment;
+// with a misaligned buffer the kernel fails the read with EINVAL (#12085).
+// Reading a regular file with `iflag=direct` exercises the same requirement
+// on filesystems that support it.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_iflag_direct_read_uses_aligned_buffer() {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    // A multiple of the block size: the EOF read then happens at an aligned
+    // file offset. A trailing partial block would leave the offset
+    // misaligned, which some kernels (e.g. f2fs on Android) reject with
+    // EINVAL instead of reporting end of file.
+    let data = build_ascii_block(2 * 4096);
+    at.write_bytes("direct-in.bin", &data);
+
+    if OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECT)
+        .open(at.plus("direct-in.bin"))
+        .is_err()
+    {
+        print!("Test skipped; filesystem does not support O_DIRECT");
+        return;
+    }
+
+    ucmd.args(&[
+        "if=direct-in.bin",
+        "of=direct-out.bin",
+        "iflag=direct",
+        "bs=4096",
+    ])
+    .succeeds();
+    assert_eq!(at.read_bytes("direct-out.bin"), data);
+}
+
+// `dd` has to accept a `bs=` far larger than the data it will copy, the way
+// GNU dd does, so the copy buffer must not fault in its pages.
+#[test]
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+fn test_large_bs_does_not_fault_in_copy_buffer() {
+    // `wait4` reports the peak RSS of this one child, so a test running in
+    // parallel cannot inflate the reading the way `/proc/self` would.
+    fn peak_rss_kib(bs: &str) -> i64 {
+        let child = Command::new(get_tests_binary())
+            .args(["dd", bs, "if=/dev/null", "of=/dev/null"])
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let pid = child.id() as libc::pid_t;
+        // Dropping a `Child` does not reap it, so `wait4` still finds it.
+        drop(child);
+
+        let mut status = 0;
+        let mut usage: libc::rusage = unsafe { std::mem::zeroed() };
+        assert_eq!(
+            unsafe { libc::wait4(pid, &raw mut status, 0, &raw mut usage) },
+            pid
+        );
+        assert_eq!(status, 0, "dd {bs} exited with status {status}");
+        usage.ru_maxrss
+    }
+
+    let growth = peak_rss_kib("bs=4G") - peak_rss_kib("bs=4K");
+    assert!(
+        growth < 64 << 10,
+        "a 4 GiB copy buffer raised peak RSS by {growth} KiB"
+    );
+}
+
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    at.make_file("input");
-    let filename = at.plus_as_string("input");
+    let file = at.make_file("input");
     new_ucmd!()
         .args(&["iflag=directory", "count=0"])
-        .set_stdin(Stdio::from(File::open(filename).unwrap()))
+        .set_stdin(Stdio::from(file))
         .fails()
         .stderr_only("dd: setting flags for 'standard input': Not a directory\n");
 }
@@ -1778,6 +1963,20 @@ fn test_iflag_directory_fails_when_file_is_piped_via_std_in() {
         .pipe_in("")
         .fails()
         .stderr_only("dd: setting flags for 'standard input': Not a directory\n");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_nocache_on_a_pipe_is_silent() {
+    // "" ends the copy on the first read, "abc" goes through the per-block
+    // path; neither may diagnose the failed cache drop on a pipe
+    for input in ["", "abc"] {
+        new_ucmd!()
+            .args(&["iflag=nocache", "oflag=nocache", "status=none"])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(input);
+    }
 }
 
 #[test]
@@ -1817,10 +2016,10 @@ fn test_stdin_stdout_not_rewound_even_when_connected_to_seekable_file() {
         .set_stderr(stderr)
         .succeeds();
 
-    let err_file_content = std::fs::read_to_string(at.plus_as_string("err")).unwrap();
+    let err_file_content = at.read("err");
     println!("stderr:\n{err_file_content}");
 
-    let out_file_content = std::fs::read_to_string(at.plus_as_string("out")).unwrap();
+    let out_file_content = at.read("out");
     println!("stdout:\n{out_file_content}");
     assert_eq!(out_file_content, "bde");
 }
@@ -1893,8 +2092,7 @@ fn test_oflag_direct_partial_block() {
             "status=none".to_string(),
         ])
         .succeeds()
-        .stdout_is("")
-        .stderr_is("");
+        .no_output();
     assert!(output_path.exists());
     let output_size = output_path.metadata().unwrap().len() as usize;
     assert_eq!(output_size, input_size);
@@ -1915,8 +2113,39 @@ fn test_skip_overflow() {
         .args(&["bs=1", "skip=9223372036854775808", "count=0"])
         .fails()
         .stderr_contains(
-            "dd: invalid number: ‘9223372036854775808’: Value too large for defined data type",
+            "dd: invalid number: '9223372036854775808': Value too large for defined data type",
         );
+}
+
+#[test]
+fn test_skip_blocks_times_ibs_overflow_does_not_wrap() {
+    // 17592186044416 * 1048576 == 2^64 would wrap around to 0, and
+    // must be rejected
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in.f", "0123456789abcdef");
+    ucmd.args(&["if=in.f", "skip=17592186044416", "ibs=1048576", "count=1"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("Value too large for defined data type");
+}
+
+#[test]
+fn test_seek_blocks_times_obs_overflow_does_not_wrap() {
+    // Same as test_skip_blocks_times_ibs_overflow_does_not_wrap,
+    // but for `seek=`/`obs=`.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("out.f", "0123456789abcdef");
+    ucmd.args(&[
+        "if=/dev/null",
+        "of=out.f",
+        "seek=17592186044416",
+        "obs=1048576",
+        "conv=notrunc",
+    ])
+    .fails()
+    .stderr_contains("Value too large for defined data type");
+    // The output file must be untouched, not overwritten at offset 0.
+    assert_eq!(at.read("out.f"), "0123456789abcdef");
 }
 
 #[test]
@@ -1936,7 +2165,8 @@ fn test_nocache_eof() {
 }
 
 #[test]
-#[cfg(all(target_os = "linux", feature = "printf"))]
+#[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
 fn test_nocache_eof_fadvise_zero_length() {
     use std::process::Command;
     let (at, _ucmd) = at_and_ucmd!();
@@ -2124,7 +2354,331 @@ fn test_bs_not_positive() {
                 .fails()
                 .no_stdout()
                 .code_is(1)
-                .stderr_is(format!("dd: invalid number: ‘{bs}’\n"));
+                .stderr_is(format!("dd: invalid number: '{bs}'\n"));
         }
+    }
+}
+
+#[test]
+fn test_count_bytes_with_expanding_block_conv() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut input = vec![b'a'; 1000];
+    input.extend([b'Z'; 24]);
+    at.write_bytes("input.txt", &input);
+    ucmd.args(&[
+        "if=input.txt",
+        "of=output.bin",
+        "conv=block",
+        "cbs=1024",
+        "count=1000",
+        "iflag=count_bytes",
+    ])
+    .succeeds();
+    let output = at.read_bytes("output.bin");
+    assert_eq!(bytecount::count(&output, b'a'), 1000);
+    assert!(!output.contains(&b'Z'));
+}
+
+// A failed copy still has to report what it transferred, including complete
+// and partial records.
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+fn test_stats_are_reported_when_a_write_fails() {
+    use rlimit::Resource;
+
+    const CAP: u64 = 768 * 1024;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd
+        .args(&["if=/dev/zero", "of=capped.bin", "bs=512K", "count=3"])
+        .limit(Resource::FSIZE, CAP, CAP)
+        .ignore_sigxfsz()
+        .fails();
+
+    // Under a 768 KiB cap, the first 512 KiB block is written in full, the
+    // second one is cut short at 256 KiB, and the third write fails.
+    result.stderr_contains("1+1 records out");
+    result.stderr_contains("786432 bytes");
+    assert_eq!(at.metadata("capped.bin").len(), CAP);
+}
+
+// `conv=block` writes a huge record in several pieces: those written before
+// the error still count.
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+fn test_block_stats_are_reported_when_a_write_fails() {
+    use rlimit::Resource;
+
+    const CAP: u64 = 200 * 1024;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd
+        .args(&["conv=block", "cbs=1M", "obs=64K", "of=capped.bin"])
+        .pipe_in("x\n")
+        .limit(Resource::FSIZE, CAP, CAP)
+        .ignore_sigxfsz()
+        .fails();
+
+    // Three 64 KiB pieces are written in full, and the fourth one is cut short.
+    result.stderr_contains("3+1 records out");
+    result.stderr_contains("204800 bytes");
+    assert_eq!(at.metadata("capped.bin").len(), CAP);
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unrecognized_key() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["bsx=1"])
+            .pipe_in("")
+            .fails_with_code(1);
+
+        // The caret takes the key alone: the value is fine, it is the operand
+        // name that dd does not know. The usage hint that follows names the
+        // binary as it was invoked, so it is checked apart from the report.
+        let stderr = result.stderr_as_displayed();
+        let (report, hint) = stderr.trim_end().rsplit_once('\n').unwrap();
+        assert_eq!(
+            report,
+            "\
+dd: unrecognized operand 'bsx=1'
+   ╭─[ dd:1:4 ]
+   │
+ 1 │ dd bsx=1
+   │    ───
+   │
+   │ Help: an operand is KEY=VALUE, as in if=file bs=4k count=10
+───╯"
+        );
+        assert!(
+            hint.ends_with("dd --help' for more information."),
+            "{stderr}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_failing_flag_of_a_list() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["conv=ucase,zap"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // Only the second flag is wrong, and the caret says so.
+        assert!(stderr.contains("dd:1:15"), "{stderr}");
+        assert!(stderr.contains("1 │ dd conv=ucase,zap"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_names_the_flags_rather_than_the_commas() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["conv=ucase,zap"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // The list syntax parsed: it is the flag that is unknown, so the
+        // report names the conversions instead of explaining commas.
+        assert!(stderr.contains("not a known conversion"), "{stderr}");
+        assert!(stderr.contains("conv= is one of ascii"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_failing_flag_and_not_the_one_it_starts() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["conv=notrunc,not"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // `not` also opens the `notrunc` in front of it, and the caret belongs
+        // on the flag that failed rather than on the one that parsed.
+        assert!(stderr.contains("dd:1:17"), "{stderr}");
+        assert!(
+            stderr.contains("1 \u{2502} dd conv=notrunc,not"),
+            "{stderr}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_value_of_a_count() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["count=8x"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("dd:1:10"), "{stderr}");
+        assert!(stderr.contains("a number may be followed by"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_keeps_the_try_help_hint_of_a_flag_message() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["iflag=nope"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("dd:1:10"), "{stderr}");
+        // The caret replaces the message, not the usage hint: a pipe and a
+        // terminal must not disagree on whether one was printed.
+        assert!(
+            stderr
+                .trim_end()
+                .ends_with("dd --help' for more information."),
+            "{stderr}"
+        );
+    }
+
+    #[test]
+    fn test_plain_message_keeps_the_try_help_hint_of_a_flag_message() {
+        new_ucmd!()
+            .args(&["iflag=nope"])
+            .pipe_in("")
+            .fails_with_code(1)
+            .stderr_contains("dd: invalid input flag: 'nope'")
+            .stderr_contains("--help' for more information.");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["bsx=1"])
+            .pipe_in("")
+            .fails_with_code(1)
+            .stderr_contains("dd: unrecognized operand 'bsx=1'\n")
+            .stderr_contains("--help' for more information.")
+            .stderr_does_not_contain("╭─");
+    }
+
+    // The three below cover the shared switch in `uucore::diagnostics`.
+
+    #[test]
+    fn test_report_is_drawn_into_a_pipe_when_asked_for() {
+        let result = new_ucmd!()
+            .env("UUTILS_DIAG", "always")
+            .args(&["bsx=1"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        // No terminal anywhere, and the report is drawn all the same.
+        assert!(stderr.contains("dd:1:4"), "{stderr}");
+        assert!(stderr.contains("1 \u{2502} dd bsx=1"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_plain_message_at_a_terminal_when_asked_for() {
+        let result = new_ucmd!()
+            .env("UUTILS_DIAG", "never")
+            .terminal_sim_stderr()
+            .args(&["bsx=1"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(
+            stderr.contains("dd: unrecognized operand 'bsx=1'"),
+            "{stderr}"
+        );
+        assert!(!stderr.contains('\u{256d}'), "{stderr}");
+    }
+
+    #[test]
+    fn test_unknown_mode_leaves_the_terminal_in_charge() {
+        // A value nobody meant behaves as if the variable were unset.
+        new_ucmd!()
+            .env("UUTILS_DIAG", "sometimes")
+            .args(&["bsx=1"])
+            .pipe_in("")
+            .fails_with_code(1)
+            .stderr_contains("dd: unrecognized operand 'bsx=1'\n")
+            .stderr_does_not_contain("╭─");
+    }
+}
+
+// Conversion conflicts are reported in a fixed order: ascii/ebcdic/ibm,
+// block/unblock, lcase/ucase, then excl/nocreat. ascii implies unblock;
+// ebcdic and ibm imply block, so with cbs an explicit flag in the other
+// direction is a block/unblock conflict as well.
+#[test]
+fn test_block_unblock_conflicts() {
+    for conv in [
+        // block/unblock is reported before the later pairs.
+        "block,unblock,lcase,ucase",
+        "block,unblock,excl,nocreat",
+        // The implied direction conflicts with the explicit flag.
+        "ascii,block",
+        "ebcdic,unblock",
+        "ibm,unblock",
+        "ascii,block,unblock",
+    ] {
+        new_ucmd!()
+            .args(&[
+                format!("conv={conv}"),
+                "cbs=1".into(),
+                "if=/dev/null".into(),
+            ])
+            .fails_with_code(1)
+            .stderr_only("dd: cannot combine block and unblock\n");
+    }
+}
+
+#[test]
+fn test_implied_block_direction_agrees_with_explicit_flag() {
+    for conv in ["ascii,unblock", "ebcdic,block", "ibm,block"] {
+        new_ucmd!()
+            .args(&[format!("conv={conv}"), "cbs=1".into(), "status=none".into()])
+            .pipe_in("")
+            .succeeds()
+            .no_output();
+    }
+}
+
+// Without cbs, block and unblock have no record length to work with and are
+// ignored rather than rejected.
+#[test]
+fn test_block_unblock_without_cbs_is_ignored() {
+    for conv in ["block", "unblock", "block,unblock"] {
+        new_ucmd!()
+            .args(&[format!("conv={conv}"), "status=none".into()])
+            .pipe_in("ab\ncd\n")
+            .succeeds()
+            .stdout_only("ab\ncd\n");
+    }
+}
+
+// Without cbs, ascii and ebcdic still convert the bytes; only the implied
+// unblock or block step is skipped, so the trailing space survives and no
+// newline is added.
+#[test]
+fn test_ascii_ebcdic_without_cbs_still_convert() {
+    let cases: [(&str, &[u8], &[u8]); 2] = [
+        ("ascii", b"\xc1\xc2\x40", b"AB "),
+        ("ebcdic", b"AB ", b"\xc1\xc2\x40"),
+    ];
+    for (conv, input, expected) in cases {
+        new_ucmd!()
+            .args(&[format!("conv={conv}"), "status=none".into()])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only_bytes(expected);
     }
 }

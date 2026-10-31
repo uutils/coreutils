@@ -5,17 +5,18 @@
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser};
 use std::ffi::OsString;
-use std::io::{self, Write};
 use uucore::error::{UResult, USimpleError, strip_errno};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use uucore::pipes::MAX_ROOTLESS_PIPE_SIZE;
 use uucore::{format_usage, translate};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-const BUF_SIZE: usize = MAX_ROOTLESS_PIPE_SIZE;
-// it's possible that using a smaller or larger buffer might provide better performance
+#[path = "platform/linux.rs"]
+mod platform;
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-const BUF_SIZE: usize = 16 * 1024;
+#[path = "platform/portable.rs"]
+mod platform;
+
+use platform::BUF_SIZE;
+pub use platform::exec;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -31,9 +32,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     repeat_content_to_capacity(&mut buffer);
     match exec(&buffer) {
         Ok(()) => Ok(()),
-        // On Windows, silently handle broken pipe since there's no SIGPIPE
-        #[cfg(windows)]
-        Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        // On Windows and WASI, silently handle broken pipe since there's no SIGPIPE
+        #[cfg(any(windows, target_os = "wasi"))]
+        Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
         Err(err) => Err(USimpleError::new(
             1,
             translate!("yes-error-standard-output", "error" => strip_errno(&err)),
@@ -77,48 +78,6 @@ fn repeat_content_to_capacity(buf: &mut Vec<u8>) {
         let to_copy = std::cmp::min(target_size - buf.len(), buf.len());
         debug_assert_eq!(to_copy % line_len, 0);
         buf.extend_from_within(..to_copy);
-    }
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-pub fn exec(bytes: &[u8]) -> io::Result<()> {
-    let mut stdout = io::stdout().lock();
-    loop {
-        stdout.write_all(bytes)?;
-    }
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn exec(bytes: &[u8]) -> io::Result<()> {
-    use uucore::io::RawWriter;
-    use uucore::pipes::{pipe, splice, tee};
-
-    let stdout = rustix::stdio::stdout();
-    // improve throughput
-    let _ = rustix::pipe::fcntl_setpipe_size(stdout, MAX_ROOTLESS_PIPE_SIZE);
-    // GNU catches all strace injections for zero-copy syscalls except for 1st one (checking support of it)
-    // tee() cannot control offset. We can do tee only if original bytes.len() is multiple of PIPE_BUF,
-    // but it is slower than mixing splice even it reduces syscalls...
-    let bytes_len = bytes.len();
-    if let Ok((p_read, mut p_write)) = pipe::<true>()
-        && p_write.write_all(bytes).is_ok()
-        && let Ok((broker_read, broker_write)) = pipe::<true>()
-        && Ok(bytes_len) == tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE)
-        && uucore::pipes::drain_pipe(&broker_read, &stdout, bytes_len)?.is_ok()
-    {
-        // fallback from tee() is possible since we did not send anything to stdout yet
-        while let Ok(mut remain) = tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE) {
-            debug_assert!(remain == bytes_len, "splice should cleanup pipe");
-            while remain > 0 {
-                remain -= splice(&broker_read, &stdout, remain)?;
-            }
-        }
-    }
-
-    // fallback
-    let mut stdout = RawWriter(stdout);
-    loop {
-        stdout.write_all(bytes)?;
     }
 }
 

@@ -2,16 +2,44 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (words) araba merci efjkow
 
 use regex::Regex;
+use rstest::rstest;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util::UCommand;
 
-#[test]
-fn test_default() {
-    new_ucmd!().arg("hi").succeeds().stdout_only("hi\n");
+#[rstest]
+#[case::default(&["hi"], "hi\n")]
+#[case::escape_alert(&["-e", "\\a"], "\x07\n")]
+#[case::escape_backslash(&["-e", "\\\\"], "\\\n")]
+#[case::escape_backspace(&["-e", "\\b"], "\x08\n")]
+#[case::escape_carriage_return(&["-e", "\\r"], "\r\n")]
+#[case::escape_escape(&["-e", "\\e"], "\x1B\n")]
+#[case::escape_form_feed(&["-e", "\\f"], "\x0C\n")]
+#[case::escape_hex(&["-e", "\\x41"], "A\n")]
+#[case::escape_short_hex(&["-e", "foo\\xa bar"], "foo\n bar\n")]
+#[case::escape_no_hex(&["-e", "foo\\x bar"], "foo\\x bar\n")]
+#[case::escape_one_slash(&["-e", "foo\\ bar"], "foo\\ bar\n")]
+#[case::escape_one_slash_multi(&["-e", "foo\\", "bar"], "foo\\ bar\n")]
+#[case::escape_newline(&["-e", "\\na"], "\na\n")]
+#[case::escape_no_further_output(&["-e", "a\\cb", "c"], "a")]
+#[case::escape_octal(&["-e", "\\0100"], "@\n")]
+#[case::escape_short_octal(&["-e", "foo\\040bar"], "foo bar\n")]
+#[case::escape_nul(&["-e", "foo\\0 bar"], "foo\0 bar\n")]
+#[case::escape_octal_invalid_digit(&["-e", "foo\\08 bar"], "foo\u{0}8 bar\n")]
+#[case::escape_tab(&["-e", "\\t"], "\t\n")]
+#[case::escape_vertical_tab(&["-e", "\\v"], "\x0B\n")]
+#[case::hyphen_value(&["-abc"], "-abc\n")]
+#[case::multiple_hyphen_values(&["-abc", "-def", "-edf"], "-abc -def -edf\n")]
+#[case::partial_version_argument(&["--ver"], "--ver\n")]
+#[case::partial_help_argument(&["--he"], "--he\n")]
+#[case::slash_eight_off_by_one(&["-e", "-n", r"\8"], r"\8")]
+#[case::cmd_result_stdout_str_check_when_false_then_panics(&["-e", "\\f"], "\x0C\n")]
+fn test_echo_args(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!().args(args).succeeds().stdout_only(expected);
 }
 
 #[test]
@@ -22,102 +50,6 @@ fn test_no_trailing_newline() {
 #[test]
 fn test_empty_args() {
     new_ucmd!().succeeds().stdout_only("\n");
-}
-
-#[test]
-fn test_escape_alert() {
-    new_ucmd!()
-        .args(&["-e", "\\a"])
-        .succeeds()
-        .stdout_only("\x07\n");
-}
-
-#[test]
-fn test_escape_backslash() {
-    new_ucmd!()
-        .args(&["-e", "\\\\"])
-        .succeeds()
-        .stdout_only("\\\n");
-}
-
-#[test]
-fn test_escape_backspace() {
-    new_ucmd!()
-        .args(&["-e", "\\b"])
-        .succeeds()
-        .stdout_only("\x08\n");
-}
-
-#[test]
-fn test_escape_carriage_return() {
-    new_ucmd!()
-        .args(&["-e", "\\r"])
-        .succeeds()
-        .stdout_only("\r\n");
-}
-
-#[test]
-fn test_escape_escape() {
-    new_ucmd!()
-        .args(&["-e", "\\e"])
-        .succeeds()
-        .stdout_only("\x1B\n");
-}
-
-#[test]
-fn test_escape_form_feed() {
-    new_ucmd!()
-        .args(&["-e", "\\f"])
-        .succeeds()
-        .stdout_only("\x0C\n");
-}
-
-#[test]
-fn test_escape_hex() {
-    new_ucmd!()
-        .args(&["-e", "\\x41"])
-        .succeeds()
-        .stdout_only("A\n");
-}
-
-#[test]
-fn test_escape_short_hex() {
-    new_ucmd!()
-        .args(&["-e", "foo\\xa bar"])
-        .succeeds()
-        .stdout_only("foo\n bar\n");
-}
-
-#[test]
-fn test_escape_no_hex() {
-    new_ucmd!()
-        .args(&["-e", "foo\\x bar"])
-        .succeeds()
-        .stdout_only("foo\\x bar\n");
-}
-
-#[test]
-fn test_escape_one_slash() {
-    new_ucmd!()
-        .args(&["-e", "foo\\ bar"])
-        .succeeds()
-        .stdout_only("foo\\ bar\n");
-}
-
-#[test]
-fn test_escape_one_slash_multi() {
-    new_ucmd!()
-        .args(&["-e", "foo\\", "bar"])
-        .succeeds()
-        .stdout_only("foo\\ bar\n");
-}
-
-#[test]
-fn test_escape_newline() {
-    new_ucmd!()
-        .args(&["-e", "\\na"])
-        .succeeds()
-        .stdout_only("\na\n");
 }
 
 #[test]
@@ -144,59 +76,74 @@ fn test_escape_override() {
 }
 
 #[test]
-fn test_escape_no_further_output() {
+fn test_escape_unicode_and_quote_not_recognized() {
+    // `echo -e` has no `\u`, `\U` or `\"` escape, unlike `printf`: the
+    // backslash and the character following it are printed as given.
+    for arg in [
+        r"\u0041",
+        r"\U00000041",
+        r"\U0001F600",
+        r#"\""#,
+        r"a\u0041b",
+        r"a\U00000041b",
+        r#"a\"b"#,
+        r"\u\u",
+    ] {
+        new_ucmd!()
+            .args(&["-e", arg])
+            .succeeds()
+            .stdout_only(format!("{arg}\n"));
+    }
+}
+
+#[test]
+fn test_escape_malformed_unicode_not_recognized() {
+    // Truncated, non-hexadecimal, surrogate and out-of-range payloads are not
+    // special either: nothing is consumed and no error is reported.
+    for arg in [
+        r"\u",
+        r"\U",
+        r"\u00",
+        r"\U0000004",
+        r"\u00zz",
+        r"\U000000zz",
+        r"\uD800",
+        r"\U00110000",
+    ] {
+        new_ucmd!()
+            .args(&["-e", arg])
+            .succeeds()
+            .stdout_only(format!("{arg}\n"));
+    }
+}
+
+#[test]
+fn test_disable_escapes_unicode_and_quote() {
+    let input_str = r#"\u0041 \U00000041 \""#;
     new_ucmd!()
-        .args(&["-e", "a\\cb", "c"])
+        .arg("-E")
+        .arg(input_str)
+        .succeeds()
+        .stdout_only(format!("{input_str}\n"));
+}
+
+#[test]
+fn test_escape_recognized_sequences_still_expand() {
+    // The sequences the GNU manual does list for `echo -e` are unaffected.
+    new_ucmd!()
+        .args(&["-e", r"\a\b\e\f\n\r\t\v\\"])
+        .succeeds()
+        .stdout_only("\x07\x08\x1B\x0C\n\r\t\x0B\\\n");
+
+    new_ucmd!()
+        .args(&["-e", r"\0101\101\x41"])
+        .succeeds()
+        .stdout_only("AAA\n");
+
+    new_ucmd!()
+        .args(&["-e", r"a\cb", "c"])
         .succeeds()
         .stdout_only("a");
-}
-
-#[test]
-fn test_escape_octal() {
-    new_ucmd!()
-        .args(&["-e", "\\0100"])
-        .succeeds()
-        .stdout_only("@\n");
-}
-
-#[test]
-fn test_escape_short_octal() {
-    new_ucmd!()
-        .args(&["-e", "foo\\040bar"])
-        .succeeds()
-        .stdout_only("foo bar\n");
-}
-
-#[test]
-fn test_escape_nul() {
-    new_ucmd!()
-        .args(&["-e", "foo\\0 bar"])
-        .succeeds()
-        .stdout_only("foo\0 bar\n");
-}
-
-#[test]
-fn test_escape_octal_invalid_digit() {
-    new_ucmd!()
-        .args(&["-e", "foo\\08 bar"])
-        .succeeds()
-        .stdout_only("foo\u{0}8 bar\n");
-}
-
-#[test]
-fn test_escape_tab() {
-    new_ucmd!()
-        .args(&["-e", "\\t"])
-        .succeeds()
-        .stdout_only("\t\n");
-}
-
-#[test]
-fn test_escape_vertical_tab() {
-    new_ucmd!()
-        .args(&["-e", "\\v"])
-        .succeeds()
-        .stdout_only("\x0B\n");
 }
 
 #[test]
@@ -207,19 +154,6 @@ fn test_disable_escapes() {
         .arg(input_str)
         .succeeds()
         .stdout_only(format!("{input_str}\n"));
-}
-
-#[test]
-fn test_hyphen_value() {
-    new_ucmd!().arg("-abc").succeeds().stdout_is("-abc\n");
-}
-
-#[test]
-fn test_multiple_hyphen_values() {
-    new_ucmd!()
-        .args(&["-abc", "-def", "-edf"])
-        .succeeds()
-        .stdout_is("-abc -def -edf\n");
 }
 
 #[test]
@@ -511,16 +445,6 @@ fn old_octal_syntax() {
 }
 
 #[test]
-fn partial_version_argument() {
-    new_ucmd!().arg("--ver").succeeds().stdout_is("--ver\n");
-}
-
-#[test]
-fn partial_help_argument() {
-    new_ucmd!().arg("--he").succeeds().stdout_is("--he\n");
-}
-
-#[test]
 fn full_version_argument() {
     new_ucmd!()
         .arg("--version")
@@ -610,7 +534,7 @@ fn nine_bit_octal() {
 }
 
 #[test]
-#[cfg(target_family = "unix")]
+#[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn non_utf_8() {
     use std::ffi::OsStr;
@@ -629,14 +553,6 @@ fn non_utf_8() {
         .arg(os_str)
         .succeeds()
         .stdout_only_bytes(INPUT_AND_OUTPUT);
-}
-
-#[test]
-fn slash_eight_off_by_one() {
-    new_ucmd!()
-        .args(&["-e", "-n", r"\8"])
-        .succeeds()
-        .stdout_only(r"\8");
 }
 
 #[test]
@@ -681,14 +597,6 @@ fn test_cmd_result_stderr_check_and_stderr_str_check() {
     result.stderr_str_check(|stderr| stderr.ends_with("world\n"));
     result.stderr_check(|stdout| stdout.get(0..2).unwrap().eq(b"He"));
     result.no_stdout();
-}
-
-#[test]
-fn test_cmd_result_stdout_str_check_when_false_then_panics() {
-    new_ucmd!()
-        .args(&["-e", "\\f"])
-        .succeeds()
-        .stdout_only("\x0C\n");
 }
 
 #[cfg(unix)]

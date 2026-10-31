@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore zaaa zaab feff
+
 //! A number in arbitrary radix expressed in a positional notation.
 //!
 //! Use the [`Number`] enum to represent an arbitrary number in an
@@ -14,6 +16,7 @@
 //!
 //! [radix]: https://en.wikipedia.org/wiki/Radix
 //! [positional notation]: https://en.wikipedia.org/wiki/Positional_notation
+
 use std::error::Error;
 use std::fmt::{self, Display, Formatter, Write};
 use uucore::translate;

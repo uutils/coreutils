@@ -2,7 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) autoformat nocheck
+
+// spell-checker:ignore (words) autoformat nocheck FILENUM
 
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 use std::fs::OpenOptions;
@@ -10,8 +11,11 @@ use std::fs::OpenOptions;
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 #[cfg(windows)]
 use std::{ffi::OsString, os::windows::ffi::OsStringExt};
+use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util::is_locale_available;
 use uutests::util_name;
 
 #[test]
@@ -201,6 +205,124 @@ fn case_insensitive() {
 }
 
 #[test]
+fn case_insensitive_prints_each_lines_own_key() {
+    // Keys that differ only in case form one group with -i, but each output
+    // line still shows the key from its own file1 line.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "b z\n");
+    ucmd.args(&["-i", "-", "f"])
+        .pipe_in("B x\nb y\n")
+        .succeeds()
+        .stdout_only("B x z\nb y z\n");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "B\n");
+    ucmd.args(&["-i", "-o", "0", "-", "f"])
+        .pipe_in("B\nb\n")
+        .succeeds()
+        .stdout_only("B\nb\n");
+}
+
+#[test]
+fn case_insensitive_matches_sort_f_order() {
+    // `sort -f` folds to upper case, so `_` sorts after letters.
+    let scene = TestScenario::new(util_name!());
+    scene
+        .fixtures
+        .write("requested", "svcabc mallory\nsvc_backup mallory\n");
+    scene.fixtures.write("reserved", "SVC_BACKUP\n");
+    scene
+        .ucmd()
+        .args(&["-i", "-v", "1", "requested", "reserved"])
+        .succeeds()
+        .stdout_only("svcabc mallory\n");
+    scene
+        .ucmd()
+        .args(&["-i", "requested", "reserved"])
+        .succeeds()
+        .stdout_only("svc_backup mallory\n");
+}
+
+#[test]
+fn numeric_sort() {
+    // Input sorted with `sort -n`: keys are compared by value, so `01` pairs with `1`.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "-3.5 w\n01 x\n2 y\n10 z\n");
+    ucmd.args(&["--numeric-sort", "--check-order", "-", "f"])
+        .pipe_in("-3.50 v\n1 a\n2 b\n9 c\n10 d\n")
+        .succeeds()
+        .stdout_only("-3.50 v w\n1 a x\n2 b y\n10 d z\n");
+}
+
+#[test]
+fn numeric_sort_missing_and_empty_fields_are_zero() {
+    // `sort -n -k2` puts a missing or empty key between -1 and 1, like 0.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "x -1\ny 0\nz 1\n");
+    ucmd.args(&["-n", "-1", "2", "-2", "2", "--check-order", "-", "f"])
+        .pipe_in("a -1\nb\nc 1\n")
+        .succeeds()
+        .stdout_only("-1 a x\n b y\n1 c z\n");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "x,-1\ny,0\nz,1\n");
+    ucmd.args(&[
+        "-n",
+        "-t",
+        ",",
+        "-1",
+        "2",
+        "-2",
+        "2",
+        "--check-order",
+        "-",
+        "f",
+    ])
+    .pipe_in("a,-1\nb,\nc\nd,1\n")
+    .succeeds()
+    .stdout_only("-1,a,x\n,b,y\n,c,y\n1,d,z\n");
+}
+
+#[test]
+fn numeric_sort_non_numeric_keys_are_zero() {
+    // Like `sort -n`, keys that are not numbers compare equal to each other and to 0.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "0 p\nfoo q\n");
+    ucmd.args(&["-n", "-", "f"])
+        .pipe_in("abc x\n")
+        .succeeds()
+        .stdout_only("abc x p\nabc x q\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn numeric_sort_locale_decimal_point() {
+    let locale = "fr_FR.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // With ',' as the decimal point, 1,5 and 1,7 differ; in the C locale both would be 1.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "1,7 x\n2,50 y\n");
+    ucmd.env("LC_ALL", locale)
+        .args(&["-n", "--check-order", "-", "f"])
+        .pipe_in("1,5 a\n2,5 b\n")
+        .succeeds()
+        .stdout_only("2,5 b y\n");
+}
+
+#[test]
+fn numeric_sort_lexicographic_input_is_unsorted() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "1\n10\n2\n");
+    ucmd.args(&["-n", "--check-order", "-", "f"])
+        .pipe_in("1\n2\n10\n")
+        .fails_with_code(1)
+        .stdout_is("1\n")
+        .stderr_is("join: f:3: is not sorted: 2\n");
+}
+
+#[test]
 fn semicolon_separated() {
     new_ucmd!()
         .arg("semicolon_fields_1.txt")
@@ -231,7 +353,21 @@ fn tab_multi_character() {
         .arg("-t")
         .arg("ab")
         .fails()
-        .stderr_is("join: multi-character tab ab\n");
+        .stderr_is("join: multi-character tab 'ab'\n");
+}
+
+#[test]
+fn tab_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading separator value passed as its own argument (not
+    // attached with `-t-x`/`=`) must not be mistaken for a new,
+    // unrecognized flag.
+    new_ucmd!()
+        .arg("semicolon_fields_1.txt")
+        .arg("semicolon_fields_2.txt")
+        .arg("-t")
+        .arg("-x")
+        .fails()
+        .stderr_is("join: multi-character tab '-x'\n");
 }
 
 #[test]
@@ -249,6 +385,50 @@ fn default_format() {
         .arg("fields_2.txt")
         .arg("-o")
         .arg("0 2.2")
+        .succeeds()
+        .stdout_only_fixture("default.expected");
+}
+
+#[test]
+fn repeated_o_accumulates_fields() {
+    // GNU lets -o repeat; the fields accumulate in the order they appear,
+    // here giving the reverse of the default format.
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_2.txt")
+        .arg("-o")
+        .arg("2.2")
+        .arg("-o")
+        .arg("1.1")
+        .succeeds()
+        .stdout_only("a 1\nb 2\nc 3\ne 5\nh 8\n");
+}
+
+#[test]
+fn repeated_o_ignores_auto_when_mixed() {
+    // When -o is repeated and not every value is `auto`, each `auto` is
+    // ignored: only the explicit fields are printed, repeats included.
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_2.txt")
+        .arg("-o")
+        .arg("auto")
+        .arg("-o")
+        .arg("2.2 2.2 1.1")
+        .succeeds()
+        .stdout_only("a a 1\nb b 2\nc c 3\ne e 5\nh h 8\n");
+}
+
+#[test]
+fn repeated_o_auto_stays_auto() {
+    // `auto` still applies when every -o value is `auto`.
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_2.txt")
+        .arg("-o")
+        .arg("auto")
+        .arg("-o")
+        .arg("auto")
         .succeeds()
         .stdout_only_fixture("default.expected");
 }
@@ -336,6 +516,92 @@ fn missing_format_fields() {
         .arg("x")
         .succeeds()
         .stdout_only_fixture("missing_format_fields.expected");
+}
+
+#[test]
+fn empty_fields_use_empty_filler() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // A blank line splits into a single empty field, so the join field is
+    // present but zero length rather than missing.
+    at.write("blank", "hello\n\n\n");
+
+    ts.ucmd()
+        .args(&["-e", "EMPTY", "blank", "blank"])
+        .succeeds()
+        .stdout_only("hello\nEMPTY\nEMPTY\nEMPTY\nEMPTY\n");
+
+    // The same holds for a line containing only whitespace.
+    at.write("spaces", "   \n");
+
+    ts.ucmd()
+        .args(&["-e", "EMPTY", "-o", "0,1.1", "spaces", "spaces"])
+        .succeeds()
+        .stdout_only("EMPTY EMPTY\n");
+
+    // A field between two adjacent separators is also present but empty.
+    at.write("gap", "a,,b\n");
+
+    ts.ucmd()
+        .args(&[
+            "-t",
+            ",",
+            "-e",
+            "EMPTY",
+            "-o",
+            "0,1.1,1.2,1.3",
+            "gap",
+            "gap",
+        ])
+        .succeeds()
+        .stdout_only("a,a,EMPTY,b\n");
+
+    ts.ucmd()
+        .args(&["-t", ",", "-e", "EMPTY", "gap", "gap"])
+        .succeeds()
+        .stdout_only("a,EMPTY,b,EMPTY,b\n");
+}
+
+#[test]
+fn empty_fields_kept_without_empty_filler() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("gap", "a,,b\n");
+
+    // Without -e an empty field stays empty.
+    ts.ucmd()
+        .args(&["-t", ",", "-o", "0,1.1,1.2,1.3", "gap", "gap"])
+        .succeeds()
+        .stdout_only("a,a,,b\n");
+
+    // Passing an empty string to -e is equivalent to not passing it at all.
+    ts.ucmd()
+        .args(&["-t", ",", "-e", "", "-o", "0,1.1,1.2,1.3", "gap", "gap"])
+        .succeeds()
+        .stdout_only("a,a,,b\n");
+}
+
+#[test]
+fn repeated_empty_filler() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("a", "1 a\n2 b\n");
+    at.write("b", "1 c\n");
+
+    // -e may be given more than once with the same string.
+    ts.ucmd()
+        .args(&["-a1", "-e", "d", "-e", "d", "-o", "1.1,1.2,2.2", "a", "b"])
+        .succeeds()
+        .stdout_only("1 a c\n2 b d\n");
+
+    // Different strings conflict.
+    ts.ucmd()
+        .args(&["-a1", "-e", "d", "-e", "e", "-o", "1.1,1.2,2.2", "a", "b"])
+        .fails_with_code(1)
+        .stderr_only("join: conflicting empty-field replacement strings\n");
 }
 
 #[test]
@@ -447,6 +713,7 @@ fn non_line_feeds() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn non_unicode() {
     new_ucmd!()
         .arg("non-unicode_1.bin")
@@ -522,6 +789,7 @@ fn null_line_endings() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_full() {
     let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
     new_ucmd!()
@@ -534,6 +802,7 @@ fn test_full() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_join_non_utf8_paths() {
     use std::fs::File;
     use std::io::Write;
@@ -581,6 +850,7 @@ fn join_emoji_delim_inner_key() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: locale database not visible")]
 fn test_locale_collation() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -596,4 +866,175 @@ fn test_locale_collation() {
         .succeeds()
         .stdout_contains("abc:d 2 y")
         .stdout_contains("ab:d 1 x");
+}
+
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: usize::MAX is computed for the 64-bit host test binary, \
+              but the wasm32 target binary saturates at the 32-bit usize::MAX"
+)]
+fn test_incompatible_fields_reports_exact_field_number() {
+    // An out-of-range field clamps to usize::MAX, which used to overflow the
+    // one-based increment. Field numbers past 2^53 also used to be rounded on
+    // their way through the localization layer.
+    //
+    // `parse_field_number` uses `usize`, so a value at or above `usize::MAX`
+    // saturates to it. The saturation ceiling is therefore pointer-width
+    // dependent, and the expected text is built from `usize::MAX` rather than a
+    // hard-coded 64-bit literal.
+    let max_field = usize::MAX.to_string();
+
+    // A small field number takes the i64 number path through the localization
+    // layer and is platform-independent.
+    new_ucmd!()
+        .args(&["-j", "3", "-1", "5", "/dev/null", "/dev/null"])
+        .fails()
+        .stderr_contains("incompatible join fields 3, 5");
+
+    // Values at or above `usize::MAX` saturate to `usize::MAX` on every
+    // platform; the localization layer must carry that ceiling as an exact
+    // decimal string rather than rounding it through Fluent's f64-backed number
+    // type.
+    for field in ["18446744073709551615", "99999999999999999999999"] {
+        new_ucmd!()
+            .args(&["-j", field, "-1", "5", "/dev/null", "/dev/null"])
+            .fails()
+            .stderr_contains(format!("incompatible join fields {max_field}, 5"));
+    }
+
+    // A value above f64 precision (2^53) but below `usize::MAX` is reported
+    // exactly on 64-bit (where `usize` holds it); on 32-bit it saturates to
+    // `usize::MAX` like the cases above.
+    #[cfg(target_pointer_width = "64")]
+    let expected_above: String = "9007199254740993".to_string();
+    #[cfg(not(target_pointer_width = "64"))]
+    let expected_above: String = max_field.clone();
+    new_ucmd!()
+        .args(&[
+            "-j",
+            "9007199254740993",
+            "-1",
+            "5",
+            "/dev/null",
+            "/dev/null",
+        ])
+        .fails()
+        .stderr_contains(format!("incompatible join fields {expected_above}, 5"));
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_failing_field_of_a_list() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-o", "1.2,2.x", "/dev/null", "/dev/null"])
+            .fails_with_code(1);
+
+        // The first field is fine; only the second one is at fault.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+join: invalid field number: 'x'
+   ╭─[ join:1:13 ]
+   │
+ 1 │ join -o 1.2,2.x /dev/null /dev/null
+   │             ───
+   │
+   │ Help: an output field is FILENUM.FIELD, as in -o 1.2,2.1; 0 stands for the join field
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_inside_a_glued_short_option() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-o1.2,0.4", "/dev/null", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("join:1:12"), "{stderr}");
+        assert!(stderr.contains("invalid field specifier"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-o", "1.2,2.x", "/dev/null", "/dev/null"])
+            .fails_with_code(1)
+            .stderr_is("join: invalid field number: 'x'\n");
+    }
+}
+
+#[test]
+fn test_hyphen_leading_field_number_is_reported_as_invalid() {
+    // GNU hands the argument after the option to that option even when it
+    // starts with a hyphen, so it is reported as an invalid field number
+    // rather than as an unknown option.
+    for opt in ["-1", "-2", "-j"] {
+        new_ucmd!()
+            .args(&[opt, "-1", "empty.txt", "empty.txt"])
+            .fails()
+            .stderr_contains("invalid field number: '-1'");
+    }
+}
+
+#[test]
+fn test_invalid_file_number() {
+    for (option, value) in [("-a", "3"), ("-a", "x"), ("-v", "0")] {
+        new_ucmd!()
+            .args(&[option, value, "fields_1.txt", "fields_2.txt"])
+            .fails_with_code(1)
+            .stderr_only(format!("join: invalid file number: '{value}'\n"));
+    }
+}
+
+#[test]
+fn test_operand_count() {
+    new_ucmd!()
+        .fails_with_code(1)
+        .stderr_contains("join: missing operand\n")
+        .stderr_contains("--help");
+    new_ucmd!()
+        .args(&["-t", "x", "fields_1.txt"])
+        .fails_with_code(1)
+        .stderr_contains("join: missing operand after 'fields_1.txt'\n")
+        .stderr_contains("--help");
+    new_ucmd!()
+        .args(&["fields_1.txt", "fields_2.txt", "fields_3.txt"])
+        .fails_with_code(1)
+        .stderr_contains("join: extra operand 'fields_3.txt'\n")
+        .stderr_contains("--help");
+}
+
+#[test]
+fn test_missing_key_is_empty_key() {
+    // Like `sort -k`, a line too short to have the join field has an empty key.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("short", "x,\ny\nbob,1002\n");
+    at.write("keys", "1002\n");
+    ts.ucmd()
+        .args(&["-t", ",", "-1", "2", "--check-order", "short", "keys"])
+        .succeeds()
+        .stdout_only("1002,bob\n");
+
+    // ...and pairs with lines whose join field is empty.
+    ts.ucmd()
+        .args(&["-t", ",", "-j", "2", "short", "short"])
+        .succeeds()
+        .stdout_only(",x,x\n,x,y\n,y,x\n,y,y\n1002,bob,bob\n");
+
+    // Same with the default blank separator and a trailing blank.
+    at.write("blank", "a \nb\nbob 1002\n");
+    ts.ucmd()
+        .args(&["-1", "2", "--check-order", "blank", "keys"])
+        .succeeds()
+        .stdout_only("1002 bob\n");
 }

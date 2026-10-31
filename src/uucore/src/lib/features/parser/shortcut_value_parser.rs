@@ -2,15 +2,15 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore abcdefgh abef Strs
 
 //! A parser that accepts shortcuts for values.
 //! `ShortcutValueParser` is similar to clap's `PossibleValuesParser`
 
-use clap::{
-    builder::{PossibleValue, TypedValueParser},
-    error::{ContextKind, ContextValue, ErrorKind},
-};
+use clap::builder::{PossibleValue, TypedValueParser};
+use clap::error::{ContextKind, ContextValue, ErrorKind};
+use std::fmt::Write as _;
 
 /// A parser that accepts shortcuts for values.
 #[derive(Clone)]
@@ -69,7 +69,7 @@ fn add_ambiguous_value_tip(
 ) {
     let mut formatted_possible_values = String::new();
     for (i, s) in possible_values.iter().enumerate() {
-        formatted_possible_values.push_str(&format!("'{}'", s.get_name()));
+        let _ = write!(formatted_possible_values, "'{}'", s.get_name());
         if i < possible_values.len() - 2 {
             formatted_possible_values.push_str(", ");
         } else if i < possible_values.len() - 1 {
@@ -136,7 +136,9 @@ where
 mod tests {
     use std::ffi::OsStr;
 
-    use clap::{Command, builder::PossibleValue, builder::TypedValueParser, error::ErrorKind};
+    use clap::Command;
+    use clap::builder::{PossibleValue, TypedValueParser};
+    use clap::error::ErrorKind;
 
     use super::ShortcutValueParser;
 

@@ -4,12 +4,6 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::errno::Errno;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::{OFlag, open};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::sys::stat::Mode;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, get_exit_code, set_exit_code};
@@ -26,20 +20,10 @@ static ARG_FILES: &str = "files";
 
 #[cfg(unix)]
 mod platform {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    use nix::fcntl::{FcntlArg, OFlag, fcntl};
-    use nix::unistd::sync;
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    use nix::unistd::{fdatasync, syncfs};
-    #[cfg(any(target_os = "linux", target_os = "android"))]
     use std::fs::{File, OpenOptions};
-    #[cfg(any(target_os = "linux", target_os = "android"))]
     use std::os::unix::fs::OpenOptionsExt;
-    #[cfg(any(target_os = "linux", target_os = "android"))]
     use uucore::display::Quotable;
-    #[cfg(any(target_os = "linux", target_os = "android"))]
     use uucore::error::FromIo;
-    #[cfg(any(target_os = "linux", target_os = "android"))]
     use uucore::translate;
 
     use uucore::error::UResult;
@@ -49,38 +33,33 @@ mod platform {
         reason = "fn sig must match on all platforms"
     )]
     pub fn do_sync() -> UResult<()> {
-        sync();
+        rustix::fs::sync();
         Ok(())
     }
 
-    /// Opens a file and resets its O_NONBLOCK flag to match GNU behavior.
+    /// Opens a file and resets its `O_NONBLOCK` flag to match GNU behavior.
     /// Returns the opened file or an error if opening fails.
     /// Logs a warning if fcntl fails but doesn't abort the operation.
-    #[cfg(any(target_os = "linux", target_os = "android"))]
     fn open_and_reset_nonblock(path: &str) -> UResult<File> {
         let f = OpenOptions::new()
             .read(true)
-            .custom_flags(OFlag::O_NONBLOCK.bits())
+            .custom_flags(rustix::fs::OFlags::NONBLOCK.bits() as i32)
             .open(path)
             .map_err_context(|| path.to_string())?;
         // Reset O_NONBLOCK flag if it was set (matches GNU behavior)
         // This is non-critical, so we log errors but don't fail
-        if let Err(e) = fcntl(&f, FcntlArg::F_SETFL(OFlag::empty())) {
+        if let Err(e) = rustix::fs::fcntl_setfl(&f, rustix::fs::OFlags::empty()) {
             use std::io::{Write, stderr};
-            let _ = writeln!(
-                stderr(),
-                "sync: {}",
-                translate!("sync-warning-fcntl-failed", "file" => path, "error" => e.to_string())
-            );
+            let msg = translate!("sync-warning-fcntl-failed", "file" => path, "error" => std::io::Error::from(e).to_string());
+            let _ = writeln!(stderr(), "sync: {msg}");
             uucore::error::set_exit_code(1);
         }
         Ok(f)
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn do_sync_with<F>(files: &[String], op: F) -> UResult<()>
     where
-        F: Fn(File) -> Result<(), nix::Error>,
+        F: Fn(File) -> std::io::Result<()>,
     {
         for path in files {
             let f = open_and_reset_nonblock(path)?;
@@ -93,34 +72,33 @@ mod platform {
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn do_syncfs(files: &[String]) -> UResult<()> {
-        do_sync_with(files, syncfs)
+        do_sync_with(files, |f| {
+            rustix::fs::syncfs(f).map_err(std::io::Error::from)
+        })
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn do_fdatasync(files: &[String]) -> UResult<()> {
-        do_sync_with(files, fdatasync)
+        do_sync_with(files, |f| f.sync_data())
     }
 }
 
 #[cfg(windows)]
 mod platform {
     use std::fs::OpenOptions;
-    use std::os::windows::prelude::*;
     use std::path::Path;
     use uucore::error::{UResult, USimpleError};
     use uucore::translate;
     use uucore::wide::{FromWide, ToWide};
     use windows_sys::Win32::Foundation::{
-        ERROR_NO_MORE_FILES, GetLastError, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
+        ERROR_NO_MORE_FILES, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
     };
     use windows_sys::Win32::Storage::FileSystem::{
-        FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, FlushFileBuffers, GetDriveTypeW,
+        FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDriveTypeW,
     };
     use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
 
     fn get_last_error() -> u32 {
-        // SAFETY: `GetLastError` has no safety preconditions
-        unsafe { GetLastError() as u32 }
+        std::io::Error::last_os_error().raw_os_error().unwrap_or(1) as u32
     }
 
     fn flush_volume(name: &str) -> UResult<()> {
@@ -139,13 +117,12 @@ mod platform {
                     translate!("sync-error-create-volume-handle"),
                 )
             })?;
-        // SAFETY: `file` is a valid `File`
-        if unsafe { FlushFileBuffers(file.as_raw_handle() as HANDLE) } == 0 {
-            return Err(USimpleError::new(
-                get_last_error() as i32,
+        file.sync_all().map_err(|e| {
+            USimpleError::new(
+                e.raw_os_error().unwrap_or(1),
                 translate!("sync-error-flush-file-buffer"),
-            ));
-        }
+            )
+        })?;
         Ok(())
     }
 
@@ -229,21 +206,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     for f in &files {
-        // Use the Nix open to be able to set the NONBLOCK flags for fifo files
-        #[cfg(any(target_os = "linux", target_os = "android"))]
+        // open with O_NONBLOCK to handle fifo files
+        #[cfg(unix)]
         {
+            use std::os::unix::fs::OpenOptionsExt as _;
+            use uucore::error::strip_errno;
             let path = Path::new(f);
-            if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
-                if e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()) {
-                    show_error!(
-                        "{}",
-                        translate!("sync-error-opening-file", "file" => f.quote(), "err" => e.desc())
-                    );
-                    set_exit_code(1);
-                }
+            if let Err(e) = std::fs::OpenOptions::new()
+                .read(true)
+                .custom_flags(rustix::fs::OFlags::NONBLOCK.bits() as _)
+                .open(path)
+                && (e.kind() != std::io::ErrorKind::PermissionDenied || path.is_dir())
+            {
+                let msg = translate!("sync-error-opening-file", "file" => f.quote(), "err" => strip_errno(&e));
+                show_error!("{msg}");
+                set_exit_code(1);
             }
         }
-        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        #[cfg(not(unix))]
         {
             if !Path::new(&f).exists() {
                 show_error!(
@@ -264,11 +244,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if files.is_empty() {
             sync()?;
         } else {
-            #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
+            #[cfg(any(target_os = "linux", target_os = "android", windows))]
             syncfs(&files)?;
         }
     } else if matches.get_flag(options::DATA) {
-        #[cfg(any(target_os = "linux", target_os = "android"))]
+        #[cfg(unix)]
         fdatasync(&files)?;
     } else {
         sync()?;
@@ -310,12 +290,12 @@ fn sync() -> UResult<()> {
     platform::do_sync()
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "android", windows))]
 fn syncfs(files: &[String]) -> UResult<()> {
     platform::do_syncfs(files)
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(unix)]
 fn fdatasync(files: &[String]) -> UResult<()> {
     platform::do_fdatasync(files)
 }

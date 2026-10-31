@@ -2,12 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (jargon) xattributes
 
-#![cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#![cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 
 use uutests::new_ucmd;
 
@@ -44,6 +42,18 @@ fn print() {
         new_ucmd!().args(&[flag, "example"]).succeeds();
         new_ucmd!().args(&[flag, "example1,example2"]).succeeds();
     }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn print_context_write_error_reported_not_panic() {
+    use std::fs::OpenOptions;
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+    new_ucmd!()
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_is("runcon: write error: No space left on device\n");
 }
 
 #[test]
@@ -87,10 +97,7 @@ fn invalid() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn plain_context() {
     let ctx = "unconfined_u:unconfined_r:unconfined_t:s0-s0";
     new_ucmd!().args(&[ctx, "/bin/true"]).succeeds();
@@ -109,10 +116,7 @@ fn plain_context() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn custom_context() {
     let t_ud = "unconfined_t";
     let u_ud = "unconfined_u";

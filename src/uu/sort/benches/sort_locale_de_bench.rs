@@ -5,13 +5,13 @@
 
 //! Benchmarks for sort with German locale (de_DE.UTF-8 collation).
 //!
-//! Note: The locale is set in main() BEFORE any benchmark runs because
-//! the locale is cached on first access via OnceLock and cannot be changed afterwards.
+//! Note: The locale is set in `main()` BEFORE any benchmark runs because
+//! the locale is cached on first access via `OnceLock` and cannot be changed afterwards.
 
 use divan::{Bencher, black_box};
 use tempfile::NamedTempFile;
 use uu_sort::uumain;
-use uucore::benchmark::{run_util_function, setup_test_file, text_data};
+use uucore::benchmark::{get_bench_args, setup_test_file, text_data};
 
 /// Benchmark German locale-specific data with German locale
 #[divan::bench]
@@ -19,14 +19,11 @@ fn sort_german_de_locale(bencher: Bencher) {
     let data = text_data::generate_german_locale_data(50_000);
     let file_path = setup_test_file(&data);
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap().to_string();
+    let output_path = output_file.path();
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-o", &output_path, file_path.to_str().unwrap()],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-o", &output_path, &file_path]).into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 fn main() {

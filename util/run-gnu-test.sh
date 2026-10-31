@@ -28,7 +28,10 @@ echo "path_UUTILS='${path_UUTILS}'"
 echo "path_GNU='${path_GNU}'"
 
 # Use GNU nproc for *BSD
-NPROC=$(command -v ${path_GNU}/src/nproc||command -v nproc)
+NPROC_BIN=$(command -v "${path_GNU}"/src/nproc||command -v nproc)
+# `-j` wants a job count: handing it the path to nproc made make read it as a
+# (bogus) goal and run with unlimited parallelism, which starves the CI runner.
+NPROC=$("${NPROC_BIN}" 2>/dev/null) || NPROC=1
 MAKEFLAGS="${MAKEFLAGS} -j ${NPROC}"
 export MAKEFLAGS
 ###
@@ -89,6 +92,10 @@ fi
 # ---------------------------------------------------------------------------
 
 export RUST_BACKTRACE=1
+
+# The GNU tests compare stderr byte for byte: never let a dev shell force a
+# caret report into their pipes.
+unset UUTILS_DIAG
 
 # Determine if we have SELinux tests
 has_selinux_tests=false

@@ -8,14 +8,15 @@
 
 use std::cmp::Ordering;
 use std::io::Read;
+use std::iter;
 
 use itertools::Itertools;
 use uucore::error::UResult;
 
-use crate::Output;
 use crate::chunks::{self, Chunk};
 use crate::tmp_dir::TmpDirWrapper;
 use crate::{GlobalSettings, compare_by, print_sorted, sort_by};
+use crate::{Line, Output};
 
 /// Sort files by reading all input into memory, sorting in a single thread, and outputting directly.
 pub fn ext_sort(
@@ -33,9 +34,13 @@ pub fn ext_sort(
     for file in files {
         file?.read_to_end(&mut input)?;
     }
+
     if input.is_empty() {
+        // empty files are sorted to empty like in coreutils
+        print_sorted(iter::empty::<&Line<'_>>(), settings, output)?;
         return Ok(());
     }
+
     let mut chunk = Chunk::try_new(input, |buffer| {
         Ok::<_, Box<dyn uucore::error::UError>>(chunks::parse_into_chunk(
             buffer, separator, settings,

@@ -10,14 +10,13 @@ use std::io::{self, Read};
 use std::num::IntErrorKind;
 
 use os_display::Quotable;
-use thiserror::Error;
 
 use crate::error::{UError, UResult, strip_errno};
 use crate::sum::{
     Blake2b, Blake3, Bsd, CRC32B, Crc, Digest, DigestOutput, DigestWriter, Md5, Sha1, Sha3_224,
     Sha3_256, Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3, SysV,
 };
-use crate::{show_error, translate};
+use crate::{show_error, translate, translate_text};
 
 pub mod compute;
 pub mod validate;
@@ -96,7 +95,10 @@ impl AlgoKind {
     /// Parses an [`AlgoKind`] from a string, only accepting valid cksum
     /// `--algorithm` values.
     pub fn from_cksum(algo: impl AsRef<str>) -> UResult<Self> {
-        use AlgoKind::*;
+        use AlgoKind::{
+            Blake2b, Blake3, Bsd, Crc, Crc32b, Md5, Sha1, Sha2, Sha3, Sha224, Sha256, Sha384,
+            Sha512, Shake128, Shake256, Sm3, Sysv,
+        };
         Ok(match algo.as_ref() {
             ALGORITHM_OPTIONS_SYSV => Sysv,
             ALGORITHM_OPTIONS_BSD => Bsd,
@@ -125,7 +127,7 @@ impl AlgoKind {
 
     /// Parses an algo kind from a string, accepting standalone binary names.
     pub fn from_bin_name(algo: impl AsRef<str>) -> UResult<Self> {
-        use AlgoKind::*;
+        use AlgoKind::{Blake2b, Md5, Sha1, Sha3, Sha224, Sha256, Sha384, Sha512};
         Ok(match algo.as_ref() {
             "md5sum" => Md5,
             "sha1sum" => Sha1,
@@ -142,7 +144,10 @@ impl AlgoKind {
 
     /// Returns a string corresponding to the algorithm kind.
     pub fn to_uppercase(self) -> &'static str {
-        use AlgoKind::*;
+        use AlgoKind::{
+            Blake2b, Blake3, Bsd, Crc, Crc32b, Md5, Sha1, Sha2, Sha3, Sha224, Sha256, Sha384,
+            Sha512, Shake128, Shake256, Sm3, Sysv,
+        };
         match self {
             // Legacy algorithms
             Sysv => "SYSV",
@@ -171,7 +176,10 @@ impl AlgoKind {
 
     /// Returns a string corresponding to the algorithm option in cksum `-a`
     pub fn to_lowercase(self) -> &'static str {
-        use AlgoKind::*;
+        use AlgoKind::{
+            Blake2b, Blake3, Bsd, Crc, Crc32b, Md5, Sha1, Sha2, Sha3, Sha224, Sha256, Sha384,
+            Sha512, Shake128, Shake256, Sm3, Sysv,
+        };
         match self {
             Sysv => "sysv",
             Bsd => "bsd",
@@ -196,8 +204,11 @@ impl AlgoKind {
         }
     }
 
+    /// Legacy algorithms (SYSV, BSD, CRC and CRC32B) print a decimal checksum
+    /// and a size, not a digest. They have no tagged format, and `--check`
+    /// does not support them.
     pub fn is_legacy(self) -> bool {
-        use AlgoKind::*;
+        use AlgoKind::{Bsd, Crc, Crc32b, Sysv};
         matches!(self, Sysv | Bsd | Crc | Crc32b)
     }
 
@@ -242,7 +253,7 @@ impl TryFrom<usize> for ShaLength {
     type Error = ChecksumError;
 
     fn try_from(value: usize) -> Result<Self, Self::Error> {
-        use ShaLength::*;
+        use ShaLength::{Len224, Len256, Len384, Len512};
         match value {
             224 => Ok(Len224),
             256 => Ok(Len256),
@@ -260,12 +271,6 @@ pub struct HashLength {
 }
 
 impl HashLength {
-    #[must_use]
-    #[inline]
-    pub(crate) fn from_bytes(n: usize) -> Self {
-        Self { bit_len: n * 8 }
-    }
-
     #[must_use]
     #[inline]
     pub fn from_bits(n: usize) -> Self {
@@ -383,7 +388,7 @@ impl SizedAlgoKind {
     }
 
     pub fn create_digest(&self) -> Box<dyn Digest + 'static> {
-        use ShaLength::*;
+        use ShaLength::{Len224, Len256, Len384, Len512};
         match self {
             Self::Sysv => Box::new(SysV::default()),
             Self::Bsd => Box::new(Bsd::default()),
@@ -419,66 +424,63 @@ impl SizedAlgoKind {
 
     pub fn bitlen(&self) -> usize {
         match self {
-            Self::Sysv => 512,
+            Self::Sysv | Self::Sm3 => 512,
             Self::Bsd => 1024,
             Self::Crc => 256,
             Self::Crc32b => 32,
             Self::Md5 => 128,
-            Self::Sm3 => 512,
             Self::Sha1 => 160,
-            Self::Sha2(len) => len.as_usize(),
-            Self::Sha3(len) => len.as_usize(),
-            Self::Blake2b(len) => len.as_bits(),
-            Self::Blake3(len) => len.as_bits(),
+            Self::Sha2(len) | Self::Sha3(len) => len.as_usize(),
+            Self::Blake2b(len) | Self::Blake3(len) => len.as_bits(),
             Self::Shake128(len) => len.map_or(Shake128::DEFAULT_BIT_SIZE, HashLength::as_bits),
             Self::Shake256(len) => len.map_or(Shake256::DEFAULT_BIT_SIZE, HashLength::as_bits),
         }
     }
     pub fn is_legacy(&self) -> bool {
-        use SizedAlgoKind::*;
+        use SizedAlgoKind::{Bsd, Crc, Crc32b, Sysv};
         matches!(self, Sysv | Bsd | Crc | Crc32b)
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum ChecksumError {
-    #[error("the --raw option is not supported with multiple files")]
+    #[error("{}", translate!("checksum-error-raw-multiple-files"))]
     RawMultipleFiles,
 
-    #[error("the --{0} option is meaningful only when verifying checksums")]
+    #[error("{}", translate_text!("checksum-error-check-only-flag", "flag" => _0))]
     CheckOnlyFlag(String),
 
     // --length sanitization errors
-    #[error("--length required for {}", .0.quote())]
+    #[error("{}", translate_text!("checksum-error-length-required", "algorithm" => _0.quote()))]
     LengthRequired(String),
-    #[error("invalid length: {}", .0.quote())]
+    #[error("{}", translate_text!("checksum-error-invalid-length", "length" => _0.quote()))]
     InvalidLength(String),
-    #[error("maximum digest length for {} is 512 bits", .0.quote())]
+    #[error("{}", translate_text!("checksum-error-length-too-big-for-blake", "algorithm" => _0.quote()))]
     LengthTooBigForBlake(String),
-    #[error("length is not a multiple of 8")]
+    #[error("{}", translate!("checksum-error-length-not-multiple-of-8"))]
     LengthNotMultipleOf8,
-    #[error("digest length for {} must be 224, 256, 384, or 512", .0.quote())]
+    #[error("{}", translate_text!("checksum-error-invalid-length-for-sha", "algorithm" => _0.quote()))]
     InvalidLengthForSha(String),
-    #[error("--algorithm={0} requires specifying --length 224, 256, 384, or 512")]
+    #[error("{}", translate_text!("checksum-error-length-required-for-sha", "algorithm" => _0))]
     LengthRequiredForSha(String),
-    #[error("--length is only supported with --algorithm blake2b, sha2, or sha3")]
+    #[error("{}", translate!("checksum-error-length-only-for-blake2b-sha2-sha3"))]
     LengthOnlyForBlake2bSha2Sha3,
 
-    #[error("the --binary and --text options are meaningless when verifying checksums")]
+    #[error("{}", translate!("checksum-error-binary-text-conflict"))]
     BinaryTextConflict,
-    #[error("--text mode is only supported with --untagged")]
+    #[error("{}", translate!("checksum-error-text-without-untagged"))]
     TextWithoutUntagged,
-    #[error("the --tag option is meaningless when verifying checksums")]
+    #[error("{}", translate!("checksum-error-tag-check"))]
     TagCheck,
-    #[error("--tag does not support --text mode")]
+    #[error("{}", translate!("checksum-error-text-after-tag"))]
     TextAfterTag,
-    #[error("--check is not supported with --algorithm={{bsd,sysv,crc,crc32b}}")]
+    #[error("{}", translate!("checksum-error-algorithm-not-supported-with-check"))]
     AlgorithmNotSupportedWithCheck,
-    #[error("You cannot combine multiple hash algorithms!")]
+    #[error("{}", translate!("checksum-error-combine-multiple-algorithms"))]
     CombineMultipleAlgorithms,
-    #[error("Needs an algorithm to hash with.\nUse --help for more information.")]
+    #[error("{}", translate!("checksum-error-need-algorithm-to-hash"))]
     NeedAlgorithmToHash,
-    #[error("unknown algorithm: {0}: clap should have prevented this case")]
+    #[error("{}", translate_text!("checksum-error-unknown-algorithm", "algorithm" => _0))]
     UnknownAlgorithm(String),
     #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
     Write(io::Error),
@@ -540,7 +542,7 @@ pub fn digest_reader<T: Read>(
     let output_size = io::copy(reader, &mut digest_writer)? as usize;
     digest_writer.finalize();
 
-    Ok((digest.result(), output_size))
+    Ok((digest.result()?, output_size))
 }
 
 pub enum BlakeLength<'s> {
@@ -553,7 +555,7 @@ pub enum BlakeLength<'s> {
 ///
 /// Note: when the input is a string, validation may print error messages.
 /// Note: when the algo is Blake2b, values that are above 512
-/// (Blake2b::DEFAULT_BIT_SIZE) are errors.
+/// ([`Blake2b::DEFAULT_BIT_SIZE`]) are errors.
 pub fn parse_blake_length(algo: AlgoKind, bit_length: BlakeLength<'_>) -> UResult<HashLength> {
     debug_assert!(matches!(algo, AlgoKind::Blake2b | AlgoKind::Blake3));
 
@@ -660,6 +662,12 @@ pub fn unescape_filename(filename: &[u8]) -> (Vec<u8>, &'static str) {
 
 pub fn escape_filename(filename: &OsStr) -> (String, &'static str) {
     let original = filename.to_string_lossy();
+
+    // On Windows, backslashes are path separators. Normalize them to forward
+    // slashes so that the checksum output is portable across platforms.
+    #[cfg(windows)]
+    let original = original.replace('\\', "/");
+
     let escaped = original
         .replace('\\', "\\\\")
         .replace('\n', "\\n")
@@ -705,7 +713,13 @@ mod tests {
         assert_eq!(prefix, "\\");
 
         let (escaped, prefix) = escape_filename(OsStr::new("test\\file.txt"));
+        #[cfg(windows)]
+        assert_eq!(escaped, "test/file.txt");
+        #[cfg(windows)]
+        assert_eq!(prefix, "");
+        #[cfg(not(windows))]
         assert_eq!(escaped, "test\\\\file.txt");
+        #[cfg(not(windows))]
         assert_eq!(prefix, "\\");
     }
 

@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use uutests::at_and_ucmd;
@@ -75,6 +76,20 @@ fn test_invalid_file() {
 }
 
 #[test]
+fn test_invalid_file_does_not_stop_other_files() {
+    // https://github.com/uutils/coreutils/issues/13131
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("d");
+    at.write("f", "hello\n");
+
+    ucmd.args(&["d", "f"])
+        .fails_with_code(1)
+        .stdout_is("36979     1 f\n")
+        .stderr_is("sum: d: Is a directory\n");
+}
+
+#[test]
 fn test_invalid_metadata() {
     let (_, mut ucmd) = at_and_ucmd!();
 
@@ -106,7 +121,7 @@ fn test_filename_ends_with_slash() {
         .stderr_is("sum: a/: Not a directory\n");
 }
 
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "openbsd")))]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "openbsd")))]
 #[cfg_attr(wasi_runner, ignore)]
 #[test]
 fn test_filename_proc_self_mem() {
@@ -119,4 +134,34 @@ fn test_filename_proc_self_mem() {
     let io = "sum: /proc/self/mem: I/O error\n";
 
     assert!(stderr == input_output || stderr == io);
+}
+
+#[test]
+fn test_repeated_flags_are_accepted() {
+    new_ucmd!()
+        .args(&["-r", "-r"])
+        .pipe_in("hello world\n")
+        .succeeds()
+        .stdout_only("03762     1\n");
+    new_ucmd!()
+        .args(&["-s", "-s"])
+        .pipe_in("hello world\n")
+        .succeeds()
+        .stdout_only("1126 1\n");
+}
+
+#[test]
+fn test_last_of_r_s_wins() {
+    // https://github.com/uutils/coreutils/issues/15986
+    // GNU uses whichever of -r (BSD) and -s (System V) comes last.
+    new_ucmd!()
+        .args(&["-s", "-r"])
+        .pipe_in("hello world\n")
+        .succeeds()
+        .stdout_only("03762     1\n");
+    new_ucmd!()
+        .args(&["-r", "-s"])
+        .pipe_in("hello world\n")
+        .succeeds()
+        .stdout_only("1126 1\n");
 }

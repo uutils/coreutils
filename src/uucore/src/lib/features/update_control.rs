@@ -46,12 +46,13 @@
 //!     }
 //! }
 //! ```
+
 use clap::ArgMatches;
 
 /// Available update mode
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub enum UpdateMode {
-    /// --update=`all`, ``
+    /// --update=`all`, or not given
     #[default]
     All,
     /// --update=`none`

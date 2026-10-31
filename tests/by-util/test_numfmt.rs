@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (paths) gnutest ronna quetta unitless
 
+use rstest::rstest;
 use uutests::new_ucmd;
 
 #[test]
@@ -12,49 +13,106 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+#[rstest]
 // This test failed when fixing #11653.
-// Add a `--` separator to ensure floats are not rounded(it match the gnu pattern).
-#[test]
-fn test_should_not_round_floats() {
-    new_ucmd!()
-        .args(&["--", "0.99", "1.01", "1.1", "1.22", ".1", "-0.1"])
-        .succeeds()
-        .stdout_is("0.99\n1.01\n1.1\n1.22\n0.1\n-0.1\n");
+// Add a `--` separator to ensure floats are not rounded (it matches the gnu pattern).
+#[case::should_not_round_floats(&["--", "0.99", "1.01", "1.1", "1.22", ".1", "-0.1"], "0.99\n1.01\n1.1\n1.22\n0.1\n-0.1\n")]
+#[case::should_preserve_trailing_zeros(&["0.1000", "10.00"], "0.1000\n10.00\n")]
+#[case::from_iec_i_without_suffix_are_bytes(&["--from=iec-i", "1024"], "1024\n")]
+#[case::input_from_free_arguments(&["--from=si", "1K", "1.1M", "0.1G"], "1000\n1100000\n100000000\n")]
+#[case::si_to_iec(&["--from=si", "--to=iec", "15334263563K"], "14T\n")]
+#[case::leading_whitespace_in_free_argument_should_imply_padding(&["--from=auto", "   1Ki"], "  1024\n")]
+#[case::should_calculate_implicit_padding_per_free_argument(&["--from=auto", "   1Ki", "        2K"], "  1024\n      2000\n")]
+#[case::format_implied_range_and_field(&["--from=auto", "--field", "-2,4", "1K 2K 3K 4K 5K 6K"], "1000 2000 3K 4000 5K 6K\n")]
+#[case::should_succeed_if_selected_field_out_of_range(&["--from=auto", "--field", "9", "1K 2K 3K"], "1K 2K 3K\n")]
+#[case::format_selected_field_range(&["--from=auto", "--field", "2-5", "1K 2K 3K 4K 5K 6K"], "1K 2000 3000 4000 5000 6K\n")]
+#[case::should_succeed_if_range_out_of_bounds(&["--from=auto", "--field", "5-10", "1K 2K 3K 4K 5K 6K"], "1K 2K 3K 4K 5000 6000\n")]
+#[case::to_unitless_small_values_use_display_rounding(&["--to=si", "--", "0.4", "0.5", "0.6", "1.4", "3.14", "-0.4", "-0.5", "-0.6", "-1.4"], "0\n0\n1\n1\n3\n-0\n-0\n-1\n-1\n")]
+#[case::invalid_arg_number_with_ignore_returns_status_0(&["--invalid=ignore", "4Q"], "4Q\n")]
+#[case::from_unit(&["--from-unit=512", "4"], "2048\n")]
+#[case::to_unit(&["--to-unit=512", "2048"], "4\n")]
+#[case::format(&["--format=--%f--", "50"], "--50--\n")]
+#[case::format_with_separate_value(&["--format", "--%f--", "50"], "--50--\n")]
+#[case::format_padding_with_prefix_and_suffix(&["--format=--%6f--", "50"], "--    50--\n")]
+#[case::format_negative_padding_with_prefix_and_suffix(&["--format=--%-6f--", "50"], "--50    --\n")]
+#[case::format_with_format_padding_overriding_padding_option(&["--format=%6f", "--padding=10", "1234"], "  1234\n")]
+#[case::format_with_format_padding_overriding_implicit_padding(&["--format=%6f", "      1234"], "  1234\n")]
+#[case::format_with_negative_format_padding_and_suffix(&["--format=%-6f", "1234 ?"], "1234   ?\n")]
+#[case::format_with_zero_padding_and_padding_option(&["--format=%06f", "--padding=8", "1234"], "  001234\n")]
+#[case::format_with_zero_padding_and_negative_padding_option(&["--format=%06f", "--padding=-8", "1234"], "001234  \n")]
+#[case::format_with_zero_padding_and_implicit_padding(&["--format=%06f", "    1234"], "  001234\n")]
+#[case::format_with_zero_padding_and_suffix(&["--format=%06f", "1234 ?"], "001234 ?\n")]
+// https://github.com/uutils/coreutils/issues/11653
+// GNU rejects `-9923868` as an invalid short option (leading `-9`) and
+// requires `--` separator; uutils accepts it as a negative positional number.
+#[case::numfmt_negative_after_double_dash_ok(&["--to=iec", "--", "-8765432"], "-8.4M\n")]
+// https://github.com/uutils/coreutils/issues/11654
+// uutils parses large integers through f64, losing precision past 2^53.
+#[case::large_integer_precision_loss_issue_11654(&["--from=iec", "9153396227555392131"], "9153396227555392131\n")]
+// https://github.com/uutils/coreutils/issues/11663
+// `--from-unit` multiplication with fractional input rounds to an integer;
+// GNU preserves the fractional digits.
+#[case::from_unit_fractional_precision_issue_11663(&["--from=iec", "--from-unit=959", "--", "-615484.454"], "-590249591.386\n")]
+// https://github.com/uutils/coreutils/issues/11664
+// Zero-padded `--format` places padding zeros before the sign for negative
+// numbers; GNU (and C printf) puts the sign first.
+#[case::zero_pad_sign_order_issue_11664(&["--from=none", "--format=%018.2f", "--", "-9869647"], "-00000009869647.00\n")]
+#[case::to_unit_prefix_selection(&["--to=iec-i", "--to-unit=885", "100000"], "113\n")]
+// https://github.com/uutils/coreutils/issues/11667
+// `--format='%.0f'` with `--to=<scale>` still prints one fractional digit;
+// the precision specifier `.0` is ignored.
+#[case::format_precision_zero_with_to_scale_issue_11667(&["--to=iec", "--format=%.0f", "5183776"], "5M\n")]
+// https://github.com/uutils/coreutils/issues/11937
+// numfmt: --format width accounting diverges from GNU for multi-byte --suffix
+#[case::multibyte_suffix_issue11937(&["--suffix=€", "--format=%10.2f", "692"], "   692.00€\n")]
+#[case::float_precision_greater_than_16bits(&["--to=iec", "--format=%.65536f", "1"], "1\n")]
+#[case::float_precision_greater_than_16bits_without_scaling(&["--format=%.65536f", "1.5"], "2\n")]
+#[case::float_precision_greater_than_16bits_with_suffix(&["--to=si", "--format=%.65536f", "1000000"], "1M\n")]
+// https://github.com/uutils/coreutils/issues/13272
+// argument following `--header` must not be interpreted as the option's value
+#[case::header_detached(&["--header", "1", "2"], "1\n2\n")]
+fn test_numfmt_args(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!().args(args).succeeds().stdout_only(expected);
 }
 
-#[test]
-fn test_should_preserve_trailing_zeros() {
+#[rstest]
+#[case::from_si(&["--from=si"], "1000\n1.1M\n0.1G", "1000\n1100000\n100000000")]
+#[case::from_iec(&["--from=iec"], "1024\n1.1M\n0.1G", "1024\n1153434\n107374183")]
+#[case::from_iec_i(&["--from=iec-i"], "1.1Mi\n0.1Gi", "1153434\n107374183")]
+#[case::from_auto(&["--from=auto"], "1K\n1Ki", "1000\n1024")]
+#[case::to_si(&["--to=si"], "1000\n1100000\n100000000", "1.0k\n1.1M\n100M")]
+#[case::to_iec(&["--to=iec"], "1024\n1153434\n107374182", "1.0K\n1.2M\n103M")]
+#[case::to_iec_i(&["--to=iec-i"], "1024\n1153434\n107374182", "1.0Ki\n1.2Mi\n103Mi")]
+#[case::padding(&["--from=si", "--padding=8"], "1K\n1.1M\n0.1G", "    1000\n 1100000\n100000000")]
+#[case::negative_padding(&["--from=si", "--padding=-8"], "1K\n1.1M\n0.1G", "1000    \n1100000 \n100000000")]
+#[case::unit_separator_hyphen_leading_as_separate_arg(&["--to=si", "--unit-separator", "-"], "1000\n", "1.0-k\n")]
+#[case::header(&["--from=si", "--header=2"], "header\nheader2\n1K\n1.1M\n0.1G", "header\nheader2\n1000\n1100000\n100000000")]
+#[case::header_default(&["--from=si", "--header"], "header\n1K\n1.1M\n0.1G", "header\n1000\n1100000\n100000000")]
+#[case::normalize(&["--from=si", "--to=si"], "10000000K\n0.001K", "10G\n1")]
+#[case::should_convert_only_first_number_in_line(&["--from=auto"], "1Ki 2M 3G", "1024 2M 3G")]
+#[case::should_calculate_implicit_padding_per_line(&["--from=auto"], "   1Ki\n        2K", "  1024\n      2000")]
+#[case::delimiter_only(&["-d", ","], "1234,56", "1234,56")]
+#[case::line_is_field_with_no_delimiter(&["-d,", "--to=iec"], "123456", "121K")]
+#[case::delimiter_to_si(&["-d=,", "--to=si"], "1234,56", "1.3k,56")]
+#[case::delimiter_skips_leading_whitespace(&["-d=,", "--to=si"], "     \t               1234,56", "1.3k,56")]
+#[case::delimiter_preserves_leading_whitespace_in_unselected_fields(&["-d=|", "--to=si"], "             1000|   2000", "1.0k|   2000")]
+#[case::delimiter_from_si(&["-d=,", "--from=si"], "1.2K,56", "1200,56")]
+#[case::delimiter_with_padding(&["-d=|", "--to=si", "--padding=5"], "1000|2000", " 1.0k|2000")]
+#[case::delimiter_with_padding_and_fields(&["-d=|", "--to=si", "--padding=5", "--field=-"], "1000|2000", " 1.0k| 2.0k")]
+#[case::suffix_is_added_if_not_supplied(&["--suffix=TEST"], "1000", "1000TEST")]
+#[case::suffix_is_preserved(&["--suffix=TEST"], "1000TEST", "1000TEST")]
+#[case::suffix_is_only_applied_to_selected_field(&["--suffix=TEST", "--field=2"], "1000 2000 3000", "1000 2000TEST 3000")]
+#[case::transform_with_suffix_on_input(&["--suffix=b", "--to=si"], "2000b", "2.0kb")]
+#[case::transform_without_suffix_on_input(&["--suffix=b", "--to=si"], "2000", "2.0kb")]
+#[case::transform_with_suffix_and_delimiter(&["--suffix=b", "--to=si", "-d=|"], "1000b|2000|3000", "1.0kb|2000|3000")]
+#[case::suffix_with_padding(&["--suffix=pad", "--padding=12"], "1000 2000 3000", "     1000pad 2000 3000")]
+#[case::invalid_stdin_number_with_ignore_returns_status_0(&["--invalid=ignore"], "4Q", "4Q")]
+fn test_numfmt_stdin(#[case] args: &[&str], #[case] input: &str, #[case] expected: &str) {
     new_ucmd!()
-        .args(&["0.1000", "10.00"])
+        .args(args)
+        .pipe_in(input)
         .succeeds()
-        .stdout_is("0.1000\n10.00\n");
-}
-
-#[test]
-fn test_from_si() {
-    new_ucmd!()
-        .args(&["--from=si"])
-        .pipe_in("1000\n1.1M\n0.1G")
-        .succeeds()
-        .stdout_is("1000\n1100000\n100000000");
-}
-
-#[test]
-fn test_from_iec() {
-    new_ucmd!()
-        .args(&["--from=iec"])
-        .pipe_in("1024\n1.1M\n0.1G")
-        .succeeds()
-        .stdout_is("1024\n1153434\n107374183");
-}
-
-#[test]
-fn test_from_iec_i() {
-    new_ucmd!()
-        .args(&["--from=iec-i"])
-        .pipe_in("1.1Mi\n0.1Gi")
-        .succeeds()
-        .stdout_is("1153434\n107374183");
+        .stdout_only(expected);
 }
 
 #[test]
@@ -74,91 +132,60 @@ fn test_from_iec_fails_if_i_suffix() {
 }
 
 #[test]
-fn test_from_iec_i_without_suffix_are_bytes() {
+fn test_negative_padding_as_separate_arg() {
+    // A negative padding value passed as its own argument (not attached
+    // with `=`) must not be mistaken for a new, unrecognized flag.
     new_ucmd!()
-        .args(&["--from=iec-i", "1024"])
-        .succeeds()
-        .stdout_is("1024\n");
-}
-
-#[test]
-fn test_from_auto() {
-    new_ucmd!()
-        .args(&["--from=auto"])
-        .pipe_in("1K\n1Ki")
-        .succeeds()
-        .stdout_is("1000\n1024");
-}
-
-#[test]
-fn test_to_si() {
-    new_ucmd!()
-        .args(&["--to=si"])
-        .pipe_in("1000\n1100000\n100000000")
-        .succeeds()
-        .stdout_is("1.0k\n1.1M\n100M");
-}
-
-#[test]
-fn test_to_iec() {
-    new_ucmd!()
-        .args(&["--to=iec"])
-        .pipe_in("1024\n1153434\n107374182")
-        .succeeds()
-        .stdout_is("1.0K\n1.2M\n103M");
-}
-
-#[test]
-fn test_to_iec_i() {
-    new_ucmd!()
-        .args(&["--to=iec-i"])
-        .pipe_in("1024\n1153434\n107374182")
-        .succeeds()
-        .stdout_is("1.0Ki\n1.2Mi\n103Mi");
-}
-
-#[test]
-fn test_input_from_free_arguments() {
-    new_ucmd!()
-        .args(&["--from=si", "1K", "1.1M", "0.1G"])
-        .succeeds()
-        .stdout_is("1000\n1100000\n100000000\n");
-}
-
-#[test]
-fn test_padding() {
-    new_ucmd!()
-        .args(&["--from=si", "--padding=8"])
-        .pipe_in("1K\n1.1M\n0.1G")
-        .succeeds()
-        .stdout_is("    1000\n 1100000\n100000000");
-}
-
-#[test]
-fn test_negative_padding() {
-    new_ucmd!()
-        .args(&["--from=si", "--padding=-8"])
+        .args(&["--from=si", "--padding", "-8"])
         .pipe_in("1K\n1.1M\n0.1G")
         .succeeds()
         .stdout_is("1000    \n1100000 \n100000000");
 }
 
 #[test]
-fn test_header() {
+fn test_suffix_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading suffix value passed as its own argument (not
+    // attached with `=`) must not be mistaken for a new, unrecognized
+    // flag.
     new_ucmd!()
-        .args(&["--from=si", "--header=2"])
-        .pipe_in("header\nheader2\n1K\n1.1M\n0.1G")
+        .args(&["--suffix", "-x"])
+        .pipe_in("5\n")
         .succeeds()
-        .stdout_is("header\nheader2\n1000\n1100000\n100000000");
+        .stdout_is("5-x\n");
 }
 
 #[test]
-fn test_header_default() {
+fn test_delimiter_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading delimiter value passed as its own argument (not
+    // attached with `-d-x`/`=`) must not be mistaken for a new,
+    // unrecognized flag.
     new_ucmd!()
-        .args(&["--from=si", "--header"])
-        .pipe_in("header\n1K\n1.1M\n0.1G")
-        .succeeds()
-        .stdout_is("header\n1000\n1100000\n100000000");
+        .args(&["-d", "-x", "--field=1"])
+        .fails()
+        .stderr_contains("the delimiter must be a single character");
+}
+
+#[test]
+fn test_unit_size_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading unit size passed as its own argument must reach
+    // our own validation instead of being read as an unknown flag.
+    for opt in ["--from-unit", "--to-unit"] {
+        new_ucmd!()
+            .args(&[opt, "-1"])
+            .fails()
+            .stderr_contains("invalid unit size: '-1'");
+    }
+}
+
+#[test]
+fn test_unit_hyphen_leading_as_separate_arg() {
+    // Same for the --from/--to units.
+    for opt in ["--from", "--to"] {
+        new_ucmd!()
+            .args(&[opt, "-x"])
+            .fails()
+            .stderr_contains("invalid argument '-x' for '--");
+    }
 }
 
 #[test]
@@ -186,6 +213,26 @@ fn test_header_error_if_negative() {
 }
 
 #[test]
+fn test_reject_leading_plus_and_scientific_notation() {
+    // GNU numfmt rejects a leading '+' as an invalid number and rejects scientific
+    // notation as an invalid suffix; Rust's parsers accept both, so guard against it.
+    for input in ["+5", "+5K", "+1e-3"] {
+        new_ucmd!()
+            .arg("--from=auto")
+            .pipe_in(format!("{input}\n"))
+            .fails_with_code(2)
+            .stderr_is(format!("numfmt: invalid number: '{input}'\n"));
+    }
+    for input in ["1e-3", "1e+3", "5e-5", "1.0e-2", "-1e-5"] {
+        new_ucmd!()
+            .arg("--from=auto")
+            .pipe_in(format!("{input}\n"))
+            .fails_with_code(2)
+            .stderr_is(format!("numfmt: invalid suffix in input: '{input}'\n"));
+    }
+}
+
+#[test]
 fn test_negative() {
     new_ucmd!()
         .args(&["--from=si"])
@@ -207,29 +254,22 @@ fn test_negative_zero() {
         .stdout_is("0\n0.0");
 }
 
+// A negative number that rounds to zero prints an unsigned zero.
+#[rstest]
+#[case::round_up_format_precision(&["--round=up", "--format=%.0f", "--", "-0.3"], "0\n")]
+#[case::to_unit_round_nearest(&["--to-unit=10", "--round=nearest", "--", "-3"], "0\n")]
+#[case::zero_padded(&["--round=up", "--format=%05.0f", "--", "-0.3"], "00000\n")]
+#[case::fractional_precision(&["--round=nearest", "--format=%.1f", "--", "-0.04"], "0.0\n")]
+fn test_negative_number_rounded_to_zero(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!().args(args).succeeds().stdout_only(expected);
+}
+
 #[test]
 fn test_no_op() {
     new_ucmd!()
         .pipe_in("1024\n1234567")
         .succeeds()
         .stdout_is("1024\n1234567");
-}
-
-#[test]
-fn test_normalize() {
-    new_ucmd!()
-        .args(&["--from=si", "--to=si"])
-        .pipe_in("10000000K\n0.001K")
-        .succeeds()
-        .stdout_is("10G\n1");
-}
-
-#[test]
-fn test_si_to_iec() {
-    new_ucmd!()
-        .args(&["--from=si", "--to=iec", "15334263563K"])
-        .succeeds()
-        .stdout_is("14T\n");
 }
 
 #[test]
@@ -344,15 +384,6 @@ fn test_should_skip_leading_space_from_stdin() {
 }
 
 #[test]
-fn test_should_convert_only_first_number_in_line() {
-    new_ucmd!()
-        .args(&["--from=auto"])
-        .pipe_in("1Ki 2M 3G")
-        .succeeds()
-        .stdout_is("1024 2M 3G");
-}
-
-#[test]
 fn test_leading_whitespace_should_imply_padding() {
     new_ucmd!()
         .args(&["--from=auto"])
@@ -365,31 +396,6 @@ fn test_leading_whitespace_should_imply_padding() {
         .pipe_in("    202Ki")
         .succeeds()
         .stdout_is("   206848");
-}
-
-#[test]
-fn test_should_calculate_implicit_padding_per_line() {
-    new_ucmd!()
-        .args(&["--from=auto"])
-        .pipe_in("   1Ki\n        2K")
-        .succeeds()
-        .stdout_is("  1024\n      2000");
-}
-
-#[test]
-fn test_leading_whitespace_in_free_argument_should_imply_padding() {
-    new_ucmd!()
-        .args(&["--from=auto", "   1Ki"])
-        .succeeds()
-        .stdout_is("  1024\n");
-}
-
-#[test]
-fn test_should_calculate_implicit_padding_per_free_argument() {
-    new_ucmd!()
-        .args(&["--from=auto", "   1Ki", "        2K"])
-        .succeeds()
-        .stdout_is("  1024\n      2000\n");
 }
 
 #[test]
@@ -432,6 +438,60 @@ fn test_format_selected_field() {
 }
 
 #[test]
+fn test_field_with_multibyte_whitespace_separator() {
+    // A multibyte Unicode whitespace separator (U+3000) before a selected field
+    // is normalized to a single space rather than sliced mid-character.
+    new_ucmd!()
+        .args(&["--field", "2", "1　2"])
+        .succeeds()
+        .stdout_only("1 2\n");
+
+    new_ucmd!()
+        .args(&["--from=auto", "--field", "2"])
+        .pipe_in("1K\u{3000}2K\n")
+        .succeeds()
+        .stdout_only("1K 2000\n");
+}
+
+// https://github.com/uutils/coreutils/issues/15552
+#[test]
+fn test_first_blank_between_fields_is_written_as_space_issue15552() {
+    // The first blank after a field is written as a space, the others as they are.
+    for (args, input, expected) in [
+        (&[][..], "1\t2\n", "1 2\n"),
+        (&[], "1\t2\t3\n", "1 2 3\n"),
+        (&[], "1\t\t2\n", "1 \t2\n"),
+        (&[], "1 \t2\n", "1 \t2\n"),
+        (&[], "1\t2\t\n", "1 2 \n"),
+        (&["--to=si"], "1000\t2\n", "1.0k 2\n"),
+        (&["--field=2", "--to=si"], "1000\t2000\n", "1000 2.0k\n"),
+        (&["--field=-", "--to=si"], "1000\t2000\n", "1.0k 2.0k\n"),
+        // blanks before the first field are kept
+        (&[], "  1\t 2000\n", "  1  2000\n"),
+        (&["--field=2"], "\t1\t2\n", "\t1 2\n"),
+        // an invalid line is echoed with the same blanks
+        (&["--invalid=ignore"], "a\tb\n", "a b\n"),
+        (&["--invalid=ignore"], "a\t\tb\n", "a \tb\n"),
+        // an explicit delimiter leaves the input alone
+        (&["-d\t"], "1\t2\n", "1\t2\n"),
+        (&["-d\t", "--invalid=ignore"], "a\t\tb\n", "a\t\tb\n"),
+    ] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(expected);
+    }
+
+    new_ucmd!()
+        .args(&["--invalid=warn"])
+        .pipe_in("a\tb\n")
+        .succeeds()
+        .stdout_is("a b\n")
+        .stderr_is("numfmt: invalid number: 'a'\n");
+}
+
+#[test]
 fn test_format_selected_fields() {
     new_ucmd!()
         .args(&["--from=auto", "--field", "1,4,3", "1K 2K 3K 4K 5K 6K"])
@@ -445,30 +505,6 @@ fn test_format_selected_fields() {
 }
 
 #[test]
-fn test_format_implied_range_and_field() {
-    new_ucmd!()
-        .args(&["--from=auto", "--field", "-2,4", "1K 2K 3K 4K 5K 6K"])
-        .succeeds()
-        .stdout_only("1000 2000 3K 4000 5K 6K\n");
-}
-
-#[test]
-fn test_should_succeed_if_selected_field_out_of_range() {
-    new_ucmd!()
-        .args(&["--from=auto", "--field", "9", "1K 2K 3K"])
-        .succeeds()
-        .stdout_only("1K 2K 3K\n");
-}
-
-#[test]
-fn test_format_selected_field_range() {
-    new_ucmd!()
-        .args(&["--from=auto", "--field", "2-5", "1K 2K 3K 4K 5K 6K"])
-        .succeeds()
-        .stdout_only("1K 2000 3000 4000 5000 6K\n");
-}
-
-#[test]
 fn test_format_all_fields() {
     let all_fields_patterns = vec!["-", "-,3", "3,-", "1,-,3", "- 3"];
 
@@ -478,14 +514,6 @@ fn test_format_all_fields() {
             .succeeds()
             .stdout_only("1000 2000 3000 4000 5000 6000\n");
     }
-}
-
-#[test]
-fn test_should_succeed_if_range_out_of_bounds() {
-    new_ucmd!()
-        .args(&["--from=auto", "--field", "5-10", "1K 2K 3K 4K 5K 6K"])
-        .succeeds()
-        .stdout_only("1K 2K 3K 4K 5000 6000\n");
 }
 
 #[test]
@@ -526,84 +554,12 @@ fn test_delimiter_must_not_be_more_than_one_character() {
 }
 
 #[test]
-fn test_delimiter_only() {
-    new_ucmd!()
-        .args(&["-d", ","])
-        .pipe_in("1234,56")
-        .succeeds()
-        .stdout_only("1234,56");
-}
-
-#[test]
-fn test_line_is_field_with_no_delimiter() {
-    new_ucmd!()
-        .args(&["-d,", "--to=iec"])
-        .pipe_in("123456")
-        .succeeds()
-        .stdout_only("121K");
-}
-
-#[test]
-fn test_delimiter_to_si() {
-    new_ucmd!()
-        .args(&["-d=,", "--to=si"])
-        .pipe_in("1234,56")
-        .succeeds()
-        .stdout_only("1.3k,56");
-}
-
-#[test]
-fn test_delimiter_skips_leading_whitespace() {
-    new_ucmd!()
-        .args(&["-d=,", "--to=si"])
-        .pipe_in("     \t               1234,56")
-        .succeeds()
-        .stdout_only("1.3k,56");
-}
-
-#[test]
-fn test_delimiter_preserves_leading_whitespace_in_unselected_fields() {
-    new_ucmd!()
-        .args(&["-d=|", "--to=si"])
-        .pipe_in("             1000|   2000")
-        .succeeds()
-        .stdout_only("1.0k|   2000");
-}
-
-#[test]
-fn test_delimiter_from_si() {
-    new_ucmd!()
-        .args(&["-d=,", "--from=si"])
-        .pipe_in("1.2K,56")
-        .succeeds()
-        .stdout_only("1200,56");
-}
-
-#[test]
 fn test_delimiter_overrides_whitespace_separator() {
     new_ucmd!()
         .args(&["-d,"])
         .pipe_in("1 234,56")
         .fails()
         .stderr_is("numfmt: invalid suffix in input: '1 234'\n");
-}
-
-#[test]
-fn test_delimiter_with_padding() {
-    new_ucmd!()
-        .args(&["-d=|", "--to=si", "--padding=5"])
-        .pipe_in("1000|2000")
-        .succeeds()
-        .stdout_only(" 1.0k|2000");
-}
-
-#[test]
-fn test_delimiter_with_padding_and_fields() {
-    new_ucmd!()
-        .args(&["-d=|", "--to=si", "--padding=5", "--field=-"])
-        .pipe_in("1000|2000")
-        .succeeds()
-        .stdout_only(" 1.0k| 2.0k");
 }
 
 #[test]
@@ -632,16 +588,6 @@ fn test_round() {
             .succeeds()
             .stdout_only(exp.join("\n") + "\n");
     }
-}
-
-#[test]
-fn test_to_unitless_small_values_use_display_rounding() {
-    new_ucmd!()
-        .args(&[
-            "--to=si", "--", "0.4", "0.5", "0.6", "1.4", "3.14", "-0.4", "-0.5", "-0.6", "-1.4",
-        ])
-        .succeeds()
-        .stdout_only("0\n0\n1\n1\n3\n-0\n-0\n-1\n-1\n");
 }
 
 #[test]
@@ -689,69 +635,6 @@ fn test_to_unit_with_unitless_small_value_uses_display_rounding() {
 }
 
 #[test]
-fn test_suffix_is_added_if_not_supplied() {
-    new_ucmd!()
-        .args(&["--suffix=TEST"])
-        .pipe_in("1000")
-        .succeeds()
-        .stdout_only("1000TEST");
-}
-
-#[test]
-fn test_suffix_is_preserved() {
-    new_ucmd!()
-        .args(&["--suffix=TEST"])
-        .pipe_in("1000TEST")
-        .succeeds()
-        .stdout_only("1000TEST");
-}
-
-#[test]
-fn test_suffix_is_only_applied_to_selected_field() {
-    new_ucmd!()
-        .args(&["--suffix=TEST", "--field=2"])
-        .pipe_in("1000 2000 3000")
-        .succeeds()
-        .stdout_only("1000 2000TEST 3000");
-}
-
-#[test]
-fn test_transform_with_suffix_on_input() {
-    new_ucmd!()
-        .args(&["--suffix=b", "--to=si"])
-        .pipe_in("2000b")
-        .succeeds()
-        .stdout_only("2.0kb");
-}
-
-#[test]
-fn test_transform_without_suffix_on_input() {
-    new_ucmd!()
-        .args(&["--suffix=b", "--to=si"])
-        .pipe_in("2000")
-        .succeeds()
-        .stdout_only("2.0kb");
-}
-
-#[test]
-fn test_transform_with_suffix_and_delimiter() {
-    new_ucmd!()
-        .args(&["--suffix=b", "--to=si", "-d=|"])
-        .pipe_in("1000b|2000|3000")
-        .succeeds()
-        .stdout_only("1.0kb|2000|3000");
-}
-
-#[test]
-fn test_suffix_with_padding() {
-    new_ucmd!()
-        .args(&["--suffix=pad", "--padding=12"])
-        .pipe_in("1000 2000 3000")
-        .succeeds()
-        .stdout_only("     1000pad 2000 3000");
-}
-
-#[test]
 fn test_invalid_stdin_number_returns_status_2() {
     new_ucmd!().pipe_in("hello").fails_with_code(2);
 }
@@ -773,15 +656,6 @@ fn test_invalid_stdin_number_with_warn_returns_status_0() {
         .succeeds()
         .stdout_is("4Q")
         .stderr_is("numfmt: rejecting suffix in input: '4Q' (consider using --from)\n");
-}
-
-#[test]
-fn test_invalid_stdin_number_with_ignore_returns_status_0() {
-    new_ucmd!()
-        .args(&["--invalid=ignore"])
-        .pipe_in("4Q")
-        .succeeds()
-        .stdout_only("4Q");
 }
 
 #[test]
@@ -810,14 +684,6 @@ fn test_invalid_arg_number_with_warn_returns_status_0() {
         .succeeds()
         .stdout_is("4Q\n")
         .stderr_is("numfmt: rejecting suffix in input: '4Q' (consider using --from)\n");
-}
-
-#[test]
-fn test_invalid_arg_number_with_ignore_returns_status_0() {
-    new_ucmd!()
-        .args(&["--invalid=ignore", "4Q"])
-        .succeeds()
-        .stdout_only("4Q\n");
 }
 
 #[test]
@@ -860,25 +726,15 @@ fn test_invalid_padding_value() {
 }
 
 #[test]
-fn test_from_unit() {
-    new_ucmd!()
-        .args(&["--from-unit=512", "4"])
-        .succeeds()
-        .stdout_is("2048\n");
-}
-
-#[test]
-fn test_to_unit() {
-    new_ucmd!()
-        .args(&["--to-unit=512", "2048"])
-        .succeeds()
-        .stdout_is("4\n");
-}
-
-#[test]
 fn test_invalid_unit_size() {
     let commands = vec!["from", "to"];
-    let invalid_sizes = vec!["A", "0", "18446744073709551616"];
+    let invalid_sizes = vec![
+        "A",
+        "0",
+        "18446744073709551616",
+        "18446744073709551615K",
+        "18014398509481984Ki",
+    ];
 
     for command in commands {
         for invalid_size in &invalid_sizes {
@@ -905,62 +761,6 @@ fn test_valid_but_forbidden_suffix() {
 }
 
 #[test]
-fn test_format() {
-    new_ucmd!()
-        .args(&["--format=--%f--", "50"])
-        .succeeds()
-        .stdout_is("--50--\n");
-}
-
-#[test]
-fn test_format_with_separate_value() {
-    new_ucmd!()
-        .args(&["--format", "--%f--", "50"])
-        .succeeds()
-        .stdout_is("--50--\n");
-}
-
-#[test]
-fn test_format_padding_with_prefix_and_suffix() {
-    new_ucmd!()
-        .args(&["--format=--%6f--", "50"])
-        .succeeds()
-        .stdout_is("--    50--\n");
-}
-
-#[test]
-fn test_format_negative_padding_with_prefix_and_suffix() {
-    new_ucmd!()
-        .args(&["--format=--%-6f--", "50"])
-        .succeeds()
-        .stdout_is("--50    --\n");
-}
-
-#[test]
-fn test_format_with_format_padding_overriding_padding_option() {
-    new_ucmd!()
-        .args(&["--format=%6f", "--padding=10", "1234"])
-        .succeeds()
-        .stdout_is("  1234\n");
-}
-
-#[test]
-fn test_format_with_format_padding_overriding_implicit_padding() {
-    new_ucmd!()
-        .args(&["--format=%6f", "      1234"])
-        .succeeds()
-        .stdout_is("  1234\n");
-}
-
-#[test]
-fn test_format_with_negative_format_padding_and_suffix() {
-    new_ucmd!()
-        .args(&["--format=%-6f", "1234 ?"])
-        .succeeds()
-        .stdout_is("1234   ?\n");
-}
-
-#[test]
 fn test_format_with_zero_padding() {
     let formats = vec!["%06f", "%0 6f"];
 
@@ -972,36 +772,39 @@ fn test_format_with_zero_padding() {
     }
 }
 
+// GNU zero-pads the number only: "Optional zero (%010f) width will zero pad
+// the number". The unit from --to and the --suffix text stay outside the width.
 #[test]
-fn test_format_with_zero_padding_and_padding_option() {
-    new_ucmd!()
-        .args(&["--format=%06f", "--padding=8", "1234"])
-        .succeeds()
-        .stdout_is("  001234\n");
-}
+fn test_format_with_zero_padding_excludes_unit_suffix() {
+    let cases = [
+        (vec!["--format=%05.1f", "--to=si", "1234567"], "001.3M"),
+        (vec!["--format=%06.1f", "--to=si", "1234"], "0001.3k"),
+        (
+            vec!["--format=%08.1f", "--to=iec-i", "1234567"],
+            "000001.2Mi",
+        ),
+        (
+            vec!["--format=%08.1f", "--to=si", "--", "-1234567"],
+            "-00001.3M",
+        ),
+        (vec!["--format=%03.1f", "--to=si", "1234567"], "1.3M"),
+        (
+            vec!["--format=%05.1f", "--to=si", "--suffix=B", "1234567"],
+            "001.3MB",
+        ),
+        (vec!["--format=%05.1f", "--suffix=B", "1.5"], "001.5B"),
+        (
+            vec!["--format=%08.1f", "--to=si", "--padding=12", "1234567"],
+            "   000001.3M",
+        ),
+    ];
 
-#[test]
-fn test_format_with_zero_padding_and_negative_padding_option() {
-    new_ucmd!()
-        .args(&["--format=%06f", "--padding=-8", "1234"])
-        .succeeds()
-        .stdout_is("001234  \n");
-}
-
-#[test]
-fn test_format_with_zero_padding_and_implicit_padding() {
-    new_ucmd!()
-        .args(&["--format=%06f", "    1234"])
-        .succeeds()
-        .stdout_is("  001234\n");
-}
-
-#[test]
-fn test_format_with_zero_padding_and_suffix() {
-    new_ucmd!()
-        .args(&["--format=%06f", "1234 ?"])
-        .succeeds()
-        .stdout_is("001234 ?\n");
+    for (args, expected) in cases {
+        new_ucmd!()
+            .args(&args)
+            .succeeds()
+            .stdout_only(format!("{expected}\n"));
+    }
 }
 
 #[test]
@@ -1150,6 +953,39 @@ fn test_format_with_invalid_precision() {
 }
 
 #[test]
+fn test_format_error_escapes_special_characters() {
+    // A control character in --format used to be written to stderr verbatim,
+    // which split the error across lines or moved the cursor. Each error that
+    // quotes the format is covered here.
+    let cases = [
+        ("ab\ncd", r"format 'ab\ncd' has no % directive"),
+        ("a\nb%", r"format 'a\nb%' ends in %"),
+        ("a\nb%f%", r"format 'a\nb%f%' has too many % directives"),
+        ("a\tb%f%", r"format 'a\tb%f%' has too many % directives"),
+        ("a\\b%f%", r"format 'a\\b%f%' has too many % directives"),
+        ("a'b%f%", r"format 'a\'b%f%' has too many % directives"),
+        // A space is printable and must stay a space, not become "\ ".
+        ("a b%f%", r"format 'a b%f%' has too many % directives"),
+        (
+            "a\nb%q",
+            r"invalid format 'a\nb%q', directive must be %[0]['][-][N][.][N]f",
+        ),
+        (
+            "a\nb%99999999999999999999f",
+            r"invalid format 'a\nb%99999999999999999999f' (width overflow)",
+        ),
+        ("a\nb%.-f", r"invalid precision in format 'a\nb%.-f'"),
+    ];
+
+    for (invalid_format, expected) in cases {
+        new_ucmd!()
+            .arg(format!("--format={invalid_format}"))
+            .fails_with_code(1)
+            .stderr_contains(expected);
+    }
+}
+
+#[test]
 fn test_format_grouping_conflicts_with_to_option() {
     new_ucmd!()
         .args(&["--format=%'f", "--to=si"])
@@ -1208,6 +1044,28 @@ fn test_zero_terminated_embedded_newline() {
         .succeeds()
         // Newlines get replaced by a single space
         .stdout_is("1000 2000\x003000 4000\x00");
+}
+
+#[test]
+fn test_zero_terminated_initial_newline() {
+    for (args, input, expected) in [
+        // kept before a field that is not converted
+        (&["--field=2"][..], "\n1\n2\x00", "\n1 2\x00"),
+        (&["--field=2"], "\n\n1 2\x00", "\n\n1 2\x00"),
+        (&["--field=2"], "\nabc\n2\x00", "\nabc 2\x00"),
+        (&["--field=2", "--to=si"], "\n1\n2\x00", "\n1 2\x00"),
+        // kept in a line that is echoed because it is invalid
+        (&["--invalid=ignore"], "\nabc\x00", "\nabc\x00"),
+        // padding before a converted field
+        (&["--to=si"], "\n1000\x00", " 1.0k\x00"),
+    ] {
+        new_ucmd!()
+            .arg("-z")
+            .args(args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(expected);
+    }
 }
 
 #[cfg(unix)]
@@ -1415,43 +1273,44 @@ fn test_null_byte_input_multiline() {
 // GNU rejects `-9923868` as an invalid short option (leading `-9`) and
 // requires `--` separator; uutils accepts it as a negative positional number.
 #[test]
-fn test_negative_number_without_double_dash_gnu_compat_issue_11653() {
+fn test_numfmt_negative_treated_as_option() {
     new_ucmd!()
-        .args(&["--to=iec", "-9923868"])
+        .args(&["--to=iec", "-8765432"])
         .fails_with_code(1)
         .stderr_contains("unexpected argument");
-}
-
-// https://github.com/uutils/coreutils/issues/11653
-// GNU rejects `-9923868` as an invalid short option (leading `-9`) and
-// requires `--` separator; uutils accepts it as a negative positional number.
-#[test]
-fn test_negative_number_with_double_dash_gnu_compat_issue_11653() {
-    new_ucmd!()
-        .args(&["--to=iec", "--", "-9923868"])
-        .succeeds()
-        .stdout_is("-9.5M\n");
-}
-
-// https://github.com/uutils/coreutils/issues/11654
-// uutils parses large integers through f64, losing precision past 2^53.
-#[test]
-fn test_large_integer_precision_loss_issue_11654() {
-    new_ucmd!()
-        .args(&["--from=iec", "9153396227555392131"])
-        .succeeds()
-        .stdout_is("9153396227555392131\n");
 }
 
 // https://github.com/uutils/coreutils/issues/11655
 // uutils accepts scientific notation (`1e9`, `5e-3`, ...); GNU rejects it
 // as "invalid suffix in input".
 #[test]
-fn test_scientific_notation_rejected_by_gnu_issue_11655() {
+fn test_numfmt_scientific_notation_rejected() {
     new_ucmd!()
-        .arg("1e9")
+        .arg("2e8")
         .fails_with_code(2)
         .stderr_contains("invalid suffix in input");
+}
+
+// Scientific notation is only rejected in the field being converted; other
+// fields are passed through unchanged, as in GNU.
+#[test]
+fn test_scientific_notation_in_unselected_field_is_kept() {
+    new_ucmd!()
+        .arg("--to=si")
+        .pipe_in("1000 1e3\n")
+        .succeeds()
+        .stdout_only("1.0k 1e3\n");
+
+    new_ucmd!()
+        .args(&["--field=2", "1e3"])
+        .succeeds()
+        .stdout_only("1e3\n");
+
+    new_ucmd!()
+        .args(&["--field=2", "--to=si"])
+        .pipe_in("1e3 5000\n")
+        .succeeds()
+        .stdout_only("1e3 5.0k\n");
 }
 
 #[test]
@@ -1462,52 +1321,62 @@ fn test_to_auto_rejected_at_parse_time() {
         .stderr_contains("invalid argument 'auto' for '--to'");
 }
 
-// https://github.com/uutils/coreutils/issues/11663
-// `--from-unit` multiplication with fractional input rounds to an integer;
-// GNU preserves the fractional digits.
+// `--format=%.0f` with `--to=<scale>` must round the scaled value with the
+// selected `--round` method, instead of first keeping a fractional digit and
+// then rounding that to nearest.
 #[test]
-fn test_from_unit_fractional_precision_issue_11663() {
-    new_ucmd!()
-        .args(&["--from=iec", "--from-unit=959", "--", "-615484.454"])
-        .succeeds()
-        .stdout_is("-590249591.386\n");
-}
+fn test_format_precision_zero_with_to_scale_honors_round_method() {
+    let cases = [
+        (vec!["--to=si", "--format=%.0f", "1234567"], "2M"),
+        (vec!["--to=si", "--format=%.0f", "--", "-1234567"], "-2M"),
+        (vec!["--to=iec", "--format=%.0f", "1234567"], "2M"),
+        (
+            vec!["--to=si", "--format=%.0f", "--round=up", "1234567"],
+            "2M",
+        ),
+        (
+            vec!["--to=si", "--format=%.0f", "--round=down", "1934567"],
+            "1M",
+        ),
+        (
+            vec!["--to=si", "--format=%.0f", "--round=nearest", "1234567"],
+            "1M",
+        ),
+        (
+            vec![
+                "--to=si",
+                "--format=%.0f",
+                "--round=towards-zero",
+                "1934567",
+            ],
+            "1M",
+        ),
+        // rounding carries into the next suffix
+        (vec!["--to=si", "--format=%.0f", "999999"], "1M"),
+        (vec!["--to=iec", "--format=%.0f", "1048575"], "1M"),
+        (
+            vec!["--to=si", "--format=%.0f", "--round=nearest", "999999"],
+            "1M",
+        ),
+        (
+            vec!["--to=si", "--format=%.0f", "--round=down", "999999"],
+            "999k",
+        ),
+    ];
 
-// https://github.com/uutils/coreutils/issues/11664
-// Zero-padded `--format` places padding zeros before the sign for negative
-// numbers; GNU (and C printf) puts the sign first.
-#[test]
-fn test_zero_pad_sign_order_issue_11664() {
-    new_ucmd!()
-        .args(&["--from=none", "--format=%018.2f", "--", "-9869647"])
-        .succeeds()
-        .stdout_is("-00000009869647.00\n");
-}
-
-#[test]
-fn test_to_unit_prefix_selection() {
-    new_ucmd!()
-        .args(&["--to=iec-i", "--to-unit=885", "100000"])
-        .succeeds()
-        .stdout_is("113\n");
-}
-
-// https://github.com/uutils/coreutils/issues/11667
-// `--format='%.0f'` with `--to=<scale>` still prints one fractional digit;
-// the precision specifier `.0` is ignored.
-#[test]
-fn test_format_precision_zero_with_to_scale_issue_11667() {
-    new_ucmd!()
-        .args(&["--to=iec", "--format=%.0f", "5183776"])
-        .succeeds()
-        .stdout_is("5M\n");
+    for (args, expected) in cases {
+        new_ucmd!()
+            .args(&args)
+            .succeeds()
+            .stdout_only(format!("{expected}\n"));
+    }
 }
 
 #[test]
 fn test_invalid_utf8_input() {
     // 0xFF is invalid UTF-8
     new_ucmd!()
-        .pipe_in([b'1', b'0', b'\n', b'\xFF'])
+        .pipe_in(*b"10\n\xFF")
         .fails_with_code(2)
         .stdout_is("10\n")
         .stderr_is("numfmt: invalid number: '\\377'\n");
@@ -1618,30 +1487,11 @@ fn test_si_format_precision_no_cap() {
         .stdout_is("1.23457M\n");
 }
 
-// https://github.com/uutils/coreutils/issues/11937
-// numfmt: --format width accounting diverges from GNU for multi-byte --suffix
-#[test]
-fn test_multibyte_suffix_issue11937() {
-    new_ucmd!()
-        .args(&["--suffix=€", "--format=%10.2f", "692"])
-        .succeeds()
-        .stdout_is("   692.00€\n");
-}
-
-#[test]
-fn test_float_precision_greater_than_16bits() {
-    new_ucmd!()
-        .args(&["--to=iec", "--format=%.65536f", "1"])
-        .succeeds()
-        .stdout_is("1\n");
-}
-
 #[test]
 fn test_format_precision_too_large_on_zero() {
     new_ucmd!()
         .args(&["--format=%.40f", "0"])
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_only(
             "numfmt: value/precision too large to be printed: '0e+0/40' (consider using --to)\n",
         );
@@ -1651,12 +1501,610 @@ fn test_format_precision_too_large_on_zero() {
         .stdout_only("0.000000000000000000\n");
 }
 
-// https://github.com/uutils/coreutils/issues/13272
-// argument following `--header` must not be interpreted as the option's value
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_bad_directive() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--format=%q", "1000"])
+            .fails_with_code(1);
+
+        // The whole report: the `numfmt: ` prefix of the plain form, the
+        // argument list echoed back, a caret on the `q` inside `--format=%q`,
+        // and the format syntax advice.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid format '%q', directive must be %[0]['][-][N][.][N]f
+   ╭─[ numfmt:1:18 ]
+   │
+ 1 │ numfmt --format=%q 1000
+   │                  ┬
+   │                  ╰── f is the only conversion numfmt has; %d, %e, %g and the other C conversions are not accepted
+   │
+   │ Help: a format is [PREFIX]%[0]['][-][WIDTH][.PRECISION]f[SUFFIX], as in \"%'-10.2f\"
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_stray_percent() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--format=%f%", "1000"])
+            .fails_with_code(1);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: format '%f%' has too many % directives
+   ╭─[ numfmt:1:19 ]
+   │
+ 1 │ numfmt --format=%f% 1000
+   │                   ┬
+   │                   ╰── a literal % must be written %%
+   │
+   │ Help: a format is [PREFIX]%[0]['][-][WIDTH][.PRECISION]f[SUFFIX], as in \"%'-10.2f\"
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_the_oversized_precision() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--format=%.88888888888888888888f", "1000"])
+            .fails_with_code(1);
+
+        // The underline covers the whole run of digits, not one character.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid precision in format '%.88888888888888888888f'
+   ╭─[ numfmt:1:19 ]
+   │
+ 1 │ numfmt --format=%.88888888888888888888f 1000
+   │                   ──────────┬─────────
+   │                             ╰─────────── this number is too large
+   │
+   │ Help: a format is [PREFIX]%[0]['][-][WIDTH][.PRECISION]f[SUFFIX], as in \"%'-10.2f\"
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_marks_a_format_without_a_directive() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--format=qwe", "1000"])
+            .fails_with_code(1);
+
+        // Nothing inside is wrong on its own, so the whole format is marked.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: format 'qwe' has no % directive
+   ╭─[ numfmt:1:17 ]
+   │
+ 1 │ numfmt --format=qwe 1000
+   │                 ───
+   │
+   │ Help: a format is [PREFIX]%[0]['][-][WIDTH][.PRECISION]f[SUFFIX], as in \"%'-10.2f\"
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_an_unknown_unit() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--from=xyz", "1000"])
+            .fails_with_code(1);
+
+        // The value is wrong as a whole, so it is underlined as a whole and
+        // the help lists what --from would have taken instead.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid argument 'xyz' for '--from'
+   ╭─[ numfmt:1:15 ]
+   │
+ 1 │ numfmt --from=xyz 1000
+   │               ───
+   │
+   │ Help: --from and --to take none, si, iec or iec-i, and --from also takes auto
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_says_auto_belongs_to_from() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--to", "auto", "1000"])
+            .fails_with_code(1);
+
+        // 'auto' exists, it is just not a unit --to can scale to; the label
+        // says so rather than leaving the help to imply it is unknown.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid argument 'auto' for '--to'
+   ╭─[ numfmt:1:13 ]
+   │
+ 1 │ numfmt --to auto 1000
+   │             ──┬─
+   │               ╰─── auto guesses the unit of the input, so only --from takes it
+   │
+   │ Help: --from and --to take none, si, iec or iec-i, and --from also takes auto
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_an_unknown_unit_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--from-unit=Q", "1000"])
+            .fails_with_code(1);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid unit size: 'Q'
+   ╭─[ numfmt:1:20 ]
+   │
+ 1 │ numfmt --from-unit=Q 1000
+   │                    ─
+   │
+   │ Help: a unit size is a number, a K, M, G, T, P or E multiplier, or both, as in 512, K or 2Ki
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_says_a_unit_size_cannot_be_zero() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--to-unit", "0", "1000"])
+            .fails_with_code(1);
+
+        // A zero is spelled like a valid size, so the label says what the
+        // syntax in the help cannot.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid unit size: '0'
+   ╭─[ numfmt:1:18 ]
+   │
+ 1 │ numfmt --to-unit 0 1000
+   │                  ┬
+   │                  ╰── a unit size must be at least 1
+   │
+   │ Help: a unit size is a number, a K, M, G, T, P or E multiplier, or both, as in 512, K or 2Ki
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_says_why_a_zero_padding_is_refused() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--padding=0", "1000"])
+            .fails_with_code(1);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid padding value '0'
+   ╭─[ numfmt:1:18 ]
+   │
+ 1 │ numfmt --padding=0 1000
+   │                  ┬
+   │                  ╰── a padding is a width in characters, so 0 asks for nothing
+   │
+   │ Help: --padding takes a non-zero whole number; a negative one left-aligns, as in --padding=-10
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_a_header_count() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--header=x", "1000"])
+            .fails_with_code(1);
+
+        // Nothing about 'x' is worth a label the message does not already
+        // carry, so the caret is bare and the help says what is taken.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid header value 'x'
+   ╭─[ numfmt:1:17 ]
+   │
+ 1 │ numfmt --header=x 1000
+   │                 ─
+   │
+   │ Help: --header takes the number of leading lines to pass through unchanged, at least 1
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_suffix_of_a_bad_number() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--to=si", "12abc"])
+            .fails_with_code(2);
+
+        // The number numfmt could read is left alone; the caret starts where
+        // it stopped.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid suffix in input: '12abc'
+   ╭─[ numfmt:1:18 ]
+   │
+ 1 │ numfmt --to=si 12abc
+   │                  ───
+   │
+   │ Help: without --from a number must be plain; --from=auto reads a K, M or Gi suffix
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_marks_an_input_that_is_not_a_number() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["abc"])
+            .fails_with_code(2);
+
+        // Nothing of it parsed, so all of it is marked, and advice about
+        // suffixes would be beside the point.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid number: 'abc'
+   ╭─[ numfmt:1:8 ]
+   │
+ 1 │ numfmt abc
+   │        ───
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_i_a_unit_does_not_take() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--from=si", "1Ki"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid suffix in input '1Ki': 'i'
+   ╭─[ numfmt:1:20 ]
+   │
+ 1 │ numfmt --from=si 1Ki
+   │                    ─
+   │
+   │ Help: the suffixes are K, M, G, T, P, E, Z, Y, R and Q, with an optional i under --from=auto or iec-i
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_input_from_stdin_keeps_its_plain_message() {
+        // There is no command line to point at, so the message stays as it is.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .pipe_in("12abc\n")
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_str().trim_end(),
+            "numfmt: invalid suffix in input: '12abc'"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_a_line_of_fields_keeps_its_plain_message() {
+        // The failure is inside one field of the argument; the offsets are of
+        // the whole line, so no caret is drawn.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--field=2", "x 12abc"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_str().trim_end(),
+            "numfmt: invalid suffix in input: '12abc'"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_other_option_errors_keep_their_plain_message() {
+        // The format is fine; the failure is elsewhere and must not be
+        // decorated with a caret into --format. The pseudo-terminal turns the
+        // newline into CRLF, hence the trim.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--format=%f", "--delimiter=ab", "1000"])
+            .fails_with_code(1);
+
+        assert_eq!(
+            result.stderr_str().trim_end(),
+            "numfmt: the delimiter must be a single character"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_ignores_another_option_with_the_same_value() {
+        // --delimiter carries the same text as --format; the caret must land
+        // inside --format, not the option that merely shares its suffix.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--delimiter=%q", "--format=%q", "1000"])
+            .fails_with_code(1);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid format '%q', directive must be %[0]['][-][N][.][N]f
+   ╭─[ numfmt:1:33 ]
+   │
+ 1 │ numfmt --delimiter=%q --format=%q 1000
+   │                                 ┬
+   │                                 ╰── f is the only conversion numfmt has; %d, %e, %g and the other C conversions are not accepted
+   │
+   │ Help: a format is [PREFIX]%[0]['][-][WIDTH][.PRECISION]f[SUFFIX], as in \"%'-10.2f\"
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_marks_a_whitespace_only_number() {
+        // There is no number to point past, so the whitespace is marked whole
+        // rather than the two ends of it crossing.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&[" "])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid number: ''
+   ╭─[ numfmt:1:9 ]
+   │
+ 1 │ numfmt ' '
+   │         ─
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_ignores_an_option_value_with_the_number_text() {
+        // --suffix takes a detached `q`, the same text as the operand; the
+        // caret must land on the operand, not on the value that precedes it.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--suffix", "q", "--from", "si", "q"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid number: ''
+   ╭─[ numfmt:1:29 ]
+   │
+ 1 │ numfmt --suffix q --from si q
+   │                             ─
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_says_nothing_about_suffixes_without_a_number() {
+        // A lone sign is the start of a number but not one yet, so advice about
+        // what may follow a number does not apply.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--from=si", "--", "-"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid number: '-'
+   ╭─[ numfmt:1:21 ]
+   │
+ 1 │ numfmt --from=si -- -
+   │                     ─
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_names_no_conversion_when_the_format_has_none() {
+        // Nothing stands where the conversion belongs, so there is no
+        // conversion to name — only a directive that never ends.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--format=%10", "1000"])
+            .fails_with_code(1);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid format '%10', directive must be %[0]['][-][N][.][N]f
+   ╭─[ numfmt:1:17 ]
+   │
+ 1 │ numfmt --format=%10 1000
+   │                 ───
+   │
+   │ Help: a format is [PREFIX]%[0]['][-][WIDTH][.PRECISION]f[SUFFIX], as in \"%'-10.2f\"
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_leaves_the_suffix_out_of_the_bad_conversion() {
+        // What follows the conversion would have been a valid suffix, so only
+        // the character standing in for `f` is underlined.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--format=%d bytes", "1000"])
+            .fails_with_code(1);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid format '%d bytes', directive must be %[0]['][-][N][.][N]f
+   ╭─[ numfmt:1:19 ]
+   │
+ 1 │ numfmt '--format=%d bytes' 1000
+   │                   ┬
+   │                   ╰── f is the only conversion numfmt has; %d, %e, %g and the other C conversions are not accepted
+   │
+   │ Help: a format is [PREFIX]%[0]['][-][WIDTH][.PRECISION]f[SUFFIX], as in \"%'-10.2f\"
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_blames_the_suffix_not_the_zero_in_a_unit_size() {
+        // `0x` fails on the unknown `x`, not on the zero, so the label about a
+        // size of at least 1 would be beside the point.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--from-unit=0x", "1"])
+            .fails_with_code(1);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid unit size: '0x'
+   ╭─[ numfmt:1:20 ]
+   │
+ 1 │ numfmt --from-unit=0x 1
+   │                    ──
+   │
+   │ Help: a unit size is a number, a K, M, G, T, P or E multiplier, or both, as in 512, K or 2Ki
+───╯"
+        );
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        // The test harness pipes stderr, so the report must not appear.
+        new_ucmd!()
+            .args(&["--format=%q", "1000"])
+            .fails_with_code(1)
+            .stderr_only("numfmt: invalid format '%q', directive must be %[0]['][-][N][.][N]f\n");
+    }
+}
+
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod field_diagnostics {
+    use super::*;
+
+    #[test]
+    fn test_snippet_points_at_the_inverted_field_range() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--field", "1,3-2", "--to=si", "1"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("numfmt:1:18"), "{stderr}");
+        assert!(
+            stderr.contains("this range ends before it starts"),
+            "{stderr}"
+        );
+    }
+
+    #[test]
+    fn test_snippet_points_at_the_zero_field() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--field=0", "--to=si", "1"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("numfmt:1:16"), "{stderr}");
+        assert!(stderr.contains("fields are numbered from 1"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["--field=0", "--to=si", "1"])
+            .fails_with_code(1)
+            .stderr_contains("range '0' was invalid: fields and positions are numbered from 1");
+    }
+}
+
+#[cfg(target_os = "linux")]
 #[test]
-fn test_header_detached() {
+fn test_write_error_is_reported_and_fatal() {
+    // A full output device must be diagnosed, not panic, whatever --invalid says.
+    for extra in [&["--to=si"][..], &["--invalid=ignore"][..]] {
+        let mut ucmd = new_ucmd!();
+        ucmd.args(extra)
+            .pipe_in("81920\n4096\n1024\n")
+            .set_stdout(std::fs::File::create("/dev/full").unwrap())
+            .fails_with_code(1)
+            .stderr_is("numfmt: write error: No space left on device\n");
+    }
+}
+
+#[test]
+fn test_repeated_option_last_one_wins() {
     new_ucmd!()
-        .args(&["--header", "1", "2"])
+        .args(&["--to=si", "--to=si", "1000"])
         .succeeds()
-        .stdout_is("1\n2\n");
+        .stdout_only("1.0k\n");
+    new_ucmd!()
+        .args(&["--to=si", "--to=iec", "2000"])
+        .succeeds()
+        .stdout_only("2.0K\n");
+}
+
+#[test]
+fn test_repeated_field_is_an_error() {
+    new_ucmd!()
+        .args(&["--field=1", "--field=1", "1000"])
+        .fails_with_code(1)
+        .stderr_only("numfmt: multiple field specifications\n");
 }

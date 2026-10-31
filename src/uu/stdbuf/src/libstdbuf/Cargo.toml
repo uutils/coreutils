@@ -10,15 +10,14 @@ categories.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 name = "stdbuf"
 path = "src/libstdbuf.rs"
 crate-type = ["cdylib"]
-test = false
 
 [dependencies]
 ctor = { workspace = true }
 libc = { workspace = true }
+
+[lints]
+workspace = true

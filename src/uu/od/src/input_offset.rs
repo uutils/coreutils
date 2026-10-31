@@ -2,6 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+use std::fmt;
 use std::io::{self, Write};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -48,16 +50,7 @@ impl InputOffset {
 
     /// returns a string with the current byte offset
     pub fn format_byte_offset(&self) -> String {
-        match (self.radix, self.label) {
-            (Radix::Decimal, None) => format!("{:07}", self.byte_pos),
-            (Radix::Decimal, Some(l)) => format!("{:07} ({l:07})", self.byte_pos),
-            (Radix::Hexadecimal, None) => format!("{:06x}", self.byte_pos),
-            (Radix::Hexadecimal, Some(l)) => format!("{:06x} ({l:06x})", self.byte_pos),
-            (Radix::Octal, None) => format!("{:07o}", self.byte_pos),
-            (Radix::Octal, Some(l)) => format!("{:07o} ({l:07o})", self.byte_pos),
-            (Radix::NoPrefix, None) => String::new(),
-            (Radix::NoPrefix, Some(l)) => format!("({l:07o})"),
-        }
+        self.to_string()
     }
 
     /// Prints the byte offset followed by a newline, or nothing at all if
@@ -67,6 +60,22 @@ impl InputOffset {
             writeln!(writer, "{}", self.format_byte_offset())?;
         }
         Ok(())
+    }
+}
+
+/// Writes the current byte offset, as [`InputOffset::format_byte_offset`] returns it.
+impl fmt::Display for InputOffset {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match (self.radix, self.label) {
+            (Radix::Decimal, None) => write!(f, "{:07}", self.byte_pos),
+            (Radix::Decimal, Some(l)) => write!(f, "{:07} ({l:07})", self.byte_pos),
+            (Radix::Hexadecimal, None) => write!(f, "{:06x}", self.byte_pos),
+            (Radix::Hexadecimal, Some(l)) => write!(f, "{:06x} ({l:06x})", self.byte_pos),
+            (Radix::Octal, None) => write!(f, "{:07o}", self.byte_pos),
+            (Radix::Octal, Some(l)) => write!(f, "{:07o} ({l:07o})", self.byte_pos),
+            (Radix::NoPrefix, None) => Ok(()),
+            (Radix::NoPrefix, Some(l)) => write!(f, "({l:07o})"),
+        }
     }
 }
 

@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore incorrectnumber
+
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
@@ -50,12 +52,18 @@ fn test_nproc_all_omp() {
     assert_eq!(nproc, nproc_omp);
 
     // clamp overflow
-    #[cfg(target_pointer_width = "64")]
+    // The wasm guest is always a 32-bit target regardless of the host's
+    // pointer width, so it clamps to u32::MAX there instead of u64::MAX.
+    #[cfg(any(target_pointer_width = "64", wasi_runner))]
     TestScenario::new(util_name!())
         .ucmd()
         .env("OMP_NUM_THREADS", "99999999999999999999")
         .succeeds()
-        .stdout_only("18446744073709551615\n");
+        .stdout_only(if cfg!(wasi_runner) {
+            "4294967295\n"
+        } else {
+            "18446744073709551615\n"
+        });
 }
 
 #[test]

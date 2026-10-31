@@ -3,16 +3,17 @@
 Unit tests for the GNU test results comparison script.
 """
 
-import unittest
 import json
-import tempfile
 import os
-from unittest.mock import patch
+import tempfile
+import unittest
 from io import StringIO
+from unittest.mock import patch
+
 from util.compare_test_results import (
     flatten_test_results,
-    load_ignore_list,
     identify_test_changes,
+    load_ignore_list,
     main,
 )
 

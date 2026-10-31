@@ -3,12 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars ioerrdir
+
+use rstest::rstest;
 #[cfg(unix)]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::vec_of_size;
 
-// spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars ioerrdir
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
@@ -59,148 +61,31 @@ fn test_stdin_explicit() {
         .stdout_is("     13     109     772 -\n");
 }
 
-#[test]
-fn test_utf8() {
+#[rstest]
+#[case::utf8(&["-lwmcL"], "UTF_8_test.txt", "    303    2178   22457   23025      79\n")]
+#[case::utf8_words(&["-w"], "UTF_8_weirdchars.txt", "89\n")]
+#[case::utf8_line_length_words(&["-Lw"], "UTF_8_weirdchars.txt", "     89      48\n")]
+#[case::utf8_line_length_chars(&["-Lm"], "UTF_8_weirdchars.txt", "    442      48\n")]
+#[case::utf8_line_length_chars_words(&["-Lmw"], "UTF_8_weirdchars.txt", "     89     442      48\n")]
+#[case::utf8_chars(&["-m"], "UTF_8_weirdchars.txt", "442\n")]
+#[case::utf8_bytes_chars(&["-cm"], "UTF_8_weirdchars.txt", "    442     513\n")]
+#[case::utf8_bytes_lines(&["-cl"], "UTF_8_weirdchars.txt", "     25     513\n")]
+#[case::utf8_bytes_chars_lines(&["-cml"], "UTF_8_weirdchars.txt", "     25     442     513\n")]
+#[case::utf8_chars_words(&["-mw"], "UTF_8_weirdchars.txt", "     89     442\n")]
+#[case::utf8_line_length_lines(&["-Ll"], "UTF_8_weirdchars.txt", "     25      48\n")]
+#[case::utf8_line_length_lines_words(&["-Llw"], "UTF_8_weirdchars.txt", "     25      89      48\n")]
+#[case::utf8_lines_chars(&["-ml"], "UTF_8_weirdchars.txt", "     25     442\n")]
+#[case::utf8_lines_words_chars(&["-mlw"], "UTF_8_weirdchars.txt", "     25      89     442\n")]
+#[case::utf8_line_length_lines_chars(&["-Llm"], "UTF_8_weirdchars.txt", "     25     442      48\n")]
+#[case::utf8_all(&["-lwmcL"], "UTF_8_weirdchars.txt", "     25      89     442     513      48\n")]
+#[case::stdin_only_bytes(&["-c"], "lorem_ipsum.txt", "772\n")]
+#[case::stdin_all_counts(&["-c", "-m", "-l", "-L", "-w"], "alice_in_wonderland.txt", "      5      57     302     302      66\n")]
+fn test_wc_fixture(#[case] args: &[&str], #[case] fixture: &str, #[case] expected: &str) {
     new_ucmd!()
-        .args(&["-lwmcL"])
-        .pipe_in_fixture("UTF_8_test.txt")
+        .args(args)
+        .pipe_in_fixture(fixture)
         .succeeds()
-        .stdout_is("    303    2178   22457   23025      79\n");
-}
-
-#[test]
-fn test_utf8_words() {
-    new_ucmd!()
-        .arg("-w")
-        .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .succeeds()
-        .stdout_is("89\n");
-}
-
-#[test]
-fn test_utf8_line_length_words() {
-    new_ucmd!()
-        .arg("-Lw")
-        .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .succeeds()
-        .stdout_is("     89      48\n");
-}
-
-#[test]
-fn test_utf8_line_length_chars() {
-    new_ucmd!()
-        .arg("-Lm")
-        .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .succeeds()
-        .stdout_is("    442      48\n");
-}
-
-#[test]
-fn test_utf8_line_length_chars_words() {
-    new_ucmd!()
-        .arg("-Lmw")
-        .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .succeeds()
-        .stdout_is("     89     442      48\n");
-}
-
-#[test]
-fn test_utf8_chars() {
-    new_ucmd!()
-        .arg("-m")
-        .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .succeeds()
-        .stdout_is("442\n");
-}
-
-#[test]
-fn test_utf8_bytes_chars() {
-    new_ucmd!()
-        .arg("-cm")
-        .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .succeeds()
-        .stdout_is("    442     513\n");
-}
-
-#[test]
-fn test_utf8_bytes_lines() {
-    new_ucmd!()
-        .arg("-cl")
-        .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .succeeds()
-        .stdout_is("     25     513\n");
-}
-
-#[test]
-fn test_utf8_bytes_chars_lines() {
-    new_ucmd!()
-        .arg("-cml")
-        .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .succeeds()
-        .stdout_is("     25     442     513\n");
-}
-
-#[test]
-fn test_utf8_chars_words() {
-    new_ucmd!()
-        .arg("-mw")
-        .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .succeeds()
-        .stdout_is("     89     442\n");
-}
-
-#[test]
-fn test_utf8_line_length_lines() {
-    new_ucmd!()
-        .arg("-Ll")
-        .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .succeeds()
-        .stdout_is("     25      48\n");
-}
-
-#[test]
-fn test_utf8_line_length_lines_words() {
-    new_ucmd!()
-        .arg("-Llw")
-        .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .succeeds()
-        .stdout_is("     25      89      48\n");
-}
-
-#[test]
-fn test_utf8_lines_chars() {
-    new_ucmd!()
-        .arg("-ml")
-        .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .succeeds()
-        .stdout_is("     25     442\n");
-}
-
-#[test]
-fn test_utf8_lines_words_chars() {
-    new_ucmd!()
-        .arg("-mlw")
-        .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .succeeds()
-        .stdout_is("     25      89     442\n");
-}
-
-#[test]
-fn test_utf8_line_length_lines_chars() {
-    new_ucmd!()
-        .arg("-Llm")
-        .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .succeeds()
-        .stdout_is("     25     442      48\n");
-}
-
-#[test]
-fn test_utf8_all() {
-    new_ucmd!()
-        .arg("-lwmcL")
-        .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .succeeds()
-        .stdout_is("     25      89     442     513      48\n");
+        .stdout_only(expected);
 }
 
 #[test]
@@ -213,63 +98,36 @@ fn test_ascii_control() {
         .stdout_is("1\n");
 }
 
-#[test]
-fn test_stdin_line_len_regression() {
+#[rstest]
+#[case::stdin_line_len_regression(&["-L"], "\n123456", "6\n")]
+#[case::files0_from_with_stdin(&["--files0-from=-"], "lorem_ipsum.txt", "13 109 772 lorem_ipsum.txt\n")]
+fn test_wc_stdin(#[case] args: &[&str], #[case] input: &str, #[case] expected: &str) {
     new_ucmd!()
-        .args(&["-L"])
-        .pipe_in("\n123456")
+        .args(args)
+        .pipe_in(input)
         .succeeds()
-        .stdout_is("6\n");
+        .stdout_only(expected);
 }
 
-#[test]
-fn test_stdin_only_bytes() {
-    new_ucmd!()
-        .args(&["-c"])
-        .pipe_in_fixture("lorem_ipsum.txt")
-        .succeeds()
-        .stdout_is("772\n");
-}
-
-#[test]
-fn test_stdin_all_counts() {
-    new_ucmd!()
-        .args(&["-c", "-m", "-l", "-L", "-w"])
-        .pipe_in_fixture("alice_in_wonderland.txt")
-        .succeeds()
-        .stdout_is("      5      57     302     302      66\n");
-}
-
-#[test]
-fn test_single_default() {
-    new_ucmd!()
-        .arg("moby_dick.txt")
-        .succeeds()
-        .stdout_is("  18  204 1115 moby_dick.txt\n");
-}
-
-#[test]
-fn test_single_only_lines() {
-    new_ucmd!()
-        .args(&["-l", "moby_dick.txt"])
-        .succeeds()
-        .stdout_is("18 moby_dick.txt\n");
-}
-
-#[test]
-fn test_single_only_bytes() {
-    new_ucmd!()
-        .args(&["-c", "lorem_ipsum.txt"])
-        .succeeds()
-        .stdout_is("772 lorem_ipsum.txt\n");
-}
-
-#[test]
-fn test_single_all_counts() {
-    new_ucmd!()
-        .args(&["-c", "-l", "-L", "-m", "-w", "alice_in_wonderland.txt"])
-        .succeeds()
-        .stdout_is("  5  57 302 302  66 alice_in_wonderland.txt\n");
+#[rstest]
+#[case::single_default(&["moby_dick.txt"], "  18  204 1115 moby_dick.txt\n")]
+#[case::single_only_lines(&["-l", "moby_dick.txt"], "18 moby_dick.txt\n")]
+#[case::single_only_bytes(&["-c", "lorem_ipsum.txt"], "772 lorem_ipsum.txt\n")]
+#[case::single_all_counts(&["-c", "-l", "-L", "-m", "-w", "alice_in_wonderland.txt"], "  5  57 302 302  66 alice_in_wonderland.txt\n")]
+// Test for an empty file.
+#[case::file_empty(&["-clmwL", "emptyfile.txt"], "0 0 0 0 0 emptyfile.txt\n")]
+// Test for a file containing a single non-whitespace character
+// *without* a trailing newline.
+#[case::file_single_line_no_trailing_newline(&["-clmwL", "notrailingnewline.txt"], "1 1 2 2 1 notrailingnewline.txt\n")]
+// Test for a file that has 100 empty lines (that is, the contents of
+// the file are the newline character repeated one hundred times).
+#[case::file_many_empty_lines(&["-clmwL", "manyemptylines.txt"], "100   0 100 100   0 manyemptylines.txt\n")]
+// Test for a file that has one long line comprising only spaces.
+#[case::file_one_long_line_only_spaces(&["-clmwL", "onelongemptyline.txt"], "    1     0 10001 10001 10000 onelongemptyline.txt\n")]
+// Test for a file that has one long line comprising a single "word".
+#[case::file_one_long_word(&["-clmwL", "onelongword.txt"], "    1     1 10001 10001 10000 onelongword.txt\n")]
+fn test_wc_args(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!().args(args).succeeds().stdout_only(expected);
 }
 
 #[cfg(unix)]
@@ -296,8 +154,8 @@ fn test_non_unicode_names() {
         .expect("Only unix platforms can test non-unicode names");
 
     at.mkdir("some-dir1");
-    at.touch(&target1);
-    at.touch(&target2);
+    at.touch(target1);
+    at.touch(target2);
 
     ucmd.args(&[target1, target2]).succeeds().stdout_is_bytes(
         [
@@ -326,53 +184,6 @@ fn test_multiple_default() {
             "   5   57  302 alice in wonderland.txt\n",
             "  41  427 2491 total\n",
         ));
-}
-
-/// Test for an empty file.
-#[test]
-fn test_file_empty() {
-    new_ucmd!()
-        .args(&["-clmwL", "emptyfile.txt"])
-        .succeeds()
-        .stdout_is("0 0 0 0 0 emptyfile.txt\n");
-}
-
-/// Test for an file containing a single non-whitespace character
-/// *without* a trailing newline.
-#[test]
-fn test_file_single_line_no_trailing_newline() {
-    new_ucmd!()
-        .args(&["-clmwL", "notrailingnewline.txt"])
-        .succeeds()
-        .stdout_is("1 1 2 2 1 notrailingnewline.txt\n");
-}
-
-/// Test for a file that has 100 empty lines (that is, the contents of
-/// the file are the newline character repeated one hundred times).
-#[test]
-fn test_file_many_empty_lines() {
-    new_ucmd!()
-        .args(&["-clmwL", "manyemptylines.txt"])
-        .succeeds()
-        .stdout_is("100   0 100 100   0 manyemptylines.txt\n");
-}
-
-/// Test for a file that has one long line comprising only spaces.
-#[test]
-fn test_file_one_long_line_only_spaces() {
-    new_ucmd!()
-        .args(&["-clmwL", "onelongemptyline.txt"])
-        .succeeds()
-        .stdout_is("    1     0 10001 10001 10000 onelongemptyline.txt\n");
-}
-
-/// Test for a file that has one long line comprising a single "word".
-#[test]
-fn test_file_one_long_word() {
-    new_ucmd!()
-        .args(&["-clmwL", "onelongword.txt"])
-        .succeeds()
-        .stdout_is("    1     1 10001 10001 10000 onelongword.txt\n");
 }
 
 /// Test that the total size of all the files in the input dictates
@@ -437,7 +248,7 @@ fn test_read_from_directory_error() {
         // wasi-libc may report a different error string than the host libc
         cmd.stderr_contains("wc: .:");
     } else if cfg!(windows) {
-        cmd.stderr_contains(".: Permission denied").stdout_is("");
+        cmd.stderr_contains(".: Permission denied").no_stdout();
     } else {
         cmd.stderr_contains(".: Is a directory")
             .stdout_is("      0       0       0 .\n");
@@ -505,7 +316,7 @@ fn test_files0_disabled_files_argument() {
         .arg("lorem_ipsum.txt")
         .fails()
         .stderr_contains(MSG)
-        .stdout_is("");
+        .no_stdout();
 }
 
 #[test]
@@ -535,15 +346,6 @@ fn test_files0_from() {
 }
 
 #[test]
-fn test_files0_from_with_stdin() {
-    new_ucmd!()
-        .args(&["--files0-from=-"])
-        .pipe_in("lorem_ipsum.txt")
-        .succeeds()
-        .stdout_is("13 109 772 lorem_ipsum.txt\n");
-}
-
-#[test]
 fn test_files0_from_with_stdin_in_file() {
     new_ucmd!()
         .args(&["--files0-from=files0_list_with_stdin.txt"])
@@ -565,7 +367,7 @@ fn test_files0_from_with_stdin_try_read_from_stdin() {
         .pipe_in("-")
         .fails()
         .stderr_contains(MSG)
-        .stdout_is("");
+        .no_stdout();
 }
 
 #[test]

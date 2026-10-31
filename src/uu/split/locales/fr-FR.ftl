@@ -8,12 +8,12 @@ split-after-help = Sortir des morceaux de taille fixe d'ENTRÉE vers PREFIXEaa, 
 
   CHUNKS peut être:
 
-  - N diviser en N fichiers basé sur la taille de l'entrée
-  - K/N sortir le Kème de N vers stdout
-  - l/N diviser en N fichiers sans diviser les lignes/enregistrements
-  - l/K/N sortir le Kème de N vers stdout sans diviser les lignes/enregistrements
-  - r/N comme 'l' mais utiliser la distribution round robin
-  - r/K/N pareillement mais ne sortir que le Kème de N vers stdout
+    - N diviser en N fichiers basé sur la taille de l'entrée
+    - K/N sortir le Kème de N vers stdout
+    - l/N diviser en N fichiers sans diviser les lignes/enregistrements
+    - l/K/N sortir le Kème de N vers stdout sans diviser les lignes/enregistrements
+    - r/N comme 'l' mais utiliser la distribution round robin
+    - r/K/N pareillement mais ne sortir que le Kème de N vers stdout
 
 # Messages d'erreur
 split-error-suffix-not-parsable = longueur de suffixe invalide : { $value }
@@ -34,7 +34,6 @@ split-error-output-file-suffixes-exhausted = suffixes de fichiers de sortie épu
 split-error-numerical-suffix-start-too-large = la valeur de départ du suffixe numérique est trop grande pour la longueur du suffixe
 split-error-cannot-open-for-reading = impossible d'ouvrir { $file } en lecture
 split-error-would-overwrite-input = { $file } écraserait l'entrée ; abandon
-split-error-cannot-determine-input-size = { $input } : impossible de déterminer la taille de l'entrée
 split-error-cannot-determine-file-size = { $input } : impossible de déterminer la taille du fichier
 split-error-cannot-read-from-input = { $input } : impossible de lire depuis l'entrée : { $error }
 split-error-unable-to-open-file = impossible d'ouvrir { $file } ; abandon

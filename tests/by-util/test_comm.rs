@@ -2,11 +2,14 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (words) defaultcheck nocheck helpb helpz nwordb nwordwordz wordtotal
 
-use uutests::new_ucmd;
+use rstest::rstest;
 use uutests::util::TestScenario;
-use uutests::util_name;
+#[cfg(unix)]
+use uutests::util::is_locale_available;
+use uutests::{new_ucmd, util_name};
 
 #[test]
 fn test_invalid_arg() {
@@ -309,7 +312,6 @@ fn zero_terminated_with_total() {
     }
 }
 
-#[ignore = "not implemented"]
 #[test]
 fn check_order() {
     let scene = TestScenario::new(util_name!());
@@ -320,36 +322,66 @@ fn check_order() {
         .ucmd()
         .args(&["--check-order", "bad_order_1", "bad_order_2"])
         .fails()
-        .stdout_is("\t\te")
-        .stderr_is("error to be defined");
+        .stdout_is("\t\te\n")
+        .stderr_is("comm: file 2 is not in sorted order\n");
 }
 
-#[ignore = "not implemented"]
 #[test]
 fn nocheck_order() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.write("bad_order_1", "e\nd\nb\na\n");
     at.write("bad_order_2", "e\nc\nb\na\n");
-    new_ucmd!()
+    scene
+        .ucmd()
         .args(&["--nocheck-order", "bad_order_1", "bad_order_2"])
         .succeeds()
-        .stdout_is("\t\te\n\tc\n\tb\n\ta\nd\nb\na\n");
+        .stdout_is("\t\te\n\tc\n\tb\n\ta\nd\nb\na\n")
+        .no_stderr();
 }
 
 // when neither --check-order nor --no-check-order is provided,
 // stderr and the error code behaves like check order, but stdout
 // behaves like nocheck_order. However with some quirks detailed below.
-#[ignore = "not implemented"]
 #[test]
-fn defaultcheck_order() {
+fn default_check_order() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
+    at.write("a", "a\n");
     at.write("bad_order_1", "e\nd\nb\na\n");
-    new_ucmd!()
+    scene
+        .ucmd()
         .args(&["a", "bad_order_1"])
         .fails()
-        .stderr_only("error to be defined");
+        .stdout_is("a\n\te\n\td\n\tb\n\ta\n")
+        .stderr_is(
+            "comm: file 2 is not in sorted order\n\
+             comm: input is not in sorted order\n",
+        );
+}
+
+// when both --check-order and --nocheck-order are provided,
+// the last one "wins"
+#[test]
+fn check_order_and_nocheck_order() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a", "apple\ncherry\n");
+    at.write("bad_order", "banana\napricot\n");
+
+    scene
+        .ucmd()
+        .args(&["--check-order", "--nocheck-order", "a", "bad_order"])
+        .succeeds()
+        .stdout_only("apple\n\tbanana\n\tapricot\ncherry\n");
+
+    scene
+        .ucmd()
+        .args(&["--nocheck-order", "--check-order", "a", "bad_order"])
+        .fails_with_code(1)
+        .stdout_is("apple\n\tbanana\n")
+        .stderr_is("comm: file 2 is not in sorted order\n");
 }
 
 // * the first: if both files are not in order, the default behavior is the only
@@ -455,17 +487,12 @@ fn test_sorted() {
     let at = &scene.fixtures;
     at.write("comm1", "1\n3");
     at.write("comm2", "3\n2");
-    let cmd = scene.ucmd().args(&["comm1", "comm2"]).run();
-    // WASI's strcoll (C locale only) may not detect unsorted input,
-    // but the comparison output is still correct.
-    if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
-        cmd.success().stdout_is("1\n\t\t3\n\t2\n");
-    } else {
-        cmd.failure()
-            .code_is(1)
-            .stdout_is("1\n\t\t3\n\t2\n")
-            .stderr_is("comm: file 2 is not in sorted order\ncomm: input is not in sorted order\n");
-    }
+    scene
+        .ucmd()
+        .args(&["comm1", "comm2"])
+        .fails_with_code(1)
+        .stdout_is("1\n\t\t3\n\t2\n")
+        .stderr_is("comm: file 2 is not in sorted order\ncomm: input is not in sorted order\n");
 }
 
 #[test]
@@ -492,19 +519,16 @@ fn test_both_inputs_out_of_order() {
     at.write("file_a", "3\n1\n0\n");
     at.write("file_b", "3\n2\n0\n");
 
-    let cmd = scene.ucmd().args(&["file_a", "file_b"]).run();
-    if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
-        cmd.success().stdout_is("\t\t3\n1\n0\n\t2\n\t0\n");
-    } else {
-        cmd.failure()
-            .code_is(1)
-            .stdout_is("\t\t3\n1\n0\n\t2\n\t0\n")
-            .stderr_is(
-                "comm: file 1 is not in sorted order\n\
-                 comm: file 2 is not in sorted order\n\
-                 comm: input is not in sorted order\n",
-            );
-    }
+    scene
+        .ucmd()
+        .args(&["file_a", "file_b"])
+        .fails_with_code(1)
+        .stdout_is("\t\t3\n1\n0\n\t2\n\t0\n")
+        .stderr_is(
+            "comm: file 1 is not in sorted order\n\
+             comm: file 2 is not in sorted order\n\
+             comm: input is not in sorted order\n",
+        );
 }
 
 #[test]
@@ -514,19 +538,16 @@ fn test_both_inputs_out_of_order_last_pair() {
     at.write("file_a", "3\n1\n");
     at.write("file_b", "3\n2\n");
 
-    let cmd = scene.ucmd().args(&["file_a", "file_b"]).run();
-    if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
-        cmd.success().stdout_is("\t\t3\n1\n\t2\n");
-    } else {
-        cmd.failure()
-            .code_is(1)
-            .stdout_is("\t\t3\n1\n\t2\n")
-            .stderr_is(
-                "comm: file 1 is not in sorted order\n\
-                 comm: file 2 is not in sorted order\n\
-                 comm: input is not in sorted order\n",
-            );
-    }
+    scene
+        .ucmd()
+        .args(&["file_a", "file_b"])
+        .fails_with_code(1)
+        .stdout_is("\t\t3\n1\n\t2\n")
+        .stderr_is(
+            "comm: file 1 is not in sorted order\n\
+             comm: file 2 is not in sorted order\n\
+             comm: input is not in sorted order\n",
+        );
 }
 
 #[test]
@@ -585,7 +606,7 @@ fn test_both_inputs_out_of_order_but_identical() {
 fn test_comm_arg_error() {
     let scene = TestScenario::new(util_name!());
 
-    // Test extra argument error case from GNU test
+    // Test extra argument error case
     scene
         .ucmd()
         .args(&["a", "b", "no-such"])
@@ -594,7 +615,7 @@ fn test_comm_arg_error() {
         .stderr_contains("error: unexpected argument 'no-such' found")
         .stderr_contains("Usage: comm [OPTION]... FILE1 FILE2")
         .stderr_contains("For more information, try '--help'.");
-    // Test extra argument error case from GNU test
+    // Test extra argument error case
     scene
         .ucmd()
         .args(&["a"])
@@ -686,6 +707,7 @@ fn test_output_lossy_utf8() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_comm_anonymous_pipes() {
+    use std::fmt::Write as _;
     use std::{io::Write, os::fd::AsRawFd, process};
 
     let scene = TestScenario::new(util_name!());
@@ -701,7 +723,7 @@ fn test_comm_anonymous_pipes() {
     // write 1500 lines into comm1: 00000\n00001\n...01500\n
     let mut content = String::new();
     for i in 0..1500 {
-        content.push_str(&format!("{i:05}\n"));
+        let _ = writeln!(content, "{i:05}");
     }
     assert!(comm1_writer.write_all(content.as_bytes()).is_ok());
     drop(comm1_writer);
@@ -739,6 +761,51 @@ fn test_read_error() {
 }
 
 #[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+fn test_locale_collation() {
+    // In a UTF-8 locale the collation puts `a1` before `a-b` and the byte order
+    // puts them the other way round. Reading a file `sort` produced with a byte
+    // comparison rejects it as unsorted and drops the line the two files share.
+    let locale = "en_US.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("f1", "a1\na-b\n");
+    scene.fixtures.write("f2", "a-b\n");
+
+    scene
+        .ucmd()
+        .env("LC_ALL", locale)
+        .args(&["-12", "f1", "f2"])
+        .succeeds()
+        .stdout_only("a-b\n");
+
+    scene
+        .ucmd()
+        .env("LC_ALL", locale)
+        .args(&["-23", "f1", "f2"])
+        .succeeds()
+        .stdout_only("a1\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_c_locale_still_orders_by_bytes() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("f1", "a-b\na1\n");
+    scene.fixtures.write("f2", "a-b\n");
+
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .args(&["-12", "f1", "f2"])
+        .succeeds()
+        .stdout_only("a-b\n");
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_comm_write_error_dev_full() {
     use std::fs::OpenOptions;
@@ -750,5 +817,96 @@ fn test_comm_write_error_dev_full() {
         .args(&["a", "a"])
         .set_stdout(dev_full)
         .fails()
-        .stderr_contains("No space left on device");
+        .stderr_is("comm: write error: No space left on device\n");
+}
+
+#[test]
+fn test_identical_unsorted_prefix_no_error() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("f1", "b\na\nc\n");
+    at.write("f2", "b\na\nd\n");
+    scene
+        .ucmd()
+        .args(&["f1", "f2"])
+        .succeeds()
+        .stdout_is("\t\tb\n\t\ta\nc\n\td\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_identical_unsorted_prefix_check_order_fails() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("f1", "b\na\nc\n");
+    at.write("f2", "b\na\nd\n");
+    scene
+        .ucmd()
+        .args(&["--check-order", "f1", "f2"])
+        .fails()
+        .stdout_is("\t\tb\n")
+        .stderr_is("comm: file 1 is not in sorted order\n");
+}
+
+#[test]
+fn test_both_inputs_stdin() {
+    // Both operands read the same standard input, so lines are taken from it
+    // alternately as the comparison advances. This used to hang.
+    new_ucmd!()
+        .args(&["-", "-"])
+        .pipe_in("b\na\nc\nc\n")
+        .timeout(std::time::Duration::from_secs(10))
+        .succeeds()
+        .stdout_is("\ta\nb\n\t\tc\n")
+        .no_stderr();
+}
+
+#[rstest]
+fn test_prefix_lines_remain_sorted(
+    #[values("", "--check-order", "--nocheck-order")] order: &str,
+    #[values(false, true)] reverse: bool,
+    #[values("\n", "\0")] ending: &str,
+) {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("empty");
+    scene
+        .fixtures
+        .write("sorted", &format!("{ending}\t{ending}"));
+    let mut cmd = scene.ucmd();
+    cmd.env("LC_ALL", "C");
+    if !order.is_empty() {
+        cmd.arg(order);
+    }
+    if ending == "\0" {
+        cmd.arg("-z");
+    }
+    let (files, expected) = if reverse {
+        (["sorted", "empty"], format!("{ending}\t{ending}"))
+    } else {
+        (["empty", "sorted"], format!("\t{ending}\t\t{ending}"))
+    };
+    cmd.args(&files).succeeds().stdout_only(expected);
+}
+
+#[rstest]
+fn test_merge_prefix_lines(
+    #[values(false, true)] reverse: bool,
+    #[values(false, true)] terminated: bool,
+    #[values("\n", "\0")] ending: &str,
+) {
+    let scene = TestScenario::new(util_name!());
+    let suffix = if terminated { ending } else { "" };
+    scene.fixtures.write("short", &format!("a{suffix}"));
+    scene.fixtures.write("long", &format!("a\tb{suffix}"));
+    let mut cmd = scene.ucmd();
+    cmd.env("LC_ALL", "C");
+    if ending == "\0" {
+        cmd.arg("-z");
+    }
+    let (files, expected) = if reverse {
+        (["long", "short"], format!("\ta{ending}a\tb{ending}"))
+    } else {
+        (["short", "long"], format!("a{ending}\ta\tb{ending}"))
+    };
+    cmd.args(&files).succeeds().stdout_only(expected);
 }

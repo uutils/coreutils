@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use std::fs;
 use tempfile::tempdir;
 use uutests::new_ucmd;
@@ -62,9 +63,9 @@ fn test_sync_data_but_not_file() {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-#[cfg(feature = "chmod")]
 #[test]
 fn test_sync_no_permission_dir() {
+    use std::os::unix::fs::PermissionsExt as _;
     use uutests::util::TestScenario;
     use uutests::util_name;
 
@@ -72,18 +73,21 @@ fn test_sync_no_permission_dir() {
     let at = &ts.fixtures;
     let dir = "foo";
     at.mkdir_all(dir);
+    let path = at.subdir.as_path().join(dir);
+    let mut perms = fs::metadata(&path).unwrap().permissions();
+    perms.set_mode(0o0);
+    fs::set_permissions(&path, perms).unwrap();
 
-    ts.ccmd("chmod").arg("0").arg(dir).succeeds();
     let result = ts.ucmd().arg("--data").arg(dir).fails();
     result.stderr_contains("sync: error opening 'foo': Permission denied");
     let result = ts.ucmd().arg(dir).fails();
     result.stderr_contains("sync: error opening 'foo': Permission denied");
 }
 
-#[cfg(not(target_os = "windows"))]
-#[cfg(feature = "chmod")]
+#[cfg(not(windows))]
 #[test]
 fn test_sync_no_permission_file() {
+    use std::os::unix::fs::PermissionsExt as _;
     use uutests::util::TestScenario;
     use uutests::util_name;
 
@@ -91,8 +95,11 @@ fn test_sync_no_permission_file() {
     let at = &ts.fixtures;
     let f = "file";
     at.touch(f);
+    let path = at.subdir.as_path().join(f);
+    let mut perms = fs::metadata(&path).unwrap().permissions();
+    perms.set_mode(0o200);
+    fs::set_permissions(&path, perms).unwrap();
 
-    ts.ccmd("chmod").arg("0200").arg(f).succeeds();
     ts.ucmd().arg(f).succeeds();
 }
 
@@ -142,7 +149,7 @@ fn test_sync_fdatasync_error_handling() {
         .stderr_contains("error opening");
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 #[test]
 fn test_sync_syncfs_error_handling_macos() {
     // Test that syncfs properly handles invalid paths on macOS
@@ -177,8 +184,7 @@ fn test_sync_multiple_files() {
 fn test_sync_multiple_nonexistent_files() {
     let result = new_ucmd!().arg("--data").arg("bad1").arg("bad2").fails();
 
-    result.stderr_contains("sync: error opening 'bad1': No such file or directory");
-    result.stderr_contains("sync: error opening 'bad2': No such file or directory");
+    result.stderr_is("sync: error opening 'bad1': No such file or directory\nsync: error opening 'bad2': No such file or directory\n");
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -194,7 +200,7 @@ fn test_sync_data_fifo_fails_immediately() {
 
     ts.ucmd()
         .arg("--data")
-        .arg(at.plus_as_string("test-fifo"))
+        .arg(at.plus("test-fifo"))
         .timeout(Duration::from_secs(2))
         .fails()
         .stderr_contains("error syncing")

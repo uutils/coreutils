@@ -17,7 +17,9 @@ jobs:
 
     runs-on: ubuntu-latest
     if: >
-      github.event.workflow_run.event == 'pull_request'
+      github.event.workflow_run.event == 'pull_request' &&
+      (github.event.workflow_run.conclusion == 'success' ||
+       github.event.workflow_run.conclusion == 'failure')
     steps:
       - name: 'Download artifact'
         uses: actions/github-script@v9
@@ -34,6 +36,10 @@ jobs:
             var matchArtifact = artifacts.data.artifacts.filter((artifact) => {
               return artifact.name == "comment"
             })[0];
+            if (!matchArtifact) {
+              core.info("No comment artifact found; skipping.");
+              return;
+            }
             var download = await github.rest.actions.downloadArtifact({
               owner: context.repo.owner,
               repo: context.repo.repo,

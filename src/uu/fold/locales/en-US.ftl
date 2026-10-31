@@ -5,5 +5,6 @@ fold-bytes-help = count using bytes rather than columns (meaning control charact
 fold-characters-help = count using character positions rather than display columns
 fold-spaces-help = break lines at word boundaries rather than a hard cut-off
 fold-width-help = set WIDTH as the maximum line width rather than 80
-fold-error-illegal-width = illegal width value
+fold-error-illegal-width = invalid number of columns: { $width }
+fold-error-width-out-of-range = invalid number of columns: { $width }: Numerical result out of range
 fold-error-readline = failed to read line

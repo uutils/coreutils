@@ -59,12 +59,12 @@ od-error-overflow = Numerical result out of range
 od-error-invalid-suffix = invalid suffix in {$option} argument {$value}
 od-error-invalid-argument = invalid {$option} argument {$value}
 od-error-argument-too-large = {$option} argument {$value} too large
-od-error-skip-past-end = tried to skip past end of input
+od-error-skip-past-end = cannot skip past end of combined input
 
 # Help messages
 od-help-help = Print help information.
 od-help-address-radix = Select the base in which file offsets are printed.
-od-help-skip-bytes = Skip bytes input bytes before formatting and writing.
+od-help-skip-bytes = Skip BYTES input bytes before formatting and writing.
 od-help-read-bytes = limit dump to BYTES input bytes
 od-help-endian = byte order to use for multi-byte formats
 od-help-strings = output strings of at least BYTES graphic chars. 3 is assumed when BYTES is not specified.

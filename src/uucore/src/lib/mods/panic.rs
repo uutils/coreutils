@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 //! Custom panic hooks that allow silencing certain types of errors.
 //!
 //! Use the [`mute_sigpipe_panic`] function to silence panics caused by
@@ -13,6 +14,7 @@
 //! $ seq inf | head -n 1
 //! ```
 //!
+
 use std::panic::{self, PanicHookInfo};
 
 /// Decide whether a panic was caused by a broken pipe (SIGPIPE) error.
@@ -43,10 +45,10 @@ pub fn mute_sigpipe_panic() {
 
 /// Preserve inherited SIGPIPE settings from parent process.
 ///
-/// Rust unconditionally sets SIGPIPE to SIG_IGN on startup. This function
+/// Rust unconditionally sets SIGPIPE to `SIG_IGN` on startup. This function
 /// checks if the parent process (e.g., `env --default-signal=PIPE`) intended
-/// for SIGPIPE to be set to default by checking the RUST_SIGPIPE environment
-/// variable. If set to "default", it restores SIGPIPE to SIG_DFL.
+/// for SIGPIPE to be set to default by checking the `RUST_SIGPIPE` environment
+/// variable. If set to "default", it restores SIGPIPE to `SIG_DFL`.
 #[cfg(unix)]
 pub fn preserve_inherited_sigpipe() {
     use nix::libc;

@@ -5,6 +5,15 @@
 
 // spell-checker:ignore (paths) wtmp
 
+#![cfg(any(
+    target_vendor = "apple",
+    target_os = "cygwin",
+    target_os = "freebsd",
+    target_os = "linux",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
+
 use std::ffi::OsString;
 use std::io::{Write, stdout};
 use std::path::Path;
@@ -55,10 +64,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 host: _,
                 time: _,
             } = entry
+                && !user.is_empty()
             {
-                if !user.is_empty() {
-                    users.push(user);
-                }
+                users.push(user);
             }
         }
     };

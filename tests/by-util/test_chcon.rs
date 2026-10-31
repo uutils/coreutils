@@ -2,12 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (jargon) xattributes
+
 #![allow(clippy::missing_errors_doc, clippy::similar_names)]
-#![cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#![cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 
 use std::ffi::CString;
 use std::path::Path;
@@ -52,6 +51,28 @@ fn recursive_errors() {
     ] {
         new_ucmd!().args(args).fails();
     }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn verbose_write_error() {
+    let (at, mut cmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+
+    let result = cmd
+        .args(&["--verbose", "--type=etc_t", "a", "b", "missing"])
+        .set_stdout(dev_full)
+        .fails_with_code(1);
+    result
+        .stderr_contains("write error: No space left on device")
+        .stderr_contains("Accessing failed on 'missing'");
+
+    assert_eq!(result.stderr_str().matches("write error:").count(), 1);
 }
 
 #[test]

@@ -3,8 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf pgrp GETFD pfds revents POLLRDBAND POLLERR
-// spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGDANGER SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGMIGRATE SIGMSG SIGPIPE SIGPRE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTALRM SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVIRT SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VIRT VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX TALRM AIOCANCEL XRES RTMIN RTMAX LTOSTOP
+// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf pgrp GETFD pfds revents POLLRDBAND POLLERR unblockable
+// spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGDANGER SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL KILLTHR SIGMIGRATE SIGMSG SIGPIPE SIGPRE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTALRM SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVIRT SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VIRT VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX TALRM AIOCANCEL XRES RTMIN RTMAX LTOSTOP SIGSIGTERM SIGSIGKILL
 
 //! This module provides a way to handle signals in a platform-independent way.
 //! It provides a way to convert signal names to their corresponding values and vice versa.
@@ -90,6 +90,131 @@ pub static ALL_SIGNALS: [&str; 32] = [
     "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV",
     "SYS", "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "IO",
     "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "INFO", "USR1", "USR2",
+];
+
+// spell-checker: disable
+/*
+
+     The following signals are defined in Haiku:
+     // https://github.com/haiku/haiku/blob/master/headers/posix/signal.h
+
+     SIGHUP           1     hangup -- tty is gone!
+     SIGINT           2     interrupt
+     SIGQUIT          3     `quit' special character typed in tty
+     SIGILL           4     illegal instruction
+     SIGCHLD          5     child process exited
+     SIGABRT          6     abort() called, dont' catch
+     SIGPIPE          7     write to a pipe w/no readers
+     SIGFPE           8     floating point exception
+     SIGKILL          9     kill a team (not catchable)
+     SIGSTOP          10    suspend a thread (not catchable)
+     SIGSEGV          11    segmentation violation (read: invalid pointer)
+     SIGCONT          12    continue execution if suspended
+     SIGTSTP          13    `stop' special character typed in tty
+     SIGALRM          14    an alarm has gone off (see alarm())
+     SIGTERM          15    termination requested
+     SIGTTIN          16    read of tty from bg process
+     SIGTTOU          17    write to tty from bg process
+     SIGUSR1          18    app defined signal 1
+     SIGUSR2          19    app defined signal 2
+     SIGWINCH         20    tty window size changed
+     SIGKILLTHR       21    be specific: kill just the thread, not team
+     SIGTRAP          22    Trace/breakpoint trap
+     SIGPOLL          23    Pollable event
+     SIGPROF          24    Profiling timer expired
+     SIGSYS           25    Bad system call
+     SIGURG           26    High bandwidth data is available at socket
+     SIGVTALRM        27    Virtual timer expired
+     SIGXCPU          28    CPU time limit exceeded
+     SIGXFSZ          29    File size limit exceeded
+     SIGBUS           30    access to undefined portion of a memory object
+     SIGRESERVED1     31    reserved for future use
+     SIGRESERVED2     32    reserved for future use
+*/
+// spell-checker: enable
+
+#[cfg(target_os = "haiku")]
+pub static ALL_SIGNALS: [&str; 33] = [
+    "EXIT",
+    "HUP",
+    "INT",
+    "QUIT",
+    "ILL",
+    "CHLD",
+    "ABRT",
+    "PIPE",
+    "FPE",
+    "KILL",
+    "STOP",
+    "SEGV",
+    "CONT",
+    "TSTP",
+    "ALRM",
+    "TERM",
+    "TTIN",
+    "TTOU",
+    "USR1",
+    "USR2",
+    "WINCH",
+    "KILLTHR",
+    "TRAP",
+    "POLL",
+    "PROF",
+    "SYS",
+    "URG",
+    "VTALRM",
+    "XCPU",
+    "XFSZ",
+    "BUS",
+    "RESERVED1",
+    "RESERVED2",
+];
+
+/*
+
+     The following signals are defined in GNU/Hurd:
+     // https://github.com/sailfishos-mirror/glibc/blob/glibc-2.35/bits/signum-generic.h
+     // https://github.com/sailfishos-mirror/glibc/blob/glibc-2.35/sysdeps/mach/hurd/bits/signum-arch.h
+
+     SIGHUP           1     Hangup.
+     SIGINT           2     Interactive attention signal.
+     SIGQUIT          3     Quit.
+     SIGILL           4     Illegal instruction.
+     SIGTRAP          5     Trace/breakpoint trap.
+     SIGABRT          6     Abnormal termination.
+     SIGEMT           7     Emulator trap (4.2 BSD).
+     SIGFPE           8     Erroneous arithmetic operation.
+     SIGKILL          9     Killed.
+     SIGBUS           10    Bus error.
+     SIGSEGV          11    Invalid access to storage.
+     SIGSYS           12    Bad system call.
+     SIGPIPE          13    Broken pipe.
+     SIGALRM          14    Alarm clock.
+     SIGTERM          15    Termination request.
+     SIGURG           16    Urgent data is available at a socket.
+     SIGSTOP          17    Stop, unblockable.
+     SIGTSTP          18    Keyboard stop.
+     SIGCONT          19    Continue.
+     SIGCHLD          20    Child terminated or stopped.
+     SIGTTIN          21    Background read from control terminal.
+     SIGTTOU          22    Background write to control terminal.
+     SIGPOLL          23    Pollable event occurred (System V).
+     SIGXCPU          24    CPU time limit exceeded.
+     SIGXFSZ          25    File size limit exceeded.
+     SIGVTALRM        26    Virtual timer expired.
+     SIGPROF          27    Profiling timer expired.
+     SIGWINCH         28    Window size change (4.3 BSD, Sun).
+     SIGINFO          29    Information request (4.4 BSD).
+     SIGUSR1          30    User-defined signal 1.
+     SIGUSR2          31    User-defined signal 2.
+     SIGLOST          32    Resource lost (Sun); server died (GNU).
+*/
+
+#[cfg(target_os = "hurd")]
+pub static ALL_SIGNALS: [&str; 33] = [
+    "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV",
+    "SYS", "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "POLL",
+    "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "INFO", "USR1", "USR2", "LOST",
 ];
 
 /*
@@ -392,33 +517,49 @@ pub static ALL_SIGNALS: [&str; 32] = [
     "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "PWR", "USR1", "USR2",
 ];
 
+// Windows has no POSIX signals, but utilities that emulate signal delivery
+// (e.g. `timeout`) accept the POSIX names/numbers so cross-platform scripts
+// keep working. The Linux layout is used so that synthesized `128 + n` exit
+// codes (130, 137, 143, ...) match what such scripts expect.
+#[cfg(windows)]
+pub static ALL_SIGNALS: [&str; 32] = [
+    "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "BUS", "FPE", "KILL", "USR1", "SEGV",
+    "USR2", "PIPE", "ALRM", "TERM", "STKFLT", "CHLD", "CONT", "STOP", "TSTP", "TTIN", "TTOU",
+    "URG", "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "POLL", "PWR", "SYS",
+];
+
 /// Returns the signal number for a given signal name or value.
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     let signal_name_upcase = signal_name_or_value.to_uppercase();
-    if let Ok(value) = signal_name_upcase.parse() {
-        if is_signal(value) {
-            return Some(value);
-        }
+    if let Some(value) = signal_name_upcase.parse().ok().filter(|&v| is_signal(v)) {
+        return Some(value);
     }
-    let signal_name = signal_name_upcase.trim_start_matches("SIG");
+
+    let signal_name = signal_name_upcase
+        .strip_prefix("SIG")
+        .unwrap_or(&signal_name_upcase);
 
     if let Some(pos) = ALL_SIGNALS.iter().position(|&s| s == signal_name) {
         return Some(pos);
     }
 
+    if let Some(value) = signal_alias_value(signal_name) {
+        return Some(value);
+    }
+
     realtime_signal_bounds().and_then(|(rtmin, rtmax)| {
-        if signal_name.starts_with("RTMIN+") {
-            if let Ok(n) = signal_name.trim_start_matches("RTMIN+").parse::<usize>() {
-                let value = rtmin + n;
-                return (value >= rtmin && value <= rtmax).then_some(value);
-            }
+        if let Some(s) = signal_name.strip_prefix("RTMIN+")
+            && let Ok(n) = s.parse::<usize>()
+        {
+            let value = rtmin + n;
+            return (value >= rtmin && value <= rtmax).then_some(value);
         }
 
-        if signal_name.starts_with("RTMAX-") {
-            if let Ok(n) = signal_name.trim_start_matches("RTMAX-").parse::<usize>() {
-                let value = rtmax - n;
-                return (value >= rtmin && value <= rtmax).then_some(value);
-            }
+        if let Some(s) = signal_name.strip_prefix("RTMAX-")
+            && let Ok(n) = s.parse::<usize>()
+        {
+            let value = rtmax - n;
+            return (value >= rtmin && value <= rtmax).then_some(value);
         }
 
         match signal_name {
@@ -427,6 +568,19 @@ pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
             _ => None,
         }
     })
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn signal_alias_value(signal_name: &str) -> Option<usize> {
+    match signal_name {
+        "IO" => Some(libc::SIGIO as usize),
+        _ => None,
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn signal_alias_value(_signal_name: &str) -> Option<usize> {
+    None
 }
 
 /// Returns true if the given number is a valid signal number.
@@ -513,7 +667,7 @@ pub fn signal_list_value_by_name_or_number(spec: &str) -> Option<usize> {
         return Some(value);
     }
 
-    let signal_name = spec_upcase.trim_start_matches("SIG");
+    let signal_name = spec_upcase.strip_prefix("SIG").unwrap_or(&spec_upcase);
     realtime_signal_bounds().and_then(|(rtmin, rtmax)| match signal_name {
         "RTMIN" => Some(rtmin),
         "RTMAX" => Some(rtmax),
@@ -550,7 +704,7 @@ pub fn ignore_interrupts() -> Result<(), Errno> {
 #[cfg(unix)]
 pub fn install_signal_handler(
     sig: i32,
-    handler: extern "C" fn(std::os::raw::c_int),
+    handler: extern "C" fn(core::ffi::c_int),
 ) -> Result<(), Errno> {
     let signal = Signal::try_from(sig).map_err(|_| Errno::EINVAL)?;
     let action = SigAction::new(
@@ -580,10 +734,10 @@ static SIGPIPE_WAS_IGNORED: AtomicBool = AtomicBool::new(false);
 #[cfg(unix)]
 static STARTUP_STATE_WAS_CAPTURED: AtomicBool = AtomicBool::new(false);
 
-/// Captures stdio and SIGPIPE state at process initialization, before main() runs.
+/// Captures stdio and SIGPIPE state at process initialization, before `main()` runs.
 ///
 /// # Safety
-/// Called from `.init_array` before main(). Only reads current state.
+/// Called from `.init_array` before `main()`. Only reads current state.
 #[cfg(unix)]
 #[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn capture_startup_state() {
@@ -627,13 +781,13 @@ pub unsafe extern "C" fn capture_startup_state() {
 #[cfg(unix)]
 macro_rules! init_startup_state_capture {
     () => {
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(target_vendor = "apple"))]
         #[used]
         #[unsafe(link_section = ".init_array")]
         static CAPTURE_STARTUP_STATE: unsafe extern "C" fn() =
             $crate::signals::capture_startup_state;
 
-        #[cfg(target_os = "macos")]
+        #[cfg(target_vendor = "apple")]
         #[used]
         #[unsafe(link_section = "__DATA,__mod_init_func")]
         static CAPTURE_STARTUP_STATE: unsafe extern "C" fn() =
@@ -690,10 +844,8 @@ pub const fn sigpipe_was_ignored() -> bool {
 
 #[cfg(target_os = "linux")]
 pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
-    use nix::{
-        poll::{PollFd, PollFlags, PollTimeout, poll},
-        sys::stat::{SFlag, fstat},
-    };
+    use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
+    use nix::sys::stat::{SFlag, fstat};
     use std::io::stdout;
     use std::os::fd::AsFd;
 
@@ -756,6 +908,14 @@ fn signal_by_long_name() {
 }
 
 #[test]
+fn signal_by_doubled_sig_prefix_is_rejected() {
+    // A doubled "SIG" (e.g. a typo'd "SIGSIGTERM") must not resolve to a real
+    // signal: only one leading "SIG" is ever part of the canonical name.
+    assert_eq!(signal_by_name_or_value("SIGSIGTERM"), None);
+    assert_eq!(signal_list_value_by_name_or_number("SIGSIGKILL"), None);
+}
+
+#[test]
 fn name() {
     for (value, signal) in ALL_SIGNALS.iter().enumerate() {
         assert_eq!(signal_name_by_value(value), Some(signal.to_string()));
@@ -806,6 +966,17 @@ fn linux_realtime_signal_names_resolve_to_runtime_values() {
     assert_eq!(signal_list_value_by_name_or_number("RTMAX"), Some(rtmax));
     assert_eq!(signal_list_value_by_name_or_number("SIGRTMIN"), Some(rtmin));
     assert_eq!(signal_list_value_by_name_or_number("SIGRTMAX"), Some(rtmax));
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn linux_sigio_alias_resolves_to_poll_signal() {
+    let sigio = libc::SIGIO as usize;
+
+    assert_eq!(signal_by_name_or_value("IO"), Some(sigio));
+    assert_eq!(signal_by_name_or_value("SIGIO"), Some(sigio));
+    assert_eq!(signal_list_value_by_name_or_number("IO"), Some(sigio));
+    assert_eq!(signal_list_value_by_name_or_number("SIGIO"), Some(sigio));
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]

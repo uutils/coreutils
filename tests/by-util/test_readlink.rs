@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
+
 // spell-checker:ignore regfile parentdir
 
 use uutests::util::{TestScenario, get_root_path};
@@ -20,7 +20,7 @@ fn test_no_args() {
     new_ucmd!()
         .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("readlink: missing operand");
+        .stderr_contains("the following required arguments were not provided"); // clap provided message
 }
 
 #[test]
@@ -33,12 +33,58 @@ fn test_resolve() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("foo");
-    at.symlink_file("foo", "bar");
+    at.relative_symlink_file("foo", "bar");
 
     ucmd.arg("bar").succeeds().stdout_contains("foo\n");
 }
 
 #[test]
+fn test_keeps_going_after_an_operand_that_cannot_be_read() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("foo");
+    at.relative_symlink_file("foo", "bar");
+    at.touch("baz");
+    at.relative_symlink_file("baz", "qux");
+
+    // GNU prints the links it could read and reports the failure through
+    // the exit status only, so nothing about `nope` stops `qux`.
+    scene
+        .ucmd()
+        .args(&["bar", "nope", "qux"])
+        .fails_with_code(1)
+        .stdout_is("foo\nbaz\n")
+        .no_stderr();
+
+    scene
+        .ucmd()
+        .args(&["-v", "bar", "nope", "qux"])
+        .fails_with_code(1)
+        .stdout_is("foo\nbaz\n")
+        .stderr_contains("nope: No such file or directory");
+}
+
+#[test]
+fn test_canonicalize_existing_keeps_going_after_a_missing_operand() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("c");
+    let actual = ucmd
+        .args(&["-e", "a", "b", "c"])
+        .fails_with_code(1)
+        .stdout_move_str();
+    let expect = path_concat!(at.root_dir_resolved(), "a")
+        + "\n"
+        + &path_concat!(at.root_dir_resolved(), "c")
+        + "\n";
+    assert_eq!(actual, expect);
+}
+
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: canonicalized path resolves to the guest's virtual root, not the host's absolute path"
+)]
 fn test_canonicalize() {
     let (at, mut ucmd) = at_and_ucmd!();
     let actual = ucmd.arg("-f").arg(".").succeeds().stdout_move_str();
@@ -49,6 +95,10 @@ fn test_canonicalize() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: canonicalized path resolves to the guest's virtual root, not the host's absolute path"
+)]
 fn test_canonicalize_existing() {
     let (at, mut ucmd) = at_and_ucmd!();
     let actual = ucmd.arg("-e").arg(".").succeeds().stdout_move_str();
@@ -59,6 +109,10 @@ fn test_canonicalize_existing() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: canonicalized path resolves to the guest's virtual root, not the host's absolute path"
+)]
 fn test_canonicalize_missing() {
     let (at, mut ucmd) = at_and_ucmd!();
     let actual = ucmd.arg("-m").arg(GIBBERISH).succeeds().stdout_move_str();
@@ -70,6 +124,10 @@ fn test_canonicalize_missing() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: canonicalized path resolves to the guest's virtual root, not the host's absolute path"
+)]
 fn test_canonicalize_symlink_before_parentdir() {
     // GNU readlink follows the symlink first and only then evaluates `..`.
     // Logical resolution would collapse `link/..` up front and return the current directory instead.
@@ -84,6 +142,10 @@ fn test_canonicalize_symlink_before_parentdir() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: canonicalized path resolves to the guest's virtual root, not the host's absolute path"
+)]
 fn test_long_redirection_to_current_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     // Create a 256-character path to current directory
@@ -398,6 +460,22 @@ fn test_canonicalize_trailing_slash_symlink_loop() {
 }
 
 #[test]
+fn test_canonicalize_growing_symlink_loop() {
+    // `link6 -> link6/more` grows the path on every expansion; it must fail
+    // instead of looping forever.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.relative_symlink_file("link6/more", "link6");
+    for mode in ["-f", "-e", "-m"] {
+        scene
+            .ucmd()
+            .args(&[mode, "link6"])
+            .fails_with_code(1)
+            .no_stdout();
+    }
+}
+
+#[test]
 #[cfg(not(windows))]
 fn test_delimiters() {
     new_ucmd!()
@@ -430,6 +508,7 @@ fn test_delimiters() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_readlink_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;

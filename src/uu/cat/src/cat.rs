@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) nonprint nonblank nonprinting ELOOP
+// spell-checker:ignore (ToDO) nonprint nonblank nonprinting ELOOP BADF
 
 mod platform;
 
@@ -17,7 +17,6 @@ use std::io::{self, BufWriter, ErrorKind, IsTerminal, Read, Write};
 use std::os::fd::AsFd;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
 use uucore::translate;
@@ -75,11 +74,13 @@ impl LineNumber {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 enum CatError {
     /// Wrapper around `io::Error`
     #[error("{}", strip_errno(.0))]
     Io(#[from] io::Error),
+    #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
+    Write(io::Error),
     /// Unknown file type; it's not a regular file, socket, etc.
     #[error("{}", translate!("cat-error-unknown-filetype", "ft_debug" => .ft_debug))]
     UnknownFiletype {
@@ -99,10 +100,13 @@ enum CatError {
 
 type CatResult<T> = Result<T, CatError>;
 
-#[cfg(any(unix, target_os = "wasi"))]
-impl From<rustix::io::Errno> for CatError {
-    fn from(value: rustix::io::Errno) -> Self {
-        Self::Io(value.into())
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl From<uucore::pipes::PipeError> for CatError {
+    fn from(error: uucore::pipes::PipeError) -> Self {
+        match error {
+            uucore::pipes::PipeError::Read(error) => Self::Io(error),
+            uucore::pipes::PipeError::Write(error) => Self::Write(error),
+        }
     }
 }
 
@@ -368,6 +372,12 @@ fn cat_handle<R: FdReadable>(
 fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -> CatResult<()> {
     match get_input_type(path)? {
         InputType::StdIn => {
+            // A closed stdin is reopened as /dev/null before `uumain` runs, so
+            // reading it would succeed silently instead of failing with EBADF.
+            #[cfg(all(unix, not(target_os = "fuchsia")))]
+            if uucore::signals::stdin_was_closed() {
+                return Err(io::Error::from(rustix::io::Errno::BADF).into());
+            }
             let stdin = io::stdin();
             let is_interactive = stdin.is_terminal();
             if !is_safe_overwrite(&stdin, &io::stdout()) {
@@ -410,6 +420,11 @@ where
 
     for path in files {
         if let Err(err) = cat_path(path, options, &mut state) {
+            if let CatError::Write(ref io_err) = err {
+                handle_broken_pipe(io_err);
+                error_messages.push(err.to_string());
+                break;
+            }
             error_messages.push(format!("{}: {err}", path.maybe_quote()));
         }
     }
@@ -417,16 +432,15 @@ where
         print!("\r");
     }
     if error_messages.is_empty() {
-        Ok(())
-    } else {
-        // each next line is expected to display "cat: …"
-        let line_joiner = "\ncat: ";
-
-        Err(uucore::error::USimpleError::new(
-            error_messages.len() as i32,
-            error_messages.join(line_joiner),
-        ))
+        return Ok(());
     }
+    // each next line is expected to display "cat: …"
+    let line_joiner = "\ncat: ";
+
+    Err(uucore::error::USimpleError::new(
+        1,
+        error_messages.join(line_joiner),
+    ))
 }
 
 /// Classifies the `InputType` of file at `path` if possible
@@ -445,9 +459,9 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
             if let Some(raw_error) = e.raw_os_error() {
                 // On Unix-like systems, the error code for "Too many levels of symbolic links" is 40 (ELOOP).
                 // we want to provide a proper error message in this case.
-                #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
+                #[cfg(not(any(target_vendor = "apple", target_os = "freebsd")))]
                 let too_many_symlink_code = 40;
-                #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+                #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
                 let too_many_symlink_code = 62;
                 if raw_error == too_many_symlink_code {
                     return Err(CatError::TooManySymlinks);
@@ -505,13 +519,11 @@ fn print_unbuffered<R: FdReadable>(
         match handle.reader.read(&mut buf) {
             Ok(0) => return Ok(()),
             Ok(n) => {
-                stdout
-                    .write_all(&buf[..n])
-                    .inspect_err(handle_broken_pipe)?;
+                stdout.write_all(&buf[..n]).map_err(CatError::Write)?;
                 // cannot use rustix::io on Windows
                 // really bad workaround for unbuffered write <https://github.com/uutils/coreutils/issues/12188>
                 #[cfg(not(any(unix, target_os = "wasi")))]
-                stdout.flush().inspect_err(handle_broken_pipe)?;
+                stdout.flush().map_err(CatError::Write)?;
             }
             Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e.into()),
             _ => {}
@@ -541,43 +553,50 @@ fn print_lines<R: FdReadable>(
         };
         let in_buf = &in_buf[..n];
         let mut pos = 0;
-        while pos < n {
+        while let Some(in_buf_pos) = in_buf.get(pos) {
             // skip empty line_number enumerating them if needed
-            if in_buf[pos] == b'\n' {
-                write_new_line(&mut writer, options, state, handle.is_interactive)?;
+            if in_buf_pos == &b'\n' {
+                write_new_line(&mut writer, options, state, handle.is_interactive)
+                    .map_err(CatError::Write)?;
                 state.at_line_start = true;
                 pos += 1;
                 continue;
             }
             if state.skipped_carriage_return {
-                writer.write_all(b"\r")?;
+                writer.write_all(b"\r").map_err(CatError::Write)?;
                 state.skipped_carriage_return = false;
                 state.at_line_start = false;
             }
             state.one_blank_kept = false;
             if state.at_line_start && options.number != NumberingMode::None {
-                state.line_number.write(&mut writer)?;
+                state
+                    .line_number
+                    .write(&mut writer)
+                    .map_err(CatError::Write)?;
                 state.line_number.increment();
             }
 
             // print to end of line or end of buffer
-            let offset = write_end(&mut writer, &in_buf[pos..], options)?;
+            let offset =
+                write_end(&mut writer, &in_buf[pos..], options).map_err(CatError::Write)?;
 
-            // end of buffer?
-            if offset + pos == in_buf.len() {
+            let Some(in_buf_pos_off) = in_buf.get(offset + pos) else {
+                // end of buffer
                 state.at_line_start = false;
                 break;
-            }
-            if in_buf[pos + offset] == b'\r' {
+            };
+
+            if in_buf_pos_off == &b'\r' {
                 state.skipped_carriage_return = true;
             } else {
-                assert_eq!(in_buf[pos + offset], b'\n');
+                assert_eq!(in_buf_pos_off, &b'\n');
                 // print suitable end of line
                 write_end_of_line(
                     &mut writer,
                     options.end_of_line().as_bytes(),
                     handle.is_interactive,
-                )?;
+                )
+                .map_err(CatError::Write)?;
                 state.at_line_start = true;
             }
             pos += offset + 1;
@@ -589,7 +608,7 @@ fn print_lines<R: FdReadable>(
         // and not be buffered internally to the `cat` process.
         // Hence it's necessary to flush our buffer before every time we could potentially block
         // on a `std::io::Read::read` call.
-        writer.flush().inspect_err(handle_broken_pipe)?;
+        writer.flush().map_err(CatError::Write)?;
     }
 
     Ok(())
@@ -601,7 +620,7 @@ fn write_new_line<W: Write>(
     options: &OutputOptions,
     state: &mut OutputState,
     is_interactive: bool,
-) -> CatResult<()> {
+) -> io::Result<()> {
     if state.skipped_carriage_return {
         if options.show_ends {
             writer.write_all(b"^M")?;
@@ -614,7 +633,8 @@ fn write_new_line<W: Write>(
         return Ok(());
     }
     if !state.at_line_start || !options.squeeze_blank || !state.one_blank_kept {
-        state.one_blank_kept = true;
+        // A newline that only finishes a line begun in an earlier read or file is not a blank line.
+        state.one_blank_kept = state.at_line_start;
         if state.at_line_start && options.number == NumberingMode::All {
             state.line_number.write(writer)?;
             state.line_number.increment();
@@ -657,25 +677,23 @@ fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> io::Result<usize> {
 
 fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> io::Result<usize> {
     let mut count = 0;
-    loop {
-        if let Some(p) = in_buf
-            .iter()
-            .position(|c| *c == b'\n' || *c == b'\t' || *c == b'\r')
-        {
-            writer.write_all(&in_buf[..p])?;
-            if in_buf[p] == b'\t' {
-                writer.write_all(b"^I")?;
-                in_buf = &in_buf[p + 1..];
-                count += p + 1;
-            } else {
-                // b'\n' or b'\r'
-                return Ok(count + p);
-            }
+
+    while let Some(p) = in_buf
+        .iter()
+        .position(|c| *c == b'\n' || *c == b'\t' || *c == b'\r')
+    {
+        writer.write_all(&in_buf[..p])?;
+        if in_buf[p] == b'\t' {
+            writer.write_all(b"^I")?;
+            in_buf = &in_buf[p + 1..];
+            count += p + 1;
         } else {
-            writer.write_all(in_buf)?;
-            return Ok(in_buf.len() + count);
+            // b'\n' or b'\r'
+            return Ok(count + p);
         }
     }
+    writer.write_all(in_buf)?;
+    Ok(in_buf.len() + count)
 }
 
 fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) -> io::Result<usize> {
@@ -703,17 +721,17 @@ fn write_end_of_line<W: Write>(
     writer: &mut W,
     end_of_line: &[u8],
     is_interactive: bool,
-) -> CatResult<()> {
+) -> io::Result<()> {
     writer.write_all(end_of_line)?;
     if is_interactive {
-        writer.flush().inspect_err(handle_broken_pipe)?;
+        writer.flush()?;
     }
     Ok(())
 }
 
 fn handle_broken_pipe(error: &io::Error) {
     // SIGPIPE is not available on Windows.
-    if cfg!(target_os = "windows") && error.kind() == ErrorKind::BrokenPipe {
+    if cfg!(windows) && error.kind() == ErrorKind::BrokenPipe {
         std::process::exit(13);
     }
 }

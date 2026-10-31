@@ -11,7 +11,7 @@ use uucore::benchmark::run_util_function;
 /// whole string is scanned. This is the input that exercised the old O(N * M)
 /// behavior.
 #[divan::bench]
-fn index_no_match(bencher: Bencher) {
+fn expr_index_no_match(bencher: Bencher) {
     let left = "A".repeat(100_000);
     let right = "B".repeat(100_000);
 
@@ -22,7 +22,7 @@ fn index_no_match(bencher: Bencher) {
 
 /// Benchmark `expr index` with a match near the end of the string.
 #[divan::bench]
-fn index_match_at_end(bencher: Bencher) {
+fn expr_index_match_at_end(bencher: Bencher) {
     let mut left = "A".repeat(100_000);
     left.push('Z');
     let right = "Z".repeat(100_000);

@@ -10,22 +10,22 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/lib.rs"
 test = false
 
 [dependencies]
 clap = { workspace = true }
+fluent = { workspace = true }
 uucore = { workspace = true, features = [
   "checksum",
   "encoding",
   "sum",
   "hardware",
 ] }
-fluent = { workspace = true }
+
+[lints]
+workspace = true
 
 # [[bench]]
 # name = "b2sum_bench"

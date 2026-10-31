@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use glob::glob;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -51,6 +52,39 @@ fn test_line_numbers_suppress_matched_final_empty_elided_with_z() {
 }
 
 #[test]
+fn test_up_to_match_suppress_matched_final_empty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--suppress-matched", "-", "2", "/a/"])
+        .pipe_in("1\n2\n3\n4\na\n")
+        .succeeds()
+        .stdout_only("2\n4\n0\n");
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 3);
+    assert_eq!(at.read("xx00"), "1\n");
+    assert_eq!(at.read("xx01"), "3\n4\n");
+    assert_eq!(at.read("xx02"), "");
+}
+
+#[test]
+fn test_up_to_match_offset_final_empty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-", "/a/+1"])
+        .pipe_in("1\na\n")
+        .succeeds()
+        .stdout_only("4\n0\n");
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 2);
+    assert_eq!(at.read("xx00"), "1\na\n");
+    assert_eq!(at.read("xx01"), "");
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
@@ -69,6 +103,73 @@ fn test_stdin() {
     assert_eq!(count, 2);
     assert_eq!(at.read("xx00"), generate(1, 10));
     assert_eq!(at.read("xx01"), generate(10, 51));
+}
+
+#[test]
+fn test_binary_input_line_number() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("input", b"\xff\0\nhello\x80");
+
+    ucmd.args(&["input", "2"]).succeeds().stdout_only("3\n6\n");
+
+    assert_eq!(at.read_bytes("xx00"), b"\xff\0\n");
+    assert_eq!(at.read_bytes("xx01"), b"hello\x80");
+}
+
+#[test]
+fn test_binary_input_regex() {
+    let input = b"\xff\0\nbefore\r\nmatch\xfe\r\nlast\x80";
+    for (pattern, split) in [("/match/", 11), ("/match/+1", 19), ("/match/-1", 3)] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["-", pattern])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(format!("{split}\n{}\n", input.len() - split));
+
+        assert_eq!(at.read_bytes("xx00"), &input[..split]);
+        assert_eq!(at.read_bytes("xx01"), &input[split..]);
+    }
+}
+
+#[test]
+fn test_regex_does_not_ignore_carriage_return() {
+    for (pattern, stdout) in [("/^---$/", "9\n"), ("/^---$/-1", "9\n"), ("%^---$%", "")] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["-", pattern])
+            .pipe_in("x\n---\r\ny\n")
+            .fails_with_code(1)
+            .stdout_is(stdout)
+            .stderr_is(format!("csplit: '{pattern}': match not found\n"));
+
+        assert!(!at.file_exists("xx00"));
+    }
+}
+
+#[test]
+fn test_regex_matches_carriage_return() {
+    let input = "x\n---\r\ny\n";
+    for (pattern, split) in [("/^---.$/", 2), ("/^y$/-1", 2), ("/^---.$/+1", 7)] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["-", pattern])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(format!("{split}\n{}\n", input.len() - split));
+
+        assert_eq!(at.read("xx00"), &input[..split]);
+        assert_eq!(at.read("xx01"), &input[split..]);
+    }
+}
+
+#[test]
+fn test_binary_input_skip_regex() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-", "%match%"])
+        .pipe_in(b"\xff\0\nmatch\xfe\nlast\x80")
+        .succeeds()
+        .stdout_only("12\n");
+
+    assert_eq!(at.read_bytes("xx00"), b"match\xfe\nlast\x80");
+    assert!(!at.file_exists("xx01"));
 }
 
 #[test]
@@ -234,6 +335,137 @@ fn test_up_to_match_negative_offset() {
     assert_eq!(count, 2);
     assert_eq!(at.read("xx00"), generate(1, 6));
     assert_eq!(at.read("xx01"), generate(6, 51));
+}
+
+#[test]
+fn test_up_to_match_negative_offset_before_split_start() {
+    // The target line (match minus the offset) may not precede the start of the
+    // current split.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "/3$/-3"])
+        .fails()
+        .stdout_is("0\n")
+        .stderr_is("csplit: '/3$/-3': line number out of range\n");
+
+    assert_eq!(
+        glob(&at.plus_as_string("xx*"))
+            .expect("there should be no splits created")
+            .count(),
+        0
+    );
+}
+
+#[test]
+fn test_up_to_match_negative_offset_at_split_start() {
+    // The target line is exactly the first line of the current split: an empty
+    // split, not an error.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "/3$/-2"])
+        .succeeds()
+        .stdout_only("0\n141\n");
+
+    assert_eq!(at.read("xx00"), "");
+    assert_eq!(at.read("xx01"), generate(1, 51));
+}
+
+#[test]
+fn test_up_to_match_negative_offset_before_second_split_start() {
+    // The bound is the start of the current split, not the start of the input.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "/10$/", "/12$/-3"])
+        .fails()
+        .stdout_is("18\n0\n")
+        .stderr_is("csplit: '/12$/-3': line number out of range\n");
+
+    assert_eq!(
+        glob(&at.plus_as_string("xx*"))
+            .expect("there should be no splits created")
+            .count(),
+        0
+    );
+}
+
+#[test]
+fn test_up_to_match_negative_offset_at_second_split_start() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "/10$/", "/12$/-2"])
+        .succeeds()
+        .stdout_only("18\n0\n123\n");
+
+    assert_eq!(at.read("xx00"), generate(1, 10));
+    assert_eq!(at.read("xx01"), "");
+    assert_eq!(at.read("xx02"), generate(10, 51));
+}
+
+#[test]
+fn test_up_to_match_negative_offset_before_split_start_suppress_matched() {
+    // The matched line is dropped, so the second split starts one line later.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--suppress-matched", "numbers50.txt", "/10$/", "/12$/-2"])
+        .fails()
+        .stdout_is("18\n0\n")
+        .stderr_is("csplit: '/12$/-2': line number out of range\n");
+
+    assert_eq!(
+        glob(&at.plus_as_string("xx*"))
+            .expect("there should be no splits created")
+            .count(),
+        0
+    );
+}
+
+#[test]
+fn test_up_to_match_negative_offset_at_split_start_suppress_matched() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--suppress-matched", "numbers50.txt", "/10$/", "/12$/-1"])
+        .succeeds()
+        .stdout_only("18\n0\n117\n");
+
+    assert_eq!(at.read("xx00"), generate(1, 10));
+    assert_eq!(at.read("xx01"), "");
+    assert_eq!(at.read("xx02"), generate(12, 51));
+}
+
+#[test]
+fn test_up_to_match_negative_offset_before_split_start_keep_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-k", "numbers50.txt", "/3$/-3"])
+        .fails()
+        .stdout_is("0\n")
+        .stderr_is("csplit: '/3$/-3': line number out of range\n");
+
+    assert_eq!(at.read("xx00"), "");
+}
+
+#[test]
+fn test_skip_to_match_negative_offset_before_split_start() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "%3$%-3"])
+        .fails()
+        .stderr_is("csplit: '%3$%-3': line number out of range\n");
+
+    assert_eq!(
+        glob(&at.plus_as_string("xx*"))
+            .expect("there should be no splits created")
+            .count(),
+        0
+    );
+}
+
+#[test]
+fn test_up_to_match_negative_offset_min_i32() {
+    new_ucmd!()
+        .args(&["numbers50.txt", "/45/-2147483648"])
+        .fails()
+        .stderr_is("csplit: '/45/-2147483648': line number out of range\n");
+}
+
+#[test]
+fn test_skip_to_match_negative_offset_min_i32() {
+    new_ucmd!()
+        .args(&["numbers50.txt", "%45%-2147483648"])
+        .fails()
+        .stderr_is("csplit: '%45%-2147483648': line number out of range\n");
 }
 
 #[test]
@@ -591,6 +823,51 @@ fn test_skip_to_match_option_suppress_matched() {
 }
 
 #[test]
+fn test_suppress_line_number_before_current_position() {
+    for line_number in ["5", "10", "11"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["numbers50.txt", "--suppress-matched", "/10$/", line_number])
+            .succeeds()
+            .stdout_only("18\n0\n117\n");
+
+        assert_eq!(at.read("xx00"), generate(1, 10));
+        assert_eq!(at.read("xx01"), "");
+        assert_eq!(at.read("xx02"), generate(12, 51));
+    }
+}
+
+#[test]
+fn test_up_to_line_one_past_end_suppress_matched() {
+    // There is no line 51 to suppress, so the split is complete.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "--suppress-matched", "51"])
+        .succeeds()
+        .stdout_only("141\n0\n");
+    assert_eq!(at.read("xx00"), generate(1, 51));
+    assert_eq!(at.read("xx01"), "");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "--suppress-matched", "17", "{2}"])
+        .succeeds()
+        .stdout_only("39\n48\n48\n0\n");
+    assert_eq!(at.read("xx02"), generate(35, 51));
+    assert_eq!(at.read("xx03"), "");
+
+    new_ucmd!()
+        .args(&["numbers50.txt", "-k", "--suppress-matched", "17", "{*}"])
+        .fails()
+        .stdout_is("39\n48\n48\n0\n")
+        .stderr_is("csplit: '17': line number out of range on repetition 3\n");
+
+    // Line 50 was already suppressed, so there is nothing left for line 51.
+    new_ucmd!()
+        .args(&["numbers50.txt", "--suppress-matched", "50", "51"])
+        .fails()
+        .stdout_is("138\n0\n")
+        .stderr_is("csplit: '51': line number out of range\n");
+}
+
+#[test]
 fn test_option_elide_empty_file1() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "--suppress-matched", "-z", "/0$/", "{*}"])
@@ -654,8 +931,7 @@ fn test_skip_to_match_context_underflow() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%5%-10"])
         .fails()
-        .stdout_is("")
-        .stderr_is("csplit: '%5%-10': line number out of range\n");
+        .stderr_only("csplit: '%5%-10': line number out of range\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -665,8 +941,7 @@ fn test_skip_to_match_context_underflow() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%5%-10", "-k"])
         .fails()
-        .stdout_is("")
-        .stderr_is("csplit: '%5%-10': line number out of range\n");
+        .stderr_only("csplit: '%5%-10': line number out of range\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -1432,6 +1707,35 @@ fn precision_format() {
 }
 
 #[test]
+fn suffix_format_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading suffix format passed as its own argument (not
+    // attached with `-b-%02d`/`=`) must not be mistaken for a new,
+    // unrecognized flag.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "10", "--suffix-format", "-%02d"])
+        .succeeds()
+        .stdout_only("18\n123\n");
+
+    assert_eq!(at.read("xx-00"), generate(1, 10));
+    assert_eq!(at.read("xx-01"), generate(10, 51));
+}
+
+#[test]
+fn zero_precision_format() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "10", "--suffix-format", "%.0d"])
+        .succeeds()
+        .stdout_only("18\n123\n");
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 2);
+    assert_eq!(at.read("xx"), generate(1, 10));
+    assert_eq!(at.read("xx1"), generate(10, 51));
+}
+
+#[test]
 fn suffix_format_huge_width_reports_memory_exhausted() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["--suffix-format", "%9999999999999999999d", "-", "1"])
@@ -1507,7 +1811,7 @@ fn repeat_everything() {
         .count();
     assert_eq!(count, 6);
     assert_eq!(at.read("xxz_000"), generate(1, 12 + 1));
-    assert_eq!(at.read("xxz_001"), generate(14, 17 + 1)); // FIXME: GNU starts at 15
+    assert_eq!(at.read("xxz_001"), generate(15, 17 + 1));
     assert_eq!(at.read("xxz_002"), generate(19, 26 + 1));
     assert_eq!(at.read("xxz_003"), generate(28, 35 + 1));
     assert_eq!(at.read("xxz_004"), generate(37, 44 + 1));
@@ -1537,7 +1841,7 @@ fn test_named_pipe_input_file() {
 
 #[cfg(unix)]
 fn create_named_pipe_with_writer(path: &str, data: &str) -> std::process::Child {
-    // cSpell:ignore IRWXU
+    // spell-checker:ignore IRWXU
     nix::unistd::mkfifo(path, nix::sys::stat::Mode::S_IRWXU).unwrap();
     std::process::Command::new("sh")
         .arg("-c")
@@ -1551,10 +1855,12 @@ fn test_directory_input_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("test_directory");
 
+    // The split that was in progress is still reported, as GNU does.
     #[cfg(unix)]
     ucmd.args(&["test_directory", "1"])
         .fails_with_code(1)
-        .stderr_only("csplit: read error: Is a directory\n");
+        .stdout_is("0\n")
+        .stderr_is("csplit: read error: Is a directory\n");
     #[cfg(windows)]
     ucmd.args(&["test_directory", "1"])
         .fails_with_code(1)
@@ -1631,4 +1937,41 @@ fn test_create_error_reports_filename() {
     ucmd.args(&["input", "2"])
         .fails()
         .stderr_is("csplit: xx00: Permission denied\n");
+}
+
+#[test]
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
+fn test_csplit_dev_full_stdout() {
+    use std::fs::OpenOptions;
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    new_ucmd!()
+        .args(&["/etc/hosts", "1"])
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_is("csplit: No space left on device\n");
+}
+
+#[test]
+fn test_empty_regex_matches_every_line() {
+    // An empty regex between the delimiters is valid and matches at once, so
+    // the split happens before the very first line.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("letters", "delta\necho\nfoxtrot\n");
+
+    ucmd.args(&["letters", "//"])
+        .succeeds()
+        .stdout_only("0\n19\n");
+    assert_eq!(at.read("xx00"), "");
+    assert_eq!(at.read("xx01"), "delta\necho\nfoxtrot\n");
+}
+
+#[test]
+fn test_empty_skip_to_regex_is_accepted() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("letters", "delta\necho\nfoxtrot\n");
+
+    ucmd.args(&["letters", "%%"]).succeeds().stdout_only("19\n");
+    assert_eq!(at.read("xx00"), "delta\necho\nfoxtrot\n");
 }

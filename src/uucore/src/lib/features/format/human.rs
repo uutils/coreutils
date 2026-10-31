@@ -7,7 +7,7 @@
 
 //! `human`-size formatting
 //!
-//! Format sizes like gnulibs human_readable() would
+//! Format sizes like gnulibs [`human_readable()`] would
 
 use unit_prefix::NumberPrefix;
 
@@ -24,7 +24,7 @@ pub enum SizeFormat {
 /// 3. The human-readable format uses powers for 1024, but does not display the "i"
 ///    that is commonly used to denote Kibi, Mebi, etc.
 /// 4. Kibi and Kilo are denoted differently ("k" and "K", respectively)
-/// 5. The decimal separator follows LC_NUMERIC ("1.3M" in C, "1,3M" in fr_FR)
+/// 5. The decimal separator follows `LC_NUMERIC` ("1.3M" in C, "1,3M" in `fr_FR`)
 fn format_prefixed(prefixed: &NumberPrefix<f64>) -> String {
     match prefixed {
         NumberPrefix::Standalone(bytes) => bytes.to_string(),

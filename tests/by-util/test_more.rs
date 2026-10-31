@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+#![cfg(all(unix, not(target_os = "redox")))]
+
 #[cfg(unix)]
 use std::fs::File;
 #[cfg(unix)]
@@ -47,6 +49,9 @@ fn run_more_with_pty(
 fn quit_more(controller: &mut File, mut child: uutests::util::UChild) {
     controller.write_all(b"q").unwrap();
     child.delay(50);
+    // Not all options quit on `q` here, and a `more` left behind spins once
+    // its terminal hangs up.
+    child.kill();
 }
 
 #[cfg(unix)]
@@ -79,6 +84,10 @@ fn test_valid_arg() {
         &["--from-line", "0"],
         &["-P", "something"],
         &["--pattern", "-1"],
+        &["-f"],
+        &["--logical"],
+        &["-l"],
+        &["--no-pause"],
     ];
     for args in args_list {
         test_alive(args);
@@ -106,9 +115,7 @@ fn test_alive(args: &[&str]) {
 
     assert!(child.is_alive(), "Command should still be alive");
 
-    // cleanup
-    controller.write_all(b"q").unwrap();
-    child.delay(50);
+    quit_more(&mut controller, child);
 }
 
 #[test]
@@ -148,7 +155,7 @@ fn test_file_arg() {
         .set_stdout(File::create(&path).unwrap())
         .arg(".")
         .succeeds()
-        .stderr_contains("'.' is a directory.");
+        .stderr_contains("'.': Is a directory");
 
     // Single argument errors
     let (path, _controller, _replica) = pty_path();
@@ -158,7 +165,7 @@ fn test_file_arg() {
         .set_stdout(File::create(&path).unwrap())
         .arg("folder")
         .succeeds()
-        .stderr_contains("is a directory");
+        .stderr_contains("Is a directory");
 
     let (path, _controller, _replica) = pty_path();
     new_ucmd!()
@@ -192,7 +199,7 @@ fn test_invalid_file_perms() {
         .set_stdout(File::create(&path).unwrap())
         .arg("invalid-perms.txt")
         .succeeds()
-        .stderr_contains("permission denied");
+        .stderr_contains("cannot open 'invalid-perms.txt': Permission denied");
 }
 
 #[test]
@@ -203,7 +210,7 @@ fn test_more_non_utf8_paths() {
     let file_name = std::ffi::OsStr::from_bytes(b"test_\xFF\xFE.txt");
     // Create test file with normal name first
     at.write(
-        &file_name.to_string_lossy(),
+        file_name.to_string_lossy().to_string(),
         "test content for non-UTF-8 file",
     );
 
@@ -252,5 +259,17 @@ fn test_from_line_option() {
         run_more_with_pty(&["-F", "2"], "test.txt", "line1\nline2\nline3\nline4\n");
     assert!(output.contains("line2"));
     assert!(!output.contains("line1"));
+    quit_more(&mut controller, child);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_lines_option_max_u16_no_overflow() {
+    // Regression test for https://github.com/uutils/coreutils/pull/12970
+    // When -n is u16::MAX (65535), adding 1 for the banner line used to
+    // overflow. Verify that more starts and displays content without crashing.
+    let (child, mut controller, output) =
+        run_more_with_pty(&["-n", "65535"], "test.txt", "line1\nline2\nline3\n");
+    assert!(output.contains("line1"));
     quit_more(&mut controller, child);
 }
