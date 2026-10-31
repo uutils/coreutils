@@ -416,7 +416,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
     let mut line = Vec::new();
     // Written before every unnumbered line. Capped to avoid OOM on 32-bit targets
     // when -w i32::MAX is passed (allocating 2 GiB would panic).
-    let blank_width = settings.number_width + 1;
+    let blank_width = settings.number_width + settings.number_separator.as_encoded_bytes().len();
     let space_buf = vec![b' '; blank_width.min(4096)];
 
     loop {
