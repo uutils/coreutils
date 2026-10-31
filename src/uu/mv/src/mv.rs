@@ -462,7 +462,11 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
                     e.map_err_context(|| message)
                 })
             } else {
-                Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
+                Err(MvError::DirectoryToNonDirectory(
+                    target.quote().to_string(),
+                    source.quote().to_string(),
+                )
+                .into())
             }
         } else {
             move_files_into_dir(&[source.to_path_buf()], target, opts)

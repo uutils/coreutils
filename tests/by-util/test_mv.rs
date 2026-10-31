@@ -1456,7 +1456,7 @@ fn test_mv_errors() {
         .arg(dir)
         .fails()
         .stderr_only(format!(
-            "mv: cannot overwrite directory '{dir}' with non-directory\n"
+            "mv: cannot overwrite directory '{dir}' with non-directory '{file_a}'\n"
         ));
 
     // $ at.mkdir dir && at.touch file
