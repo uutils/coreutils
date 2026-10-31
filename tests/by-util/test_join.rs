@@ -1038,3 +1038,32 @@ fn test_missing_key_is_empty_key() {
         .succeeds()
         .stdout_only("1002 bob\n");
 }
+
+#[test]
+fn check_order_nocheck_order_last_wins() {
+    // --nocheck-order after --check-order: nocheck wins, unsorted input succeeds.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("unsorted.txt", "b\na\n");
+    ts.ucmd()
+        .args(&[
+            "--check-order",
+            "--nocheck-order",
+            "unsorted.txt",
+            "unsorted.txt",
+        ])
+        .succeeds()
+        .stdout_contains("a")
+        .stdout_contains("b");
+
+    // --check-order after --nocheck-order: check wins, unsorted input fails.
+    ts.ucmd()
+        .args(&[
+            "--nocheck-order",
+            "--check-order",
+            "unsorted.txt",
+            "unsorted.txt",
+        ])
+        .fails()
+        .stderr_contains("is not sorted");
+}

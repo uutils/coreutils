@@ -849,12 +849,10 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
         settings.empty = empty.as_bytes().to_vec();
     }
 
-    if matches.get_flag("nocheck-order") {
-        settings.check_order = CheckOrder::Disabled;
-    }
-
     if matches.get_flag("check-order") {
         settings.check_order = CheckOrder::Enabled;
+    } else if matches.get_flag("nocheck-order") {
+        settings.check_order = CheckOrder::Disabled;
     }
 
     if matches.get_flag("header") {
@@ -1016,12 +1014,14 @@ pub fn uu_app() -> Command {
             Arg::new("check-order")
                 .long("check-order")
                 .help(translate!("join-help-check-order"))
+                .overrides_with("nocheck-order")
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("nocheck-order")
                 .long("nocheck-order")
                 .help(translate!("join-help-nocheck-order"))
+                .overrides_with("check-order")
                 .action(ArgAction::SetTrue),
         )
         .arg(
