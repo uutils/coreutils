@@ -1992,3 +1992,77 @@ fn test_dash_hint_is_shell_escaped() {
         .fails_with_code(1)
         .stderr_contains("./'-a'$'\\t''b'\\''c'' to remove the file '-a'$'\\t''b'\\''c'.");
 }
+
+/// When a mid-traversal getdents failed, GNU reports "traversal failed"
+/// even under `-f`. Without that, rm later fails with "Directory not empty".
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
+fn test_recursive_getdents_eio_reports_traversal_failed() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir_all("dir/nonempty");
+
+    let Ok(out) = Command::new("strace")
+        .args([
+            "-qq",
+            "-o",
+            "/dev/null",
+            "-e",
+            "trace=getdents64",
+            "-e",
+            "fault=getdents64:error=EIO:when=2",
+        ])
+        .arg(&scene.bin_path)
+        .arg(scene.util_name.as_str())
+        .args(["-Rf", "dir"])
+        .current_dir(scene.fixtures.as_string())
+        .output()
+    else {
+        return; // missing strace
+    };
+
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stderr),
+        "rm: traversal failed: 'dir': Input/output error\n"
+    );
+}
+
+/// Same as above, but the failing getdents is on a subdirectory (child
+/// `read_dir` path), not the top-level directory.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
+fn test_recursive_getdents_eio_subdirectory_reports_traversal_failed() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir_all("dir/sub/nonempty");
+
+    let Ok(out) = Command::new("strace")
+        .args([
+            "-qq",
+            "-o",
+            "/dev/null",
+            "-e",
+            "trace=getdents64",
+            "-e",
+            "fault=getdents64:error=EIO:when=3",
+        ])
+        .arg(&scene.bin_path)
+        .arg(scene.util_name.as_str())
+        .args(["-Rf", "dir"])
+        .current_dir(scene.fixtures.as_string())
+        .output()
+    else {
+        return; // missing strace
+    };
+
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stderr),
+        "rm: traversal failed: 'dir/sub': Input/output error\n"
+    );
+}
