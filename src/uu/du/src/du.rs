@@ -11,7 +11,7 @@ use rustc_hash::FxHashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, DirEntry, File, Metadata};
-use std::io::{self, BufRead, BufReader, Write, stdout};
+use std::io::{self, BufRead, BufReader, BufWriter, IsTerminal, Write, stdout};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
@@ -23,7 +23,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::SystemTime;
 use uucore::diagnostics::OptionValue;
-use uucore::display::{Quotable, print_verbatim};
+use uucore::display::{OsWrite, Quotable};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::fs::SYMLINK_FOLLOW_LIMIT;
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
@@ -527,10 +527,9 @@ fn safe_du(
                 || pattern.matches(&entry_name.to_string_lossy())
             {
                 if options.verbose {
-                    println!(
-                        "{}",
-                        translate!("du-verbose-ignored", "path" => this_stat.path.quote())
-                    );
+                    print_tx.send(Ok(StatPrintInfo::Ignored(
+                        translate!("du-verbose-ignored", "path" => this_stat.path.quote()),
+                    )))?;
                 }
                 continue 'file_loop;
             }
@@ -576,7 +575,7 @@ fn safe_du(
                     (None, b) => b,
                 }
             }
-            print_tx.send(Ok(StatPrintInfo {
+            print_tx.send(Ok(StatPrintInfo::Stat {
                 stat: this_stat,
                 depth: depth + 1,
             }))?;
@@ -590,7 +589,7 @@ fn safe_du(
                 (None, b) => b,
             };
             if options.all {
-                print_tx.send(Ok(StatPrintInfo {
+                print_tx.send(Ok(StatPrintInfo::Stat {
                     stat: this_stat,
                     depth: depth + 1,
                 }))?;
@@ -691,10 +690,9 @@ fn du_regular(
                                 {
                                     // if the directory is ignored, leave early
                                     if options.verbose {
-                                        println!(
-                                            "{}",
-                                            translate!("du-verbose-ignored", "path" => this_stat.path.quote())
-                                        );
+                                        print_tx.send(Ok(StatPrintInfo::Ignored(
+                                            translate!("du-verbose-ignored", "path" => this_stat.path.quote()),
+                                        )))?;
                                     }
                                     // Go to the next file
                                     continue 'file_loop;
@@ -738,7 +736,7 @@ fn du_regular(
                                             (None, b) => b,
                                         };
                                 }
-                                print_tx.send(Ok(StatPrintInfo {
+                                print_tx.send(Ok(StatPrintInfo::Stat {
                                     stat: this_stat,
                                     depth: depth + 1,
                                 }))?;
@@ -753,7 +751,7 @@ fn du_regular(
                                         (None, b) => b,
                                     };
                                 if options.all {
-                                    print_tx.send(Ok(StatPrintInfo {
+                                    print_tx.send(Ok(StatPrintInfo::Stat {
                                         stat: this_stat,
                                         depth: depth + 1,
                                     }))?;
@@ -840,9 +838,11 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     Ok(exclude_patterns)
 }
 
-struct StatPrintInfo {
-    stat: Stat,
-    depth: usize,
+// Keep stats inline: boxing would allocate for every printed entry.
+#[allow(clippy::large_enum_variant)]
+enum StatPrintInfo {
+    Stat { stat: Stat, depth: usize },
+    Ignored(String),
 }
 
 impl StatPrinter {
@@ -859,34 +859,45 @@ impl StatPrinter {
     }
 
     fn print_stats(&self, rx: &mpsc::Receiver<UResult<StatPrintInfo>>) -> UResult<()> {
+        let stdout = stdout();
+        let mut output = if stdout.is_terminal() {
+            // Keep terminal output immediate.
+            BufWriter::with_capacity(0, stdout.lock())
+        } else {
+            BufWriter::new(stdout.lock())
+        };
         let mut grand_total = 0;
         while let Ok(received) = rx.recv() {
             match received {
-                Ok(stat_info) => {
-                    let size = self.choose_size(&stat_info.stat);
+                Ok(StatPrintInfo::Stat { stat, depth }) => {
+                    let size = self.choose_size(&stat);
 
-                    if stat_info.depth == 0 {
+                    if depth == 0 {
                         grand_total += size;
                     }
 
                     if !self
                         .threshold
                         .is_some_and(|threshold| threshold.should_exclude(size))
-                        && self
-                            .max_depth
-                            .is_none_or(|max_depth| stat_info.depth <= max_depth)
-                        && (!self.summarize || stat_info.depth == 0)
+                        && self.max_depth.is_none_or(|max_depth| depth <= max_depth)
+                        && (!self.summarize || depth == 0)
                     {
-                        self.print_stat(&stat_info.stat, size)?;
+                        self.print_stat(&mut output, &stat, size)?;
                     }
                 }
-                Err(e) => show!(e),
+                Ok(StatPrintInfo::Ignored(message)) => {
+                    writeln!(output, "{message}")?;
+                }
+                Err(e) => {
+                    output.flush()?;
+                    show!(e);
+                }
             }
         }
 
         if self.total {
             write!(
-                stdout(),
+                output,
                 "{}\t{}{}",
                 self.convert_size(grand_total),
                 self.total_text,
@@ -894,6 +905,7 @@ impl StatPrinter {
             )?;
         }
 
+        output.flush()?;
         Ok(())
     }
 
@@ -918,25 +930,25 @@ impl StatPrinter {
         }
     }
 
-    fn print_stat(&self, stat: &Stat, size: u64) -> UResult<()> {
-        write!(stdout(), "{}\t", self.convert_size(size))?;
+    fn print_stat(&self, output: &mut impl OsWrite, stat: &Stat, size: u64) -> UResult<()> {
+        write!(output, "{}\t", self.convert_size(size))?;
 
         if self.time.is_some() {
             if let Some(time) = stat.latest_time {
                 format_system_time(
-                    &mut stdout(),
+                    output,
                     time,
                     &self.time_format,
                     FormatSystemTimeFallback::IntegerError,
                 )?;
-                write!(stdout(), "\t")?;
+                write!(output, "\t")?;
             } else {
-                write!(stdout(), "???\t")?;
+                write!(output, "???\t")?;
             }
         }
 
-        print_verbatim(&stat.path)?;
-        write!(stdout(), "{}", self.line_ending)?;
+        output.write_all_os(stat.path.as_os_str())?;
+        write!(output, "{}", self.line_ending)?;
 
         Ok(())
     }
@@ -1178,10 +1190,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 if pattern.matches(&path_string) {
                     // if the directory is ignored, leave early
                     if traversal_options.verbose {
-                        println!(
-                            "{}",
-                            translate!("du-verbose-ignored", "path" => path_string.quote())
-                        );
+                        print_tx
+                            .send(Ok(StatPrintInfo::Ignored(
+                                translate!("du-verbose-ignored", "path" => path_string.quote()),
+                            )))
+                            .map_err(|e| USimpleError::new(1, e.to_string()))?;
                     }
                     continue 'loop_file;
                 }
@@ -1219,7 +1232,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 ) {
                     Ok(stat) => {
                         print_tx
-                            .send(Ok(StatPrintInfo { stat, depth: 0 }))
+                            .send(Ok(StatPrintInfo::Stat { stat, depth: 0 }))
                             .map_err(|e| USimpleError::new(1, e.to_string()))?;
                     }
                     Err(e) => {
@@ -1249,7 +1262,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 .map_err(|e| USimpleError::new(1, e.to_string()))?;
 
                 print_tx
-                    .send(Ok(StatPrintInfo { stat, depth: 0 }))
+                    .send(Ok(StatPrintInfo::Stat { stat, depth: 0 }))
                     .map_err(|e| USimpleError::new(1, e.to_string()))?;
             } else {
                 #[cfg(unix)]
