@@ -648,19 +648,18 @@ fn wipe_file(
     #[cfg(not(unix))]
     let path = display_path;
 
-    if path_str.as_encoded_bytes().ends_with(b"/") {
-        if path.is_dir() {
-            return Err(USimpleError::new(
-                1,
-                translate_text!("shred-failed-to-open-for-writing-is-a-directory", "file" => display_path.maybe_quote()),
-            ));
-        }
-        if fs::metadata(path).is_err_and(|e| e.kind() == io::ErrorKind::NotADirectory) {
-            return Err(USimpleError::new(
-                1,
-                translate_text!("shred-failed-to-open-for-writing-not-a-directory", "file" => display_path.maybe_quote()),
-            ));
-        }
+    if path_str.as_encoded_bytes().ends_with(b"/")
+        && let Err(e) = fs::metadata(path)
+        && e.kind() == io::ErrorKind::NotADirectory
+    {
+        return Err(USimpleError::new(
+            1,
+            format!(
+                "{}: {}",
+                translate_text!("shred-failed-to-open-for-writing", "file" => display_path.maybe_quote()),
+                strip_errno(&e)
+            ),
+        ));
     }
 
     // On OpenBSD, /dev/fd/1 is a character device rather than a symlink.
@@ -689,7 +688,8 @@ fn wipe_file(
     // "no such file" error while a permission error falls through to the
     // open-for-writing below, which surfaces the real reason.
     match get_metadata() {
-        Ok(md) if !md.is_file() => {
+        // Directories fall through so opening them for writing reports EISDIR.
+        Ok(md) if !md.is_file() && !md.is_dir() => {
             return Err(USimpleError::new(
                 1,
                 translate_text!("shred-not-a-file", "file" => display_path.maybe_quote()),

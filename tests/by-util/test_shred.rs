@@ -467,23 +467,23 @@ fn test_shred_trailing_slash_on_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.touch("a");
-    scene
-        .ucmd()
-        .arg("a/")
-        .fails()
-        .stderr_contains("Not a directory");
+    let result = scene.ucmd().arg("a/").fails();
+    #[cfg(unix)]
+    result.stderr_contains("a/: failed to open for writing: Not a directory");
+    #[cfg(windows)]
+    result.stderr_contains("a/: failed to open for writing: The directory name is invalid.");
 }
 
-#[test]
-fn test_shred_trailing_slash_on_dir() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+#[rstest::rstest]
+#[case("d")]
+#[case("d/")]
+#[cfg(unix)]
+fn test_shred_on_dir(#[case] arg: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("d");
-    scene
-        .ucmd()
-        .arg("d/")
-        .fails()
-        .stderr_contains("Is a directory");
+    ucmd.arg(arg).fails_with_code(1).stderr_only(format!(
+        "shred: {arg}: failed to open for writing: Is a directory\n"
+    ));
 }
 
 #[test]
@@ -588,7 +588,7 @@ fn test_couldnt_rename() {
 
 #[rstest::rstest]
 #[case(&["1e3"], "shred: 1e3: No such file or directory\n")]
-#[case(&["007"], "shred: 007: Not a file\n")]
+#[case(&["007"], "shred: 007: failed to open for writing: Is a directory\n")]
 #[cfg(not(windows))]
 fn test_numeric_looking_file_names_are_kept_verbatim(
     #[case] args: &[&str],
