@@ -2969,6 +2969,70 @@ fn test_mv_prompt_unwriteable_file_when_using_tty() {
     assert!(at.file_exists("source"));
 }
 
+/// A symlink destination must not trigger the "overriding mode" prompt just
+/// because the file it points at is unwritable: `mv` replaces the link itself
+/// and never writes through it.
+#[cfg(unix)]
+#[test]
+fn test_mv_no_prompt_symlink_dest_pointing_to_unwriteable_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("source_link");
+    at.touch("real_unwriteable");
+    at.set_mode("real_unwriteable", 0o555);
+    at.symlink_file("real_unwriteable", "link");
+
+    ucmd.arg("source_link")
+        .arg("link")
+        .terminal_sim_stdio(TerminalSimulation {
+            stdin: true,
+            stdout: false,
+            stderr: false,
+            ..Default::default()
+        })
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.file_exists("source_link"));
+    assert!(!at.is_symlink("link"));
+}
+
+/// Writability has to be judged with the caller's effective credentials: root
+/// can overwrite a 0555 file, so no prompt is warranted. Deriving it from the
+/// owner write bit instead makes root prompt, which breaks privileged
+/// activations. Requires root via non-interactive `sudo`; skipped otherwise.
+#[cfg(unix)]
+#[test]
+fn test_mv_no_prompt_as_root_over_unwriteable_file() {
+    use uutests::util::run_ucmd_as_root_with_terminal_simulation;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.touch("source_root");
+    at.touch("target_root");
+    at.set_mode("target_root", 0o555);
+
+    let result = run_ucmd_as_root_with_terminal_simulation(
+        &ts,
+        &["source_root", "target_root"],
+        TerminalSimulation {
+            stdin: true,
+            stdout: false,
+            stderr: false,
+            ..Default::default()
+        },
+        "n\n",
+    );
+    if let Ok(result) = result {
+        result.success().no_stderr();
+        assert!(!at.file_exists("source_root"));
+        assert!(at.file_exists("target_root"));
+    } else {
+        println!("Test skipped; requires root user");
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn test_mv_force_no_prompt_unwriteable_file() {

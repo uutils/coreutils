@@ -3326,6 +3326,36 @@ pub fn run_ucmd_as_root_with_stdin_stdout(
     stdin: Option<&str>,
     stdout: Option<&str>,
 ) -> std::result::Result<CmdResult, String> {
+    let mut cmd = sudo_ucmd(ts, args)?;
+    if let Some(stdin) = stdin {
+        cmd.set_stdin(File::open(stdin).unwrap());
+    }
+    if let Some(stdout) = stdout {
+        cmd.set_stdout(File::open(stdout).unwrap());
+    }
+    Ok(cmd.run())
+}
+
+/// Like [`run_ucmd_as_root`], but runs the utility attached to a pseudo terminal.
+///
+/// Utilities only prompt when stdin is a tty, so a plain root run cannot reach
+/// the prompt path at all. `stdin` is written to the terminal after `term`.
+#[cfg(unix)]
+pub fn run_ucmd_as_root_with_terminal_simulation(
+    ts: &TestScenario,
+    args: &[&str],
+    term: TerminalSimulation,
+    stdin: &str,
+) -> std::result::Result<CmdResult, String> {
+    let mut cmd = sudo_ucmd(ts, args)?;
+    cmd.terminal_sim_stdio(term).pipe_in(stdin);
+    Ok(cmd.run())
+}
+
+/// Build a `sudo`-wrapped invocation of the utility under test, or explain why
+/// root is unavailable.
+#[cfg(unix)]
+fn sudo_ucmd(ts: &TestScenario, args: &[&str]) -> std::result::Result<UCommand, String> {
     if is_ci() {
         Err(format!("{UUTILS_INFO}: {}", "cannot run inside CI"))
     } else {
@@ -3338,7 +3368,6 @@ pub fn run_ucmd_as_root_with_stdin_stdout(
         {
             Ok(output) if String::from_utf8_lossy(&output.stdout).eq("root\n") => {
                 // we can run sudo and we're root
-                // run ucmd as root:
                 let mut cmd = ts.cmd("sudo");
                 cmd.env("PATH", path())
                     .envs(DEFAULT_ENV)
@@ -3347,13 +3376,7 @@ pub fn run_ucmd_as_root_with_stdin_stdout(
                     .arg(&ts.bin_path)
                     .arg(&ts.util_name)
                     .args(args);
-                if let Some(stdin) = stdin {
-                    cmd.set_stdin(File::open(stdin).unwrap());
-                }
-                if let Some(stdout) = stdout {
-                    cmd.set_stdout(File::open(stdout).unwrap());
-                }
-                Ok(cmd.run())
+                Ok(cmd)
             }
             Ok(output)
                 if String::from_utf8_lossy(&output.stderr).eq("sudo: a password is required\n") =>
