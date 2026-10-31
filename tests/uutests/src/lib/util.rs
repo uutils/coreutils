@@ -1525,6 +1525,8 @@ pub struct UCommand {
     has_run: bool,
     ignore_stdin_write_error: bool,
     stdin: Option<Stdio>,
+    #[cfg(unix)]
+    close_stdin: bool,
     stdout: Option<Stdio>,
     stderr: Option<Stdio>,
     bytes_into_stdin: Option<Vec<u8>>,
@@ -1614,6 +1616,12 @@ impl UCommand {
 
     pub fn set_stdin<T: Into<Stdio>>(&mut self, stdin: T) -> &mut Self {
         self.stdin = Some(stdin.into());
+        self
+    }
+
+    #[cfg(unix)]
+    pub fn close_stdin(&mut self, close: bool) -> &mut Self {
+        self.close_stdin = close;
         self
     }
 
@@ -1970,6 +1978,26 @@ impl UCommand {
         let mut stdin_pty: Option<File> = None;
         #[cfg(not(all(unix, not(target_os = "redox"))))]
         let stdin_pty: Option<File> = None;
+
+        #[cfg(unix)]
+        if self.close_stdin {
+            let close_stdin = || {
+                // SAFETY: the unsafe state where STDIN is not a valid file
+                // descriptor is precisely what we want to achieve, to test
+                // how the program under test reacts.
+                if unsafe { libc::close(libc::STDIN_FILENO) } == -1 {
+                    Err(io::Error::last_os_error())
+                } else {
+                    Ok(())
+                }
+            };
+
+            // SAFETY: pre-exec is run after `fork`ing, and before calling
+            // `exec`. This is safe, since we indeed want to run `close_stdin`
+            // on the child process.
+            unsafe { command.pre_exec(close_stdin) };
+        }
+
         if self.stderr_to_stdout {
             let mut output = CapturedOutput::default();
 

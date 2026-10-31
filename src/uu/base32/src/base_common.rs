@@ -18,6 +18,7 @@ use uucore::encoding::{
 };
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError, strip_errno};
 use uucore::format_usage;
+use uucore::stdio::stdin;
 use uucore::translate;
 
 pub const BASE_CMD_PARSE_ERROR: i32 = 1;
@@ -151,7 +152,7 @@ pub fn get_input(config: &Config) -> UResult<Box<dyn BufRead>> {
             // Stdin is already buffered by the OS; wrap once more to reduce syscalls per read.
             Ok(Box::new(BufReader::with_capacity(
                 DEFAULT_BUF_SIZE,
-                io::stdin(),
+                stdin(),
             )))
         }
     }
