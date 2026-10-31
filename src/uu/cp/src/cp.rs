@@ -820,12 +820,40 @@ pub fn uu_app() -> Command {
 /// that value rather than further flags in the same cluster.
 const SHORT_OPTIONS_WITH_VALUE: &[char] = &['S', 't'];
 
+/// Resolve a long option name the way clap reads `--infer-long-args` arguments: an
+/// exact match wins, otherwise a unique prefix of a long name or of one of its
+/// visible aliases.
+fn resolve_long_option(app: &Command, name: &str) -> Option<String> {
+    let mut exact = None;
+    let mut prefixed: Option<String> = None;
+    let mut ambiguous = false;
+
+    for arg in app.get_arguments() {
+        for candidate in arg.get_long_and_visible_aliases().unwrap_or_default() {
+            if candidate == name {
+                exact = Some(arg.get_id().as_str().to_owned());
+            } else if candidate.starts_with(name) {
+                let id = arg.get_id().as_str().to_owned();
+                match &prefixed {
+                    Some(previous) if previous != &id => ambiguous = true,
+                    Some(_) => {}
+                    None => prefixed = Some(id),
+                }
+            }
+        }
+    }
+
+    exact.or(if ambiguous { None } else { prefixed })
+}
+
 /// Whether the arguments ask for hard links and symbolic links at the same time.
 ///
 /// Only the arguments up to `--` are inspected, and a scan of a short cluster stops at
 /// the first option that takes a value, so that `-t./backups`, `-S.s` or an operand
-/// like `-s.txt` are not mistaken for `--symbolic-link`.
+/// like `-s.txt` are not mistaken for `--symbolic-link`. Long options are resolved the
+/// way clap resolves them, so `--sym` counts as `--symbolic-link`.
 fn has_both_link_modes(args: &[OsString]) -> bool {
+    let app = uu_app();
     let mut link = false;
     let mut symbolic_link = false;
 
@@ -836,10 +864,12 @@ fn has_both_link_modes(args: &[OsString]) -> bool {
         }
         if let Some(name) = arg.strip_prefix("--") {
             let name = name.split('=').next().unwrap_or(name);
-            if name == options::LINK {
-                link = true;
-            } else if name == options::SYMBOLIC_LINK {
-                symbolic_link = true;
+            if let Some(id) = resolve_long_option(&app, name) {
+                if id == options::LINK {
+                    link = true;
+                } else if id == options::SYMBOLIC_LINK {
+                    symbolic_link = true;
+                }
             }
         } else if let Some(flags) = arg.strip_prefix('-') {
             for flag in flags.chars() {
