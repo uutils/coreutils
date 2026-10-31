@@ -3946,11 +3946,53 @@ fn test_copy_through_just_created_symlink() {
 fn test_copy_through_dangling_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
-    at.symlink_file("nonexistent", "target");
+    at.relative_symlink_file("nonexistent", "target");
     ucmd.arg("file")
         .arg("target")
         .fails()
         .stderr_only("cp: not writing through dangling symlink 'target'\n");
+}
+
+#[rstest]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: directory search permissions are not enforced"
+)]
+fn test_copy_through_inaccessible_symlink_target(
+    #[values(false, true)] directory: bool,
+    #[values("", "-f", "-P", "--attributes-only")] flag: &str,
+) {
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("source", "new contents");
+    at.mkdir("private");
+    if directory {
+        at.mkdir("private/target");
+    } else {
+        at.write("private/target", "old contents");
+    }
+    at.relative_symlink_file("private/target", "link");
+    at.set_mode("private", 0);
+    let mut cmd = scene.ucmd();
+    if !flag.is_empty() {
+        cmd.arg(flag);
+    }
+    let result = cmd.args(&["source", "link"]).run();
+    at.set_mode("private", 0o755);
+
+    result
+        .code_is(1)
+        .stderr_only("cp: cannot stat 'link': Permission denied\n");
+    assert!(at.is_symlink("link"));
+    if directory {
+        assert!(at.dir_exists("private/target"));
+    } else {
+        assert_eq!(at.read("private/target"), "old contents");
+    }
 }
 
 #[test]
@@ -4031,7 +4073,7 @@ fn test_cp_dangling_symlink_inside_directory() {
     at.write("README", "file1");
     at.write("good/README", "file2");
 
-    at.symlink_file("foo", "tmp/README");
+    at.relative_symlink_file("../foo", "tmp/README");
 
     ts.ucmd()
         .arg("README")
@@ -4082,7 +4124,7 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
 fn test_copy_through_dangling_symlink_no_dereference_2() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
-    at.symlink_file("nonexistent", "target");
+    at.relative_symlink_file("nonexistent", "target");
     ucmd.args(&["-P", "file", "target"])
         .fails()
         .stderr_only("cp: not writing through dangling symlink 'target'\n");
@@ -4094,7 +4136,7 @@ fn test_copy_through_dangling_symlink_no_dereference_2() {
 fn test_copy_through_dangling_symlink_force() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("src");
-    at.symlink_file("no-such-file", "dest");
+    at.relative_symlink_file("no-such-file", "dest");
     ucmd.args(&["--force", "src", "dest"])
         .fails()
         .stderr_only("cp: not writing through dangling symlink 'dest'\n");
