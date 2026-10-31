@@ -155,6 +155,8 @@ fn invalid_setting() {
 fn invalid_baud_setting() {
     #[cfg(not(any(
         target_vendor = "apple",
+        target_os = "android",
+        target_os = "linux",
         target_os = "freebsd",
         target_os = "dragonfly",
         target_os = "netbsd",
@@ -182,6 +184,8 @@ fn invalid_baud_setting() {
 
     #[cfg(not(any(
         target_vendor = "apple",
+        target_os = "android",
+        target_os = "linux",
         target_os = "freebsd",
         target_os = "dragonfly",
         target_os = "netbsd",
@@ -194,6 +198,8 @@ fn invalid_baud_setting() {
 
     #[cfg(not(any(
         target_vendor = "apple",
+        target_os = "android",
+        target_os = "linux",
         target_os = "freebsd",
         target_os = "dragonfly",
         target_os = "netbsd",
@@ -1471,10 +1477,12 @@ fn invalid_baud_rate() {
         .fails()
         .stderr_contains("invalid ispeed");
 
-    // On non-BSD systems, test invalid numeric baud rate
-    // On BSD systems, any u32 is accepted, so we skip this test
+    // On Linux and BSD, any u32 is accepted, so we skip this test
+    // On other systems, test invalid numeric baud rate
     #[cfg(not(any(
         target_vendor = "apple",
+        target_os = "android",
+        target_os = "linux",
         target_os = "freebsd",
         target_os = "dragonfly",
         target_os = "netbsd",
