@@ -455,8 +455,8 @@ feat_diagnostics = ["uucore/diagnostics"]
 ## Optional feature for stdbuf
 # "feat_external_libstdbuf" == use an external libstdbuf.so for stdbuf instead of embedding it
 feat_external_libstdbuf = ["stdbuf/feat_external_libstdbuf"]
-# "feat_systemd_logind" == enable systemd_logind support for utmpx replacement
-feat_systemd_logind = [
+# "systemd_logind" == enable systemd_logind support for utmpx replacement
+systemd_logind = [
   "pinky/systemd_logind",
   "uptime/systemd_logind",
   "users/systemd_logind",
