@@ -410,6 +410,7 @@ fn display_items_non_long(
             &mut state.out,
             quoted,
             config.tab_size,
+            config.line_ending,
         ),
         Format::Across => display_grid(
             names.into_iter(),
@@ -418,6 +419,7 @@ fn display_items_non_long(
             &mut state.out,
             quoted,
             config.tab_size,
+            config.line_ending,
         ),
         Format::Commas => display_commas_format(
             names.into_iter(),
@@ -497,6 +499,7 @@ fn display_grid(
     out: &mut BufWriter<Stdout>,
     quoted: bool,
     tab_size: usize,
+    line_ending: LineEnding,
 ) -> UResult<()> {
     if width == 0 {
         // If the width is 0 we print one single line
@@ -509,7 +512,7 @@ fn display_grid(
             write_os_str(out, &name.displayed)?;
         }
         if printed_something {
-            writeln!(out)?;
+            write!(out, "{line_ending}")?;
         }
     } else {
         let names: Vec<String> = {
@@ -539,8 +542,12 @@ fn display_grid(
                 .collect()
         };
 
+        if names.is_empty() {
+            return Ok(());
+        }
+
         // Since tab_size=0 means no \t, use Spaces separator for optimization.
-        let filling = match tab_size {
+        let make_filling = || match tab_size {
             0 => Filling::Spaces(DEFAULT_SEPARATOR_SIZE),
             _ => Filling::Tabs {
                 spaces: DEFAULT_SEPARATOR_SIZE,
@@ -548,15 +555,90 @@ fn display_grid(
             },
         };
 
-        let grid = Grid::new(
-            names,
+        // Use the grid only to compute the layout (row count and column
+        // widths), borrowing the names so the string data is not duplicated.
+        // Rows are rendered below with `line_ending` so that `--zero`
+        // terminates every row with NUL instead of newline, while embedded
+        // newlines inside file names are preserved.
+        let layout = Grid::new(
+            names.iter().map(String::as_str).collect(),
             GridOptions {
-                filling,
+                filling: make_filling(),
                 direction,
                 width: width as usize,
             },
         );
-        write!(out, "{grid}")?;
+        let num_rows = layout.row_count();
+        let col_widths = layout.column_widths().to_vec();
+        // Keep `layout` alive while rendering since it borrows `names`.
+        let _ = &layout;
+
+        let widths: Vec<usize> = names.iter().map(|c| ansi_width(c)).collect();
+        let widest_cell_width = widths.iter().copied().max().unwrap_or(0);
+        let filling_width = DEFAULT_SEPARATOR_SIZE;
+        let separator = " ".repeat(DEFAULT_SEPARATOR_SIZE);
+        let padding = " ".repeat(widest_cell_width + filling_width);
+        let padding_bytes = padding.as_bytes();
+        let separator_bytes = separator.as_bytes();
+        let num_cols = col_widths.len();
+
+        for y in 0..num_rows {
+            // Current position on the line (only used for tab stops).
+            let mut cursor: usize = 0;
+            for (x, col_width) in col_widths.iter().enumerate() {
+                let (current, offset) = match direction {
+                    Direction::LeftToRight => (y * num_cols + x, 1),
+                    Direction::TopToBottom => (y + num_rows * x, num_rows),
+                };
+
+                // Abandon a line mid-way through if that's where the cells end.
+                if current >= names.len() {
+                    break;
+                }
+
+                let last_in_row = x == num_cols - 1;
+                let contents = &names[current];
+                let width = widths[current];
+                let padding_size = col_width - width;
+
+                out.write_all(contents.as_bytes())?;
+
+                // In case this entry was the last on the current line,
+                // there is no need to print the separator and padding.
+                if last_in_row || current + offset >= names.len() {
+                    break;
+                }
+
+                if tab_size == 0 {
+                    out.write_all(&padding_bytes[..padding_size])?;
+                    out.write_all(separator_bytes)?;
+                } else {
+                    // Move cursor to the end of the current contents.
+                    cursor += width;
+                    let total_spaces = padding_size + filling_width;
+                    // The size of \t can be inconsistent in terminal.
+                    // Tab stops are relative to the cursor position e.g.,
+                    //  * cursor = 0, \t moves to column 8;
+                    //  * cursor = 5, \t moves to column 8 (3 spaces);
+                    //  * cursor = 9, \t moves to column 16 (7 spaces).
+                    // Calculate the nearest \t position in relation to cursor.
+                    let closest_tab = tab_size - (cursor % tab_size);
+
+                    if closest_tab > total_spaces {
+                        out.write_all(&padding_bytes[..total_spaces])?;
+                    } else {
+                        let rest_spaces = total_spaces - closest_tab;
+                        let tabs = 1 + (rest_spaces / tab_size);
+                        let spaces = rest_spaces % tab_size;
+                        out.write_all("\t".repeat(tabs).as_bytes())?;
+                        out.write_all(&padding_bytes[..spaces])?;
+                    }
+
+                    cursor += total_spaces;
+                }
+            }
+            write!(out, "{line_ending}")?;
+        }
     }
     Ok(())
 }
