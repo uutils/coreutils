@@ -1352,3 +1352,29 @@ fn test_missing_file_error_message() {
         .stderr_contains("pr: nonexistent_file: ")
         .stderr_does_not_contain("(os error");
 }
+
+#[test]
+fn test_non_utf8_input_is_written_unchanged() {
+    new_ucmd!()
+        .arg("-t")
+        .pipe_in(b"\xff\xfe abc\n\xc3( x\n\x80\n")
+        .succeeds()
+        .stdout_is_bytes(b"\xff\xfe abc\n\xc3( x\n\x80\n");
+
+    new_ucmd!()
+        .args(&["-n", "-t"])
+        .pipe_in(b"\xff\n")
+        .succeeds()
+        .stdout_is_bytes(b"    1\t\xff\n");
+}
+
+#[test]
+fn test_non_utf8_input_in_columns() {
+    // Each invalid byte takes one column, so "\xff\xfeab" exactly fills the
+    // first column of 4 and is neither cut short nor replaced.
+    new_ucmd!()
+        .args(&["-2", "-t", "-w", "9", "-s|"])
+        .pipe_in(b"\xff\xfeab\nc\n")
+        .succeeds()
+        .stdout_contains_bytes(b"\xff\xfeab|c");
+}
