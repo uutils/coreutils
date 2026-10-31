@@ -137,24 +137,6 @@ pub struct NoFormatLine {
     pub newline: bool,
 }
 
-impl Line {
-    /// when we know that it's a [`Line::FormatLine`], as in the [`ParagraphStream`] iterator
-    fn get_formatline(self) -> FileLine {
-        match self {
-            Self::FormatLine(fl) => fl,
-            Self::NoFormatLine(..) => panic!("Found NoFormatLine when expecting FormatLine"),
-        }
-    }
-
-    /// when we know that it's a [`Line::NoFormatLine`], as in the [`ParagraphStream`] iterator
-    fn get_noformatline(self) -> NoFormatLine {
-        match self {
-            Self::NoFormatLine(nfl) => nfl,
-            Self::FormatLine(..) => panic!("Found FormatLine when expecting NoFormatLine"),
-        }
-    }
-}
-
 /// Each line's prefix has to be considered to know whether to merge it with
 /// the next line or not
 #[derive(Debug)]
@@ -258,14 +240,19 @@ impl FileLines<'_> {
 }
 
 impl Iterator for FileLines<'_> {
-    type Item = Line;
+    type Item = Result<Line, std::io::Error>;
 
-    fn next(&mut self) -> Option<Line> {
+    fn next(&mut self) -> Option<Self::Item> {
         let mut buf = Vec::new();
-        self.reader
-            .read_until(b'\n', &mut buf)
-            .ok()
-            .filter(|n| *n > 0)?;
+
+        // Distinguish EOF from an actual read error.
+        match self.reader.read_until(b'\n', &mut buf) {
+            Ok(0) => return None,
+            Ok(_) => {}
+            Err(e) => return Some(Err(e)),
+        }
+
+        // Preserve newline information from main.
         let has_newline = buf.ends_with(b"\n");
         if has_newline {
             buf.pop();
@@ -273,70 +260,61 @@ impl Iterator for FileLines<'_> {
                 buf.pop();
             }
         }
+
         let n = buf;
 
-        // if this line is entirely whitespace,
-        // emit a blank line
-        // Err(true) indicates that this was a linebreak,
-        // which is important to know when detecting mail headers
+        // Empty or whitespace-only line.
         if n.iter().all(|&b| is_fmt_whitespace_byte(b)) {
-            return Some(Line::NoFormatLine(NoFormatLine {
+            return Some(Ok(Line::NoFormatLine(NoFormatLine {
                 line: Vec::new(),
                 blank: true,
                 newline: true,
-            }));
+            })));
         }
 
         let (pmatch, poffset) = self.match_prefix(&n[..]);
 
-        // if this line does not match the prefix,
-        // emit the line unprocessed (even when it lacks a final newline)
-        // and iterate again
+        // Lines without the requested prefix pass through.
         if !pmatch {
-            return Some(Line::NoFormatLine(NoFormatLine {
+            return Some(Ok(Line::NoFormatLine(NoFormatLine {
                 line: n,
                 blank: false,
                 newline: has_newline,
-            }));
+            })));
         }
 
-        // if the line matches the prefix, but is blank after,
-        // don't allow lines to be combined through it (that is,
-        // treat it like a blank line, except that since it's
-        // not truly blank we will not allow mail headers on the
-        // following line)
+        // Lines containing only a prefix and whitespace.
         if n[poffset + self.opts.prefix.as_ref().map_or(0, String::len)..]
             .iter()
             .all(|&b| is_fmt_whitespace_byte(b))
         {
-            return Some(Line::NoFormatLine(NoFormatLine {
+            return Some(Ok(Line::NoFormatLine(NoFormatLine {
                 line: n,
                 blank: false,
                 newline: true,
-            }));
+            })));
         }
 
-        // skip if this line matches the anti_prefix
-        // (NOTE definition of match_anti_prefix is TRUE if we should process)
+        // Lines excluded by the anti-prefix pass through.
         if !self.match_anti_prefix(&n[..]) {
-            return Some(Line::NoFormatLine(NoFormatLine {
+            return Some(Ok(Line::NoFormatLine(NoFormatLine {
                 line: n,
                 blank: false,
                 newline: has_newline,
-            }));
+            })));
         }
 
-        // figure out the indent, prefix, and prefixindent ending points
         let prefix_end = poffset + self.opts.prefix.as_ref().map_or(0, String::len);
+
         let (indent_end, prefix_len, indent_len) = self.compute_indent(&n[..], prefix_end);
 
-        Some(Line::FormatLine(FileLine {
+        Some(Ok(Line::FormatLine(FileLine {
             line: n,
             indent_end,
             prefix_indent_end: poffset,
             indent_len,
             prefix_len,
-        }))
+        })))
     }
 }
 
@@ -413,25 +391,42 @@ impl ParagraphStream<'_> {
     }
 }
 
+pub enum ParagraphStreamError {
+    /// A line that should be passed through unformatted
+    NoFormatLine(NoFormatLine),
+    /// An IO error encountered while reading
+    IoError(std::io::Error),
+}
+
 impl Iterator for ParagraphStream<'_> {
-    type Item = Result<Paragraph, NoFormatLine>;
+    type Item = Result<Paragraph, ParagraphStreamError>;
 
     #[allow(clippy::cognitive_complexity)]
-    fn next(&mut self) -> Option<Result<Paragraph, NoFormatLine>> {
-        // return a NoFormatLine in an Err; it should immediately be output
+    fn next(&mut self) -> Option<Self::Item> {
+        // Return unformatted lines directly, but propagate read errors.
         let noformat = match self.lines.peek()? {
-            Line::FormatLine(_) => false,
-            Line::NoFormatLine(_) => true,
+            Err(_) => {
+                // peek() confirmed the next item is a read error.
+                let Some(Err(e)) = self.lines.next() else {
+                    unreachable!("peeked read error must still be available");
+                };
+                return Some(Err(ParagraphStreamError::IoError(e)));
+            }
+            Ok(Line::FormatLine(_)) => false,
+            Ok(Line::NoFormatLine(_)) => true,
         };
 
-        // found a NoFormatLine, immediately dump it out
+        // Found a NoFormatLine; immediately pass it through.
         if noformat {
-            let nfl = self.lines.next().unwrap().get_noformatline();
+            let Some(Ok(Line::NoFormatLine(nfl))) = self.lines.next() else {
+                unreachable!("peeked unformatted line must still be available");
+            };
+
             self.next_mail = nfl.blank;
-            return Some(Err(nfl));
+            return Some(Err(ParagraphStreamError::NoFormatLine(nfl)));
         }
 
-        // found a FormatLine, now build a paragraph
+        // Found a FormatLine; build a paragraph.
         let mut init_str = Vec::new();
         let mut init_end = 0;
         let mut init_len = 0;
@@ -443,16 +438,14 @@ impl Iterator for ParagraphStream<'_> {
         let mut p_lines = Vec::new();
 
         let mut in_mail = false;
-        let mut second_done = false; // for when we use crown or tagged mode
-        while let Some(Line::FormatLine(fl)) = self.lines.peek() {
+        let mut second_done = false; // for crown or tagged mode
+
+        while let Some(Ok(Line::FormatLine(fl))) = self.lines.peek() {
             if p_lines.is_empty() {
-                // first time through the loop, get things set up
-                // detect mail header
+                // First time through the loop: set up the paragraph.
                 if self.opts.mail && self.next_mail && ParagraphStream::is_mail_header(fl) {
                     in_mail = true;
-                    // there can't be any indent or prefixindent because otherwise is_mail_header
-                    // would fail since there cannot be any whitespace before the colon in a
-                    // valid header field
+                    // Mail headers have no indent or prefix indent.
                     indent_str.extend_from_slice(b"  ");
                     indent_len = 2;
                 } else {
@@ -464,41 +457,31 @@ impl Iterator for ParagraphStream<'_> {
                         second_done = true;
                     }
 
-                    // these will be overwritten in the 2nd line of crown or tagged mode, but
-                    // we are not guaranteed to get to the 2nd line, e.g., if the next line
-                    // is a NoFormatLine or None. Thus, we set sane defaults the 1st time around
+                    // Initialize indentation from the first line.
                     indent_str.extend_from_slice(&fl.line[..fl.indent_end]);
                     indent_len = fl.indent_len;
                     indent_end = fl.indent_end;
 
-                    // save these to check for matching lines
                     prefix_len = fl.prefix_len;
                     prefix_indent_end = fl.prefix_indent_end;
 
-                    // in tagged mode, add 4 spaces of additional indenting by default
-                    // (gnu fmt's behavior is different: it seems to find the closest column to
-                    // indent_end that is divisible by 3. But honestly that behavior seems
-                    // pretty arbitrary.
-                    // Perhaps a better default would be 1 TABWIDTH? But ugh that's so big.
                     if self.opts.tagged {
                         indent_str.extend_from_slice(b"    ");
                         indent_len += 4;
                     }
                 }
             } else if in_mail {
-                // lines following mail headers must begin with spaces
+                // Lines following mail headers must begin with spaces.
                 if fl.indent_end == 0 || (self.opts.prefix.is_some() && fl.prefix_indent_end == 0) {
-                    break; // this line does not begin with spaces
+                    break;
                 }
             } else if !second_done {
-                // now we have enough info to handle crown margin and tagged mode
-
-                // in both crown and tagged modes we require that prefix_len is the same
+                // In crown and tagged modes, prefix information must match.
                 if prefix_len != fl.prefix_len || prefix_indent_end != fl.prefix_indent_end {
                     break;
                 }
 
-                // in tagged mode, indent has to be *different* on following lines
+                // Tagged paragraphs require different indentation.
                 if self.opts.tagged
                     && indent_len - 4 == fl.indent_len
                     && indent_end == fl.indent_end
@@ -506,7 +489,7 @@ impl Iterator for ParagraphStream<'_> {
                     break;
                 }
 
-                // this is part of the same paragraph, get the indent info from this line
+                // Use the second line's indentation.
                 indent_str.clear();
                 indent_str.extend_from_slice(&fl.line[..fl.indent_end]);
                 indent_len = fl.indent_len;
@@ -514,7 +497,7 @@ impl Iterator for ParagraphStream<'_> {
 
                 second_done = true;
             } else {
-                // detect mismatch
+                // A mismatch indicates the start of another paragraph.
                 if indent_end != fl.indent_end
                     || prefix_indent_end != fl.prefix_indent_end
                     || indent_len != fl.indent_len
@@ -524,17 +507,20 @@ impl Iterator for ParagraphStream<'_> {
                 }
             }
 
-            p_lines.push(self.lines.next().unwrap().get_formatline().line);
+            // peek() confirmed that this is a formatted line.
+            let Some(Ok(Line::FormatLine(fl))) = self.lines.next() else {
+                unreachable!("peeked formatted line must still be available");
+            };
 
-            // when we're in split-only mode, we never join lines, so stop here
+            p_lines.push(fl.line);
+
+            // In split-only mode, never join lines.
             if self.opts.split_only {
                 break;
             }
         }
 
-        // if this was a mail header, then the next line can be detected as one. Otherwise, it cannot.
-        // NOTE next_mail is true at ParagraphStream instantiation, and is set to true after a blank
-        // NoFormatLine.
+        // Allow another mail header only after a mail header paragraph.
         self.next_mail = in_mail;
 
         Some(Ok(Paragraph {
