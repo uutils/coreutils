@@ -101,9 +101,8 @@ impl Encoding {
         if len == 1 {
             return (bytes[0] == b' ' || bytes[0] == b'\t').then_some(1);
         }
-        // `char_len` only looks at the shape of the sequence, so decode it for
-        // real here: an overlong or surrogate encoding is not a character at
-        // all, and must not pass for one of the blanks it decodes to.
+        // Under UTF-8, `char_len` only returns more than one byte for a
+        // well-formed sequence, so this decodes it to look the character up.
         if self == Self::Utf8
             && std::str::from_utf8(&bytes[..len]).is_ok_and(|s| s.starts_with(is_unicode_blank))
         {
@@ -137,18 +136,20 @@ fn utf8_len(b: &[u8], b0: u8) -> usize {
             1
         };
     }
-    let n = match b0 {
-        0xE0..=0xEF => 3,
-        0xF0..=0xF4 => 4,
+    let (n, second) = match b0 {
+        0xE0 => (3, 0xA0..=0xBF),
+        0xE1..=0xEC | 0xEE | 0xEF => (3, 0x80..=0xBF),
+        0xED => (3, 0x80..=0x9F),
+        0xF0 => (4, 0x90..=0xBF),
+        0xF1..=0xF3 => (4, 0x80..=0xBF),
+        0xF4 => (4, 0x80..=0x8F),
         _ => return 1,
     };
-    if b.get(1..n)
-        .is_some_and(|s| s.iter().copied().all(is_continuation))
-    {
-        n
-    } else {
-        1
-    }
+    let valid = match b.get(1..n) {
+        Some([b1, rest @ ..]) => second.contains(b1) && rest.iter().copied().all(is_continuation),
+        _ => false,
+    };
+    if valid { n } else { 1 }
 }
 
 fn is_continuation(byte: u8) -> bool {
@@ -263,5 +264,58 @@ mod tests {
         assert!(is_unicode_blank('\u{205f}'));
         assert!(!is_unicode_blank('\u{202f}'));
         assert!(!is_unicode_blank('\u{feff}'));
+    }
+
+    #[test]
+    fn utf8_char_len_keeps_well_formed_sequences() {
+        for cp in [
+            0x80, 0x7ff, 0x800, 0x1000, 0xcfff, 0xd7ff, 0xe000, 0xffff, 0x10000, 0x40000, 0xfffff,
+            0x10_ffff,
+        ] {
+            let c = char::from_u32(cp).unwrap();
+            let seq = c.to_string().into_bytes();
+            let followed = [&seq[..], b"\x80xyz"].concat();
+            let want = c.len_utf8();
+            assert_eq!(Encoding::Utf8.char_len(&seq), want, "{c:?}");
+            assert_eq!(Encoding::Utf8.char_len(&followed), want, "{c:?} then more");
+        }
+    }
+
+    #[test]
+    fn utf8_char_len_rejects_overlong_surrogate_and_out_of_range_sequences() {
+        let ill_formed: [&[u8]; 8] = [
+            &[0xe0, 0x80, 0x80],
+            &[0xe0, 0x9f, 0xbf],
+            &[0xf0, 0x80, 0x80, 0x80],
+            &[0xf0, 0x8f, 0xbf, 0xbf],
+            &[0xed, 0xa0, 0x80],
+            &[0xed, 0xbf, 0xbf],
+            &[0xf4, 0x90, 0x80, 0x80],
+            &[0xf4, 0xbf, 0xbf, 0xbf],
+        ];
+        let counted_as_one: Vec<Vec<u8>> = ill_formed
+            .into_iter()
+            .flat_map(|seq| [seq.to_vec(), [seq, b"xyz"].concat()])
+            .filter(|input| Encoding::Utf8.char_len(input) != 1)
+            .collect();
+        assert!(counted_as_one.is_empty(), "{counted_as_one:x?}");
+    }
+
+    #[test]
+    fn utf8_char_len_is_one_for_truncated_and_invalid_bytes() {
+        let cases: [&[u8]; 9] = [
+            &[0xc2],
+            &[0xe1, 0x80],
+            &[0xf1, 0x80, 0x80],
+            &[0xe1, 0x80, 0x7f],
+            &[0x80],
+            &[0xc0, 0x80],
+            &[0xc1, 0xbf],
+            &[0xf5, 0x80, 0x80, 0x80],
+            &[0xff],
+        ];
+        for seq in cases {
+            assert_eq!(Encoding::Utf8.char_len(seq), 1, "{seq:x?}");
+        }
     }
 }
