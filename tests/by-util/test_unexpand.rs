@@ -498,3 +498,41 @@ fn test_buffered_read_edgecase_behaviour() {
             .stdout_only(String::from_utf8(expected).unwrap());
     }
 }
+
+#[test]
+fn test_line_continues_into_next_file() {
+    // Neither first file ends in a newline, so its blanks and text continue
+    // the line in the next file.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "    ");
+    at.write("b", "    x\n");
+    ucmd.args(&["a", "b"]).succeeds().stdout_is("\tx\n");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("c", "abcdef");
+    at.write("d", "  x\n");
+    ucmd.args(&["-a", "c", "d"])
+        .succeeds()
+        .stdout_is("abcdef\tx\n");
+}
+
+#[test]
+fn test_trailing_blanks_of_last_file_are_kept() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "x\n");
+    at.write("b", "   ");
+    ucmd.args(&["a", "b"]).succeeds().stdout_is("x\n   ");
+}
+
+#[test]
+fn test_line_continues_past_unreadable_file() {
+    // A file that cannot be read does not end the line started before it.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "    ");
+    at.mkdir("dir");
+    at.write("b", "    x\n");
+    ucmd.args(&["a", "dir", "b"])
+        .fails()
+        .stdout_is("\tx\n")
+        .stderr_contains("unexpand: dir: Is a directory");
+}

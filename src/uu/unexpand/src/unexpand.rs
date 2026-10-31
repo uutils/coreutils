@@ -490,6 +490,16 @@ struct PrintState {
 }
 
 impl PrintState {
+    fn new() -> Self {
+        Self {
+            col: 0,
+            scol: 0,
+            leading: true,
+            pctype: CharType::Other,
+            pending_wide: Vec::new(),
+        }
+    }
+
     // reinitializes the PrintState struct to beginning of line values
     fn new_line(&mut self) {
         self.col = 0;
@@ -647,22 +657,41 @@ fn unexpand_file(
     options: &Options,
     lastcol: usize,
     tab_config: &TabConfig,
+    line_state: &mut PrintState,
 ) -> UResult<()> {
     let mut input = open(file)?;
-    let mut print_state = PrintState {
-        col: 0,
-        scol: 0,
-        leading: true,
-        pctype: CharType::Other,
-        pending_wide: Vec::new(),
-    };
+    // Work on a local copy of the line state, so it can stay in registers
+    // while unexpanding, and hand it back when done with this file.
+    let mut print_state = std::mem::replace(line_state, PrintState::new());
+    let result = unexpand_input(
+        &mut input,
+        file,
+        output,
+        options,
+        lastcol,
+        tab_config,
+        &mut print_state,
+    );
+    *line_state = print_state;
+    result
+}
 
+/// Unexpands everything `input` yields, carrying the line state in `print_state`.
+fn unexpand_input(
+    input: &mut impl BufRead,
+    file: &OsString,
+    output: &mut BufWriter<Stdout>,
+    options: &Options,
+    lastcol: usize,
+    tab_config: &TabConfig,
+    print_state: &mut PrintState,
+) -> UResult<()> {
     while let buf @ [_, ..] = input
         .fill_buf()
         .map_err(|e| e.map_err_context(|| file.maybe_quote().to_string()) as Box<dyn UError>)?
     {
         for line in buf.split_inclusive(|b| *b == b'\n') {
-            unexpand_buf(line, output, options, lastcol, tab_config, &mut print_state)?;
+            unexpand_buf(line, output, options, lastcol, tab_config, print_state)?;
             if let Some(b'\n') = line.last() {
                 print_state.new_line();
             }
@@ -670,8 +699,7 @@ fn unexpand_file(
         let len = buf.len();
         input.consume(len);
     }
-    // write out anything remaining
-    write_tabs(output, tab_config, &mut print_state, options.aflag)
+    Ok(())
 }
 
 fn unexpand(options: &Options) -> UResult<()> {
@@ -686,12 +714,25 @@ fn unexpand(options: &Options) -> UResult<()> {
         0
     };
 
+    // Input files form a single stream: a line that does not end in a
+    // newline continues in the next file.
+    let mut print_state = PrintState::new();
+
     for file in &options.files {
-        if let Err(e) = unexpand_file(file, &mut output, options, lastcol, tab_config) {
+        if let Err(e) = unexpand_file(
+            file,
+            &mut output,
+            options,
+            lastcol,
+            tab_config,
+            &mut print_state,
+        ) {
             show!(e);
             set_exit_code(1);
         }
     }
+    // write out anything remaining
+    write_tabs(&mut output, tab_config, &mut print_state, options.aflag)?;
     output.flush()?;
     Ok(())
 }
