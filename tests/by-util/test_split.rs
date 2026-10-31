@@ -438,6 +438,45 @@ fn test_split_lines_number() {
         .stderr_only("split: invalid number of lines: 'file'\n");
 }
 
+/// The line count is a plain decimal number, not a SIZE like `-b` takes.
+#[test]
+fn test_split_lines_number_is_decimal() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let name = "lines-decimal";
+    RandomFile::new(at, name).add_lines(20);
+    let glob = Glob::new(at, ".", r"x[[:alpha:]][[:alpha:]]$");
+
+    // A leading zero does not make the count octal, in `-l` or the
+    // obsolete `-NUMBER` form, and a leading `+` is allowed.
+    for (args, chunks) in [
+        (&["-l", "010"][..], 2),
+        (&["-010"][..], 2),
+        (&["-l", "+5"][..], 4),
+    ] {
+        scene.ucmd().args(args).arg(name).succeeds().no_output();
+        assert_eq!(glob.count(), chunks);
+        assert_eq!(glob.collate(), at.read_bytes(name));
+        for file in glob.collect() {
+            at.remove(&file);
+        }
+    }
+
+    scene
+        .ucmd()
+        .args(&["-l", "0", name])
+        .fails_with_code(1)
+        .stderr_only("split: invalid number of lines: 0\n");
+
+    for count in ["1k", "1K", "0x10", "1e2", "5b"] {
+        scene
+            .ucmd()
+            .args(&["-l", count, name])
+            .fails_with_code(1)
+            .stderr_only(format!("split: invalid number of lines: '{count}'\n"));
+    }
+}
+
 /// Test interference between split line size and IO buffer capacity.
 /// See issue #7869.
 #[test]

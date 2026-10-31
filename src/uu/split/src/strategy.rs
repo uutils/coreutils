@@ -248,6 +248,20 @@ impl StrategyError {
     }
 }
 
+/// Parse the number of lines given to `-l` or the obsolete `-NUMBER` form.
+///
+/// Unlike the SIZE of `-b` and `-C`, this is a plain decimal number, like in
+/// GNU split: no multiplier suffixes, no hex, and a leading `0` does not make
+/// it octal. A count too large for `u64` is clamped to `u64::MAX`.
+fn parse_lines(s: &str) -> Result<u64, ParseSizeError> {
+    let trimmed = s.trim_start_matches(|c: char| c.is_ascii_whitespace());
+    let digits = trimmed.strip_prefix('+').unwrap_or(trimmed);
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(ParseSizeError::ParseFailure(s.quote().to_string()));
+    }
+    Ok(digits.parse().unwrap_or(u64::MAX))
+}
+
 impl Strategy {
     /// Parse a strategy from the command-line arguments.
     pub fn from(matches: &ArgMatches, obs_lines: Option<&str>) -> Result<Self, StrategyError> {
@@ -255,6 +269,7 @@ impl Strategy {
             matches: &ArgMatches,
             option: &'static str,
             short: char,
+            parse: fn(&str) -> Result<u64, ParseSizeError>,
             strategy: fn(u64) -> Strategy,
             error: fn(ParseSizeError, Option<OptionValue>) -> StrategyError,
         ) -> Result<Strategy, StrategyError> {
@@ -262,7 +277,7 @@ impl Strategy {
             // `None` for a size that did not come from an option, such as the
             // obsolete `split -22` spelling: there is nothing to point at.
             let origin = || Some(OptionValue::new(s, short, option));
-            let n = parse_size_u64_max(s).map_err(|e| error(e, origin()))?;
+            let n = parse(s).map_err(|e| error(e, origin()))?;
             if n > 0 {
                 Ok(strategy(n))
             } else {
@@ -281,7 +296,7 @@ impl Strategy {
             matches.value_source(options::NUMBER) == Some(ValueSource::CommandLine),
         ) {
             (Some(v), false, false, false, false) => {
-                let v = parse_size_u64_max(v).map_err(|_| {
+                let v = parse_lines(v).map_err(|_| {
                     StrategyError::Lines(ParseSizeError::ParseFailure(v.to_string()), None)
                 })?;
                 if v > 0 {
@@ -298,6 +313,7 @@ impl Strategy {
                 matches,
                 options::LINES,
                 'l',
+                parse_lines,
                 Self::Lines,
                 StrategyError::Lines,
             ),
@@ -305,6 +321,7 @@ impl Strategy {
                 matches,
                 options::BYTES,
                 'b',
+                parse_size_u64_max,
                 Self::Bytes,
                 StrategyError::Bytes,
             ),
@@ -312,6 +329,7 @@ impl Strategy {
                 matches,
                 options::LINE_BYTES,
                 'C',
+                parse_size_u64_max,
                 Self::LineBytes,
                 StrategyError::Bytes,
             ),
