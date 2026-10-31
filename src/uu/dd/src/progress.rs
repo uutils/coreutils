@@ -13,7 +13,7 @@
 //! updater that runs in its own thread.
 
 use std::io::Write;
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::Duration;
@@ -419,51 +419,39 @@ pub(crate) enum StatusLevel {
     None,
 }
 
-/// Return a closure that can be used in its own thread to print progress info.
-///
-/// This function returns a closure that receives [`ProgUpdate`]
-/// instances sent through `rx`. When a [`ProgUpdate`] instance is
-/// received, the transfer statistics are re-printed to stderr.
-#[cfg(not(target_os = "linux"))]
-pub(crate) fn gen_prog_updater(
-    rx: mpsc::Receiver<ProgUpdate>,
-    print_level: Option<StatusLevel>,
-) -> impl Fn() {
-    move || {
-        // As we are in a thread, we need to set up localization independently.
-        let _ = setup_localization("dd");
+#[cfg(unix)]
+static PROGRESS_SIGNAL_RECEIVED: AtomicBool = AtomicBool::new(false);
 
-        let mut progress_printed = false;
-        while let Ok(update) = rx.recv() {
-            // Print the final read/write statistics.
-            if update.update_type == ProgUpdateType::Final {
-                update.print_final_stats(print_level, progress_printed);
-                return;
-            }
-            if Some(StatusLevel::Progress) == print_level {
-                update.reprint_prog_line();
-                progress_printed = true;
-            }
-        }
-    }
+#[cfg(unix)]
+pub(crate) fn check_and_reset_progress_signal() -> bool {
+    PROGRESS_SIGNAL_RECEIVED.swap(false, Ordering::Relaxed)
 }
 
-#[cfg(target_os = "linux")]
-static SIGUSR1_RECEIVED: AtomicBool = AtomicBool::new(false);
-
-#[cfg(target_os = "linux")]
-pub(crate) fn check_and_reset_sigusr1() -> bool {
-    SIGUSR1_RECEIVED.swap(false, Ordering::Relaxed)
+#[cfg(unix)]
+extern "C" fn progress_signal_handler(_: core::ffi::c_int) {
+    PROGRESS_SIGNAL_RECEIVED.store(true, Ordering::Relaxed);
 }
 
-#[cfg(target_os = "linux")]
-extern "C" fn sigusr1_handler(_: core::ffi::c_int) {
-    SIGUSR1_RECEIVED.store(true, Ordering::Relaxed);
-}
-
-#[cfg(target_os = "linux")]
-pub(crate) fn install_sigusr1_handler() -> std::io::Result<()> {
-    uucore::signals::install_signal_handler(libc::SIGUSR1, sigusr1_handler)?;
+#[cfg(unix)]
+pub(crate) fn install_progress_signal_handler() -> std::io::Result<()> {
+    // BSD systems (including macOS) use SIGINFO; other Unix systems use SIGUSR1.
+    #[cfg(any(
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "dragonfly"
+    ))]
+    let signal = libc::SIGINFO;
+    #[cfg(not(any(
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "dragonfly"
+    )))]
+    let signal = libc::SIGUSR1;
+    uucore::signals::install_signal_handler(signal, progress_signal_handler)?;
     Ok(())
 }
 
@@ -473,10 +461,7 @@ pub(crate) fn install_sigusr1_handler() -> std::io::Result<()> {
 /// instances sent through `rx`. When a [`ProgUpdate`] instance is
 /// received, the transfer statistics are re-printed to stderr.
 ///
-/// The closure also registers a signal handler for `SIGUSR1`. When
-/// the `SIGUSR1` signal is sent to this process, the transfer
-/// statistics are printed to stderr.
-#[cfg(target_os = "linux")]
+/// Signal updates are sent by the copy loop after SIGINFO or SIGUSR1 is received.
 pub(crate) fn gen_prog_updater(
     rx: mpsc::Receiver<ProgUpdate>,
     print_level: Option<StatusLevel>,
@@ -505,8 +490,8 @@ pub(crate) fn gen_prog_updater(
                     }
                 }
                 ProgUpdateType::Signal => {
-                    update.print_transfer_stats(progress_printed);
-                    // Reset the progress printed, since print_transfer_stats always prints a newline.
+                    update.print_final_stats(print_level, progress_printed);
+                    // Signal reports finish the current progress line.
                     progress_printed = false;
                 }
             }
