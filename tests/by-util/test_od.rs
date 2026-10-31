@@ -1709,3 +1709,13 @@ fn test_width_invalid_numbers() {
             .stderr_only(format!("od: {message}\n"));
     }
 }
+
+#[test]
+fn test_strings_with_type_option_is_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a.txt", "a\n");
+    ucmd.args(&["--strings=1", "-c", "a.txt"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("no type may be specified when dumping strings");
+}
