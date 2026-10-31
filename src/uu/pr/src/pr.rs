@@ -10,7 +10,7 @@ use itertools::Itertools;
 use regex::Regex;
 use std::ffi::OsStr;
 use std::fs::metadata;
-use std::io::{self, Read, Write, stderr, stdin, stdout};
+use std::io::{self, BufRead, BufReader, Read, Write, stderr, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::PathBuf;
 use std::str::Utf8Error;
@@ -1079,6 +1079,14 @@ fn apply_expand_tab(chunk: &mut Vec<u8>, byte: u8, expand_options: &ExpandTabsOp
 }
 
 fn pr(name: &str, options: &OutputOptions) -> Result<i32, PrError> {
+    // Stream the simple stdin layout so output can begin before EOF; keep
+    // other layouts on the existing buffered path.
+    if name == FILE_STDIN && can_stream_stdin(options) {
+        let mut writer = uucore::output::StdoutBuffer::new(stdout().lock());
+        stream_stdin(&mut writer, options)?;
+        return Ok(0);
+    }
+
     // Read the entire contents of the file into a buffer.
     //
     // TODO Read incrementally.
@@ -1106,6 +1114,185 @@ fn pr(name: &str, options: &OutputOptions) -> Result<i32, PrError> {
     }
 
     Ok(0)
+}
+
+fn can_stream_stdin(options: &OutputOptions) -> bool {
+    options.number.is_none()
+        && options.column_mode_options.is_none()
+        && options.merge_files_print.is_none()
+        && !options.double_space
+        && options.start_page == 1
+        && options.end_page.is_none()
+        && !options.form_feed_used
+        && options.offset_spaces == 0
+        && options.line_separator == "\n"
+        && options.content_line_separator == "\n"
+        && options.page_separator_char == "\n"
+        && options.line_width.is_none()
+        && options.expand_tabs.is_none()
+}
+
+fn stream_stdin(writer: &mut impl Write, options: &OutputOptions) -> Result<(), PrError> {
+    // Keep only the current record and page state so pipes produce output
+    // before EOF.
+    let mut reader = BufReader::new(stdin());
+    let mut line = Vec::new();
+    let mut page = 1;
+    let mut line_number = get_start_line_number(options);
+    let lines_per_page = lines_to_read_for_page(options);
+    let mut lines_on_page = 0;
+    let mut page_started = false;
+    let mut previous_delimiter = None;
+
+    loop {
+        let delimiter = read_stream_record(&mut reader, &mut line).map_err(PrError::Read)?;
+
+        let Some(delimiter) = delimiter else {
+            if !line.is_empty() {
+                write_stream_line(writer, options, page, line_number, &line, &mut page_started)?;
+                lines_on_page += 1;
+                if lines_on_page == lines_per_page {
+                    finish_stream_page(writer, options, page, lines_on_page, &mut page_started)?;
+                    page += 1;
+                    lines_on_page = 0;
+                }
+            }
+            break;
+        };
+
+        let ignore_empty_line = line.is_empty()
+            && ((delimiter == FF && previous_delimiter == Some(NL))
+                || (delimiter == NL && previous_delimiter == Some(FF)));
+
+        // Adjacent newline/form-feed delimiters mark a page boundary rather
+        // than an additional empty input record.
+        if !ignore_empty_line {
+            write_stream_line(writer, options, page, line_number, &line, &mut page_started)?;
+            lines_on_page += 1;
+            if delimiter == NL {
+                line_number += 1;
+            }
+        }
+
+        if delimiter == FF || lines_on_page == lines_per_page {
+            finish_stream_page(writer, options, page, lines_on_page, &mut page_started)?;
+            page += 1;
+            lines_on_page = 0;
+        }
+
+        previous_delimiter = Some(delimiter);
+    }
+
+    if lines_on_page > 0 {
+        finish_stream_page(writer, options, page, lines_on_page, &mut page_started)?;
+    }
+
+    writer.flush().map_err(PrError::Write)?;
+    Ok(())
+}
+
+fn read_stream_record(reader: &mut impl BufRead, line: &mut Vec<u8>) -> io::Result<Option<u8>> {
+    // Search each BufRead chunk for a delimiter, retaining only one record
+    // instead of reading the whole input before writing.
+    line.clear();
+    loop {
+        let input = reader.fill_buf()?;
+        if input.is_empty() {
+            return Ok(None);
+        }
+
+        if let Some(index) = memchr::memchr2(FF, NL, input) {
+            line.extend_from_slice(&input[..index]);
+            let delimiter = input[index];
+            reader.consume(index + 1);
+            return Ok(Some(delimiter));
+        }
+
+        line.extend_from_slice(input);
+        let input_len = input.len();
+        reader.consume(input_len);
+    }
+}
+
+fn write_stream_line(
+    writer: &mut impl Write,
+    options: &OutputOptions,
+    page: usize,
+    line_number: usize,
+    line: &[u8],
+    page_started: &mut bool,
+) -> Result<(), PrError> {
+    if !*page_started {
+        // Delay headers until a record arrives so empty input produces no page.
+        for header_line in header_content(options, page) {
+            writer
+                .write_all(header_line.as_bytes())
+                .map_err(PrError::Write)?;
+            writer
+                .write_all(options.line_separator.as_bytes())
+                .map_err(PrError::Write)?;
+        }
+        *page_started = true;
+    }
+
+    let file_line = FileLine::from_buf(0, page - 1, line_number, line, options);
+    writer
+        .write_all(
+            get_line_for_printing(options, &file_line, 1, 0, options.line_width, 1).as_bytes(),
+        )
+        .map_err(PrError::Write)?;
+    writer
+        .write_all(options.content_line_separator.as_bytes())
+        .map_err(PrError::Write)
+}
+
+fn finish_stream_page(
+    writer: &mut impl Write,
+    options: &OutputOptions,
+    page: usize,
+    lines_on_page: usize,
+    page_started: &mut bool,
+) -> Result<(), PrError> {
+    if !*page_started {
+        // A form feed can create an empty page, so emit its header here.
+        for header_line in header_content(options, page) {
+            writer
+                .write_all(header_line.as_bytes())
+                .map_err(PrError::Write)?;
+            writer
+                .write_all(options.line_separator.as_bytes())
+                .map_err(PrError::Write)?;
+        }
+        *page_started = true;
+    }
+
+    if options.display_header_and_trailer {
+        for _ in lines_on_page..options.content_lines_per_page {
+            writer
+                .write_all(options.content_line_separator.as_bytes())
+                .map_err(PrError::Write)?;
+        }
+    }
+
+    let trailer = trailer_content(options);
+    for (index, trailer_line) in trailer.iter().enumerate() {
+        writer
+            .write_all(trailer_line.as_bytes())
+            .map_err(PrError::Write)?;
+        if index + 1 != trailer.len() {
+            writer
+                .write_all(options.line_separator.as_bytes())
+                .map_err(PrError::Write)?;
+        }
+    }
+    if options.display_header_and_trailer || options.form_feed_used {
+        writer
+            .write_all(options.page_separator_char.as_bytes())
+            .map_err(PrError::Write)?;
+    }
+
+    *page_started = false;
+    Ok(())
 }
 
 /// Group lines of a file into pages.
