@@ -319,3 +319,16 @@ mod diagnostics {
         assert!(!stderr.contains(":1:"), "{stderr}");
     }
 }
+
+#[test]
+fn test_mode_negative_value() {
+    use uucore::fs::display_permissions;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Only the permission bits of a negative mode are used, so -066 is 0600.
+    scene.ucmd().args(&["-m", "-066", "f"]).succeeds();
+
+    let metadata = std::fs::metadata(at.subdir.join("f")).unwrap();
+    assert_eq!(display_permissions(&metadata, true), "prw-------"); // spell-checker:disable-line
+}
