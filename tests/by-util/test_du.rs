@@ -1766,6 +1766,38 @@ fn test_du_exclude_several_components() {
     assert!(!result.stdout_str().contains("a/b"));
 }
 
+// spell-checker:ignore fnmatch corefile ncorefile
+#[test]
+fn test_du_exclude_fnmatch_syntax() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir");
+    at.touch("dir/report.txt");
+    at.touch("dir/1.log");
+    at.touch("dir/corefile");
+
+    for (pattern, excluded) in [
+        ("*\\.txt", "report.txt"),
+        ("[[:digit:]]*", "1.log"),
+        ("core**", "corefile"),
+    ] {
+        let result = ts
+            .ucmd()
+            .arg("-a")
+            .arg(format!("--exclude={pattern}"))
+            .arg("dir")
+            .succeeds();
+        let stdout = result.stdout_str();
+        assert!(!stdout.contains(excluded), "{pattern}: {stdout}");
+        for name in ["report.txt", "1.log", "corefile"] {
+            if name != excluded {
+                assert!(stdout.contains(name), "{pattern}: {stdout}");
+            }
+        }
+    }
+}
+
 #[test]
 fn test_du_exclude_invalid_syntax() {
     let ts = TestScenario::new(util_name!());
