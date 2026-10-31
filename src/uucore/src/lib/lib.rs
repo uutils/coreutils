@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind
+// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind ohos
 
 //! library ~ (core/bundler file)
 
@@ -41,7 +41,9 @@ pub use uucore_procs::*;
 // * cross-platform modules
 #[cfg(all(feature = "fs", any(unix, windows, target_os = "wasi")))]
 pub use crate::mods::io;
-pub use crate::mods::{clap_localization, display, error, line_ending, locale, os, panic, posix};
+pub use crate::mods::{
+    clap_localization, display, error, line_ending, locale, os, output, panic, posix,
+};
 
 // * feature-gated modules
 #[cfg(feature = "backup-control")]

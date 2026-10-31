@@ -13,5 +13,6 @@ pub mod io;
 pub mod line_ending;
 pub mod locale;
 pub mod os;
+pub mod output;
 pub mod panic;
 pub mod posix;

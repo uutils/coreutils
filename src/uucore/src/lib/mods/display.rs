@@ -110,7 +110,8 @@ impl<W: OsWrite> OsWrite for BufWriter<W> {}
 
 impl OsWrite for Box<dyn OsWrite> {
     fn write_all_os(&mut self, buf: &OsStr) -> io::Result<()> {
-        let this: &mut dyn OsWrite = self;
+        // Dereference the box before coercing, or dispatch would recurse here.
+        let this: &mut dyn OsWrite = &mut **self;
         this.write_all_os(buf)
     }
 }
