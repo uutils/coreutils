@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
+use std::io::{BufReader, Read, Stdout, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -203,7 +203,7 @@ impl FmtOptions {
 fn process_file(
     file_name: &OsString,
     fmt_opts: &FmtOptions,
-    ostream: &mut BufWriter<Stdout>,
+    ostream: &mut uucore::output::StdoutBuffer<Stdout>,
 ) -> UResult<()> {
     let mut fp = BufReader::new(if file_name == "-" {
         Box::new(stdin()) as Box<dyn Read + 'static>
@@ -404,7 +404,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let fmt_opts = FmtOptions::from_matches(&matches)?;
 
-    let mut ostream = BufWriter::new(stdout());
+    let mut ostream = uucore::output::StdoutBuffer::new(stdout());
 
     for file_name in &files {
         process_file(file_name, &fmt_opts, &mut ostream)?;

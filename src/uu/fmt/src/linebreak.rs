@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) INFTY MULT accum breakwords linebreak linebreaking linebreaks linelen maxlength minlength nchars ostream overlen parasplit plass posn powf punct signum slen sstart tabwidth tlen underlen winfo wlen wordlen
 
-use std::io::{BufWriter, Stdout, Write};
+use std::io::{Stdout, Write};
 use std::mem;
 
 use crate::FmtOptions;
@@ -17,7 +17,7 @@ struct BreakArgs<'a> {
     indent: &'a [u8],
     indent_len: usize,
     uniform: bool,
-    ostream: &'a mut BufWriter<Stdout>,
+    ostream: &'a mut uucore::output::StdoutBuffer<Stdout>,
 }
 
 impl BreakArgs<'_> {
@@ -48,7 +48,7 @@ impl BreakArgs<'_> {
 pub fn break_lines(
     para: &Paragraph,
     opts: &FmtOptions,
-    ostream: &mut BufWriter<Stdout>,
+    ostream: &mut uucore::output::StdoutBuffer<Stdout>,
 ) -> std::io::Result<()> {
     // indent
     let p_indent = &para.indent_str;
@@ -510,7 +510,10 @@ fn slice_if_fresh<'a>(
 }
 
 /// Write a newline and add the indent.
-fn write_newline(indent: &[u8], ostream: &mut BufWriter<Stdout>) -> std::io::Result<()> {
+fn write_newline(
+    indent: &[u8],
+    ostream: &mut uucore::output::StdoutBuffer<Stdout>,
+) -> std::io::Result<()> {
     ostream.write_all(b"\n")?;
     ostream.write_all(indent)
 }
@@ -519,7 +522,7 @@ fn write_newline(indent: &[u8], ostream: &mut BufWriter<Stdout>) -> std::io::Res
 fn write_with_spaces(
     word: &[u8],
     slen: usize,
-    ostream: &mut BufWriter<Stdout>,
+    ostream: &mut uucore::output::StdoutBuffer<Stdout>,
 ) -> std::io::Result<()> {
     if slen == 2 {
         ostream.write_all(b"  ")?;
