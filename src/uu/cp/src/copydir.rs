@@ -16,7 +16,7 @@ use std::convert::identity;
 use std::env;
 use std::fs::{self, exists};
 use std::io;
-use std::path::{Path, PathBuf, StripPrefixError};
+use std::path::{Component, Path, PathBuf, StripPrefixError};
 
 use indicatif::ProgressBar;
 use uucore::display::Quotable;
@@ -70,8 +70,10 @@ fn adjust_canonicalization(p: &Path) -> Cow<'_, Path> {
 
 /// Get a descendant path relative to the given parent directory.
 ///
-/// If `root_parent` is `None`, then this just returns the `path`
-/// itself. Otherwise, this function strips the parent prefix from the
+/// If `root_parent` is `None` (the source is a filesystem root), then
+/// this returns the `path` without its drive prefix and root directory,
+/// so that joining it to the target does not discard the target.
+/// Otherwise, this function strips the parent prefix from the
 /// given `path`, leaving only the portion of the path relative to the
 /// parent.
 fn get_local_to_root_parent(
@@ -91,7 +93,10 @@ fn get_local_to_root_parent(
             let path = path.strip_prefix(parent)?;
             Ok(path.to_path_buf())
         }
-        None => Ok(path.to_path_buf()),
+        None => Ok(path
+            .components()
+            .filter(|c| !matches!(c, Component::Prefix(_) | Component::RootDir))
+            .collect()),
     }
 }
 
@@ -398,38 +403,39 @@ pub(crate) fn copy_directory(
     let parents_dest = options.parents.then(|| target.join(root));
     let mut parent_dirs = Vec::new();
     let mut copy_tree = || -> CopyResult<()> {
-        let tmp =
-            match (parents_dest.as_ref(), root.parent()) {
-                (Some(parents_dest), Some(parent)) => {
-                    create_parent_dirs(root, parents_dest, options, &mut parent_dirs)?;
-                    if root.components().next_back().is_some_and(|component| {
-                        matches!(component, std::path::Component::ParentDir)
-                    }) {
-                        build_dir(parents_dest, false, options, Some(root)).map_err(
-                            |err| match err {
-                                CpError::IoErr(io_err) => CpError::IoErrContext(
-                                    io_err,
-                                    format!("cannot create directory {}", parents_dest.quote()),
-                                ),
-                                err => err,
-                            },
-                        )?;
-                    }
-                    if options.verbose {
-                        // For example, if copying file `a/b/c` and its parents
-                        // to directory `d/`, then print
-                        //
-                        //     a -> d/a
-                        //     a/b -> d/a/b
-                        //
-                        for (x, y) in aligned_ancestors(root, parents_dest) {
-                            println!("{} -> {}", x.display(), y.display());
-                        }
-                    }
-                    target.join(parent)
+        let tmp = match (parents_dest.as_ref(), root.parent()) {
+            (Some(parents_dest), Some(parent)) => {
+                create_parent_dirs(root, parents_dest, options, &mut parent_dirs)?;
+                if root
+                    .components()
+                    .next_back()
+                    .is_some_and(|component| matches!(component, Component::ParentDir))
+                {
+                    build_dir(parents_dest, false, options, Some(root)).map_err(
+                        |err| match err {
+                            CpError::IoErr(io_err) => CpError::IoErrContext(
+                                io_err,
+                                format!("cannot create directory {}", parents_dest.quote()),
+                            ),
+                            err => err,
+                        },
+                    )?;
                 }
-                _ => target.to_path_buf(),
-            };
+                if options.verbose {
+                    // For example, if copying file `a/b/c` and its parents
+                    // to directory `d/`, then print
+                    //
+                    //     a -> d/a
+                    //     a/b -> d/a/b
+                    //
+                    for (x, y) in aligned_ancestors(root, parents_dest) {
+                        println!("{} -> {}", x.display(), y.display());
+                    }
+                }
+                target.join(parent)
+            }
+            _ => target.to_path_buf(),
+        };
         let target = tmp.as_path();
 
         let preserve_hard_links = options.preserve_hard_links();
@@ -687,4 +693,26 @@ fn build_dir(
 
     builder.create(path)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_local_to_root_parent_without_parent_is_relative() {
+        // Copying a filesystem root (`cp -r / dst`, or `cp -r W:/ dst` on
+        // Windows) has no parent; the result must not be absolute, or
+        // `target.join(..)` would discard the target.
+        let local = get_local_to_root_parent(Path::new("/a/b"), None).unwrap();
+        assert_eq!(local, Path::new("a").join("b"));
+        assert!(local.is_relative());
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_local_to_root_parent_without_parent_drops_drive() {
+        let local = get_local_to_root_parent(Path::new("W:/id.dat"), None).unwrap();
+        assert_eq!(local, Path::new("id.dat"));
+    }
 }
