@@ -1434,15 +1434,22 @@ pub fn uu_app() -> Command {
                 .long(options::DEREFERENCE_ARGS)
                 .help(translate!("du-help-dereference-args"))
                 .action(ArgAction::SetTrue)
-                .overrides_with(options::DEREFERENCE_ARGS),
+                .overrides_with_all([
+                    options::DEREFERENCE,
+                    options::DEREFERENCE_ARGS,
+                    options::NO_DEREFERENCE,
+                ]),
         )
         .arg(
             Arg::new(options::NO_DEREFERENCE)
                 .short('P')
                 .long(options::NO_DEREFERENCE)
                 .help(translate!("du-help-no-dereference"))
-                .overrides_with(options::DEREFERENCE)
-                .overrides_with(options::NO_DEREFERENCE)
+                .overrides_with_all([
+                    options::DEREFERENCE,
+                    options::DEREFERENCE_ARGS,
+                    options::NO_DEREFERENCE,
+                ])
                 .action(ArgAction::SetTrue),
         )
         .arg(
