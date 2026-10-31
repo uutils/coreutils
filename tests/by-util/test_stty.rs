@@ -153,13 +153,7 @@ fn invalid_setting() {
 
 #[test]
 fn invalid_baud_setting() {
-    #[cfg(not(any(
-        target_vendor = "apple",
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    )))]
+    #[cfg(not(bsd))]
     new_ucmd!()
         .args(&["100"])
         .fails()
@@ -180,25 +174,13 @@ fn invalid_baud_setting() {
         .fails()
         .stderr_contains("missing argument to 'ospeed'");
 
-    #[cfg(not(any(
-        target_vendor = "apple",
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    )))]
+    #[cfg(not(bsd))]
     new_ucmd!()
         .args(&["ispeed", "995"])
         .fails()
         .stderr_contains("invalid ispeed '995'");
 
-    #[cfg(not(any(
-        target_vendor = "apple",
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    )))]
+    #[cfg(not(bsd))]
     new_ucmd!()
         .args(&["ospeed", "995"])
         .fails()
@@ -471,13 +453,7 @@ fn grouped_flag_removal() {
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn baud_rate_validation() {
     // Test various baud rate formats
-    #[cfg(any(
-        target_vendor = "apple",
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
+    #[cfg(bsd)]
     {
         // BSD accepts numeric baud rates
         new_ucmd!().args(&["9600"]).fails(); // Fails due to no TTY, but validates parsing
@@ -1473,13 +1449,7 @@ fn invalid_baud_rate() {
 
     // On non-BSD systems, test invalid numeric baud rate
     // On BSD systems, any u32 is accepted, so we skip this test
-    #[cfg(not(any(
-        target_vendor = "apple",
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    )))]
+    #[cfg(not(bsd))]
     {
         new_ucmd!()
             .args(&["ospeed", "999999999"])
@@ -1632,13 +1602,7 @@ fn test_ispeed_ospeed_valid_speeds() {
 }
 
 #[test]
-#[cfg(not(any(
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "netbsd",
-    target_os = "openbsd"
-)))]
+#[cfg(not(bsd))]
 #[ignore = "Issue: #9547"]
 fn test_ispeed_ospeed_invalid_speeds() {
     let (path, _controller, _replica) = pty_path();
