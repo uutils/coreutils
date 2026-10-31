@@ -8,13 +8,14 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
 use uucore::char_width::char_width_at;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
+use uucore::output::StdoutBuffer;
 use uucore::{format_usage, show, translate};
 
 pub mod options {
@@ -368,7 +369,7 @@ fn write_spaces(output: &mut impl Write, mut n: usize) -> std::io::Result<()> {
 
 fn expand_buf(
     buf: &[u8],
-    output: &mut BufWriter<std::io::Stdout>,
+    output: &mut StdoutBuffer<std::io::Stdout>,
     tabstops: &[usize],
     options: &Options,
     col: &mut usize,
@@ -446,7 +447,7 @@ fn expand_buf(
 
 fn expand_file(
     file: &OsString,
-    output: &mut BufWriter<std::io::Stdout>,
+    output: &mut StdoutBuffer<std::io::Stdout>,
     options: &Options,
 ) -> UResult<()> {
     let mut input = open(file)?;
@@ -468,7 +469,7 @@ fn expand_file(
 }
 
 fn expand(options: &Options) -> UResult<()> {
-    let mut output = BufWriter::new(stdout());
+    let mut output = StdoutBuffer::new(stdout());
 
     for file in &options.files {
         if let Err(e) = expand_file(file, &mut output, options) {
