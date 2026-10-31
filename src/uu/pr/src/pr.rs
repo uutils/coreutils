@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
 use regex::Regex;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fs::metadata;
 use std::io::{self, Read, Write, stderr, stdin, stdout};
 use std::num::IntErrorKind;
@@ -66,7 +66,7 @@ mod options {
 struct OutputOptions {
     /// Line numbering mode
     number: Option<NumberingMode>,
-    header: String,
+    header: OsString,
     double_space: bool,
     line_separator: String,
     content_line_separator: String,
@@ -365,7 +365,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILES)
                 .action(ArgAction::Append)
                 .default_value(FILE_STDIN)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::EXPAND_TABS)
@@ -379,7 +380,7 @@ pub fn uu_app() -> Command {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
+    let args: Vec<_> = args.collect();
 
     let opt_args = recreate_arguments(&args);
 
@@ -388,8 +389,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     #[allow(clippy::unwrap_used, reason = "default value is set by clap")]
     let files = matches
-        .get_many::<String>(options::FILES)
-        .map(|v| v.map(String::as_str).collect::<Vec<_>>())
+        .get_many::<OsString>(options::FILES)
+        .map(|v| v.map(OsString::as_os_str).collect::<Vec<_>>())
         .unwrap();
 
     let file_groups: Vec<_> = if matches.get_flag(options::MERGE) {
@@ -424,7 +425,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 /// Rewrite arguments before clap parsing, preserving legacy numeric operands.
-fn recreate_arguments(args: &[String]) -> Vec<String> {
+fn recreate_arguments(args: &[OsString]) -> Vec<OsString> {
     let num_regex = Regex::new(r"^[^-]\d*$").unwrap();
     // `-e` ends a cluster of short flags that take no value of their own, as in `-tre`.
     // Options that do take a value are excluded so that `-se` keeps meaning `-s e`.
@@ -432,14 +433,14 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
     let mut arguments = args.to_owned();
     let num_option = args
         .iter()
-        .take_while(|arg| arg.as_str() != "--")
-        .position(|x| x.trim() == "-n");
+        .take_while(|arg| *arg != "--")
+        .position(|x| x.to_str().is_some_and(|x| x.trim() == "-n"));
     if let Some(pos) = num_option
         && let Some(num_val_opt) = args.get(pos + 1)
-        && !num_regex.is_match(num_val_opt)
+        && !num_val_opt.to_str().is_some_and(|s| num_regex.is_match(s))
     {
         let could_be_file = arguments.remove(pos + 1);
-        arguments.insert(pos + 1, format!("{}", NumberingMode::default().width));
+        arguments.insert(pos + 1, NumberingMode::default().width.to_string().into());
         arguments.insert(pos + 2, could_be_file);
     }
 
@@ -448,10 +449,12 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
     // argument, usually a file name, for a bare `-e`.
     let expand_tabs_option = arguments
         .iter()
-        .take_while(|arg| arg.as_str() != "--")
-        .find_position(|x| e_regex.is_match(x.trim()));
+        .take_while(|arg| *arg != "--")
+        .enumerate()
+        .filter_map(|(pos, value)| value.to_str().map(|value| (pos, value)))
+        .find(|(_, value)| e_regex.is_match(value.trim()));
     if let Some((pos, value)) = expand_tabs_option {
-        arguments[pos] = format!("{}\t8", value.trim());
+        arguments[pos] = format!("{}\t8", value.trim()).into();
     }
 
     // Remove only whole-token legacy operands before clap parsing.
@@ -466,7 +469,9 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
                 past_terminator = true;
                 return true;
             }
-            as_column_operand(arg).is_none() && as_page_operand(arg).is_none()
+            arg.to_str().is_none_or(|arg| {
+                as_column_operand(arg).is_none() && as_page_operand(arg).is_none()
+            })
         })
         .collect()
 }
@@ -478,12 +483,15 @@ struct ColumnPageOperands {
 }
 
 /// Extract legacy `-COLUMN` and `+FIRST[:LAST]` operands before `--`.
-fn parse_column_page_operands(args: &[String]) -> ColumnPageOperands {
+fn parse_column_page_operands(args: &[OsString]) -> ColumnPageOperands {
     let mut operands = ColumnPageOperands::default();
     for arg in args {
         if arg == "--" {
             break;
         }
+        let Some(arg) = arg.to_str() else {
+            continue;
+        };
         if operands.column.is_none()
             && let Some(digits) = as_column_operand(arg)
         {
@@ -576,7 +584,7 @@ fn get_date_format(matches: &ArgMatches) -> String {
 #[allow(clippy::cognitive_complexity)]
 fn build_options(
     matches: &ArgMatches,
-    paths: &[&str],
+    paths: &[&OsStr],
     operands: &ColumnPageOperands,
 ) -> Result<OutputOptions, PrError> {
     let form_feed_used = matches.get_flag(options::FORM_FEED);
@@ -601,17 +609,16 @@ fn build_options(
         None
     };
 
-    let header = matches
-        .get_one::<String>(options::HEADER)
-        .map_or(
+    let header = matches.get_one::<String>(options::HEADER).map_or_else(
+        || {
             if is_merge_mode || paths[0] == FILE_STDIN {
-                ""
+                OsString::new()
             } else {
-                paths[0]
-            },
-            |s| s.as_str(),
-        )
-        .to_string();
+                paths[0].to_os_string()
+            }
+        },
+        OsString::from,
+    );
 
     let default_first_number = NumberingMode::default().first_number;
     let first_number = parse_usize(
@@ -746,7 +753,7 @@ fn build_options(
     let line_separator = "\n".to_string();
 
     let last_modified_time = {
-        let time = if is_merge_mode || paths[0].eq(FILE_STDIN) {
+        let time = if is_merge_mode || paths[0] == FILE_STDIN {
             Some(SystemTime::now())
         } else {
             metadata(paths.first().unwrap())
@@ -1045,7 +1052,7 @@ fn build_options(
 /// Read the entire contents of the given path into memory.
 ///
 /// If `name` is `"-"`, then read from stdin.
-fn read_to_end(name: &str) -> Result<Vec<u8>, PrError> {
+fn read_to_end(name: &OsStr) -> Result<Vec<u8>, PrError> {
     if name == "-" {
         let mut f = stdin();
         let mut buf = vec![];
@@ -1078,7 +1085,7 @@ fn apply_expand_tab(chunk: &mut Vec<u8>, byte: u8, expand_options: &ExpandTabsOp
     }
 }
 
-fn pr(name: &str, options: &OutputOptions) -> Result<i32, PrError> {
+fn pr(name: &OsStr, options: &OutputOptions) -> Result<i32, PrError> {
     // Read the entire contents of the file into a buffer.
     //
     // TODO Read incrementally.
@@ -1253,7 +1260,7 @@ fn group_lines(num_files: usize, lines: Vec<FileLine>) -> Vec<(usize, Vec<FileLi
 /// Each group can then be merged into columns of a single page.
 fn get_file_line_groups(
     options: &OutputOptions,
-    paths: &[&str],
+    paths: &[&OsStr],
 ) -> Result<Vec<(usize, Vec<FileLine>)>, PrError> {
     let num_files = paths.len();
     let mut all_lines = vec![];
@@ -1276,7 +1283,7 @@ fn get_file_line_groups(
     Ok(group_lines(num_files, all_lines))
 }
 
-fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
+fn mpr(paths: &[&OsStr], options: &OutputOptions) -> Result<i32, PrError> {
     let file_line_groups = get_file_line_groups(options, paths)?;
 
     if file_line_groups.is_empty() {
@@ -1318,7 +1325,7 @@ fn write_page(
     let trailer_content = trailer_content(options);
 
     for x in header {
-        writer.write_all(x.as_bytes())?;
+        writer.write_all(&x)?;
         writer.write_all(line_separator)?;
     }
 
@@ -1606,7 +1613,7 @@ fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: us
 
 /// Returns a five line header content if displaying header is not disabled by
 /// using `NO_HEADER_TRAILER_OPTION` option.
-fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
+fn header_content(options: &OutputOptions, page: usize) -> Vec<Vec<u8>> {
     if !options.display_header_and_trailer {
         return Vec::new();
     }
@@ -1623,7 +1630,7 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
     let total_width = options.line_width.unwrap_or(DEFAULT_COLUMN_WIDTH);
 
     let date_len = date_part.chars().count();
-    let filename_len = filename.chars().count();
+    let filename_len = filename.to_string_lossy().chars().count();
     let page_len = page_part.chars().count();
 
     let header_line = if date_len + filename_len + page_len + 2 < total_width {
@@ -1632,25 +1639,26 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
         let padding_before_filename = (space_for_filename - filename_len) / 2;
         let padding_after_filename = space_for_filename - filename_len - padding_before_filename;
 
-        let mut line = String::with_capacity(total_width);
-        line.push_str(date_part);
-        line.extend(std::iter::repeat_n(' ', padding_before_filename));
-        line.push_str(filename);
-        line.extend(std::iter::repeat_n(' ', padding_after_filename));
-        line.push_str(&page_part);
+        let mut line = Vec::with_capacity(total_width);
+        line.extend_from_slice(date_part.as_bytes());
+        line.extend(std::iter::repeat_n(b' ', padding_before_filename));
+        line.extend_from_slice(filename.as_encoded_bytes());
+        line.extend(std::iter::repeat_n(b' ', padding_after_filename));
+        line.extend_from_slice(page_part.as_bytes());
         line
     } else {
         // If content is too long, just use single spaces
-        format!("{date_part} {filename} {page_part}")
+        [
+            date_part.as_bytes(),
+            b" ",
+            filename.as_encoded_bytes(),
+            b" ",
+            page_part.as_bytes(),
+        ]
+        .concat()
     };
 
-    vec![
-        String::new(),
-        String::new(),
-        header_line,
-        String::new(),
-        String::new(),
-    ]
+    vec![Vec::new(), Vec::new(), header_line, Vec::new(), Vec::new()]
 }
 
 /// Returns five empty lines as trailer content if displaying trailer
