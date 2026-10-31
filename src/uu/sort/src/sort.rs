@@ -262,8 +262,8 @@ impl Output {
         Ok(Self { file })
     }
 
-    fn into_write(self) -> UResult<BufWriter<Box<dyn Write>>> {
-        Ok(BufWriter::new(match self.file {
+    fn into_write(self) -> UResult<Box<dyn Write>> {
+        Ok(match self.file {
             Some((name, file)) => {
                 // Only regular files can be truncated; there a failure leaves stale bytes.
                 if file.metadata().is_ok_and(|meta| meta.is_file()) {
@@ -272,10 +272,10 @@ impl Output {
                         error,
                     })?;
                 }
-                Box::new(file)
+                Box::new(BufWriter::new(file))
             }
-            None => Box::new(stdout()),
-        }))
+            None => Box::new(uucore::output::StdoutBuffer::new(stdout())),
+        })
     }
 
     fn as_output_name(&self) -> Option<&OsStr> {
