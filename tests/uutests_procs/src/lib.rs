@@ -42,6 +42,9 @@ pub fn wasi_ignore(args: TokenStream, item: TokenStream) -> TokenStream {
         "ClosedStdoutGenericIoError" => {
             "WASI: closed stdout reports a generic I/O error rather than BrokenPipe"
         }
+        "CompressProgramBypassed" => {
+            "WASI: ext_sort bypasses --compress-program entirely (single-threaded in-memory path)"
+        }
         "DebugReportsUnsupported" => {
             "WASI: --debug reports 'unsupported' instead of 'unknown' for this platform"
         }
@@ -86,6 +89,9 @@ pub fn wasi_ignore(args: TokenStream, item: TokenStream) -> TokenStream {
         "NoRlimitSetrlimitSupport" => "WASI: rlimit/setrlimit not supported",
         "NoStdoutFileRedirection" => "WASI: no stdout-to-file redirection",
         "NoSubprocessSpawning" => "WASI: no subprocess spawning",
+        "NoThreadSpawning" => {
+            "WASI: sort -m spawns real OS threads for multi-file merge, unsupported under wasmtime's default config"
+        }
         "NoTzdb" => {
             "WASI: no tzdb; TZ env var is not honoured, so timezone-dependent behaviour (DST validation, timestamps) differs from the host"
         }

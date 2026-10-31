@@ -41,6 +41,7 @@ fn test_helper(file_name: &str, possible_args: &[&str]) {
 }
 
 #[test]
+#[uutests::wasi_ignore(Usize32BitOverflow)]
 fn test_buffer_sizes() {
     #[cfg(target_os = "linux")]
     let buffer_sizes = ["0", "50K", "50k", "1M", "100M", "0%", "10%"];
@@ -57,6 +58,7 @@ fn test_buffer_sizes() {
             .stdout_is_fixture("ext_sort.expected");
     }
 
+    // The WASI guest is always 32-bit, so these values overflow there.
     #[cfg(not(target_pointer_width = "32"))]
     {
         let buffer_sizes = ["1000G", "10T"];
@@ -774,6 +776,7 @@ fn month_sort_input_expected(months: &[String]) -> (String, String) {
 
 #[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoLocaleData)]
 fn test_month_sort_french_locale() {
     let locale = "fr_FR.UTF-8";
     if !is_locale_available(locale) {
@@ -817,6 +820,7 @@ fn test_month_sort_french_locale() {
 
 #[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoLocaleData)]
 fn test_month_sort_hungarian_locale() {
     let locale = "hu_HU.UTF-8";
     if !is_locale_available(locale) {
@@ -860,6 +864,7 @@ fn test_month_sort_hungarian_locale() {
 /// E.g. "av   ril" should NOT match "avril" — GNU treats it as unknown.
 #[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoLocaleData)]
 fn test_month_sort_french_embedded_blanks() {
     let locale = "fr_FR.UTF-8";
     if !is_locale_available(locale) {
@@ -924,6 +929,7 @@ fn test_month_sort_french_embedded_blanks() {
 
 #[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoLocaleData)]
 fn test_month_sort_japanese_locale() {
     let locale = "ja_JP.UTF-8";
     if !is_locale_available(locale) {
@@ -1309,6 +1315,7 @@ fn test_unterminated_file_not_fused_across_chunk_boundary() {
 }
 
 #[test]
+#[uutests::wasi_ignore(NoThreadSpawning)]
 fn test_merge_interleaved() {
     new_ucmd!()
         .arg("-m")
@@ -1320,6 +1327,7 @@ fn test_merge_interleaved() {
 }
 
 #[test]
+#[uutests::wasi_ignore(NoThreadSpawning)]
 fn test_merge_preserves_long_lines() {
     use std::fmt::Write;
 
@@ -1379,6 +1387,7 @@ fn test_ext_sort_preserves_long_lines() {
 // receivers while the reader was still sending, and `chunks::read` unwraps that send.
 #[test]
 #[cfg(target_os = "linux")]
+#[uutests::wasi_ignore(NoThreadSpawning)]
 fn test_merge_write_error_does_not_panic() {
     use std::fs::File;
 
@@ -1479,6 +1488,7 @@ fn test_merge_flush_error_is_reported() {
 }
 
 #[test]
+#[uutests::wasi_ignore(NoThreadSpawning)]
 fn test_merge_unique() {
     new_ucmd!()
         .arg("-m")
@@ -1494,6 +1504,7 @@ fn test_merge_unique() {
 }
 
 #[test]
+#[uutests::wasi_ignore(NoThreadSpawning)]
 fn test_merge_stable() {
     new_ucmd!()
         .arg("-m")
@@ -1506,6 +1517,7 @@ fn test_merge_stable() {
 }
 
 #[test]
+#[uutests::wasi_ignore(NoThreadSpawning)]
 fn test_merge_reversed() {
     new_ucmd!()
         .arg("-m")
@@ -1787,6 +1799,7 @@ fn test_compress() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[uutests::wasi_ignore(NoThreadSpawning)]
 fn test_compress_merge() {
     new_ucmd!()
         .args(&[
@@ -1810,6 +1823,7 @@ fn test_compress_merge() {
 
 #[test]
 #[cfg(not(target_os = "android"))]
+#[uutests::wasi_ignore(CompressProgramBypassed)]
 fn test_compress_fail() {
     let result = new_ucmd!()
         .args(&[
@@ -1872,7 +1886,7 @@ fn test_batch_size_too_large() {
             "--batch-size argument '{large_batch_size}' too large"
         ));
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(wasi_runner)))]
     new_ucmd!()
         .arg(format!("--batch-size={large_batch_size}"))
         .fails_with_code(2)
@@ -1880,6 +1894,7 @@ fn test_batch_size_too_large() {
 }
 
 #[test]
+#[uutests::wasi_ignore(NoThreadSpawning)]
 fn test_merge_batch_size() {
     new_ucmd!()
         .arg("--batch-size=2")
@@ -1899,6 +1914,7 @@ fn test_merge_batch_size() {
 // TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
 // #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(target_os = "linux")]
+#[uutests::wasi_ignore(NoThreadSpawning)]
 fn test_merge_batch_size_with_limit() {
     // Currently need...
     // 3 descriptors for stdin, stdout, stderr
@@ -2138,6 +2154,7 @@ fn test_verifies_files_after_keys() {
 
 #[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 fn test_verifies_input_files() {
     new_ucmd!()
         .args(&["/dev/random", "nonexistent_file"])
@@ -2266,6 +2283,7 @@ fn test_merge_output_file_is_truncated() {
 
 #[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 fn test_output_device() {
     new_ucmd!()
         .args(&["-o", "/dev/null"])
@@ -2274,6 +2292,7 @@ fn test_output_device() {
 }
 
 #[test]
+#[uutests::wasi_ignore(NoThreadSpawning)]
 fn test_merge_empty_input() {
     new_ucmd!()
         .args(&["-m", "empty.txt"])
@@ -2299,6 +2318,7 @@ fn test_wrong_args_exit_code() {
 
 #[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 fn test_tmp_files_deleted_on_sigint() {
     use rand::{RngExt as _, SeedableRng, rngs::SmallRng};
     use rustix::process::{Pid, Signal, kill_process};
@@ -2493,6 +2513,7 @@ fn test_args_check_conflict() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_failed_write_is_reported() {
     new_ucmd!()
         .pipe_in("hello")
@@ -2613,6 +2634,10 @@ fn test_files0_from_empty_input_file() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasip2_runner,
+    ignore = "WASI preview2: error message text for this OS error differs from native Unix"
+)]
 fn test_files0_from_non_utf8_filename() {
     new_ucmd!()
         .args(&["--files0-from", "-"])
@@ -2639,6 +2664,10 @@ fn test_read_error_on_reader_thread(#[case] args: &[&str]) {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasip2_runner,
+    ignore = "WASI preview2: error message text for this OS error differs from native Unix"
+)]
 fn test_files0_from_unreadable_source() {
     new_ucmd!()
         .args(&["--files0-from", "."])
@@ -2649,6 +2678,7 @@ fn test_files0_from_unreadable_source() {
 #[cfg(unix)]
 #[test]
 // Test files0-from with non-regular empty file
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 fn test_files0_from_dev_null_is_empty() {
     new_ucmd!()
         .args(&["--files0-from", "/dev/null"])
@@ -2735,6 +2765,7 @@ fn test_files0_from_two_entries_trailing_nul() {
 #[test]
 // Test files0-from with non-UTF-8 filenames
 #[cfg(all(unix, not(target_vendor = "apple")))]
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 fn test_files0_from_non_utf8_content() {
     use std::os::unix::ffi::OsStringExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3721,6 +3752,7 @@ fn test_locale_collation_utf8() {
 }
 
 #[test]
+#[uutests::wasi_ignore(NoLocaleData)]
 fn test_locale_interleaved_en_us_utf8() {
     // Test case for issue: locale-based collation support
     // In en_US.UTF-8, lowercase and uppercase letters should interleave
@@ -3793,6 +3825,7 @@ fn test_locale_with_ignore_case_flag() {
 }
 
 #[test]
+#[uutests::wasi_ignore(NoLocaleData)]
 fn test_locale_complex_utf8_sorting() {
     // More complex test with mixed case and special characters
     // In en_US.UTF-8, should respect locale collation rules
@@ -3817,6 +3850,7 @@ fn test_locale_posix_sort_debug_message() {
 }
 
 #[test]
+#[uutests::wasi_ignore(NoLocaleData)]
 fn test_locale_utf8_sort_debug_message() {
     new_ucmd!()
         .env("LC_ALL", "en_US.UTF-8")
@@ -3837,7 +3871,7 @@ fn test_failed_to_set_locale_debug_message() {
 
     result.stderr_contains("text ordering performed using simple byte comparison");
 
-    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    #[cfg(all(target_os = "linux", target_env = "gnu", not(wasi_runner)))]
     result.stderr_contains("failed to set locale");
 }
 
@@ -3871,6 +3905,7 @@ fn test_empty_input_empty_output() {
 }
 
 #[test]
+#[uutests::wasi_ignore(NoLocaleData)]
 fn test_consistent_sorting_with_i18n_collate() {
     // Regression test for issue #11980
     // Lexicographic fallback sorting for equal sorting keys for 01 and 0_1
