@@ -332,6 +332,9 @@ struct Precomputed {
     selections_per_line: usize,
     fast_lexicographic: bool,
     fast_locale_collation: bool,
+    /// True when the locale needs collation, used by the last resort comparison.
+    #[cfg(feature = "i18n-collator")]
+    locale_collation: bool,
     fast_ascii_insensitive: bool,
     whole_line_numeric: bool,
     tokenize_blank_thousands_sep: bool,
@@ -398,6 +401,10 @@ impl GlobalSettings {
             !disable_fast_lexicographic && self.can_use_fast_lexicographic();
         self.precomputed.fast_locale_collation =
             disable_fast_lexicographic && self.can_use_fast_lexicographic();
+        #[cfg(feature = "i18n-collator")]
+        {
+            self.precomputed.locale_collation = disable_fast_lexicographic;
+        }
         self.precomputed.fast_ascii_insensitive = self.can_use_fast_ascii_insensitive();
         self.precomputed.whole_line_numeric = self.can_use_whole_line_numeric();
     }
@@ -2955,7 +2962,7 @@ fn compare_by<'a>(
     {
         Ordering::Equal
     } else {
-        a.line.cmp(b.line)
+        last_resort_cmp(a.line, b.line, global_settings)
     };
 
     if global_settings.reverse {
@@ -2963,6 +2970,20 @@ fn compare_by<'a>(
     } else {
         cmp
     }
+}
+
+/// Whole-line tie-break once every key compared equal: locale collation when the
+/// locale needs it, byte order otherwise and whenever the collation says equal.
+/// Only reached for ties, so the collator never runs on the regular comparisons.
+#[inline]
+fn last_resort_cmp(a: &[u8], b: &[u8], settings: &GlobalSettings) -> Ordering {
+    #[cfg(feature = "i18n-collator")]
+    if settings.precomputed.locale_collation {
+        return locale_cmp(a, b).then_with(|| a.cmp(b));
+    }
+    #[cfg(not(feature = "i18n-collator"))]
+    let _ = settings;
+    a.cmp(b)
 }
 
 /// Compare two byte slices in ASCII case-insensitive order without allocating.
