@@ -2681,6 +2681,75 @@ fn test_date_strftime_o_modifier() {
 }
 
 #[test]
+fn test_date_strftime_e_modifier() {
+    // In C locale the `E` modifier is a no-op (alternative era representation).
+    // GNU renders `%Ey` as `24` for 2024, and keeps `%E` literal where POSIX
+    // does not pair it with a conversion, as in `%Ej`.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15")
+        .arg("+%Ey-%EY-%EC")
+        .succeeds()
+        .stdout_is("24-2024-20\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15")
+        .arg("+%Ec|%Ex|%EX")
+        .succeeds()
+        .stdout_is("Sat Jun 15 00:00:00 2024|06/15/24|00:00:00\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15")
+        .arg("+%Ej|%E|%E9|%%Ey")
+        .succeeds()
+        .stdout_is("%Ej|%E|%E9|%Ey\n");
+}
+
+#[test]
+fn test_date_strftime_modifier_after_flags_and_width() {
+    // The modifier sits behind the GNU flags and field width, so those apply to
+    // the conversion the modifier resolves to.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15")
+        .arg("+%-Oy|%10OY|%_Om|%0Oy|%-Od")
+        .succeeds()
+        .stdout_is("24|0000002024| 6|24|15\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15")
+        .arg("+%12Ex|%0EY")
+        .succeeds()
+        .stdout_is("    06/15/24|2024\n");
+}
+
+#[test]
+#[ignore = "GNU renders an E-modified year as an era string, which pads with spaces and ignores `-`: `%-Ey` is 24, `%_Ey` is `24` and `%10EY` is six spaces then 2024. uutils applies the flags to the plain conversion."]
+fn test_date_strftime_e_modifier_pads_like_a_string() {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15")
+        .arg("+%-Ey|%_Ey|%10EY")
+        .succeeds()
+        .stdout_is("24|24|      2024\n");
+}
+
+#[test]
 fn test_date_bare_timezone_abbreviation() {
     // GNU and uutils accept bare UT/GMT abbreviations as UTC.
     for input in ["ut", "UT", "gmt", "GMT"] {
