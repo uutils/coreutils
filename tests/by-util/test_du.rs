@@ -2938,3 +2938,57 @@ du: invalid suffix in --block-size argument '1fb'
             .stderr_is("du: invalid suffix in --block-size argument '1fb'\n");
     }
 }
+
+/// The apparent-size total must saturate instead of wrapping when the sizes
+/// add up past `u64::MAX` (GNU du prints `Infinity` in that case).
+/// Needs a filesystem that accepts files of `i64::MAX` bytes (e.g. tmpfs);
+/// the test returns early otherwise.
+#[test]
+#[cfg(unix)]
+fn test_du_bytes_total_saturates() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir_all("d/sub");
+    at.write("d/payload", "hello");
+
+    // i64::MAX + (u64::MAX - i64::MAX - 5 + 1): with the 5 byte payload the
+    // three sizes add up to exactly 2^64.
+    let sizes = [
+        ("d/hole1", i64::MAX as u64),
+        ("d/sub/hole2", u64::MAX - i64::MAX as u64 - 4),
+    ];
+    for (name, len) in sizes {
+        let file = std::fs::File::create(at.plus(name)).unwrap();
+        if file.set_len(len).is_err() {
+            // Filesystem refuses such huge sparse files.
+            return;
+        }
+    }
+
+    let max = u64::MAX.to_string();
+
+    ucmd.args(&["-sb", "d"])
+        .succeeds()
+        .stdout_only(format!("{max}\td\n"));
+
+    // Walker used with -L
+    new_ucmd!()
+        .current_dir(at.as_string())
+        .args(&["-sbL", "d"])
+        .succeeds()
+        .stdout_only(format!("{max}\td\n"));
+
+    // Grand total over several operands
+    new_ucmd!()
+        .current_dir(at.as_string())
+        .args(&["-bc", "d/hole1", "d/sub/hole2", "d/payload"])
+        .succeeds()
+        .stdout_contains(format!("{max}\ttotal"));
+
+    // The wrapped directory must not be dropped by --threshold
+    new_ucmd!()
+        .current_dir(at.as_string())
+        .args(&["-sb", "--threshold=1M", "d"])
+        .succeeds()
+        .stdout_only(format!("{max}\td\n"));
+}
