@@ -1097,9 +1097,33 @@ fn test_error_message_preserves_non_utf8_filename() {
 fn test_last_of_format_printf_wins() {
     let scene = TestScenario::new(util_name!());
     scene.fixtures.write("a.txt", "");
+
+    // --format prints a trailing newline, --printf prints nothing.
     scene
         .ucmd()
         .args(&["--printf=X", "--format=Y"])
+        .arg("a.txt")
+        .succeeds()
+        .stdout_is("Y\n");
+
+    scene
+        .ucmd()
+        .args(&["--format=Y", "--printf=X"])
+        .arg("a.txt")
+        .succeeds()
+        .stdout_is("X");
+
+    // -c is the short form of --format and follows the same rule.
+    scene
+        .ucmd()
+        .args(&["-c", "Y", "--printf=X"])
+        .arg("a.txt")
+        .succeeds()
+        .stdout_is("X");
+
+    scene
+        .ucmd()
+        .args(&["--printf=X", "-c", "Y"])
         .arg("a.txt")
         .succeeds()
         .stdout_is("Y\n");
