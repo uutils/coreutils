@@ -223,7 +223,7 @@ impl OdOptions {
                         _ => {
                             return Err(USimpleError::new(
                                 1,
-                                translate!("od-error-radix-invalid", "radix" => s),
+                                translate!("od-error-radix-invalid", "radix" => s.chars().next().unwrap_or_default()),
                             ));
                         }
                     }
