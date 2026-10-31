@@ -28,6 +28,7 @@ use uucore::error::{UError, UResult, strip_errno};
 use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
 use uucore::i18n::get_ctype_encoding;
 use uucore::quoting_style::{QuotingStyle, escape_bytes};
+use uucore::show_error;
 use uucore::translate;
 use uucore::translate_text;
 use uucore::{format_usage, show, show_if_err};
@@ -481,25 +482,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let date =
                 if is_empty_or_whitespace || trimmed == "-" || trimmed == "+" || is_military_j {
                     // Treat empty string, single hyphen, or 'J' as midnight today in local time
-                    let date_part =
-                        strtime::format("%F", &now).unwrap_or_else(|_| String::from("1970-01-01"));
-                    let offset = if settings.utc {
-                        String::from("+00:00")
-                    } else {
-                        strtime::format("%:z", &now).unwrap_or_default()
-                    };
-                    let composed = if offset.is_empty() {
-                        format!("{date_part} 00:00")
-                    } else {
-                        format!("{date_part} 00:00 {offset}")
-                    };
                     if settings.debug {
                         let _ = writeln!(
                             stderr(),
                             "date: warning: using midnight as starting time: 00:00:00"
                         );
                     }
-                    parse(&composed, false)
+                    parse(&midnight_today(&now, settings.utc), false)
                 } else if let Some((total_hours, day_delta)) = military_tz_with_offset {
                     // Military timezone with optional hour offset
                     // Convert to UTC time: midnight + military_tz_offset + additional_hours
@@ -560,6 +549,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         DateSource::Stdin => parse_dates_from_reader(
             std::io::stdin(),
             &now,
+            settings.utc,
             DebugOptions::new(settings.debug, true),
         ),
         DateSource::File(ref path) => {
@@ -570,7 +560,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             let file =
                 File::open(path).map_err_context(|| path.as_os_str().maybe_quote().to_string())?;
-            parse_dates_from_reader(file, &now, DebugOptions::new(settings.debug, true))
+            parse_dates_from_reader(
+                file,
+                &now,
+                settings.utc,
+                DebugOptions::new(settings.debug, true),
+            )
         }
         DateSource::FileMtime(ref path) => {
             let metadata = std::fs::metadata(path)
@@ -1565,6 +1560,29 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Optio
     Some(zoned.with_time_zone(now.time_zone().clone()))
 }
 
+/// Whether a date string only asks for midnight today: it is empty,
+/// whitespace, or a lone `-` or `+`.
+fn is_midnight_today_input(input: &str) -> bool {
+    let input = input.trim();
+    input.is_empty() || input == "-" || input == "+"
+}
+
+/// The date string for midnight today, in the local time zone or in UTC.
+///
+/// GNU parses an empty date string (or a lone `-`) as midnight today; this is
+/// the equivalent input for our parser. The start of the day is resolved in
+/// the time zone itself, because on a DST transition day the UTC offset at
+/// midnight is not the offset right now.
+fn midnight_today(now: &Zoned, utc: bool) -> String {
+    let today = if utc {
+        now.with_time_zone(TimeZone::UTC)
+    } else {
+        now.clone()
+    };
+    let midnight = today.start_of_day().unwrap_or(today);
+    strtime::format("%F %H:%M %:z", &midnight).unwrap_or_else(|_| String::from("1970-01-01 00:00"))
+}
+
 /// Helper function to parse dates from a line-based reader (stdin or file)
 ///
 /// Takes any `Read` source, reads it line by line, and parses each line as a date.
@@ -1572,10 +1590,12 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Optio
 fn parse_dates_from_reader<R: Read + 'static>(
     reader: R,
     now: &Zoned,
+    utc: bool,
     dbg_opts: DebugOptions,
 ) -> Box<
     dyn Iterator<Item = Result<ParsedDateTime, (String, parse_datetime::ParseDateTimeError)>> + '_,
 > {
+    let midnight = midnight_today(now, utc);
     let lines = BufReader::new(reader).split(b'\n');
     Box::new(lines.map_while(Result::ok).map(move |mut bytes| {
         // GNU handles each line as a C string, so a NUL byte ends it
@@ -1587,6 +1607,14 @@ fn parse_dates_from_reader<R: Read + 'static>(
             bytes.pop();
         }
         match String::from_utf8(bytes) {
+            // GNU compatibility: an empty (or whitespace-only) line and a lone
+            // hyphen are midnight today, just like `-d ''`, not the current time.
+            Ok(s) if is_midnight_today_input(&s) => {
+                if dbg_opts.debug {
+                    show_error!("warning: using midnight as starting time: 00:00:00");
+                }
+                parse_date(&midnight, now, DebugOptions::new(dbg_opts.debug, false))
+            }
             Ok(s) => parse_date(s, now, dbg_opts),
             // Report lines with invalid UTF-8 (with non-printable bytes
             // octal-escaped like GNU) instead of silently stopping the input
