@@ -83,9 +83,21 @@ fn test_stdin_explicit() {
 fn test_wc_fixture(#[case] args: &[&str], #[case] fixture: &str, #[case] expected: &str) {
     new_ucmd!()
         .args(args)
+        .env("LC_ALL", "C.UTF-8")
         .pipe_in_fixture(fixture)
         .succeeds()
         .stdout_only(expected);
+}
+
+#[cfg(unix)]
+#[test]
+fn test_chars_in_c_locale_count_bytes() {
+    new_ucmd!()
+        .arg("-m")
+        .env("LC_ALL", "C")
+        .pipe_in("é")
+        .succeeds()
+        .stdout_is("2\n");
 }
 
 #[test]

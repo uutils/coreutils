@@ -31,6 +31,7 @@ use uucore::{
     error::{FromIo, UError, UResult},
     format_usage,
     hardware::{HardwareFeature, HasHardwareFeatures as _, SimdPolicy},
+    i18n::charmap::{Encoding, locale_encoding},
     parser::shortcut_value_parser::ShortcutValueParser,
     quoting_style::{self, QuotingStyle},
     show,
@@ -48,6 +49,7 @@ const MINIMUM_WIDTH: usize = 7;
 struct Settings<'a> {
     show_bytes: bool,
     show_chars: bool,
+    count_chars_as_bytes: bool,
     show_lines: bool,
     show_words: bool,
     show_max_line_length: bool,
@@ -62,6 +64,7 @@ impl Default for Settings<'_> {
         Self {
             show_bytes: true,
             show_chars: false,
+            count_chars_as_bytes: false,
             show_lines: true,
             show_words: true,
             show_max_line_length: false,
@@ -86,6 +89,7 @@ impl<'a> Settings<'a> {
         let settings = Self {
             show_bytes: matches.get_flag(options::BYTES),
             show_chars: matches.get_flag(options::CHAR),
+            count_chars_as_bytes: false,
             show_lines: matches.get_flag(options::LINES),
             show_words: matches.get_flag(options::WORDS),
             show_max_line_length: matches.get_flag(options::MAX_LINE_LENGTH),
@@ -94,13 +98,19 @@ impl<'a> Settings<'a> {
             total_when,
         };
 
+        let count_chars_as_bytes = settings.show_chars && locale_encoding() == Encoding::SingleByte;
+
         if settings.number_enabled() > 0 {
-            settings
+            Self {
+                count_chars_as_bytes,
+                ..settings
+            }
         } else {
             Self {
                 files0_from: settings.files0_from,
                 total_when,
                 debug: settings.debug,
+                count_chars_as_bytes: false,
                 ..Default::default()
             }
         }
@@ -497,8 +507,25 @@ fn word_count_from_reader<T: WordCountable>(
             count_bytes_chars_and_lines_fast::<_, false, false, true>(&mut reader)
         }
         // show_chars
+        (false, true, false, false, false) if settings.count_chars_as_bytes => {
+            let (bytes, error) = count_bytes_fast(&mut reader);
+            (
+                WordCount {
+                    chars: bytes,
+                    ..WordCount::default()
+                },
+                error,
+            )
+        }
         (false, true, false, false, false) => {
             count_bytes_chars_and_lines_fast::<_, false, true, false>(&mut reader)
+        }
+        // show_chars, show_lines
+        (_, true, true, false, false) if settings.count_chars_as_bytes => {
+            let (mut count, error) =
+                count_bytes_chars_and_lines_fast::<_, true, false, true>(&mut reader);
+            count.chars = count.bytes;
+            (count, error)
         }
         // show_chars, show_lines
         (false, true, true, false, false) => {
@@ -509,6 +536,17 @@ fn word_count_from_reader<T: WordCountable>(
             count_bytes_chars_and_lines_fast::<_, true, false, true>(&mut reader)
         }
         // show_bytes, show_chars
+        (true, true, false, false, false) if settings.count_chars_as_bytes => {
+            let (bytes, error) = count_bytes_fast(&mut reader);
+            (
+                WordCount {
+                    bytes,
+                    chars: bytes,
+                    ..WordCount::default()
+                },
+                error,
+            )
+        }
         (true, true, false, false, false) => {
             count_bytes_chars_and_lines_fast::<_, true, true, false>(&mut reader)
         }
@@ -518,51 +556,87 @@ fn word_count_from_reader<T: WordCountable>(
         }
         // show_words
         (_, false, false, false, true) => {
-            word_count_from_reader_specialized::<_, false, false, false, true>(reader)
+            word_count_from_reader_specialized::<_, false, false, false, true>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_max_line_length
         (_, false, false, true, false) => {
-            word_count_from_reader_specialized::<_, false, false, true, false>(reader)
+            word_count_from_reader_specialized::<_, false, false, true, false>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_max_line_length, show_words
         (_, false, false, true, true) => {
-            word_count_from_reader_specialized::<_, false, false, true, true>(reader)
+            word_count_from_reader_specialized::<_, false, false, true, true>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_lines, show_words
         (_, false, true, false, true) => {
-            word_count_from_reader_specialized::<_, false, true, false, true>(reader)
+            word_count_from_reader_specialized::<_, false, true, false, true>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_lines, show_max_line_length
         (_, false, true, true, false) => {
-            word_count_from_reader_specialized::<_, false, true, true, false>(reader)
+            word_count_from_reader_specialized::<_, false, true, true, false>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_lines, show_max_line_length, show_words
         (_, false, true, true, true) => {
-            word_count_from_reader_specialized::<_, false, true, true, true>(reader)
+            word_count_from_reader_specialized::<_, false, true, true, true>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_chars, show_words
         (_, true, false, false, true) => {
-            word_count_from_reader_specialized::<_, true, false, false, true>(reader)
+            word_count_from_reader_specialized::<_, true, false, false, true>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_chars, show_max_line_length
         (_, true, false, true, false) => {
-            word_count_from_reader_specialized::<_, true, false, true, false>(reader)
+            word_count_from_reader_specialized::<_, true, false, true, false>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_chars, show_max_line_length, show_words
         (_, true, false, true, true) => {
-            word_count_from_reader_specialized::<_, true, false, true, true>(reader)
+            word_count_from_reader_specialized::<_, true, false, true, true>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_chars, show_lines, show_words
         (_, true, true, false, true) => {
-            word_count_from_reader_specialized::<_, true, true, false, true>(reader)
+            word_count_from_reader_specialized::<_, true, true, false, true>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_chars, show_lines, show_max_line_length
         (_, true, true, true, false) => {
-            word_count_from_reader_specialized::<_, true, true, true, false>(reader)
+            word_count_from_reader_specialized::<_, true, true, true, false>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_chars, show_lines, show_max_line_length, show_words
         (_, true, true, true, true) => {
-            word_count_from_reader_specialized::<_, true, true, true, true>(reader)
+            word_count_from_reader_specialized::<_, true, true, true, true>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
     }
 }
@@ -572,6 +646,7 @@ fn process_chunk<
     const SHOW_LINES: bool,
     const SHOW_MAX_LINE_LENGTH: bool,
     const SHOW_WORDS: bool,
+    const COUNT_CHARS_AS_BYTES: bool,
 >(
     total: &mut WordCount,
     text: &str,
@@ -613,9 +688,12 @@ fn process_chunk<
         if SHOW_LINES && ch == '\n' {
             total.lines += 1;
         }
-        if SHOW_CHARS {
+        if SHOW_CHARS && !COUNT_CHARS_AS_BYTES {
             total.chars += 1;
         }
+    }
+    if SHOW_CHARS && COUNT_CHARS_AS_BYTES {
+        total.chars += text.len();
     }
     total.bytes += text.len();
 
@@ -626,10 +704,14 @@ fn handle_error(
     error: BufReadDecoderError<'_>,
     total: &mut WordCount,
     in_word: &mut bool,
+    count_chars_as_bytes: bool,
 ) -> Option<io::Error> {
     match error {
         BufReadDecoderError::InvalidByteSequence(bytes) => {
             total.bytes += bytes.len();
+            if count_chars_as_bytes {
+                total.chars += bytes.len();
+            }
             if !(*in_word) {
                 *in_word = true;
                 total.words += 1;
@@ -648,6 +730,7 @@ fn word_count_from_reader_specialized<
     const SHOW_WORDS: bool,
 >(
     reader: T,
+    count_chars_as_bytes: bool,
 ) -> (WordCount, Option<io::Error>) {
     let mut total = WordCount::default();
     let mut reader = BufReadDecoder::new(reader.buffered());
@@ -657,16 +740,26 @@ fn word_count_from_reader_specialized<
     while let Some(chunk) = reader.next_strict() {
         match chunk {
             Ok(text) => {
-                process_chunk::<SHOW_CHARS, SHOW_LINES, SHOW_MAX_LINE_LENGTH, SHOW_WORDS>(
-                    &mut total,
-                    text,
-                    &mut current_len,
-                    &mut in_word,
-                    is_posixly_correct,
-                );
+                if count_chars_as_bytes {
+                    process_chunk::<SHOW_CHARS, SHOW_LINES, SHOW_MAX_LINE_LENGTH, SHOW_WORDS, true>(
+                        &mut total,
+                        text,
+                        &mut current_len,
+                        &mut in_word,
+                        is_posixly_correct,
+                    );
+                } else {
+                    process_chunk::<SHOW_CHARS, SHOW_LINES, SHOW_MAX_LINE_LENGTH, SHOW_WORDS, false>(
+                        &mut total,
+                        text,
+                        &mut current_len,
+                        &mut in_word,
+                        is_posixly_correct,
+                    );
+                }
             }
             Err(e) => {
-                if let Some(e) = handle_error(e, &mut total, &mut in_word) {
+                if let Some(e) = handle_error(e, &mut total, &mut in_word, count_chars_as_bytes) {
                     return (total, Some(e));
                 }
             }
