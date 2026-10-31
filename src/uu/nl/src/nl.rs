@@ -6,11 +6,12 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{self, BufRead, BufReader, Read, Write, stdin, stdout};
 use std::num::{IntErrorKind, ParseIntError};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
+use uucore::output::StdoutBuffer;
 use uucore::{format_usage, show_error, translate, translate_text};
 
 mod helper;
@@ -264,35 +265,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut stats = Stats::new(settings.starting_line_number);
 
-    for file in &files {
-        if file == "-" {
-            let mut buffer = BufReader::new(stdin());
-            nl(&mut buffer, &mut stats, &settings)?;
-        } else {
-            let path = Path::new(file);
-
-            if path.is_dir() {
-                show_error!(
-                    "{}",
-                    translate_text!("nl-error-is-directory", "path" => path.maybe_quote())
-                );
-                set_exit_code(1);
-            } else {
-                match File::open(path) {
-                    Ok(reader) => {
-                        let mut buffer = BufReader::new(reader);
-                        nl(&mut buffer, &mut stats, &settings)?;
-                    }
-                    Err(e) => {
-                        show_error!("{}", e.map_err_context(|| file.maybe_quote().to_string()));
-                        set_exit_code(1);
-                    }
-                }
-            }
+    let output = StdoutBuffer::new(stdout());
+    match output {
+        StdoutBuffer::Block(mut output) => nl_files(&files, &mut stats, &settings, &mut output),
+        #[cfg(unix)]
+        StdoutBuffer::Unbuffered(output) => {
+            let mut output = StdoutBuffer::into_unbuffered(output);
+            nl_files(&files, &mut stats, &settings, &mut output)
         }
+        #[cfg(unix)]
+        StdoutBuffer::Line(mut output) => nl_files(&files, &mut stats, &settings, &mut output),
     }
-
-    Ok(())
 }
 
 pub fn uu_app() -> Command {
@@ -413,8 +396,12 @@ fn write_line(writer: &mut impl Write, line: &[u8]) -> io::Result<()> {
 }
 
 /// `nl` implements the main functionality for an individual buffer.
-fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings) -> UResult<()> {
-    let mut writer = BufWriter::new(stdout());
+fn nl<T: Read, W: Write>(
+    reader: &mut BufReader<T>,
+    stats: &mut Stats,
+    settings: &Settings,
+    writer: &mut W,
+) -> UResult<()> {
     let mut line = Vec::new();
     // Written before every unnumbered line. Capped to avoid OOM on 32-bit targets
     // when -w i32::MAX is passed (allocating 2 GiB would panic).
@@ -481,7 +468,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                 })?;
                 settings
                     .number_format
-                    .format_to(&mut writer, line_number, settings.number_width)
+                    .format_to(&mut *writer, line_number, settings.number_width)
                     .map_err_context(|| translate!("nl-error-could-not-write"))?;
                 writer
                     .write_all(settings.number_separator.as_encoded_bytes())
@@ -497,13 +484,50 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                     remaining -= chunk;
                 }
             }
-            write_line(&mut writer, &line)
+            write_line(&mut *writer, &line)
                 .map_err_context(|| translate!("nl-error-could-not-write"))?;
         }
     }
     writer
         .flush()
         .map_err_context(|| translate!("nl-error-could-not-write"))?;
+    Ok(())
+}
+
+fn nl_files<W: Write>(
+    files: &[OsString],
+    stats: &mut Stats,
+    settings: &Settings,
+    writer: &mut W,
+) -> UResult<()> {
+    for file in files {
+        if file == "-" {
+            let mut buffer = BufReader::new(stdin());
+            nl(&mut buffer, stats, settings, writer)?;
+        } else {
+            let path = Path::new(file);
+
+            if path.is_dir() {
+                show_error!(
+                    "{}",
+                    translate_text!("nl-error-is-directory", "path" => path.maybe_quote())
+                );
+                set_exit_code(1);
+            } else {
+                match File::open(path) {
+                    Ok(reader) => {
+                        let mut buffer = BufReader::new(reader);
+                        nl(&mut buffer, stats, settings, writer)?;
+                    }
+                    Err(e) => {
+                        show_error!("{}", e.map_err_context(|| file.maybe_quote().to_string()));
+                        set_exit_code(1);
+                    }
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
