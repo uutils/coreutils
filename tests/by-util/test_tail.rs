@@ -5741,3 +5741,30 @@ fn test_header_quotes_name_with_control_char() {
         .succeeds()
         .stdout_only("==> 'tab'$'\\t''here' <==\nt\n");
 }
+
+#[test]
+fn test_huge_max_unchanged_stats_is_clamped() {
+    // A value beyond u32 and one beyond u128 are both clamped, like GNU.
+    for value in [
+        "99999999999999999999",
+        "999999999999999999999999999999999999999999",
+    ] {
+        new_ucmd!()
+            .arg(format!("--max-unchanged-stats={value}"))
+            .pipe_in("a\n")
+            .succeeds()
+            .stdout_only("a\n");
+    }
+}
+
+#[test]
+fn test_invalid_max_unchanged_stats_is_rejected() {
+    for value in ["-1", "abc"] {
+        new_ucmd!()
+            .arg(format!("--max-unchanged-stats={value}"))
+            .pipe_in("a\n")
+            .fails_with_code(1)
+            .stderr_contains("invalid maximum number of unchanged stats between opens: '")
+            .stderr_contains(value);
+    }
+}
