@@ -506,12 +506,10 @@ fn parse_saved_state(arg: &str) -> Option<Vec<u32>> {
         if part.is_empty() {
             return None; // GNU rejects empty hex values
         }
-        let val = u32::from_str_radix(part, 16).ok()?;
-
-        // Control characters (indices 4+) must fit in u8
-        if i >= 4 && val > 255 {
-            return None;
-        }
+        let val = u32::from_str_radix(part, 16)
+            .ok()
+            // Control characters (indices 4+) must fit in u8
+            .filter(|&v| i < 4 || v <= 255)?;
 
         values.push(val);
     }
