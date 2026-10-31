@@ -2530,7 +2530,7 @@ fn print_paths(parents: bool, source: &Path, dest: &Path) -> CopyResult<()> {
 
     // Buffer the output so a failed write (e.g. stdout redirected to a full
     // disk) surfaces as one error instead of panicking inside println!.
-    let mut out = io::BufWriter::new(io::stdout().lock());
+    let mut out = uucore::output::StdoutBuffer::new(io::stdout().lock());
     let write_err = |e| CpError::IoErrContext(e, translate!("cp-error-write"));
     if parents {
         // For example, if copying file `a/b/c` and its parents
