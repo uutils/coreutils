@@ -31,7 +31,9 @@ uucore = { workspace = true, features = [
 uucore = { workspace = true, features = ["benchmark"] }
 
 [features]
+default = ["signals"]
 openssl = ["uucore/openssl"]
+signals = ["uucore/signals"]
 
 [lints]
 workspace = true

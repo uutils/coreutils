@@ -5,7 +5,7 @@
 
 //! Custom panic hooks that allow silencing certain types of errors.
 //!
-//! Use the [`mute_sigpipe_panic`] function to silence panics caused by
+//! Use the [`silence_broken_pipe_panic`] function to silence panics caused by
 //! broken pipe errors. This can happen when a process is still
 //! producing data when the consuming process terminates and closes the
 //! pipe. For example,
@@ -34,34 +34,11 @@ fn is_broken_pipe(info: &PanicHookInfo) -> bool {
 /// * `<https://github.com/BurntSushi/ripgrep/issues/200>`
 /// * `<https://github.com/crev-dev/cargo-crev/issues/287>`
 ///
-pub fn mute_sigpipe_panic() {
+pub fn silence_broken_pipe_panic() {
     let hook = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
         if !is_broken_pipe(info) {
             hook(info);
         }
     }));
-}
-
-/// Preserve inherited SIGPIPE settings from parent process.
-///
-/// Rust unconditionally sets SIGPIPE to `SIG_IGN` on startup. This function
-/// checks if the parent process (e.g., `env --default-signal=PIPE`) intended
-/// for SIGPIPE to be set to default by checking the `RUST_SIGPIPE` environment
-/// variable. If set to "default", it restores SIGPIPE to `SIG_DFL`.
-#[cfg(unix)]
-pub fn preserve_inherited_sigpipe() {
-    use nix::libc;
-
-    // Check if parent specified that SIGPIPE should be default
-    if std::env::var_os("RUST_SIGPIPE").is_some_and(|v| v == "default") {
-        unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
-        // Remove the environment variable so child processes don't inherit it incorrectly
-        unsafe { std::env::remove_var("RUST_SIGPIPE") };
-    }
-}
-
-#[cfg(not(unix))]
-pub fn preserve_inherited_sigpipe() {
-    // No-op on non-Unix platforms
 }

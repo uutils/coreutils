@@ -16,7 +16,7 @@ path = "src/hostid.rs"
 test = false
 doctest = false
 
-[dependencies]
+[target.'cfg(any(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))), windows))'.dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
 uucore = { workspace = true }
@@ -27,9 +27,14 @@ hostname = { workspace = true }
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["system"] }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true
 
 [[bin]]
 name = "hostid"
 path = "src/main.rs"
+required-features = ["uucore/default"]

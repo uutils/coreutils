@@ -7,6 +7,7 @@
 
 //! library ~ (core/bundler file)
 
+#![cfg(not(any(target_os = "aix", target_os = "horizon")))]
 // #![deny(missing_docs)] //TODO: enable this
 #![cfg_attr(
     any(
@@ -106,7 +107,7 @@ pub use crate::features::mode;
 // ** unix-only
 #[cfg(all(unix, feature = "entries"))]
 pub use crate::features::entries;
-#[cfg(all(unix, feature = "perms"))]
+#[cfg(all(feature = "perms", unix, not(target_os = "haiku")))]
 pub use crate::features::perms;
 #[cfg(all(feature = "pipes", any(target_os = "linux", target_os = "android")))]
 pub use crate::features::pipes;
@@ -151,7 +152,32 @@ pub use crate::features::utmpx;
 #[cfg(all(windows, feature = "wide"))]
 pub use crate::features::wide;
 
-#[cfg(feature = "fsext")]
+#[cfg(all(
+    feature = "fsext",
+    any(
+        all(
+            unix,
+            any(
+                target_vendor = "apple",
+                target_os = "aix",
+                target_os = "cygwin",
+                target_os = "dragonfly",
+                target_os = "freebsd",
+                target_os = "haiku",
+                target_os = "hurd",
+                target_os = "illumos",
+                target_os = "solaris",
+                target_os = "linux",
+                target_os = "android",
+                target_os = "netbsd",
+                target_os = "openbsd",
+                target_os = "redox",
+            )
+        ),
+        windows,
+        target_os = "wasi"
+    )
+))]
 pub use crate::features::fsext;
 
 #[cfg(all(
@@ -175,12 +201,6 @@ pub use crate::features::smack;
 
 //## core functions
 
-#[cfg(unix)]
-use nix::errno::Errno;
-#[cfg(unix)]
-use nix::sys::signal::{
-    SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGSEGV, sigaction,
-};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader};
@@ -192,25 +212,6 @@ use std::str::Utf8Chunk;
 use std::sync::LazyLock;
 use std::sync::atomic::Ordering;
 use std::{iter, str};
-
-/// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
-/// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
-#[cfg(unix)]
-pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
-    unsafe {
-        sigaction(
-            SIGSEGV,
-            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
-        )
-    }?;
-    unsafe {
-        sigaction(
-            SIGBUS,
-            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
-        )
-    }?;
-    Ok(())
-}
 
 pub fn get_canonical_util_name(util_name: &str) -> &str {
     // remove the "uu_" prefix
@@ -232,10 +233,11 @@ macro_rules! bin_inner {
             use uucore::locale;
 
             // Preserve inherited SIGPIPE settings (e.g., from env --default-signal=PIPE)
-            uucore::panic::preserve_inherited_sigpipe();
+            #[cfg(all(feature = "signals", unix, not(target_os = "fuchsia")))]
+            uucore::signals::preserve_inherited_sigpipe();
 
             // suppress extraneous error output for SIGPIPE failures/panics
-            uucore::panic::mute_sigpipe_panic();
+            uucore::panic::silence_broken_pipe_panic();
             locale::setup_localization(uucore::get_canonical_util_name(stringify!($util)))
                 .unwrap_or_else(|err| {
                     match err {

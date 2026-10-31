@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (words) nosuchgroup groupname
 
+#![cfg(unix)]
+
 use rustix::process::getegid;
 #[cfg(not(target_vendor = "apple"))]
 use rustix::process::getgroups;
