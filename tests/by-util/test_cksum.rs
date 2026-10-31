@@ -1732,22 +1732,18 @@ fn test_check_untagged_flag_without_file_name() {
 }
 
 #[test]
-#[cfg(all(not(windows), feature = "b2sum"))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: empty filename resolves to the preopened directory (EISDIR) instead of ENOENT, see #15357"
-)]
+#[cfg(feature = "b2sum")]
 fn test_check_untagged_without_file_name() {
     let scene = TestScenario::new(util_name!());
     let digest = "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce";
 
     for (util, args) in [("cksum", vec!["-a", "blake2b"]), ("b2sum", vec![])] {
-        for line in [format!("{digest} "), format!(" {digest}\t")] {
+        for line in [format!("{digest} \n"), format!(" {digest}\t\n")] {
             scene
                 .ccmd(util)
                 .args(&args)
                 .arg("--check")
-                .pipe_in(format!("{line}\n"))
+                .pipe_in(line)
                 .fails_with_code(1)
                 .stdout_is("'': FAILED open or read\n")
                 .stderr_is(format!(
