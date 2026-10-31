@@ -769,7 +769,11 @@ pub fn is_symlink_loop(path: &Path) -> bool {
         if !metadata.file_type().is_symlink() {
             return false;
         }
-        current_path = link;
+        // A relative target is relative to the directory holding the link
+        current_path = match current_path.parent() {
+            Some(parent) if link.is_relative() => parent.join(link),
+            _ => link,
+        };
     }
 
     true
@@ -1428,6 +1432,19 @@ mod tests {
         unix::fs::symlink(&symlink2_path, &symlink1_path).unwrap();
 
         assert!(is_symlink_loop(&symlink1_path));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_is_symlink_loop_relative_target() {
+        // A relative target is resolved from the directory holding the link,
+        // not from the current directory.
+        let temp_dir = tempdir().unwrap();
+        let symlink_path = temp_dir.path().join("loop");
+
+        unix::fs::symlink("loop", &symlink_path).unwrap();
+
+        assert!(is_symlink_loop(&symlink_path));
     }
 
     #[cfg(unix)]

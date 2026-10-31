@@ -3954,6 +3954,23 @@ fn test_copy_through_dangling_symlink() {
 }
 
 #[test]
+#[cfg(not(windows))]
+fn test_copy_through_dangling_symlink_with_relative_target() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    // A loop in the current directory with the same name as the target of
+    // the dangling link must not make the link look like a loop.
+    at.relative_symlink_file("decoy", "decoy");
+    at.relative_symlink_file("decoy", "d/target");
+    at.touch("file");
+    ucmd.arg("file")
+        .arg("d/target")
+        .fails()
+        .stderr_only("cp: not writing through dangling symlink 'd/target'\n");
+    assert!(!at.file_exists("d/decoy"));
+}
+
+#[test]
 #[cfg_attr(
     wasi_runner,
     ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
