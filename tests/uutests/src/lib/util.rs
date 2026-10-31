@@ -1421,6 +1421,32 @@ impl TestScenario {
         UCommand::from_test_scenario(self)
     }
 
+    /// Builds a utility command in a user namespace with multiple unmapped groups.
+    /// Returns `None` if there are too few supplementary groups or `unshare -U` is unavailable.
+    #[cfg(target_os = "linux")]
+    pub fn ucmd_with_unmapped_groups(&self) -> Option<UCommand> {
+        // Multiple inherited groups all become the overflow GID in an unmapped namespace.
+        if rustix::process::getgroups().unwrap().len() < 2 {
+            eprintln!("Skipping: requires at least two supplementary groups");
+            return None;
+        }
+        if !Command::new("unshare")
+            .args(["-U", "true"])
+            .output()
+            .is_ok_and(|output| output.status.success())
+        {
+            eprintln!("Skipping: unshare -U does not work");
+            return None;
+        }
+
+        let mut command = self.cmd("unshare");
+        command
+            .args(&["-U", "--"])
+            .arg(&self.bin_path)
+            .arg(&self.util_name);
+        Some(command)
+    }
+
     /// Returns builder for invoking any system command. Paths given are treated
     /// relative to the environment's unique temporary test directory.
     pub fn cmd<S: Into<PathBuf>>(&self, bin_path: S) -> UCommand {
