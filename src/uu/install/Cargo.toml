@@ -29,6 +29,9 @@ uucore = { workspace = true, default-features = true, features = [
   "process",
 ] }
 
+[build-dependencies]
+cfg_aliases = { workspace = true }
+
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 rustix = { workspace = true, features = ["fs"] }
 selinux = { workspace = true, optional = true }

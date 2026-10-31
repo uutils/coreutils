@@ -12,5 +12,7 @@ pub fn register() {
             target_os = "netbsd",
             target_os = "openbsd"
         ) },
+        selinux: { all(feature = "selinux", any(target_os = "android", target_os = "linux")) },
+        smack: { all(feature = "smack", target_os = "linux") },
     }
 }
