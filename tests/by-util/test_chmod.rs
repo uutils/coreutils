@@ -2202,3 +2202,26 @@ fn test_chmod_changes_does_not_report_inaccessible_operand() {
         .no_stdout()
         .stderr_is("chmod: cannot access 'missing': No such file or directory\n");
 }
+
+#[cfg(unix)]
+#[test]
+fn test_numeric_mode_must_be_the_whole_mode() {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.touch("probe");
+
+    // A comma-separated mode is a list of symbolic clauses, so a number in it
+    // is invalid rather than applied to one clause.
+    for mode in ["755,644", "644,u+x", "u=r,2"] {
+        ts.ucmd()
+            .args(&[mode, "probe"])
+            .fails_with_code(1)
+            .stderr_contains("invalid mode");
+    }
+
+    // On its own the same number is fine.
+    ts.ucmd().args(&["700", "probe"]).succeeds();
+    assert_eq!(
+        ts.fixtures.metadata("probe").permissions().mode() & 0o777,
+        0o700
+    );
+}
