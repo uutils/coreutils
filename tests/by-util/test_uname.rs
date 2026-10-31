@@ -12,6 +12,17 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_unexpected_numeric_operand_is_verbatim() {
+    for arg in ["007", "1e3", "1.50"] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .arg(arg)
+            .fails_with_code(1)
+            .stderr_contains(format!("unexpected argument '{arg}' found"));
+    }
+}
+
+#[test]
 fn test_uname() {
     new_ucmd!().succeeds();
 }
@@ -19,6 +30,20 @@ fn test_uname() {
 #[test]
 fn test_uname_compatible() {
     new_ucmd!().arg("-a").succeeds();
+}
+
+#[rstest::rstest]
+fn test_uname_all_omits_unknown_fields(
+    #[values("-a", "--all", "-A", "--all-labeled")] all: &str,
+    #[values("-p", "-i", "-pi")] unknown: &str,
+) {
+    let expected = new_ucmd!().arg(all).succeeds();
+    for args in [[all, unknown], [unknown, all]] {
+        new_ucmd!()
+            .args(&args)
+            .succeeds()
+            .stdout_only(expected.stdout_str());
+    }
 }
 
 #[test]

@@ -388,8 +388,9 @@ impl Sequence {
             .collect();
 
         // For every upper/lower in set2, there must be an upper/lower in set1 at the same position. The position is calculated by expanding everything before the upper/lower in both sets
+        // This only applies when translating. With `-d -s`, set2 is only the set to squeeze.
         for (set2_pos, set2_item) in set2.iter().enumerate() {
-            if matches!(set2_item, Self::Class(_)) {
+            if translating && matches!(set2_item, Self::Class(_)) {
                 let set2_part_solved_len = Self::expanded_len_of(&set2[..set2_pos]);
 
                 let mut class_matches = false;

@@ -19,6 +19,7 @@ doctest = false
 clap = { workspace = true }
 fluent = { workspace = true }
 memchr = { workspace = true }
+tempfile = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["fs", "parser-size"] }
 
@@ -31,7 +32,6 @@ path = "src/main.rs"
 
 [dev-dependencies]
 divan = { workspace = true }
-tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
 
 [lints]

@@ -92,8 +92,12 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
                     match s.parse::<usize>() {
                         // Tab size must be positive.
                         Ok(0) => return Err(ParseError::TabSizeCannotBeZero),
-                        // Tab sizes must be ascending.
-                        Ok(num) if nums.last().is_some_and(|last| *last >= num) => {
+                        // Tab stops must be ascending. A number after `/` or `+` is a
+                        // tab size for the remaining columns, not a tab stop.
+                        Ok(num)
+                            if remaining_mode == RemainingMode::None
+                                && nums.last().is_some_and(|last| *last >= num) =>
+                        {
                             return Err(ParseError::TabSizesMustBeAscending);
                         }
                         Ok(num) => {
@@ -189,11 +193,12 @@ fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
     let mut processed_args = Vec::with_capacity(args.len());
 
     for arg in args {
-        if let Some(arg) = arg.to_str()
-            && arg.starts_with('-')
-            && arg[1..].chars().all(is_digit_or_comma)
+        if let Some(shortcut) = arg
+            .to_str()
+            .and_then(|arg| arg.strip_prefix('-'))
+            .filter(|shortcut| !shortcut.is_empty() && shortcut.chars().all(is_digit_or_comma))
         {
-            arg[1..]
+            shortcut
                 .split(',')
                 .filter(|s| !s.is_empty())
                 .for_each(|s| processed_args.push(OsString::from(format!("--tabs={s}"))));

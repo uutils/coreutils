@@ -76,6 +76,53 @@ fn test_command_where_command_takes_n_flag() {
 
 #[test]
 #[cfg(unix)]
+fn test_command_with_non_utf8_args() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    new_ucmd!()
+        .args(&["-n", "19", "echo"])
+        .arg(OsStr::from_bytes(b"a\xffb"))
+        .succeeds()
+        .stdout_only_bytes(b"a\xffb\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_non_utf8_command_not_found() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    new_ucmd!()
+        .arg(OsStr::from_bytes(b"no-such-command-\xff"))
+        .fails_with_code(127)
+        .no_stdout()
+        .stderr_contains("no-such-command-\\xFF");
+}
+
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+fn test_non_utf8_command_path() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    use uutests::util::TestScenario;
+    use uutests::util_name;
+
+    // The path of the command is not valid UTF-8 and must reach exec unchanged.
+    let ts = TestScenario::new(util_name!());
+    let dir = ts.fixtures.plus(OsStr::from_bytes(b"dir-\xff"));
+    std::fs::create_dir(&dir).unwrap();
+    let cmd = dir.join("coreutils");
+    std::os::unix::fs::symlink(&ts.bin_path, &cmd).unwrap();
+    ts.ucmd()
+        .arg(&cmd)
+        .args(&["nice", "--version"])
+        .succeeds()
+        .stdout_only(format!("nice {}\n", uucore::crate_version!()));
+}
+
+#[test]
+#[cfg(unix)]
 fn test_invalid_argument() {
     new_ucmd!().arg("--invalid").fails_with_code(125);
 }

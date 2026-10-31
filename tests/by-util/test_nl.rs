@@ -438,6 +438,22 @@ fn test_default_body_numbering_multiple_files_and_stdin() {
 }
 
 #[test]
+fn test_section_continues_into_next_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // A footer started in a.txt goes on in b.txt, and a header started in
+    // b.txt goes on in stdin.
+    at.write("a.txt", "a\n\\:\n");
+    at.write("b.txt", "b\n\\:\\:\\:\n");
+    at.write("c.txt", "\\:\\:\nd\n");
+
+    ucmd.args(&["-h", "a", "a.txt", "b.txt", "-", "c.txt"])
+        .pipe_in("c\n")
+        .succeeds()
+        .stdout_is("     1\ta\n\n       b\n\n     1\tc\n\n     1\td\n");
+}
+
+#[test]
 fn test_default_body_numbering_multiple_files_with_non_existing_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -827,6 +843,20 @@ fn test_directory_as_input() {
 }
 
 #[test]
+#[cfg(not(windows))]
+fn test_numeric_looking_directory_names_are_kept_verbatim() {
+    // Names such as "007" or "1e3" must not be reformatted as numbers
+    // in error messages. Windows quotes these names, so skip it there.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("007");
+    at.mkdir("1e3");
+    at.mkdir("2.50");
+    ucmd.args(&["007", "1e3", "2.50"])
+        .fails_with_code(1)
+        .stderr_is("nl: 007: Is a directory\nnl: 1e3: Is a directory\nnl: 2.50: Is a directory\n");
+}
+
+#[test]
 fn test_file_with_non_utf8_content() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -961,4 +991,51 @@ fn test_no_skip_after_error() {
     ucmd.args(&["/proc/self/mem", "f"])
         .fails()
         .stdout_is("     1\thello\n");
+}
+
+#[test]
+fn test_join_blank_lines_above_u64_saturates() {
+    // Too many blank lines to ever join, so the value saturates instead of
+    // being rejected.
+    for value in [
+        "18446744073709551615",
+        "18446744073709551616",
+        "99999999999999999999",
+        "99999999999999999999999999999999999999999999999",
+    ] {
+        for arg in [format!("-l{value}"), format!("--join-blank-lines={value}")] {
+            new_ucmd!()
+                .arg(arg)
+                .arg("-ba")
+                .pipe_in("a\n\n\n\nb\n")
+                .succeeds()
+                .stdout_is("     1\ta\n       \n       \n       \n     2\tb\n");
+        }
+    }
+}
+
+#[test]
+fn test_join_blank_lines_still_rejects_invalid_numbers() {
+    for value in [
+        "-1",
+        "abc",
+        "1K",
+        "99999999999999999999x",
+        "-99999999999999999999",
+    ] {
+        new_ucmd!()
+            .arg(format!("--join-blank-lines={value}"))
+            .fails_with_code(1)
+            .stderr_contains(format!("invalid value '{value}'"));
+    }
+}
+
+#[test]
+fn test_other_numeric_options_still_reject_values_above_the_limit() {
+    for arg in ["-v", "-i", "-w"] {
+        new_ucmd!()
+            .args(&[arg, "18446744073709551616"])
+            .fails_with_code(1)
+            .stderr_contains("invalid value '18446744073709551616'");
+    }
 }

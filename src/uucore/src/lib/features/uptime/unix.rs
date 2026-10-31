@@ -11,7 +11,7 @@
 
 use super::UptimeError;
 use crate::error::UResult;
-use libc::time_t;
+use std::time::Duration;
 
 /// Safely get macOS boot time using sysctl command
 ///
@@ -21,9 +21,9 @@ use libc::time_t;
 ///
 /// # Returns
 ///
-/// Returns Some(time_t) if successful, None if the call fails.
+/// Returns Some(i64) if successful, None if the call fails.
 #[cfg(target_vendor = "apple")]
-fn get_macos_boot_time_sysctl() -> Option<time_t> {
+fn get_macos_boot_time_sysctl() -> Option<i64> {
     use std::process::Command;
 
     // Execute sysctl command to get boot time
@@ -46,7 +46,7 @@ fn get_macos_boot_time_sysctl() -> Option<time_t> {
             if let Some(sec_end) = sec_part.find(',') {
                 let sec_str = &sec_part[..sec_end];
                 if let Ok(boot_time) = sec_str.trim().parse::<i64>() {
-                    return Some(boot_time as time_t);
+                    return Some(boot_time);
                 }
             }
         }
@@ -59,11 +59,11 @@ fn get_macos_boot_time_sysctl() -> Option<time_t> {
 ///
 /// # Arguments
 ///
-/// boot_time: Option<time_t> - Manually specify the boot time, or None to try to get it from the system.
+/// `boot_time`: `Option<i64>` - Manually specify the boot time, or None to try to get it from the system.
 ///
 /// # Returns
 ///
-/// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
+/// Returns a `UResult` with the elapsed duration since boot if successful, otherwise an `UptimeError`.
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
@@ -71,32 +71,32 @@ fn get_macos_boot_time_sysctl() -> Option<time_t> {
     target_os = "openbsd",
 ))]
 #[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
-pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
+pub fn get_uptime(_boot_time: Option<i64>) -> UResult<Duration> {
     use rustix::time::{ClockId, clock_gettime};
 
     let tp = clock_gettime(ClockId::Boottime);
 
-    Ok(tp.tv_sec as i64)
+    let seconds = u64::try_from(tp.tv_sec).map_err(|_| UptimeError::SystemUptime)?;
+    Ok(Duration::new(seconds, tp.tv_nsec as u32))
 }
 
 /// Get the system uptime
 ///
 /// # Arguments
 ///
-/// boot_time: Option<time_t> - Manually specify the boot time, or None to try to get it from the system.
+/// `boot_time`: `Option<i64>` - Manually specify the boot time, or None to try to get it from the system.
 ///
 /// # Returns
 ///
-/// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
+/// Returns a `UResult` with the elapsed duration since boot if successful, otherwise an [`UptimeError`].
 #[cfg(not(any(
     target_os = "linux",
     target_os = "android",
     target_os = "fuchsia",
     target_os = "openbsd",
 )))]
-pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
-    use crate::utmpx::BOOT_TIME;
-    use crate::utmpx::Utmpx;
+pub fn get_uptime(boot_time: Option<i64>) -> UResult<Duration> {
+    use crate::utmpx::{BOOT_TIME, Utmpx};
     use jiff::Timestamp;
     use std::fs::File;
     use std::io::Read;
@@ -107,7 +107,8 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
         .ok()
         .and_then(|mut f| f.read_to_string(&mut proc_uptime_s).ok())
         .and_then(|_| proc_uptime_s.split_whitespace().next())
-        .and_then(|s| s.split('.').next().unwrap_or("0").parse::<i64>().ok());
+        .and_then(|s| s.parse::<f64>().ok())
+        .and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
 
     if let Some(uptime) = proc_uptime {
         return Ok(uptime);
@@ -119,7 +120,6 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
             .filter(|r| r.record_type() == BOOT_TIME)
             .map(|r| r.login_time().unix_timestamp())
             .find(|&ts| ts > 0)
-            .map(|ts| ts as time_t)
     });
 
     // macOS-specific fallback: use sysctl kern.boottime when utmpx did not provide BOOT_TIME
@@ -142,16 +142,15 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
         t
     };
 
-    if let Some(t) = derived_boot_time {
-        let now = Timestamp::now().as_second();
-        #[cfg(target_pointer_width = "64")]
-        let boottime: i64 = t;
-        #[cfg(not(target_pointer_width = "64"))]
-        let boottime: i64 = t.into();
-        if now < boottime {
+    if let Some(boottime) = derived_boot_time {
+        let now = Timestamp::now();
+        if now.as_second() < boottime {
             Err(UptimeError::BootTime)?;
         }
-        return Ok(now - boottime);
+        return Ok(Duration::new(
+            (now.as_second() - boottime) as u64,
+            now.subsec_nanosecond() as u32,
+        ));
     }
 
     Err(UptimeError::SystemUptime)?
@@ -165,8 +164,7 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
 #[cfg(not(any(target_os = "openbsd", target_os = "android")))]
 // see: https://gitlab.com/procps-ng/procps/-/blob/4740a0efa79cade867cfc7b32955fe0f75bf5173/library/uptime.c#L63-L115
 pub fn get_nusers() -> usize {
-    use crate::utmpx::USER_PROCESS;
-    use crate::utmpx::Utmpx;
+    use crate::utmpx::{USER_PROCESS, Utmpx};
 
     let mut num_user = 0;
     Utmpx::iter_all_records().for_each(|ut| {
@@ -220,7 +218,7 @@ pub(crate) fn default_nusers() -> usize {
 ///
 /// # Returns
 ///
-/// Returns a UResult with the load average if successful, otherwise an UptimeError.
+/// Returns a `UResult` with the load average if successful, otherwise an [`UptimeError`].
 /// The load average is a tuple of three floating point numbers representing the 1-minute, 5-minute, and 15-minute load averages.
 #[cfg(not(any(target_arch = "wasm32", target_os = "android")))]
 pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
@@ -278,7 +276,7 @@ mod tests {
         assert!(boot_time < now, "Boot time should be before current time");
     }
 
-    /// Test that get_uptime always succeeds on macOS due to sysctl fallback.
+    /// Test that `get_uptime` always succeeds on macOS due to sysctl fallback.
     /// This addresses the intermittent failures reported in issue #3621.
     #[test]
     fn test_get_uptime_always_succeeds_on_macos() {
@@ -292,17 +290,17 @@ mod tests {
         );
 
         let uptime = result.unwrap();
-        assert!(uptime > 0, "Uptime should be positive");
+        assert!(!uptime.is_zero(), "Uptime should be positive");
 
         // Reasonable upper bound: system hasn't been up for more than 365 days
         // (This is just a sanity check)
         assert!(
-            uptime < 365 * 86400,
-            "Uptime seems unreasonably high: {uptime} seconds"
+            uptime < Duration::from_secs(365 * 86400),
+            "Uptime seems unreasonably high: {uptime:?}"
         );
     }
 
-    /// Test get_uptime consistency by calling it multiple times.
+    /// Test `get_uptime` consistency by calling it multiple times.
     /// Verifies the sysctl fallback produces stable results.
     #[test]
     fn test_get_uptime_macos_consistency() {
@@ -310,10 +308,37 @@ mod tests {
         let uptime2 = get_uptime(None).expect("Second call should succeed");
 
         // Uptimes should be very close (within 1 second)
-        let diff = (uptime1 - uptime2).abs();
+        let diff = uptime1.abs_diff(uptime2);
         assert!(
-            diff <= 1,
-            "Consecutive uptime calls should be consistent, got {uptime1} and {uptime2}"
+            diff <= Duration::from_secs(1),
+            "Consecutive uptime calls should be consistent, got {uptime1:?} and {uptime2:?}"
+        );
+    }
+}
+
+#[cfg(all(
+    test,
+    any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "fuchsia",
+        target_os = "openbsd"
+    )
+))]
+mod clock_tests {
+    use super::*;
+    use rustix::time::{ClockId, clock_gettime};
+
+    #[test]
+    fn uptime_retains_fractional_clock_precision() {
+        let before = clock_gettime(ClockId::Boottime);
+        let uptime = get_uptime(None).unwrap();
+        let after = clock_gettime(ClockId::Boottime);
+        let before = Duration::new(before.tv_sec as u64, before.tv_nsec as u32);
+        let after = Duration::new(after.tv_sec as u64, after.tv_nsec as u32);
+        assert!(
+            before <= uptime && uptime <= after,
+            "{before:?} <= {uptime:?} <= {after:?}"
         );
     }
 }

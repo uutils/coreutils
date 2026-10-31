@@ -35,14 +35,10 @@
 use core::ffi::{CStr, c_char, c_int};
 #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
 use libc::time_t;
-use libc::{getgrgid, getgrnam};
-use libc::{getpwnam, getpwuid, group, passwd};
-use libc::{gid_t, uid_t};
+use libc::{getgrgid, getgrnam, getpwnam, getpwuid, gid_t, group, passwd, uid_t};
 
 use std::ffi::CString;
-use std::io::Error as IOError;
-use std::io::ErrorKind;
-use std::io::Result as IOResult;
+use std::io::{Error as IOError, ErrorKind, Result as IOResult};
 use std::ptr;
 use std::sync::Mutex;
 
@@ -277,33 +273,32 @@ macro_rules! f {
             }
         }
 
-        impl<'a> Locate<&'a str> for $st {
-            fn locate(k: &'a str) -> IOResult<Self> {
+        impl $st {
+            /// Look up an entry by name only, without falling back to
+            /// parsing `k` as a numeric ID like [`Locate::locate`] does.
+            pub fn locate_name(k: &str) -> IOResult<Self> {
+                let cstring = CString::new(k)?;
                 let _guard = PW_LOCK.lock();
                 // SAFETY: We're holding PW_LOCK.
                 unsafe {
-                    let cstring = CString::new(k)?;
-                    // try to get user or group with name matching the input with these tow lines:
-                    // f!(getpwnam, getpwuid, uid_t, Passwd);
-                    // f!(getgrnam, getgrgid, gid_t, Group);
                     let data = $fnam(cstring.as_ptr());
-                    if !data.is_null() {
-                        return Ok($st::from_raw(ptr::read(data.cast_const())));
-                    }
-                    if let Ok(id) = k.parse::<$t>() {
-                        let data = $fid(id);
-                        if !data.is_null() {
-                            Ok($st::from_raw(ptr::read(data.cast_const())))
-                        } else {
-                            Err(IOError::new(
-                                ErrorKind::NotFound,
-                                format!("No such id: {id}"),
-                            ))
-                        }
-                    } else {
+                    if data.is_null() {
                         Err(IOError::new(ErrorKind::NotFound, format!("Not found: {k}")))
+                    } else {
+                        Ok($st::from_raw(ptr::read(data.cast_const())))
                     }
                 }
+            }
+        }
+
+        impl<'a> Locate<&'a str> for $st {
+            /// Look up an entry by name, or by ID if no entry has that name
+            /// and `k` parses as a number.
+            fn locate(k: &'a str) -> IOResult<Self> {
+                Self::locate_name(k).or_else(|e| match k.parse::<$t>() {
+                    Ok(id) => Self::locate(id),
+                    Err(_) => Err(e),
+                })
             }
         }
     };

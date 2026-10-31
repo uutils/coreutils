@@ -780,10 +780,10 @@ fn test_chown_recursive() {
 
     at.mkdir_all("a/b/c");
     at.mkdir("z");
-    at.touch(at.plus_as_string("a/a"));
-    at.touch(at.plus_as_string("a/b/b"));
-    at.touch(at.plus_as_string("a/b/c/c"));
-    at.touch(at.plus_as_string("z/y"));
+    at.touch(at.plus("a/a"));
+    at.touch(at.plus("a/b/b"));
+    at.touch(at.plus("a/b/c/c"));
+    at.touch(at.plus("z/y"));
 
     scene
         .ucmd()
@@ -1140,4 +1140,31 @@ fn verbose_missing_file_write_error_is_reported_not_panic() {
         .set_stdout(dev_full)
         .fails_with_code(1)
         .stderr_contains("chown: write error: No space left on device");
+}
+
+#[test]
+fn test_repeated_flags_are_accepted() {
+    use rustix::process::geteuid;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.touch("dir/file");
+
+    // GNU chown accepts a flag given more than once; the last one wins.
+    for flags in [
+        vec!["-R", "-R"],
+        vec!["-R", "--recursive"],
+        vec!["-v", "-v"],
+        vec!["-c", "-c"],
+        vec!["-f", "-f"],
+        vec!["-R", "-c", "-c"],
+    ] {
+        scene
+            .ucmd()
+            .args(&flags)
+            .arg(geteuid().to_string())
+            .arg("dir")
+            .succeeds();
+    }
 }

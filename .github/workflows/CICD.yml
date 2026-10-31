@@ -139,16 +139,11 @@ jobs:
         CARGO_FEATURES_OPTION='--all-features' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features ${{ matrix.job.features }}' ; fi
         outputs CARGO_FEATURES_OPTION
-        # * determine sub-crate utility list
-        UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
-        echo UTILITY_LIST=${UTILITY_LIST}
-        CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
-        outputs CARGO_UTILITY_LIST_OPTIONS
     - name: "`cargo doc` with warnings"
       shell: bash
       run: |
         RUSTDOCFLAGS="-Dwarnings" cargo doc  ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-deps --workspace --document-private-items
-    - uses: DavidAnson/markdownlint-cli2-action@v24
+    - uses: DavidAnson/markdownlint-cli2-action@v25
       with:
         fix: "true"
         globs: |
@@ -388,8 +383,9 @@ jobs:
           - { os: ubuntu-latest  , target: riscv64gc-unknown-linux-musl  , features: feat_os_unix_musl , use-cross: use-cross , skip-tests: true }
           - { os: ubuntu-latest  , target: powerpc64le-unknown-linux-gnu , features: feat_os_unix , use-cross: use-cross , check-only: true }
           # - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: feat_selinux           , use-cross: use-cross }
-          - { os: ubuntu-latest  , target: i686-unknown-linux-gnu      , features: "feat_os_unix,test_risky_names", use-cross: use-cross }
-          - { os: ubuntu-latest  , target: i686-unknown-linux-musl     , features: feat_os_unix_musl , use-cross: use-cross }
+          # TODO use ubuntu-latest, https://github.com/uutils/coreutils/issues/15955
+          - { os: ubuntu-24.04  , target: i686-unknown-linux-gnu      , features: "feat_os_unix,test_risky_names", use-cross: use-cross }
+          - { os: ubuntu-24.04  , target: i686-unknown-linux-musl     , features: feat_os_unix_musl , use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,test_risky_names", use-cross: use-cross, skip-publish: true }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,openssl,uudoc"   , use-cross: no, workspace-tests: true, pgo: PGO }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl , use-cross: use-cross }
@@ -573,9 +569,7 @@ jobs:
             # The account also has empty gecos fields.
             # To work around these issues for pinky (and who) tests, we create a fake utmp file with a
             # system boot entry and a login entry for the GH runner account.
-            FAKE_UTMP_2='[2] [00000] [~~  ] [reboot] [~   ] [6.0.0-test] [0.0.0.0] [2022-02-22T22:11:22,222222+00:00]'
-            FAKE_UTMP_7='[7] [999999] [tty2] [runner] [tty2] [          ] [0.0.0.0] [2022-02-22T22:22:22,222222+00:00]'
-            (echo "$FAKE_UTMP_2" ; echo "$FAKE_UTMP_7") | sudo utmpdump -r -o /var/run/utmp
+            sudo cp .github/utmp.bin /var/run/utmp # see .github/utmp.txt
             # ... and add a full name to each account with a gecos field but no full name.
             sudo sed -i 's/:,/:runner name,/' /etc/passwd
             # We also create a couple optional files pinky looks for
@@ -597,9 +591,7 @@ jobs:
         ## Dependent VARs setup
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # * determine sub-crate utility list
-        UTILITY_LIST="$(./util/show-utils.sh ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }})"
-        echo UTILITY_LIST=${UTILITY_LIST}
-        CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
+        CARGO_UTILITY_LIST_OPTIONS="$(cargo tree --depth 1 --format '{lib}' ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --prefix none | sed -n 's/^uu_/-p &/p' | tr '\n' ' ')"
         outputs CARGO_UTILITY_LIST_OPTIONS
     - name: Info
       shell: bash
@@ -821,9 +813,7 @@ jobs:
             # The account also has empty gecos fields.
             # To work around these issues for pinky (and who) tests, we create a fake utmp file with a
             # system boot entry and a login entry for the GH runner account.
-            FAKE_UTMP_2='[2] [00000] [~~  ] [reboot] [~   ] [6.0.0-test] [0.0.0.0] [2022-02-22T22:11:22,222222+00:00]'
-            FAKE_UTMP_7='[7] [999999] [tty2] [runner] [tty2] [          ] [0.0.0.0] [2022-02-22T22:22:22,222222+00:00]'
-            (echo "$FAKE_UTMP_2" ; echo "$FAKE_UTMP_7") | sudo utmpdump -r -o /var/run/utmp
+            sudo cp .github/utmp.bin /var/run/utmp # see .github/utmp.txt
             # ... and add a full name to each account with a gecos field but no full name.
             sudo sed -i 's/:,/:runner name,/' /etc/passwd
             # We also create a couple optional files pinky looks for
@@ -957,7 +947,7 @@ jobs:
   test_selinux:
     name: Build/SELinux
     needs: [ min_version, deps ]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # use ubuntu-latest, https://github.com/uutils/coreutils/issues/15955
     steps:
     - uses: actions/checkout@v7.0.1
       with:

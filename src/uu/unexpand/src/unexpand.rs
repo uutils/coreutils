@@ -201,8 +201,11 @@ fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
 
     for arg in args {
         if let Some(arg) = arg.to_str() {
-            if arg.starts_with('-') && arg[1..].chars().all(is_digit_or_comma) {
-                arg[1..]
+            if let Some(shortcut) = arg
+                .strip_prefix('-')
+                .filter(|shortcut| !shortcut.is_empty() && shortcut.chars().all(is_digit_or_comma))
+            {
+                shortcut
                     .split(',')
                     .filter(|s| !s.is_empty())
                     .for_each(|s| processed_args.push(OsString::from(format!("--tabs={s}"))));
@@ -319,15 +322,13 @@ fn next_tabstop(tab_config: &TabConfig, col: usize) -> Option<usize> {
     let tabstops = &tab_config.tabstops;
 
     if tabstops.is_empty() {
-        return None;
-    }
-
-    if tabstops.len() == 1
-        && !matches!(tab_config.increment_size, Some(n) if n > 0)
-        && !matches!(tab_config.extend_size, Some(n) if n > 0)
+        None
+    } else if let [tabstop] = tabstops[..]
+        && !matches!(tab_config.increment_size, Some(1..))
+        && !matches!(tab_config.extend_size, Some(1..))
     {
         // Simple case: single tab stop, repeat at that interval
-        Some(tabstops[0] - col % tabstops[0])
+        Some(tabstop - col % tabstop)
     } else {
         // Find next larger tab
         if let Some(&next_tab) = tabstops.iter().find(|&&t| t > col) {
@@ -509,12 +510,15 @@ fn unexpand_buf(
     print_state: &mut PrintState,
 ) -> UResult<()> {
     // We can only fast forward if we don't need to calculate col/scol
-    if let Some(b'\n') = buf.last() {
+    if Some(&b'\n') == buf.last() {
         // Fast path: if we're not converting all spaces (-a flag not set)
-        // and the line doesn't start with spaces, just write it directly
+        // and the line doesn't start with spaces, just write it directly. In
+        // UTF-8 mode a leading multibyte char may be a blank, so it needs the
+        // general loop.
         if !options.aflag
-            && !buf.is_empty()
-            && ((buf[0] != b' ' && buf[0] != b'\t') || !print_state.leading)
+            && buf.first().is_some_and(|&b| {
+                !print_state.leading || (b != b' ' && b != b'\t' && (b.is_ascii() || !options.utf8))
+            })
         {
             write_tabs(output, tab_config, print_state, options.aflag)?;
             print_state.scol = print_state.col;

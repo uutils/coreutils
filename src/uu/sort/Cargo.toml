@@ -32,6 +32,7 @@ uucore = { workspace = true, features = [
   "parser-size",
   "version-cmp",
   "i18n-decimal",
+  "numeric-str-cmp",
   "i18n-collator",
   "i18n-datetime",
 ] }
@@ -39,11 +40,15 @@ uucore = { workspace = true, features = [
 [target.'cfg(all(unix, not(any(target_os = "redox", target_os = "fuchsia", target_os = "haiku", target_os = "solaris", target_os = "illumos"))))'.dependencies]
 rustix = { workspace = true, features = ["fs", "system", "process"] }
 
+[target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
+rlimit = { workspace = true }
+
 [target.'cfg(not(any(target_os = "redox", target_os = "wasi")))'.dependencies]
 ctrlc = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
+rustix = { workspace = true, features = ["fs"] }
 
 [dev-dependencies]
 divan = { workspace = true }
@@ -51,6 +56,7 @@ tempfile = { workspace = true }
 uucore = { workspace = true, features = [
   "benchmark",
   "fs",
+  "mode",
   "parser-size",
   "version-cmp",
   "i18n-collator",

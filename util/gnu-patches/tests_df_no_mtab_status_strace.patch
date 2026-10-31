@@ -1,0 +1,142 @@
+diff --git a/tests/df/no-mtab-status.sh b/tests/df/no-mtab-status.sh
+index 6573476ffb..9dfd5e86b1 100755
+--- a/tests/df/no-mtab-status.sh
++++ b/tests/df/no-mtab-status.sh
+@@ -1,6 +1,5 @@
+ #!/bin/sh
+ # Test df's behavior when the mount list cannot be read.
+-# This test is skipped on systems that lack LD_PRELOAD support; that's fine.
+
+ # Copyright (C) 2012-2026 Free Software Foundation, Inc.
+
+@@ -19,117 +18,27 @@
+
+ . "${srcdir=.}/tests/init.sh"; path_prepend_ ./src
+ print_ver_ df
+-require_gcc_shared_
++uses_strace_
+
+ # Protect against inaccessible remote mounts etc.
+ timeout 10 df || skip_ "df fails"
+
+-grep '^#define HAVE_GETMNTENT 1' $CONFIG_HEADER > /dev/null \
+-      || skip_ "getmntent is not used on this system"
+-
+-# Simulate "mtab" failure.
+-# Replace gnulib streq as that is not available here.
+-sed 's/streq/0==str''cmp/' > k.c <<EOF || framework_failure_
+-#define _GNU_SOURCE
+-#include <stdio.h>
+-#include <stdlib.h>
+-#include <errno.h>
+-#include <fcntl.h>
+-#include <mntent.h>
+-#include <string.h>
+-#include <stdarg.h>
+-#include <dlfcn.h>
+-
+-static FILE *(*fopen_func) (const char *, const char *);
+-
+-FILE *fopen(const char *path, const char *mode)
+-{
+-
+-  /* get reference to original (libc provided) fopen */
+-  if (!fopen_func)
+-    {
+-      fopen_func = (FILE*(*)(const char *, const char *))
+-                   dlsym(RTLD_NEXT, "fopen");
+-      if (!fopen_func)
+-        {
+-          fprintf (stderr, "Failed to find fopen()\n");
+-          errno = ESRCH;
+-          return NULL;
+-        }
+-    }
+-
+-  /* Returning ENOENT here will get read_file_system_list()
+-     to fall back to using getmntent() below.  */
+-  if (streq (path, "/proc/self/mountinfo"))
+-    {
+-      errno = ENOENT;
+-      return NULL;
+-    }
+-
+-  return fopen_func(path, mode);
++no-mtab() {
++  strace -o /dev/null \
++    -e quiet=path-resolution \
++    -P /proc/self/mountinfo \
++    -P /proc/mounts \
++    -P /etc/mtab \
++    -P /proc/self/mounts \
++    -e fault=openat \
++    "$@"
+ }
+
+-int open(const char *path, int flags, ...)
+-{
+-  static int (*open_func)(const char *, int, ...);
+-
+-  /* get reference to original (libc provided) open */
+-  if (!open_func)
+-    {
+-      open_func = (int(*)(const char *, int, ...))
+-                   dlsym(RTLD_NEXT, "open");
+-      if (!open_func)
+-        {
+-          fprintf (stderr, "Failed to find open()\n");
+-          errno = ESRCH;
+-          return -1;
+-        }
+-    }
+-
+-  /* Returning ENOENT here will get read_file_system_list()
+-     to fall back to using getmntent() below.  */
+-  if (streq (path, "/proc/self/mountinfo"))
+-    {
+-      errno = ENOENT;
+-      return -1;
+-    }
+-
+-  va_list ap;
+-  va_start (ap, flags);
+-  mode_t mode = (sizeof (mode_t) < sizeof (int)
+-                 ? va_arg (ap, int)
+-                 : va_arg (ap, mode_t));
+-  va_end (ap);
+-
+-  return open_func(path, flags, mode);
+-}
++no-mtab true || skip_ 'strace injection for openat failed'
+
+-struct mntent *getmntent (FILE *fp)
+-{
+-  /* Prove that LD_PRELOAD works. */
+-  static int done = 0;
+-  if (!done)
+-    {
+-      fclose (fopen_func ("x", "w"));
+-      ++done;
+-    }
+-  /* Now simulate the failure. */
+-  errno = ENOENT;
+-  return NULL;
++df() {
++  no-mtab df "$@"
+ }
+-EOF
+-
+-# Then compile/link it:
+-gcc_shared_ k.c k.so \
+-  || skip_ 'failed to build mntent shared library'
+-
+-cleanup_() { unset LD_PRELOAD; }
+-
+-export LD_PRELOAD=$LD_PRELOAD:./k.so
+-
+-# Test if LD_PRELOAD works:
+-df
+-test -f x || skip_ "internal test failure: maybe LD_PRELOAD doesn't work?"
+
+ # These tests are supposed to succeed:
+ df '.' || fail=1

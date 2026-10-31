@@ -100,3 +100,7 @@ mode-diag-help-syntax = a mode is either octal, as in 644, or clauses such as u+
 # Shared recursive chown/chgrp/chmod diagnostics (uucore::perms)
 perms-cannot-access = cannot access { $file }: { $error }
 perms-cannot-access-replaced = cannot access { $file }: replaced while it was being processed
+
+# Encoding/decoding error messages (base32, base64, basenc)
+encoding-error-invalid-input = invalid input
+encoding-error-invalid-input-z85-length = invalid input (length must be multiple of 4 characters)

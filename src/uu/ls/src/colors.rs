@@ -45,7 +45,7 @@ pub(crate) struct StyleManager<'a> {
     /// `true` if the initial reset is applied
     pub(crate) initial_reset_is_done: bool,
     pub(crate) colors: &'a LsColors,
-    /// raw indicator codes as specified in LS_COLORS (if available)
+    /// raw indicator codes as specified in `LS_COLORS` (if available)
     indicator_codes: FxHashMap<Indicator, String>,
     /// whether ln=target is active
     ln_color_from_target: bool,

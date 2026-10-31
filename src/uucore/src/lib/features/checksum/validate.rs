@@ -23,6 +23,7 @@ use crate::quoting_style::locale_aware_shell_escape;
 use crate::sum::{self, Blake2b, Blake3, DigestOutput};
 use crate::{
     os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_warning_caps, translate,
+    translate_text,
 };
 
 /// To what level should checksum validation print logging info.
@@ -102,7 +103,7 @@ impl ChecksumResult {
 /// Represents a reason for which the processing of a checksum line
 /// could not proceed to digest comparison.
 enum LineCheckError {
-    /// a generic UError was encountered in sub-functions
+    /// a generic `UError` was encountered in sub-functions
     UError(Box<dyn UError>),
     /// the computed checksum digest differs from the expected one
     DigestMismatch,
@@ -132,7 +133,7 @@ impl From<ChecksumError> for LineCheckError {
 
 /// Represents an error that was encountered when processing a checksum file.
 enum FileCheckError {
-    /// a generic UError was encountered in sub-functions
+    /// a generic `UError` was encountered in sub-functions
     UError(Box<dyn UError>),
     /// reading of the checksum file failed
     CantOpenChecksumFile,
@@ -184,7 +185,7 @@ fn log_no_properly_formatted(filename: impl Display) {
         stderr(),
         "{}: {}",
         util_name(),
-        translate!("checksum-no-properly-formatted", "checksum_file" => filename)
+        translate_text!("checksum-no-properly-formatted", "checksum_file" => filename)
     );
 }
 
@@ -195,7 +196,7 @@ fn log_no_file_verified(filename: impl Display) {
         stderr(),
         "{}: {}",
         util_name(),
-        translate!("checksum-no-file-verified", "checksum_file" => filename)
+        translate_text!("checksum-no-file-verified", "checksum_file" => filename)
     );
 }
 
@@ -612,7 +613,7 @@ fn get_file_to_check(
                     Ok(Box::new(f))
                 }
             }
-            Err(err) => {
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 if !opts.ignore_missing {
                     // yes, we have both stderr and stdout here
                     print_error(err);
@@ -620,6 +621,13 @@ fn get_file_to_check(
                 }
                 // we could not open the file but we want to continue
                 Err(LineCheckError::FileNotFound)
+            }
+            Err(err) => {
+                // The file exists but cannot be opened. `--ignore-missing` does
+                // not cover this, so report it whether or not it is set.
+                print_error(err);
+                failed_open();
+                Err(LineCheckError::CantOpenFile)
             }
         }
     }
@@ -640,7 +648,7 @@ fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
     #[cfg(any(target_os = "wasi", windows))]
     if file.metadata().is_ok_and(|m| m.is_dir()) {
         return Err(io::Error::other(
-            translate!("error-is-a-directory", "file" => filename.maybe_quote()),
+            translate_text!("error-is-a-directory", "file" => filename.maybe_quote()),
         )
         .into());
     }
@@ -861,10 +869,13 @@ fn process_checksum_line(
 
     // Use `LineInfo` to extract the data of a line.
     // Then, depending on its format, apply a different pre-treatment.
-    let line_info = LineInfo::parse(line, cached_line_format, opts.allow_empty_filename)
+    // The detected format is kept only if the line turns out to be properly
+    // formatted: an improper line must not decide how the next ones are read.
+    let mut line_format = *cached_line_format;
+    let line_info = LineInfo::parse(line, &mut line_format, opts.allow_empty_filename)
         .ok_or(LineCheckError::ImproperlyFormatted)?;
 
-    if line_info.format == LineFormat::AlgoBased {
+    let result = if line_info.format == LineFormat::AlgoBased {
         process_algo_based_line(&line_info, cli_algo_name, opts, last_algo)
     } else if let Some(cli_algo) = cli_algo_name {
         // If we match a non-algo based parser, we expect a cli argument
@@ -873,7 +884,12 @@ fn process_checksum_line(
     } else {
         // We have no clue of what algorithm to use
         Err(LineCheckError::ImproperlyFormatted)
+    };
+
+    if !matches!(result, Err(LineCheckError::ImproperlyFormatted)) {
+        *cached_line_format = line_format;
     }
+    result
 }
 
 fn process_checksum_file(
@@ -956,7 +972,7 @@ fn process_checksum_file(
                         stderr(),
                         "{}: {}",
                         util_name(),
-                        translate!("checksum-error-algo-bad-format", "file" => filename_input.maybe_quote(), "line" => i + 1, "algo" => algo)
+                        translate_text!("checksum-error-algo-bad-format", "file" => filename_input.maybe_quote(), "line" => i + 1, "algo" => algo)
                     );
                 }
             }
@@ -1000,8 +1016,9 @@ fn process_checksum_file(
         return Err(FileCheckError::Failed);
     }
 
-    // If a file was missing, return an error unless we explicitly ignore it.
-    if res.failed_open_file > 0 && !opts.ignore_missing {
+    // Files we could not read are a failure. Missing files are only counted
+    // when they are not ignored, so this needs no further guard.
+    if res.failed_open_file > 0 {
         return Err(FileCheckError::Failed);
     }
 
@@ -1331,6 +1348,82 @@ mod tests {
         );
         assert!(res.is_none());
         assert!(cached_line_format.is_none());
+    }
+
+    fn check_md5_line(
+        line: &str,
+        cached_line_format: &mut Option<LineFormat>,
+    ) -> Result<(), LineCheckError> {
+        let opts = ChecksumValidateOptions {
+            ignore_missing: true,
+            ..Default::default()
+        };
+        process_checksum_line(
+            OsStr::new(line),
+            Some(AlgoKind::Md5),
+            None,
+            opts,
+            cached_line_format,
+            &mut None,
+        )
+    }
+
+    #[test]
+    fn test_improperly_formatted_line_does_not_select_single_space_format() {
+        let mut cached_line_format = None;
+
+        let res = check_md5_line("2024 release", &mut cached_line_format);
+        assert!(matches!(res, Err(LineCheckError::ImproperlyFormatted)));
+        assert_eq!(cached_line_format, None);
+
+        let res = check_md5_line(
+            "d41d8cd98f00b204e9800998ecf8427e  missing",
+            &mut cached_line_format,
+        );
+        assert!(matches!(res, Err(LineCheckError::FileNotFound)));
+        assert_eq!(cached_line_format, Some(LineFormat::Untagged));
+    }
+
+    #[test]
+    fn test_improperly_formatted_line_does_not_select_untagged_format() {
+        let mut cached_line_format = None;
+
+        let res = check_md5_line("Checksums  for release", &mut cached_line_format);
+        assert!(matches!(res, Err(LineCheckError::ImproperlyFormatted)));
+        assert_eq!(cached_line_format, None);
+
+        let res = check_md5_line(
+            "d41d8cd98f00b204e9800998ecf8427e missing",
+            &mut cached_line_format,
+        );
+        assert!(matches!(res, Err(LineCheckError::FileNotFound)));
+        assert_eq!(cached_line_format, Some(LineFormat::SingleSpace));
+    }
+
+    #[test]
+    fn test_properly_formatted_line_selects_format_whatever_the_digest_check_outcome() {
+        let mut cached_line_format = None;
+        let res = check_md5_line(
+            "d41d8cd98f00b204e9800998ecf8427e  missing",
+            &mut cached_line_format,
+        );
+        assert!(matches!(res, Err(LineCheckError::FileNotFound)));
+        assert_eq!(cached_line_format, Some(LineFormat::Untagged));
+
+        let mut cached_line_format = None;
+        let res = check_md5_line(
+            "d41d8cd98f00b204e9800998ecf8427e Cargo.toml",
+            &mut cached_line_format,
+        );
+        assert!(matches!(res, Err(LineCheckError::DigestMismatch)));
+        assert_eq!(cached_line_format, Some(LineFormat::SingleSpace));
+
+        let res = check_md5_line(
+            "d41d8cd98f00b204e9800998ecf8427e  missing",
+            &mut cached_line_format,
+        );
+        assert!(matches!(res, Err(LineCheckError::FileNotFound)));
+        assert_eq!(cached_line_format, Some(LineFormat::SingleSpace));
     }
 
     #[test]

@@ -424,6 +424,11 @@ fn custom_write_all<T: Write>(
     }
 }
 
+struct InputSize {
+    size: u64,
+    spooled: Option<File>,
+}
+
 /// Get the size of the input file in bytes
 /// Used only for subset of `--number=CHUNKS` strategy, as there is a need
 /// to determine input file size upfront in order to estimate the chunk size
@@ -440,9 +445,8 @@ fn custom_write_all<T: Write>(
 /// their actual content size, we will need to attempt to find the end of file
 /// with direct `seek()` on [`std::fs::File`].
 ///
-/// For STDIN stream - read into a buffer up to a limit
-/// If input stream does not EOF before that - return an error
-/// (i.e. "infinite" input as in `cat /dev/zero | split ...`, `yes | split ...` etc.).
+/// For STDIN stream - read into a buffer up to a limit. If the stream does not reach EOF,
+/// spool it to a temporary file so its size can be determined without keeping it in memory.
 ///
 /// Note: The `buf` might end up with either partial or entire input content.
 fn get_input_size(
@@ -450,7 +454,7 @@ fn get_input_size(
     reader: &mut impl Read,
     buf: &mut Vec<u8>,
     io_blksize: Option<u64>,
-) -> io::Result<u64> {
+) -> io::Result<InputSize> {
     // Set read limit to io_blksize if specified
     let read_limit: u64 = if let Some(custom_blksize) = io_blksize {
         custom_blksize
@@ -473,20 +477,31 @@ fn get_input_size(
         // empty STDIN stream,
         // and files with true file size 0
         // will also fit here
-        Ok(num_bytes)
+        Ok(InputSize {
+            size: num_bytes,
+            spooled: None,
+        })
     } else if input == "-" {
-        // STDIN stream that did not fit all content into a buffer
-        // Most likely continuous/infinite input stream
-        Err(io::Error::other(
-            translate!("split-error-cannot-determine-input-size", "input" => input.maybe_quote()),
-        ))
+        // STDIN stream that did not fit into the buffer. Spool it so the
+        // size-dependent --number strategies can read it again.
+        let mut spooled = tempfile::tempfile()?;
+        spooled.write_all(buf)?;
+        let size = num_bytes + io::copy(reader, &mut spooled)?;
+        spooled.seek(SeekFrom::Start(0))?;
+        Ok(InputSize {
+            size,
+            spooled: Some(spooled),
+        })
     } else {
         // Could be that file size is larger than set read limit
         // Get the file size from filesystem metadata
         let metadata = metadata(Path::new(input))?;
         let metadata_size = metadata.len();
         if num_bytes <= metadata_size {
-            Ok(metadata_size)
+            Ok(InputSize {
+                size: metadata_size,
+                spooled: None,
+            })
         } else {
             // Could be a file from locations like /dev, /sys, /proc or similar
             // which report filesystem metadata size that does not match
@@ -495,7 +510,10 @@ fn get_input_size(
             let mut tmp_fd = File::open(Path::new(input))?;
             let end = tmp_fd.seek(SeekFrom::End(0))?;
             if end > 0 {
-                Ok(end)
+                Ok(InputSize {
+                    size: end,
+                    spooled: None,
+                })
             } else {
                 // Edge case of either "infinite" file (i.e. /dev/zero)
                 // or some other "special" non-standard file type
@@ -954,8 +972,13 @@ fn n_chunks_by_byte(
 ) -> UResult<()> {
     // Get the size of the input in bytes
     let initial_buf = &mut Vec::new();
-    let mut num_bytes = get_input_size(&settings.input, reader, initial_buf, settings.io_blksize)?;
-    let mut reader = initial_buf.chain(reader);
+    let InputSize { size, spooled } =
+        get_input_size(&settings.input, reader, initial_buf, settings.io_blksize)?;
+    let mut num_bytes = size;
+    let mut reader: Box<dyn Read> = match spooled {
+        Some(file) => Box::new(file),
+        None => Box::new(initial_buf.chain(reader)),
+    };
 
     // If input file is empty and we would not have determined the Kth chunk
     // in the Kth chunk of N chunk mode, then terminate immediately.
@@ -1086,13 +1109,19 @@ fn n_chunks_by_line(
     // Get the size of the input in bytes and compute the number
     // of bytes per chunk.
     let initial_buf = &mut Vec::new();
-    let num_bytes = get_input_size(
+    let InputSize {
+        size: num_bytes,
+        spooled,
+    } = get_input_size(
         &settings.input,
         &mut reader,
         initial_buf,
         settings.io_blksize,
     )?;
-    let reader = initial_buf.chain(reader);
+    let reader: Box<dyn BufRead> = match spooled {
+        Some(file) => Box::new(BufReader::with_capacity(io_blksize, file)),
+        None => Box::new(initial_buf.chain(reader)),
+    };
 
     // If input file is empty and we would not have determined the Kth chunk
     // in the Kth chunk of N chunk mode, then terminate immediately.
@@ -1127,6 +1156,7 @@ fn n_chunks_by_line(
     }
 
     let mut chunk_number = 1;
+    let mut file_index = 0;
     let sep = settings.separator;
     let mut num_bytes_should_be_written = chunk_size_base + (chunk_size_reminder > 0) as u64;
     let mut num_bytes_written = 0;
@@ -1147,8 +1177,7 @@ fn n_chunks_by_line(
             }
         } else {
             // Should write into a file
-            let idx = (chunk_number - 1) as usize;
-            let writer = out_files.get_writer(idx, settings)?;
+            let writer = out_files.get_writer(file_index, settings)?;
             custom_write_all(bytes, writer, settings)?;
         }
 
@@ -1175,12 +1204,11 @@ fn n_chunks_by_line(
             chunk_number += 1;
         }
 
-        // If a chunk was skipped and `elide_empty_files` flag is set,
-        // roll chunk_number back to preserve sequential continuity
-        // of file names for files written to,
-        // except for Kth chunk of N mode
-        if settings.elide_empty_files && kth_chunk.is_none() {
-            chunk_number = chunk_number.min(first_chunk_number + 1);
+        // Keep output names consecutive without changing the chunk boundaries.
+        if settings.elide_empty_files {
+            file_index += usize::from(chunk_number > first_chunk_number);
+        } else {
+            file_index = (chunk_number - 1) as usize;
         }
         if kth_chunk.is_some_and(|k| chunk_number > k) {
             break;

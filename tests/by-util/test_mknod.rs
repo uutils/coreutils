@@ -86,6 +86,37 @@ fn test_mknod_fifo_read_only() {
 }
 
 #[test]
+fn test_mknod_context_without_security_support() {
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    if uucore::selinux::is_selinux_enabled() {
+        println!("Test skipped: SELinux is enabled");
+        return;
+    }
+    #[cfg(all(feature = "feat_smack", target_os = "linux"))]
+    if uucore::smack::is_smack_enabled() {
+        println!("Test skipped: SMACK is enabled");
+        return;
+    }
+
+    let warning =
+        "mknod: warning: ignoring --context; it requires an SELinux/SMACK-enabled kernel\n";
+    for (arg, stderr) in [
+        ("--context=con", warning),
+        ("--context=", warning),
+        ("--context", ""),
+        ("-Z", ""),
+    ] {
+        let ts = TestScenario::new(util_name!());
+        ts.ucmd()
+            .args(&[arg, "fifo", "p"])
+            .succeeds()
+            .no_stdout()
+            .stderr_is(stderr);
+        assert!(ts.fixtures.is_fifo("fifo"));
+    }
+}
+
+#[test]
 fn test_mknod_fifo_invalid_extra_operand() {
     new_ucmd!()
         .arg("test_file")
@@ -184,8 +215,56 @@ fn test_mknod_mode_comma_separated() {
 }
 
 #[test]
+fn test_mknod_fifo_with_mode_and_umask() {
+    use uucore::fs::display_permissions;
+    let ts = TestScenario::new(util_name!());
+
+    let test_fifo_creation = |mode: &str, umask: u16, expected: &str| {
+        ts.ucmd()
+            .args(&["-m", mode, "fifo_test", "p"])
+            .umask(libc::mode_t::from(umask))
+            .succeeds();
+
+        let metadata = ts.fixtures.metadata("fifo_test");
+        assert_eq!(display_permissions(&metadata, true), expected);
+        ts.fixtures.remove("fifo_test");
+    };
+
+    test_fifo_creation("734", 0o077, "prwx-wxr--"); // spell-checker:disable-line
+    test_fifo_creation("706", 0o777, "prwx---rw-"); // spell-checker:disable-line
+    test_fifo_creation("a=r", 0o022, "pr--r--r--"); // spell-checker:disable-line
+    test_fifo_creation("u+x", 0o022, "prwxrw-rw-"); // spell-checker:disable-line
+}
+
+#[test]
+fn test_mknod_fifo_with_umask() {
+    use uucore::fs::display_permissions;
+    let ts = TestScenario::new(util_name!());
+
+    let test_fifo_creation = |umask: u16, expected: &str| {
+        ts.ucmd()
+            .args(&["fifo_test", "p"])
+            .umask(libc::mode_t::from(umask))
+            .succeeds();
+
+        let metadata = ts.fixtures.metadata("fifo_test");
+        assert_eq!(display_permissions(&metadata, true), expected);
+        ts.fixtures.remove("fifo_test");
+    };
+
+    test_fifo_creation(0o022, "prw-r--r--"); // spell-checker:disable-line
+    test_fifo_creation(0o077, "prw-------"); // spell-checker:disable-line
+    test_fifo_creation(0o777, "p---------"); // spell-checker:disable-line
+}
+
+#[test]
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mknod_selinux() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("Test skipped: SELinux is not enabled");
+        return;
+    }
+
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     let dest = "test_file";
@@ -210,13 +289,18 @@ fn test_mknod_selinux() {
             context_value.contains("unconfined_u"),
             "Expected 'unconfined_u' not found in getfattr output:\n{context_value}"
         );
-        at.remove(&at.plus_as_string(dest));
+        at.remove(at.plus(dest));
     }
 }
 
 #[test]
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mknod_selinux_invalid() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("Test skipped: SELinux is not enabled");
+        return;
+    }
+
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let dest = "orig";
@@ -244,13 +328,18 @@ fn test_mknod_selinux_invalid() {
 #[test]
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mknod_selinux_invalid_cleanup() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("Test skipped: SELinux is not enabled");
+        return;
+    }
+
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let dest = "test_fifo";
 
     new_ucmd!()
         .arg("--context=invalid_context_t")
-        .arg(at.plus_as_string(dest))
+        .arg(at.plus(dest))
         .arg("p")
         .fails()
         .no_stdout();

@@ -555,7 +555,7 @@ pub enum BlakeLength<'s> {
 ///
 /// Note: when the input is a string, validation may print error messages.
 /// Note: when the algo is Blake2b, values that are above 512
-/// (Blake2b::DEFAULT_BIT_SIZE) are errors.
+/// ([`Blake2b::DEFAULT_BIT_SIZE`]) are errors.
 pub fn parse_blake_length(algo: AlgoKind, bit_length: BlakeLength<'_>) -> UResult<HashLength> {
     debug_assert!(matches!(algo, AlgoKind::Blake2b | AlgoKind::Blake3));
 

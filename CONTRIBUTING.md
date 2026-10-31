@@ -51,10 +51,10 @@ crates is as follows:
 - `locales/en-US.ftl`: the util's strings
 - `locales/fr-FR.ftl`: French translation of the util's strings
 
-We have separated repositories for crates that we maintain but also publish for
+We have separate repositories for crates that we maintain but also publish for
 use by others:
 
-- [coreutils-i10n](https://github.com/uutils/coreutils-l10n)
+- [coreutils-l10n](https://github.com/uutils/coreutils-l10n)
 - [num-prime](https://github.com/uutils/num-prime)
 - [uutils-term-grid](https://github.com/uutils/uutils-term-grid)
 - [parse_datetime](https://github.com/uutils/parse_datetime)
@@ -214,6 +214,13 @@ naming of variables and functions.
 If you edit a piece of code, make sure to update any comments that need to
 change as a result. The only thing worse than having no comments is having
 outdated comments!
+
+### Tests use `#[rstest]`
+
+Tests use [`rstest`](https://crates.io/crates/rstest) with `#[case(...)]` for
+parameterized test cases. Prefer `#[rstest]` over writing multiple near-identical
+`#[test]` functions when a test has multiple cases. Plain `#[test]` is fine for
+single-case tests; there is no need to convert existing tests.
 
 ## AI policy
 

@@ -7,10 +7,11 @@ use clap::{Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::num::{IntErrorKind, ParseIntError};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
-use uucore::{format_usage, show_error, translate};
+use uucore::{format_usage, show_error, translate, translate_text};
 
 mod helper;
 
@@ -56,6 +57,8 @@ impl Default for Settings {
 struct Stats {
     line_number: Option<i64>,
     consecutive_empty_lines: u64,
+    // Kept across files: nl treats all its inputs as one document.
+    section: SectionDelimiter,
 }
 
 impl Stats {
@@ -63,6 +66,7 @@ impl Stats {
         Self {
             line_number: Some(starting_line_number),
             consecutive_empty_lines: 0,
+            section: SectionDelimiter::Body,
         }
     }
 }
@@ -160,6 +164,7 @@ impl NumberFormat {
     }
 }
 
+#[derive(Clone, Copy)]
 enum SectionDelimiter {
     Header,
     Body,
@@ -213,6 +218,25 @@ pub mod options {
     pub const NUMBER_WIDTH: &str = "number-width";
 }
 
+/// Parses the value of `-l`. A number too large for `u64` saturates instead of
+/// being rejected: it only sets how many blank lines make up one numbered line.
+fn parse_join_blank_lines(s: &str) -> Result<u64, ParseIntError> {
+    s.parse::<u64>().or_else(|e| {
+        // `parse` reports an overflow without looking at the rest of the
+        // value, so only saturate when all of it is digits.
+        let all_digits = s
+            .strip_prefix('+')
+            .unwrap_or(s)
+            .bytes()
+            .all(|b| b.is_ascii_digit());
+        if *e.kind() == IntErrorKind::PosOverflow && all_digits {
+            Ok(u64::MAX)
+        } else {
+            Err(e)
+        }
+    })
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
@@ -250,7 +274,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if path.is_dir() {
                 show_error!(
                     "{}",
-                    translate!("nl-error-is-directory", "path" => path.maybe_quote())
+                    translate_text!("nl-error-is-directory", "path" => path.maybe_quote())
                 );
                 set_exit_code(1);
             } else {
@@ -337,7 +361,7 @@ pub fn uu_app() -> Command {
                 .long(options::JOIN_BLANK_LINES)
                 .help(translate!("nl-help-join-blank-lines"))
                 .value_name("NUMBER")
-                .value_parser(clap::value_parser!(u64)),
+                .value_parser(parse_join_blank_lines),
         )
         .arg(
             Arg::new(options::NUMBER_FORMAT)
@@ -389,7 +413,6 @@ fn write_line(writer: &mut impl Write, line: &[u8]) -> io::Result<()> {
 /// `nl` implements the main functionality for an individual buffer.
 fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings) -> UResult<()> {
     let mut writer = BufWriter::new(stdout());
-    let mut current_numbering_style = &settings.body_numbering;
     let mut line = Vec::new();
     // Written before every unnumbered line. Capped to avoid OOM on 32-bit targets
     // when -w i32::MAX is passed (allocating 2 GiB would panic).
@@ -420,21 +443,18 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
             stats.consecutive_empty_lines = 0;
         }
 
-        let new_numbering_style = match SectionDelimiter::parse(&line, &settings.section_delimiter)
-        {
-            Some(SectionDelimiter::Header) => Some(&settings.header_numbering),
-            Some(SectionDelimiter::Body) => Some(&settings.body_numbering),
-            Some(SectionDelimiter::Footer) => Some(&settings.footer_numbering),
-            None => None,
-        };
-
-        if let Some(new_style) = new_numbering_style {
-            current_numbering_style = new_style;
+        if let Some(section) = SectionDelimiter::parse(&line, &settings.section_delimiter) {
+            stats.section = section;
             if settings.renumber {
                 stats.line_number = Some(settings.starting_line_number);
             }
             writeln!(writer).map_err_context(|| translate!("nl-error-could-not-write"))?;
         } else {
+            let current_numbering_style = match stats.section {
+                SectionDelimiter::Header => &settings.header_numbering,
+                SectionDelimiter::Body => &settings.body_numbering,
+                SectionDelimiter::Footer => &settings.footer_numbering,
+            };
             let is_line_numbered = match current_numbering_style {
                 // consider $join_blank_lines consecutive empty lines to be one logical line
                 // for numbering, and only number the last one

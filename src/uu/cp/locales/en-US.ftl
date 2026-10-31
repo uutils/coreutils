@@ -50,12 +50,13 @@ cp-help-progress = Display a progress bar. Note: this feature is not supported b
 cp-help-copy-contents = NotImplemented: copy contents of special files when recursive
 
 # Error messages
+cp-error-relative-symlink-not-in-cwd = { $dest }: can make relative symbolic links only in current directory
 cp-error-missing-file-operand = missing file operand
 cp-error-missing-destination-operand = missing destination file operand after { $source }
 cp-error-extra-operand = extra operand { $operand }
 cp-error-same-file = { $source } and { $dest } are the same file
 cp-error-backing-up-destroy-source = backing up { $dest } might destroy source;  { $source } not copied
-cp-error-cannot-open-for-reading = cannot open { $source } for reading
+cp-error-cannot-open-for-reading = cannot open { $source } for reading: permission denied
 cp-error-not-writing-dangling-symlink = not writing through dangling symlink { $dest }
 cp-error-failed-to-clone = failed to clone { $dest } from { $source }: { $error }
 cp-error-cannot-change-attribute = cannot change attribute { $dest }: Source file is a non regular file
@@ -110,6 +111,7 @@ cp-debug-enum-seek-hole = SEEK_HOLE
 cp-debug-enum-seek-hole-zeros = SEEK_HOLE + zeros
 
 # Warning messages
+cp-warning-context-ignored = ignoring --context; it requires an SELinux-enabled kernel
 cp-warning-source-specified-more-than-once = source { $file_type } { $source } specified more than once
 
 # Verbose and debug messages
