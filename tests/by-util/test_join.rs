@@ -1046,14 +1046,24 @@ fn check_order_nocheck_order_last_wins() {
     let at = &ts.fixtures;
     at.write("unsorted.txt", "b\na\n");
     ts.ucmd()
-        .args(&["--check-order", "--nocheck-order", "unsorted.txt", "unsorted.txt"])
+        .args(&[
+            "--check-order",
+            "--nocheck-order",
+            "unsorted.txt",
+            "unsorted.txt",
+        ])
         .succeeds()
         .stdout_contains("a")
         .stdout_contains("b");
 
     // --check-order after --nocheck-order: check wins, unsorted input fails.
     ts.ucmd()
-        .args(&["--nocheck-order", "--check-order", "unsorted.txt", "unsorted.txt"])
+        .args(&[
+            "--nocheck-order",
+            "--check-order",
+            "unsorted.txt",
+            "unsorted.txt",
+        ])
         .fails()
         .stderr_contains("is not sorted");
 }

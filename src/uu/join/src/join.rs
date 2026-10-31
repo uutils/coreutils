@@ -849,18 +849,10 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
         settings.empty = empty.as_bytes().to_vec();
     }
 
-    let nocheck_idx = matches
-        .indices_of("nocheck-order")
-        .and_then(|mut i| i.next_back());
-    let check_idx = matches
-        .indices_of("check-order")
-        .and_then(|mut i| i.next_back());
-    match (check_idx, nocheck_idx) {
-        (Some(c), Some(n)) if c > n => settings.check_order = CheckOrder::Enabled,
-        (Some(c), Some(n)) if n > c => settings.check_order = CheckOrder::Disabled,
-        (Some(_), None) => settings.check_order = CheckOrder::Enabled,
-        (None, Some(_)) => settings.check_order = CheckOrder::Disabled,
-        _ => {}
+    if matches.get_flag("check-order") {
+        settings.check_order = CheckOrder::Enabled;
+    } else if matches.get_flag("nocheck-order") {
+        settings.check_order = CheckOrder::Disabled;
     }
 
     if matches.get_flag("header") {
@@ -1022,12 +1014,14 @@ pub fn uu_app() -> Command {
             Arg::new("check-order")
                 .long("check-order")
                 .help(translate!("join-help-check-order"))
+                .overrides_with("nocheck-order")
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("nocheck-order")
                 .long("nocheck-order")
                 .help(translate!("join-help-nocheck-order"))
+                .overrides_with("check-order")
                 .action(ArgAction::SetTrue),
         )
         .arg(
