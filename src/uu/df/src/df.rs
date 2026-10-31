@@ -25,7 +25,7 @@ use uucore::{format_usage, show, show_warning};
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 
 use std::ffi::OsString;
-use std::io::{BufWriter, Write, stdout};
+use std::io::{Write, stdout};
 use std::path::Path;
 
 use crate::blocks::{BlockSize, read_block_size};
@@ -505,7 +505,7 @@ pub fn df(paths: Option<&[&Path]>, opt: &Options) -> UResult<()> {
         return Ok(());
     }
 
-    let mut writer = BufWriter::new(stdout().lock());
+    let mut writer = uucore::output::StdoutBuffer::new(stdout().lock());
     write_table(&mut writer, filesystems, opt)?;
 
     // `BufWriter` swallows errors per drop, so flush explicitly.
