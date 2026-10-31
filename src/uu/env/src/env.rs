@@ -1039,6 +1039,14 @@ fn apply_change_directory(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
         ));
     }
 
+    // GNU env requires a command when --argv0 is given.
+    if opts.program.is_empty() && opts.argv0.is_some() {
+        return Err(UUsageError::new(
+            125,
+            translate!("env-error-must-specify-command-with-argv0"),
+        ));
+    }
+
     if let Some(d) = opts.running_directory {
         match env::set_current_dir(d) {
             Ok(()) => d,
