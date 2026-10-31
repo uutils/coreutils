@@ -22,7 +22,7 @@ use std::{
     ffi::{OsStr, OsString},
     fmt::Write as FmtWrite,
     fs::{self, DirEntry, FileType, Metadata},
-    io::{BufWriter, Stdout, Write},
+    io::{Stdout, Write},
 };
 
 use ansi_width::ansi_width;
@@ -161,7 +161,7 @@ enum SizeOrDeviceId {
 /// needs to place the header in `//SUBDIRED//`.
 pub fn show_dir_name(
     path_data: &PathData,
-    out: &mut BufWriter<Stdout>,
+    out: &mut uucore::output::StdoutBuffer<Stdout>,
     config: &Config,
 ) -> std::io::Result<usize> {
     let escaped_name =
@@ -449,7 +449,7 @@ fn display_commas_format(
     names: impl Iterator<Item = DisplayWithQuote>,
     width: u16,
     line_ending: LineEnding,
-    out: &mut BufWriter<Stdout>,
+    out: &mut uucore::output::StdoutBuffer<Stdout>,
 ) -> UResult<()> {
     let mut names = names.peekable();
     let mut current_col = 0;
@@ -481,7 +481,7 @@ fn display_commas_format(
 fn display_oneline_format(
     names: impl Iterator<Item = DisplayWithQuote>,
     line_ending: LineEnding,
-    out: &mut BufWriter<Stdout>,
+    out: &mut uucore::output::StdoutBuffer<Stdout>,
 ) -> UResult<()> {
     for name in names {
         write_os_str(out, &name.displayed)?;
@@ -494,7 +494,7 @@ fn display_grid(
     names: impl Iterator<Item = DisplayWithQuote>,
     width: u16,
     direction: Direction,
-    out: &mut BufWriter<Stdout>,
+    out: &mut uucore::output::StdoutBuffer<Stdout>,
     quoted: bool,
     tab_size: usize,
 ) -> UResult<()> {
@@ -895,7 +895,8 @@ fn display_item_name(
     }
 }
 
-/// This writes to the [`BufWriter`] `state.out` a single string of the output of `ls -l`.
+/// This writes to the [`uucore::output::StdoutBuffer`] `state.out` a single
+/// string of the output of `ls -l`.
 ///
 /// It writes the following keys, in order:
 /// * `inode` ([`display_inode`], config-optional)

@@ -22,7 +22,7 @@ use std::{
     cell::OnceCell,
     ffi::{OsStr, OsString},
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
-    io::{BufWriter, ErrorKind, Stdout, Write, stdout},
+    io::{ErrorKind, Stdout, Write, stdout},
     ops::RangeInclusive,
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -1007,7 +1007,7 @@ impl Colorable for PathData<'_> {
 // A struct to encapsulate state that is passed around from `list` functions.
 #[cfg_attr(not(unix), allow(dead_code))]
 struct ListState<'a> {
-    out: BufWriter<Stdout>,
+    out: uucore::output::StdoutBuffer<Stdout>,
     style_manager: Option<StyleManager<'a>>,
     // TODO: More benchmarking with different use cases is required here.
     // From experiments, BTreeMap may be faster than HashMap, especially as the
@@ -1039,7 +1039,7 @@ impl<'a> TextOutput<'a> {
     pub fn new(config: &'a Config) -> Self {
         Self {
             state: ListState {
-                out: BufWriter::new(stdout()),
+                out: uucore::output::StdoutBuffer::new(stdout()),
                 style_manager: config.color.as_ref().map(StyleManager::new),
                 #[cfg(unix)]
                 uid_cache: FxHashMap::default(),

@@ -37,7 +37,7 @@
 ///
 use crate::{Config, LsError};
 use std::fmt;
-use std::io::{BufWriter, Stdout, Write};
+use std::io::{Stdout, Write};
 use uucore::error::UResult;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -97,7 +97,7 @@ pub fn calculate_dired(
     (start, end)
 }
 
-pub fn indent(out: &mut BufWriter<Stdout>) -> UResult<()> {
+pub fn indent(out: &mut uucore::output::StdoutBuffer<Stdout>) -> UResult<()> {
     write!(out, "  ")?;
     Ok(())
 }
@@ -113,7 +113,7 @@ pub fn calculate_subdired(dired: &mut DiredOutput, path_len: usize) {
 pub fn print_dired_output(
     config: &Config,
     dired: &DiredOutput,
-    out: &mut BufWriter<Stdout>,
+    out: &mut uucore::output::StdoutBuffer<Stdout>,
 ) -> UResult<()> {
     if !dired.dired_positions.is_empty() {
         print_positions(out, "//DIRED//", &dired.dired_positions)?;
@@ -134,7 +134,7 @@ pub fn print_dired_output(
 
 /// Helper function to print positions with a given prefix.
 fn print_positions(
-    out: &mut BufWriter<Stdout>,
+    out: &mut uucore::output::StdoutBuffer<Stdout>,
     prefix: &str,
     positions: &[BytePosition],
 ) -> UResult<()> {
