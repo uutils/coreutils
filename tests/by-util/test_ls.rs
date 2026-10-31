@@ -554,6 +554,41 @@ fn test_ls_devices() {
     }
 }
 
+#[test]
+#[cfg(target_os = "linux")]
+fn test_ls_filename_too_long_error() {
+    let path = "x".repeat(256);
+    let reason = if cfg!(any(wasi_runner, target_env = "musl")) {
+        "Filename too long"
+    } else {
+        "File name too long"
+    };
+    new_ucmd!()
+        .arg(&path)
+        .fails_with_code(2)
+        .stderr_only(format!("ls: cannot access '{path}': {reason}\n"));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ls_recursive_symlink_loop_error() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("dir");
+    scene.fixtures.relative_symlink_file("loop", "dir/loop");
+    let reason = if cfg!(any(wasi_runner, target_env = "musl")) {
+        "Symbolic link loop"
+    } else if cfg!(target_os = "android") {
+        "Too many symbolic links encountered"
+    } else {
+        "Too many levels of symbolic links"
+    };
+    scene
+        .ucmd()
+        .args(&["-lRL", "dir"])
+        .fails_with_code(1)
+        .stderr_is(format!("ls: cannot access 'dir/loop': {reason}\n"));
+}
+
 #[cfg(feature = "chmod")]
 #[test]
 fn test_ls_io_errors() {
