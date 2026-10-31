@@ -258,18 +258,28 @@ impl Cell {
     /// Create a cell from an unknown origin string that may contain
     /// wide characters.
     fn from_string<T: AsRef<str>>(s: T) -> Self {
-        let s = s.as_ref();
-        Self {
-            bytes: s.as_bytes().into(),
-            width: UnicodeWidthStr::width(s),
-        }
+        Self::from_bytes(s.as_ref().as_bytes())
     }
 
     /// Create a cell from an `OsString`
     fn from_os_string(os: &OsString) -> Self {
+        Self::from_bytes(uucore::os_str_as_bytes(os).unwrap())
+    }
+
+    /// Create a cell from the bytes of a name (file, device, mount point or
+    /// fs type). ASCII control characters are replaced with `?`, like GNU df
+    /// does, so that a name can neither break the table layout (e.g. with a
+    /// newline) nor send escape sequences to the terminal. These bytes never
+    /// occur inside a multi-byte UTF-8 sequence, so non-Unicode names are
+    /// otherwise kept as they are.
+    fn from_bytes(name: &[u8]) -> Self {
+        let bytes: Vec<u8> = name
+            .iter()
+            .map(|&b| if b.is_ascii_control() { b'?' } else { b })
+            .collect();
         Self {
-            bytes: uucore::os_str_as_bytes(os).unwrap().to_vec(),
-            width: UnicodeWidthStr::width(os.to_string_lossy().as_ref()),
+            width: UnicodeWidthStr::width(String::from_utf8_lossy(&bytes).as_ref()),
+            bytes,
         }
     }
 }
@@ -1160,5 +1170,95 @@ mod tests {
         assert_eq!(row1.inodes, total * 2);
         assert_eq!(row1.inodes_used, used1 + used2);
         assert_eq!(row1.inodes_free, total * 2 - used1 - used2);
+    }
+
+    #[test]
+    fn test_table_control_chars_are_replaced() {
+        let c1 = Cell::from_string("hello\nworld");
+        assert_eq!(c1.bytes, b"hello?world");
+        assert_eq!(c1.width, 11);
+
+        let c2 = Cell::from_string("src\x1b]0;owned\x07");
+        assert_eq!(c2.bytes, b"src?]0;owned?");
+        assert_eq!(c2.width, 13);
+
+        let os = std::ffi::OsString::from("a\r\nb");
+        let c3 = Cell::from_os_string(&os);
+        assert_eq!(c3.bytes, b"a??b");
+        assert_eq!(c3.width, 4);
+
+        let c4 = Cell::from_string("src\ttab");
+        assert_eq!(c4.bytes, b"src?tab");
+        assert_eq!(c4.width, 7);
+
+        let c5 = Cell::from_string("s\nx");
+        assert_eq!(c5.bytes, b"s?x");
+        assert_eq!(c5.width, 3);
+    }
+
+    #[test]
+    fn test_table_mount_control_chars_in_output() {
+        init();
+        let d1 = crate::Filesystem {
+            file: None,
+            mount_info: crate::MountInfo {
+                dev_id: "28".to_string(),
+                dev_name: "src\ttab".to_string(),
+                fs_type: "tmpfs".to_string(),
+                mount_dir: "/tmp/dft/t\tt".into(),
+                mount_option: "rw".to_string(),
+                mount_root: "/".into(),
+                remote: false,
+                dummy: false,
+            },
+            usage: crate::table::FsUsage {
+                blocksize: 4096,
+                blocks: 100,
+                bfree: 50,
+                bavail: 50,
+                bavail_top_bit_set: false,
+                files: 100,
+                ffree: 50,
+            },
+        };
+        let d2 = crate::Filesystem {
+            file: None,
+            mount_info: crate::MountInfo {
+                dev_id: "29".to_string(),
+                dev_name: "s\nx".to_string(),
+                fs_type: "tmpfs".to_string(),
+                mount_dir: "/tmp/dft/n\nl".into(),
+                mount_option: "rw".to_string(),
+                mount_root: "/".into(),
+                remote: false,
+                dummy: false,
+            },
+            usage: crate::table::FsUsage {
+                blocksize: 4096,
+                blocks: 100,
+                bfree: 50,
+                bavail: 50,
+                bavail_top_bit_set: false,
+                files: 100,
+                ffree: 50,
+            },
+        };
+
+        let filesystems = vec![d1, d2];
+        let options = Options {
+            show_total: false,
+            columns: vec![Column::Source, Column::Target],
+            ..Default::default()
+        };
+
+        let table = Table::new(&options, filesystems);
+        let mut data: Vec<u8> = vec![];
+        table.write_to(&mut data).expect("Write error.");
+        assert_eq!(
+            data,
+            b"Filesystem     Mounted on\n\
+              src?tab        /tmp/dft/t?t\n\
+              s?x            /tmp/dft/n?l\n"
+        );
     }
 }
