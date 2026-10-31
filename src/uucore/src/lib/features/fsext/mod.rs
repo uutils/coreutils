@@ -169,26 +169,34 @@ pub struct MountInfo {
     pub dummy: bool,
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin", test))]
 fn replace_special_chars(s: &[u8]) -> Vec<u8> {
-    use bstr::ByteSlice;
-
-    // Replace
-    //
-    // * ASCII space with a regular space character,
-    // * \011 ASCII horizontal tab with a tab character,
-    // * ASCII backslash with an actual backslash character.
-    //
-    s.replace(r"\040", " ")
-        .replace(r"\011", "	")
-        .replace(r"\134", r"\")
+    // Unescape octal sequences (e.g. \040 for space, \011 for tab, \012 for newline,
+    // \134 for backslash) as formatted by the Linux kernel in mountinfo/mtab.
+    let mut out = Vec::with_capacity(s.len());
+    let mut i = 0;
+    while i < s.len() {
+        if s[i] == b'\\'
+            && i + 3 < s.len()
+            && (b'0'..=b'3').contains(&s[i + 1])
+            && (b'0'..=b'7').contains(&s[i + 2])
+            && (b'0'..=b'7').contains(&s[i + 3])
+        {
+            let byte = ((s[i + 1] - b'0') << 6) | ((s[i + 2] - b'0') << 3) | (s[i + 3] - b'0');
+            out.push(byte);
+            i += 4;
+        } else {
+            out.push(s[i]);
+            i += 1;
+        }
+    }
+    out
 }
 
 impl MountInfo {
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
     fn new(file_name: &str, raw: &[&[u8]]) -> Option<Self> {
-        use std::ffi::OsStr;
-        use std::os::unix::ffi::{OsStrExt, OsStringExt};
+        use std::os::unix::ffi::OsStringExt;
 
         let (dev_name, fs_type, mount_root, mount_dir, mount_option) = match file_name {
             // spell-checker:ignore (word) noatime
@@ -196,23 +204,23 @@ impl MountInfo {
             // "man proc" for more details
             LINUX_MOUNTINFO => {
                 const FIELDS_OFFSET: usize = 6;
-                let after_fields = raw[FIELDS_OFFSET..]
-                    .iter()
-                    .position(|c| *c == b"-")
-                    .unwrap()
-                    + FIELDS_OFFSET
-                    + 1;
+                let after_fields =
+                    raw[FIELDS_OFFSET..].iter().position(|c| *c == b"-")? + FIELDS_OFFSET + 1;
+                if raw.len() <= after_fields + 1 {
+                    return None;
+                }
                 (
-                    String::from_utf8_lossy(raw[after_fields + 1]).to_string(),
-                    String::from_utf8_lossy(raw[after_fields]).to_string(),
-                    OsStr::from_bytes(raw[3]).to_owned(),
+                    String::from_utf8_lossy(&replace_special_chars(raw[after_fields + 1]))
+                        .to_string(),
+                    String::from_utf8_lossy(&replace_special_chars(raw[after_fields])).to_string(),
+                    OsString::from_vec(replace_special_chars(raw[3])),
                     OsString::from_vec(replace_special_chars(raw[4])),
                     String::from_utf8_lossy(raw[5]).to_string(),
                 )
             }
             LINUX_MTAB => (
-                String::from_utf8_lossy(raw[0]).to_string(),
-                String::from_utf8_lossy(raw[2]).to_string(),
+                String::from_utf8_lossy(&replace_special_chars(raw[0])).to_string(),
+                String::from_utf8_lossy(&replace_special_chars(raw[2])).to_string(),
                 OsString::new(),
                 OsString::from_vec(replace_special_chars(raw[1])),
                 String::from_utf8_lossy(raw[3]).to_string(),
@@ -1014,6 +1022,57 @@ mod tests {
         .unwrap();
 
         assert_eq!(info.mount_dir, r"/mnt/f\ 	oo");
+
+        let info = MountInfo::new(
+            LINUX_MOUNTINFO,
+            &br"318 61 7:0 / /tmp/dft/n\012l rw,relatime shared:641 - tmpfs s\012x rw"
+                .split(|c| *c == b' ')
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+
+        assert_eq!(info.mount_dir, "/tmp/dft/n\nl");
+        assert_eq!(info.dev_name, "s\nx");
+
+        let info = MountInfo::new(
+            LINUX_MOUNTINFO,
+            &br"319 61 7:0 / /tmp/dft/t\011t rw,relatime shared:641 - tmpfs src\011tab rw"
+                .split(|c| *c == b' ')
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+
+        assert_eq!(info.mount_dir, "/tmp/dft/t\tt");
+        assert_eq!(info.dev_name, "src\ttab");
+
+        let info = MountInfo::new(
+            LINUX_MTAB,
+            &br"s\012x /tmp/dft/n\012l tmpfs rw,relatime 0 0"
+                .split(|c| *c == b' ')
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+
+        assert_eq!(info.mount_dir, "/tmp/dft/n\nl");
+        assert_eq!(info.dev_name, "s\nx");
+    }
+
+    #[test]
+    fn test_replace_special_chars_octal() {
+        assert_eq!(
+            replace_special_chars(b"/mnt/f\\134\\040\\011oo"),
+            b"/mnt/f\\ \too"
+        );
+        assert_eq!(replace_special_chars(b"/tmp/dft/n\\012l"), b"/tmp/dft/n\nl");
+        assert_eq!(replace_special_chars(b"s\\012x"), b"s\nx");
+        assert_eq!(replace_special_chars(b"src\\011tab"), b"src\ttab");
+        assert_eq!(replace_special_chars(b"plain_path"), b"plain_path");
+        assert_eq!(
+            replace_special_chars(b"trailing_backslash\\"),
+            b"trailing_backslash\\"
+        );
+        assert_eq!(replace_special_chars(b"short\\01"), b"short\\01");
+        assert_eq!(replace_special_chars(b"invalid\\400"), b"invalid\\400");
     }
 
     #[test]
