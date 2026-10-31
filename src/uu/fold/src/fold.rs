@@ -345,6 +345,17 @@ fn next_tab_stop(col_count: usize) -> usize {
     col_count + TAB_WIDTH - col_count % TAB_WIDTH
 }
 
+/// Display columns of a character other than tab, backspace and carriage
+/// return. Like GNU fold, a control character takes one column, except NUL,
+/// which takes none.
+fn char_columns(ch: char) -> usize {
+    match ch {
+        '\0' => 0,
+        c if c.is_control() => 1,
+        c => UnicodeWidthChar::width(c).unwrap_or(0),
+    }
+}
+
 fn compute_col_count(buffer: &[u8], mode: WidthMode) -> usize {
     if let Ok(s) = std::str::from_utf8(buffer) {
         let mut width = 0;
@@ -356,7 +367,7 @@ fn compute_col_count(buffer: &[u8], mode: WidthMode) -> usize {
                 _ => {
                     width += match mode {
                         WidthMode::Characters => 1,
-                        WidthMode::Columns => UnicodeWidthChar::width(ch).unwrap_or(0),
+                        WidthMode::Columns => char_columns(ch),
                     }
                 }
             }
@@ -369,6 +380,7 @@ fn compute_col_count(buffer: &[u8], mode: WidthMode) -> usize {
                 CR => width = 0,
                 TAB => width = next_tab_stop(width),
                 0x08 => width = width.saturating_sub(1),
+                0 if mode == WidthMode::Columns => {}
                 _ => width += 1,
             }
         }
@@ -486,19 +498,20 @@ fn process_ascii_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UR
                 idx += 1;
             }
             0x00..=0x07 | 0x0B..=0x0C | 0x0E..=0x1F | 0x7F => {
+                let added = match ctx.mode {
+                    WidthMode::Columns => char_columns(line[idx].into()),
+                    WidthMode::Characters => 1,
+                };
+                if added > 0 && *ctx.col_count >= ctx.width {
+                    emit_output(ctx)?;
+                }
                 push_byte(ctx, line[idx])?;
                 if ctx.spaces && line[idx].is_ascii_whitespace() && line[idx] != CR {
                     *ctx.last_space = Some(ctx.output.len() - 1);
                 } else if !ctx.spaces {
                     *ctx.last_space = None;
                 }
-
-                if ctx.mode == WidthMode::Characters {
-                    *ctx.col_count = ctx.col_count.saturating_add(1);
-                    if *ctx.col_count >= ctx.width {
-                        emit_output(ctx)?;
-                    }
-                }
+                *ctx.col_count = ctx.col_count.saturating_add(added);
                 idx += 1;
             }
             _ => {
@@ -592,7 +605,9 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
 
         let next_idx = iter.peek().map_or(line_bytes.len(), |(idx, _)| *idx);
 
-        if *ctx.col_count >= ctx.width {
+        // A zero-width character such as NUL stays on the full line.
+        let zero_width = ctx.mode == WidthMode::Columns && char_columns(ch) == 0;
+        if *ctx.col_count >= ctx.width && !zero_width {
             emit_output(ctx)?;
         }
 
@@ -628,7 +643,7 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
         }
 
         let added = match ctx.mode {
-            WidthMode::Columns => UnicodeWidthChar::width(ch).unwrap_or(0),
+            WidthMode::Columns => char_columns(ch),
             WidthMode::Characters => 1,
         };
 
@@ -659,7 +674,9 @@ fn process_non_utf8_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) ->
             continue;
         }
 
-        if *ctx.col_count >= ctx.width {
+        // NUL takes no column, so it stays on the full line.
+        let zero_width = byte == 0 && ctx.mode == WidthMode::Columns;
+        if *ctx.col_count >= ctx.width && !zero_width {
             emit_output(ctx)?;
         }
 
@@ -680,6 +697,7 @@ fn process_non_utf8_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) ->
                 continue;
             }
             0x08 => *ctx.col_count = ctx.col_count.saturating_sub(1),
+            _ if zero_width => {}
             _ if ctx.spaces && byte.is_ascii_whitespace() => {
                 *ctx.last_space = Some(ctx.output.len());
                 *ctx.col_count = ctx.col_count.saturating_add(1);

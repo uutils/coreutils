@@ -243,6 +243,40 @@ fn test_zero_width_bytes_in_character_mode() {
 }
 
 #[test]
+fn test_control_chars_take_one_column() {
+    // Only tab, backspace and carriage return are special; other control
+    // characters take one column, except NUL, which takes none.
+    for (args, input, expected) in [
+        (&["-w2"][..], &b"ab\x1bcd"[..], &b"ab\n\x1bc\nd"[..]),
+        (&["-w1"], b"\x0c0", b"\x0c\n0"),
+        (&["-w2"], b"a\x7fb\n", b"a\x7f\nb\n"),
+        (&["-w2"], b"ab\x01\x01cd\n", b"ab\n\x01\x01\ncd\n"),
+        (&["-s", "-w3"], b"a \x01b\n", b"a \n\x01b\n"),
+        (&["-w2"], b"ab\0cd\n", b"ab\0\ncd\n"),
+        (&["-w2"], b"ab\0cd\xff\n", b"ab\0\ncd\n\xff\n"),
+        (
+            &["-w2"],
+            "\u{e9}\x01xy\n".as_bytes(),
+            "\u{e9}\x01\nxy\n".as_bytes(),
+        ),
+        (
+            &["-w1"],
+            "\u{fc}\0\u{fc}\n".as_bytes(),
+            "\u{fc}\0\n\u{fc}\n".as_bytes(),
+        ),
+        // No newline is added after a control character that fills the
+        // last line.
+        (&["-c", "-w2"], b"a\x01", b"a\x01"),
+    ] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is_bytes(expected);
+    }
+}
+
+#[test]
 fn test_zero_width_spaces_in_column_mode() {
     let len = io_buf_size_times_two();
     let input = "\u{200B}".repeat(len);
