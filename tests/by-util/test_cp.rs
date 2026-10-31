@@ -9873,3 +9873,59 @@ fn test_progressbar_inexistent_source() {
         .fails_with_code(1)
         .stderr_contains("cp: cannot stat 'inexistent1': No such file or directory");
 }
+
+#[cfg(all(unix, not(target_os = "android")))] // Android denies hard links in the test directory.
+#[rstest]
+fn test_cp_hardlink_replaces_distinct_symlink(
+    #[values("file", "hop")] target: &str,
+    #[values(false, true)] backup: bool,
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("file", "keep me");
+    at.symlink_file("file", "source");
+    at.symlink_file("file", "hop");
+    at.symlink_file(target, "dest");
+    let dest_inode = at.symlink_metadata("dest").ino();
+
+    let expected = if backup {
+        ucmd.arg("--backup=simple");
+        "'source' -> 'dest'\n"
+    } else {
+        "removed 'dest'\n'source' -> 'dest'\n"
+    };
+
+    ucmd.args(&["--link", "--no-dereference", "--verbose", "source", "dest"])
+        .succeeds()
+        .stdout_only(expected);
+
+    assert_eq!(at.resolve_link("dest"), "file");
+    assert_eq!(
+        at.symlink_metadata("source").ino(),
+        at.symlink_metadata("dest").ino()
+    );
+    assert_eq!(at.read("file"), "keep me");
+    if backup {
+        assert_eq!(at.resolve_link("dest~"), target);
+        assert_eq!(at.symlink_metadata("dest~").ino(), dest_inode);
+    }
+}
+
+#[cfg(all(unix, not(target_os = "android")))] // Android denies hard links in the test directory.
+#[rstest]
+fn test_cp_hardlink_keeps_existing_symlink(#[values(false, true)] dangling: bool) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    if !dangling {
+        at.write("file", "keep me");
+    }
+    at.symlink_file("file", "source");
+    at.hard_link("source", "dest");
+    let inode = at.symlink_metadata("dest").ino();
+
+    ucmd.args(&["--link", "--no-dereference", "--verbose", "source", "dest"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.resolve_link("dest"), "file");
+    assert_eq!(at.symlink_metadata("dest").ino(), inode);
+    assert_eq!(at.symlink_metadata("source").ino(), inode);
+}

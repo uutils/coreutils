@@ -2582,6 +2582,10 @@ fn handle_copy_mode(
                 }
                 force = options.overwrite == OverwriteMode::Clobber(ClobberMode::Force);
             }
+            // Check after backup handling, which may have moved the destination away.
+            let replace_symlink = !options.dereference(source_in_command_line)
+                && source_metadata.file_type().is_symlink()
+                && dest.is_symlink();
             let src = if options.dereference(source_in_command_line) && source.is_symlink() {
                 canonicalize(source, MissingHandling::Missing, ResolveMode::Physical).unwrap()
             } else {
@@ -2589,7 +2593,7 @@ fn handle_copy_mode(
             };
             // Replace atomically rather than unlinking first: the gap would
             // let another user claim `dest` under a name the caller trusts.
-            if force {
+            if force || replace_symlink {
                 replace_link(&src, dest, false)
             } else {
                 fs::hard_link(&src, dest)
@@ -2600,6 +2604,12 @@ fn handle_copy_mode(
                     translate!("cp-error-cannot-create-hard-link", "dest" => get_filename(dest).unwrap_or("?").quote(), "source" => get_filename(source).unwrap_or("?").quote())
                 )
             })?;
+            if replace_symlink && options.verbose {
+                println!(
+                    "{}",
+                    translate!("cp-verbose-removed", "path" => dest.quote())
+                );
+            }
         }
         CopyMode::Copy => {
             copy_helper(
@@ -2857,7 +2867,12 @@ fn copy_file(
                 OverwriteMode::Clobber(ClobberMode::RemoveDestination)
             ))
     {
-        if paths_refer_to_same_file(source, dest, true) && options.copy_mode == CopyMode::Link {
+        // Distinct symlinks can share a target without being the same link under -P.
+        let dereference_links =
+            options.dereference(source_in_command_line) || !source_is_symlink || !dest_is_symlink;
+        if options.copy_mode == CopyMode::Link
+            && paths_refer_to_same_file(source, dest, dereference_links)
+        {
             if source_is_symlink {
                 if !dest_is_symlink {
                     return Ok(());
