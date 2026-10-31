@@ -180,3 +180,15 @@ fn get_sestatus_context(output: &[u8]) -> &str {
         .and_then(|bytes| std::str::from_utf8(bytes).ok())
         .expect("Output of sestatus is unexpected")
 }
+
+#[test]
+#[cfg(all(target_os = "linux", feature = "feat_selinux", feature = "feat_smack"))]
+fn test_security_contexts_disabled() {
+    if !uutests::util::security_contexts_disabled() {
+        return;
+    }
+    new_ucmd!()
+        .args(&["some_context", "true"])
+        .fails_with_code(1)
+        .stderr_only("runcon: runcon may be used only on a SELinux kernel\n");
+}

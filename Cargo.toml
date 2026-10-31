@@ -466,7 +466,7 @@ feat_systemd_logind = [
 # "feat_selinux" == enable support for SELinux Security Context (by using `--features feat_selinux`)
 # NOTE:
 # * The selinux(-sys) crate requires `libselinux` headers and shared library to be accessible in the C toolchain at compile time.
-# * Running a uutils compiled with `feat_selinux` requires an SELinux enabled Kernel at run time.
+# * These utilities also run with SELinux disabled; setting security contexts requires an enabled kernel.
 feat_selinux = [
   "cp/selinux",
   "feat_require_selinux",
@@ -478,16 +478,18 @@ feat_selinux = [
   "mknod/selinux",
   "selinux",
   "stat/selinux",
+  "uutests/selinux",
 ]
 # "feat_smack" == enable support for SMACK Security Context (by using `--features feat_smack`)
 # NOTE:
-# * Running a uutils compiled with `feat_smack` requires a SMACK enabled Kernel at run time.
+# * These utilities also run with SMACK disabled; setting security contexts requires an enabled kernel.
 feat_smack = [
   "id/smack",
   "ls/smack",
   "mkdir/smack",
   "mkfifo/smack",
   "mknod/smack",
+  "uutests/smack",
 ]
 ##
 ## feature sets

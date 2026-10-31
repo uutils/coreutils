@@ -9873,3 +9873,28 @@ fn test_progressbar_inexistent_source() {
         .fails_with_code(1)
         .stderr_contains("cp: cannot stat 'inexistent1': No such file or directory");
 }
+
+#[test]
+#[cfg(all(target_os = "linux", feature = "feat_selinux", feature = "feat_smack"))]
+fn test_security_contexts_disabled() {
+    if !uutests::util::security_contexts_disabled() {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("source", "contents");
+    for (option, warning) in [
+        ("-Z", ""),
+        (
+            "--context=some_context",
+            "cp: warning: ignoring --context; it requires an SELinux-enabled kernel\n",
+        ),
+    ] {
+        scene
+            .ucmd()
+            .args(&[option, "source", "dest"])
+            .succeeds()
+            .no_stdout()
+            .stderr_is(warning);
+        assert_eq!(scene.fixtures.read("dest"), "contents");
+    }
+}

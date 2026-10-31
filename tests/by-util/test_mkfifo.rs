@@ -27,6 +27,27 @@ fn test_create_one_fifo() {
 }
 
 #[test]
+#[cfg(all(target_os = "linux", feature = "feat_selinux", feature = "feat_smack"))]
+fn test_security_contexts_disabled() {
+    if !uutests::util::security_contexts_disabled() {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    for (option, fifo) in [
+        ("-Z", "default"),
+        ("--context", "default_long"),
+        ("--context=some_context", "explicit"),
+    ] {
+        scene
+            .ucmd()
+            .args(&[option, "--", fifo])
+            .succeeds()
+            .no_output();
+        assert!(scene.fixtures.is_fifo(fifo));
+    }
+}
+
+#[test]
 fn test_create_one_fifo_with_invalid_mode() {
     new_ucmd!()
         .arg("abcd")
