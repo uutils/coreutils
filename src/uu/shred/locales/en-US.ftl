@@ -63,10 +63,9 @@ shred-removing = {$file}: removing
 shred-removed = {$file}: removed
 shred-renamed-to = renamed to
 shred-pass-progress = {$file}: pass
-shred-couldnt-rename = {$file}: Couldn't rename to {$new_name}: {$error}
 shred-failed-to-open-for-writing = {$file}: failed to open for writing
 shred-file-write-pass-failed = {$file}: File write pass failed
-shred-failed-to-remove-file = {$file}: failed to remove file
+shred-failed-to-remove-file = {$file}: failed to remove
 
 # File I/O error messages
 shred-failed-to-clone-file-handle = failed to clone file handle

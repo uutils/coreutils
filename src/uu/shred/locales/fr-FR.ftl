@@ -62,10 +62,9 @@ shred-removing = {$file} : suppression
 shred-removed = {$file} : supprimé
 shred-renamed-to = renommé en
 shred-pass-progress = {$file}: passage
-shred-couldnt-rename = {$file} : Impossible de renommer en {$new_name} : {$error}
 shred-failed-to-open-for-writing = {$file} : impossible d'ouvrir pour l'écriture
 shred-file-write-pass-failed = {$file} : Échec du passage d'écriture de fichier
-shred-failed-to-remove-file = {$file} : impossible de supprimer le fichier
+shred-failed-to-remove-file = {$file} : impossible de supprimer
 
 # Messages d'erreur E/S de fichier
 shred-failed-to-clone-file-handle = échec du clonage du descripteur de fichier
