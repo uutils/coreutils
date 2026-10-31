@@ -251,15 +251,16 @@ struct SplitWriter<'a> {
 
 impl Drop for SplitWriter<'_> {
     fn drop(&mut self) {
-        if self.options.elide_empty_files && self.size == 0 {
-            if let Ok(file_name) = self.options.split_name.get(self.counter) {
-                // In the case of `echo a | csplit -z - %a%1`, the file
-                // `xx00` does not exist because the positive offset
-                // advanced past the end of the input. Since there is no
-                // file to remove in that case, `remove_file` would return
-                // an error, so we just ignore it.
-                let _ = remove_file(file_name);
-            }
+        if self.options.elide_empty_files
+            && self.size == 0
+            && let Ok(file_name) = self.options.split_name.get(self.counter)
+        {
+            // In the case of `echo a | csplit -z - %a%1`, the file
+            // `xx00` does not exist because the positive offset
+            // advanced past the end of the input. Since there is no
+            // file to remove in that case, `remove_file` would return
+            // an error, so we just ignore it.
+            let _ = remove_file(file_name);
         }
     }
 }
