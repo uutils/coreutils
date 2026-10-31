@@ -12,7 +12,7 @@ use memchr::memmem;
 #[cfg(not(target_os = "wasi"))]
 use memmap2::Mmap;
 use std::ffi::{OsStr, OsString};
-use std::io::{BufWriter, Read, Write, stdin, stdout};
+use std::io::{Read, Write, stdin, stdout};
 use std::{fs::File, path::Path};
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::error::UError;
@@ -121,7 +121,7 @@ fn buffer_tac_regex(
     before: bool,
 ) -> std::io::Result<()> {
     let out = stdout();
-    let mut out = BufWriter::new(out.lock());
+    let mut out = uucore::output::StdoutBuffer::new(out.lock());
 
     // The index of the line separator for the current line.
     //
@@ -191,7 +191,7 @@ fn buffer_tac_regex(
 /// `"/abc/def"`.
 fn buffer_tac(data: &[u8], before: bool, separator: &OsStr) -> std::io::Result<()> {
     let out = stdout();
-    let mut out = BufWriter::new(out.lock());
+    let mut out = uucore::output::StdoutBuffer::new(out.lock());
 
     // The number of bytes in the line separator.
     let slen = separator.len();
