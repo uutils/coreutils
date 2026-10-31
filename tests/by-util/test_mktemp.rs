@@ -1014,7 +1014,18 @@ fn test_default_issue_4821_t_tmpdir_p() {
         .succeeds();
     let stdout = result.stdout_str();
     println!("stdout = {stdout}");
+
+    #[cfg(not(windows))]
     assert!(stdout.contains(&pathname));
+
+    // The harness forwards %TMP% on Windows, and with -t it takes priority
+    // over -p, just like $TMPDIR does elsewhere.
+    #[cfg(windows)]
+    {
+        let tmp = std::env::var("TMP").expect("TMP must be set on Windows");
+        assert!(stdout.starts_with(&tmp));
+        assert!(!stdout.contains(&pathname));
+    }
 }
 
 #[test]
