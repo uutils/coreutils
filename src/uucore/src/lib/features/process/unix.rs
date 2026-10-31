@@ -5,14 +5,11 @@
 
 // spell-checker:ignore sigwait KTIME timeval itimerval setitimer itimer timerid
 // spell-checker:ignore sigevent sigev sigval itimerspec signo clockid sevp
+// spell-checker:ignore sigset sigaddset sigemptyset
 
 #[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
-use libc::pid_t;
-#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
-use nix::sys::signal::{self as nix_signal, SigHandler};
+use nix::sys::signal::{self, SigHandler};
 use nix::sys::signal::{SigSet, Signal};
-#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
-use nix::unistd::Pid;
 use rustix::process::Signal as RixSignal;
 use std::io;
 #[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
@@ -26,17 +23,30 @@ use timer::Timer;
 use super::{ChildExt, TimeoutRet};
 
 #[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
+fn signal_from_raw(signal: libc::c_int) -> Option<RixSignal> {
+    if let Some(signal) = RixSignal::from_named_raw(signal) {
+        return Some(signal);
+    }
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if (libc::SIGRTMIN()..=libc::SIGRTMAX()).contains(&signal) {
+        // SAFETY: the signal is within the platform's real-time signal range.
+        return Some(unsafe { RixSignal::from_raw_unchecked(signal) });
+    }
+    None
+}
+
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 impl ChildExt for Child {
     fn send_signal(&mut self, signal: usize) -> io::Result<()> {
-        let pid = Pid::from_raw(self.id() as pid_t);
-        let result = if signal == 0 {
-            nix_signal::kill(pid, None)
-        } else {
-            let signal = Signal::try_from(signal as i32)
-                .map_err(|_| io::Error::from_raw_os_error(libc::EINVAL))?;
-            nix_signal::kill(pid, Some(signal))
-        };
-        result.map_err(|e| io::Error::from_raw_os_error(e as i32))
+        let signal = libc::c_int::try_from(signal)
+            .map_err(|_| io::Error::from_raw_os_error(libc::EINVAL))?;
+        let pid = rustix::process::Pid::from_child(self);
+        if signal == 0 {
+            return rustix::process::test_kill_process(pid).map_err(Into::into);
+        }
+        let signal =
+            signal_from_raw(signal).ok_or_else(|| io::Error::from_raw_os_error(libc::EINVAL))?;
+        rustix::process::kill_process(pid, signal).map_err(Into::into)
     }
 
     fn send_signal_group(&mut self, signal: usize) -> io::Result<()> {
@@ -46,23 +56,42 @@ impl ChildExt for Child {
         // in the group. If the child has created its own process group (via setpgid),
         // it won't receive this group signal, but will have received the direct signal.
 
+        let signal = libc::c_int::try_from(signal)
+            .map_err(|_| io::Error::from_raw_os_error(libc::EINVAL))?;
+
         // Signal 0 is special - it just checks if process exists, doesn't send anything.
         // No need to manipulate signal handlers for it.
         if signal == 0 {
-            return nix_signal::kill(Pid::from_raw(0), None)
-                .map_err(|e| io::Error::from_raw_os_error(e as i32));
+            return rustix::process::test_kill_process_group(rustix::process::getpgrp())
+                .map_err(Into::into);
         }
 
-        let signal = Signal::try_from(signal as i32)
-            .map_err(|_| io::Error::from_raw_os_error(libc::EINVAL))?;
+        let rustix_signal =
+            signal_from_raw(signal).ok_or_else(|| io::Error::from_raw_os_error(libc::EINVAL))?;
+        if let Ok(signal) = Signal::try_from(signal) {
+            // SAFETY: ignoring a signal does not install a callback.
+            let old_handler = unsafe { signal::signal(signal, SigHandler::SigIgn) }?;
+            let result =
+                rustix::process::kill_process_group(rustix::process::getpgrp(), rustix_signal)
+                    .map_err(Into::into);
+            // SAFETY: restore the handler returned by the successful call above.
+            let _ = unsafe { signal::signal(signal, old_handler) };
+            return result;
+        }
 
         // Ignore the signal temporarily so we don't receive it ourselves.
-        let old_handler = unsafe { nix_signal::signal(signal, SigHandler::SigIgn) }
-            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
-        let result = nix_signal::kill(Pid::from_raw(0), Some(signal));
+        // nix cannot represent real-time signals in its Signal enum.
+        // SAFETY: SIG_IGN is a valid handler; signal validates the raw number.
+        let old_handler = unsafe { libc::signal(signal, libc::SIG_IGN) };
+        if old_handler == libc::SIG_ERR {
+            return Err(io::Error::last_os_error());
+        }
+        let result = rustix::process::kill_process_group(rustix::process::getpgrp(), rustix_signal)
+            .map_err(Into::into);
         // Restore the old handler
-        let _ = unsafe { nix_signal::signal(signal, old_handler) };
-        result.map_err(|e| io::Error::from_raw_os_error(e as i32))
+        // SAFETY: old_handler was returned by a successful signal call.
+        let _ = unsafe { libc::signal(signal, old_handler) };
+        result
     }
 
     fn wait_or_timeout(&mut self, timeout: Duration, ignore_term: bool) -> io::Result<TimeoutRet> {
@@ -112,11 +141,16 @@ pub fn timeout_signal_set() -> SigSet {
 
 /// Unblocks a signal from the current thread.
 pub fn unblock_signal(signal: RixSignal) -> io::Result<()> {
-    let mut set = SigSet::empty();
-    // SAFETY: rustix's Signal is also a valid nix Signal.
-    set.add(unsafe { Signal::try_from(signal.as_raw()).unwrap_unchecked() });
-
-    set.thread_unblock().map_err(Into::into)
+    let mut set = *SigSet::empty().as_ref();
+    // SAFETY: set is initialized and rustix supplies a valid signal number.
+    // In particular, a real-time signal need not have a nix Signal variant.
+    if unsafe { libc::sigaddset(&raw mut set, signal.as_raw()) } == -1 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: the set was initialized by sigemptyset and changed by sigaddset.
+    unsafe { SigSet::from_sigset_t_unchecked(set) }
+        .thread_unblock()
+        .map_err(Into::into)
 }
 
 /// Ensures there is no overflow on `time_t` operations. Some BSDs (notably XNU)
