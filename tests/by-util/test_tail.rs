@@ -2315,28 +2315,28 @@ fn test_follow_name_truncate1() {
         .stdout_is(expected_stdout);
 }
 
+fn wait_for_output(
+    child: &mut uutests::util::UChild,
+    expected_stdout: &str,
+    expected_stderr: &str,
+) {
+    for _ in 0..500 {
+        if child.stdout_all() == expected_stdout && child.stderr_all() == expected_stderr {
+            return;
+        }
+        child.delay(10);
+    }
+    child
+        .make_assertion()
+        .with_all_output()
+        .stdout_is(expected_stdout)
+        .stderr_is(expected_stderr);
+}
+
 #[test]
 #[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))] // FIXME: for currently not working platforms
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_truncate2() {
-    fn wait_for_output(
-        child: &mut uutests::util::UChild,
-        expected_stdout: &str,
-        expected_stderr: &str,
-    ) {
-        for _ in 0..500 {
-            if child.stdout_all() == expected_stdout && child.stderr_all() == expected_stderr {
-                return;
-            }
-            child.delay(10);
-        }
-        child
-            .make_assertion()
-            .with_all_output()
-            .stdout_is(expected_stdout)
-            .stderr_is(expected_stderr);
-    }
-
     // This test triggers a truncate event while `tail --follow=name file` is running.
     // $ ((sleep 1 && echo -n "x\nx\nx\n" >> file && sleep 1 && \
     // echo -n "x\n" > file &)>/dev/null 2>&1 &) ; tail --follow=name file
@@ -2399,7 +2399,7 @@ fn test_follow_name_truncate3() {
     p.make_assertion_with_delay(delay).is_alive();
 
     at.truncate(source, "x\n");
-    p.delay(delay);
+    wait_for_output(&mut p, expected_stdout, "");
 
     p.make_assertion().is_alive();
     p.kill()
@@ -5553,11 +5553,11 @@ fn test_follow_symlink_appends() {
         let mut p = ucmd
             .args(&["-s.1", "--max-unchanged-stats=1", follow, "latest.log"])
             .run_no_wait();
-        p.delay(500);
+        wait_for_output(&mut p, "a\n", "");
         at.append("2026-09-01.log", "b\n");
-        p.delay(500);
+        wait_for_output(&mut p, "a\nb\n", "");
         at.append("2026-09-01.log", "c\n");
-        p.delay(500);
+        wait_for_output(&mut p, "a\nb\nc\n", "");
         p.kill()
             .make_assertion()
             .with_all_output()
