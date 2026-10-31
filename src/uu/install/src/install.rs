@@ -505,39 +505,45 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
     }
 
     for path in paths.iter().map(Path::new) {
+        // Special case to match GNU's behavior:
+        // install -d foo/. should work and just create foo/
+        // std::fs::create_dir("foo/."); fails in pure Rust
+        // See also mkdir.rs for another occurrence of this
+        let path_to_create = dir_strip_dot_for_creation(path);
+        // Set up first: like GNU, an unusable context fails even when nothing is created.
+        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+        let _selinux_guard = match directory_creation_context(&path_to_create, b) {
+            Ok(guard) => guard,
+            Err(e) => {
+                show!(e);
+                continue;
+            }
+        };
         // if the path already exist, check if it's a file
         if path.exists() {
             if !path.is_dir() {
                 show!(InstallError::ExistingFileNotADirectory(path.to_path_buf()));
                 continue;
             }
+            // Like GNU, -Z resets an existing target to its default context; --context doesn't.
+            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+            if b.privileged && b.default_context && is_selinux_enabled() {
+                show_if_err!(set_selinux_security_context(path, None));
+            }
         } else {
-            // Special case to match GNU's behavior:
-            // install -d foo/. should work and just create foo/
-            // std::fs::create_dir("foo/."); fails in pure Rust
-            // See also mkdir.rs for another occurrence of this
-            let path_to_create = dir_strip_dot_for_creation(path);
             // Differently than the primary functionality
             // (MainFunction::Standard), the directory functionality should
             // create all ancestors (or components) of a directory
             // regardless of the presence of the "-D" flag.
             //
             // Only the target gets the requested mode; newly created ancestors
-            // use DEFAULT_MODE, which create_dir_all would request as 0777.
-            let mut builder = fs::DirBuilder::new();
-            builder.recursive(true).mode(DEFAULT_MODE);
-            if let Err(e) = builder.create(&path_to_create).map_err_context(
+            // use DEFAULT_MODE.
+            let created = create_dir_all_with(&path_to_create, label_new_directories(b));
+            if let Err(e) = created.map_err_context(
                 || translate!("install-error-create-dir-failed", "path" => path_to_create.quote()),
             ) {
                 show!(e);
                 continue;
-            }
-
-            // Set SELinux context for all created directories if needed
-            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-            if should_set_selinux_context(b) {
-                let context = get_context_for_selinux(b);
-                set_selinux_context_for_directories_install(path_to_create.as_path(), context);
             }
 
             if b.verbose {
@@ -557,17 +563,6 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
             show!(e);
             uucore::error::set_exit_code(1);
             continue;
-        }
-
-        // Set SELinux context for directory if needed
-        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-        if b.privileged {
-            if b.default_context {
-                show_if_err!(set_selinux_default_context(path));
-            } else if b.context.is_some() {
-                let context = get_context_for_selinux(b);
-                show_if_err!(set_selinux_security_context(path, context));
-            }
         }
 
         if mode::chmod(path, b.mode()).is_err() {
@@ -711,6 +706,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     target_filename = Some(filename.to_os_string());
                 }
             } else {
+                // Before the -v lines, so a context error reports no directories.
+                #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+                let selinux_guard = directory_creation_context(to_create, b)?;
                 if b.verbose {
                     let mut result = PathBuf::new();
                     // When creating directories with -Dv, show directory creations step by step
@@ -729,7 +727,15 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
                 #[cfg(not(target_os = "redox"))]
                 {
-                    match create_dir_all_safe(to_create, DEFAULT_MODE) {
+                    let created =
+                        create_dir_all_safe(to_create, DEFAULT_MODE, label_new_directories(b));
+                    // End the creation context before any file is created.
+                    #[cfg(all(
+                        feature = "selinux",
+                        any(target_os = "linux", target_os = "android")
+                    ))]
+                    drop(selinux_guard);
+                    match created {
                         Ok(dir_fd) => {
                             if b.target_dir.is_none()
                                 && sources.len() == 1
@@ -738,16 +744,6 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                             {
                                 target_parent_fd = Some(dir_fd);
                                 target_filename = Some(filename.to_os_string());
-                            }
-
-                            // Set SELinux context for all created directories if needed
-                            #[cfg(all(
-                                feature = "selinux",
-                                any(target_os = "linux", target_os = "android")
-                            ))]
-                            if should_set_selinux_context(b) {
-                                let context = get_context_for_selinux(b);
-                                set_selinux_context_for_directories_install(to_create, context);
                             }
                         }
                         Err(e) => {
@@ -1522,80 +1518,63 @@ fn derive_context_from_parent(parent_context: &str) -> String {
     }
 }
 
-/// Helper function to collect paths that need `SELinux` context setting.
-///
-/// Traverses from the given starting path up to existing parent directories.
-/// Returns a vector of paths in reverse order (from parent to child).
+/// With --context, label the directories created while the returned guard lives.
+/// -Z looks up each one instead, in `label_new_directories`.
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-fn collect_paths_for_context_setting(starting_path: &Path) -> Vec<&Path> {
-    let mut paths: Vec<&Path> = starting_path
-        .ancestors()
-        .take_while(|p| p.exists())
-        .collect();
-    paths.reverse();
-    paths
+fn directory_creation_context(
+    path: &Path,
+    b: &Behavior,
+) -> Result<Option<uucore::selinux::FsCreateContext>, InstallError> {
+    if b.default_context || !should_set_selinux_context(b) || !is_selinux_enabled() {
+        return Ok(None);
+    }
+    uucore::selinux::FsCreateContext::new(path, None, b.context.as_ref())
+        .map(Some)
+        .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))
 }
 
-/// Sets the `SELinux` security context for a directory hierarchy.
-///
-/// This function traverses from the given starting path up to existing parent directories
-/// and sets the `SELinux` context on each directory in the hierarchy (from parent to child).
-/// This is useful when creating directory structures and needing to set contexts on all
-/// created directories.
-///
-/// # Arguments
-///
-/// * `target_path` - The target path (typically the deepest directory in a hierarchy)
-/// * `context` - Optional `SELinux` context string to set. If None, sets default context.
-///
-/// # Behavior
-///
-/// - Traverses from `target_path` upward to find existing parent directories
-/// - Sets the context on each directory in reverse order (parent to child)
-/// - Uses `show_if_err!` to handle errors gracefully without panicking
-/// - Stops at filesystem root ("/") or empty path to prevent infinite loops
-/// - Only processes paths that exist on the filesystem
-/// - Silently handles `SELinux` context setting failures
-///
-/// # Examples
-///
-/// ```no_run
-/// use std::path::Path;
-///
-/// // Set default context on directory hierarchy
-/// // set_selinux_context_for_directories(Path::new("/tmp/new/deep/dir"), None);
-///
-/// // Set specific context on directory hierarchy
-/// // let context = String::from("user_u:object_r:tmp_t:s0");
-/// // set_selinux_context_for_directories(Path::new("/tmp/new/deep/dir"), Some(&context));
-/// ```
+/// The `before_create` hook for directory creation. With -Z, like GNU, each new
+/// directory is labelled with the policy's default for its own name.
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-fn set_selinux_context_for_directories(target_path: &Path, context: Option<&String>) {
-    for path in collect_paths_for_context_setting(target_path) {
-        show_if_err!(set_selinux_security_context(path, context));
+fn label_new_directories(
+    b: &Behavior,
+) -> impl FnMut(&Path) -> std::io::Result<Option<uucore::selinux::FsCreateContext>> + '_ {
+    move |path| {
+        if !(b.privileged && b.default_context && is_selinux_enabled()) {
+            return Ok(None);
+        }
+        let mode = uucore::libc::S_IFDIR | DEFAULT_MODE as uucore::libc::mode_t;
+        uucore::selinux::FsCreateContext::new(path, Some(mode), None)
+            .map(Some)
+            .map_err(std::io::Error::other)
     }
 }
 
-/// Sets `SELinux` context for created directories using install's -Z default behavior.
-///
-/// Similar to `set_selinux_context_for_directories` but uses install's
-/// specific default context derivation when no context is provided.
-///
-/// # Arguments
-///
-/// * `target_path` - The target path (typically the deepest directory in a hierarchy)
-/// * `context` - Optional `SELinux` context string to set. If None, uses install's default derivation.
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-pub fn set_selinux_context_for_directories_install(target_path: &Path, context: Option<&String>) {
-    if context.is_some() {
-        // Use the standard function for explicit contexts
-        set_selinux_context_for_directories(target_path, context);
-    } else {
-        // For default context, we need our custom install behavior
-        for path in collect_paths_for_context_setting(target_path) {
-            show_if_err!(set_selinux_default_context(path));
+#[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
+fn label_new_directories(_b: &Behavior) -> impl FnMut(&Path) -> std::io::Result<()> {
+    |_| Ok(())
+}
+
+/// Like [`fs::create_dir_all`], but calls `before_create` with each missing directory
+/// first and keeps what it returns until that directory is created.
+fn create_dir_all_with<G>(
+    path: &Path,
+    mut before_create: impl FnMut(&Path) -> std::io::Result<G>,
+) -> std::io::Result<()> {
+    let missing: Vec<&Path> = path
+        .ancestors()
+        .take_while(|dir| !dir.as_os_str().is_empty() && !dir.exists())
+        .collect();
+    for dir in missing.into_iter().rev() {
+        let _created_with = before_create(dir)?;
+        if let Err(e) = fs::DirBuilder::new().mode(DEFAULT_MODE).create(dir) {
+            // Like fs::create_dir_all, accept a directory that appeared meanwhile.
+            if !(e.kind() == std::io::ErrorKind::AlreadyExists && dir.is_dir()) {
+                return Err(e);
+            }
         }
     }
+    Ok(())
 }
 
 #[cfg(test)]
