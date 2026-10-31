@@ -86,6 +86,7 @@ thiserror = { workspace = true }
 
 [build-dependencies]
 cfg_aliases = { workspace = true }
+fluent-syntax = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
