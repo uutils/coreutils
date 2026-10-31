@@ -244,6 +244,7 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(&translate!("unexpand-usage")))
         .about(translate!("unexpand-about"))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
@@ -264,8 +265,7 @@ pub fn uu_app() -> Command {
                 .short('f')
                 .long(options::FIRST_ONLY)
                 .help(translate!("unexpand-help-first-only"))
-                .action(ArgAction::SetTrue)
-                .overrides_with(options::FIRST_ONLY),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TABS)
