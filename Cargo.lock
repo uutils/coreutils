@@ -2575,6 +2575,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustix-openpty"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1de16c7c59892b870a6336f185dc10943517f1327447096bbb7bb32cd85e2393"
+dependencies = [
+ "errno",
+ "libc",
+ "rustix",
+]
+
+[[package]]
 name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4507,7 +4518,7 @@ dependencies = [
  "rand 0.10.3",
  "regex",
  "rlimit",
- "rustix",
+ "rustix-openpty",
  "tempfile",
  "uucore",
  "xattr",
