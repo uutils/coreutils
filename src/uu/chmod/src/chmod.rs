@@ -844,13 +844,7 @@ impl Chmoder {
                 );
             }
 
-            return Err(match e.kind() {
-                std::io::ErrorKind::ReadOnlyFilesystem => {
-                    ChmodError::ChangingPermissions(file_path.into(), e)
-                }
-                _ => ChmodError::PermissionDenied(file_path.into()),
-            }
-            .into());
+            return Err(ChmodError::ChangingPermissions(file_path.into(), e).into());
         }
 
         // Report the change using the helper method
