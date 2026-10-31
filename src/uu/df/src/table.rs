@@ -258,18 +258,28 @@ impl Cell {
     /// Create a cell from an unknown origin string that may contain
     /// wide characters.
     fn from_string<T: AsRef<str>>(s: T) -> Self {
-        let s = s.as_ref();
-        Self {
-            bytes: s.as_bytes().into(),
-            width: UnicodeWidthStr::width(s),
-        }
+        Self::from_bytes(s.as_ref().as_bytes())
     }
 
     /// Create a cell from an `OsString`
     fn from_os_string(os: &OsString) -> Self {
+        Self::from_bytes(uucore::os_str_as_bytes(os).unwrap())
+    }
+
+    /// Create a cell from the bytes of a name (file, device, mount point or
+    /// fs type). ASCII control characters are replaced with `?`, like GNU df
+    /// does, so that a name can neither break the table layout (e.g. with a
+    /// newline) nor send escape sequences to the terminal. These bytes never
+    /// occur inside a multi-byte UTF-8 sequence, so non-Unicode names are
+    /// otherwise kept as they are.
+    fn from_bytes(name: &[u8]) -> Self {
+        let bytes: Vec<u8> = name
+            .iter()
+            .map(|&b| if b.is_ascii_control() { b'?' } else { b })
+            .collect();
         Self {
-            bytes: uucore::os_str_as_bytes(os).unwrap().to_vec(),
-            width: UnicodeWidthStr::width(os.to_string_lossy().as_ref()),
+            width: UnicodeWidthStr::width(String::from_utf8_lossy(&bytes).as_ref()),
+            bytes,
         }
     }
 }
@@ -1160,5 +1170,21 @@ mod tests {
         assert_eq!(row1.inodes, total * 2);
         assert_eq!(row1.inodes_used, used1 + used2);
         assert_eq!(row1.inodes_free, total * 2 - used1 - used2);
+    }
+
+    #[test]
+    fn test_table_control_chars_are_replaced() {
+        let c1 = Cell::from_string("hello\nworld");
+        assert_eq!(c1.bytes, b"hello?world");
+        assert_eq!(c1.width, 11);
+
+        let c2 = Cell::from_string("src\x1b]0;owned\x07");
+        assert_eq!(c2.bytes, b"src?]0;owned?");
+        assert_eq!(c2.width, 13);
+
+        let os = std::ffi::OsString::from("a\r\nb");
+        let c3 = Cell::from_os_string(&os);
+        assert_eq!(c3.bytes, b"a??b");
+        assert_eq!(c3.width, 4);
     }
 }
