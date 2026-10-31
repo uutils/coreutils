@@ -19,13 +19,14 @@ concurrency:
 jobs:
   test_wasi:
     name: Tests
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { target: wasm32-wasip1, rust-flags: "--cfg wasi_runner" }
-          - { target: wasm32-wasip2, rust-flags: "--cfg wasi_runner --cfg wasip2_runner"  }
+          - { os: ubuntu-latest, target: wasm32-wasip1, rust-flags: "--cfg wasi_runner" }
+          - { os: ubuntu-latest, target: wasm32-wasip2, rust-flags: "--cfg wasi_runner --cfg wasip2_runner"  }
+          - { os: macos-latest, target: wasm32-wasip1, rust-flags: "--cfg wasi_runner" }
     steps:
     - uses: actions/checkout@v7.0.1
       with:

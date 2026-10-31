@@ -20,7 +20,15 @@ use crate::error::TouchError;
 /// supports setting both atime and mtime via `utimensat`, which we reach
 /// through `rustix`.
 pub fn set_file_times(path: &Path, atime: FileTime, mtime: FileTime) -> Result<()> {
-    set_times(path, atime, mtime, AtFlags::empty())
+    set_times(path, atime, mtime, AtFlags::empty()).or_else(|err| {
+        // Some hosts reject a mode 0 file when `utimensat` follows symlinks.
+        // The flag has no effect on a path that is not a symlink.
+        if path.is_symlink() {
+            Err(err)
+        } else {
+            set_times(path, atime, mtime, AtFlags::SYMLINK_NOFOLLOW)
+        }
+    })
 }
 
 /// WASI replacement for `filetime::set_symlink_file_times`.
