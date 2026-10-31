@@ -1224,6 +1224,26 @@ fn test_install_creating_leading_dir_fails_on_long_name() {
         .stderr_contains("cannot create directory");
 }
 
+/// `-D` into an existing but unwritable parent should match GNU's
+/// `cannot create directory 'parent': Permission denied`, not a failed-unlink
+/// line for the destination basename.
+#[test]
+#[cfg(unix)]
+fn test_install_d_inaccessible_parent_directory() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+    at.mkdir("r--");
+    at.set_mode("r--", 0o400);
+
+    scene
+        .ucmd()
+        .args(&["-D", "f", "r--/f"])
+        .fails_with_code(1)
+        .stderr_is("install: cannot create directory 'r--': Permission denied\n");
+}
+
 #[test]
 fn test_install_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
