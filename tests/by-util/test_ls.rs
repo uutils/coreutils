@@ -6621,6 +6621,21 @@ fn test_ls_invalid_block_size() {
         .fails_with_code(2)
         .no_stdout()
         .stderr_is("ls: invalid --block-size argument '0'\n");
+
+    // A later -h/--si must not skip validation of an invalid --block-size.
+    new_ucmd!()
+        .arg("--block-size=0")
+        .arg("--si")
+        .fails_with_code(2)
+        .no_stdout()
+        .stderr_is("ls: invalid --block-size argument '0'\n");
+
+    new_ucmd!()
+        .arg("--block-size=invalid")
+        .arg("--human-readable")
+        .fails_with_code(2)
+        .no_stdout()
+        .stderr_is("ls: invalid --block-size argument 'invalid'\n");
 }
 
 #[cfg(all(unix, feature = "dd"))]
