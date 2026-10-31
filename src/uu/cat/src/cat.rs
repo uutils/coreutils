@@ -383,6 +383,9 @@ fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -
             if !is_safe_overwrite(&stdin, &io::stdout()) {
                 return Err(CatError::OutputIsInput);
             }
+            // Use RawReader so read errors like EBADF are reported
+            #[cfg(any(unix, target_os = "wasi"))]
+            let stdin = uucore::io::RawReader(stdin);
             let mut handle = InputHandle {
                 reader: stdin,
                 is_interactive,
