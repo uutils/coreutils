@@ -1048,4 +1048,11 @@ fn test_last_of_check_order_nocheck_order_wins() {
         .args(&["--check-order", "--nocheck-order", "a.txt", "a.txt"])
         .succeeds()
         .stdout_is("b\na\n");
+
+    // The other order: --check-order wins and the unsorted input is reported.
+    scene
+        .ucmd()
+        .args(&["--nocheck-order", "--check-order", "a.txt", "a.txt"])
+        .fails_with_code(1)
+        .stderr_is("join: a.txt:2: is not sorted: a\n");
 }
