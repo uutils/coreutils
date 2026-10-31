@@ -428,6 +428,8 @@ impl SplitWriter<'_> {
     where
         I: Iterator<Item = (usize, UResult<Vec<u8>>)>,
     {
+        // A numeric pattern may leave rewind active. Do not replay lines as we buffer them.
+        input_iter.rewind = false;
         if offset >= 0 {
             // The offset is zero or positive, no need for a buffer on the lines read.
             // NOTE: drain the buffer of input_iter, no match should be done within.

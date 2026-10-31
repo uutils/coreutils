@@ -1944,3 +1944,40 @@ fn test_empty_skip_to_regex_is_accepted() {
     ucmd.args(&["letters", "%%"]).succeeds().stdout_only("19\n");
     assert_eq!(at.read("xx00"), "delta\necho\nfoxtrot\n");
 }
+
+#[rstest::rstest]
+#[case::split("/3/-1", "2\n0\n0\n4\n", &["1\n", "", "", "2\n3\n"])]
+#[case::skip("%3%-1", "2\n0\n4\n", &["1\n", "", "2\n3\n"])]
+fn test_negative_offset_after_empty_numeric_split(
+    #[case] pattern: &str,
+    #[case] sizes: &str,
+    #[case] pieces: &[&str],
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-", "/2/", "2", pattern])
+        .pipe_in("1\n2\n3\n")
+        .succeeds()
+        .stdout_only(sizes);
+
+    for (index, piece) in pieces.iter().enumerate() {
+        assert_eq!(at.read(&format!("xx{index:02}")), *piece);
+    }
+    assert!(!at.file_exists(format!("xx{:02}", pieces.len())));
+}
+
+#[rstest::rstest]
+#[case::split("/x/-1", "2\n0\n8\n")]
+#[case::skip("%x%-1", "2\n0\n")]
+fn test_negative_offset_after_empty_numeric_split_without_match(
+    #[case] pattern: &str,
+    #[case] sizes: &str,
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-", "/3/-1", "2", pattern])
+        .pipe_in("1\n2\n3\n4\n5\n")
+        .fails_with_code(1)
+        .stdout_is(sizes)
+        .stderr_is(format!("csplit: '{pattern}': match not found\n"));
+
+    assert_eq!(glob(&at.plus_as_string("xx*")).unwrap().count(), 0);
+}
