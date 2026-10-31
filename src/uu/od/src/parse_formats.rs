@@ -302,6 +302,13 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
                                     "spec" => params.quote()
                                 )
                             })?;
+                            if byte_size == 0 {
+                                return Err(translate!(
+                                    "od-error-invalid-size",
+                                    "size" => byte_size,
+                                    "spec" => params.quote()
+                                ));
+                            }
                         }
                     }
                 }
@@ -317,6 +324,13 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
                 byte_size = decimal_size.parse().map_err(|_| {
                     translate!("od-error-invalid-number", "number" => decimal_size.quote(), "spec" => params.quote())
                 })?;
+                if byte_size == 0 {
+                    return Err(translate!(
+                        "od-error-invalid-size",
+                        "size" => byte_size,
+                        "spec" => params.quote()
+                    ));
+                }
             }
         }
         if ch == Some('z') {
@@ -427,6 +441,10 @@ fn test_invalid_long_format() {
     parse_format_flags_str(&["od", "--format=xzC"]).unwrap_err();
     parse_format_flags_str(&["od", "--format=xzz"]).unwrap_err();
     parse_format_flags_str(&["od", "--format=xCC"]).unwrap_err();
+
+    parse_format_flags_str(&["od", "--format=x0"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format=d00"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format=f0"]).unwrap_err();
 
     parse_format_flags_str(&["od", "--format=c1"]).unwrap_err();
     parse_format_flags_str(&["od", "--format=x256"]).unwrap_err();
