@@ -3882,6 +3882,57 @@ fn test_consistent_sorting_with_i18n_collate() {
 }
 
 #[test]
+fn test_numeric_ties_use_locale_collation() {
+    // Regression test for issue #13319: when every key compares equal, the
+    // whole-line tie-break follows the locale collation (and is byte order in C).
+    let input = "      1 lock/lock0lock.c line 5163\n\
+                 \x20     1 lock/lock0lock.c line 3249\n\
+                 \x20     1 fsp/fsp0fsp.c line 3395\n\
+                 \x20     1 btr/btr0cur.c line 672\n\
+                 \x20     1 btr/btr0cur.c line 450\n\
+                 \x20     1 ./include/btr0btr.ic line 53\n";
+    let collated = "      1 btr/btr0cur.c line 450\n\
+                    \x20     1 btr/btr0cur.c line 672\n\
+                    \x20     1 fsp/fsp0fsp.c line 3395\n\
+                    \x20     1 ./include/btr0btr.ic line 53\n\
+                    \x20     1 lock/lock0lock.c line 3249\n\
+                    \x20     1 lock/lock0lock.c line 5163\n";
+    let collated_reversed = "      1 lock/lock0lock.c line 5163\n\
+                             \x20     1 lock/lock0lock.c line 3249\n\
+                             \x20     1 ./include/btr0btr.ic line 53\n\
+                             \x20     1 fsp/fsp0fsp.c line 3395\n\
+                             \x20     1 btr/btr0cur.c line 672\n\
+                             \x20     1 btr/btr0cur.c line 450\n";
+    let bytewise = "      1 ./include/btr0btr.ic line 53\n\
+                    \x20     1 btr/btr0cur.c line 450\n\
+                    \x20     1 btr/btr0cur.c line 672\n\
+                    \x20     1 fsp/fsp0fsp.c line 3395\n\
+                    \x20     1 lock/lock0lock.c line 3249\n\
+                    \x20     1 lock/lock0lock.c line 5163\n";
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-nr")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(collated_reversed);
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-n")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(collated);
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg("-n")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(bytewise);
+}
+
+#[test]
 fn test_merge_locale_collation() {
     // `sort -m` compares lines lazily with the collator instead of precomputed
     // sort keys; the result must match what a full sort produces.
