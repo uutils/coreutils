@@ -396,17 +396,13 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         )
         .into());
     }
-    // WASI may return file metadata even when a trailing slash requires a directory.
-    let Some(source_metadata) = source
-        .symlink_metadata()
-        .ok()
-        .filter(|metadata| !metadata.is_file() || !path_ends_with_terminator(source))
-    else {
-        return Err(if path_ends_with_terminator(source) {
-            MvError::CannotStatNotADirectory(source.quote().to_string()).into()
-        } else {
-            MvError::NoSuchFile(source.quote().to_string()).into()
-        });
+    let source_metadata = match source.symlink_metadata() {
+        // WASI may return file metadata even when a trailing slash requires a directory.
+        Ok(metadata) if metadata.is_file() && path_ends_with_terminator(source) => {
+            return Err(cannot_stat(source, not_a_directory()));
+        }
+        Ok(metadata) => metadata,
+        Err(e) => return Err(cannot_stat(source, e)),
     };
 
     // `symlink_metadata` does not follow symlinks, so this is equivalent to
@@ -485,6 +481,8 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         )
         .into())
     } else {
+        check_target_accessible(target)?;
+
         #[cfg(unix)]
         let (mut hardlink_tracker, hardlink_scanner) = create_hardlink_context();
         #[cfg(unix)]
@@ -501,6 +499,29 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
             hardlink_params.1,
         )
         .map_err(|e| USimpleError::new(1, format!("{e}")))
+    }
+}
+
+fn cannot_stat(path: &Path, e: io::Error) -> Box<dyn UError> {
+    e.map_err_context(|| translate!("mv-error-cannot-stat", "path" => path.quote()))
+}
+
+/// For paths that fail without an OS error of their own, such as `..`, which
+/// has no file name.
+fn no_such_file() -> io::Error {
+    io::Error::new(io::ErrorKind::NotFound, "No such file or directory")
+}
+
+fn not_a_directory() -> io::Error {
+    io::Error::new(io::ErrorKind::NotADirectory, "Not a directory")
+}
+
+/// Fail with `cannot stat` if the target cannot be examined for a reason other
+/// than not existing, e.g. a parent directory without search permission.
+fn check_target_accessible(target: &Path) -> UResult<()> {
+    match target.symlink_metadata() {
+        Err(e) if e.kind() != io::ErrorKind::NotFound => Err(cannot_stat(target, e)),
+        _ => Ok(()),
     }
 }
 
@@ -646,7 +667,7 @@ fn exchange_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
             for source in sources {
                 let name = source
                     .file_name()
-                    .ok_or_else(|| MvError::NoSuchFile(source.quote().to_string()))?;
+                    .ok_or_else(|| cannot_stat(source, no_such_file()))?;
                 exchange_two_paths(source, &target_dir.join(name), opts)?;
             }
             Ok(())
@@ -731,8 +752,8 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
     };
 
     for sourcepath in files {
-        if sourcepath.symlink_metadata().is_err() {
-            show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
+        if let Err(e) = sourcepath.symlink_metadata() {
+            show!(cannot_stat(sourcepath, e));
             continue;
         }
 
@@ -744,7 +765,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         let targetpath = if let Some(name) = sourcepath.file_name() {
             target_dir.join(name)
         } else {
-            show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
+            show!(cannot_stat(sourcepath, no_such_file()));
             continue;
         };
 
@@ -760,6 +781,11 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         // Check if we have mv dir1 dir2 dir2
         // And generate an error if this is the case
         if let Err(e) = assert_not_same_file(sourcepath, target_dir, true, options) {
+            show!(e);
+            continue;
+        }
+
+        if let Err(e) = check_target_accessible(&targetpath) {
             show!(e);
             continue;
         }

@@ -8,10 +8,6 @@ use uucore::translate;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MvError {
-    #[error("{}", translate!("mv-error-no-such-file", "path" => .0))]
-    NoSuchFile(String),
-    #[error("{}", translate!("mv-error-cannot-stat-not-directory", "path" => .0))]
-    CannotStatNotADirectory(String),
     #[error("{}", translate!("mv-error-same-file", "source" => .0, "target" => .1))]
     SameFile(String, String),
     #[error("{}", translate!("mv-error-self-target-subdirectory", "source" => .0, "target" => .1))]

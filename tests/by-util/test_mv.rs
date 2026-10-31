@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore mydir hardlinked tmpfs notty unwriteable myfolder SRCDATA DSTDATA REALDATA realfile
-// spell-checker:ignore dirattr dirvalue setfattr getfattr
+// spell-checker:ignore dirattr dirvalue setfattr getfattr ENOTDIR
 
 use rstest::rstest;
 use std::io::Write;
@@ -3748,4 +3748,32 @@ fn test_mv_exchange_missing_target() {
         .stderr_contains("cannot move")
         .stderr_contains("present")
         .stderr_contains("absent");
+}
+
+#[cfg(unix)]
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
+fn test_mv_target_in_unsearchable_dir_reports_cannot_stat() {
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("file1");
+    at.mkdir("dir2");
+    at.set_mode("dir2", 0o200);
+
+    scene
+        .ucmd()
+        .args(&["file1", "dir2/file1"])
+        .fails_with_code(1)
+        .stderr_only("mv: cannot stat 'dir2/file1': Permission denied\n");
+    scene
+        .ucmd()
+        .args(&["file1", "dir2"])
+        .fails_with_code(1)
+        .stderr_only("mv: cannot stat 'dir2/file1': Permission denied\n");
+
+    at.set_mode("dir2", 0o700);
 }

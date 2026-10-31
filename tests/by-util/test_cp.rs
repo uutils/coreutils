@@ -3342,7 +3342,25 @@ fn test_cp_reflink_insufficient_permission() {
         .arg("unreadable")
         .arg(TEST_EXISTING_FILE)
         .fails()
-        .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied\n");
+        .stderr_only("cp: cannot open 'unreadable' for reading: Permission denied\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_unreadable_source_reports_cannot_open() {
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.make_file("file1")
+        .set_permissions(PermissionsExt::from_mode(0o000))
+        .unwrap();
+    at.mkdir("dir2");
+
+    ucmd.args(&["file1", "dir2/file1"])
+        .fails_with_code(1)
+        .stderr_only("cp: cannot open 'file1' for reading: Permission denied\n");
 }
 
 #[cfg(target_os = "linux")]
