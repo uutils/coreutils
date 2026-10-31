@@ -442,11 +442,13 @@ fn test_field_with_multibyte_whitespace_separator() {
     // A multibyte Unicode whitespace separator (U+3000) before a selected field
     // is normalized to a single space rather than sliced mid-character.
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .args(&["--field", "2", "1　2"])
         .succeeds()
         .stdout_only("1 2\n");
 
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .args(&["--from=auto", "--field", "2"])
         .pipe_in("1K\u{3000}2K\n")
         .succeeds()
@@ -2122,4 +2124,22 @@ fn test_field_separator_is_a_blank(#[case] input: &str, #[case] expected: &str) 
         .pipe_in(input)
         .succeeds()
         .stdout_only(expected);
+}
+
+#[rstest]
+#[case::ideographic_space("1\u{3000}2000\n")]
+#[case::em_space("1\u{2003}2000\n")]
+fn test_multibyte_blank_separates_only_in_utf8_locale(#[case] input: &str) {
+    // In the C locale a multibyte blank is not a blank, so it stays inside field 1.
+    new_ucmd!()
+        .args(&["--to=si", "--field=2"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(input);
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["--to=si", "--field=2"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("1 2.0k\n");
 }
