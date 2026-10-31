@@ -42,11 +42,12 @@ pub struct Filesystem {
     pub usage: FsUsage,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub(crate) enum FsError {
     #[cfg(not(windows))]
     OverMounted,
-    InvalidPath,
+    /// The path could not be resolved; holds the OS error saying why.
+    InvalidPath(std::io::Error),
     MountMissing,
 }
 
@@ -77,9 +78,7 @@ where
     // TODO Refactor this function with `Stater::find_mount_point()`
     // in the `stat` crate.
     let path = if canonicalize {
-        path.as_ref()
-            .canonicalize()
-            .map_err(|_| FsError::InvalidPath)?
+        path.as_ref().canonicalize().map_err(FsError::InvalidPath)?
     } else {
         path.as_ref().to_path_buf()
     };
@@ -187,19 +186,19 @@ mod tests {
 
         #[test]
         fn test_empty_mounts() {
-            assert_eq!(
+            assert!(matches!(
                 mount_info_from_path(&[], "/", false).unwrap_err(),
                 FsError::MountMissing
-            );
+            ));
         }
 
         #[test]
         fn test_bad_path() {
-            assert_eq!(
+            assert!(matches!(
                 // This path better not exist....
                 mount_info_from_path(&[], "/non-existent-path", true).unwrap_err(),
-                FsError::InvalidPath
-            );
+                FsError::InvalidPath(e) if e.kind() == std::io::ErrorKind::NotFound
+            ));
         }
 
         #[test]
@@ -226,19 +225,19 @@ mod tests {
         #[test]
         fn test_no_match() {
             let mounts = [mount_info("/foo")];
-            assert_eq!(
+            assert!(matches!(
                 mount_info_from_path(&mounts, "/bar", false).unwrap_err(),
                 FsError::MountMissing
-            );
+            ));
         }
 
         #[test]
         fn test_partial_match() {
             let mounts = [mount_info("/foo/bar")];
-            assert_eq!(
+            assert!(matches!(
                 mount_info_from_path(&mounts, "/foo/baz", false).unwrap_err(),
                 FsError::MountMissing
-            );
+            ));
         }
 
         #[test]
