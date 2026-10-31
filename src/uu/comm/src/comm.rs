@@ -8,7 +8,7 @@
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, Stdin, Write, stderr, stdin};
+use std::io::{self, BufRead, BufReader, Stdin, Write, stderr, stdin};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
@@ -199,7 +199,7 @@ fn comm(
     let delim_col_2 = delim.repeat(width_col_1);
     let delim_col_3 = delim.repeat(width_col_1 + width_col_2);
 
-    let mut writer = BufWriter::new(io::stdout().lock());
+    let mut writer = uucore::output::StdoutBuffer::new(io::stdout().lock());
 
     let ra = &mut Vec::new();
     let mut na = a
