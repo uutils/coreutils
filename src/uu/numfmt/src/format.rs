@@ -365,10 +365,21 @@ fn apply_grouping(s: &str) -> String {
     grouped
 }
 
+/// Whether `c` separates fields when no `--delimiter` is given: a newline or a
+/// blank. Unlike [`char::is_whitespace`], this excludes vertical tab, form feed
+/// and carriage return, and the no-break spaces, which belong to the field.
+fn is_field_separator(c: char) -> bool {
+    match c {
+        ' ' | '\t' | '\n' => true,
+        '\u{a0}' | '\u{2007}' | '\u{202f}' => false,
+        _ => !c.is_ascii() && c.is_whitespace() && !matches!(c, '\u{85}' | '\u{2028}' | '\u{2029}'),
+    }
+}
+
 fn split_next_field(s: &str) -> (&str, &str, &str) {
-    let prefix_len = s.find(|c: char| !c.is_whitespace()).unwrap_or(s.len());
+    let prefix_len = s.find(|c| !is_field_separator(c)).unwrap_or(s.len());
     let field_end = s[prefix_len..]
-        .find(char::is_whitespace)
+        .find(is_field_separator)
         .map_or(s.len(), |i| prefix_len + i);
     (&s[..prefix_len], &s[prefix_len..field_end], &s[field_end..])
 }
