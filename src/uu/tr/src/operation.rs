@@ -183,7 +183,7 @@ impl Error for SequenceError {}
 
 impl UError for SequenceError {}
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Class {
     Alnum,
     Alpha,
@@ -206,6 +206,135 @@ pub enum Sequence {
     CharStar(u8),
     CharRepeat(u8, usize),
     Class(Class),
+    /// A set2 upper/lower class paired with an opposite-case class in set1.
+    /// It expands to the case conversion of each member of the set1 class,
+    /// so the two sides stay the same length even when the locale's classes
+    /// have different sizes (for example Latin-1 has more lowercase than
+    /// uppercase letters).
+    CaseConverted {
+        from: Class,
+        to: Class,
+    },
+}
+
+/// Initialise the process locale from the environment, so the C library
+/// classification functions below see the locale the user asked for. This
+/// follows the pattern `dd` already uses for its case tables. Windows is
+/// left out on purpose: there setlocale with an empty string selects the
+/// user's ANSI code page, which makes the C library classify high bytes
+/// and changes long standing ASCII only behaviour, breaking existing
+/// tests. Windows therefore keeps the previous behaviour.
+#[cfg(not(any(target_os = "wasi", target_os = "windows")))]
+fn init_locale() {
+    // SAFETY: setlocale is called with a valid C string, as in `dd`.
+    unsafe {
+        libc::setlocale(libc::LC_CTYPE, c"".as_ptr());
+    }
+}
+
+#[cfg(any(target_os = "wasi", target_os = "windows"))]
+fn init_locale() {}
+
+/// Whether a high byte belongs to a class in the current locale, using the
+/// C library classification functions. The ASCII members are handled
+/// separately, so this is only asked about bytes 128 and above. In the C
+/// and UTF-8 locales glibc puts no such byte in any class, so behaviour
+/// there is unchanged.
+#[cfg(not(target_os = "wasi"))]
+fn locale_is_member(class: Class, byte: u8) -> bool {
+    // SAFETY: the is* functions are called with a byte value in range, as
+    // `dd` calls tolower/toupper, and they only read process locale state.
+    let result = unsafe {
+        match class {
+            Class::Alnum => libc::isalnum(i32::from(byte)),
+            Class::Alpha => libc::isalpha(i32::from(byte)),
+            Class::Blank => libc::isblank(i32::from(byte)),
+            Class::Control => libc::iscntrl(i32::from(byte)),
+            Class::Digit => libc::isdigit(i32::from(byte)),
+            Class::Graph => libc::isgraph(i32::from(byte)),
+            Class::Lower => libc::islower(i32::from(byte)),
+            Class::Print => libc::isprint(i32::from(byte)),
+            Class::Punct => libc::ispunct(i32::from(byte)),
+            Class::Space => libc::isspace(i32::from(byte)),
+            Class::Upper => libc::isupper(i32::from(byte)),
+            Class::Xdigit => libc::isxdigit(i32::from(byte)),
+        }
+    };
+    result != 0
+}
+
+#[cfg(target_os = "wasi")]
+fn locale_is_member(_class: Class, _byte: u8) -> bool {
+    false
+}
+
+/// Convert one byte to the given case in the current locale, as `dd` does
+/// with tolower/toupper. Bytes with no counterpart in the locale map to
+/// themselves.
+#[cfg(not(target_os = "wasi"))]
+fn convert_case(byte: u8, to: Class) -> u8 {
+    // SAFETY: tolower/toupper are called with a byte value in range.
+    let converted = unsafe {
+        match to {
+            Class::Upper => libc::toupper(i32::from(byte)),
+            _ => libc::tolower(i32::from(byte)),
+        }
+    };
+    converted as u8
+}
+
+#[cfg(target_os = "wasi")]
+fn convert_case(byte: u8, to: Class) -> u8 {
+    match to {
+        Class::Upper => byte.to_ascii_uppercase(),
+        _ => byte.to_ascii_lowercase(),
+    }
+}
+
+impl Class {
+    /// The class members that do not depend on the locale: the tables `tr`
+    /// has always used, unchanged and in the same order.
+    fn ascii_members(self) -> Box<dyn Iterator<Item = u8>> {
+        match self {
+            Self::Alnum => Box::new((b'0'..=b'9').chain(b'A'..=b'Z').chain(b'a'..=b'z')),
+            Self::Alpha => Box::new((b'A'..=b'Z').chain(b'a'..=b'z')),
+            Self::Blank => Box::new(unicode_table::BLANK.iter().copied()),
+            Self::Control => Box::new((0..=31).chain(std::iter::once(127))),
+            Self::Digit => Box::new(b'0'..=b'9'),
+            Self::Graph => Box::new(
+                (48..=57) // digit
+                    .chain(65..=90) // uppercase
+                    .chain(97..=122) // lowercase
+                    // punctuations
+                    .chain(33..=47)
+                    .chain(58..=64)
+                    .chain(91..=96)
+                    .chain(123..=126),
+            ),
+            Self::Print => Box::new(
+                (48..=57) // digit
+                    .chain(65..=90) // uppercase
+                    .chain(97..=122) // lowercase
+                    // punctuations
+                    .chain(33..=47)
+                    .chain(58..=64)
+                    .chain(91..=96)
+                    .chain(123..=126)
+                    .chain(std::iter::once(32)), // space
+            ),
+            Self::Punct => Box::new((33..=47).chain(58..=64).chain(91..=96).chain(123..=126)),
+            Self::Space => Box::new(unicode_table::SPACES.iter().copied()),
+            Self::Xdigit => Box::new((b'0'..=b'9').chain(b'A'..=b'F').chain(b'a'..=b'f')),
+            Self::Lower => Box::new(b'a'..=b'z'),
+            Self::Upper => Box::new(b'A'..=b'Z'),
+        }
+    }
+
+    /// The class members above ASCII in the current locale, in byte order.
+    fn locale_members(self) -> Box<dyn Iterator<Item = u8>> {
+        let class = self;
+        Box::new((128..=u8::MAX).filter(move |byte| locale_is_member(class, *byte)))
+    }
 }
 
 impl Sequence {
@@ -215,39 +344,15 @@ impl Sequence {
             Self::CharRange(l, r) => Box::new(*l..=*r),
             Self::CharStar(c) => Box::new(std::iter::repeat(*c)),
             Self::CharRepeat(c, n) => Box::new(std::iter::repeat_n(*c, *n)),
-            Self::Class(class) => match class {
-                Class::Alnum => Box::new((b'0'..=b'9').chain(b'A'..=b'Z').chain(b'a'..=b'z')),
-                Class::Alpha => Box::new((b'A'..=b'Z').chain(b'a'..=b'z')),
-                Class::Blank => Box::new(unicode_table::BLANK.iter().copied()),
-                Class::Control => Box::new((0..=31).chain(std::iter::once(127))),
-                Class::Digit => Box::new(b'0'..=b'9'),
-                Class::Graph => Box::new(
-                    (48..=57) // digit
-                        .chain(65..=90) // uppercase
-                        .chain(97..=122) // lowercase
-                        // punctuations
-                        .chain(33..=47)
-                        .chain(58..=64)
-                        .chain(91..=96)
-                        .chain(123..=126),
-                ),
-                Class::Print => Box::new(
-                    (48..=57) // digit
-                        .chain(65..=90) // uppercase
-                        .chain(97..=122) // lowercase
-                        // punctuations
-                        .chain(33..=47)
-                        .chain(58..=64)
-                        .chain(91..=96)
-                        .chain(123..=126)
-                        .chain(std::iter::once(32)), // space
-                ),
-                Class::Punct => Box::new((33..=47).chain(58..=64).chain(91..=96).chain(123..=126)),
-                Class::Space => Box::new(unicode_table::SPACES.iter().copied()),
-                Class::Xdigit => Box::new((b'0'..=b'9').chain(b'A'..=b'F').chain(b'a'..=b'f')),
-                Class::Lower => Box::new(b'a'..=b'z'),
-                Class::Upper => Box::new(b'A'..=b'Z'),
-            },
+            Self::Class(class) => Box::new(class.ascii_members().chain(class.locale_members())),
+            Self::CaseConverted { from, to } => {
+                let to = *to;
+                Box::new(
+                    from.ascii_members()
+                        .chain(from.locale_members())
+                        .map(move |byte| convert_case(byte, to)),
+                )
+            }
         }
     }
 
@@ -260,7 +365,7 @@ impl Sequence {
             // A star is only sized once it has been turned into a repeat.
             Self::CharStar(_) => 0,
             Self::CharRepeat(_, n) => *n,
-            Self::Class(_) => self.flatten().count(),
+            Self::Class(_) | Self::CaseConverted { .. } => self.flatten().count(),
         }
     }
 
@@ -326,6 +431,10 @@ impl Sequence {
         truncate_set1_flag: bool,
         translating: bool,
     ) -> Result<(Vec<u8>, Vec<u8>), SequenceError> {
+        // Class membership for high bytes comes from the C library, so the
+        // locale has to be initialised before any class is expanded.
+        init_locale();
+
         let is_char_star = |s: &&Self| -> bool { matches!(s, Self::CharStar(_)) };
 
         let set1 = Self::parse_set(set1_str).map_err(|(error, span)| SequenceError {
@@ -386,6 +495,46 @@ impl Sequence {
                 r => Some(*r),
             })
             .collect();
+
+        // When translating, a set2 upper/lower class matched by the opposite
+        // case class in set1 at the same position is replaced by the case
+        // conversion of that set1 class. Position is tracked on the
+        // converted lengths, so anything after the class still pairs by
+        // position. A converted class is not a class for the checks below.
+        if translating {
+            let mut converted_set2 = Vec::with_capacity(set2.len());
+            let mut set2_prefix_len: u128 = 0;
+            for set2_item in set2 {
+                let mut replacement = None;
+                if let Self::Class(to) = set2_item
+                    && matches!(to, Class::Upper | Class::Lower)
+                {
+                    let wanted_from = match to {
+                        Class::Upper => Class::Lower,
+                        _ => Class::Upper,
+                    };
+                    for (set1_pos, set1_item) in set1.iter().enumerate() {
+                        if matches!(set1_item, Self::Class(from) if *from == wanted_from)
+                            && Self::expanded_len_of(&set1[..set1_pos]) == set2_prefix_len
+                        {
+                            replacement = Some(Self::CaseConverted {
+                                from: wanted_from,
+                                to,
+                            });
+                            break;
+                        }
+                    }
+                }
+                if let Some(converted) = replacement {
+                    set2_prefix_len += converted.expanded_len() as u128;
+                    converted_set2.push(converted);
+                } else {
+                    set2_prefix_len += set2_item.expanded_len() as u128;
+                    converted_set2.push(set2_item);
+                }
+            }
+            set2 = converted_set2;
+        }
 
         // For every upper/lower in set2, there must be an upper/lower in set1 at the same position. The position is calculated by expanding everything before the upper/lower in both sets
         // This only applies when translating. With `-d -s`, set2 is only the set to squeeze.
@@ -452,10 +601,12 @@ impl Sequence {
                     }
                 }
                 // Otherwise set1 is cut to the length of set2 while pairing below.
-            } else if matches!(
-                set2.last().copied(),
-                Some(Self::Class(Class::Upper | Class::Lower))
-            ) {
+            } else if translating
+                && matches!(
+                    set2.last().copied(),
+                    Some(Self::Class(Class::Upper | Class::Lower) | Self::CaseConverted { .. })
+                )
+            {
                 return Err(SequenceError::whole_set(
                     BadSequence::Set1LongerSet2EndsInClass,
                     1,

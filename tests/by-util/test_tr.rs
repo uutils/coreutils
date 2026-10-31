@@ -1393,6 +1393,48 @@ fn test_stdin_is_socket() {
         .stdout_is(";;");
 }
 
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+#[test]
+fn test_classes_follow_single_byte_locale() {
+    // Compile a Latin-1 locale into a scratch directory; return early if
+    // localedef is unavailable, so the test never fails for a missing tool.
+    let locale_dir = std::env::temp_dir().join(format!("uutils-tr-locale-{}", std::process::id()));
+    let compiled = std::process::Command::new("localedef")
+        .args(["-i", "en_US", "-f", "ISO-8859-1"])
+        .arg(locale_dir.join("en_US.ISO-8859-1"))
+        .output()
+        .is_ok_and(|output| output.status.success());
+    if !compiled {
+        return;
+    }
+    let locale_dir = locale_dir.to_string_lossy().into_owned();
+    // In Latin-1, 0x9b is a control character, so deleting [:cntrl:]
+    // removes it; under C it is kept, as the existing tests show.
+    new_ucmd!()
+        .env("LOCPATH", &locale_dir)
+        .env("LC_ALL", "en_US.ISO-8859-1")
+        .args(&["-d", "[:cntrl:]"])
+        .pipe_in([b'h', b'e', b'l', b'l', b'o', 0x9b, b'3', b'1', b'm'])
+        .succeeds()
+        .stdout_is_bytes(b"hello31m");
+    // Case folding follows the locale too: 0xe9 uppercases to 0xc9.
+    new_ucmd!()
+        .env("LOCPATH", &locale_dir)
+        .env("LC_ALL", "en_US.ISO-8859-1")
+        .args(&["[:lower:]", "[:upper:]"])
+        .pipe_in([0xe9, b'a'])
+        .succeeds()
+        .stdout_is_bytes([0xc9, b'A']);
+    new_ucmd!()
+        .env("LOCPATH", &locale_dir)
+        .env("LC_ALL", "en_US.ISO-8859-1")
+        .args(&["[:upper:]", "[:lower:]"])
+        .pipe_in([0xc9, b'A'])
+        .succeeds()
+        .stdout_is_bytes([0xe9, b'a']);
+}
+
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     use super::*;

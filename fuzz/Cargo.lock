@@ -1817,6 +1817,7 @@ dependencies = [
  "bytecount",
  "clap",
  "fluent",
+ "libc",
  "memchr",
  "nom",
  "uucore",
