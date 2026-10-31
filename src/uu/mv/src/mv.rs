@@ -1136,7 +1136,13 @@ fn rename_dir_fallback(
     // We remove the destination directory if it exists to match the
     // behavior of `fs::rename`.
     if to.exists() {
-        fs::remove_dir_all(to)?;
+        fs::remove_dir_all(to).map_err(|err| {
+            RenameError::Formatted(translate!(
+                "mv-error-cannot-remove",
+                "from" => to.quote(),
+                "err" => strip_errno(&err)
+            ))
+        })?;
     }
 
     // Calculate total size of directory
@@ -1173,7 +1179,7 @@ fn rename_dir_fallback(
     };
 
     // Use directory copying (with or without hardlink support)
-    let result = copy_dir_contents(
+    copy_dir_contents(
         from,
         to,
         #[cfg(unix)]
@@ -1183,7 +1189,7 @@ fn rename_dir_fallback(
         verbose,
         progress_bar.as_ref(),
         display_manager,
-    );
+    )?;
 
     // Apply xattrs using a file descriptor to avoid TOCTOU races, ignoring
     // ENOTSUP/EOPNOTSUPP (filesystem without xattr support, which is expected
@@ -1200,11 +1206,10 @@ fn rename_dir_fallback(
     ))]
     {
         use std::fs::File;
-        let dest = File::open(to)?;
-        fsxattr::apply_xattrs_fd_ignore_unsupported(&dest, xattrs)?;
+        if let Ok(dest) = File::open(to) {
+            let _ = fsxattr::apply_xattrs_fd_ignore_unsupported(&dest, xattrs);
+        }
     }
-
-    result?;
 
     // Remove the source directory after successful copy
     fs::remove_dir_all(from).map_err(|err| {
@@ -1223,15 +1228,19 @@ fn rename_dir_fallback(
 ///
 /// `create_dir_all` would accept a symlink planted at `path` after the caller
 /// removed the destination, redirecting the move out of the destination tree.
-fn create_dir_fail_closed(path: &Path) -> io::Result<()> {
+fn create_dir_fail_closed(path: &Path) -> Result<(), RenameError> {
     fs::create_dir(path).map_err(|e| {
         if e.kind() == io::ErrorKind::AlreadyExists {
-            io::Error::new(
+            RenameError::Io(io::Error::new(
                 io::ErrorKind::AlreadyExists,
                 translate!("mv-error-dest-appeared", "path" => path.quote()),
-            )
+            ))
         } else {
-            e
+            RenameError::Formatted(translate!(
+                "mv-error-cannot-create-directory",
+                "path" => path.quote(),
+                "err" => strip_errno(&e)
+            ))
         }
     })
 }
@@ -1262,7 +1271,7 @@ fn copy_dir_contents(
     verbose: bool,
     progress_bar: Option<&ProgressBar>,
     display_manager: Option<&MultiProgress>,
-) -> io::Result<()> {
+) -> Result<(), RenameError> {
     // Create the destination directory
     create_dir_fail_closed(to)?;
 
@@ -1299,7 +1308,7 @@ fn copy_dir_contents_recursive(
     verbose: bool,
     progress_bar: Option<&ProgressBar>,
     display_manager: Option<&MultiProgress>,
-) -> io::Result<()> {
+) -> Result<(), RenameError> {
     // Helper closure to print verbose messages
     let print_verbose = |from: &Path, to: &Path| {
         if verbose {
@@ -1314,10 +1323,22 @@ fn copy_dir_contents_recursive(
         }
     };
 
-    let entries = fs::read_dir(from_dir)?;
+    let entries = fs::read_dir(from_dir).map_err(|err| {
+        RenameError::Formatted(translate!(
+            "mv-error-cannot-access",
+            "path" => from_dir.quote(),
+            "err" => strip_errno(&err)
+        ))
+    })?;
 
     for entry in entries {
-        let entry = entry?;
+        let entry = entry.map_err(|err| {
+            RenameError::Formatted(translate!(
+                "mv-error-cannot-access",
+                "path" => from_dir.quote(),
+                "err" => strip_errno(&err)
+            ))
+        })?;
         let from_path = entry.path();
         let file_name = from_path.file_name().unwrap();
         let to_path = to_dir.join(file_name);
@@ -1381,7 +1402,7 @@ fn copy_dir_contents_recursive(
             #[cfg(not(unix))]
             {
                 // Symlinks are already handled above, so this is always a regular file
-                fs::copy(&from_path, &to_path)?;
+                copy_regular_file(&from_path, &to_path)?;
             }
 
             print_verbose(&from_path, &to_path);
@@ -1403,7 +1424,7 @@ fn copy_file_with_hardlinks_helper(
     to: &Path,
     hardlink_tracker: &mut HardlinkTracker,
     hardlink_scanner: &HardlinkGroupScanner,
-) -> io::Result<()> {
+) -> Result<(), RenameError> {
     // Check if this file should be a hardlink to an already-copied file
     use crate::hardlink::HardlinkOptions;
     let hardlink_options = HardlinkOptions::default();
@@ -1411,7 +1432,13 @@ fn copy_file_with_hardlinks_helper(
     if let Some(existing_target) =
         hardlink_tracker.check_hardlink(from, to, hardlink_scanner, &hardlink_options)
     {
-        fs::hard_link(&existing_target, to)?;
+        fs::hard_link(&existing_target, to).map_err(|err| {
+            RenameError::Formatted(translate!(
+                "mv-error-cannot-create-regular-file",
+                "to" => to.quote(),
+                "err" => strip_errno(&err)
+            ))
+        })?;
         return Ok(());
     }
 
@@ -1419,31 +1446,111 @@ fn copy_file_with_hardlinks_helper(
         // Copy a symlink file (no-follow).
         // rename_symlink_fallback already preserves ownership and removes the source.
         rename_symlink_fallback(from, to)?;
-    } else if is_fifo(from.symlink_metadata()?.file_type()) {
+    } else if is_fifo(
+        from.symlink_metadata()
+            .map_err(|err| {
+                RenameError::Formatted(translate!(
+                    "mv-error-cannot-access",
+                    "path" => from.quote(),
+                    "err" => strip_errno(&err)
+                ))
+            })?
+            .file_type(),
+    ) {
         // rustix::fs::mkfifoat is linux only
-        nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666))?;
+        nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666)).map_err(|err| {
+            RenameError::Formatted(translate!(
+                "mv-error-cannot-create-regular-file",
+                "to" => to.quote(),
+                "err" => strip_errno(&err.into())
+            ))
+        })?;
         // Preserve ownership (uid/gid) from the source
         let _ = preserve_ownership(from, to);
     } else {
         // Copy a regular file.
-        fs::copy(from, to)?;
-        // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
-        #[cfg(any(
-            target_os = "freebsd",
-            target_os = "hurd",
-            target_os = "linux",
-            target_os = "android",
-            target_os = "netbsd"
-        ))]
-        {
-            if let Ok(failed) = fsxattr::copy_xattrs_ignore_unsupported(from, to) {
-                show_xattr_failures(failed);
-            }
-        }
-        // Preserve ownership (uid/gid) from the source
-        let _ = preserve_ownership(from, to);
+        copy_regular_file(from, to)?;
     }
 
+    Ok(())
+}
+
+#[cfg(unix)]
+fn copy_regular_file(from: &Path, to: &Path) -> Result<(), RenameError> {
+    use std::fs::Permissions;
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    use uucore::safe_copy::{create_dest_restrictive, open_source};
+
+    let src_file = open_source(from, /* nofollow */ true).map_err(|err| {
+        RenameError::Formatted(translate!(
+            "mv-error-cannot-open-for-reading",
+            "from" => from.quote(),
+            "err" => strip_errno(&err)
+        ))
+    })?;
+    let src_mode = src_file.metadata()?.mode() & 0o7777;
+    let mut dst_file = create_dest_restrictive(to, /* nofollow */ true).map_err(|err| {
+        RenameError::Formatted(translate!(
+            "mv-error-cannot-create-regular-file",
+            "to" => to.quote(),
+            "err" => strip_errno(&err)
+        ))
+    })?;
+    uucore::buf_copy::copy_fast(&mut &src_file, &mut dst_file).map_err(|err| {
+        RenameError::Formatted(translate!(
+            "mv-error-error-writing",
+            "to" => to.quote(),
+            "err" => strip_errno(&err)
+        ))
+    })?;
+
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "hurd",
+        target_os = "linux",
+        target_os = "android",
+        target_os = "netbsd"
+    ))]
+    {
+        if let Ok(failed) = fsxattr::copy_xattrs_fd_ignore_unsupported(&src_file, &dst_file) {
+            show_xattr_failures(failed);
+        }
+    }
+
+    // chown before chmod: chown(2) clears setuid/setgid for non-root,
+    // so the final mode must be applied last to preserve those bits.
+    //
+    // If the chown did not take, the destination belongs to whoever ran
+    // `mv`, and re-applying setuid/setgid would hand them a binary running
+    // as themselves that used to run as someone else. GNU strips the bits
+    // in that case and so do we.
+    let ownership_preserved = preserve_ownership(from, to).unwrap_or(false);
+    let dest_mode = if ownership_preserved {
+        src_mode
+    } else {
+        src_mode & !0o6000
+    };
+    let _ = dst_file.set_permissions(Permissions::from_mode(dest_mode));
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn copy_regular_file(from: &Path, to: &Path) -> Result<(), RenameError> {
+    fs::copy(from, to).map_err(|err| {
+        if from.exists() {
+            RenameError::Formatted(translate!(
+                "mv-error-cannot-create-regular-file",
+                "to" => to.quote(),
+                "err" => strip_errno(&err)
+            ))
+        } else {
+            RenameError::Formatted(translate!(
+                "mv-error-cannot-open-for-reading",
+                "from" => from.quote(),
+                "err" => strip_errno(&err)
+            ))
+        }
+    })?;
     Ok(())
 }
 
@@ -1492,84 +1599,7 @@ fn rename_file_fallback(
         }
     }
 
-    // Open src/dst with O_NOFOLLOW and keep the fds alive across copy,
-    // chown, xattr, and chmod so a concurrent path-swap can't redirect any
-    // step to a different inode.
-    #[cfg(unix)]
-    {
-        use std::fs::Permissions;
-        use std::os::unix::fs::{MetadataExt, PermissionsExt};
-        use uucore::safe_copy::{create_dest_restrictive, open_source};
-        let src_file = open_source(from, /* nofollow */ true).map_err(|err| {
-            RenameError::Formatted(translate!(
-                "mv-error-cannot-open-for-reading",
-                "from" => from.quote(),
-                "err" => strip_errno(&err)
-            ))
-        })?;
-        let src_mode = src_file.metadata()?.mode() & 0o7777;
-        let mut dst_file = create_dest_restrictive(to, /* nofollow */ true).map_err(|err| {
-            RenameError::Formatted(translate!(
-                "mv-error-cannot-create-regular-file",
-                "to" => to.quote(),
-                "err" => strip_errno(&err)
-            ))
-        })?;
-        uucore::buf_copy::copy_fast(&mut &src_file, &mut dst_file).map_err(|err| {
-            RenameError::Formatted(translate!(
-                "mv-error-error-writing",
-                "to" => to.quote(),
-                "err" => strip_errno(&err)
-            ))
-        })?;
-
-        #[cfg(any(
-            target_os = "freebsd",
-            target_os = "hurd",
-            target_os = "linux",
-            target_os = "android",
-            target_os = "netbsd"
-        ))]
-        {
-            if let Ok(failed) = fsxattr::copy_xattrs_fd_ignore_unsupported(&src_file, &dst_file) {
-                show_xattr_failures(failed);
-            }
-        }
-
-        // chown before chmod: chown(2) clears setuid/setgid for non-root,
-        // so the final mode must be applied last to preserve those bits.
-        //
-        // If the chown did not take, the destination belongs to whoever ran
-        // `mv`, and re-applying setuid/setgid would hand them a binary running
-        // as themselves that used to run as someone else. GNU strips the bits
-        // in that case and so do we.
-        let ownership_preserved = preserve_ownership(from, to).unwrap_or(false);
-        let dest_mode = if ownership_preserved {
-            src_mode
-        } else {
-            src_mode & !0o6000
-        };
-        let _ = dst_file.set_permissions(Permissions::from_mode(dest_mode));
-    }
-
-    #[cfg(not(unix))]
-    {
-        fs::copy(from, to).map_err(|err| {
-            if from.exists() {
-                RenameError::Formatted(translate!(
-                    "mv-error-cannot-create-regular-file",
-                    "to" => to.quote(),
-                    "err" => strip_errno(&err)
-                ))
-            } else {
-                RenameError::Formatted(translate!(
-                    "mv-error-cannot-open-for-reading",
-                    "from" => from.quote(),
-                    "err" => strip_errno(&err)
-                ))
-            }
-        })?;
-    }
+    copy_regular_file(from, to)?;
 
     fs::remove_file(from).map_err(|err| {
         RenameError::Formatted(translate!(
