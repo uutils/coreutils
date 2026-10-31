@@ -707,3 +707,6 @@ strip = true
 inherits = "release"
 panic = "unwind"
 debug = true
+
+[patch.crates-io]
+openssl = { git = "https://github.com/xtqqczze/rust-openssl-rust-openssl.git", branch = "deps/aws-ls-sys" }
