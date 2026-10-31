@@ -2108,3 +2108,18 @@ fn test_repeated_field_is_an_error() {
         .fails_with_code(1)
         .stderr_only("numfmt: multiple field specifications\n");
 }
+
+#[rstest]
+#[case::vertical_tab("1\x0b2 3K\n", "1\x0b2 3000\n")]
+#[case::form_feed("1\x0c2 3K\n", "1\x0c2 3000\n")]
+#[case::carriage_return("1\r2 3K\n", "1\r2 3000\n")]
+#[case::no_break_space("1\u{a0}2 3K\n", "1\u{a0}2 3000\n")]
+#[case::narrow_no_break_space("1\u{202f}2 3K\n", "1\u{202f}2 3000\n")]
+fn test_field_separator_is_a_blank(#[case] input: &str, #[case] expected: &str) {
+    // Only blanks separate fields, so these characters stay inside field 1.
+    new_ucmd!()
+        .args(&["--from=si", "--field=2"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected);
+}
