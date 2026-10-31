@@ -27,23 +27,28 @@ pub enum EscapeState {
 }
 
 /// Bytes we need to present as escaped octal, in the form of `\nnn` per byte.
-/// Only supports characters up to 2 bytes long in UTF-8.
 pub struct EscapeOctal {
-    c: [u8; 2],
+    bytes: [u8; 4],
+    len: usize,
+    byte_index: usize,
+    octal_index: u8,
     state: EscapeOctalState,
-    idx: u8,
 }
 
 enum EscapeOctalState {
     Done,
-    FirstBackslash,
-    FirstValue,
-    LastBackslash,
-    LastValue,
+    Backslash,
+    Value,
 }
 
 fn byte_to_octal_digit(byte: u8, idx: u8) -> u8 {
     (byte >> (idx * 3)) & 0o7
+}
+
+/// GNU also treats the Unicode line and paragraph separators as unprintable,
+/// even though Rust does not classify them as control characters.
+fn is_unprintable(c: char) -> bool {
+    c.is_control() || matches!(c, '\u{2028}' | '\u{2029}')
 }
 
 impl Iterator for EscapeOctal {
@@ -52,30 +57,23 @@ impl Iterator for EscapeOctal {
     fn next(&mut self) -> Option<char> {
         match self.state {
             EscapeOctalState::Done => None,
-            EscapeOctalState::FirstBackslash => {
-                self.state = EscapeOctalState::FirstValue;
+            EscapeOctalState::Backslash => {
+                self.octal_index = 2;
+                self.state = EscapeOctalState::Value;
                 Some('\\')
             }
-            EscapeOctalState::LastBackslash => {
-                self.state = EscapeOctalState::LastValue;
-                Some('\\')
-            }
-            EscapeOctalState::FirstValue => {
-                let octal_digit = byte_to_octal_digit(self.c[0], self.idx);
-                if self.idx == 0 {
-                    self.state = EscapeOctalState::LastBackslash;
-                    self.idx = 2;
+            EscapeOctalState::Value => {
+                let octal_digit =
+                    byte_to_octal_digit(self.bytes[self.byte_index], self.octal_index);
+                if self.octal_index == 0 {
+                    self.byte_index += 1;
+                    self.state = if self.byte_index >= self.len {
+                        EscapeOctalState::Done
+                    } else {
+                        EscapeOctalState::Backslash
+                    };
                 } else {
-                    self.idx -= 1;
-                }
-                Some(from_digit(octal_digit.into(), 8).unwrap())
-            }
-            EscapeOctalState::LastValue => {
-                let octal_digit = byte_to_octal_digit(self.c[1], self.idx);
-                if self.idx == 0 {
-                    self.state = EscapeOctalState::Done;
-                } else {
-                    self.idx -= 1;
+                    self.octal_index -= 1;
                 }
                 Some(from_digit(octal_digit.into(), 8).unwrap())
             }
@@ -89,20 +87,25 @@ impl EscapeOctal {
             return Self::from_byte(c as u8);
         }
 
-        let mut buf = [0; 2];
-        let _s = c.encode_utf8(&mut buf);
+        let mut buf = [0; 4];
+        let len = c.len_utf8();
+        c.encode_utf8(&mut buf);
         Self {
-            c: buf,
-            idx: 2,
-            state: EscapeOctalState::FirstBackslash,
+            bytes: buf,
+            len,
+            byte_index: 0,
+            octal_index: 2,
+            state: EscapeOctalState::Backslash,
         }
     }
 
     fn from_byte(b: u8) -> Self {
         Self {
-            c: [0, b],
-            idx: 2,
-            state: EscapeOctalState::LastBackslash,
+            bytes: [b, 0, 0, 0],
+            len: 1,
+            byte_index: 0,
+            octal_index: 2,
+            state: EscapeOctalState::Backslash,
         }
     }
 }
@@ -137,7 +140,7 @@ impl EscapedChar {
             '\\' => Backslash('\\'),
             ' ' if !dirname && quotes.is_none() => Backslash(' '),
             ':' if dirname => Backslash(':'),
-            _ if c.is_control() => Octal(EscapeOctal::from_char(c)),
+            _ if is_unprintable(c) => Octal(EscapeOctal::from_char(c)),
             _ => Char(c),
         };
         Self { state: init_state }
@@ -146,7 +149,7 @@ impl EscapedChar {
     pub(super) fn new_shell(c: char, escape: bool, quotes: ShellQuotes) -> Self {
         use EscapeState::{Backslash, Char, ForceQuote, Octal};
         let init_state = match c {
-            _ if !escape && c.is_control() => Char(c),
+            _ if !escape && is_unprintable(c) => Char(c),
             '\x07' => Backslash('a'),
             '\x08' => Backslash('b'),
             '\t' => Backslash('t'),
@@ -155,7 +158,7 @@ impl EscapedChar {
             '\x0C' => Backslash('f'),
             '\r' => Backslash('r'),
             '\'' if matches!(quotes, ShellQuotes::Single) => Backslash('\''),
-            _ if c.is_control() => Octal(EscapeOctal::from_char(c)),
+            _ if is_unprintable(c) => Octal(EscapeOctal::from_char(c)),
             _ if SPECIAL_SHELL_CHARS.contains(c) => ForceQuote(c),
             _ => Char(c),
         };
@@ -164,7 +167,7 @@ impl EscapedChar {
 
     pub fn hide_control(self) -> Self {
         match self.state {
-            EscapeState::Char(c) if c.is_control() => Self {
+            EscapeState::Char(c) if is_unprintable(c) => Self {
                 state: EscapeState::Char('?'),
             },
             _ => self,

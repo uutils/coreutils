@@ -430,6 +430,31 @@ mod tests {
     }
 
     #[test]
+    fn test_line_separator_is_escaped_or_replaced() {
+        check_names_encoding(
+            UEncoding::Utf8,
+            "x\u{2028}y",
+            &[
+                ("x\\342\\200\\250y", "escape"),
+                ("\"x\\342\\200\\250y\"", "c"),
+                ("'x'$'\\342\\200\\250''y'", "shell-escape"),
+                ("x?y", "literal"),
+                ("x\u{2028}y", "literal-show"),
+                ("x\u{2028}y", "shell-show"),
+            ],
+        );
+        check_names_encoding(
+            UEncoding::Utf8,
+            "x\u{2029}y",
+            &[
+                ("x\\342\\200\\251y", "escape"),
+                ("x?y", "literal"),
+                ("x\u{2029}y", "literal-show"),
+            ],
+        );
+    }
+
+    #[test]
     fn test_escape_control_chars_preserves_other_characters() {
         assert_eq!(
             escape_control_chars("a b\\c'\x01\n\t"),
