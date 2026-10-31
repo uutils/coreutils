@@ -324,14 +324,20 @@ pub fn determine_backup_mode(env_ctl: Option<String>, matches: &ArgMatches) -> U
         // is used but method is not specified, then the value of the
         // VERSION_CONTROL environment variable is used. And if VERSION_CONTROL
         // is not set, the default backup type is 'existing'.
-        if let Some(method) = matches.get_one::<String>(arguments::OPT_BACKUP) {
+        // An empty value (`--backup=`) behaves like a bare `--backup`: the value
+        // of `VERSION_CONTROL` decides, falling back to 'existing'.
+        if let Some(method) = matches
+            .get_one::<String>(arguments::OPT_BACKUP)
+            .filter(|method| !method.is_empty())
+        {
             // Second argument is for the error string that is returned.
             match_method(method, "backup type")
         } else if let Some(method) = env_ctl {
             // Second argument is for the error string that is returned.
             match_method(&method, "$VERSION_CONTROL")
         } else {
-            // Default if no argument is provided to '--backup'
+            // Default if no argument is provided to '--backup', or it is given
+            // without a value
             Ok(BackupMode::Existing)
         }
     } else if matches.get_flag(arguments::OPT_BACKUP_NO_ARG) {
@@ -561,6 +567,22 @@ mod tests {
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
         let result = determine_backup_mode(None, &matches).unwrap();
         assert_eq!(result, BackupMode::Existing);
+    }
+
+    // --backup= (empty value) behaves like a bare --backup
+    #[test]
+    fn test_backup_mode_long_with_empty_arg() {
+        let matches = make_app().get_matches_from(vec!["command", "--backup="]);
+        let result = determine_backup_mode(None, &matches).unwrap();
+        assert_eq!(result, BackupMode::Existing);
+    }
+
+    // --backup= (empty value) still consults VERSION_CONTROL
+    #[test]
+    fn test_backup_mode_long_with_empty_arg_and_env() {
+        let matches = make_app().get_matches_from(vec!["command", "--backup="]);
+        let result = determine_backup_mode(Some("numbered".into()), &matches).unwrap();
+        assert_eq!(result, BackupMode::Numbered);
     }
 
     // --backup can be passed with an argument only
