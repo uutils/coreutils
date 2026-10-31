@@ -161,7 +161,7 @@ fn process_input<R: BufRead>(reader: R, graph: &mut Graph) -> Result<(), Error> 
     //
     // Tokens are kept as raw bytes so invalid UTF-8 can be preserved.
 
-    let result = parser::for_each_token(reader, |token| {
+    parser::for_each_token(reader, |token| {
         let token_sym = graph.interner.get_or_intern(token);
 
         if let Some(from) = pending.take() {
@@ -169,14 +169,19 @@ fn process_input<R: BufRead>(reader: R, graph: &mut Graph) -> Result<(), Error> 
         } else {
             pending = Some(token_sym);
         }
-    });
-
-    if let Err(e) = result {
-        if e.kind() == io::ErrorKind::IsADirectory {
-            return Err(ReadError::IsDir(graph.name()).into());
+        Ok(())
+    })
+    .map_err(|error| match error {
+        Error::Read(ReadError::IoContext(_, error))
+            if error.kind() == io::ErrorKind::IsADirectory =>
+        {
+            ReadError::IsDir(graph.name()).into()
         }
-        return Err(ReadError::Io(e).into());
-    }
+        Error::Read(ReadError::IoContext(_, error)) => {
+            ReadError::IoContext(Some(graph.name()), error).into()
+        }
+        error => error,
+    })?;
 
     if pending.is_some() {
         return Err(ReadError::NumTokensOdd(graph.name()).into());
