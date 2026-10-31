@@ -9912,6 +9912,22 @@ fn test_link_with_backup_suffix_attached_to_the_flag() {
 #[test]
 // Android's app-private filesystem refuses hard links.
 #[cfg(not(target_os = "android"))]
+fn test_link_with_an_abbreviated_symbolic_link_flag() {
+    // `--sym` is an unambiguous prefix of `--symbolic-link`, and it still conflicts
+    // with `-l` rather than making a hard link.
+    for flag in ["--sym", "--symbol", "--symbolic-link"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("a.txt", "a\n");
+        ucmd.args(&[flag, "-l", "a.txt", "b"])
+            .fails_with_code(1)
+            .stderr_contains("cannot make both hard and symbolic links");
+        assert!(!at.file_exists("b"));
+    }
+}
+
+#[test]
+// Android's app-private filesystem refuses hard links.
+#[cfg(not(target_os = "android"))]
 fn test_link_with_an_operand_that_looks_like_a_flag() {
     // Everything after "--" is an operand, even when it starts with a dash.
     let (at, mut ucmd) = at_and_ucmd!();
