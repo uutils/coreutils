@@ -533,6 +533,53 @@ fn test_mv_file_to_broken_symlink_file() {
     assert!(!at.file_exists("file"));
 }
 
+#[rstest]
+#[case::no_clobber(&["-n"], true)]
+#[case::update_none(&["--update=none"], true)]
+#[case::update_none_fail(&["--update=none-fail"], false)]
+#[case::update_older(&["-u"], true)]
+#[case::interactive(&["-i"], false)]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_file_keeps_broken_symlink(#[case] args: &[&str], #[case] succeeds: bool) {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // The link is created last, so it is not older than the file for -u
+    at.touch("file");
+    at.symlink_file("missing-target", "broken");
+
+    // Only -i reads the answer; the others may exit before stdin is written
+    let result = ucmd
+        .args(args)
+        .arg("file")
+        .arg("broken")
+        .pipe_in("n")
+        .ignore_stdin_write_error()
+        .run();
+    assert_eq!(result.succeeded(), succeeds);
+
+    assert!(at.is_symlink("broken"));
+    assert!(at.file_exists("file"));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_file_backs_up_broken_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("file");
+    at.symlink_file("missing-target", "broken");
+
+    ucmd.arg("-b")
+        .arg("file")
+        .arg("broken")
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.is_symlink("broken~"));
+    assert!(at.file_exists("broken"));
+    assert!(!at.is_symlink("broken"));
+}
+
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
 fn test_mv_file_to_broken_symlink_directory() {
