@@ -1038,3 +1038,21 @@ fn test_missing_key_is_empty_key() {
         .succeeds()
         .stdout_only("1002 bob\n");
 }
+
+#[test]
+fn test_last_of_check_order_nocheck_order_wins() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("a.txt", "b\na\n");
+    scene
+        .ucmd()
+        .args(&["--check-order", "--nocheck-order", "a.txt", "a.txt"])
+        .succeeds()
+        .stdout_is("b\na\n");
+
+    // The other order: --check-order wins and the unsorted input is reported.
+    scene
+        .ucmd()
+        .args(&["--nocheck-order", "--check-order", "a.txt", "a.txt"])
+        .fails_with_code(1)
+        .stderr_is("join: a.txt:2: is not sorted: a\n");
+}
