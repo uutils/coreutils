@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat biguint
 
 use std::ffi::{OsStr, OsString};
-use std::io::{BufWriter, Write, stdout};
+use std::io::{Write, stdout};
 
 use clap::{Arg, ArgAction, Command};
 use num_bigint::BigUint;
@@ -17,6 +17,7 @@ use uucore::error::{FromIo, UResult};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format::num_format::FloatVariant;
 use uucore::format::{Format, num_format};
+use uucore::output::StdoutBuffer;
 use uucore::{fast_inc::fast_inc, format_usage};
 
 mod diagnostics;
@@ -426,8 +427,50 @@ fn print_seq(
     fast_allowed: bool,
     padding: usize, // Used by fast path only
 ) -> std::io::Result<()> {
-    let stdout = stdout().lock();
-    let mut stdout = BufWriter::new(stdout);
+    let output = StdoutBuffer::new(stdout().lock());
+
+    match output {
+        StdoutBuffer::Block(output) => print_seq_with_output(
+            range,
+            separator,
+            terminator,
+            format,
+            fast_allowed,
+            padding,
+            output,
+        ),
+        #[cfg(unix)]
+        StdoutBuffer::Unbuffered(output) => print_seq_with_output(
+            range,
+            separator,
+            terminator,
+            format,
+            fast_allowed,
+            padding,
+            StdoutBuffer::into_unbuffered(output),
+        ),
+        #[cfg(unix)]
+        StdoutBuffer::Line(output) => print_seq_with_output(
+            range,
+            separator,
+            terminator,
+            format,
+            fast_allowed,
+            padding,
+            output,
+        ),
+    }
+}
+
+fn print_seq_with_output<W: Write>(
+    range: RangeFloat,
+    separator: &OsStr,
+    terminator: &OsStr,
+    format: &Format<num_format::Float, &ExtendedBigDecimal>,
+    fast_allowed: bool,
+    padding: usize,
+    mut stdout: W,
+) -> std::io::Result<()> {
     let (first, increment, last) = range;
 
     if fast_allowed {
