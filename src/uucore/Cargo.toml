@@ -102,8 +102,8 @@ bstr = { workspace = true, optional = true }
 [target.'cfg(any(target_vendor = "apple", target_os = "cygwin", target_os = "freebsd", target_os = "linux", target_os = "netbsd"))'.dependencies]
 dns-lookup = { workspace = true, optional = true }
 
-[target.'cfg(any(unix, windows, target_os = "wasi"))'.dependencies]
-rustix = { workspace = true, optional = true }
+[target.'cfg(any(unix, target_os = "wasi"))'.dependencies]
+rustix = { workspace = true, features = ["std"] }
 
 [target.'cfg(unix)'.dependencies]
 # Core error conversions and signal setup use nix even without optional features.
@@ -121,6 +121,7 @@ walkdir = { workspace = true, optional = true }
 procfs = { workspace = true, optional = true }
 
 [target.'cfg(windows)'.dependencies]
+rustix = { workspace = true, optional = true }
 wild = { workspace = true }
 windows-sys = { workspace = true, optional = true, default-features = false, features = [
   "Wdk_System_SystemInformation",

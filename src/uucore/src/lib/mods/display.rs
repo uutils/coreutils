@@ -27,7 +27,11 @@
 
 use std::ffi::OsStr;
 use std::fs::File;
+#[cfg(any(unix, windows))]
+use std::io::LineWriter;
 use std::io::{self, BufWriter, Stdout, StdoutLock, Write as _};
+#[cfg(any(unix, target_os = "wasi"))]
+use std::os::fd::AsFd;
 use std::{env, fmt};
 
 // These used to be defined here, but they live in their own crate now.
@@ -108,9 +112,17 @@ impl OsWrite for StdoutLock<'_> {}
 // doing a raw write.
 impl<W: OsWrite> OsWrite for BufWriter<W> {}
 
+#[cfg(any(unix, windows))]
+// Keep OS-string output available through the line-buffering wrapper.
+impl<W: OsWrite> OsWrite for LineWriter<W> {}
+
+#[cfg(any(unix, target_os = "wasi"))]
+impl<T: AsFd> OsWrite for crate::io::RawWriter<T> {}
+
 impl OsWrite for Box<dyn OsWrite> {
     fn write_all_os(&mut self, buf: &OsStr) -> io::Result<()> {
-        let this: &mut dyn OsWrite = self;
+        // Dereference the box before coercing, or dispatch would recurse here.
+        let this: &mut dyn OsWrite = &mut **self;
         this.write_all_os(buf)
     }
 }
