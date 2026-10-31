@@ -253,6 +253,31 @@ fn is_format_size_decimal(
     }
 }
 
+/// GNU od reports a size it has no type for as "invalid type string ...;
+/// this system doesn't provide a N-byte integral/floating point type".
+fn invalid_size_error(params: &str, size: u64, type_cat: FormatTypeCategory) -> String {
+    let size = size.to_string();
+    if type_cat == FormatTypeCategory::Float {
+        translate!("od-error-invalid-size-float", "size" => size, "spec" => params.quote())
+    } else {
+        translate!("od-error-invalid-size-integral", "size" => size, "spec" => params.quote())
+    }
+}
+
+/// Parse the decimal SIZE of a type string. A number that doesn't fit in
+/// u64 is an invalid type string; one that fits but names no type is an
+/// invalid size, like in GNU od.
+fn parse_decimal_size(
+    decimal_size: &str,
+    params: &str,
+    type_cat: FormatTypeCategory,
+) -> Result<u8, String> {
+    let size: u64 = decimal_size
+        .parse()
+        .map_err(|_| translate!("od-error-invalid-type-string", "spec" => params.quote()))?;
+    u8::try_from(size).map_err(|_| invalid_size_error(params, size, type_cat))
+}
+
 fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, String> {
     let mut formats = Vec::new();
 
@@ -260,9 +285,9 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
     let mut ch = chars.next();
 
     while let Some(type_char) = ch {
-        let type_char = format_type(type_char).ok_or_else(|| {
-            translate!("od-error-unexpected-char", "char" => type_char, "spec" => params.quote())
-        })?;
+        let type_char = format_type(type_char).ok_or_else(
+            || translate!("od-error-invalid-char", "char" => type_char, "spec" => params.quote()),
+        )?;
 
         let type_cat = format_type_category(type_char);
 
@@ -295,13 +320,7 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
                             ch = chars.next();
                         }
                         if !decimal_size.is_empty() {
-                            byte_size = decimal_size.parse().map_err(|_| {
-                                translate!(
-                                    "od-error-invalid-number",
-                                    "number" => decimal_size.quote(),
-                                    "spec" => params.quote()
-                                )
-                            })?;
+                            byte_size = parse_decimal_size(&decimal_size, params, type_cat)?;
                         }
                     }
                 }
@@ -314,9 +333,7 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
                 ch = chars.next();
             }
             if !decimal_size.is_empty() {
-                byte_size = decimal_size.parse().map_err(|_| {
-                    translate!("od-error-invalid-number", "number" => decimal_size.quote(), "spec" => params.quote())
-                })?;
+                byte_size = parse_decimal_size(&decimal_size, params, type_cat)?;
             }
         }
         if ch == Some('z') {
@@ -331,13 +348,8 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
                 _ => unreachable!(),
             }
         } else {
-            od_format_type(type_char, byte_size).ok_or_else(|| {
-                translate!(
-                    "od-error-invalid-size",
-                    "size" => byte_size,
-                    "spec" => params.quote()
-                )
-            })?
+            od_format_type(type_char, byte_size)
+                .ok_or_else(|| invalid_size_error(params, byte_size.into(), type_cat))?
         };
         formats.push(ParsedFormatterItemInfo::new(ft, show_ascii_dump));
     }

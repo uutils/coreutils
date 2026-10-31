@@ -45,13 +45,16 @@ od-after-help = Affiche les données dans divers formats lisibles par l'homme. S
 od-error-invalid-endian = Argument invalide --endian={$endian}
 od-error-invalid-inputs = Entrées invalides : {$msg}
 od-error-too-large = la valeur est trop grande
-od-error-radix-invalid = Radix doit être l'un de [o, d, x, n], reçu : {$radix}
+od-error-radix-invalid = base d'adresse de sortie invalide '{$radix}' ; elle doit être un caractère parmi [doxn]
 od-error-radix-empty = Radix ne peut pas être vide, et doit être l'un de [o, d, x, n]
 od-error-invalid-width = largeur invalide {$width} ; utilisation de {$min} à la place
 od-error-missing-format-spec = spécification de format manquante après '--format' / '-t'
-od-error-unexpected-char = caractère inattendu '{$char}' dans la spécification de format {$spec}
-od-error-invalid-number = nombre invalide {$number} dans la spécification de format {$spec}
-od-error-invalid-size = taille invalide '{$size}' dans la spécification de format {$spec}
+od-error-invalid-char = caractère invalide '{$char}' dans la chaîne de type {$spec}
+od-error-invalid-type-string = chaîne de type invalide {$spec}
+od-error-invalid-size-integral = chaîne de type invalide {$spec} ;
+  ce système ne fournit pas de type entier de {$size} octets
+od-error-invalid-size-float = chaîne de type invalide {$spec} ;
+  ce système ne fournit pas de type à virgule flottante de {$size} octets
 od-error-invalid-offset = décalage invalide : {$offset}
 od-error-invalid-label = étiquette invalide : {$label}
 od-error-too-many-inputs = trop d'entrées après --traditional : {$input}
