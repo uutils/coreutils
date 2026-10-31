@@ -294,12 +294,12 @@ fn print_but_last_n_lines(mut input: impl Read, n: u64, separator: u8) -> io::Re
     Ok(bytes_written)
 }
 
-/// Return the index in `input` just after the `n`th line from the end.
+/// Return the index in `input` just after the `n`th line from the end,
+/// counted from the cursor position on entry.
 ///
-/// If `n` exceeds the number of lines in this file, then return 0.
-/// This function rewinds the cursor to the
-/// beginning of the input just before returning unless there is an
-/// I/O error.
+/// If `n` exceeds the number of lines after the cursor, then return 0.
+/// This function moves the cursor back to its position on entry just
+/// before returning unless there is an I/O error.
 ///
 /// # Errors
 ///
@@ -319,7 +319,7 @@ fn print_but_last_n_lines(mut input: impl Read, n: u64, separator: u8) -> io::Re
 /// assert_eq!(find_nth_line_from_end(&mut input, 2, false).unwrap(), 2);
 /// ```
 ///
-/// If `n` exceeds the number of lines in the file, always return 0:
+/// If `n` exceeds the number of lines after the cursor, always return 0:
 ///
 /// ```rust,ignore
 /// let mut input = Cursor::new("x\ny\nz\n");
@@ -331,13 +331,14 @@ fn find_nth_line_from_end<R>(input: &mut R, n: u64, separator: u8) -> io::Result
 where
     R: Read + Seek,
 {
-    let file_size = input.seek(SeekFrom::End(0))?;
+    let start = input.stream_position()?;
+    let input_size = input.seek(SeekFrom::End(0))?.saturating_sub(start);
 
     let mut buffer = [0u8; BUF_SIZE];
 
     let mut lines = 0u64;
     let mut check_last_byte_first_loop = true;
-    let mut bytes_remaining_to_search = file_size;
+    let mut bytes_remaining_to_search = input_size;
 
     loop {
         // the casts here are ok, `buffer.len()` should never be above a few k
@@ -347,7 +348,7 @@ where
         let buffer = &mut buffer[..bytes_to_read_this_loop.try_into().unwrap()];
         bytes_remaining_to_search -= bytes_to_read_this_loop;
 
-        input.seek(SeekFrom::Start(read_start_offset))?;
+        input.seek(SeekFrom::Start(start + read_start_offset))?;
         input.read_exact(buffer)?;
 
         // Unfortunately need special handling for the case that the input file doesn't have
@@ -359,8 +360,8 @@ where
             check_last_byte_first_loop = false;
             if buffer.last().is_some_and(|&b| b != separator) {
                 if n == 0 {
-                    input.rewind()?;
-                    return Ok(file_size);
+                    input.seek(SeekFrom::Start(start))?;
+                    return Ok(input_size);
                 }
                 assert_eq!(lines, 0);
                 lines = 1;
@@ -370,14 +371,14 @@ where
         for separator_offset in memrchr_iter(separator, &buffer[..]) {
             lines += 1;
             if lines > n {
-                input.rewind()?;
+                input.seek(SeekFrom::Start(start))?;
                 return Ok(read_start_offset
                     + TryInto::<u64>::try_into(separator_offset).unwrap()
                     + 1);
             }
         }
         if read_start_offset == 0 {
-            input.rewind()?;
+            input.seek(SeekFrom::Start(start))?;
             return Ok(0);
         }
     }
@@ -412,7 +413,10 @@ fn head_backwards_without_seek_file(input: &mut File, options: &HeadOptions) -> 
 fn head_backwards_on_seekable_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
     match options.mode {
         Mode::AllButLastBytes(n) => {
-            let size = input.metadata()?.len();
+            let size = input
+                .metadata()?
+                .len()
+                .saturating_sub(input.stream_position()?);
             if n >= size {
                 Ok(0)
             } else {
@@ -786,5 +790,31 @@ mod tests {
         let mut input = Cursor::new(input_file);
         assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 0);
         assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 0);
+    }
+
+    #[test]
+    fn test_find_nth_line_from_end_after_cursor() {
+        // The result is relative to the cursor position on entry, and the cursor is
+        // restored to that position, like when stdin was partly read by another process.
+        let mut input = Cursor::new("header\na\nb\nc\n");
+        input.set_position(7);
+        assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 4);
+        assert_eq!(input.position(), 7);
+        assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 6);
+        assert_eq!(find_nth_line_from_end(&mut input, 3, b'\n').unwrap(), 0);
+        assert_eq!(input.position(), 7);
+
+        // Without a trailing newline, n == 0 means everything after the cursor.
+        let mut input = Cursor::new("header\na\nb");
+        input.set_position(7);
+        assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 3);
+        assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 2);
+        assert_eq!(input.position(), 7);
+
+        // Cursor at the end: nothing left to print.
+        let mut input = Cursor::new("a\nb\n");
+        input.set_position(4);
+        assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 0);
+        assert_eq!(input.position(), 4);
     }
 }
