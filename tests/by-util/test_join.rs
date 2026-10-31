@@ -1038,3 +1038,36 @@ fn test_missing_key_is_empty_key() {
         .succeeds()
         .stdout_only("1002 bob\n");
 }
+
+#[test]
+fn test_repeated_options() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "a 1\nB 2\nc 3\n");
+    at.write("b", "A x\nb y\nc z\n");
+    ucmd.args(&["-i", "-i", "a", "b"])
+        .succeeds()
+        .stdout_only("a 1 x\nB 2 y\nc 3 z\n");
+    new_ucmd!()
+        .args(&["--header", "--header", "header_1.txt", "header_2.txt"])
+        .succeeds()
+        .stdout_only_fixture("header.expected");
+    // A repeated -1, -2, -j or -t is fine when it gives the same value again.
+    new_ucmd!()
+        .args(&["-2", "2", "-2", "2", "fields_2.txt", "fields_3.txt"])
+        .succeeds()
+        .stdout_only_fixture("different_field.expected");
+    new_ucmd!()
+        .args(&["-t", ";", "-t", ";"])
+        .args(&["semicolon_fields_1.txt", "semicolon_fields_2.txt"])
+        .succeeds()
+        .stdout_only_fixture("semicolon_separated.expected");
+    new_ucmd!()
+        .args(&["-1", "1", "-1", "2", "fields_1.txt", "fields_2.txt"])
+        .fails_with_code(1)
+        .stderr_contains("join: incompatible join fields");
+    new_ucmd!()
+        .args(&["-t", ";", "-t", ","])
+        .args(&["semicolon_fields_1.txt", "semicolon_fields_2.txt"])
+        .fails_with_code(1)
+        .stderr_only("join: incompatible tabs\n");
+}
