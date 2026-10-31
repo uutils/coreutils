@@ -8,13 +8,14 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
+use uucore::output::StdoutBuffer;
 use uucore::show;
 use uucore::translate;
 
@@ -224,7 +225,7 @@ fn fold(
     spaces: bool,
     width: usize,
 ) -> UResult<()> {
-    let mut output = BufWriter::new(stdout());
+    let mut output = StdoutBuffer::new(stdout());
 
     for filename in filenames {
         let mut stdin_buf;
