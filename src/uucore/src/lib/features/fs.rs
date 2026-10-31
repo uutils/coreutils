@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore backport Ioctl absolutized linkat symlinkat renameat unlinkat openat urandom NOFOLLOW CLOEXEC RDONLY unguessability
+// spell-checker:ignore backport Ioctl absolutized linkat symlinkat renameat unlinkat openat urandom NOFOLLOW CLOEXEC RDONLY unguessability DACL PSECURITY PSID PATHEXT accessat EACCESS NOSYS OPNOTSUPP euid egid XUSR XGRP XOTH
 
 //! Set of functions to manage regular files, special files, and links.
 
@@ -37,6 +37,469 @@ use windows_sys::Win32::Storage::FileSystem::{
 use windows_sys::Win32::System::IO::DeviceIoControl;
 #[cfg(windows)]
 use windows_sys::Win32::System::Ioctl::FSCTL_SET_SPARSE;
+
+/// The access right to test with [`effective_access`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AccessMode {
+    /// Whether the path can be read.
+    Read,
+    /// Whether the path can be written.
+    Write,
+    /// Whether the path can be executed or entered.
+    Execute,
+}
+
+/// Check a path using the current process's effective access rights.
+///
+/// On Unix, this asks the operating system so supplementary groups, ACLs, and
+/// privileged users are accounted for. Windows uses the current token and the
+/// file's security descriptor. WASI has no permission bits or user identity,
+/// so its result follows the permissions and capabilities exposed by the
+/// standard library.
+pub fn effective_access(path: impl AsRef<Path>, access: AccessMode) -> bool {
+    let path = path.as_ref();
+
+    #[cfg(unix)]
+    {
+        effective_access_unix(path, access)
+    }
+    #[cfg(windows)]
+    {
+        windows::effective_access(path, access)
+    }
+    #[cfg(target_os = "wasi")]
+    {
+        effective_access_wasi(path, access)
+    }
+}
+
+#[cfg(unix)]
+fn effective_access_unix(path: &Path, access: AccessMode) -> bool {
+    use rustix::fs::{Access, AtFlags, CWD, accessat};
+    use rustix::io;
+
+    #[cfg(target_os = "android")]
+    let flags = AtFlags::empty();
+
+    #[cfg(not(target_os = "android"))]
+    let flags = AtFlags::EACCESS;
+
+    let access_mode = access;
+    let access = match access_mode {
+        AccessMode::Read => Access::READ_OK,
+        AccessMode::Write => Access::WRITE_OK,
+        AccessMode::Execute => Access::EXEC_OK,
+    };
+
+    match accessat(CWD, path.as_os_str(), access, flags) {
+        Ok(()) => true,
+        Err(io::Errno::NOSYS | io::Errno::OPNOTSUPP) => {
+            effective_access_fallback(path, access_mode)
+        }
+        Err(_) => false,
+    }
+}
+
+#[cfg(unix)]
+fn effective_access_fallback(path: &Path, access: AccessMode) -> bool {
+    use rustix::fs::{Mode, stat};
+    use rustix::process::{getegid, geteuid, getgroups};
+    use std::fs::OpenOptions;
+
+    if access == AccessMode::Execute {
+        let Ok(st) = stat(path.as_os_str()) else {
+            return false;
+        };
+
+        let mode = Mode::from_raw_mode(st.st_mode);
+        let euid = geteuid().as_raw();
+        let egid = getegid().as_raw();
+
+        let executable = if euid == 0 {
+            mode.intersects(Mode::XUSR | Mode::XGRP | Mode::XOTH)
+        } else if st.st_uid == euid {
+            mode.contains(Mode::XUSR)
+        } else {
+            let in_group = st.st_gid == egid
+                || getgroups()
+                    .is_ok_and(|groups| groups.iter().any(|gid| gid.as_raw() == st.st_gid));
+
+            if in_group {
+                mode.contains(Mode::XGRP)
+            } else {
+                mode.contains(Mode::XOTH)
+            }
+        };
+
+        return executable;
+    }
+
+    let mut options = OpenOptions::new();
+    match access {
+        AccessMode::Read => options.read(true),
+        AccessMode::Write => options.write(true),
+        AccessMode::Execute => unreachable!(),
+    }
+    .open(path)
+    .is_ok()
+}
+
+#[cfg(target_os = "wasi")]
+fn effective_access_wasi(path: &Path, access: AccessMode) -> bool {
+    let Ok(metadata) = fs::metadata(path) else {
+        return false;
+    };
+
+    match access {
+        AccessMode::Read => true,
+        AccessMode::Write => !metadata.permissions().readonly(),
+        AccessMode::Execute => false,
+    }
+}
+
+#[cfg(windows)]
+mod windows {
+    use super::AccessMode;
+    use std::ffi::{OsStr, OsString};
+    use std::fs;
+    use std::io;
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    use std::os::windows::io::{AsHandle, OwnedHandle};
+    use std::path::Path;
+    use std::sync::LazyLock;
+
+    use windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED;
+    use windows_sys::Win32::Security::{
+        DACL_SECURITY_INFORMATION, GENERIC_MAPPING, GROUP_SECURITY_INFORMATION,
+        OWNER_SECURITY_INFORMATION, SecurityImpersonation, TOKEN_DUPLICATE, TOKEN_QUERY,
+    };
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_ALL_ACCESS, FILE_GENERIC_EXECUTE, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
+    };
+
+    /// Confines the unsafe security calls: results come back as [`io::Error`]
+    /// and SIDs only as [`Sid`]s borrowed from the buffer that owns them.
+    mod sys {
+        use std::ffi::OsStr;
+        use std::io;
+        use std::marker::PhantomData;
+        use std::mem::size_of;
+        use std::os::windows::ffi::OsStrExt;
+        use std::os::windows::io::{AsRawHandle, BorrowedHandle, FromRawHandle, OwnedHandle};
+        use std::ptr;
+
+        use windows_sys::Win32::Foundation::{ERROR_SUCCESS, HANDLE, LocalFree};
+        use windows_sys::Win32::Security::Authorization::{GetNamedSecurityInfoW, SE_FILE_OBJECT};
+        use windows_sys::Win32::Security::{
+            AccessCheck, DuplicateToken, EqualSid, GENERIC_MAPPING, GROUP_SECURITY_INFORMATION,
+            GetTokenInformation, MapGenericMask, OBJECT_SECURITY_INFORMATION,
+            OWNER_SECURITY_INFORMATION, PRIVILEGE_SET, PSECURITY_DESCRIPTOR, PSID,
+            SECURITY_IMPERSONATION_LEVEL, TOKEN_ACCESS_MASK, TokenOwner, TokenPrimaryGroup,
+        };
+        use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+        /// A SID borrowed from the structure that owns it.
+        #[derive(Clone, Copy)]
+        pub struct Sid<'a>(PSID, PhantomData<&'a ()>);
+
+        impl PartialEq for Sid<'_> {
+            fn eq(&self, other: &Self) -> bool {
+                // SAFETY: each SID is valid for as long as its owner lives,
+                // which the borrows guarantee.
+                unsafe { EqualSid(self.0, other.0) != 0 }
+            }
+        }
+
+        /// A security descriptor allocated by the security API, freed on drop,
+        /// along with the owner and group SIDs that point into it.
+        pub struct SecurityDescriptor {
+            ptr: PSECURITY_DESCRIPTOR,
+            owner: PSID,
+            group: PSID,
+        }
+
+        impl Drop for SecurityDescriptor {
+            fn drop(&mut self) {
+                // SAFETY: the pointer comes from GetNamedSecurityInfoW; freeing
+                // a null pointer is a no-op.
+                unsafe { LocalFree(self.ptr) };
+            }
+        }
+
+        impl SecurityDescriptor {
+            pub fn owner(&self) -> Option<Sid<'_>> {
+                (!self.owner.is_null()).then_some(Sid(self.owner, PhantomData))
+            }
+
+            pub fn group(&self) -> Option<Sid<'_>> {
+                (!self.group.is_null()).then_some(Sid(self.group, PhantomData))
+            }
+        }
+
+        pub fn named_security_info(
+            path: &OsStr,
+            info: OBJECT_SECURITY_INFORMATION,
+        ) -> io::Result<SecurityDescriptor> {
+            let wide_path: Vec<_> = path.encode_wide().chain([0]).collect();
+            let mut descriptor = SecurityDescriptor {
+                ptr: ptr::null_mut(),
+                owner: ptr::null_mut(),
+                group: ptr::null_mut(),
+            };
+            let owner = if info & OWNER_SECURITY_INFORMATION == 0 {
+                ptr::null_mut()
+            } else {
+                &raw mut descriptor.owner
+            };
+            let group = if info & GROUP_SECURITY_INFORMATION == 0 {
+                ptr::null_mut()
+            } else {
+                &raw mut descriptor.group
+            };
+            // SAFETY: `wide_path` is NUL-terminated and outlives the call, and
+            // each out pointer is either valid or null.
+            let status = unsafe {
+                GetNamedSecurityInfoW(
+                    wide_path.as_ptr(),
+                    SE_FILE_OBJECT,
+                    info,
+                    owner,
+                    group,
+                    ptr::null_mut(),
+                    ptr::null_mut(),
+                    &raw mut descriptor.ptr,
+                )
+            };
+            if status == ERROR_SUCCESS {
+                Ok(descriptor)
+            } else {
+                Err(io::Error::from_raw_os_error(status as i32))
+            }
+        }
+
+        pub fn open_process_token(access: TOKEN_ACCESS_MASK) -> io::Result<OwnedHandle> {
+            let mut handle: HANDLE = ptr::null_mut();
+            // SAFETY: GetCurrentProcess returns a pseudo handle that needs no
+            // closing, and `handle` is a valid out pointer.
+            if unsafe { OpenProcessToken(GetCurrentProcess(), access, &raw mut handle) } == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            // SAFETY: OpenProcessToken succeeded, so `handle` is a fresh owned
+            // handle.
+            Ok(unsafe { OwnedHandle::from_raw_handle(handle) })
+        }
+
+        pub fn duplicate_token(
+            token: BorrowedHandle,
+            level: SECURITY_IMPERSONATION_LEVEL,
+        ) -> io::Result<OwnedHandle> {
+            let mut handle: HANDLE = ptr::null_mut();
+            // SAFETY: `token` is a valid handle and `handle` a valid out pointer.
+            if unsafe { DuplicateToken(token.as_raw_handle(), level, &raw mut handle) } == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            // SAFETY: DuplicateToken succeeded, so `handle` is a fresh owned
+            // handle.
+            Ok(unsafe { OwnedHandle::from_raw_handle(handle) })
+        }
+
+        #[derive(Clone, Copy)]
+        pub enum TokenSidClass {
+            Owner,
+            PrimaryGroup,
+        }
+
+        /// A SID of a token, kept in the buffer it points into.
+        pub struct TokenSid(Vec<usize>);
+
+        impl TokenSid {
+            pub fn sid(&self) -> Sid<'_> {
+                // SAFETY: GetTokenInformation filled the buffer with a
+                // structure whose first field is the SID pointer.
+                Sid(unsafe { *self.0.as_ptr().cast::<PSID>() }, PhantomData)
+            }
+        }
+
+        pub fn token_sid(token: BorrowedHandle, class: TokenSidClass) -> io::Result<TokenSid> {
+            let class = match class {
+                TokenSidClass::Owner => TokenOwner,
+                TokenSidClass::PrimaryGroup => TokenPrimaryGroup,
+            };
+            let token = token.as_raw_handle();
+
+            let mut size = 0;
+            // SAFETY: a null buffer of length zero only asks for the size to
+            // allocate.
+            unsafe { GetTokenInformation(token, class, ptr::null_mut(), 0, &raw mut size) };
+            if size == 0 {
+                return Err(io::Error::last_os_error());
+            }
+
+            // TOKEN_OWNER and TOKEN_PRIMARY_GROUP are a lone SID pointer
+            // followed by the SID it points at, so the buffer has to be pointer
+            // aligned.
+            let mut buffer = vec![0usize; (size as usize).div_ceil(size_of::<usize>())];
+            // SAFETY: `buffer` is at least `size` bytes long, as reported above.
+            let ok = unsafe {
+                GetTokenInformation(
+                    token,
+                    class,
+                    buffer.as_mut_ptr().cast(),
+                    size,
+                    &raw mut size,
+                )
+            };
+            if ok == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(TokenSid(buffer))
+        }
+
+        pub fn access_check(
+            descriptor: &SecurityDescriptor,
+            token: BorrowedHandle,
+            mut desired: u32,
+            mapping: &GENERIC_MAPPING,
+        ) -> io::Result<bool> {
+            // SAFETY: both pointers refer to live locals.
+            unsafe { MapGenericMask(&raw mut desired, mapping) };
+
+            // One entry is enough: no file right is ever granted by a privilege.
+            let mut privileges = PRIVILEGE_SET::default();
+            let mut privileges_len = size_of::<PRIVILEGE_SET>() as u32;
+            let mut granted = 0;
+            let mut status = 0;
+            // SAFETY: the descriptor and token are valid, every out pointer
+            // refers to a live local, and `privileges_len` is the size of
+            // `privileges`.
+            let ok = unsafe {
+                AccessCheck(
+                    descriptor.ptr,
+                    token.as_raw_handle(),
+                    desired,
+                    mapping,
+                    &raw mut privileges,
+                    &raw mut privileges_len,
+                    &raw mut granted,
+                    &raw mut status,
+                )
+            };
+            if ok == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(status != 0)
+        }
+    }
+
+    /// Whether `path` is owned by the current process token, comparing its
+    /// owner (or, with `group`, its primary group) SID.
+    pub fn owned_by_current_token(path: &OsStr, group: bool) -> bool {
+        let info = if group {
+            GROUP_SECURITY_INFORMATION
+        } else {
+            OWNER_SECURITY_INFORMATION
+        };
+        let Ok(descriptor) = sys::named_security_info(path, info) else {
+            return false;
+        };
+        let sid = if group {
+            descriptor.group()
+        } else {
+            descriptor.owner()
+        };
+        sid.is_some_and(|sid| matches_token_sid(sid, group))
+    }
+
+    fn matches_token_sid(sid: sys::Sid<'_>, group: bool) -> bool {
+        let class = if group {
+            sys::TokenSidClass::PrimaryGroup
+        } else {
+            sys::TokenSidClass::Owner
+        };
+        sys::open_process_token(TOKEN_QUERY)
+            .and_then(|token| sys::token_sid(token.as_handle(), class))
+            .is_ok_and(|token_sid| token_sid.sid() == sid)
+    }
+
+    /// `AccessCheck` only evaluates impersonation tokens.
+    fn impersonation_token() -> io::Result<OwnedHandle> {
+        let primary = sys::open_process_token(TOKEN_QUERY | TOKEN_DUPLICATE)?;
+        sys::duplicate_token(primary.as_handle(), SecurityImpersonation)
+    }
+
+    /// `None` on volumes without ACLs (FAT, exFAT, many network shares), where
+    /// the question cannot be answered and the caller keeps the permissive
+    /// answer.
+    fn access_check(path: &OsStr, access: u32) -> Option<bool> {
+        let descriptor = match sys::named_security_info(
+            path,
+            OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+        ) {
+            Ok(descriptor) => descriptor,
+            // Every file right includes READ_CONTROL, so a denied descriptor
+            // means the file cannot be opened.
+            Err(e) if e.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32) => return Some(false),
+            Err(_) => return None,
+        };
+        let token = impersonation_token().ok()?;
+        let mapping = GENERIC_MAPPING {
+            GenericRead: FILE_GENERIC_READ,
+            GenericWrite: FILE_GENERIC_WRITE,
+            GenericExecute: FILE_GENERIC_EXECUTE,
+            GenericAll: FILE_ALL_ACCESS,
+        };
+        sys::access_check(&descriptor, token.as_handle(), access, &mapping).ok()
+    }
+
+    fn has_access(path: &OsStr, access: u32) -> bool {
+        access_check(path, access).unwrap_or(true)
+    }
+
+    pub(super) fn effective_access(path: &Path, access: AccessMode) -> bool {
+        let Ok(metadata) = fs::metadata(path) else {
+            return false;
+        };
+
+        match access {
+            AccessMode::Read => has_access(path.as_os_str(), FILE_GENERIC_READ),
+            AccessMode::Write => {
+                (metadata.is_dir() || !metadata.permissions().readonly())
+                    && has_access(path.as_os_str(), FILE_GENERIC_WRITE)
+            }
+            AccessMode::Execute => {
+                (metadata.is_dir() || has_executable_extension(path.as_os_str()))
+                    && has_access(path.as_os_str(), FILE_GENERIC_EXECUTE)
+            }
+        }
+    }
+
+    // These are the extensions cmd.exe uses when PATHEXT is not present.
+    const DEFAULT_PATHEXT: &str = ".COM;.EXE;.BAT;.CMD";
+
+    static PATHEXT: LazyLock<Box<[OsString]>> = LazyLock::new(|| {
+        let value = std::env::var_os("PATHEXT").unwrap_or_else(|| OsString::from(DEFAULT_PATHEXT));
+        let value: Vec<u16> = value.encode_wide().collect();
+
+        value
+            .split(|unit| *unit == u16::from(b';'))
+            .filter_map(|extension| {
+                let extension = extension.strip_prefix(&[u16::from(b'.')])?;
+                (!extension.is_empty()).then(|| OsString::from_wide(extension))
+            })
+            .collect()
+    });
+
+    fn has_executable_extension(path: &OsStr) -> bool {
+        Path::new(path).extension().is_some_and(|extension| {
+            PATHEXT
+                .iter()
+                .any(|candidate| candidate.as_os_str().eq_ignore_ascii_case(extension))
+        })
+    }
+}
+
+#[cfg(windows)]
+pub use windows::owned_by_current_token;
 
 /// Maximum number of symlinks followed while resolving a single path.
 ///
@@ -1226,8 +1689,23 @@ mod tests {
     use std::io::Write;
     #[cfg(unix)]
     use std::os::unix;
+    #[cfg(not(target_os = "wasi"))]
+    use tempfile::NamedTempFile;
     #[cfg(unix)]
-    use tempfile::{NamedTempFile, tempdir};
+    use tempfile::tempdir;
+
+    #[cfg(not(target_os = "wasi"))]
+    #[test]
+    fn test_effective_access_for_created_file() {
+        let file = NamedTempFile::new().unwrap();
+
+        assert!(effective_access(file.path(), AccessMode::Read));
+        assert!(effective_access(file.path(), AccessMode::Write));
+        assert!(!effective_access(
+            file.path().with_file_name("missing"),
+            AccessMode::Read
+        ));
+    }
 
     // `tempfile` is unusable on WASI (`std::env::temp_dir` aborts there), so
     // tests create a uniquely named directory under the current (preopened,
@@ -1584,9 +2062,10 @@ mod tests {
     #[test]
     fn test_set_file_sparse() {
         use std::os::windows::fs::MetadataExt;
+        use tempfile::NamedTempFile;
         use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_SPARSE_FILE;
 
-        let file = tempfile::NamedTempFile::new().unwrap();
+        let file = NamedTempFile::new().unwrap();
         set_file_sparse(file.as_file()).unwrap();
         let attributes = file.as_file().metadata().unwrap().file_attributes();
         assert_ne!(attributes & FILE_ATTRIBUTE_SPARSE_FILE, 0);

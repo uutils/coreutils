@@ -855,7 +855,8 @@ fn test_force_prompts_order() {
 }
 
 #[test]
-#[ignore = "issue #3722"]
+#[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
 fn test_directory_rights_rm1() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir_all("b/a/p");
