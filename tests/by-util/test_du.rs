@@ -299,6 +299,96 @@ fn test_du_env_block_size_hierarchy() {
 }
 
 #[test]
+fn test_du_block_size_unit_display() {
+    use std::fmt::Write;
+
+    let ts = TestScenario::new(util_name!());
+    // Sparse files exercise rounding without depending on filesystem allocation.
+    let files = ["empty", "below", "exact", "above", "large"];
+    for (unit, bytes, suffix) in [
+        ("K", 1024_u64, "K"),
+        ("k", 1024, "K"),
+        ("KiB", 1024, "KiB"),
+        ("kiB", 1024, "KiB"),
+        ("M", 1_048_576, "M"),
+        ("m", 1_048_576, "M"),
+        ("MiB", 1_048_576, "MiB"),
+        ("miB", 1_048_576, "MiB"),
+        ("kB", 1000, "kB"),
+        ("KB", 1000, "kB"),
+        ("MB", 1_000_000, "MB"),
+        ("mB", 1_000_000, "MB"),
+        ("kD", 1000, "K"),
+    ] {
+        let large_blocks = if bytes <= 1024 { 12_345 } else { 12 };
+        let lengths = [0, bytes - 1, bytes, bytes + 1, bytes * large_blocks + 17];
+        for (file, len) in files.iter().zip(lengths) {
+            std::fs::File::create(ts.fixtures.plus(file))
+                .unwrap()
+                .set_len(len)
+                .unwrap();
+        }
+        for prefix in ["", "1"] {
+            let value = format!("{prefix}{unit}");
+            let display_suffix = if prefix.is_empty() { suffix } else { "" };
+            let mut expected = String::new();
+            for (file, count) in files.iter().zip([0, 1, 1, 2, large_blocks + 1]) {
+                writeln!(expected, "{count}{display_suffix}\t{file}").unwrap();
+            }
+            for source in [
+                "-B",
+                "--block-size=",
+                "DU_BLOCK_SIZE",
+                "BLOCK_SIZE",
+                "BLOCKSIZE",
+            ] {
+                let mut cmd = ts.ucmd();
+                cmd.arg("-A").args(&files);
+                if source.starts_with('-') {
+                    cmd.arg(format!("{source}{value}"));
+                } else {
+                    cmd.env(source, &value);
+                }
+                cmd.succeeds().stdout_only(&expected);
+            }
+        }
+    }
+}
+
+#[test]
+fn test_du_block_size_display_overrides() {
+    let ts = TestScenario::new(util_name!());
+    std::fs::File::create(ts.fixtures.plus("data"))
+        .unwrap()
+        .set_len(4097)
+        .unwrap();
+    for (args, expected) in [
+        (vec!["-k"], "5\tdata\n"),
+        (vec!["-m"], "1\tdata\n"),
+        (vec!["-b"], "4097\tdata\n"),
+        (vec!["-h"], "4.1K\tdata\n"),
+        (vec!["--block-size=1KiB"], "5\tdata\n"),
+        (vec!["--block-size=2KiB"], "3\tdata\n"),
+        (vec!["-BKiB", "-k"], "5\tdata\n"),
+        (vec!["-k", "-BKiB"], "5KiB\tdata\n"),
+        (vec!["-c", "-BKiB"], "5KiB\tdata\n5KiB\ttotal\n"),
+    ] {
+        ts.ucmd()
+            .env("DU_BLOCK_SIZE", "KiB")
+            .args(&["-A", "data"])
+            .args(&args)
+            .succeeds()
+            .stdout_only(expected);
+    }
+    ts.ucmd()
+        .env("DU_BLOCK_SIZE", "invalid")
+        .env("BLOCK_SIZE", "KiB")
+        .args(&["-A", "data"])
+        .succeeds()
+        .stdout_only("5\tdata\n");
+}
+
+#[test]
 fn test_du_binary_block_size() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
