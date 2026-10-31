@@ -6,7 +6,7 @@
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
 // spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot EOVERFLOW chowned chmoded
-// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat
+// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat renameat unguessability
 
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
@@ -622,6 +622,73 @@ impl DirFd {
             .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
 
         Ok(fs::File::from(fd))
+    }
+
+    /// Create `name` with `create`, renaming a temporary entry over it if it is taken, so
+    /// the name is never free. `create` must fail with `EEXIST` there and not make a directory.
+    pub fn replace_entry_at(
+        &self,
+        name: &OsStr,
+        mut create: impl FnMut(&Self, &OsStr) -> io::Result<()>,
+    ) -> io::Result<()> {
+        match create(self, name) {
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+            res => return res,
+        }
+        self.replace_existing_entry_at(name, create)
+    }
+
+    /// [`Self::replace_entry_at`] once creating `name` itself failed with `EEXIST`.
+    pub(crate) fn replace_existing_entry_at(
+        &self,
+        name: &OsStr,
+        create: impl FnMut(&Self, &OsStr) -> io::Result<()>,
+    ) -> io::Result<()> {
+        use rustix::fs::{AtFlags, renameat};
+
+        let ((), tmp) = self.create_temp_at(create)?;
+        let renamed = renameat(self, &tmp, self, name);
+        // Renaming onto an existing link to the same inode is a no-op, which
+        // leaves the temp behind.
+        let _ = rustix::fs::unlinkat(self, &tmp, AtFlags::empty());
+        renamed.map_err(Into::into)
+    }
+
+    /// Create an entry under an unused random name with `create`, which must fail with
+    /// `EEXIST` on a taken name. Returns what `create` returned and the name.
+    pub fn create_temp_at<T>(
+        &self,
+        mut create: impl FnMut(&Self, &OsStr) -> io::Result<T>,
+    ) -> io::Result<(T, OsString)> {
+        use std::io::Read;
+
+        // GNU's template is `CuXXXXXX`: a 2-char prefix plus 6 random chars
+        // from a 62-char alphabet. The ~3% modulo bias per slot is irrelevant
+        // for an 8-char unguessability budget.
+        const ALPHABET: &[u8; 62] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+        let mut urandom = fs::File::open("/dev/urandom")?;
+
+        for _ in 0..32 {
+            let mut tmp = *b"Cu------";
+            let mut raw = [0u8; 6];
+            urandom.read_exact(&mut raw)?;
+            for (slot, byte) in tmp[2..].iter_mut().zip(raw) {
+                *slot = ALPHABET[byte as usize % ALPHABET.len()];
+            }
+            let tmp = OsStr::from_bytes(&tmp);
+
+            match create(self, tmp) {
+                Ok(created) => return Ok((created, tmp.to_owned())),
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            translate!("error-no-unique-temp-name"),
+        ))
     }
 
     /// Create a [`DirFd`] from an existing file descriptor (takes ownership)

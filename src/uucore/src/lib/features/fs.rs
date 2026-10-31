@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore backport Ioctl absolutized linkat symlinkat renameat unlinkat openat urandom NOFOLLOW CLOEXEC RDONLY unguessability
+// spell-checker:ignore backport Ioctl absolutized linkat symlinkat renameat NOFOLLOW
 
 //! Set of functions to manage regular files, special files, and links.
 
@@ -1109,16 +1109,7 @@ pub fn get_filename(file: &Path) -> Option<&str> {
 pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> {
     #[cfg(all(unix, not(target_os = "redox")))]
     {
-        use rustix::fs::{AtFlags, CWD, Mode, OFlags, openat, renameat, unlinkat};
-        use std::ffi::OsStr;
-        use std::io::Read;
-        use std::os::unix::ffi::OsStrExt;
-
-        // GNU's template is `CuXXXXXX`: a 2-char prefix plus 6 random chars
-        // from a 62-char alphabet. The ~3% modulo bias per slot is irrelevant
-        // for an 8-char unguessability budget.
-        const ALPHABET: &[u8; 62] =
-            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        use rustix::fs::CWD;
 
         match link_at(target, CWD, dest.as_os_str(), symbolic) {
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
@@ -1134,39 +1125,8 @@ pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> 
             .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid link path"))?;
         // No NOFOLLOW: the parent may be a symlink to a directory, which the
         // create attempt above already followed.
-        let dir = openat(
-            CWD,
-            parent,
-            OFlags::DIRECTORY | OFlags::RDONLY | OFlags::CLOEXEC,
-            Mode::empty(),
-        )?;
-        let mut urandom = fs::File::open("/dev/urandom")?;
-
-        for _ in 0..32 {
-            let mut name = *b"Cu------";
-            let mut raw = [0u8; 6];
-            urandom.read_exact(&mut raw)?;
-            for (slot, byte) in name[2..].iter_mut().zip(raw) {
-                *slot = ALPHABET[byte as usize % ALPHABET.len()];
-            }
-            let tmp = OsStr::from_bytes(&name);
-
-            match link_at(target, &dir, tmp, symbolic) {
-                Ok(()) => {
-                    let renamed = renameat(&dir, tmp, &dir, basename);
-                    // Renaming onto an existing link to the same inode is a
-                    // no-op, which leaves the temp behind.
-                    let _ = unlinkat(&dir, tmp, AtFlags::empty());
-                    return renamed.map_err(Into::into);
-                }
-                Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
-                Err(e) => return Err(e),
-            }
-        }
-        Err(Error::new(
-            ErrorKind::AlreadyExists,
-            "no unique temporary name available in the destination directory",
-        ))
+        let dir = crate::safe_traversal::DirFd::open_anchor(parent)?;
+        dir.replace_existing_entry_at(basename, |dir, name| link_at(target, dir, name, symbolic))
     }
     #[cfg(any(windows, target_os = "redox", target_os = "wasi"))]
     {
