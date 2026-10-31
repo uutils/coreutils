@@ -1135,6 +1135,15 @@ fn test_q_string_control_chars_with_quotes() {
         .stdout_only("''$'\\001'\\'''$'\\001'");
 }
 
+#[test]
+fn test_q_string_c1_control_char_with_quote() {
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["%q", "it's\u{9b}here"])
+        .succeeds()
+        .stdout_only("'it'\\''s'$'\\302\\233''here'");
+}
+
 // Output with no trailing newline stays in the buffer until the process exits,
 // so the failure is only visible when it is flushed.
 #[test]

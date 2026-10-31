@@ -446,6 +446,25 @@ mod tests {
     }
 
     #[test]
+    fn test_c1_control_chars_with_single_quote() {
+        for (name, expected) in [
+            ("it's\u{9b}here", "'it'\\''s'$'\\302\\233''here'"),
+            ("\u{9b}it's", "''$'\\302\\233''it'\\''s'"),
+            ("it's\u{9b}", "'it'\\''s'$'\\302\\233'"),
+            ("it's\u{e9}", "\"it's\u{e9}\""),
+        ] {
+            check_names_encoding(
+                UEncoding::Utf8,
+                name,
+                &[
+                    (expected, "shell-escape"),
+                    (expected, "shell-escape-always"),
+                ],
+            );
+        }
+    }
+
+    #[test]
     fn test_simple_names() {
         check_names_both(
             "one_two",
