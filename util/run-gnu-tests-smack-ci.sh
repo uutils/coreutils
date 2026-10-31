@@ -21,10 +21,11 @@ sudo apt-get install -y --no-install-recommends linux-image-generic
 sudo install -Dvm644 "$(ls -1 /boot/vmlinuz-*-generic | head -n 1)" "$QEMU_DIR/kernel/vmlinuz"
 
 # Setup busybox
-curl -L -o b.tar.gz https://dl-cdn.alpinelinux.org/alpine/latest-stable/main/x86_64/busybox-static-1.37.0-r31.apk
-tar -xf b.tar.gz
-install -Dvm755 bin/busybox.static "$QEMU_DIR/rootfs/bin/busybox"
-(cd "$QEMU_DIR/rootfs/bin" && ./busybox --list | xargs -I{} ln -sf busybox {} 2>/dev/null)
+curl -fsSL -o busybox.tar.zst https://github.com/uutils/thirdparty-artifacts/releases/download/busybox-arch-1.36.1-4/busybox-1.36.1-4-x86_64.pkg.tar.zst
+echo "14b14151bbc901c6e0c7cbb21fa73db2540df91cdea2a0ff1caf20be2cd8c333  busybox.tar.zst" | sha256sum -c
+tar --zstd -xf busybox.tar.zst usr/bin/busybox
+install -Dvm755 usr/bin/busybox "$QEMU_DIR/rootfs/bin/busybox"
+(cd "$QEMU_DIR/rootfs/bin" && ./busybox --list | grep -vx busybox | xargs -I{} ln -sf busybox {} 2>/dev/null)
 
 # Copy required libraries
 for lib in ld-linux-x86-64.so.2 libc.so.6 libm.so.6 libgcc_s.so.1 libpthread.so.0 libdl.so.2 librt.so.1; do
