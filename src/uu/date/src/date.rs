@@ -19,7 +19,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stderr};
+use std::io::{BufRead, BufReader, Read, Write, stderr};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use uucore::display::Quotable;
@@ -28,6 +28,7 @@ use uucore::error::{UError, UResult, strip_errno};
 #[cfg(feature = "i18n-datetime")]
 use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
 use uucore::i18n::get_ctype_encoding;
+use uucore::output::StdoutBuffer;
 use uucore::quoting_style::{QuotingStyle, escape_bytes};
 use uucore::translate;
 use uucore::translate_text;
@@ -663,7 +664,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let output = OutputContext::new(&settings);
-    let mut stdout = BufWriter::new(std::io::stdout().lock());
+    let mut stdout = StdoutBuffer::new(std::io::stdout().lock());
 
     // Format all the dates
     for date in dates {
@@ -1135,7 +1136,7 @@ fn set_and_echo(input: &str, now: &Zoned, settings: &Settings) -> UResult<()> {
             )));
 
             let output = OutputContext::new(settings);
-            let mut stdout = BufWriter::new(std::io::stdout().lock());
+            let mut stdout = StdoutBuffer::new(std::io::stdout().lock());
             write_formatted_date(&mut stdout, date, &output, settings)?;
             stdout.flush().map_err(DateError::Write)?;
             Ok(())
