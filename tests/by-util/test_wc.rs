@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars ioerrdir
+// spell-checker:ignore (linux) NOFILE
 
 use rstest::rstest;
 #[cfg(unix)]
@@ -42,6 +43,20 @@ fn test_count_bytes_large_stdin() {
             .succeeds()
             .stdout_is_bytes(expected.as_bytes());
     }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
+fn test_count_bytes_page_aligned_without_splice() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input", &"x".repeat(64 * 1024));
+
+    // Leave room for stdin, stdout, stderr and the input file, but not /dev/null.
+    ucmd.args(&["-c", "input"])
+        .limit(rlimit::Resource::NOFILE, 4, 4)
+        .succeeds()
+        .stdout_only("65536 input\n");
 }
 
 #[test]
