@@ -360,7 +360,8 @@ fn opt_parsed(opt_name: &str, matches: &ArgMatches) -> UResult<Option<usize>> {
         Ok(v) => Ok(Some(v)),
         Err(e) if *e.kind() == IntErrorKind::PosOverflow => Ok(Some(usize::MAX)),
         Err(_) => {
-            let arg = arg_str.maybe_quote();
+            // GNU prints the value as given, without quoting.
+            let arg = arg_str.as_str();
             let msg = if opt_name == options::SKIP_FIELDS {
                 translate!("uniq-error-invalid-skip-fields", "arg" => arg)
             } else if opt_name == options::SKIP_CHARS {
