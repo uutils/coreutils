@@ -4251,3 +4251,34 @@ fn test_numeric_looking_file_names_are_kept_verbatim(
     at.touch("empty");
     ucmd.args(args).fails_with_code(2).stderr_is(expected);
 }
+
+#[rstest]
+#[case::control_chars_take_no_column("C", &["--debug"], b"a\x01b\n", b"a\x01b\n__\n")]
+#[case::tab_and_del("C", &["--debug"], b"a\x7fb\tc\n", b"a\x7fb>c\n____\n")]
+#[case::nul("C", &["--debug"], b"\0x\n", b"\0x\n_\n")]
+#[case::control_chars_before_key("C", &["--debug", "-k2"], b"x \x01\x02y\n", b"x \x01\x02y\n __\n___\n")]
+#[case::bytes_in_c_locale(
+    "C",
+    &["--debug", "-k2", "-k1,1"],
+    "é日 b\n".as_bytes(),
+    "é日 b\n     __\n_____\n_______\n".as_bytes()
+)]
+#[case::display_width_in_utf8_locale(
+    "en_US.UTF-8",
+    &["--debug", "-k2", "-k1,1"],
+    "é日 b\n".as_bytes(),
+    "é日 b\n   __\n___\n_____\n".as_bytes()
+)]
+fn test_debug_underline_uses_display_width(
+    #[case] locale: &str,
+    #[case] args: &[&str],
+    #[case] input: &[u8],
+    #[case] expected: &[u8],
+) {
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .args(args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(expected);
+}
