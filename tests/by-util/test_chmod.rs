@@ -2122,7 +2122,7 @@ mod diagnostics {
         // The test harness pipes stderr, so the report must not appear.
         ucmd.args(&["g+rw?x", "probe"])
             .fails_with_code(1)
-            .stderr_only("chmod: invalid operator (expected +, -, or =, but found ?)\n");
+            .stderr_only("chmod: invalid operator (expected +, -, or =, but found '?')\n");
     }
 
     #[cfg(unix)]
