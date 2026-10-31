@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ugoa cmode
+// spell-checker:ignore (ToDO) ugoa cmode fchmod NOFOLLOW EACCES ENOTDIR gnulib lchmod
 
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
@@ -22,6 +22,8 @@ use uucore::{format_usage, show_if_err};
 use uucore::{translate, translate_text};
 
 static DEFAULT_PERM: u32 = 0o777;
+#[cfg(not(windows))]
+const SPECIAL_BITS: u32 = 0o7000;
 
 mod options {
     pub const MODE: &str = "mode";
@@ -40,6 +42,10 @@ pub struct Config<'a> {
     /// File permissions (octal) if provided via -m
     pub mode: Option<u32>,
 
+    /// Setuid/setgid/sticky bits that -m leaves as the kernel created them
+    /// (e.g. setgid inherited from the parent). Only used with `mode`.
+    pub special_bits_kept: u32,
+
     /// Print message for each created directory.
     pub verbose: bool,
 
@@ -55,21 +61,29 @@ pub struct Config<'a> {
     clippy::unnecessary_wraps,
     reason = "fn sig must match on all platforms"
 )]
-fn get_mode(_matches: &ArgMatches, _diag_args: Option<&[OsString]>) -> UResult<Option<u32>> {
+fn get_mode(_matches: &ArgMatches, _diag_args: Option<&[OsString]>) -> UResult<Option<(u32, u32)>> {
     Ok(None)
 }
 
 /// `diag_args` is the argument list a caret can point into, or `None` when the
 /// plain one-line message is all that is wanted.
+///
+/// Returns the mode and the special bits it leaves untouched.
 #[cfg(not(windows))]
-fn get_mode(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Option<u32>> {
+fn get_mode(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Option<(u32, u32)>> {
     // Not tested on Windows
     let Some(m) = matches.get_one::<String>(options::MODE) else {
         // If no mode argument, let the kernel apply umask and ACLs naturally.
         return Ok(None);
     };
-    mode::parse_chmod(DEFAULT_PERM, m, true, mode::get_umask())
-        .map(Some)
+    let umask = mode::get_umask();
+    mode::parse_chmod(DEFAULT_PERM, m, true, umask)
+        .and_then(|requested| {
+            // A special bit the mode neither sets nor clears survives starting
+            // from all special bits set.
+            let kept = mode::parse_chmod(DEFAULT_PERM | SPECIAL_BITS, m, true, umask)?;
+            Ok(Some((requested, kept & SPECIAL_BITS)))
+        })
         .map_err(|err| {
             if diag_args.is_some_and(|args| err.render_mode_value(args, m, 0, &err.to_string())) {
                 // The diagnostic is already on stderr; exit quietly.
@@ -94,7 +108,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let diag_args = uucore::diagnostics::operands(&args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let mode = get_mode(&matches, diag_args.as_deref())?;
+    let parsed_mode = get_mode(&matches, diag_args.as_deref())?;
     let dirs = matches
         .get_many::<OsString>(options::DIRS)
         .unwrap_or_default();
@@ -107,7 +121,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let config = Config {
         recursive,
-        mode,
+        mode: parsed_mode.map(|(mode, _)| mode),
+        special_bits_kept: parsed_mode.map_or(0, |(_, kept)| kept),
         verbose,
         set_security_context: set_security_context || context.is_some(),
         context,
@@ -259,6 +274,68 @@ fn create_dir_with_mode(path: &Path, mode: u32, shaped_umask: u32) -> std::io::R
     })
 }
 
+/// mkdir(2) ignores setuid/setgid in its mode argument (and setgid may be
+/// inherited from the parent), so fix them up afterwards. The rwx bits are
+/// left as created, so a default ACL is not disturbed.
+#[cfg(unix)]
+fn apply_special_bits(path: &Path, requested: u32, kept: u32) -> std::io::Result<()> {
+    use std::fs::{OpenOptions, Permissions};
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    use uucore::libc;
+
+    // The kernel already honors the sticky bit and setgid inheritance; only
+    // setting setuid/setgid or clearing an inherited setgid needs a chmod.
+    if requested & 0o6000 == 0 && kept & 0o2000 != 0 {
+        return Ok(());
+    }
+    let wanted = |current: u32| {
+        let current = current & 0o7777;
+        (current & !SPECIAL_BITS) | (current & kept) | (requested & SPECIAL_BITS)
+    };
+
+    // Work through an fd so a swapped-in symlink cannot redirect the chmod.
+    let flags = libc::O_DIRECTORY | libc::O_NOFOLLOW;
+    match OpenOptions::new().read(true).custom_flags(flags).open(path) {
+        Ok(dir) => {
+            let current = dir.metadata()?.permissions().mode();
+            if wanted(current) != current & 0o7777 {
+                dir.set_permissions(Permissions::from_mode(wanted(current)))?;
+            }
+        }
+        // The new directory is not readable by its owner (e.g. -m 2300):
+        // fchmod does not work on an O_PATH fd, but its /proc link does.
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        Err(e) if e.raw_os_error() == Some(libc::EACCES) => {
+            use std::os::fd::AsRawFd;
+            use std::os::unix::fs::MetadataExt;
+            let dir = OpenOptions::new()
+                .read(true)
+                .custom_flags(flags | libc::O_PATH)
+                .open(path)?;
+            let meta = dir.metadata()?;
+            let current = meta.permissions().mode();
+            if wanted(current) != current & 0o7777 {
+                let perms = Permissions::from_mode(wanted(current));
+                let link = format!("/proc/self/fd/{}", dir.as_raw_fd());
+                match std::fs::set_permissions(link, perms.clone()) {
+                    // Without /proc, do as gnulib's lchmod: chmod by path, but
+                    // only if the path still names the directory we opened.
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                        let now = std::fs::symlink_metadata(path)?;
+                        if !now.is_dir() || now.dev() != meta.dev() || now.ino() != meta.ino() {
+                            return Err(std::io::Error::from_raw_os_error(libc::ENOTDIR));
+                        }
+                        std::fs::set_permissions(path, perms)?;
+                    }
+                    res => res?,
+                }
+            }
+        }
+        Err(e) => return Err(e),
+    }
+    Ok(())
+}
+
 #[cfg(not(unix))]
 fn create_dir_with_mode(path: &Path, _mode: u32, _shaped_umask: u32) -> std::io::Result<()> {
     std::fs::create_dir(path)
@@ -305,6 +382,15 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
 
     match create_dir_with_mode(path, mkdir_mode, shaped_umask) {
         Ok(()) => {
+            #[cfg(unix)]
+            if let Some(requested) = config.mode.filter(|_| !is_parent) {
+                apply_special_bits(path, requested, config.special_bits_kept).map_err_context(
+                    || {
+                        translate_text!("mkdir-error-cannot-set-permissions", "path" => locale_aware_c_single_escape(path))
+                    },
+                )?;
+            }
+
             if config.verbose {
                 writeln!(
                     stdout(),
