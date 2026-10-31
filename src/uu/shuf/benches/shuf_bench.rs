@@ -30,6 +30,31 @@ fn shuf_input_range(bencher: Bencher, range_size: usize) {
         .bench_values(|args| black_box(uumain(args)));
 }
 
+/// Benchmark a complete numeric permutation, including vector allocation and
+/// repeated removal from the full representation. Discard output to isolate
+/// the permutation work from filesystem writes.
+#[divan::bench(args = [10_000_000])]
+fn shuf_input_range_full(bencher: Bencher, range_size: usize) {
+    let range_arg = format!("1-{range_size}");
+    let output = if cfg!(windows) { "NUL" } else { "/dev/null" };
+
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-i", &range_arg, &"-o", &output]).into_iter())
+        .bench_values(|args| black_box(uumain(args)));
+}
+
+/// Benchmark sparse sampling from a huge numeric range with a bounded count.
+#[divan::bench(args = [100, 10_000, 100_000])]
+fn shuf_input_range_sparse(bencher: Bencher, head_count: usize) {
+    let count = head_count.to_string();
+    let range = "1000-2000000000";
+    let output = if cfg!(windows) { "NUL" } else { "/dev/null" };
+
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-n", &count, &"-i", &range, &"-o", &output]).into_iter())
+        .bench_values(|args| black_box(uumain(args)));
+}
+
 /// Benchmark shuffling with repeat (sampling with replacement)
 /// Tests the -r flag combined with -n to output a specific count
 #[divan::bench(args = [(50_000, 80), (50_000, 10)])]
