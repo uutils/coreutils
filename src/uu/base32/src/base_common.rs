@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::encoding::{
@@ -196,7 +196,8 @@ pub fn handle_input<R: BufRead>(input: &mut R, format: Format, config: Config) -
         ),
         // Batch Base16's small encoded chunks to reduce write syscalls.
         (Format::Base16, false) => {
-            let mut output = BufWriter::with_capacity(DEFAULT_BUF_SIZE, &mut stdout_lock);
+            let mut output =
+                uucore::output::StdoutBuffer::with_capacity(DEFAULT_BUF_SIZE, &mut stdout_lock);
             let result = fast_encode::fast_encode_stream(
                 input,
                 &mut output,
