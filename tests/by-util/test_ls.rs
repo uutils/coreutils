@@ -4714,22 +4714,16 @@ fn test_ls_ignore_hide() {
         .succeeds()
         .stdout_only("some_other_file\n");
 
-    // Invalid patterns
-    scene
-        .ucmd()
-        .arg("--ignore=READ[ME")
-        .arg("-1")
-        .succeeds()
-        .stderr_contains("Invalid pattern")
-        .stdout_is("CONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
-
-    scene
-        .ucmd()
-        .arg("--hide=READ[ME")
-        .arg("-1")
-        .succeeds()
-        .stderr_contains("Invalid pattern")
-        .stdout_is("CONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
+    // fnmatch treats the unmatched bracket literally; the glob fallback rejects it.
+    for option in ["--ignore=READ[ME", "--hide=READ[ME"] {
+        let result = scene.ucmd().arg(option).arg("-1").succeeds();
+        if cfg!(all(unix, not(target_os = "redox"))) {
+            result.no_stderr();
+        } else {
+            result.stderr_contains("Invalid pattern");
+        }
+        result.stdout_is("CONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
+    }
 }
 
 #[test]
@@ -8579,4 +8573,89 @@ fn test_ls_dereference_sibling_alias_not_already_listed() {
         .stdout_contains("real:\nfile")
         .stdout_contains("link:\nfile")
         .no_stderr();
+}
+
+#[cfg(all(unix, not(target_vendor = "apple")))]
+#[test]
+fn test_ignore_patterns_preserve_non_utf8_names() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    let ts = TestScenario::new(util_name!());
+    for name in [b"bad\xff.txt".as_slice(), "bad�.txt".as_bytes(), b"keep"] {
+        ts.fixtures.touch(OsStr::from_bytes(name));
+    }
+    for option in ["--ignore", "--hide"] {
+        let result = ts
+            .ucmd()
+            .args(&["--zero", option])
+            .arg("bad�.txt")
+            .succeeds();
+        result.stdout_only_bytes(b"bad\xff.txt\0keep\0");
+        let result = ts
+            .ucmd()
+            .args(&["--zero", option])
+            .arg(OsStr::from_bytes(b"bad\xff.*"))
+            .succeeds();
+        result.stdout_only_bytes(b"bad\xef\xbf\xbd.txt\0keep\0");
+        ts.ucmd()
+            .args(&["--zero", option, "bad*.txt"])
+            .succeeds()
+            .stdout_only("keep\0");
+    }
+    ts.ucmd()
+        .args(&["-a", "--zero", "--ignore"])
+        .arg(OsStr::from_bytes(b"bad\xff.*"))
+        .succeeds()
+        .stdout_only_bytes(b".\0..\0bad\xef\xbf\xbd.txt\0keep\0");
+    // --hide is ignored with -a.
+    ts.ucmd()
+        .args(&["-a", "--zero", "--hide"])
+        .arg(OsStr::from_bytes(b"bad\xff.*"))
+        .succeeds()
+        .stdout_contains_bytes(b"bad\xff.txt\0");
+}
+
+#[cfg(all(unix, not(target_os = "redox"), not(target_vendor = "apple")))]
+#[test]
+fn test_ignore_patterns_use_fnmatch_for_all_filename_encodings() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    let ts = TestScenario::new(util_name!());
+    for name in [b"a*\xff".as_slice(), b"a*x", b"a1\xff", b"a1x", b"keep"] {
+        ts.fixtures.touch(OsStr::from_bytes(name));
+    }
+    for option in ["--ignore", "--hide"] {
+        ts.ucmd()
+            .env("LC_ALL", "C")
+            .args(&["--zero", option, r"a\*?", option, "a[[:digit:]]?"])
+            .succeeds()
+            .stdout_only("keep\0");
+    }
+}
+
+#[cfg(all(unix, not(target_os = "redox")))]
+#[test]
+fn test_ignore_patterns_accept_unix_fnmatch_syntax() {
+    let ts = TestScenario::new(util_name!());
+    for name in ["ab", "axxb", "[", "keep"] {
+        ts.fixtures.touch(name);
+    }
+    for option in ["--ignore", "--hide"] {
+        ts.ucmd()
+            .env("LC_ALL", "C")
+            .args(&["--zero", option, "a**b"])
+            .succeeds()
+            .stdout_only("[\0keep\0");
+        // Darwin's fnmatch does not treat an unclosed bracket as a literal.
+        let expected = if cfg!(target_vendor = "apple") {
+            "[\0ab\0axxb\0keep\0"
+        } else {
+            "ab\0axxb\0keep\0"
+        };
+        ts.ucmd()
+            .env("LC_ALL", "C")
+            .args(&["--zero", option, "["])
+            .succeeds()
+            .stdout_only(expected);
+    }
 }
