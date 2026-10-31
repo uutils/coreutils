@@ -10,13 +10,14 @@ use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, IsTerminal, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code, strip_errno};
 use uucore::i18n::charmap::{Encoding, locale_encoding, mb_char_len};
 use uucore::line_ending::LineEnding;
 use uucore::os_str_as_bytes;
+use uucore::output::StdoutBuffer;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 
 use self::searcher::Searcher;
@@ -928,7 +929,7 @@ where
     let mut out: Box<dyn Write> = if stdout().is_terminal() {
         Box::new(stdout())
     } else {
-        Box::new(BufWriter::new(stdout())) as Box<dyn Write>
+        Box::new(StdoutBuffer::new(stdout())) as Box<dyn Write>
     };
 
     for filename in filenames {
