@@ -938,6 +938,31 @@ fn test_empty_tmpdir_env_var() {
 }
 
 #[test]
+#[cfg(not(any(windows, target_os = "android")))]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+fn test_empty_tmpdir_env_var_with_template() {
+    for args in [
+        &["-t", "fooXXX"][..],
+        &["-d", "-t", "fooXXX"],
+        &["--tmpdir", "fooXXX"],
+    ] {
+        let result = new_ucmd!().env(TMPDIR, "").args(args).succeeds();
+        let path = result.stdout_str().trim_end();
+        assert!(path.starts_with("/tmp/foo"), "{args:?}: {path}");
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    let dir = at.plus_as_string("d");
+    let result = ucmd
+        .env(TMPDIR, "")
+        .args(&["-p", &dir, "-t", "fooXXX"])
+        .succeeds();
+    let path = result.stdout_str().trim_end();
+    assert!(path.starts_with(&format!("{dir}/foo")), "{path}");
+}
+
+#[test]
 fn test_nonexistent_dir_prefix() {
     #[cfg(not(windows))]
     new_ucmd!().arg("d/XXX").fails().stderr_only(

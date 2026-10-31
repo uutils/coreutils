@@ -131,7 +131,8 @@ impl Options {
                 (tmpdir, OsString::from(template))
             }
             Some(template) => {
-                let tmpdir = if let Some(tmpdir) = env::var_os(TMPDIR_ENV_VAR)
+                let tmpdir = if let Some(tmpdir) =
+                    env::var_os(TMPDIR_ENV_VAR).filter(|dir| !dir.is_empty())
                     && matches.get_flag(OPT_T)
                 {
                     Some(PathBuf::from(tmpdir))
@@ -140,13 +141,7 @@ impl Options {
                 } else if matches.get_flag(OPT_T) || matches.contains_id(OPT_TMPDIR) {
                     // If --tmpdir is given without an argument, or -t is given
                     // export in TMPDIR
-                    #[cfg(target_os = "wasi")]
-                    // WASI's `std::env::temp_dir()` unconditionally panics
-                    let default_tmp_dir = env::var_os(TMPDIR_ENV_VAR)
-                        .map_or_else(|| PathBuf::from(FALLBACK_TMPDIR), PathBuf::from);
-                    #[cfg(not(target_os = "wasi"))]
-                    let default_tmp_dir = env::temp_dir();
-                    Some(default_tmp_dir)
+                    Some(get_tmpdir_env_or_default())
                 } else {
                     None
                 };
