@@ -1762,8 +1762,9 @@ fn suffix_format_huge_width_elide_empty_drop_does_not_panic() {
             "%a%1",
         ])
         .pipe_in("a\n")
-        .succeeds()
-        .no_output();
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_only("csplit: memory exhausted\n");
 }
 
 #[test]
