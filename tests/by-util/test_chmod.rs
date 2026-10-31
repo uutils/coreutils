@@ -2515,18 +2515,23 @@ fn test_chmod_changes_does_not_report_inaccessible_operand() {
 
 #[cfg(unix)]
 #[test]
-#[ignore = "chmod -R --dereference must change the target of symlinks found while recursing"]
-fn test_recursive_dereference_changes_link_targets() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-    at.mkdir("tree");
-    at.touch("target");
-    set_permissions(at.plus("target"), Permissions::from_mode(0o600)).unwrap();
-    at.symlink_file("../target", "tree/link");
-    scene
-        .ucmd()
-        .args(&["-R", "--dereference", "g+r", "tree"])
-        .succeeds()
-        .no_output();
-    assert_eq!(at.metadata("target").permissions().mode() & 0o777, 0o640);
+fn test_numeric_mode_must_be_the_whole_mode() {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.touch("probe");
+
+    // A comma-separated mode is a list of symbolic clauses, so a number in it
+    // is invalid rather than applied to one clause.
+    for mode in ["755,644", "644,u+x", "u=r,2"] {
+        ts.ucmd()
+            .args(&[mode, "probe"])
+            .fails_with_code(1)
+            .stderr_contains("invalid mode");
+    }
+
+    // On its own the same number is fine.
+    ts.ucmd().args(&["700", "probe"]).succeeds();
+    assert_eq!(
+        ts.fixtures.metadata("probe").permissions().mode() & 0o777,
+        0o700
+    );
 }
