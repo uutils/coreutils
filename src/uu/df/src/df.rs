@@ -48,6 +48,15 @@ static OPT_HUMAN_READABLE_DECIMAL: &str = "human-readable-decimal";
 static OPT_INODES: &str = "inodes";
 static OPT_KILO: &str = "kilo";
 static OPT_MEGA: &str = "mega";
+/// `-B`, `-h`, `-H`, `-k` and `-m` all pick how sizes are shown. Like GNU df,
+/// whichever comes last on the command line wins, so each overrides the others.
+static SIZE_OPTIONS: [&str; 5] = [
+    "blocksize",
+    "human-readable-binary",
+    "human-readable-decimal",
+    "kilo",
+    "mega",
+];
 static OPT_LOCAL: &str = "local";
 static OPT_NO_SYNC: &str = "no-sync";
 static OPT_OUTPUT: &str = "output";
@@ -564,7 +573,7 @@ pub fn uu_app() -> Command {
                 .short('B')
                 .long(OPT_BLOCKSIZE_LONG)
                 .value_name("SIZE")
-                .overrides_with_all([OPT_KILO, OPT_MEGA, OPT_BLOCKSIZE])
+                .overrides_with_all(SIZE_OPTIONS)
                 .help(translate!("df-help-block-size")),
         )
         .arg(
@@ -578,7 +587,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_HUMAN_READABLE_BINARY)
                 .short('h')
                 .long("human-readable")
-                .overrides_with_all([OPT_HUMAN_READABLE_DECIMAL, OPT_HUMAN_READABLE_BINARY])
+                .overrides_with_all(SIZE_OPTIONS)
                 .help(translate!("df-help-human-readable"))
                 .action(ArgAction::SetTrue),
         )
@@ -586,7 +595,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_HUMAN_READABLE_DECIMAL)
                 .short('H')
                 .long("si")
-                .overrides_with_all([OPT_HUMAN_READABLE_BINARY, OPT_HUMAN_READABLE_DECIMAL])
+                .overrides_with_all(SIZE_OPTIONS)
                 .help(translate!("df-help-si"))
                 .action(ArgAction::SetTrue),
         )
@@ -602,14 +611,14 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_KILO)
                 .short('k')
                 .help(translate!("df-help-kilo"))
-                .overrides_with_all([OPT_BLOCKSIZE, OPT_KILO, OPT_MEGA])
+                .overrides_with_all(SIZE_OPTIONS)
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_MEGA)
                 .short('m')
                 .help(translate!("df-help-mega"))
-                .overrides_with_all([OPT_BLOCKSIZE, OPT_KILO, OPT_MEGA])
+                .overrides_with_all(SIZE_OPTIONS)
                 .action(ArgAction::SetTrue),
         )
         .arg(
