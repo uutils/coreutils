@@ -3256,6 +3256,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
+ "rustc-hash",
  "thiserror 2.0.21",
  "uucore",
 ]
