@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat biguint
 
 use std::ffi::{OsStr, OsString};
-use std::io::{BufWriter, Write, stdout};
+use std::io::{Write, stdout};
 
 use clap::{Arg, ArgAction, Command};
 use num_bigint::BigUint;
@@ -371,7 +371,7 @@ fn print_seq(
     padding: usize, // Used by fast path only
 ) -> std::io::Result<()> {
     let stdout = stdout().lock();
-    let mut stdout = BufWriter::new(stdout);
+    let mut stdout = uucore::output::StdoutBuffer::new(stdout);
     let (first, increment, last) = range;
 
     if fast_allowed {
