@@ -654,10 +654,7 @@ fn try_format_exact_int_without_suffix_scaling(
     let scaled = integer / to_unit;
 
     if is_too_large_to_format(scaled, precision) {
-        let value_sci = format_gnu_scientific(scaled as f64);
-        return Some(Err(format!(
-            "value/precision too large to be printed: '{value_sci}/{precision}' (consider using --to)"
-        )));
+        return Some(Err(too_large_to_print(scaled as f64, precision)));
     }
 
     Some(Ok(if precision == 0 {
@@ -671,20 +668,40 @@ fn try_format_exact_int_without_suffix_scaling(
     }))
 }
 
-fn format_gnu_scientific(v: f64) -> String {
-    // 6 significant figures with trimmed trailing zeros and signed exponent
+/// GNU names the precision only when there is one.
+fn too_large_to_print(value: f64, precision: usize) -> String {
+    let value_sci = format_gnu_general(value);
+    if precision == 0 {
+        format!("value too large to be printed: '{value_sci}' (consider using --to)")
+    } else {
+        format!(
+            "value/precision too large to be printed: '{value_sci}/{precision}' (consider using --to)"
+        )
+    }
+}
+
+fn format_gnu_general(v: f64) -> String {
+    // like C's %g: 6 significant figures, trailing zeros trimmed, and an
+    // exponent of at least two digits only outside 1e-4..1e6
     let s = format!("{v:.5e}");
     let Some(e_pos) = s.find('e') else {
         return s;
     };
     let (mantissa, rest) = s.split_at(e_pos);
-    let exp = &rest[1..];
-    let mantissa = mantissa.trim_end_matches('0').trim_end_matches('.');
-    if exp.starts_with('-') {
-        format!("{mantissa}e{exp}")
-    } else {
-        format!("{mantissa}e+{exp}")
+    let exp: i32 = rest[1..].parse().unwrap_or(0);
+    if (-4..6).contains(&exp) {
+        let fixed = format!("{v:.*}", (5 - exp) as usize);
+        if !fixed.contains('.') {
+            return fixed;
+        }
+        return fixed
+            .trim_end_matches('0')
+            .trim_end_matches('.')
+            .to_string();
     }
+    let mantissa = mantissa.trim_end_matches('0').trim_end_matches('.');
+    let sign = if exp < 0 { '-' } else { '+' };
+    format!("{mantissa}e{sign}{:02}", exp.abs())
 }
 
 /// Format `value` with `precision` decimals, exactly as `{:.precision$}` would.
@@ -725,6 +742,13 @@ fn transform_to(
 
     let s = s.to_f64();
     let i2 = s / (opts.to_unit as f64);
+    // a value read with a suffix, like 1Z, is a float and skipped the check above
+    if opts.to == Unit::None
+        && i2.is_finite()
+        && i2.abs().max(1.0) * 10_f64.powi(precision.min(19) as i32) >= 1e19
+    {
+        return Err(too_large_to_print(i2, precision));
+    }
     let (i2, s) = consider_suffix(i2, opts.to, round_method, precision, is_precision_specified)?;
     let dec_sep = locale_decimal_separator();
     let localize = |s: String| -> String {
