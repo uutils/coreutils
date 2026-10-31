@@ -2143,10 +2143,13 @@ fn context_for(src: &Path, dest: &Path) -> String {
     format!("{} -> {}", src.quote(), dest.quote())
 }
 
-/// Implements a simple backup copy for the destination file .
-/// if `is_dest_symlink` flag is set to true dest will be renamed to `backup_path`
-/// TODO: for the backup, should this function be replaced by `copy_file(...)`?
-fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyResult<()> {
+/// Back up the destination, preserving symlinks and using hard links in link mode.
+fn backup_dest(
+    dest: &Path,
+    backup_path: &Path,
+    is_dest_symlink: bool,
+    copy_mode: &CopyMode,
+) -> CopyResult<()> {
     if is_dest_symlink {
         fs::rename(dest, backup_path)?;
     } else {
@@ -2155,7 +2158,11 @@ fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyRe
             Err(err) if err.kind() == io::ErrorKind::NotFound => {}
             Err(err) => return Err(err.into()),
         }
-        fs::copy(dest, backup_path)?;
+        if *copy_mode == CopyMode::Link {
+            fs::hard_link(dest, backup_path)?;
+        } else {
+            fs::copy(dest, backup_path)?;
+        }
     }
     Ok(())
 }
@@ -2255,6 +2262,7 @@ fn verify_relative_symlink_in_cwd(source: &Path, dest: &Path, options: &Options)
 
 /// Back up, remove, or leave intact the destination file, depending on the options.
 fn handle_existing_dest(
+    progress_bar: Option<&ProgressBar>,
     source: &Path,
     dest: &Path,
     options: &Options,
@@ -2289,7 +2297,13 @@ fn handle_existing_dest(
             .into());
         }
         is_dest_removed = dest.is_symlink();
-        backup_dest(dest, &backup_path, is_dest_removed)?;
+        backup_dest(dest, &backup_path, is_dest_removed, &options.copy_mode)?;
+        if options.copy_mode == CopyMode::Link && source == dest {
+            if options.verbose {
+                print_verbose_output(false, progress_bar, source, &backup_path)?;
+            }
+            return Ok(());
+        }
     }
     if !is_dest_removed {
         delete_dest_if_needed_and_allowed(
@@ -2577,7 +2591,7 @@ fn handle_copy_mode(
                 let backup_path =
                     backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
                 if let Some(backup_path) = backup_path {
-                    backup_dest(dest, &backup_path, dest.is_symlink())?;
+                    backup_dest(dest, &backup_path, dest.is_symlink(), &options.copy_mode)?;
                     fs::remove_file(dest)?;
                 }
                 force = options.overwrite == OverwriteMode::Clobber(ClobberMode::Force);
@@ -2875,7 +2889,14 @@ fn copy_file(
                 }
             }
         }
-        handle_existing_dest(source, dest, options, source_in_command_line, copied_files)?;
+        handle_existing_dest(
+            progress_bar,
+            source,
+            dest,
+            options,
+            source_in_command_line,
+            copied_files,
+        )?;
         if are_hardlinks_to_same_file(source, dest) {
             if options.copy_mode == CopyMode::Copy {
                 return Ok(());

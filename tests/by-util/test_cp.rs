@@ -1688,6 +1688,27 @@ fn test_cp_backup_simple_protect_source() {
 }
 
 #[test]
+#[cfg(all(unix, not(target_os = "android")))]
+#[cfg_attr(wasi_runner, ignore = "WASI: hard-link capability restrictions")]
+fn test_cp_link_with_backup_of_distinct_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "source content");
+    at.write("b", "destination content");
+    at.write("b~", "old backup");
+    let source_inode = at.metadata("a").ino();
+    let destination_inode = at.metadata("b").ino();
+
+    ucmd.args(&["-lb", "a", "b"]).succeeds().no_output();
+
+    assert_eq!(at.metadata("a").ino(), source_inode);
+    assert_eq!(at.metadata("b").ino(), source_inode);
+    assert_eq!(at.metadata("b~").ino(), destination_inode);
+    assert_eq!(at.read("a"), "source content");
+    assert_eq!(at.read("b"), "source content");
+    assert_eq!(at.read("b~"), "destination content");
+}
+
+#[test]
 // Android denies hard links on the filesystem backing the test directory, so
 // the setup cannot be built there; see the mv analogue.
 #[cfg(not(target_os = "android"))]
@@ -6475,26 +6496,48 @@ mod same_file {
         }
     }
 
-    #[test]
+    #[rstest::rstest]
+    #[case(&["--backup=simple"], "foo~")]
+    #[case(&["--backup=numbered"], "foo.~2~")]
+    #[case(&["--backup=existing"], "foo.~2~")]
+    #[case(&["--backup=simple", "--suffix=.bak"], "foo.bak")]
     #[cfg_attr(
         wasi_runner,
         ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
     )]
-    fn test_same_file_from_file_to_file_with_options_link_and_backup_and_force() {
-        for option in ["-bfl", "-bdfl"] {
-            let scene = TestScenario::new(util_name!());
-            let at = &scene.fixtures;
-            let backup = "foo~";
-            at.write(FILE_NAME, CONTENTS);
-            scene
-                .ucmd()
-                .args(&[option, FILE_NAME, FILE_NAME])
-                .succeeds();
-            assert!(at.file_exists(FILE_NAME));
-            assert!(at.file_exists(backup));
-            assert_eq!(at.read(FILE_NAME), CONTENTS);
-            assert_eq!(at.read(backup), CONTENTS);
+    fn test_same_file_from_file_to_file_with_options_link_and_backup_and_force(
+        #[case] backup_options: &[&str],
+        #[case] backup: &str,
+        #[values("-fl", "-dfl")] option: &str,
+        #[values(false, true)] verbose: bool,
+        #[values(0o444, 0o644)] mode: u32,
+    ) {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.write(FILE_NAME, CONTENTS);
+        at.set_mode(FILE_NAME, mode);
+        at.write("foo~", "old backup");
+        at.write("foo.bak", "old suffix backup");
+        at.write("foo.~1~", "old numbered backup");
+        let original_inode = at.metadata(FILE_NAME).ino();
+        let mut cmd = scene.ucmd();
+        cmd.arg(option).args(backup_options);
+        if verbose {
+            cmd.arg("-v");
         }
+        let expected = if verbose {
+            format!("'foo' -> '{backup}'\n")
+        } else {
+            String::new()
+        };
+        cmd.args(&[FILE_NAME, FILE_NAME])
+            .succeeds()
+            .stdout_only(expected);
+        assert_eq!(at.metadata(FILE_NAME).ino(), original_inode);
+        assert_eq!(at.metadata(backup).ino(), original_inode);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
+        assert_eq!(at.read(backup), CONTENTS);
+        assert_eq!(at.read("foo.~1~"), "old numbered backup");
     }
 
     #[test]
