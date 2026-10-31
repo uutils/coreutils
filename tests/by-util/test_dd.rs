@@ -2682,3 +2682,31 @@ fn test_ascii_ebcdic_without_cbs_still_convert() {
             .stdout_only_bytes(expected);
     }
 }
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_oflag_preserves_append_on_stdout() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("journal", "record 1 alice\nrecord 2 bob\n");
+    at.write("submission", "FORGED 1 alice\n");
+
+    let stdout = OpenOptions::new()
+        .append(true)
+        .open(at.plus("journal"))
+        .unwrap();
+    ts.ucmd()
+        .args(&[
+            "if=submission",
+            "oflag=dsync",
+            "conv=notrunc",
+            "status=none",
+        ])
+        .set_stdout(Stdio::from(stdout))
+        .succeeds();
+
+    assert_eq!(
+        at.read("journal"),
+        "record 1 alice\nrecord 2 bob\nFORGED 1 alice\n"
+    );
+}
