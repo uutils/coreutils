@@ -6,7 +6,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::io::{self, Write as _};
 use uucore::error::strip_errno;
-use uucore::{crate_version, show_error, translate};
+use uucore::{crate_version, format_usage, show_error, translate};
 
 // uucore::main does not support no-result
 pub fn uumain(mut args: impl uucore::Args) -> i32 {
@@ -47,7 +47,8 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
 pub fn uu_app() -> Command {
     Command::new("true")
         .version(crate_version!())
-        .help_template(uucore::localized_help_template("true"))
+        .help_template(uucore::localized_help_template_usage_first("true"))
+        .override_usage(format_usage(&translate!("true-usage")))
         .about(translate!("true-about"))
         // We provide our own help and version options, to ensure maximum compatibility with GNU.
         .disable_help_flag(true)
