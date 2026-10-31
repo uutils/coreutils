@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore clocal erange tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime cflag lflag ispeed ospeed
+// spell-checker:ignore clocal erange tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime cflag lflag ispeed ospeed openpty
 // spell-checker:ignore parenb parodd cmspar hupcl cstopb cread clocal crtscts CSIZE
 // spell-checker:ignore ignbrk brkint ignpar parmrk inpck istrip inlcr igncr icrnl ixoff ixon iuclc ixany imaxbel iutf
 // spell-checker:ignore opost olcuc ocrnl onlcr onocr onlret ofdel nldly crdly tabdly bsdly vtdly ffdly ofill
@@ -104,6 +104,16 @@ impl<T> Flag<T> {
     pub const fn sane(mut self) -> Self {
         self.sane = true;
         self
+    }
+
+    fn apply(&self, termios: &mut Termios, enabled: bool)
+    where
+        T: TermiosFlag,
+    {
+        if enabled && let Some(group) = self.group {
+            group.apply(termios, false);
+        }
+        self.flag.apply(termios, enabled);
     }
 }
 
@@ -869,16 +879,16 @@ fn apply_setting(termios: &mut Termios, setting: &AllFlags) -> nix::Result<()> {
     match setting {
         AllFlags::Baud(_, _) => apply_baud_rate_flag(termios, setting)?,
         AllFlags::ControlFlags((setting, disable)) => {
-            setting.flag.apply(termios, !disable);
+            setting.apply(termios, !disable);
         }
         AllFlags::InputFlags((setting, disable)) => {
-            setting.flag.apply(termios, !disable);
+            setting.apply(termios, !disable);
         }
         AllFlags::LocalFlags((setting, disable)) => {
-            setting.flag.apply(termios, !disable);
+            setting.apply(termios, !disable);
         }
         AllFlags::OutputFlags((setting, disable)) => {
-            setting.flag.apply(termios, !disable);
+            setting.apply(termios, !disable);
         }
     }
     Ok(())
@@ -1177,6 +1187,29 @@ impl TermiosFlag for LocalFlags {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(not(any(target_os = "aix", target_os = "redox", target_os = "fuchsia")))]
+    fn test_apply_character_size_preserves_other_control_flags() {
+        let pty = nix::pty::openpty(None, None).unwrap();
+        let mut termios = tcgetattr(&pty.slave).unwrap();
+        let other_flags = ControlFlags::CLOCAL | ControlFlags::CREAD;
+        let sizes = [
+            ("cs5", ControlFlags::CS5),
+            ("cs6", ControlFlags::CS6),
+            ("cs7", ControlFlags::CS7),
+            ("cs8", ControlFlags::CS8),
+        ];
+
+        for (_, initial) in sizes {
+            for (name, expected) in sizes {
+                termios.control_flags = initial | other_flags;
+                let flag = CONTROL_FLAGS.iter().find(|flag| flag.name == name).unwrap();
+                apply_setting(&mut termios, &AllFlags::ControlFlags((flag, false))).unwrap();
+                assert_eq!(termios.control_flags, expected | other_flags);
+            }
+        }
+    }
 
     // Essential unit tests for complex internal parsing and logic functions.
 

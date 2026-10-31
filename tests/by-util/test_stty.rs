@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar ispeed ospeed NCCS nonhex gstty notachar cbreak evenp oddp CSIZE
+// spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar ispeed ospeed NCCS nonhex gstty notachar cbreak evenp oddp CSIZE tcgetattr CRDLY
 
 #![cfg(all(unix, not(target_os = "redox")))]
 
@@ -44,6 +44,73 @@ fn test_all_flag() {
     for flag in ["parenb", "parmrk", "ixany", "onlcr", "icanon", "noflsh"] {
         result.stdout_contains(flag);
     }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_character_size_cs8_then_cs7() {
+    use rustix::termios::{ControlModes, tcgetattr};
+
+    let (path, _controller, replica) = pty_path();
+    new_ucmd!()
+        .args(&["--file", &path, "cs8"])
+        .succeeds()
+        .no_output();
+
+    // Applying a saved state bypasses grouped flag handling while using the same
+    // libc interface, whose treatment of unsupported PTY settings can vary.
+    let original = new_ucmd!()
+        .args(&["--file", &path, "--save"])
+        .succeeds()
+        .stdout_move_str();
+    let mut expected: Vec<_> = original.trim().split(':').map(str::to_owned).collect();
+    let control_modes = tcgetattr(&replica).unwrap().control_modes;
+    expected[2] = format!(
+        "{:x}",
+        ((control_modes - ControlModes::CSIZE) | ControlModes::CS7).bits()
+    );
+    let expected_result = new_ucmd!()
+        .args(&["--file", &path, &expected.join(":")])
+        .run();
+    let expected_size = tcgetattr(&replica).unwrap().control_modes & ControlModes::CSIZE;
+    new_ucmd!()
+        .args(&["--file", &path, original.trim()])
+        .succeeds()
+        .no_output();
+
+    let result = new_ucmd!().args(&["--file", &path, "cs7"]).run();
+    result
+        .code_is(expected_result.code())
+        .no_stdout()
+        .stderr_is(expected_result.stderr_str());
+    assert_eq!(
+        tcgetattr(&replica).unwrap().control_modes & ControlModes::CSIZE,
+        expected_size
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[rstest::rstest]
+#[case("cr3", "cr0", rustix::termios::OutputModes::CR0)]
+#[case("cr3", "cr1", rustix::termios::OutputModes::CR1)]
+#[case("cr1", "cr2", rustix::termios::OutputModes::CR2)]
+#[case("cr2", "cr3", rustix::termios::OutputModes::CR3)]
+fn test_grouped_output_flags(
+    #[case] initial: &str,
+    #[case] setting: &str,
+    #[case] expected: rustix::termios::OutputModes,
+) {
+    use rustix::termios::{OutputModes, tcgetattr};
+
+    let (path, _controller, replica) = pty_path();
+    new_ucmd!()
+        .args(&["--file", &path, "opost", initial, setting])
+        .succeeds()
+        .no_output();
+
+    let termios = tcgetattr(&replica).unwrap();
+    assert_eq!(termios.output_modes & OutputModes::CRDLY, expected);
+    assert!(termios.output_modes.contains(OutputModes::OPOST));
 }
 
 #[test]
