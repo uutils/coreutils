@@ -1269,6 +1269,23 @@ mod diagnostics {
     }
 
     #[test]
+    fn test_comma_separated_mode_is_rejected() {
+        // A numeric mode has to be the whole mode, so it cannot share the
+        // list with anything else.
+        for mode in ["1,2", "755,u+w", "+1,2"] {
+            let ts = TestScenario::new(util_name!());
+            ts.ucmd()
+                .args(&["-m", mode, "some_dir"])
+                .fails_with_code(1)
+                .stderr_only(format!("mkdir: invalid mode '{mode}'\n"));
+            assert!(
+                !ts.fixtures.file_exists("some_dir"),
+                "{mode} made the directory"
+            );
+        }
+    }
+
+    #[test]
     fn test_terminal_message_quotes_control_character() {
         let result = new_ucmd!()
             .terminal_sim_stderr()

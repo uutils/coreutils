@@ -369,6 +369,11 @@ pub fn parse_chmod(
 ) -> Result<u32, ModeError> {
     let mut new_mode: u32 = current_mode;
 
+    // A numeric mode has to be the whole mode: GNU reads a comma-separated
+    // mode as a list of symbolic clauses, so `755,u+w` and `u=r,2` are
+    // invalid rather than the number being applied to one clause.
+    let list = mode_string.contains(',');
+
     // Split by commas and process each mode part sequentially
     let mut offset = 0;
     for raw_part in mode_string.split(',') {
@@ -381,10 +386,10 @@ pub fn parse_chmod(
             continue;
         }
 
-        new_mode = if mode_part.chars().any(|c| c.is_ascii_digit()) {
-            parse_numeric(new_mode, mode_part, considering_dir)
-        } else {
+        new_mode = if list || !mode_part.chars().any(|c| c.is_ascii_digit()) {
             parse_symbolic(new_mode, mode_part, umask, considering_dir)
+        } else {
+            parse_numeric(new_mode, mode_part, considering_dir)
         }
         .map_err(|err| err.shift(start))?;
     }
@@ -528,8 +533,6 @@ mod tests {
 
         // Numeric mode with - operator (starting from 0, so nothing to remove)
         assert_eq!(parse("-4", false, 0).unwrap(), 0);
-        // But if we first set a mode, then remove bits
-        assert_eq!(parse("644,-4", false, 0).unwrap(), 0o640);
     }
 
     #[test]
@@ -565,10 +568,16 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_mixed_numeric_and_symbolic() {
-        // Mix of numeric and symbolic modes
-        assert_eq!(parse("644,u+x", false, 0).unwrap(), 0o744);
-        assert_eq!(parse("u+rw,755", false, 0).unwrap(), 0o755);
+    fn test_numeric_mode_must_stand_alone() {
+        // A comma-separated mode is a list of symbolic clauses, so a number
+        // inside it is invalid rather than applied to one clause.
+        for mode in ["644,u+x", "u+rw,755", "755,644", "u=r,2", "1,u=w", "+1,2"] {
+            assert!(parse(mode, false, 0).is_err(), "{mode}");
+        }
+
+        // On its own a number, with or without an operator, still parses.
+        assert_eq!(parse("755", false, 0).unwrap(), 0o755);
+        assert_eq!(parse("+100", false, 0).unwrap(), 0o100);
     }
 
     #[test]
@@ -615,19 +624,17 @@ mod tests {
     fn test_parse_complex_combinations() {
         // Complex real-world examples
         assert_eq!(parse("u=rwx,g=rx,o=r", false, 0).unwrap(), 0o754);
-        // To test removal, we need to first set permissions, then remove them
-        assert_eq!(parse("644,a-w", false, 0).unwrap(), 0o444);
-        assert_eq!(parse("644,g-r", false, 0).unwrap(), 0o604);
+        // To test removal, start from a mode and remove bits from it.
+        assert_eq!(parse_chmod(0o644, "a-w", false, 0).unwrap(), 0o444);
+        assert_eq!(parse_chmod(0o644, "g-r", false, 0).unwrap(), 0o604);
     }
 
     #[test]
     fn test_parse_sequential_application() {
-        // Test that comma-separated modes are applied sequentially
-        // First set to 644, then add execute for user
-        assert_eq!(parse("644,u+x", false, 0).unwrap(), 0o744);
-
-        // First add user write, then set to 755 (should override)
-        assert_eq!(parse("u+w,755", false, 0).unwrap(), 0o755);
+        // Test that comma-separated clauses are applied sequentially, each one
+        // starting from the mode the previous one produced.
+        assert_eq!(parse("u+x,g-w", false, 0).unwrap(), 0o100);
+        assert_eq!(parse_chmod(0o644, "u+x,go-r", false, 0).unwrap(), 0o700);
     }
 
     /// Reads the umask without going through the helpers under test.
