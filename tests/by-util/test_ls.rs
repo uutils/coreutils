@@ -6251,6 +6251,40 @@ fn names_at_offsets(output: &str, tag: &str) -> Vec<String> {
 }
 
 #[test]
+fn test_ls_dired_offsets_after_empty_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("d");
+    at.mkdir("d/empty");
+    at.mkdir("d/hidden");
+    at.touch("d/hidden/.dot");
+    at.mkdir("d/zfull");
+    at.touch("d/zfull/f");
+
+    // Directories listing no entry must still count their heading and "total" line.
+    let result = scene
+        .ucmd()
+        .args(&["--dired", "-l", "d/empty", "d/hidden", "d/zfull"])
+        .succeeds();
+    assert_eq!(dired_names(result.stdout_str()), ["f"]);
+    assert_eq!(
+        subdired_names(result.stdout_str()),
+        ["d/empty", "d/hidden", "d/zfull"]
+    );
+
+    let result = scene.ucmd().args(&["--dired", "-lR", "d"]).succeeds();
+    assert_eq!(
+        dired_names(result.stdout_str()),
+        ["empty", "hidden", "zfull", "f"]
+    );
+    assert_eq!(
+        subdired_names(result.stdout_str()),
+        ["d", "d/empty", "d/hidden", "d/zfull"]
+    );
+}
+
+#[test]
 fn test_ls_dired_name_boundaries() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
