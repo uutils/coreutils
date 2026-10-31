@@ -107,6 +107,23 @@ fn byte_width(bytes: &[u8]) -> usize {
     width
 }
 
+/// Like [`byte_width`], with tabs advancing to the next multiple of `tabwidth`.
+fn indent_width(bytes: &[u8], tabwidth: usize) -> usize {
+    let mut width = 0;
+    let mut idx = 0;
+    while idx < bytes.len() {
+        if bytes[idx] == b'\t' {
+            width = (width / tabwidth + 1) * tabwidth;
+            idx += 1;
+            continue;
+        }
+        let info = decode_char_info(bytes, idx);
+        width += info.width;
+        idx += info.consumed;
+    }
+    width
+}
+
 /// GNU fmt has a more restrictive definition of whitespace than Unicode.
 /// It only considers ASCII whitespace characters (space, tab, newline, etc.)
 /// and excludes many Unicode whitespace characters like non-breaking spaces.
@@ -475,14 +492,20 @@ impl Iterator for ParagraphStream<'_> {
                     prefix_len = fl.prefix_len;
                     prefix_indent_end = fl.prefix_indent_end;
 
-                    // in tagged mode, add 4 spaces of additional indenting by default
-                    // (gnu fmt's behavior is different: it seems to find the closest column to
-                    // indent_end that is divisible by 3. But honestly that behavior seems
-                    // pretty arbitrary.
-                    // Perhaps a better default would be 1 TABWIDTH? But ugh that's so big.
+                    // In tagged mode, until a second line gives the indent, GNU fmt
+                    // puts the following lines right after the prefix, 3 columns in
+                    // when the first line starts at column 0.
                     if self.opts.tagged {
-                        indent_str.extend_from_slice(b"    ");
-                        indent_len += 4;
+                        let prefix_end = indent_str
+                            .iter()
+                            .rposition(|&b| !is_fmt_whitespace_byte(b))
+                            .map_or(0, |i| i + 1);
+                        indent_str.truncate(prefix_end);
+                        indent_len = indent_width(&indent_str, self.opts.tabwidth);
+                        if fl.indent_len == 0 {
+                            indent_str.extend_from_slice(b"   ");
+                            indent_len = 3;
+                        }
                     }
                 }
             } else if in_mail {
@@ -499,10 +522,7 @@ impl Iterator for ParagraphStream<'_> {
                 }
 
                 // in tagged mode, indent has to be *different* on following lines
-                if self.opts.tagged
-                    && indent_len - 4 == fl.indent_len
-                    && indent_end == fl.indent_end
-                {
+                if self.opts.tagged && init_len == fl.indent_len && init_end == fl.indent_end {
                     break;
                 }
 
