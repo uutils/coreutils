@@ -16,6 +16,7 @@ use std::num::IntErrorKind;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::format_usage;
+use uucore::output::StdoutBuffer;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::posix::{OBSOLETE, posix_version};
 use uucore::translate;
@@ -68,6 +69,12 @@ struct LineMeta {
 
 impl Uniq {
     pub fn write_uniq(&self, mut reader: impl BufRead, mut writer: impl Write) -> UResult<()> {
+        // Default output needs only one-record lookahead, so stream it before
+        // EOF; filtering and counting modes keep the existing path below.
+        if self.can_stream() {
+            return self.write_uniq_stream(&mut reader, &mut writer);
+        }
+
         let mut first_line_printed = false;
         let mut group_count = 1;
         let line_terminator = self.get_line_terminator();
@@ -151,6 +158,55 @@ impl Uniq {
             .flush()
             .map_err_context(|| translate!("uniq-error-write-error"))?;
         read_result
+    }
+
+    fn can_stream(&self) -> bool {
+        !self.repeats_only
+            && !self.uniques_only
+            && !self.all_repeated
+            && !self.show_counts
+            && self.delimiters == Delimiters::None
+    }
+
+    fn write_uniq_stream(&self, reader: &mut impl BufRead, writer: &mut impl Write) -> UResult<()> {
+        // Retain the current line and one lookahead line; a changed key starts
+        // the next group.
+        let line_terminator = self.get_line_terminator();
+        let mut current_buf = Vec::with_capacity(1024);
+        if !Self::read_line(reader, &mut current_buf, line_terminator)? {
+            return Ok(());
+        }
+
+        let mut current_meta = LineMeta::default();
+        self.build_meta(&current_buf, &mut current_meta);
+        let mut next_buf = Vec::with_capacity(1024);
+        let mut next_meta = LineMeta::default();
+        let mut line_out = Vec::with_capacity(1024);
+
+        self.write_line(writer, &mut line_out, &current_buf, 1, false)?;
+
+        loop {
+            match Self::read_line(reader, &mut next_buf, line_terminator) {
+                Ok(true) => {
+                    self.build_meta(&next_buf, &mut next_meta);
+                    if !self.keys_are_equal(&current_buf, &current_meta, &next_buf, &next_meta) {
+                        // Swap buffers instead of copying the first line of
+                        // the new group.
+                        std::mem::swap(&mut current_buf, &mut next_buf);
+                        std::mem::swap(&mut current_meta, &mut next_meta);
+                        self.write_line(writer, &mut line_out, &current_buf, 1, true)?;
+                    }
+                    next_buf.clear();
+                }
+                Ok(false) => break,
+                Err(error) => return Err(error),
+            }
+        }
+
+        writer
+            .flush()
+            .map_err_context(|| translate!("uniq-error-write-error"))?;
+        Ok(())
     }
 
     fn get_line_terminator(&self) -> u8 {
@@ -878,7 +934,7 @@ fn open_output_file(out_file_name: Option<&OsStr>) -> UResult<Box<dyn Write>> {
             let out_file = File::create(path).map_err_context(|| path.maybe_quote().to_string())?;
             Box::new(BufWriter::with_capacity(OUTPUT_BUFFER_CAPACITY, out_file))
         }
-        _ => Box::new(BufWriter::with_capacity(
+        _ => Box::new(StdoutBuffer::with_capacity(
             OUTPUT_BUFFER_CAPACITY,
             stdout().lock(),
         )),
