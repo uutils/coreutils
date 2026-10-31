@@ -2,3 +2,4 @@ printenv-about = Display the values of the specified environment VARIABLE(s), or
 printenv-usage = printenv [OPTION]... [VARIABLE]...
 
 printenv-help-null = end each output line with 0 byte rather than newline
+printenv-help-quoting-style = set quoting style
