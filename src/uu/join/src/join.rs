@@ -11,7 +11,7 @@ use memchr::{Memchr3, memchr_iter, memmem::Finder};
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, Split, Stdin, Write, stdin, stdout};
+use std::io::{self, BufRead, BufReader, Split, Stdin, Write, stdin, stdout};
 use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -1116,7 +1116,7 @@ fn exec<Sep: Separator>(
     let repr = Repr::new(settings.line_ending, sep, format, &settings.empty);
 
     let stdout = stdout();
-    let mut writer = BufWriter::new(stdout.lock());
+    let mut writer = uucore::output::StdoutBuffer::new(stdout.lock());
 
     if settings.headers {
         state1.write_headers(&mut writer, &state2, &repr)?;
