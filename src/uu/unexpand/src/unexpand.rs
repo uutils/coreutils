@@ -8,11 +8,12 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, Read, Stdin, Stdout, Write, stdin, stdout};
+use std::io::{self, BufRead, BufReader, Read, Stdin, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use uucore::char_width::char_info_at;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
+use uucore::output::StdoutBuffer;
 use uucore::translate;
 use uucore::{format_usage, show};
 
@@ -366,7 +367,7 @@ fn next_tabstop(tab_config: &TabConfig, col: usize) -> Option<usize> {
 }
 
 fn write_tabs(
-    output: &mut BufWriter<Stdout>,
+    output: &mut StdoutBuffer<Stdout>,
     tab_config: &TabConfig,
     print_state: &mut PrintState,
     amode: bool,
@@ -503,7 +504,7 @@ impl PrintState {
 #[allow(clippy::cognitive_complexity)]
 fn unexpand_buf(
     buf: &[u8],
-    output: &mut BufWriter<Stdout>,
+    output: &mut StdoutBuffer<Stdout>,
     options: &Options,
     lastcol: usize,
     tab_config: &TabConfig,
@@ -643,7 +644,7 @@ fn unexpand_buf(
 
 fn unexpand_file(
     file: &OsString,
-    output: &mut BufWriter<Stdout>,
+    output: &mut StdoutBuffer<Stdout>,
     options: &Options,
     lastcol: usize,
     tab_config: &TabConfig,
@@ -675,7 +676,7 @@ fn unexpand_file(
 }
 
 fn unexpand(options: &Options) -> UResult<()> {
-    let mut output = BufWriter::new(stdout());
+    let mut output = StdoutBuffer::new(stdout());
     let tab_config = &options.tab_config;
     let lastcol = if tab_config.tabstops.len() > 1
         && tab_config.increment_size.is_none()
