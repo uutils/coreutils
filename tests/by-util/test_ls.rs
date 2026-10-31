@@ -8580,3 +8580,57 @@ fn test_ls_dereference_sibling_alias_not_already_listed() {
         .stdout_contains("link:\nfile")
         .no_stderr();
 }
+
+#[rstest::rstest]
+#[case(&["-lL", "."], "./entry")]
+#[case(&["-lLZ", "."], "./entry")]
+#[case(&["-lLd", "entry"], "entry")]
+#[case(&["--dereference-command-line-symlink-to-dir", "-d", "--color=always", "entry"], "entry")]
+#[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
+fn test_dereferenced_metadata_is_cached(#[case] args: &[&str], #[case] path: &str) {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("target");
+    scene.fixtures.symlink_dir("target", "entry");
+
+    let Ok(output) = Command::new("strace")
+        .args(["-qq", "-e", "trace=stat,statx,lstat,newfstatat"])
+        .arg(&scene.bin_path)
+        .arg(scene.util_name.as_str())
+        .args(args)
+        .current_dir(scene.fixtures.as_string())
+        .output()
+    else {
+        return;
+    };
+    let trace = String::from_utf8_lossy(&output.stderr);
+    if !trace.contains('(') {
+        return; // strace unavailable, e.g. restricted ptrace in a container
+    }
+    assert!(output.status.success(), "{trace}");
+    let count = trace
+        .lines()
+        .filter(|line| line.contains(&format!("\"{path}\"")))
+        .count();
+    assert_eq!(count, 1, "expected one metadata lookup of {path}: {trace}");
+}
+
+#[rstest::rstest]
+#[cfg(unix)]
+fn test_dereferenced_context_reports_error_once(
+    #[values("-LZ", "-lL", "-lLZ")] flag: &str,
+    #[values(false, true)] command_line: bool,
+) {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("dir");
+    scene.fixtures.symlink_file("missing", "dir/broken");
+
+    let operand = if command_line { "dir/broken" } else { "dir" };
+    scene
+        .ucmd()
+        .args(&[flag, operand])
+        .fails_with_code(if command_line { 2 } else { 1 })
+        .stderr_is("ls: cannot access 'dir/broken': No such file or directory\n");
+}
