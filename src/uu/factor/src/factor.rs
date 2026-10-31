@@ -40,11 +40,7 @@ enum Number {
     BigUint(BigUint),
 }
 
-fn write_factors_str(
-    num_str: &[u8],
-    w: &mut io::BufWriter<impl Write>,
-    print_exponents: bool,
-) -> UResult<()> {
+fn write_factors_str(num_str: &[u8], w: &mut impl Write, print_exponents: bool) -> UResult<()> {
     let parsed = parse_num(num_str);
     show_if_err!(&parsed);
     let Ok(x) = parsed else {
@@ -125,7 +121,7 @@ impl Display for NumError<'_> {
 
 /// Writing out the prime factors for integers
 fn write_result(
-    w: &mut io::BufWriter<impl Write>,
+    w: &mut impl Write,
     x: &impl Display,
     factorization: BTreeMap<impl Display, usize>,
     print_exponents: bool,
@@ -155,7 +151,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let stdout = stdout();
     // use a smaller buffer here to pass a GNU test.
-    let mut w = io::BufWriter::with_capacity(4 * 1024, stdout.lock());
+    let mut w = uucore::output::StdoutBuffer::with_capacity(4 * 1024, stdout.lock());
 
     if let Some(values) = matches.get_many::<String>(options::NUMBER) {
         for number in values {
