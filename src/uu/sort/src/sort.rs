@@ -2353,7 +2353,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         /* if no file, default to stdin */
         files.push(OsString::from(STDIN_FILE));
     } else if settings.check && files.len() != 1 {
-        return Err(UUsageError::new(
+        return Err(USimpleError::new(
             2,
             translate_text!("sort-extra-operand-not-allowed-with-c", "operand" => files[1].quote()),
         ));
@@ -2372,11 +2372,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // This rejects non-ASCII codepoints, but perhaps we don't have to.
         // On the other hand GNU accepts any single byte, valid unicode or not.
         // (Supporting multi-byte chars would require changes in tokenize_with_separator().)
+        // GNU reports these without the usage hint.
         let &[sep_char] = separator.as_bytes() else {
-            return Err(UUsageError::new(
-                2,
-                translate!("sort-separator-must-be-one-char", "separator" => separator.quote()),
-            ));
+            let message = if separator.is_empty() {
+                translate!("sort-empty-tab")
+            } else {
+                translate!("sort-multi-character-tab", "separator" => separator.quote())
+            };
+            return Err(USimpleError::new(2, message));
         };
         settings.separator = Some(sep_char);
     }
