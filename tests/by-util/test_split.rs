@@ -1470,10 +1470,11 @@ fn test_line_bytes_no_empty_file() {
     assert!(!at.plus("xak").exists());
 }
 
-#[test]
-fn test_line_bytes_no_eof() {
+#[rstest::rstest]
+fn test_line_bytes_no_eof(#[values(1, 2, 8192)] io_blksize: usize) {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-C", "3"])
+        .arg(format!("---io-blksize={io_blksize}"))
         .pipe_in("1\n2222\n3\n4")
         .succeeds()
         .no_output();
@@ -2368,4 +2369,39 @@ fn test_obsolete_lines_not_read_after_double_dash() {
         .args(&["--", "-1"])
         .fails()
         .stderr_contains("cannot open '-1' for reading");
+}
+
+#[rstest::rstest]
+#[case(&["-C", "10"])]
+#[case(&["-C", "10", "--separator=:"])]
+fn test_line_bytes_streams_unterminated_lines(#[case] args: &[&str]) {
+    use std::time::{Duration, Instant};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut child = ucmd
+        .args(args)
+        .set_stdin(std::process::Stdio::piped())
+        .run_no_wait();
+    let mut stalled_at = None;
+    for (data, file, expected) in [
+        ("hello", "xaa", "hello"),
+        ("world", "xaa", "helloworld"),
+        ("!", "xab", "!"),
+    ] {
+        child.write_in(data);
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while fs::read(at.plus(file)).ok().as_deref() != Some(expected.as_bytes()) {
+            if Instant::now() >= deadline {
+                stalled_at = Some(file);
+                break;
+            }
+            child.delay(10);
+        }
+        if stalled_at.is_some() {
+            break;
+        }
+    }
+    child.close_stdin();
+    child.wait().unwrap().success().no_output();
+    assert!(stalled_at.is_none(), "output stalled at {stalled_at:?}");
 }
