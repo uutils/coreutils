@@ -18,6 +18,7 @@ use std::os::unix::ffi::OsStrExt;
 use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::i18n::charmap::{Encoding, locale_encoding};
 use uucore::i18n::collator::{
     AlternateHandling, CollatorOptions, locale_cmp, should_use_locale_collation, try_init_collator,
 };
@@ -87,6 +88,36 @@ impl Separator for OneByteSep {
 
     fn output_separator(&self) -> &[u8] {
         &self.byte
+    }
+}
+
+/// A separator that may occur as a trail byte, so matches stay on character boundaries.
+#[derive(Clone)]
+struct CharBoundarySep {
+    needle: Vec<u8>,
+    encoding: Encoding,
+}
+
+impl Separator for CharBoundarySep {
+    fn field_ranges(&self, haystack: &[u8], len_guess: usize) -> Vec<(usize, usize)> {
+        let mut field_ranges = Vec::with_capacity(len_guess);
+        let mut last_end = 0;
+        let mut i = 0;
+        let n = self.needle.len();
+        while i < haystack.len() {
+            let len = self.encoding.char_len(&haystack[i..]);
+            if len == n && haystack[i..i + len] == self.needle[..] {
+                field_ranges.push((last_end, i));
+                last_end = i + len;
+            }
+            i += len;
+        }
+        field_ranges.push((last_end, haystack.len()));
+        field_ranges
+    }
+
+    fn output_separator(&self) -> &[u8] {
+        &self.needle
     }
 }
 
@@ -915,14 +946,37 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let sep = settings.separator.clone();
+    let encoding = locale_encoding();
     match sep {
-        SepSetting::Byte(byte) => exec(file1, file2, settings, OneByteSep { byte: [byte] }),
-        SepSetting::Char(c) => exec(
+        SepSetting::Byte(byte) if encoding.is_single_byte_char(byte) => {
+            exec(file1, file2, settings, OneByteSep { byte: [byte] })
+        }
+        SepSetting::Byte(byte) => exec(
+            file1,
+            file2,
+            settings,
+            CharBoundarySep {
+                needle: vec![byte],
+                encoding,
+            },
+        ),
+        // UTF-8 is self-synchronizing, and a single-byte locale has no
+        // character for a multi-byte needle to land inside.
+        SepSetting::Char(c) if matches!(encoding, Encoding::Utf8 | Encoding::SingleByte) => exec(
             file1,
             file2,
             settings,
             MultiByteSep {
                 finder: Finder::new(&c),
+            },
+        ),
+        SepSetting::Char(c) => exec(
+            file1,
+            file2,
+            settings,
+            CharBoundarySep {
+                needle: c,
+                encoding,
             },
         ),
         SepSetting::Whitespaces => exec(file1, file2, settings, WhitespaceSep {}),

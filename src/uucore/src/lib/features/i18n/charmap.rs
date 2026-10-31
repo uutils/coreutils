@@ -89,6 +89,21 @@ impl Encoding {
         len
     }
 
+    /// Whether a search for `byte` can never land inside a longer character.
+    ///
+    /// Single-byte encodings have no longer characters. In UTF-8, EUC-JP and
+    /// EUC-KR an ASCII byte is never a trail byte. GB18030 uses `0x30`–`0x39`
+    /// and `0x40`–`0x7E` as trail bytes, and Big5 uses `0x40`–`0x7E`.
+    #[inline]
+    pub fn is_single_byte_char(self, byte: u8) -> bool {
+        match self {
+            Self::SingleByte => true,
+            Self::Utf8 | Self::EucJp | Self::EucKr => byte <= 0x7F,
+            Self::Gb18030 => !matches!(byte, 0x30..=0x39 | 0x40..=0x7E | 0x80..=0xFE),
+            Self::Big5 => !matches!(byte, 0x40..=0x7E | 0x81..=0xFE),
+        }
+    }
+
     /// If the first character in `bytes` is horizontal whitespace ("blank"),
     /// return its byte length; otherwise `None`.
     ///
@@ -255,6 +270,24 @@ mod tests {
         assert_eq!(Encoding::Utf8.blank_len(&[0xe2, 0x80]), None);
         // Surrogate half.
         assert_eq!(Encoding::Utf8.blank_len(&[0xed, 0xa0, 0x80]), None);
+    }
+
+    #[test]
+    fn ascii_byte_search_is_safe_except_where_trail_bytes_overlap() {
+        for byte in 0u8..=0x7F {
+            assert!(Encoding::SingleByte.is_single_byte_char(byte));
+            assert!(Encoding::Utf8.is_single_byte_char(byte));
+            assert!(Encoding::EucJp.is_single_byte_char(byte));
+            assert!(Encoding::EucKr.is_single_byte_char(byte));
+        }
+        assert!(!Encoding::Utf8.is_single_byte_char(0x80));
+        assert!(!Encoding::Gb18030.is_single_byte_char(b'|'));
+        assert!(!Encoding::Gb18030.is_single_byte_char(b'5'));
+        assert!(Encoding::Gb18030.is_single_byte_char(b' '));
+        assert!(!Encoding::Big5.is_single_byte_char(b'|'));
+        assert!(Encoding::Big5.is_single_byte_char(b'5'));
+        assert!(Encoding::EucJp.is_single_byte_char(b'|'));
+        assert!(!Encoding::EucJp.is_single_byte_char(0xA2));
     }
 
     #[test]

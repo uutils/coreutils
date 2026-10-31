@@ -1038,3 +1038,89 @@ fn test_missing_key_is_empty_key() {
         .succeeds()
         .stdout_only("1002 bob\n");
 }
+
+/// A one-byte separator that is a trail byte in the locale's encoding must not
+/// split a character. The encoding comes from the locale name, so the locale
+/// does not have to be installed.
+#[test]
+#[cfg(unix)]
+fn separator_inside_of_a_character() {
+    fn expect(locale: &str, sep: &[u8], left: &[u8], right: &[u8], extra: &[&str], expected: &[u8]) {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write_bytes("left", left);
+        at.write_bytes("right", right);
+        ucmd.env("LC_ALL", locale)
+            .arg("-t")
+            .arg(OsStr::from_bytes(sep))
+            .args(extra)
+            .arg("left")
+            .arg("right")
+            .succeeds()
+            .stdout_only_bytes(expected);
+    }
+
+    // GB18030/GBK 東 is 96 7C, and 7C is '|'.
+    let mut users = b"alice|Alice|staff\nmallory|".to_vec();
+    users.extend_from_slice(&[0x96, 0x7c]);
+    users.extend_from_slice(b"admin|guest\n");
+    let homes = b"alice|/home/alice\nmallory|/home/mallory\n";
+    let whole = b"alice|staff|/home/alice\nmallory|guest|/home/mallory\n";
+    let split = b"alice|staff|/home/alice\nmallory|admin|/home/mallory\n";
+    for locale in ["zh_CN.GB18030", "zh_CN.GBK"] {
+        expect(locale, b"|", &users, homes, &["-o", "0,1.3,2.2"], whole);
+    }
+    expect("C", b"|", &users, homes, &["-o", "0,1.3,2.2"], split);
+    expect(
+        "ru_RU.KOI8-R",
+        b"|",
+        &users,
+        homes,
+        &["-o", "0,1.3,2.2"],
+        split,
+    );
+
+    // Big5 四 is A5 7C.
+    let mut big5 = b"alice|Alice|staff\nmallory|".to_vec();
+    big5.extend_from_slice(&[0xa5, 0x7c]);
+    big5.extend_from_slice(b"admin|guest\n");
+    expect(
+        "zh_TW.Big5",
+        b"|",
+        &big5,
+        homes,
+        &["-o", "0,1.3,2.2"],
+        whole,
+    );
+
+    // UTF-8 東 does not contain the separator byte.
+    let utf8 = "alice|Alice|staff\nmallory|東admin|guest\n";
+    expect(
+        "en_US.UTF-8",
+        b"|",
+        utf8.as_bytes(),
+        homes,
+        &["-o", "0,1.3,2.2"],
+        whole,
+    );
+
+    // GB18030 four-byte form 81 35 81 35 contains the digit separator '5'.
+    let key = [0x81, 0x35, 0x81, 0x35];
+    let mut left = key.to_vec();
+    left.extend_from_slice(b"5value\n");
+    let mut right = key.to_vec();
+    right.extend_from_slice(b"5other\n");
+    let mut expected = key.to_vec();
+    expected.extend_from_slice(b"5value5other\n");
+    expect("zh_CN.GB18030", b"5", &left, &right, &[], &expected);
+
+    // EUC-JP A4 A2 is one character; A2 is the separator.
+    let mut left = vec![0xa4, 0xa2, 0xa2];
+    left.extend_from_slice(b"value\n");
+    let mut right = vec![0xa4, 0xa2, 0xa2];
+    right.extend_from_slice(b"other\n");
+    let mut expected = vec![0xa4, 0xa2, 0xa2];
+    expected.extend_from_slice(b"value");
+    expected.push(0xa2);
+    expected.extend_from_slice(b"other\n");
+    expect("ja_JP.EUC-JP", &[0xa2], &left, &right, &[], &expected);
+}
