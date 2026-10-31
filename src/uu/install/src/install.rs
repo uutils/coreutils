@@ -993,6 +993,16 @@ fn perform_backup(from: &Path, to: &Path, b: &Behavior) -> UResult<Option<PathBu
         );
     }
 
+    // Never move a directory aside to put a file in its place. Like GNU,
+    // refuse it, but still back up a symlink to a directory.
+    if b.backup_mode != BackupMode::None && fs::symlink_metadata(to).is_ok_and(|m| m.is_dir()) {
+        return Err(InstallError::CreateRegularFileFailed(
+            to.to_path_buf(),
+            rustix::io::Errno::ISDIR.into(),
+        )
+        .into());
+    }
+
     if to.exists() {
         if b.verbose {
             writeln!(
