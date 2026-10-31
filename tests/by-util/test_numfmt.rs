@@ -442,11 +442,13 @@ fn test_field_with_multibyte_whitespace_separator() {
     // A multibyte Unicode whitespace separator (U+3000) before a selected field
     // is normalized to a single space rather than sliced mid-character.
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .args(&["--field", "2", "1　2"])
         .succeeds()
         .stdout_only("1 2\n");
 
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .args(&["--from=auto", "--field", "2"])
         .pipe_in("1K\u{3000}2K\n")
         .succeeds()
@@ -2107,4 +2109,37 @@ fn test_repeated_field_is_an_error() {
         .args(&["--field=1", "--field=1", "1000"])
         .fails_with_code(1)
         .stderr_only("numfmt: multiple field specifications\n");
+}
+
+#[rstest]
+#[case::vertical_tab("1\x0b2 3K\n", "1\x0b2 3000\n")]
+#[case::form_feed("1\x0c2 3K\n", "1\x0c2 3000\n")]
+#[case::carriage_return("1\r2 3K\n", "1\r2 3000\n")]
+#[case::no_break_space("1\u{a0}2 3K\n", "1\u{a0}2 3000\n")]
+#[case::narrow_no_break_space("1\u{202f}2 3K\n", "1\u{202f}2 3000\n")]
+fn test_field_separator_is_a_blank(#[case] input: &str, #[case] expected: &str) {
+    // Only blanks separate fields, so these characters stay inside field 1.
+    new_ucmd!()
+        .args(&["--from=si", "--field=2"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[rstest]
+#[case::ideographic_space("1\u{3000}2000\n")]
+#[case::em_space("1\u{2003}2000\n")]
+fn test_multibyte_blank_separates_only_in_utf8_locale(#[case] input: &str) {
+    // In the C locale a multibyte blank is not a blank, so it stays inside field 1.
+    new_ucmd!()
+        .args(&["--to=si", "--field=2"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(input);
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["--to=si", "--field=2"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("1 2.0k\n");
 }
