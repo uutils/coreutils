@@ -8,7 +8,7 @@
 #![cfg(not(target_os = "fuchsia"))]
 
 use clap::{Arg, ArgAction, Command};
-use std::io::{self, BufWriter, Write};
+use std::io::{self, Write};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use uucore::translate;
@@ -172,7 +172,7 @@ fn handle_obsolete(args: &mut Vec<String>) -> UResult<Option<usize>> {
 fn table() -> UResult<()> {
     // Buffer the listing so a failed write surfaces as one clean error at flush
     // rather than the runtime's implicit-flush message on top of ours.
-    let mut out = BufWriter::new(io::stdout().lock());
+    let mut out = uucore::output::StdoutBuffer::new(io::stdout().lock());
     for signal_value in 0..=signal_number_upper_bound() {
         if let Some(signal_name) = signal_list_name_by_value(signal_value) {
             writeln!(out, "{signal_value: >#2} {signal_name}").map_err(KillError::Write)?;
@@ -215,14 +215,14 @@ fn print_signal(signal_name_or_value: &str) -> UResult<()> {
         ));
     };
 
-    let mut out = BufWriter::new(io::stdout().lock());
+    let mut out = uucore::output::StdoutBuffer::new(io::stdout().lock());
     writeln!(out, "{output}").map_err(KillError::Write)?;
     out.flush().map_err(KillError::Write)?;
     Ok(())
 }
 
 fn print_signals() -> UResult<()> {
-    let mut out = BufWriter::new(io::stdout().lock());
+    let mut out = uucore::output::StdoutBuffer::new(io::stdout().lock());
     for signal_value in 0..=signal_number_upper_bound() {
         if let Some(signal_name) = signal_list_name_by_value(signal_value) {
             writeln!(out, "{signal_name}").map_err(KillError::Write)?;
