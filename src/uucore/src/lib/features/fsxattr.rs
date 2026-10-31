@@ -7,7 +7,6 @@
 
 //! Set of functions to manage xattr on files and dirs
 
-use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use std::ffi::{OsStr, OsString};
 #[cfg(unix)]
@@ -247,6 +246,42 @@ pub fn apply_xattrs_fd_ignore_unsupported(
     }
 }
 
+/// Summary of a single `listxattr` pass: whether any attributes exist (used as
+/// the ACL/`+` indicator) and whether `security.capability` is among them.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct XattrSummary {
+    pub has_acl: bool,
+    /// Linux file capabilities (`security.capability`); meaningful on Unix only.
+    #[cfg(unix)]
+    pub has_capability: bool,
+}
+
+/// List extended attributes once and derive the flags that `ls -l` / `--color`
+/// need, so callers can share one `llistxattr` instead of issuing separate
+/// scans for ACLs and capabilities.
+pub fn summarize_xattrs<P: AsRef<Path>>(file: P, dereference: bool) -> XattrSummary {
+    // don't use exacl here, it is doing more getxattr call then needed
+    let attrs = if dereference {
+        xattr::list_deref(file)
+    } else {
+        xattr::list(file)
+    };
+
+    let Ok(list) = attrs else {
+        return XattrSummary::default();
+    };
+
+    let mut summary = XattrSummary::default();
+    for name in list {
+        summary.has_acl = true;
+        #[cfg(unix)]
+        if name.as_bytes() == b"security.capability" {
+            summary.has_capability = true;
+        }
+    }
+    summary
+}
+
 /// Checks if a file has an Access Control List (ACL).
 ///
 /// On macOS this asks the ACL API; elsewhere it looks at the file's extended
@@ -267,19 +302,8 @@ pub fn has_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
     #[cfg(target_os = "macos")]
     return macos_acl::has_extended_acl(file.as_ref(), dereference);
 
-    // don't use exacl here, it is doing more getxattr call then needed
     #[cfg(not(target_os = "macos"))]
-    let attrs = if dereference {
-        xattr::list_deref(file)
-    } else {
-        xattr::list(file)
-    };
-
-    #[cfg(not(target_os = "macos"))]
-    attrs.is_ok_and(|acl| {
-        // if we have extra attributes, we have an acl
-        acl.count() > 0
-    })
+    summarize_xattrs(file, dereference).has_acl
 }
 
 #[cfg(target_os = "macos")]
@@ -324,33 +348,6 @@ mod macos_acl {
         unsafe { acl_free(acl) };
         has_entry
     }
-}
-
-/// Checks if a file has an Access Control List (ACL) named "security.capability" based on its extended attributes.
-///
-/// # Arguments
-///
-/// * `file` - A reference to the path of the file.
-/// * `dereference` - Whether to inspect the target of a symlink instead of the link itself.
-///
-/// # Returns
-///
-/// `true` if the file has an extended attribute named "security.capability", `false` otherwise.
-pub fn has_security_cap_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
-    // don't use exacl here, it is doing more getxattr call then needed
-    let attrs = if dereference {
-        xattr::list_deref(file)
-    } else {
-        xattr::list(file)
-    };
-
-    attrs.is_ok_and(|mut acl| {
-        #[cfg(unix)]
-        return acl.contains(OsStr::from_bytes(b"security.capability"));
-
-        #[cfg(not(unix))]
-        return false;
-    })
 }
 
 /// Returns the permissions bits of a file or directory which has Access Control List (ACL) entries based on its
@@ -564,7 +561,7 @@ mod tests {
 
         // On macOS an ACL isn't an xattr, so an xattr alone is not an ACL.
         assert_eq!(has_acl(&file_path, true), cfg!(not(target_os = "macos")));
-        assert!(!has_security_cap_acl(&file_path, true));
+        assert!(!summarize_xattrs(&file_path, true).has_capability);
 
         // FreeBSD/NetBSD's xattr library does not support the "security" namespace
         // (https://github.com/Stebalien/xattr/blob/master/src/sys/bsd.rs#L148).
@@ -576,7 +573,8 @@ mod tests {
             let test_value = b"";
             xattr::set(&file_path, test_attr, test_value).unwrap();
 
-            assert!(has_security_cap_acl(&file_path, true));
+            let summary = summarize_xattrs(&file_path, true);
+            assert!(summary.has_acl && summary.has_capability);
         }
     }
 

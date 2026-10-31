@@ -534,27 +534,18 @@ pub(crate) fn color_name(
     target_symlink: Option<&PathData>,
     wrap: bool,
 ) -> OsString {
-    // Check if the file has capabilities
-    #[cfg(any(
-        target_os = "freebsd",
-        target_os = "hurd",
-        target_os = "linux",
-        target_os = "netbsd"
-    ))]
+    // Skip checking capabilities if LS_COLORS=ca=:; reuse PathData's
+    // cached xattr summary so this does not add a second llistxattr.
+    // Unsupported platforms stub `has_security_capability` to false.
+    if style_manager
+        .colors
+        .has_explicit_style_for(Indicator::Capabilities)
+        && path.has_security_capability()
     {
-        // Skip checking capabilities if LS_COLORS=ca=:
-        let has_capabilities = style_manager
+        let capabilities = style_manager
             .colors
-            .has_explicit_style_for(Indicator::Capabilities)
-            && uucore::fsxattr::has_security_cap_acl(&path.p_buf, path.must_dereference);
-
-        // If the file has capabilities, use a specific style for `ca` (capabilities)
-        if has_capabilities {
-            let capabilities = style_manager
-                .colors
-                .style_for_indicator(Indicator::Capabilities);
-            return style_manager.apply_style(capabilities, Some(path), name, wrap);
-        }
+            .style_for_indicator(Indicator::Capabilities);
+        return style_manager.apply_style(capabilities, Some(path), name, wrap);
     }
 
     if target_symlink.is_none()
