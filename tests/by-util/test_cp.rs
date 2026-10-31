@@ -9709,6 +9709,8 @@ fn test_cp_source_in_unsearchable_dir() {
         .stderr_only("cp: cannot stat 'd/f': Permission denied\n");
     at.set_mode("d", 0o755);
     assert!(!at.file_exists("dest"));
+}
+
 #[test]
 fn test_symbolic_link_and_link_conflict() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -9745,6 +9747,22 @@ fn test_link_with_backup_suffix_attached_to_the_flag() {
         .succeeds()
         .no_stderr();
     assert!(at.file_exists("b"));
+}
+
+#[test]
+// Android's app-private filesystem refuses hard links.
+#[cfg(not(target_os = "android"))]
+fn test_link_with_an_abbreviated_symbolic_link_flag() {
+    // `--sym` is an unambiguous prefix of `--symbolic-link`, and it still conflicts
+    // with `-l` rather than making a hard link.
+    for flag in ["--sym", "--symbol", "--symbolic-link"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("a.txt", "a\n");
+        ucmd.args(&[flag, "-l", "a.txt", "b"])
+            .fails_with_code(1)
+            .stderr_contains("cannot make both hard and symbolic links");
+        assert!(!at.file_exists("b"));
+    }
 }
 
 #[test]
