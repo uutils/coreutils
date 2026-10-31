@@ -7,7 +7,7 @@
 
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{self, BufReader, BufWriter, Read, stdin, stdout};
 use std::num::IntErrorKind;
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
@@ -264,17 +264,20 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn open_output(output: Option<&Path>) -> UResult<BufWriter<Box<dyn OsWrite>>> {
+fn open_output(output: Option<&Path>) -> UResult<Box<dyn OsWrite>> {
     let writer: Box<dyn OsWrite> = match output {
-        None => Box::new(stdout()),
+        None => Box::new(uucore::output::StdoutBuffer::with_capacity(
+            BUF_SIZE,
+            stdout(),
+        )),
         Some(s) => {
             let file = File::create(s).map_err_context(
                 || translate!("shuf-error-failed-to-open-for-writing", "file" => s.quote()),
             )?;
-            Box::new(file)
+            Box::new(BufWriter::with_capacity(BUF_SIZE, file))
         }
     };
-    Ok(BufWriter::with_capacity(BUF_SIZE, writer))
+    Ok(writer)
 }
 
 fn read_input_file(filename: &Path) -> UResult<Vec<u8>> {
@@ -385,23 +388,23 @@ impl Shufable for RangeInclusive<u64> {
 }
 
 trait Writable {
-    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), io::Error>;
+    fn write_all_to(&self, output: &mut dyn OsWrite) -> Result<(), io::Error>;
 }
 
 impl Writable for &[u8] {
-    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), io::Error> {
+    fn write_all_to(&self, output: &mut dyn OsWrite) -> Result<(), io::Error> {
         output.write_all(self)
     }
 }
 
 impl Writable for &OsStr {
-    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), io::Error> {
+    fn write_all_to(&self, output: &mut dyn OsWrite) -> Result<(), io::Error> {
         output.write_all_os(self)
     }
 }
 
 impl Writable for u64 {
-    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), io::Error> {
+    fn write_all_to(&self, output: &mut dyn OsWrite) -> Result<(), io::Error> {
         // The itoa crate is surprisingly much more efficient than a formatted write.
         // It speeds up `shuf -r -n1000000 -i1-1024` by 1.8×.
         let mut buf = itoa::Buffer::new();
@@ -421,7 +424,7 @@ fn shuf_exec(
     input: &mut impl Shufable,
     opts: &Options,
     rng: &mut WrappedRng,
-    output: &mut BufWriter<Box<dyn OsWrite>>,
+    output: &mut dyn OsWrite,
 ) -> UResult<()> {
     let sep = [opts.sep];
     if opts.repeat {
