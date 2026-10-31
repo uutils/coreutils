@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline onetwo somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline onetwo somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile konsole
 // spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE NOTCAPABLE iproduct newfstatat isox
 
 #![allow(
@@ -7098,6 +7098,40 @@ fn test_term_colorterm() {
         result.stdout_str().trim().escape_default().to_string(),
         "exe"
     );
+}
+
+#[test]
+fn test_term_glob_patterns() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+
+    for (term, colored) in [
+        ("xterm-256color", true),
+        ("konsole", true),
+        ("dumb", false),
+        ("konsole-256color", true),
+        ("linux-256color", true),
+        ("konsole-direct", true),
+        ("con80x25", true),
+    ] {
+        let result = scene
+            .ucmd()
+            .arg("--color=always")
+            .env("LS_COLORS", "")
+            .env("TERM", term)
+            .succeeds();
+        let expected = if colored {
+            "\\u{1b}[0m\\u{1b}[01;34mdir\\u{1b}[0m"
+        } else {
+            "dir"
+        };
+        assert_eq!(
+            result.stdout_str().trim().escape_default().to_string(),
+            expected,
+            "TERM={term}"
+        );
+    }
 }
 
 #[cfg(all(unix, not(target_vendor = "apple")))]
