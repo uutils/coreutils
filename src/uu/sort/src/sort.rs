@@ -2143,6 +2143,32 @@ where
     })
 }
 
+/// Parse one -t/--field-separator value the way GNU does.
+fn parse_separator(arg: &OsString) -> UResult<u8> {
+    let mut separator = arg.to_str().ok_or_else(|| {
+        UUsageError::new(
+            2,
+            translate!("sort-separator-not-valid-unicode", "arg" => arg.quote()),
+        )
+    })?;
+    if separator == "\\0" {
+        separator = "\0";
+    }
+    // This rejects non-ASCII codepoints, but perhaps we don't have to.
+    // On the other hand GNU accepts any single byte, valid unicode or not.
+    // (Supporting multi-byte chars would require changes in tokenize_with_separator().)
+    // GNU reports these without the usage hint.
+    let &[sep_char] = separator.as_bytes() else {
+        let message = if separator.is_empty() {
+            translate!("sort-empty-tab")
+        } else {
+            translate!("sort-multi-character-tab", "separator" => separator.quote())
+        };
+        return Err(USimpleError::new(2, message));
+    };
+    Ok(sep_char)
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -2187,10 +2213,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(SortError::MultipleOutputFiles.into());
     }
 
-    // Prevent -t/--field-separator from being given different values. Raw
-    // values suffice: `\0` is the only spelling rewritten later, and argv cannot hold a NUL.
-    if has_conflicting_values::<OsString>(&matches, options::SEPARATOR) {
-        return Err(SortError::IncompatibleTabs.into());
+    // Like GNU, check each -t/--field-separator in order: a bad value is
+    // reported before it is compared with an earlier one.
+    if let Some(values) = matches.get_many::<OsString>(options::SEPARATOR) {
+        for arg in values {
+            let sep_char = parse_separator(arg)?;
+            if settings.separator.is_some_and(|prev| prev != sep_char) {
+                return Err(SortError::IncompatibleTabs.into());
+            }
+            settings.separator = Some(sep_char);
+        }
     }
 
     settings.debug = matches.get_flag(options::DEBUG);
@@ -2404,33 +2436,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if settings.check && files.len() != 1 {
         return Err(USimpleError::new(
             2,
-            translate_text!("sort-extra-operand-not-allowed-with-c", "operand" => files[1].quote()),
+            translate_text!(
+                "sort-extra-operand-not-allowed-with-c",
+                "operand" => files[1].quote(),
+                "option" => if settings.check_silent { "-C" } else { "-c" }
+            ),
         ));
-    }
-
-    if let Some(arg) = matches.get_one::<OsString>(options::SEPARATOR) {
-        let mut separator = arg.to_str().ok_or_else(|| {
-            UUsageError::new(
-                2,
-                translate!("sort-separator-not-valid-unicode", "arg" => arg.quote()),
-            )
-        })?;
-        if separator == "\\0" {
-            separator = "\0";
-        }
-        // This rejects non-ASCII codepoints, but perhaps we don't have to.
-        // On the other hand GNU accepts any single byte, valid unicode or not.
-        // (Supporting multi-byte chars would require changes in tokenize_with_separator().)
-        // GNU reports these without the usage hint.
-        let &[sep_char] = separator.as_bytes() else {
-            let message = if separator.is_empty() {
-                translate!("sort-empty-tab")
-            } else {
-                translate!("sort-multi-character-tab", "separator" => separator.quote())
-            };
-            return Err(USimpleError::new(2, message));
-        };
-        settings.separator = Some(sep_char);
     }
 
     if let Some(values) = matches.get_many::<String>(options::KEY) {
