@@ -5431,6 +5431,22 @@ fn test_ls_selinux_context_indicator() {
         );
     }
 
+    // A file with an ACL as well as a context is listed with `+`: the context is
+    // an extended attribute too, so it must not hide the ACL.
+    at.touch("file_acl");
+    if run_attr_tool(
+        "setfacl",
+        &["-m", "u:bin:r--", &at.plus_as_string("file_acl")],
+    ) {
+        let result = scene.ucmd().args(&["-l", "file_acl"]).succeeds();
+        let first_line = result.stdout_str().lines().next().unwrap().to_string();
+        assert_eq!(
+            first_line.chars().nth(10),
+            Some('+'),
+            "Expected '+' indicator for an ACL plus SELinux context, got: {first_line}",
+        );
+    }
+
     // Test that ls -lnZ properly shows the context
     for file in ["file", "link"] {
         let result = scene.ucmd().args(&["-lnZ", file]).succeeds();
@@ -7179,6 +7195,95 @@ fn test_acl_display_macos() {
         .args(&["-l", "with_acl", "without_acl"])
         .succeeds()
         .stdout_matches(&re_with_acl)
+        .stdout_matches(&re_without_acl);
+}
+
+/// Runs an attribute tool (`setfacl`, `setfattr`) on a test file. Returns false, after
+/// saying why, when it cannot be used here, so that the caller can skip its test.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn run_attr_tool(tool: &str, args: &[&str]) -> bool {
+    use std::process::Command;
+
+    // calling the command directly. xattr requires some dev packages to be installed
+    // and it adds a complex dependency just for a test
+    match Command::new(tool).args(args).status().map(|s| s.code()) {
+        Ok(Some(0)) => true,
+        Ok(_) => {
+            println!("test skipped: {tool} failed");
+            false
+        }
+        Err(e) => {
+            println!("test skipped: {tool} failed with {e}");
+            false
+        }
+    }
+}
+
+// A real ACL is listed with `+`, so the check below that other attributes are not
+// is not just passing because `+` never shows up.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_acl_display_access_acl_on_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("with_acl");
+    at.touch("without_acl");
+
+    if !run_attr_tool(
+        "setfacl",
+        &["-m", "u:bin:r--", &at.plus_as_string("with_acl")],
+    ) {
+        return;
+    }
+
+    let result = scene
+        .ucmd()
+        .args(&["-l", "with_acl", "without_acl"])
+        .succeeds();
+    let out = result.stdout_str();
+    assert!(
+        Regex::new(r"(?m)^-[rwx-]{9}\+ .*with_acl$")
+            .unwrap()
+            .is_match(out),
+        "{out}"
+    );
+    assert!(
+        Regex::new(r"(?m)^-[rwx-]{9}[^+].*without_acl$")
+            .unwrap()
+            .is_match(out),
+        "{out}"
+    );
+}
+
+// An extended attribute that is not an ACL (a security label is one too) must not
+// be listed with the ACL `+`.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_acl_display_ignores_other_xattrs() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("with_xattr");
+
+    if !run_attr_tool(
+        "setfattr",
+        &[
+            "-n",
+            "user.test",
+            "-v",
+            "1",
+            &at.plus_as_string("with_xattr"),
+        ],
+    ) {
+        return;
+    }
+
+    // Whatever follows the mode bits (nothing, or `.` for a security context on
+    // an SELinux host), it is not the ACL `+`.
+    let re_without_acl = Regex::new(r"(?m)^-[rwx-]{9}[^+].*with_xattr$").unwrap();
+    scene
+        .ucmd()
+        .args(&["-l", "with_xattr"])
+        .succeeds()
         .stdout_matches(&re_without_acl);
 }
 
