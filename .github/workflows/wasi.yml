@@ -88,6 +88,6 @@ jobs:
           test_paste:: test_pathchk:: test_pr:: test_printenv:: test_printf:: test_ptx:: \
           test_pwd:: test_readlink:: test_realpath:: test_rmdir:: test_sha1sum:: test_sha224sum:: test_sha256sum:: \
           test_sha384sum:: test_sha512sum:: test_shred:: test_shuf:: test_sleep:: \
-          test_sum:: test_tail:: test_tee:: \
+          test_sort::sort_multiple test_sort::test_check test_sum:: test_tail:: test_tee:: \
           test_test:: test_touch:: test_tr:: test_true:: test_truncate:: test_uname:: \
           test_uniq:: test_unexpand:: test_unlink:: test_vdir:: test_wc:: test_yes::

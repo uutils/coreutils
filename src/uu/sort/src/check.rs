@@ -11,9 +11,9 @@ use crate::{
     compare_by, open,
 };
 use itertools::Itertools;
+use std::{cmp::Ordering, ffi::OsStr};
+#[cfg(not(target_os = "wasi"))]
 use std::{
-    cmp::Ordering,
-    ffi::OsStr,
     io::Read,
     iter,
     sync::mpsc::{Receiver, SyncSender, sync_channel},
@@ -21,11 +21,76 @@ use std::{
 };
 use uucore::error::UResult;
 
+fn buffer_size(settings: &GlobalSettings) -> usize {
+    if settings.buffer_size < 100 * 1024 {
+        // when the buffer size is smaller than 100KiB we choose it instead of the default.
+        // this improves testability.
+        settings.buffer_size
+    } else {
+        100 * 1024
+    }
+}
+
+/// Returns [`SortError::Disorder`] for the first line that violates the requested ordering.
+#[cfg(target_os = "wasi")]
+fn check_chunks(
+    path: &OsStr,
+    settings: &GlobalSettings,
+    max_allowed_cmp: Ordering,
+    chunks: impl Iterator<Item = Chunk>,
+) -> UResult<()> {
+    let mut prev_chunk: Option<Chunk> = None;
+    let mut line_idx = 0;
+    for chunk in chunks {
+        line_idx += 1;
+        if let Some(prev_chunk) = &prev_chunk {
+            // Check if the first element of the new chunk is greater than the last
+            // element from the previous chunk
+            let prev_last = prev_chunk.lines().last().unwrap();
+            let new_first = chunk.lines().first().unwrap();
+
+            if compare_by(
+                prev_last,
+                new_first,
+                settings,
+                prev_chunk.line_data(),
+                chunk.line_data(),
+            ) > max_allowed_cmp
+            {
+                return Err(SortError::Disorder {
+                    file: path.to_owned(),
+                    line_number: line_idx,
+                    line: String::from_utf8_lossy(new_first.line).into_owned(),
+                    silent: settings.check_silent,
+                }
+                .into());
+            }
+        }
+
+        for (a, b) in chunk.lines().iter().tuple_windows() {
+            line_idx += 1;
+            if compare_by(a, b, settings, chunk.line_data(), chunk.line_data()) > max_allowed_cmp {
+                return Err(SortError::Disorder {
+                    file: path.to_owned(),
+                    line_number: line_idx,
+                    line: String::from_utf8_lossy(b.line).into_owned(),
+                    silent: settings.check_silent,
+                }
+                .into());
+            }
+        }
+
+        prev_chunk = Some(chunk);
+    }
+    Ok(())
+}
+
 /// Check if the file at `path` is ordered.
 ///
 /// # Returns
 ///
 /// The code we should exit with.
+#[cfg(not(target_os = "wasi"))]
 pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
     let max_allowed_cmp = if settings.unique {
         // If `unique` is enabled, the previous line must compare _less_ to the next one.
@@ -42,13 +107,7 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
         move || reader(file, &recycled_receiver, &loaded_sender, &settings)
     });
     for _ in 0..2 {
-        let _ = recycled_sender.send(RecycledChunk::new(if settings.buffer_size < 100 * 1024 {
-            // when the buffer size is smaller than 100KiB we choose it instead of the default.
-            // this improves testability.
-            settings.buffer_size
-        } else {
-            100 * 1024
-        }));
+        let _ = recycled_sender.send(RecycledChunk::new(buffer_size(settings)));
     }
 
     let mut prev_chunk: Option<Chunk> = None;
@@ -117,7 +176,22 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
     result.and(reader_result)
 }
 
+/// Check if the file at `path` is ordered.
+///
+/// WASI has no threads, so this reads all chunks on the current thread.
+#[cfg(target_os = "wasi")]
+pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
+    let max_allowed_cmp = if settings.unique {
+        Ordering::Less
+    } else {
+        Ordering::Equal
+    };
+    let chunks = read_all_chunks(path, settings)?;
+    check_chunks(path, settings, max_allowed_cmp, chunks.into_iter())
+}
+
 /// The function running on the reader thread.
+#[cfg(not(target_os = "wasi"))]
 fn reader(
     mut file: Box<dyn Read + Send>,
     receiver: &Receiver<RecycledChunk>,
@@ -141,4 +215,33 @@ fn reader(
         }
     }
     Ok(())
+}
+
+/// Reads all chunks of `path` on the current thread.
+#[cfg(target_os = "wasi")]
+fn read_all_chunks(path: &OsStr, settings: &GlobalSettings) -> UResult<Vec<Chunk>> {
+    let mut file = open(path)?;
+    let mut carry_over = vec![];
+    let mut chunks = Vec::new();
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    loop {
+        let recycled = RecycledChunk::new(buffer_size(settings));
+        let should_continue = chunks::read(
+            &sender,
+            recycled,
+            None,
+            &mut carry_over,
+            &mut file,
+            &mut std::iter::empty(),
+            settings.line_ending.into(),
+            settings,
+        )?;
+        while let Ok(chunk) = receiver.try_recv() {
+            chunks.push(chunk);
+        }
+        if !should_continue {
+            break;
+        }
+    }
+    Ok(chunks)
 }
