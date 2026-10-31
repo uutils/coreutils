@@ -400,7 +400,7 @@ fn test_mv_replace_file() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 fn test_mv_replace_symlink_with_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -472,7 +472,7 @@ fn test_mv_symlink_to_directory_with_trailing_slash_keeps_empty_directory() {
 #[rstest]
 #[case::existing_target(true)]
 #[case::dangling_target(false)]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(any(windows, all(unix, not(target_os = "android"))))]
 fn test_mv_replace_symlink_with_directory(#[case] target_exists: bool) {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -497,7 +497,7 @@ fn test_mv_replace_symlink_with_directory(#[case] target_exists: bool) {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 fn test_mv_replace_symlink_with_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -519,7 +519,7 @@ fn test_mv_replace_symlink_with_file() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 fn test_mv_file_to_broken_symlink_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -534,7 +534,7 @@ fn test_mv_file_to_broken_symlink_file() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 fn test_mv_file_to_broken_symlink_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -549,7 +549,7 @@ fn test_mv_file_to_broken_symlink_directory() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(any(windows, all(unix, not(target_os = "android"))))]
 #[cfg_attr(
     wasi_runner,
     ignore = "WASI sandbox: mv doesn't recognize a symlink-to-directory as a directory target, so it overwrites the symlink with a plain file instead of moving into the directory it points to"
@@ -607,7 +607,7 @@ fn test_mv_same_file() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(any(windows, all(unix, not(target_os = "android"))))]
 #[cfg_attr(
     wasi_runner,
     ignore = "WASI: rustix::fs::stat doesn't return stable inode identity, so same-file detection via a hard link fails"
@@ -628,7 +628,7 @@ fn test_mv_same_hardlink() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 fn test_mv_dangling_symlink_to_folder() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -641,7 +641,7 @@ fn test_mv_dangling_symlink_to_folder() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(any(windows, all(unix, not(target_os = "android"))))]
 #[cfg_attr(
     wasi_runner,
     ignore = "WASI: rustix::fs::stat doesn't return stable inode identity, so same-file detection via a symlink fails"
@@ -693,7 +693,7 @@ fn test_mv_same_symlink() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 fn test_mv_same_broken_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -706,7 +706,7 @@ fn test_mv_same_broken_symlink() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 fn test_mv_symlink_into_target() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -735,7 +735,7 @@ fn test_mv_broken_symlink_to_another_fs() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(any(windows, all(unix, not(target_os = "android"))))]
 #[cfg_attr(
     wasi_runner,
     ignore = "WASI: rustix::fs::stat doesn't return stable inode identity, so same-file detection via a symlink/hardlink pair fails"
@@ -768,7 +768,7 @@ fn test_mv_hardlink_to_symlink() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 fn test_mv_same_hardlink_backup_simple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_same_file_a";
@@ -784,7 +784,7 @@ fn test_mv_same_hardlink_backup_simple() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 fn test_mv_same_hardlink_backup_simple_destroy() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_same_file_a~";
@@ -803,7 +803,7 @@ fn test_mv_same_hardlink_backup_simple_destroy() {
 /// Comparing strings let `'a~'` versus `'./a'` slip through, and mv then
 /// destroyed the source and exited 0 with no diagnostic.
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 fn test_mv_backup_simple_guard_ignores_spelling() {
     for target in ["./test_mv_spell_a", "test_mv_spell_a"] {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -827,7 +827,7 @@ fn test_mv_backup_simple_guard_ignores_spelling() {
 
 /// ...but it must not fire for unrelated operands that merely look similar.
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 fn test_mv_backup_simple_guard_allows_unrelated_source() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("test_mv_spell_src", "SRCDATA");
@@ -845,7 +845,7 @@ fn test_mv_backup_simple_guard_allows_unrelated_source() {
 /// A symlink source is a distinct file from the backup it points at, so the
 /// backup rename cannot destroy it. GNU allows this.
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 fn test_mv_backup_simple_guard_allows_symlink_source() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("test_mv_sym_a", "DSTDATA");
@@ -861,7 +861,7 @@ fn test_mv_backup_simple_guard_allows_symlink_source() {
 /// A hard link under another name shares the backup's inode but keeps the data
 /// alive after the rename, so the guard must not fire. GNU allows this.
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 fn test_mv_backup_simple_guard_allows_hardlink_source() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("test_mv_hl_a", "DSTDATA");
@@ -2580,7 +2580,7 @@ fn test_mv_error_msg_with_multiple_sources_that_does_not_exist() {
 
 // Tests for hardlink preservation (now always enabled)
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 fn test_mv_hardlink_preservation() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2599,7 +2599,7 @@ fn test_mv_hardlink_preservation() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 fn test_mv_hardlink_progress_indication() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2625,10 +2625,9 @@ fn test_mv_hardlink_progress_indication() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(any(windows, all(unix, not(target_os = "android"))))]
 fn test_mv_mixed_hardlinks_and_regular_files() {
-    use std::fs::metadata;
-    use std::os::unix::fs::MetadataExt;
+    use uucore::fs::paths_refer_to_same_file;
 
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2655,18 +2654,16 @@ fn test_mv_mixed_hardlinks_and_regular_files() {
     assert!(at.file_exists("target/regular2"));
 
     // Verify hardlinks are preserved (on same filesystem)
-    let h1_meta = metadata(at.plus("target/hardlink1")).unwrap();
-    let h2_meta = metadata(at.plus("target/hardlink2")).unwrap();
-    let r1_meta = metadata(at.plus("target/regular1")).unwrap();
-    let r2_meta = metadata(at.plus("target/regular2")).unwrap();
+    let h1 = at.plus("target/hardlink1");
+    let h2 = at.plus("target/hardlink2");
+    let r1 = at.plus("target/regular1");
+    let r2 = at.plus("target/regular2");
 
     // Hardlinked files should have same inode if on same filesystem
-    if h1_meta.dev() == h2_meta.dev() {
-        assert_eq!(h1_meta.ino(), h2_meta.ino());
-    }
+    assert!(paths_refer_to_same_file(h1, h2, false));
 
     // Regular files should have different inodes
-    assert_ne!(r1_meta.ino(), r2_meta.ino());
+    assert!(!paths_refer_to_same_file(r1, r2, false));
 }
 
 #[cfg(not(windows))]

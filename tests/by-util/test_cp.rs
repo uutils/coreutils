@@ -1499,11 +1499,9 @@ fn test_cp_arg_force() {
 }
 
 /// TODO: write a better test that differentiates --remove-destination
-/// from --force. Also this test currently doesn't work on
-/// Windows. This test originally checked file timestamps, which
+/// from --force. This test originally checked file timestamps, which
 /// proved to be unreliable per target / CI platform
 #[test]
-#[cfg(not(windows))]
 fn test_cp_arg_remove_destination() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -3820,7 +3818,6 @@ fn test_copy_dir_with_symlinks() {
 }
 
 #[test]
-#[cfg(not(windows))]
 #[cfg_attr(
     wasi_runner,
     ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
@@ -4090,7 +4087,6 @@ fn test_copy_through_dangling_symlink_no_dereference_2() {
 
 /// Test that copy through a dangling symbolic link fails, even with --force.
 #[test]
-#[cfg(not(windows))]
 fn test_copy_through_dangling_symlink_force() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("src");
@@ -4592,7 +4588,7 @@ fn test_copy_same_symlink_no_dereference_dangling() {
 }
 
 // TODO: enable for Android, when #3477 solved
-#[cfg(not(any(windows, target_os = "android", target_os = "openbsd")))]
+#[cfg(not(any(target_os = "android", target_os = "openbsd")))]
 #[test]
 #[cfg_attr(
     wasi_runner,
@@ -4752,7 +4748,7 @@ fn test_cp_mode_hardlink_no_dereference() {
     assert_eq!(at.read_symlink("z"), "slink");
 }
 
-#[cfg(not(any(windows, target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 #[test]
 #[cfg_attr(
     wasi_runner,
@@ -4818,7 +4814,6 @@ fn test_remove_destination_symbolic_link_loop() {
 }
 
 #[test]
-#[cfg(not(windows))]
 #[cfg_attr(
     wasi_runner,
     ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
@@ -4988,7 +4983,6 @@ fn test_same_file_backup() {
 }
 
 /// Test that copying file to itself with forced backup succeeds.
-#[cfg(not(windows))]
 #[test]
 fn test_same_file_force() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -5000,7 +4994,6 @@ fn test_same_file_force() {
 }
 
 /// Test that copying file to itself with forced backup succeeds.
-#[cfg(not(windows))]
 #[test]
 #[cfg_attr(
     wasi_runner,
@@ -5104,7 +5097,7 @@ fn test_preserve_hardlink_attributes_in_directory() {
 }
 
 #[test]
-#[cfg(not(any(windows, target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 fn test_hard_link_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("src");
@@ -5117,7 +5110,6 @@ fn test_hard_link_file() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_symbolic_link_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("src");
@@ -5205,7 +5197,6 @@ fn test_non_utf8_target() {
 }
 
 #[test]
-#[cfg(not(windows))]
 #[cfg_attr(
     wasi_runner,
     ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
@@ -8866,7 +8857,6 @@ fn test_cp_current_directory_with_symlinks() {
 }
 
 #[test]
-#[cfg(not(windows))]
 #[cfg_attr(
     wasi_runner,
     ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
