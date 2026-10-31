@@ -16,7 +16,7 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
 use uucore::error::strip_errno;
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 use uucore::selinux::get_getfattr_output;
 use uutests::util::{TestScenario, is_ci, run_ucmd_as_root};
 use uutests::{at_and_ucmd, new_ucmd, util_name};
@@ -2363,7 +2363,7 @@ fn test_install_no_target_basic() {
 
 #[test]
 fn test_context_without_selinux() {
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    #[cfg(selinux)]
     if uucore::selinux::is_selinux_enabled() {
         println!("Test skipped: SELinux is enabled");
         return;
@@ -2441,7 +2441,7 @@ fn test_selinux() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_selinux_invalid_args() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("Test skipped: SELinux is not enabled");
@@ -2473,7 +2473,7 @@ fn test_selinux_invalid_args() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_selinux_default_context() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("Test skipped: SELinux is not enabled");
@@ -2796,22 +2796,7 @@ fn test_install_d_dangling_symlink_in_path_errors() {
 }
 
 #[test]
-// The targets with O_PATH or O_SEARCH, as named by the `has_o_path` and
-// `has_o_search` cfg aliases in src/uucore/build.rs. Elsewhere install cannot
-// anchor on an unreadable directory and fails with EACCES.
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "macos",
-    target_os = "ios",
-    target_os = "tvos",
-    target_os = "watchos",
-    target_os = "visionos",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "illumos",
-    target_os = "solaris"
-))]
+#[cfg(any(has_o_path, has_o_search))]
 fn test_install_d_leading_dirs_in_write_only_directory() {
     // mkdir needs write and execute on the parent, not read, so -D must be
     // able to create leading directories inside a directory it cannot read.

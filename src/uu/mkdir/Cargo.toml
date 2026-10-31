@@ -26,6 +26,9 @@ uucore = { workspace = true, features = [
   "quoting-style",
 ] }
 
+[build-dependencies]
+cfg_aliases = { workspace = true }
+
 [features]
 diagnostics = ["uucore/diagnostics"]
 selinux = ["uucore/selinux"]

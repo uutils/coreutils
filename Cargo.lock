@@ -505,6 +505,7 @@ name = "coreutils"
 version = "0.13.0"
 dependencies = [
  "bytecount",
+ "cfg_aliases",
  "clap",
  "clap_complete",
  "clap_mangen",
@@ -3304,6 +3305,7 @@ dependencies = [
 name = "uu_cp"
 version = "0.13.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "codspeed-divan-compat",
  "filetime",
@@ -3578,6 +3580,7 @@ dependencies = [
 name = "uu_id"
 version = "0.13.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "fluent",
  "rustix",
@@ -3589,6 +3592,7 @@ dependencies = [
 name = "uu_install"
 version = "0.13.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "fluent",
  "rustix",
@@ -3657,6 +3661,7 @@ name = "uu_ls"
 version = "0.13.0"
 dependencies = [
  "ansi-width",
+ "cfg_aliases",
  "clap",
  "codspeed-divan-compat",
  "fluent",
@@ -3686,6 +3691,7 @@ dependencies = [
 name = "uu_mkdir"
 version = "0.13.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "fluent",
  "uucore",
@@ -3695,6 +3701,7 @@ dependencies = [
 name = "uu_mkfifo"
 version = "0.13.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "fluent",
  "libc",
@@ -3706,6 +3713,7 @@ dependencies = [
 name = "uu_mknod"
 version = "0.13.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "fluent",
  "nix",
@@ -3739,6 +3747,7 @@ dependencies = [
 name = "uu_mv"
 version = "0.13.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "codspeed-divan-compat",
  "fluent",
@@ -4102,6 +4111,7 @@ dependencies = [
 name = "uu_stat"
 version = "0.13.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "fluent",
  "rustix",
