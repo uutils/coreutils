@@ -8,11 +8,12 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, Read, Stdin, Stdout, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Stdin, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use uucore::char_width::char_info_at;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
+use uucore::io::InputReader;
 use uucore::translate;
 use uucore::{format_usage, show};
 
@@ -283,21 +284,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-enum Input {
-    Stdin(Stdin),
-    File(File),
-}
-
-impl Read for Input {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            Self::Stdin(s) => s.read(buf),
-            Self::File(f) => f.read(buf),
-        }
-    }
-}
-
-fn open(path: &OsString) -> UResult<BufReader<Input>> {
+fn open(path: &OsString) -> UResult<BufReader<InputReader<File, Stdin>>> {
     // some platforms show different read error
     #[cfg(any(target_os = "wasi", windows))]
     {
@@ -310,12 +297,12 @@ fn open(path: &OsString) -> UResult<BufReader<Input>> {
         }
     }
     if path == "-" {
-        return Ok(BufReader::new(Input::Stdin(stdin())));
+        return Ok(BufReader::new(InputReader::Stdin(stdin())));
     }
     let f = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
     let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
-    Ok(BufReader::new(Input::File(f)))
+    Ok(BufReader::new(InputReader::File(f)))
 }
 
 fn next_tabstop(tab_config: &TabConfig, col: usize) -> Option<usize> {

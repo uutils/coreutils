@@ -8,13 +8,14 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
 use uucore::char_width::char_width_at;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
+use uucore::io::InputReader;
 use uucore::{format_usage, show, translate};
 
 pub mod options {
@@ -259,9 +260,9 @@ pub fn uu_app() -> Command {
     )
 }
 
-fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read>>> {
+fn open(path: &OsString) -> UResult<InputReader> {
     if path == "-" {
-        return Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>));
+        return Ok(InputReader::Stdin(stdin().lock()));
     }
     let path_ref = Path::new(path);
     // some platforms cannot catch this as read error. accept additional overhead.
@@ -275,7 +276,7 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read>>> {
     let file = File::open(path_ref).map_err_context(|| path.maybe_quote().to_string())?;
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
     let _ = rustix::fs::fadvise(&file, 0, None, rustix::fs::Advice::Sequential);
-    Ok(BufReader::new(Box::new(file) as Box<dyn Read>))
+    Ok(InputReader::File(BufReader::new(file)))
 }
 
 /// Compute the number of spaces to the next tabstop.
