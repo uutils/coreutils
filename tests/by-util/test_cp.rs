@@ -4529,9 +4529,6 @@ fn test_cp_overriding_arguments() {
         #[cfg(not(windows))]
         ("--force", "--remove-destination"),
         ("--interactive", "--no-clobber"),
-        ("--link", "--symbolic-link"),
-        #[cfg(not(target_os = "android"))]
-        ("--symbolic-link", "--link"),
         ("--dereference", "--no-dereference"),
         ("--no-dereference", "--dereference"),
     ] {
@@ -9872,4 +9869,71 @@ fn test_progressbar_inexistent_source() {
         .arg("inexistent2")
         .fails_with_code(1)
         .stderr_contains("cp: cannot stat 'inexistent1': No such file or directory");
+}
+
+#[test]
+fn test_symbolic_link_and_link_conflict() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a.txt", "a\n");
+    ucmd.args(&["-s", "-l", "a.txt", "b"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("cannot make both hard and symbolic links");
+    assert!(!at.file_exists("b"));
+}
+
+#[test]
+// Android's app-private filesystem refuses hard links.
+#[cfg(not(target_os = "android"))]
+fn test_link_with_target_directory_attached_to_the_flag() {
+    // "./backups" ends with an "s", but it is the value of -t, not --symbolic-link.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("backups");
+    at.write("a.txt", "a\n");
+    ucmd.args(&["-l", "-t./backups", "a.txt"])
+        .succeeds()
+        .no_stderr();
+    assert!(at.file_exists("backups/a.txt"));
+}
+
+#[test]
+// Android's app-private filesystem refuses hard links.
+#[cfg(not(target_os = "android"))]
+fn test_link_with_backup_suffix_attached_to_the_flag() {
+    // ".s" is the suffix given to -S, not a further flag in the cluster.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a.txt", "a\n");
+    ucmd.args(&["-l", "-b", "-S.s", "a.txt", "b"])
+        .succeeds()
+        .no_stderr();
+    assert!(at.file_exists("b"));
+}
+
+#[test]
+// Android's app-private filesystem refuses hard links.
+#[cfg(not(target_os = "android"))]
+fn test_link_with_an_abbreviated_symbolic_link_flag() {
+    // `--sym` is an unambiguous prefix of `--symbolic-link`, and it still conflicts
+    // with `-l` rather than making a hard link.
+    for flag in ["--sym", "--symbol", "--symbolic-link"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("a.txt", "a\n");
+        ucmd.args(&[flag, "-l", "a.txt", "b"])
+            .fails_with_code(1)
+            .stderr_contains("cannot make both hard and symbolic links");
+        assert!(!at.file_exists("b"));
+    }
+}
+
+#[test]
+// Android's app-private filesystem refuses hard links.
+#[cfg(not(target_os = "android"))]
+fn test_link_with_an_operand_that_looks_like_a_flag() {
+    // Everything after "--" is an operand, even when it starts with a dash.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("-s.txt", "s\n");
+    ucmd.args(&["-l", "--", "-s.txt", "d"])
+        .succeeds()
+        .no_stderr();
+    assert!(at.file_exists("d"));
 }
