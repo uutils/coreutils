@@ -264,9 +264,9 @@ fn invalid_size_error(params: &str, size: u64, type_cat: FormatTypeCategory) -> 
     }
 }
 
-/// Parse the decimal SIZE of a type string. A number that doesn't fit in
-/// u64 is an invalid type string; one that fits but names no type is an
-/// invalid size, like in GNU od.
+/// Parse the decimal SIZE of a type string. Like GNU od, a number above
+/// `INT_MAX` is just an invalid type string; a smaller one that names no
+/// type is an invalid size.
 fn parse_decimal_size(
     decimal_size: &str,
     params: &str,
@@ -274,7 +274,9 @@ fn parse_decimal_size(
 ) -> Result<u8, String> {
     let size: u64 = decimal_size
         .parse()
-        .map_err(|_| translate!("od-error-invalid-type-string", "spec" => params.quote()))?;
+        .ok()
+        .filter(|&size| i32::try_from(size).is_ok())
+        .ok_or_else(|| translate!("od-error-invalid-type-string", "spec" => params.quote()))?;
     match u8::try_from(size) {
         Ok(size) if size > 0 => Ok(size),
         _ => Err(invalid_size_error(params, size, type_cat)),
