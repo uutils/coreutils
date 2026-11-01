@@ -1419,13 +1419,15 @@ fn test_date_tz_various_formats() {
     ignore = "WASI sandbox: timezone/locale database not visible"
 )]
 fn test_date_tz_with_relative_time() {
+    // Anchor the relative expression to a fixed instant so this test does not
+    // depend on the current date or a future timezone transition.
     new_ucmd!()
         .env("TZ", "America/Vancouver")
         .arg("-d")
-        .arg("1 hour ago")
+        .arg("2024-01-02 12:00:00 +0000 1 hour ago")
         .arg("+%Y-%m-%d %H:%M:%S %Z")
         .succeeds()
-        .stdout_matches(&Regex::new(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} P[DS]T\n$").unwrap());
+        .stdout_only("2024-01-02 03:00:00 PST\n");
 }
 
 #[test]

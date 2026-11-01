@@ -1528,6 +1528,7 @@ fn test_cp_arg_remove_destination() {
 #[case::short(&["-b"], Some("~"))]
 #[case::combined_short_flags(&["-vbL"], Some("~"))]
 #[case::long(&["--backup"], Some("~"))]
+#[case::empty_value(&["--backup="], Some("~"))]
 #[case::suffix(&["-b", "--suffix", ".bak"], Some(".bak"))]
 #[case::suffix_implies_backup(&["--suffix", ".bak"], Some(".bak"))]
 #[case::suffix_hyphen_value(&["-b", "--suffix", "-v"], Some("-v"))]
