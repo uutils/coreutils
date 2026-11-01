@@ -109,3 +109,6 @@ encoding-error-invalid-input-z85-length = invalid input (length must be multiple
 backup-error-invalid-argument = invalid argument { $arg } for '{ $origin }'
 backup-error-ambiguous-argument = ambiguous argument { $arg } for '{ $origin }'
 backup-valid-arguments = Valid arguments are:
+
+# OsStr conversion errors
+error-non-utf8-os-str = invalid UTF-8 input { $input } encountered when converting to bytes on a platform that doesn't expose byte arguments

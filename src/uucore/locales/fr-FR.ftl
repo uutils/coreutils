@@ -98,3 +98,6 @@ encoding-error-invalid-input-z85-length = entrée invalide (la longueur doit êt
 backup-error-invalid-argument = argument { $arg } invalide pour '{ $origin }'
 backup-error-ambiguous-argument = argument { $arg } ambigu pour '{ $origin }'
 backup-valid-arguments = Les arguments valides sont :
+
+# Erreurs de conversion OsStr
+error-non-utf8-os-str = entrée UTF-8 invalide { $input } rencontrée lors de la conversion en octets sur une plateforme qui n'expose pas les arguments en octets
