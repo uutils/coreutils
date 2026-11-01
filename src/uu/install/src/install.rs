@@ -993,7 +993,8 @@ fn perform_backup(from: &Path, to: &Path, b: &Behavior) -> UResult<Option<PathBu
         );
     }
 
-    if to.exists() {
+    // A dangling symlink is still a destination entry to back up.
+    if to.symlink_metadata().is_ok() {
         if b.verbose {
             writeln!(
                 stdout(),
