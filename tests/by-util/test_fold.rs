@@ -919,7 +919,7 @@ fn test_dash_operand_reads_stdin() {
 
 /// fold writes out a long unbroken line in pieces before it is complete. A
 /// tab or wide character that no longer fits right after such a write must
-/// still go to the next line, even though nothing of the line is buffered.
+/// still go to the next line.
 ///
 /// The first lines are sized so that the write happens right before the tab
 /// or wide character: the buffer is written out at 8 KiB
