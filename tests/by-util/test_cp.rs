@@ -3989,9 +3989,9 @@ fn test_cp_backup_keeps_destination_when_source_is_missing(#[case] dangling_dest
     } else {
         at.write("dest", "old");
     }
-    ucmd.args(&["-b", "source", "dest"])
-        .fails()
-        .stderr_contains("cannot stat 'source'");
+    let result = ucmd.args(&["-b", "source", "dest"]).fails();
+    #[cfg(unix)]
+    result.stderr_contains("cannot stat 'source'");
     assert!(at.symlink_exists("dest") || at.file_exists("dest"));
     assert!(!at.symlink_exists("dest~") && !at.file_exists("dest~"));
 }
