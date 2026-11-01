@@ -565,6 +565,12 @@ fn test_invalid_type_string_errors() {
             "od: invalid type string 'f3';\nthis system doesn't provide a 3-byte floating point type\n",
         ),
         (
+            "d2147483647",
+            "od: invalid type string 'd2147483647';\nthis system doesn't provide a 2147483647-byte integral type\n",
+        ),
+        ("d2147483648", "od: invalid type string 'd2147483648'\n"),
+        ("f2147483648", "od: invalid type string 'f2147483648'\n"),
+        (
             "d99999999999999999999",
             "od: invalid type string 'd99999999999999999999'\n",
         ),
