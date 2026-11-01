@@ -105,8 +105,16 @@ fn report_verbose_write_error(result: UResult<()>) {
 
 /// Helper function to show error with context and return error status
 fn show_removal_error(error: io::Error, path: &Path) -> bool {
-    let e = error.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
-    show_error!("{e}");
+    if error.kind() == io::ErrorKind::IsADirectory {
+        show_error!(
+            "{}",
+            RmError::CannotRemoveIsDirectory(path.as_os_str().to_os_string())
+        );
+    } else {
+        let e =
+            error.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
+        show_error!("{e}");
+    }
     true
 }
 
@@ -639,9 +647,15 @@ fn is_readable_metadata(metadata: &Metadata) -> bool {
 }
 
 /// Whether the given file or directory is readable.
-#[cfg(any(not(unix), target_os = "redox"))]
+#[cfg(all(any(not(unix), target_os = "redox"), not(target_os = "wasi")))]
 fn is_readable(_path: &Path) -> bool {
     true
+}
+
+/// Checks directory readability on WASI, which has no `PermissionsExt`.
+#[cfg(target_os = "wasi")]
+fn is_readable(path: &Path) -> bool {
+    fs::read_dir(path).is_ok()
 }
 
 #[cfg(unix)]
@@ -1076,9 +1090,31 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
     }
 }
 
+// WASI has no `PermissionsExt`, so the readable and writable distinction the
+// unix variant makes is not available. Directory access collapses to a single
+// `read_dir` probe, so this variant never prints the "write-protected
+// directory" prompt that unix can.
+#[cfg(target_os = "wasi")]
+fn handle_writable_directory(path: &Path, options: &Options, _metadata: &Metadata) -> bool {
+    let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
+
+    let is_accessible = fs::read_dir(path).is_ok();
+
+    match (stdin_ok, is_accessible, options.interactive) {
+        (false, _, InteractiveMode::PromptProtected) | (false, false, InteractiveMode::Never) => {
+            true
+        }
+        (_, false, _) => prompt_yes!(
+            "attempt removal of inaccessible directory {}?",
+            path.quote()
+        ),
+        (_, _, InteractiveMode::Always) => prompt_yes!("remove directory {}?", path.quote()),
+        (_, _, _) => true,
+    }
+}
+
 // I have this here for completeness but it will always return "remove directory {}" because metadata.permissions().readonly() only works for file not directories
-#[cfg(not(windows))]
-#[cfg(not(unix))]
+#[cfg(not(any(windows, unix, target_os = "wasi")))]
 fn handle_writable_directory(path: &Path, options: &Options, _metadata: &Metadata) -> bool {
     if options.interactive == InteractiveMode::Always {
         prompt_yes!("remove directory {}?", path.quote())
