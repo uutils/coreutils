@@ -146,7 +146,7 @@ impl NumberFormat {
             }
             Self::RightZero if number < 0 => {
                 writer.write_all(b"-")?;
-                let num = buffer.format(number.abs());
+                let num = buffer.format(number.unsigned_abs());
                 for _ in num.len()..min_width.saturating_sub(1) {
                     writer.write_all(b"0")?;
                 }

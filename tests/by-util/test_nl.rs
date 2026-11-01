@@ -154,6 +154,33 @@ fn test_number_format_rz_with_negative_line_number() {
 }
 
 #[test]
+fn test_number_format_rz_with_minimum_line_number() {
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MIN))
+        .args(&["-n", "rz", "-w", "1", "-s", ":"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is(format!("{}:a\n{}:b\n", i64::MIN, i64::MIN + 1));
+
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MIN))
+        .args(&["-n", "rz", "-w", "25", "-s", ":"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is("-000009223372036854775808:a\n-000009223372036854775807:b\n");
+}
+
+#[test]
+fn test_number_format_rz_decrementing_to_minimum_line_number() {
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MIN + 1))
+        .args(&["--line-increment=-1", "-n", "rz", "-w", "1", "-s", ":"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is(format!("{}:a\n{}:b\n", i64::MIN + 1, i64::MIN));
+}
+
+#[test]
 fn test_invalid_number_format() {
     for arg in ["-ninvalid", "--number-format=invalid"] {
         new_ucmd!()
