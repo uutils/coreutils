@@ -10,8 +10,6 @@ use uutests::util::TestScenario;
 #[cfg(unix)]
 use std::os::unix::fs::symlink as symlink_file;
 
-use std::env;
-
 // Use the ctor attribute to run this function before any tests
 #[ctor::ctor(unsafe)]
 fn init() {
