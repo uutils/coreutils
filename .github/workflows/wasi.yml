@@ -72,7 +72,7 @@ jobs:
         # caret diagnostics; the host test crate does have them, hence the
         # not(wasi_runner) in the cfg guarding every `mod diagnostics`.
         # TODO: add integration tests for these tools as WASI support is extended:
-        #   csplit ls rm seq sort split tsort
+        #   csplit ls rm seq sort split
         # nproc is not part of the default feature set, so it needs to be
         # requested explicitly for the host test crate to compile its tests.
         UUTESTS_BINARY_PATH="$(pwd)/target/${{ matrix.job.target }}/debug/coreutils.wasm" \
@@ -89,5 +89,5 @@ jobs:
           test_pwd:: test_readlink:: test_realpath:: test_rmdir:: test_sha1sum:: test_sha224sum:: test_sha256sum:: \
           test_sha384sum:: test_sha512sum:: test_shred:: test_shuf:: test_sleep:: \
           test_sum:: test_tail:: test_tee:: \
-          test_test:: test_touch:: test_tr:: test_true:: test_truncate:: test_uname:: \
+          test_test:: test_touch:: test_tr:: test_true:: test_truncate:: test_tsort:: test_uname:: \
           test_uniq:: test_unexpand:: test_unlink:: test_vdir:: test_wc:: test_yes::
