@@ -2813,6 +2813,18 @@ fn copy_file(
             ));
         }
 
+        // A symlink loop can't be stat'ed, so -n can't tell whether it would
+        // clobber anything: fail as GNU cp does instead of skipping it.
+        if options.overwrite == OverwriteMode::NoClobber
+            && is_symlink_loop(dest)
+            && let Err(e) = fs::metadata(dest)
+        {
+            return Err(CpError::IoErrContext(
+                e,
+                format!("cannot stat {}", dest.quote()),
+            ));
+        }
+
         let copy_contents = options.dereference(source_in_command_line) || !source_is_symlink;
         if copy_contents
             && !dest_target_exists

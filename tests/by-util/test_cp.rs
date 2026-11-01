@@ -4866,6 +4866,32 @@ fn test_cp_symbolic_link_loop() {
     assert!(at.file_exists("loop"));
 }
 
+#[test]
+#[cfg(not(windows))]
+fn test_cp_force_relative_symbolic_link_loop_in_subdir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    // The relative target is resolved from the link's directory, so this is
+    // a loop even though there's no `loop` in the current directory.
+    at.relative_symlink_file("loop", "d/loop");
+    at.touch("f");
+    ucmd.args(&["-f", "f", "d/loop"]).succeeds().no_output();
+    assert!(at.file_exists("d/loop"));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_cp_no_clobber_symbolic_link_loop() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    at.relative_symlink_file("loop", "d/loop");
+    at.touch("f");
+    ucmd.args(&["-n", "f", "d/loop"])
+        .fails()
+        .stderr_contains("cannot stat 'd/loop'");
+    assert!(at.is_symlink("d/loop"));
+}
+
 /// Test that copying a directory to itself is disallowed.
 #[test]
 fn test_copy_directory_to_itself_disallowed() {
