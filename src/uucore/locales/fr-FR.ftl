@@ -93,3 +93,8 @@ mode-diag-help-syntax = un mode est soit octal, comme 644, soit des clauses comm
 # Messages d'erreur d'encodage/décodage (base32, base64, basenc)
 encoding-error-invalid-input = entrée invalide
 encoding-error-invalid-input-z85-length = entrée invalide (la longueur doit être un multiple de 4 caractères)
+
+# Messages de contrôle des sauvegardes (uucore::backup_control)
+backup-error-invalid-argument = argument { $arg } invalide pour '{ $origin }'
+backup-error-ambiguous-argument = argument { $arg } ambigu pour '{ $origin }'
+backup-valid-arguments = Les arguments valides sont :

@@ -104,3 +104,8 @@ perms-cannot-access-replaced = cannot access { $file }: replaced while it was be
 # Encoding/decoding error messages (base32, base64, basenc)
 encoding-error-invalid-input = invalid input
 encoding-error-invalid-input-z85-length = invalid input (length must be multiple of 4 characters)
+
+# Backup control messages (uucore::backup_control)
+backup-error-invalid-argument = invalid argument { $arg } for '{ $origin }'
+backup-error-ambiguous-argument = ambiguous argument { $arg } for '{ $origin }'
+backup-valid-arguments = Valid arguments are:
