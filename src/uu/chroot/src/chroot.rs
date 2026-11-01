@@ -383,8 +383,19 @@ fn set_supplemental_gids_with_strategy(
         None => handle_missing_groups(strategy),
         Some(groups) => {
             let mut gids = vec![];
+            let mut unknown = vec![];
             for group in groups {
-                gids.push(name_to_gid(group)?);
+                match name_to_gid(group) {
+                    Ok(gid) => gids.push(gid),
+                    Err(_) => unknown.push(group.clone()),
+                }
+            }
+            // Report every unknown group, like GNU.
+            if let Some(last) = unknown.pop() {
+                for group in unknown {
+                    show!(ChrootError::InvalidGroup(group));
+                }
+                return Err(ChrootError::InvalidGroup(last));
             }
             set_supplemental_gids(&gids).map_err(ChrootError::SetGroupsFailed)
         }

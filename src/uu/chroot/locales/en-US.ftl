@@ -12,8 +12,8 @@ chroot-error-cannot-enter = cannot chroot to { $dir }: { $err }
 chroot-error-command-failed = failed to run command { $cmd }: { $err }
 chroot-error-command-not-found = failed to run command { $cmd }: { $err }
 chroot-error-groups-parsing-failed = --groups parsing failed
-chroot-error-invalid-group = invalid group: { $group }
-chroot-error-invalid-group-list = invalid group list: { $list }
+chroot-error-invalid-group = invalid group { $group }
+chroot-error-invalid-group-list = invalid group list { $list }
 chroot-error-missing-newroot = Missing operand: NEWROOT
   Try '{ $util_name } --help' for more information.
 chroot-error-no-group-specified = no group specified for unknown uid: { $uid }
