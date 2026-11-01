@@ -178,6 +178,7 @@ fn test_huge_obs_reports_memory_error_instead_of_aborting() {
         .stderr_contains("memory");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 // A petabyte `cbs` does not fit in a 32-bit `usize`.
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
@@ -368,6 +369,7 @@ fn test_excl_causes_failure_when_present() {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[uutests::wasi_ignore(UnsupportedIoHints)]
 #[test]
 fn test_noatime_does_not_update_infile_atime() {
     // NOTE: Not all environments support tracking access time. If this
@@ -388,6 +390,7 @@ fn test_noatime_does_not_update_infile_atime() {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[uutests::wasi_ignore(UnsupportedIoHints)]
 #[test]
 fn test_noatime_does_not_update_ofile_atime() {
     // NOTE: Not all environments support tracking access time. If this
@@ -739,6 +742,7 @@ fn test_seek_bytes() {
 }
 
 #[cfg(all(unix, not(target_os = "redox")))]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_seek_zero_on_non_seekable_output() {
     for args in [&["status=none"][..], &["seek=0", "status=none"][..]] {
@@ -996,6 +1000,7 @@ fn test_random_73k_test_obs_lt_not_a_multiple_ibs() {
 }
 
 #[cfg(not(windows))]
+#[uutests::wasi_ignore(NoFifo)]
 #[test]
 fn test_random_73k_test_lazy_fullblock() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1148,6 +1153,7 @@ fn test_truncated_record() {
 
 /// Test that the output file can be `/dev/null`.
 #[cfg(unix)]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_outfile_dev_null() {
     new_ucmd!().arg("of=/dev/null").succeeds().no_stdout();
@@ -1221,6 +1227,7 @@ fn test_bytes_oseek_bytes_oflag() {
         .stdout_is_fixture_bytes("dd-bytes-alphabet-null.spec");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_bytes_oseek_bytes_trunc_oflag() {
     // The test harness hands stdout over as a regular file. Where dd detects
@@ -1456,6 +1463,7 @@ fn test_bytes_suffix_recursive() {
 
 /// Test for "conv=sync" with a slow reader.
 #[cfg(not(windows))]
+#[uutests::wasi_ignore(NoFifo)]
 #[test]
 fn test_sync_delayed_reader() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1541,6 +1549,7 @@ fn test_sparse_notrunc_does_not_shrink() {
 /// Without `of=`, a seekable stdout was not asked to be truncated, so the
 /// data after the written range must survive. Linux only: elsewhere dd does
 /// not detect a seekable stdout and emulates the seek by writing zeros.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_seekable_stdout_without_of_is_not_truncated() {
@@ -1569,6 +1578,7 @@ fn test_seekable_stdout_without_of_is_not_truncated() {
 /// An `oflag=` on a seekable stdout must keep the flags it was opened with,
 /// so output redirected with `>>` is still appended, with or without
 /// `conv=notrunc`.
+#[uutests::wasi_ignore(UnsupportedIoHints)]
 #[rstest]
 #[cfg(target_os = "linux")]
 fn test_oflag_keeps_append_mode_of_stdout(
@@ -1596,6 +1606,7 @@ fn test_oflag_keeps_append_mode_of_stdout(
 
 /// A failed truncate of the output names the file and the size, the copy
 /// still runs and prints its statistics, and the exit status is 1.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_failed_truncate_is_reported_and_copy_goes_on() {
@@ -1620,6 +1631,7 @@ fn test_failed_truncate_is_reported_and_copy_goes_on() {
 }
 
 /// Test that a seek on an output FIFO results in a read.
+#[uutests::wasi_ignore(NoFifo)]
 #[test]
 #[cfg(unix)]
 fn test_seek_output_fifo() {
@@ -1642,6 +1654,7 @@ fn test_seek_output_fifo() {
 }
 
 /// Test that a skip on an input FIFO results in a read.
+#[uutests::wasi_ignore(NoFifo)]
 #[test]
 #[cfg(unix)]
 fn test_skip_input_fifo() {
@@ -1665,6 +1678,7 @@ fn test_skip_input_fifo() {
 
 /// Test for reading part of stdin from each of two child processes.
 #[cfg(not(windows))]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 fn test_multiple_processes_reading_stdin() {
     // TODO Investigate if this is possible on Windows.
@@ -1678,6 +1692,7 @@ fn test_multiple_processes_reading_stdin() {
 }
 
 /// Test that discarding system file cache fails for stdin.
+#[uutests::wasi_ignore(UnsupportedIoHints)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_nocache_stdin_error() {
@@ -1692,6 +1707,7 @@ fn test_nocache_stdin_error() {
 }
 
 /// Test that discarding system file cache fails for an output FIFO.
+#[uutests::wasi_ignore(UnsupportedIoHints)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_nocache_output_fifo_error() {
@@ -1718,6 +1734,7 @@ fn test_empty_count_number() {
 }
 
 /// Test for discarding system file cache.
+#[uutests::wasi_ignore(UnsupportedIoHints)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_nocache_file() {
@@ -1777,6 +1794,7 @@ fn test_seek_past_dev() {
     }
 }
 
+#[uutests::wasi_ignore(NoFifo)]
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "freebsd"),))]
 fn test_reading_partial_blocks_from_fifo() {
@@ -1818,6 +1836,7 @@ fn test_reading_partial_blocks_from_fifo() {
     assert!(output.stderr.starts_with(expected));
 }
 
+#[uutests::wasi_ignore(NoFifo)]
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "freebsd"),))]
 fn test_reading_partial_blocks_from_fifo_unbuffered() {
@@ -1868,6 +1887,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
 ///
 /// The writer below runs `printf` inside `sh`, where it is a builtin, so this
 /// needs no `printf` feature.
+#[uutests::wasi_ignore(NoFifo)]
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "freebsd")))]
 fn test_reading_partial_blocks_from_fifo_gathered_into_larger_obs() {
@@ -1913,6 +1933,7 @@ fn test_reading_partial_blocks_from_fifo_gathered_into_larger_obs() {
 // with a misaligned buffer the kernel fails the read with EINVAL (#12085).
 // Reading a regular file with `iflag=direct` exercises the same requirement
 // on filesystems that support it.
+#[uutests::wasi_ignore(UnsupportedIoHints)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_iflag_direct_read_uses_aligned_buffer() {
@@ -1948,6 +1969,7 @@ fn test_iflag_direct_read_uses_aligned_buffer() {
 
 // `dd` has to accept a `bs=` far larger than the data it will copy, the way
 // GNU dd does, so the copy buffer must not fault in its pages.
+#[uutests::wasi_ignore(UnsupportedIoHints)]
 #[test]
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
 fn test_large_bs_does_not_fault_in_copy_buffer() {
@@ -1980,6 +2002,7 @@ fn test_large_bs_does_not_fault_in_copy_buffer() {
     );
 }
 
+#[uutests::wasi_ignore(StdioHandlesOpaque)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
@@ -1993,6 +2016,7 @@ fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
         .stderr_only("dd: setting flags for 'standard input': Not a directory\n");
 }
 
+#[uutests::wasi_ignore(StdioHandlesOpaque)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_iflag_directory_passes_when_dir_is_redirected() {
@@ -2002,6 +2026,7 @@ fn test_iflag_directory_passes_when_dir_is_redirected() {
         .succeeds();
 }
 
+#[uutests::wasi_ignore(StdioHandlesOpaque)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_iflag_directory_fails_when_file_is_piped_via_std_in() {
@@ -2012,6 +2037,7 @@ fn test_iflag_directory_fails_when_file_is_piped_via_std_in() {
         .stderr_only("dd: setting flags for 'standard input': Not a directory\n");
 }
 
+#[uutests::wasi_ignore(UnsupportedIoHints)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_nocache_on_a_pipe_is_silent() {
@@ -2026,6 +2052,7 @@ fn test_nocache_on_a_pipe_is_silent() {
     }
 }
 
+#[uutests::wasi_ignore(StdioHandlesOpaque)]
 #[test]
 fn test_stdin_stdout_not_rewound_even_when_connected_to_seekable_file() {
     let ts = TestScenario::new(util_name!());
@@ -2084,6 +2111,7 @@ fn test_wrong_number_err_msg() {
         .stderr_contains("dd: invalid number: '1kBb555'\n");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(unix)]
 fn test_no_dropped_writes() {
@@ -2105,6 +2133,7 @@ fn test_no_dropped_writes() {
     assert!(result.stderr_str().contains(&format!("{NUM_BYTES} bytes")));
 }
 
+#[uutests::wasi_ignore(UnsupportedIoHints)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_oflag_direct_partial_block() {
@@ -2195,6 +2224,7 @@ fn test_seek_blocks_times_obs_overflow_does_not_wrap() {
     assert_eq!(at.read("out.f"), "0123456789abcdef");
 }
 
+#[uutests::wasi_ignore(UnsupportedIoHints)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_nocache_eof() {
@@ -2245,6 +2275,7 @@ fn test_nocache_eof_fadvise_zero_length() {
     );
 }
 
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_iso8859_1_case_conversion() {
@@ -2428,6 +2459,7 @@ fn test_count_bytes_with_expanding_block_conv() {
 
 // A failed copy still has to report what it transferred, including complete
 // and partial records.
+#[uutests::wasi_ignore(NoRlimitSetrlimitSupport)]
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_stats_are_reported_when_a_write_fails() {
@@ -2451,6 +2483,7 @@ fn test_stats_are_reported_when_a_write_fails() {
 
 // `conv=block` writes a huge record in several pieces: those written before
 // the error still count.
+#[uutests::wasi_ignore(NoRlimitSetrlimitSupport)]
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_block_stats_are_reported_when_a_write_fails() {

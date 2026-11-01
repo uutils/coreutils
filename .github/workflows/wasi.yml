@@ -81,7 +81,7 @@ jobs:
         UUTESTS_WASM_RUNNER=wasmtime \
         cargo test --test tests --features nproc -- \
           test_arch:: test_b2sum:: test_base32:: test_base64:: test_basenc:: \
-          test_basename:: test_cat:: test_cksum:: test_comm:: test_cp:: test_cut:: test_date:: \
+          test_basename:: test_cat:: test_cksum:: test_comm:: test_cp:: test_cut:: test_date:: test_dd:: \
           test_dir:: test_dircolors:: test_dirname:: test_echo:: test_expand:: test_expr:: \
           test_factor:: test_false:: test_fmt:: test_fold:: test_head:: test_join:: test_link:: test_ln:: \
           test_ls::test_ls_a_dotdot_no_error_on_wasi \
