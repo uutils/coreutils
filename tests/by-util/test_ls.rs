@@ -75,9 +75,10 @@ fn test_directory_in_file() {
 fn test_name_too_long() {
     let name = "a".repeat(300);
     let result = new_ucmd!().arg(&name).fails_with_code(2);
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_env = "musl")))]
     result.stderr_is(format!("ls: cannot access '{name}': File name too long\n"));
-    #[cfg(not(unix))]
+    // musl spells strerror(ENAMETOOLONG) "Filename too long"
+    #[cfg(any(not(unix), target_env = "musl"))]
     result
         .stderr_contains(format!("ls: cannot access '{name}': "))
         .stderr_does_not_contain("os error");
