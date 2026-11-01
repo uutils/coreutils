@@ -15,7 +15,6 @@ use rustc_hash::FxHashMap;
 use std::collections::VecDeque;
 use std::collections::hash_map::Entry;
 use std::ffi::OsString;
-use std::fmt;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
@@ -136,16 +135,9 @@ pub fn uu_app() -> Command {
 //
 // Diagnostics go through Display, so invalid UTF-8 bytes are represented
 // lossily here.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("{}", String::from_utf8_lossy(.0))]
 struct LoopNode<'a>(&'a [u8]);
-
-impl fmt::Display for LoopNode<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", String::from_utf8_lossy(self.0))
-    }
-}
-
-impl std::error::Error for LoopNode<'_> {}
 
 impl UError for Error {}
 impl UError for LoopNode<'_> {}
