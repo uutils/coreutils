@@ -71,6 +71,63 @@ pub fn locale_grouping_separator() -> &'static str {
     })
 }
 
+/// Return the grouping separator of the `LC_NUMERIC` locale as bytes in the
+/// locale's own encoding, so a Latin-1 French locale gets `0xA0` where
+/// [`locale_grouping_separator`] would give a UTF-8 `U+202F`.
+///
+/// The C library provides it where it has `nl_langinfo_l`. Elsewhere (macOS,
+/// NetBSD, OpenBSD, Windows...) the separator comes from ICU, and in a
+/// non-UTF-8 locale a no-break space is written as the Latin-1 `0xA0`.
+pub fn locale_grouping_separator_bytes() -> &'static [u8] {
+    static GROUPING_SEP: OnceLock<Vec<u8>> = OnceLock::new();
+
+    GROUPING_SEP.get_or_init(read_grouping_separator_bytes)
+}
+
+#[cfg(any(
+    target_os = "linux",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "illumos",
+    target_os = "solaris"
+))]
+fn read_grouping_separator_bytes() -> Vec<u8> {
+    // SAFETY: the locale name is a NUL-terminated literal. The locale object
+    // returned by newlocale is checked for null and freed only after the
+    // NUL-terminated string from nl_langinfo_l, which it owns, is copied out.
+    unsafe {
+        let numeric = libc::newlocale(libc::LC_NUMERIC_MASK, c"".as_ptr(), std::ptr::null_mut());
+        if numeric.is_null() {
+            return Vec::new();
+        }
+        let separator = libc::nl_langinfo_l(libc::THOUSEP, numeric);
+        let bytes = if separator.is_null() {
+            Vec::new()
+        } else {
+            std::ffi::CStr::from_ptr(separator).to_bytes().to_vec()
+        };
+        libc::freelocale(numeric);
+        bytes
+    }
+}
+
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "illumos",
+    target_os = "solaris"
+)))]
+fn read_grouping_separator_bytes() -> Vec<u8> {
+    let separator = locale_grouping_separator();
+    let is_no_break_space = matches!(separator, "\u{a0}" | "\u{202f}");
+    if is_no_break_space && get_numeric_locale().1 != crate::i18n::UEncoding::Utf8 {
+        b"\xa0".to_vec()
+    } else {
+        separator.as_bytes().to_vec()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use icu_locale::locale;
