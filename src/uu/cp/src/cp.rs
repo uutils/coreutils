@@ -2814,12 +2814,15 @@ fn copy_file(
         }
 
         let copy_contents = options.dereference(source_in_command_line) || !source_is_symlink;
+        // With a backup, the link is renamed out of the way first, so nothing
+        // is written through it.
         if copy_contents
             && !dest_target_exists
             && !matches!(
                 options.overwrite,
                 OverwriteMode::Clobber(ClobberMode::RemoveDestination)
             )
+            && options.backup == BackupMode::None
             && !is_symlink_loop(dest)
             && std::env::var_os("POSIXLY_CORRECT").is_none()
         {

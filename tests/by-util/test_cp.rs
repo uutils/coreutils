@@ -3953,6 +3953,27 @@ fn test_copy_through_dangling_symlink() {
         .stderr_only("cp: not writing through dangling symlink 'target'\n");
 }
 
+#[rstest]
+#[case::simple("-b", "~")]
+#[case::numbered("--backup=numbered", ".~1~")]
+#[case::force("-bf", "~")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
+fn test_copy_backup_dangling_symlink(#[case] backup_arg: &str, #[case] suffix: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("file", "new");
+    at.symlink_file("nonexistent", "target");
+    ucmd.arg(backup_arg)
+        .arg("file")
+        .arg("target")
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("target"), "new");
+    assert!(at.is_symlink(format!("target{suffix}")));
+}
+
 #[test]
 #[cfg_attr(
     wasi_runner,
