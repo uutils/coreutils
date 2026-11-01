@@ -49,6 +49,16 @@ struct FoldContext<'a, W: Write> {
     output: &'a mut Vec<u8>,
     col_count: &'a mut usize,
     last_space: &'a mut Option<usize>,
+    /// Whether part of the current line was already written out by
+    /// `maybe_flush_unbroken_output`, so it is not in `output` any more.
+    line_flushed: bool,
+}
+
+impl<W: Write> FoldContext<'_, W> {
+    /// Whether anything has been placed on the current output line.
+    fn line_started(&self) -> bool {
+        self.line_flushed || !self.output.is_empty()
+    }
 }
 
 #[uucore::main]
@@ -400,6 +410,7 @@ fn emit_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
     }
 
     *ctx.col_count = compute_col_count(ctx.output, ctx.mode);
+    ctx.line_flushed = false;
 
     if ctx.spaces {
         // Rebase the remembered whitespace position into the remaining buffer.
@@ -428,6 +439,7 @@ fn maybe_flush_unbroken_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResul
     // based on updated column tracking in the caller.
     ctx.writer.write_all(ctx.output)?;
     ctx.output.clear();
+    ctx.line_flushed = true;
     Ok(())
 }
 
@@ -470,7 +482,7 @@ fn process_ascii_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UR
             TAB => {
                 loop {
                     let next_stop = next_tab_stop(*ctx.col_count);
-                    if next_stop > ctx.width && !ctx.output.is_empty() {
+                    if next_stop > ctx.width && ctx.line_started() {
                         emit_output(ctx)?;
                         continue;
                     }
@@ -611,7 +623,7 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
         if ch == '\t' {
             loop {
                 let next_stop = next_tab_stop(*ctx.col_count);
-                if next_stop > ctx.width && !ctx.output.is_empty() {
+                if next_stop > ctx.width && ctx.line_started() {
                     emit_output(ctx)?;
                     continue;
                 }
@@ -635,7 +647,7 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
         if ctx.mode == WidthMode::Columns
             && added > 0
             && *ctx.col_count + added > ctx.width
-            && !ctx.output.is_empty()
+            && ctx.line_started()
         {
             emit_output(ctx)?;
         }
@@ -666,11 +678,15 @@ fn process_non_utf8_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) ->
         match byte {
             CR => *ctx.col_count = 0,
             TAB => {
-                let next_stop = next_tab_stop(*ctx.col_count);
-                if next_stop > ctx.width && !ctx.output.is_empty() {
-                    emit_output(ctx)?;
+                loop {
+                    let next_stop = next_tab_stop(*ctx.col_count);
+                    if next_stop > ctx.width && ctx.line_started() {
+                        emit_output(ctx)?;
+                        continue;
+                    }
+                    *ctx.col_count = next_stop;
+                    break;
                 }
-                *ctx.col_count = next_stop;
                 *ctx.last_space = if ctx.spaces {
                     Some(ctx.output.len())
                 } else {
@@ -762,6 +778,7 @@ fn fold_file<T: Read, W: Write>(
             output: &mut output,
             col_count: &mut col_count,
             last_space: &mut last_space,
+            line_flushed: false,
         };
 
         loop {

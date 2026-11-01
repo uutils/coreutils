@@ -691,6 +691,18 @@ fn test_tab_advances_at_non_utf8_character() {
         .succeeds()
         .stdout_is_fixture_bytes("non_utf8_tab_stops_w8.expected");
 }
+/// A tab that folds after a non-UTF-8 byte starts the next line at column 0.
+#[rstest]
+#[case::default(&["-w12"])]
+#[case::spaces(&["-s", "-w12"])]
+fn test_tab_after_fold_at_non_utf8_character(#[case] args: &[&str]) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in(&b"\xffaaaaaaaaa\tX\n"[..])
+        .succeeds()
+        .stdout_is_bytes(b"\xffaaaaaaaaa\n\tX\n");
+}
+
 #[test]
 fn test_all_tab_advances_at_non_utf8_character() {
     new_ucmd!()
@@ -879,4 +891,34 @@ fn test_dash_operand_reads_stdin() {
         .ignore_stdin_write_error()
         .fails()
         .stderr_contains("invalid number of columns: '-'");
+}
+
+/// fold writes out a long unbroken line in pieces before it is complete. A
+/// tab or wide character that no longer fits right after such a write must
+/// still go to the next line, even though nothing of the line is buffered.
+///
+/// The first lines are sized so that the write happens right before the tab
+/// or wide character: the buffer is written out at 8 KiB
+/// (`STREAMING_FLUSH_THRESHOLD`), and ASCII input is read in 8 KiB chunks.
+#[rstest]
+#[case::ascii_tab(vec![b'a'; 8192], "-w8192", b"\tX\n")]
+#[case::utf8_tab("\u{E9}".repeat(4096).into_bytes(), "-w4100", "\t\u{E9}\n".as_bytes())]
+#[case::non_utf8_tab([&b"\xff"[..], &[b'a'; 8191]].concat(), "-w8192", b"\tX\n")]
+#[case::wide_character(vec![b'a'; 8192], "-w8193", "\u{754C}X\n".as_bytes())]
+fn test_fold_after_long_line_is_flushed(
+    #[case] first_line: Vec<u8>,
+    #[case] width: &str,
+    #[case] rest: &[u8],
+) {
+    let mut input = first_line.clone();
+    input.extend_from_slice(rest);
+    let mut expected = first_line;
+    expected.push(b'\n');
+    expected.extend_from_slice(rest);
+
+    new_ucmd!()
+        .arg(width)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(expected);
 }
