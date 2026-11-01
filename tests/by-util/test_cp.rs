@@ -632,6 +632,34 @@ fn test_cp_arg_no_target_directory_with_recursive_target_does_not_exists() {
     assert!(!at.plus(target).join("dir").exists());
 }
 
+/// A subdirectory named like the source must stay one level down (issue #15744).
+#[rstest]
+#[case::new_target(&["dir", "new"], "new")]
+#[case::new_target_trailing_slash(&["dir", "new/"], "new")]
+#[case::existing_target(&["dir", "existing"], "existing")]
+#[case::source_trailing_slash(&["dir/", "new"], "new")]
+#[case::source_curdir(&["dir/.", "new"], "new")]
+#[case::existing_target_source_curdir(&["dir/.", "existing"], "existing")]
+fn test_cp_no_target_directory_keeps_source_named_subdir(
+    #[case] args: &[&str],
+    #[case] target: &str,
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("dir/dir");
+    at.mkdir("existing");
+    at.write("dir/f", "outer");
+    at.write("dir/dir/f", "inner");
+    at.write("dir/dir/g", "g");
+
+    ucmd.arg("-rT").args(args).succeeds().no_output();
+
+    assert_eq!(at.read(format!("{target}/f")), "outer");
+    assert!(at.dir_exists(format!("{target}/dir")));
+    assert_eq!(at.read(format!("{target}/dir/f")), "inner");
+    assert_eq!(at.read(format!("{target}/dir/g")), "g");
+    assert!(!at.file_exists(format!("{target}/g")));
+}
+
 #[test]
 fn test_cp_target_directory_is_file() {
     new_ucmd!()
