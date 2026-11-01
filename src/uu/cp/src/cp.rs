@@ -2303,6 +2303,11 @@ fn handle_existing_dest(
         {
             return Err(CpError::Skipped(false));
         }
+        // Ask before the backup, so that answering no leaves no backup behind.
+        // The `CopyMode::Update` branch skips its own prompt in this case.
+        if options.update == UpdateMode::IfOlder {
+            options.overwrite.verify(dest, options.debug)?;
+        }
         if backup_would_destroy_source(source, dest, &options.backup_suffix, options.backup, true) {
             return Err(translate!("cp-error-backing-up-destroy-source", "dest" => dest.quote(), "source" => source.quote())
             .into());
@@ -2677,7 +2682,10 @@ fn handle_copy_mode(
                             return Ok(PerformedAction::Skipped);
                         }
 
-                        options.overwrite.verify(dest, options.debug)?;
+                        // With a backup, `handle_existing_dest` already asked.
+                        if options.backup == BackupMode::None {
+                            options.overwrite.verify(dest, options.debug)?;
+                        }
 
                         copy_helper(
                             source,

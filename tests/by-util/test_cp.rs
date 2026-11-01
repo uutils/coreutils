@@ -4012,6 +4012,37 @@ fn test_cp_update_older_does_not_back_up_skipped_destination() {
 }
 
 #[test]
+fn test_cp_interactive_update_older_backup_asks_before_backup() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("dest", "old");
+    at.write("file", "new");
+    let past = filetime::FileTime::from_unix_time(0, 0);
+    filetime::set_file_times(at.plus("dest"), past, past).unwrap();
+    ucmd.args(&["-i", "-b", "-u", "file", "dest"])
+        .pipe_in("n\n")
+        .fails()
+        .stderr_contains("overwrite 'dest'?");
+    assert_eq!(at.read("dest"), "old");
+    assert!(!at.file_exists("dest~"));
+}
+
+#[test]
+fn test_cp_interactive_update_older_backup_asks_once() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("dest", "old");
+    at.write("file", "new");
+    let past = filetime::FileTime::from_unix_time(0, 0);
+    filetime::set_file_times(at.plus("dest"), past, past).unwrap();
+    let result = ucmd
+        .args(&["-i", "-b", "-u", "file", "dest"])
+        .pipe_in("y\n")
+        .succeeds();
+    assert_eq!(result.stderr_str().matches("overwrite").count(), 1);
+    assert_eq!(at.read("dest"), "new");
+    assert_eq!(at.read("dest~"), "old");
+}
+
+#[test]
 #[cfg_attr(
     wasi_runner,
     ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
