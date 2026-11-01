@@ -3974,6 +3974,28 @@ fn test_copy_backup_dangling_symlink(#[case] backup_arg: &str, #[case] suffix: &
     assert!(at.is_symlink(format!("target{suffix}")));
 }
 
+#[rstest]
+#[case::regular_dest(false)]
+#[case::dangling_dest(true)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
+fn test_cp_backup_keeps_destination_when_source_is_missing(#[case] dangling_dest: bool) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("nonexistent", "source");
+    if dangling_dest {
+        at.symlink_file("missing", "dest");
+    } else {
+        at.write("dest", "old");
+    }
+    ucmd.args(&["-b", "source", "dest"])
+        .fails()
+        .stderr_contains("cannot stat 'source'");
+    assert!(at.symlink_exists("dest") || at.file_exists("dest"));
+    assert!(!at.symlink_exists("dest~") && !at.file_exists("dest~"));
+}
+
 #[test]
 fn test_cp_update_older_does_not_back_up_skipped_destination() {
     let (at, mut ucmd) = at_and_ucmd!();
