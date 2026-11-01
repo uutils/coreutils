@@ -18,6 +18,8 @@ use std::fs::{File, OpenOptions};
 use std::io;
 #[cfg(not(windows))]
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
+#[cfg(target_os = "wasi")]
+use std::os::fd::{AsRawFd, FromRawFd};
 #[cfg(windows)]
 use std::os::windows::io::{AsHandle, OwnedHandle};
 use std::path::Path;
@@ -202,6 +204,28 @@ impl OwnedFileDescriptorOrHandle {
 impl From<OwnedFileDescriptorOrHandle> for Stdio {
     fn from(value: OwnedFileDescriptorOrHandle) -> Self {
         value.into_stdio()
+    }
+}
+
+/// WASI cannot duplicate descriptors, so this takes ownership of the stdout
+/// descriptor directly instead of cloning it.
+#[cfg(target_os = "wasi")]
+impl TryFrom<io::Stdout> for OwnedFileDescriptorOrHandle {
+    type Error = io::Error;
+
+    fn try_from(stdout: io::Stdout) -> io::Result<Self> {
+        // SAFETY: `io::Stdout` does not own descriptor 1, so only this handle closes it.
+        let fd = unsafe { OwnedFd::from_raw_fd(stdout.as_raw_fd()) };
+        Ok(Self::new(fd))
+    }
+}
+
+#[cfg(not(target_os = "wasi"))]
+impl TryFrom<io::Stdout> for OwnedFileDescriptorOrHandle {
+    type Error = io::Error;
+
+    fn try_from(stdout: io::Stdout) -> io::Result<Self> {
+        Self::from(stdout)
     }
 }
 
