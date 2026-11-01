@@ -1325,6 +1325,26 @@ fn test_install_backup_file_to_dir(#[case] backup_arg: &str) {
     assert!(at.file_exists(format!("{expect}~")));
 }
 
+#[rstest]
+#[case::simple("-b", "~")]
+#[case::numbered("--backup=numbered", ".~1~")]
+#[cfg(unix)]
+fn test_install_backup_dangling_symlink(#[case] backup_arg: &str, #[case] suffix: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("source", "new");
+    at.symlink_file("missing-target", "dest");
+
+    ucmd.arg(backup_arg)
+        .arg("source")
+        .arg("dest")
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("dest"), "new");
+    assert!(at.is_symlink(format!("dest{suffix}")));
+    assert_eq!(at.resolve_link(format!("dest{suffix}")), "missing-target");
+}
+
 #[test]
 fn test_install_backup_custom_suffix_via_env() {
     let scene = TestScenario::new(util_name!());
