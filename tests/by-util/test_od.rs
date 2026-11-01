@@ -1709,3 +1709,20 @@ fn test_width_invalid_numbers() {
             .stderr_only(format!("od: {message}\n"));
     }
 }
+
+#[test]
+fn test_od_zero_byte_type_size() {
+    for spec in ["x0", "d0", "o00", "u0", "f0"] {
+        new_ucmd!()
+            .arg(format!("-t{spec}"))
+            .pipe_in("abcd")
+            .fails_with_code(1)
+            .stderr_contains("invalid")
+            .no_stdout();
+    }
+    new_ucmd!()
+        .arg("-tx4")
+        .pipe_in("abcd")
+        .succeeds()
+        .stdout_is("0000000 64636261\n0000004\n");
+}

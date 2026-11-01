@@ -58,6 +58,10 @@ mod platform;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CpError {
+    /// Permission denied.
+    #[error("{}", translate!("cp-error-cannot-open-for-reading", "source" => .0.quote()))]
+    CannotOpenForReading(PathBuf),
+
     /// Simple [`io::Error`] wrapper
     #[error("{0}")]
     IoErr(#[from] io::Error),

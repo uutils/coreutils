@@ -780,19 +780,31 @@ fn cut_fields_whitespace_trimmed<R: Read, W: Write>(
     newline_char: u8,
     out_delim: &[u8],
 ) -> UResult<()> {
-    let is_blank = |&b: &u8| b == b' ' || b == b'\t';
     let matcher = WhitespaceMatcher {};
     let mut buf_in = BufReader::new(reader);
 
     // Trimming is the only difference from the plain whitespace path: once the
     // outer blanks are gone, the remaining blank runs are ordinary delimiters.
+    // The ends are trimmed with the same matcher that splits the fields, so
+    // in a UTF-8 locale a Unicode blank at either end is trimmed rather than
+    // turned into a leading or trailing delimiter.
     buf_in
         .for_byte_record(newline_char, |line| {
-            let start = line.iter().position(|b| !is_blank(b)).unwrap_or(line.len());
-            let end = line
-                .iter()
-                .rposition(|b| !is_blank(b))
-                .map_or(start, |p| p + 1);
+            let start = match matcher.next_match(line) {
+                Some((0, run_end)) => run_end,
+                _ => 0,
+            };
+            let rest = &line[start..];
+            let mut end = rest.len();
+            let mut pos = 0;
+            while let Some((run_start, run_end)) = matcher.next_match(&rest[pos..]) {
+                if pos + run_end == rest.len() {
+                    end = pos + run_start;
+                    break;
+                }
+                pos += run_end;
+            }
+            let end = start + end;
 
             write_fields_line(
                 &line[start..end],
@@ -1047,12 +1059,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // GNU `cut` supports `-d=` to set the delimiter to `=`.
     // Clap parsing is limited in this situation, see:
     // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
-    let args = args.into_iter().map(|x| {
-        if x == "-d=" {
+    // Arguments after `--` are file operands and must be left untouched.
+    let args = args.into_iter().scan(false, |seen_double_dash, x| {
+        Some(if *seen_double_dash {
+            x
+        } else if x == "--" {
+            *seen_double_dash = true;
+            x
+        } else if x == "-d=" {
             "--delimiter==".into()
         } else {
             x
-        }
+        })
     });
 
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;

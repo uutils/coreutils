@@ -3,14 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST MESZ KST uueuu ueuu vasárnap június január distros Wednes
-// spell-checker:ignore uppercases xffx
+// spell-checker:ignore AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST MESZ KST uueuu ueuu vasárnap június január distros Wednes Ihours uppercases xffx
 
 use std::cmp::Ordering;
 
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
+use rstest::rstest;
 #[cfg(unix)]
 use rustix::process::geteuid;
 use uutests::util::TestScenario;
@@ -355,6 +355,8 @@ fn test_date_rfc_8601_hour() {
             .succeeds()
             .stdout_matches(&re);
     }
+
+    new_ucmd!().arg("-uIhours").succeeds().stdout_matches(&re);
 }
 
 #[test]
@@ -471,6 +473,48 @@ fn test_date_rejects_multiple_output_formats() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("date: multiple output formats specified\n");
+}
+
+#[rstest]
+#[case::format_with_plus("+hours", "date: multiple output formats specified\n")]
+#[case::format_without_plus("hours", "lacks a leading '+'")]
+fn test_date_rejects_iso_format_with_positional_format(
+    #[case] format: &str,
+    #[case] expected_stderr: &str,
+) {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .args(&["-r", ".", "-I", format])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains(expected_stderr);
+}
+
+#[test]
+fn test_date_rejects_setting_with_date_sources() {
+    // Setting the clock cannot be combined with another date source.
+    for args in [
+        ["-d", "@now", "-s", ""],
+        ["-r", ".", "-s", ""],
+        ["-f", ".", "-s", ""],
+    ] {
+        new_ucmd!()
+            .env("LANG", "C")
+            .env("LC_ALL", "C")
+            .args(&args)
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("cannot be used with");
+    }
+
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .args(&["-s", "a", "--resolution"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("cannot be used with");
 }
 
 #[test]
@@ -919,6 +963,22 @@ fn test_date_for_file_mtime() {
 }
 
 #[test]
+fn test_date_reference_attached_value_containing_iso_flag() {
+    use std::time::{Duration, UNIX_EPOCH};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let reference_file = "Ifile";
+    let f = at.make_file(reference_file);
+    f.set_modified(UNIX_EPOCH + Duration::from_secs(1234))
+        .unwrap();
+
+    ucmd.arg("-rIfile")
+        .arg("+%s")
+        .succeeds()
+        .stdout_only("1234\n");
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_date_reference_is_non_utf8_path() {
@@ -1142,6 +1202,35 @@ fn test_weekday_items_are_ignored_with_explicit_dates() {
     }
 }
 
+#[rstest]
+#[case::weekday_before_month("WEDNESDAY August 17", "+%m-%d", "08-17\n")]
+#[case::weekday_after_month("August 17 Monday", "+%m-%d", "08-17\n")]
+#[case::weekday_before_day_month("Monday 17 August 2026", "+%F", "2026-08-17\n")]
+#[case::weekday_before_day_month_incorrect("Wednesday 17 August 2026", "+%F", "2026-08-17\n")]
+#[case::relative_weekday_before_date(
+    "Next Friday Sep 25 12:00:00 AM EDT 2026",
+    "+%F %T %Z",
+    "2026-09-25 04:00:00 UTC\n"
+)]
+#[case::relative_weekday_before_date_incorrect(
+    "Next Sunday Sep 25 12:00:00 AM EDT 2026",
+    "+%F %T %Z",
+    "2026-09-25 04:00:00 UTC\n"
+)]
+fn test_weekday_items_are_ignored_with_named_dates(
+    #[case] input: &str,
+    #[case] format: &str,
+    #[case] expected: &str,
+) {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .args(&["-u", "-d", input, format])
+        .succeeds()
+        .stdout_is(expected);
+}
+
 #[test]
 fn test_invalid_date_string() {
     new_ucmd!()
@@ -1330,13 +1419,15 @@ fn test_date_tz_various_formats() {
     ignore = "WASI sandbox: timezone/locale database not visible"
 )]
 fn test_date_tz_with_relative_time() {
+    // Anchor the relative expression to a fixed instant so this test does not
+    // depend on the current date or a future timezone transition.
     new_ucmd!()
         .env("TZ", "America/Vancouver")
         .arg("-d")
-        .arg("1 hour ago")
+        .arg("2024-01-02 12:00:00 +0000 1 hour ago")
         .arg("+%Y-%m-%d %H:%M:%S %Z")
         .succeeds()
-        .stdout_matches(&Regex::new(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} P[DS]T\n$").unwrap());
+        .stdout_only("2024-01-02 03:00:00 PST\n");
 }
 
 #[test]
@@ -2324,7 +2415,7 @@ fn test_date_french_full_sentence() {
     }
 }
 
-/// `%x`, `%X` and `%r` use the locale's `D_FMT`, `T_FMT` and `T_FMT_AMPM`.
+/// `%x`, `%X`, `%r` and `%c` use the locale's `D_FMT`, `T_FMT`, `T_FMT_AMPM` and `D_T_FMT`.
 /// The Linux values are GNU date's, the macOS ones follow its locale data.
 #[test]
 #[cfg(any(target_vendor = "apple", all(target_os = "linux", target_env = "gnu")))]
@@ -2365,6 +2456,27 @@ fn test_date_format_locale_date_and_time() {
     }
 }
 
+#[test]
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
+fn test_date_format_locale_c() {
+    if !is_locale_available("fr_FR.UTF-8") {
+        return;
+    }
+
+    new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .env("TZ", "UTC")
+        .args(&["-u", "-d", "@0", "+%c"])
+        .succeeds()
+        .stdout_contains("jeu.")
+        .stdout_contains("janv")
+        .stdout_contains("1970 00:00:00");
+}
+
 /// GNU pads `%x`, `%X` and `%r` as a whole and keeps the padding of the
 /// fields inside: `%-x` is still `01/19/97`.
 #[test]
@@ -2393,47 +2505,48 @@ fn test_date_format_locale_date_and_time_no_pad_large_width() {
 
 /// `%p` and `%P` use the locale's AM/PM markers, also inside `%r`. The Linux
 /// values are GNU date's, the macOS ones follow its locale data.
-#[test]
+#[rstest]
 #[cfg(any(target_vendor = "apple", all(target_os = "linux", target_env = "gnu")))]
 #[cfg_attr(
     wasi_runner,
     ignore = "WASI sandbox: timezone/locale database not visible"
 )]
-fn test_date_format_locale_ampm_markers() {
-    #[cfg(target_os = "linux")]
-    let cases = [
-        ("es_ES.UTF-8", "%p", "p.\u{202f}m."),
-        ("es_ES.UTF-8", "%^p", "P.\u{202f}M."),
-        ("es_ES.UTF-8", "%10p", "   p.\u{202f}m."),
-        ("es_ES.UTF-8", "%r", "08:17:48 p.\u{202f}m."),
-        ("es_ES.UTF-8", "%^r", "08:17:48 P.\u{202f}M."),
-        ("fr_FR.UTF-8", "%p", ""),
-        ("fr_FR.UTF-8", "%10p", "          "),
-        ("fr_FR.UTF-8", "%r", "08:17:48 "),
-        ("en_GB.UTF-8", "%p", "pm"),
-        ("en_GB.UTF-8", "%^P", "pm"),
-    ];
-    #[cfg(target_vendor = "apple")]
-    let cases = [
-        ("es_ES.UTF-8", "%p", "p. m."),
-        ("es_ES.UTF-8", "%^p", "P. M."),
-        ("es_ES.UTF-8", "%r", "08:17:48 p. m."),
-        ("en_GB.UTF-8", "%P", "p.m."),
-        ("ja_JP.UTF-8", "%p", "午後"),
-    ];
-
-    for (locale, format, expected) in cases {
-        if !is_locale_available(locale) {
-            continue;
-        }
-        new_ucmd!()
-            .env("LC_ALL", locale)
-            .arg("-d")
-            .arg("1997-01-19 20:17:48")
-            .arg(format!("+{format}"))
-            .succeeds()
-            .stdout_only(format!("{expected}\n"));
+#[cfg_attr(
+    target_os = "linux",
+    case::spanish("es_ES.UTF-8", "%p", "p.\u{202f}m."),
+    case::spanish_upper("es_ES.UTF-8", "%^p", "P.\u{202f}M."),
+    case::spanish_width("es_ES.UTF-8", "%10p", "   p.\u{202f}m."),
+    case::spanish_time("es_ES.UTF-8", "%r", "08:17:48 p.\u{202f}m."),
+    case::spanish_time_upper("es_ES.UTF-8", "%^r", "08:17:48 P.\u{202f}M."),
+    case::french("fr_FR.UTF-8", "%p", ""),
+    case::french_width("fr_FR.UTF-8", "%10p", "          "),
+    case::french_time("fr_FR.UTF-8", "%r", "08:17:48 "),
+    case::british("en_GB.UTF-8", "%p", "pm"),
+    case::british_upper("en_GB.UTF-8", "%^P", "pm")
+)]
+#[cfg_attr(
+    target_vendor = "apple",
+    case::spanish("es_ES.UTF-8", "%p", "p. m."),
+    case::spanish_upper("es_ES.UTF-8", "%^p", "P. M."),
+    case::spanish_time("es_ES.UTF-8", "%r", "08:17:48 p. m."),
+    case::british_lower("en_GB.UTF-8", "%P", "p.m."),
+    case::japanese("ja_JP.UTF-8", "%p", "午後")
+)]
+fn test_date_format_locale_ampm_markers(
+    #[case] locale: &str,
+    #[case] format: &str,
+    #[case] expected: &str,
+) {
+    if !is_locale_available(locale) {
+        return;
     }
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-d")
+        .arg("1997-01-19 20:17:48")
+        .arg(format!("+{format}"))
+        .succeeds()
+        .stdout_only(format!("{expected}\n"));
 }
 
 /// `bg_BG`'s `date_fmt` has the year only inside `%x`, which therefore has to
@@ -2646,6 +2759,46 @@ fn test_date_strftime_flag_on_composite() {
             .succeeds()
             .stdout_is(expected);
     }
+}
+
+#[rstest]
+#[case::no_padding("+%-F", "1-01-01\n")]
+#[case::underscore_padding("+%_F", "1-01-01\n")]
+#[case::width_6("+%6F", "1-01-01\n")]
+#[case::underscore_width_6("+%_6F", "1-01-01\n")]
+#[case::width_12("+%12F", "000001-01-01\n")]
+#[case::underscore_width_12("+%_12F", "     1-01-01\n")]
+fn test_date_strftime_flags_on_iso_date_year(#[case] format: &str, #[case] expected: &str) {
+    // Unlike other composites, GNU applies these modifiers to %Y inside %F.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("0001-01-01")
+        .arg(format)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[rstest]
+#[case::year_1_width_8("0001-01-01", "+%+8F", "01-01-01\n")]
+#[case::year_1_width_11("0001-01-01", "+%+11F", "+0001-01-01\n")]
+#[case::year_2024_width_6("2024-06-15", "+%+6F", "2024-06-15\n")]
+#[case::year_2024_width_11("2024-06-15", "+%+11F", "+2024-06-15\n")]
+#[case::year_2024_width_12("2024-06-15", "+%+12F", "+02024-06-15\n")]
+fn test_date_strftime_plus_flag_on_iso_date_width(
+    #[case] date: &str,
+    #[case] format: &str,
+    #[case] expected: &str,
+) {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg(date)
+        .arg(format)
+        .succeeds()
+        .stdout_is(expected);
 }
 
 #[test]

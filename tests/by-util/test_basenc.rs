@@ -185,6 +185,26 @@ fn test_base58_large_file_no_chunking() {
 }
 
 #[test]
+fn test_base58_decode_large_input_round_trip() {
+    // Decoding must not cut the input into 1024-digit chunks either.
+    // spell-checker:disable
+    let input = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(50);
+    // spell-checker:enable
+    let encoded = new_ucmd!()
+        .arg("--base58")
+        .pipe_in(input.clone())
+        .succeeds()
+        .stdout_move_str();
+    assert!(encoded.len() > 1024);
+
+    new_ucmd!()
+        .args(&["--base58", "-d"])
+        .pipe_in(encoded)
+        .succeeds()
+        .stdout_is(input);
+}
+
+#[test]
 fn test_choose_last_encoding_base64() {
     new_ucmd!()
         .args(&[

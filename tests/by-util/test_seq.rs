@@ -1277,3 +1277,15 @@ fn test_format_zero_precision_above_formatter_limit() {
 fn test_equal_width_ignores_increment_integer_width(#[case] args: &[&str], #[case] expected: &str) {
     new_ucmd!().args(args).succeeds().stdout_only(expected);
 }
+
+#[test]
+fn test_repeated_option_last_one_wins() {
+    new_ucmd!()
+        .args(&["-w", "-w", "8", "10"])
+        .succeeds()
+        .stdout_only("08\n09\n10\n");
+    new_ucmd!()
+        .args(&["-s", ",", "-s", ":", "3"])
+        .succeeds()
+        .stdout_only("1:2:3\n");
+}

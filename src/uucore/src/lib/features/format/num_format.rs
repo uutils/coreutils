@@ -9,15 +9,12 @@
 
 use bigdecimal::BigDecimal;
 use bigdecimal::num_bigint::ToBigInt;
-use num_traits::Signed;
-use num_traits::Zero;
+use num_traits::{Signed, Zero};
 use std::cmp::min;
 use std::io::Write;
 
-use super::{
-    ExtendedBigDecimal, FormatError, check_precision,
-    spec::{CanAsterisk, Spec},
-};
+use super::spec::{CanAsterisk, Spec};
+use super::{ExtendedBigDecimal, FormatError, check_precision};
 
 pub trait Formatter<T> {
     fn fmt(&self, writer: impl Write, x: T) -> std::io::Result<()>;
@@ -865,10 +862,8 @@ mod test {
     use num_traits::FromPrimitive;
     use std::str::FromStr;
 
-    use crate::format::{
-        ExtendedBigDecimal, Format,
-        num_format::{Case, Float, ForceDecimal, UnsignedInt},
-    };
+    use crate::format::num_format::{Case, Float, ForceDecimal, UnsignedInt};
+    use crate::format::{ExtendedBigDecimal, Format};
 
     use super::{Formatter, SignedInt};
 

@@ -439,9 +439,7 @@ impl SplitWriter<'_> {
 
             while let Some((ln, line)) = input_iter.next() {
                 let line = line?;
-                let l = line
-                    .strip_suffix(b"\r\n")
-                    .unwrap_or_else(|| line.strip_suffix(b"\n").unwrap_or(&line));
+                let l = line.strip_suffix(b"\n").unwrap_or(&line);
                 if regex.is_match(l) {
                     let mut next_line_suppress_matched = false;
                     match (self.options.suppress_matched, offset) {
@@ -495,9 +493,7 @@ impl SplitWriter<'_> {
             input_iter.set_size_of_buffer(offset_usize);
             while let Some((ln, line)) = input_iter.next() {
                 let line = line?;
-                let l = line
-                    .strip_suffix(b"\r\n")
-                    .unwrap_or_else(|| line.strip_suffix(b"\n").unwrap_or(&line));
+                let l = line.strip_suffix(b"\n").unwrap_or(&line);
                 if regex.is_match(l) {
                     if offset_usize > lines_in_split {
                         self.finish_split()?;

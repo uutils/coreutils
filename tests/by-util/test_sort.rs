@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) ints (linux) Nofile dfgi abmon avril naab
+// spell-checker:ignore (words) ints (linux) NOFILE dfgi abmon avril naab
 
 #![allow(clippy::cast_possible_wrap)]
 
@@ -13,6 +13,9 @@ use std::fmt::Write as FmtWrite;
 #[cfg(unix)]
 use std::process::Command;
 use std::time::Duration;
+
+#[cfg(target_os = "linux")]
+use rlimit::Resource;
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -1073,6 +1076,34 @@ fn test_incompatible_options() {
         .stderr_only("sort: options '-nR' are incompatible\n");
 
     new_ucmd!()
+        .args(&["--sort=general-numeric", "--sort=human-numeric"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-gh' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["-h", "--sort=general-numeric", "--sort=human-numeric"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-gh' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["--sort=general-numeric", "--sort=general-numeric"])
+        .pipe_in("1e2\n20\n")
+        .succeeds()
+        .stdout_only("20\n1e2\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&[
+            "--debug",
+            "--sort=general-numeric",
+            "--sort=human-numeric",
+            "-k1,1n",
+        ])
+        .pipe_in("")
+        .succeeds()
+        .stderr_contains("sort: options '-gh' are ignored\n");
+
+    new_ucmd!()
         .args(&["-c", "-o", "out"])
         .fails_with_code(2)
         .stderr_only("sort: options '-co' are incompatible\n");
@@ -1577,6 +1608,40 @@ fn test_check_silent() {
 }
 
 #[test]
+fn test_check_repeated_modes() {
+    for args in [
+        ["--check=silent", "--check=diagnose-first"],
+        ["-c=silent", "-c=diagnose-first"],
+        ["--check=diagnose-first", "--check=quiet"],
+        ["-c", "--check=quiet"],
+        ["--check=silent", "-c"],
+    ] {
+        new_ucmd!()
+            .args(&args)
+            .arg("check_fail.txt")
+            .fails_with_code(2)
+            .stderr_only("sort: options '-cC' are incompatible\n");
+    }
+
+    for args in [
+        ["--check=quiet", "-C"],
+        ["-C", "--check=silent"],
+        ["--check=quiet", "--check=silent"],
+    ] {
+        new_ucmd!()
+            .args(&args)
+            .arg("check_fail.txt")
+            .fails_with_code(1)
+            .no_output();
+    }
+
+    new_ucmd!()
+        .args(&["--check=diagnose-first", "-c", "check_fail.txt"])
+        .fails_with_code(1)
+        .stderr_only("sort: check_fail.txt:6: disorder: 5\n");
+}
+
+#[test]
 fn test_check_stops_early_without_panicking() {
     // `--check` returns as soon as it finds the first disorder. That used to drop the
     // channel while the reader thread was still sending chunks, so the reader panicked
@@ -1817,14 +1882,13 @@ fn test_merge_batch_size() {
 // #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(target_os = "linux")]
 fn test_merge_batch_size_with_limit() {
-    use rustix::process::Resource;
     // Currently need...
     // 3 descriptors for stdin, stdout, stderr
     // 2 descriptors for CTRL+C handling logic (to be reworked at some point)
     // 2 descriptors for the input files (i.e. batch-size of 2).
     let limit_fd = 3 + 2 + 2;
     new_ucmd!()
-        .limit(Resource::Nofile, limit_fd, limit_fd)
+        .limit(Resource::NOFILE, limit_fd, limit_fd)
         .arg("--batch-size=2")
         .arg("-m")
         .arg("--unique")
@@ -1842,13 +1906,12 @@ fn test_merge_batch_size_with_limit() {
 // TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
 #[cfg(target_os = "linux")]
 fn test_batch_size_above_fd_limit_is_rejected() {
-    use rustix::process::Resource;
     // Only stdin, stdout and stderr are unavailable for merge inputs, so the
     // largest acceptable --batch-size is the soft limit minus 3, here 27 - 3.
     let limit_fd = 27;
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("gamma.txt", "delta\nalpha\n");
-    ucmd.limit(Resource::Nofile, limit_fd, limit_fd)
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
         .arg("--batch-size=31")
         .arg("gamma.txt")
         .fails_with_code(2)
@@ -1860,12 +1923,11 @@ fn test_batch_size_above_fd_limit_is_rejected() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_batch_size_at_fd_limit_is_accepted() {
-    use rustix::process::Resource;
     let limit_fd = 27;
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("gamma.txt", "delta\nalpha\n");
     // 24 is the largest value the limit above allows, and sorting must still happen.
-    ucmd.limit(Resource::Nofile, limit_fd, limit_fd)
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
         .arg("--batch-size=24")
         .arg("gamma.txt")
         .succeeds()
@@ -1875,7 +1937,6 @@ fn test_batch_size_at_fd_limit_is_accepted() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_merge_more_files_than_fd_limit() {
-    use rustix::process::Resource;
     let (at, mut ucmd) = at_and_ucmd!();
     // 40 single-line files cannot all be open at once with a soft limit of 24,
     // so sort has to merge them in several batches through temporary files.
@@ -1891,7 +1952,7 @@ fn test_merge_more_files_than_fd_limit() {
         writeln!(expected, "{i:02}").unwrap();
     }
     let limit_fd = 24;
-    ucmd.limit(Resource::Nofile, limit_fd, limit_fd)
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
         .arg("-m")
         .args(&names)
         .succeeds()
@@ -1901,7 +1962,6 @@ fn test_merge_more_files_than_fd_limit() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_more_files_than_fd_limit() {
-    use rustix::process::Resource;
     let (at, mut ucmd) = at_and_ucmd!();
     // The inputs are read one after another, so sorting must not need more open
     // file descriptors than the soft limit allows, no matter how many inputs there are.
@@ -1917,7 +1977,7 @@ fn test_more_files_than_fd_limit() {
         writeln!(expected, "{i:02}").unwrap();
     }
     let limit_fd = 24;
-    ucmd.limit(Resource::Nofile, limit_fd, limit_fd)
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
         .args(&names)
         .succeeds()
         .stdout_only(expected);
@@ -1926,7 +1986,6 @@ fn test_more_files_than_fd_limit() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_temporary_files_with_few_file_descriptors() {
-    use rustix::process::Resource;
     let ts = TestScenario::new("sort");
     // Each input is larger than what the merge reads ahead, so it stays open.
     let mut names = Vec::new();
@@ -1945,20 +2004,20 @@ fn test_temporary_files_with_few_file_descriptors() {
 
     // Stdin, stdout, stderr, two merge inputs and the merge output.
     ts.ucmd()
-        .limit(Resource::Nofile, 6, 6)
+        .limit(Resource::NOFILE, 6, 6)
         .arg("-m")
         .args(&names)
         .succeeds()
         .stdout_only(&expected);
     ts.ucmd()
-        .limit(Resource::Nofile, 6, 6)
+        .limit(Resource::NOFILE, 6, 6)
         .args(&["-S", "64K", "unsorted"])
         .succeeds()
         .stdout_only(&expected);
     // Starting the compress program can take two more for a moment: on musl and
     // glibc before 2.24, a failed exec is reported through a pipe.
     ts.ucmd()
-        .limit(Resource::Nofile, 10, 10)
+        .limit(Resource::NOFILE, 10, 10)
         .args(&["-S", "64K", "--compress-program", "gzip", "unsorted"])
         .succeeds()
         .stdout_only(&expected);
@@ -2116,6 +2175,28 @@ fn test_separator_attached_equals_multi_char() {
         .args(&["-t=a", "-k", "2"])
         .fails()
         .stderr_contains("separator must be exactly one character long: '=a'");
+}
+
+#[rstest]
+#[case::attached(&["-t@", "-t!"])]
+#[case::separate(&["-t", "@", "-t", "!"])]
+#[case::long_and_short(&["--field-separator=@", "-t", "!"])]
+fn test_error_on_incompatible_separators(#[case] args: &[&str]) {
+    new_ucmd!()
+        .args(args)
+        .fails_with_code(2)
+        .stderr_only("sort: incompatible tabs\n");
+}
+
+#[rstest]
+#[case::short_twice(&["-t:", "-t:", "-k2"])]
+#[case::long_and_short(&["--field-separator=:", "-t", ":", "-k2"])]
+fn test_same_separator_twice_ok(#[case] args: &[&str]) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in("a:2\nb:1\n")
+        .succeeds()
+        .stdout_only("b:1\na:2\n");
 }
 
 #[test]
@@ -2419,6 +2500,24 @@ fn test_same_output_flag_twice_ok() {
         .pipe_in("")
         .succeeds()
         .no_stderr();
+}
+
+#[test]
+fn test_error_on_multiple_compress_programs() {
+    new_ucmd!()
+        .args(&["--compress-program", "pwd", "--compress-program", "python3"])
+        .fails_with_code(2)
+        .stderr_only("sort: multiple compress programs specified\n");
+}
+
+#[test]
+fn test_same_compress_program_twice_ok() {
+    // The input is far below the buffer size, so the program is never spawned.
+    new_ucmd!()
+        .args(&["--compress-program", "gzip", "--compress-program", "gzip"])
+        .pipe_in("b\na\n")
+        .succeeds()
+        .stdout_only("a\nb\n");
 }
 
 #[test]

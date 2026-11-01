@@ -565,7 +565,7 @@ fn test_selinux() {
         new_ucmd!()
             .arg(arg)
             .arg("-v")
-            .arg(at.plus_as_string(dest))
+            .arg(at.plus(dest))
             .succeeds()
             .stdout_contains("created directory");
 
@@ -586,7 +586,7 @@ fn test_selinux_invalid() {
     let dest = "test_dir_a";
     new_ucmd!()
         .arg("--context=testtest")
-        .arg(at.plus_as_string(dest))
+        .arg(at.plus(dest))
         .fails()
         .no_stdout()
         .stderr_contains("failed to set default file creation context to 'testtest':");

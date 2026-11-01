@@ -7,11 +7,22 @@
 
 use rstest::rstest;
 use uucore::display::Quotable;
-use uutests::new_ucmd;
+use uutests::{at_and_ucmd, new_ucmd};
 
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[test]
+fn test_bare_dash_reads_stdin_in_file_list() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("file", "file\n");
+
+    ucmd.args(&["-", "file"])
+        .pipe_in("stdin\n")
+        .succeeds()
+        .stdout_is("stdin\nfile\n");
 }
 
 #[test]
@@ -248,12 +259,12 @@ fn test_tabs_with_too_large_size() {
 )]
 #[test]
 fn test_large_tab_stop_without_tabs_does_not_allocate() {
-    use rustix::process::Resource;
+    use rlimit::Resource;
 
     const AS_LIMIT: u64 = 200 * 1024 * 1024;
 
     new_ucmd!()
-        .limit(Resource::As, AS_LIMIT, AS_LIMIT)
+        .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
         .arg("--tabs=267672676527678256")
         .pipe_in("hello\n")
         .succeeds()

@@ -132,7 +132,6 @@ const MAX_KTIME_T: Duration = if cfg!(target_os = "linux") {
 /// Sets up a timer on SIGALRM for platforms that support POSIX.1-2008 realtime
 /// clock extensions. Notably, both Android and Redox do not support the latter
 /// fallback since it was removed in that same spec.
-// TODO: Enable support for DragonFly BSD once https://github.com/rust-lang/libc/issues/5649 is resolved.
 #[cfg(not(any(
     target_vendor = "apple",
     target_os = "dragonfly",

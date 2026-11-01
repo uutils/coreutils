@@ -368,6 +368,18 @@ fn test_equal_as_delimiter() {
 }
 
 #[test]
+fn test_equal_delimiter_file_operand_after_double_dash() {
+    // After `--`, a file named `-d=` is an operand and must not be rewritten
+    // to `--delimiter==`. #15806
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("-d=", "a:b:c\n");
+    at.write("--delimiter==", "x:y:z\n");
+    ucmd.args(&["-d:", "-f2", "--", "-d="])
+        .succeeds()
+        .stdout_only("b\n");
+}
+
+#[test]
 fn test_empty_string_as_delimiter() {
     new_ucmd!()
         .args(&["-f2", "--delimiter="])
@@ -832,6 +844,35 @@ fn test_whitespace_delimited_trimmed_zero_terminated() {
         .pipe_in(&b"\t \0 amber violet \0"[..])
         .succeeds()
         .stdout_only_bytes(&b"amber\0"[..]);
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+#[cfg(target_os = "linux")]
+fn test_whitespace_delimited_trimmed_unicode_blanks() {
+    // In a UTF-8 locale the field splitter treats Unicode blanks such as
+    // U+3000 (e3 80 80) as delimiters, so trimming must strip them too, or a
+    // leading one empties field 1 and a trailing one adds an empty last field.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-w=trimmed", "-f1"])
+        .pipe_in(&b"\xe3\x80\x80shutdown now\n"[..])
+        .succeeds()
+        .stdout_only("shutdown\n");
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-w=trimmed", "-f2-", "--output-delimiter=|"])
+        .pipe_in(&b" \xe3\x80\x80red\xe2\x80\x83blue \xe3\x80\x80\n"[..])
+        .succeeds()
+        .stdout_only("blue\n");
+    // A one-word line padded with Unicode blanks has no delimiter left after
+    // trimming, so -s drops it.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-s", "-w=trimmed", "-f1"])
+        .pipe_in(&b"\xe3\x80\x80alone\xe3\x80\x80\nnot alone\n"[..])
+        .succeeds()
+        .stdout_only("not\n");
 }
 
 #[test]

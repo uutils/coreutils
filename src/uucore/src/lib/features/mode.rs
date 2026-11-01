@@ -494,8 +494,7 @@ pub fn with_umask<T>(mask: u32, operation: impl FnOnce() -> T) -> T {
 #[cfg(test)]
 mod tests {
 
-    use super::parse;
-    use super::parse_chmod;
+    use super::{parse, parse_chmod};
 
     #[test]
     fn test_chmod_symbolic_modes() {

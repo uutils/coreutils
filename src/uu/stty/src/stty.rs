@@ -506,12 +506,10 @@ fn parse_saved_state(arg: &str) -> Option<Vec<u32>> {
         if part.is_empty() {
             return None; // GNU rejects empty hex values
         }
-        let val = u32::from_str_radix(part, 16).ok()?;
-
-        // Control characters (indices 4+) must fit in u8
-        if i >= 4 && val > 255 {
-            return None;
-        }
+        let val = u32::from_str_radix(part, 16)
+            .ok()
+            // Control characters (indices 4+) must fit in u8
+            .filter(|&v| i < 4 || v <= 255)?;
 
         values.push(val);
     }
@@ -986,10 +984,8 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
     };
 
     if let Some(val) = ascii_num {
-        if val > 255 {
-            return Err(ControlCharMappingError::IntOutOfRange(s.to_string()));
-        }
-        return Ok(val as u8);
+        return u8::try_from(val)
+            .map_err(|_| ControlCharMappingError::IntOutOfRange(s.to_string()));
     }
     // try to parse ^<char> or just <char>
     let mut chars = s.chars();

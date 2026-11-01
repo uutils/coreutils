@@ -58,17 +58,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         process_input(io::stdin().lock(), &mut g)?;
     } else {
         let mut options: OpenOptions;
-        // some platforms cannot catch this as read error. Needs additional cost by stat
+        // Windows and WASI do not report a directory as a read error.
+        #[cfg(any(windows, target_os = "wasi"))]
+        if std::path::Path::new(input).is_dir() {
+            return Err(Error::Read(ReadError::IsDir(input.to_string_lossy().to_string())).into());
+        }
         #[cfg(windows)]
         {
             use std::os::windows::fs::OpenOptionsExt;
             use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_SEQUENTIAL_SCAN;
-            let input = std::path::Path::new(input);
-            if input.is_dir() {
-                return Err(
-                    Error::Read(ReadError::IsDir(input.to_string_lossy().to_string())).into(),
-                );
-            }
             // advise the OS we will access the data sequentially if possible (windows)
             options = File::options()
                 .custom_flags(FILE_FLAG_SEQUENTIAL_SCAN)

@@ -692,6 +692,32 @@ fn test_split_string_backslash_a_behavior_matches_gnu_quoting_context() {
         .no_stdout()
         .stderr_contains("invalid sequence '\\a' in -S");
 }
+
+#[cfg(not(windows))] // no printf available
+#[test]
+fn test_split_string_unset_variable_does_not_start_a_word() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("-Sprintf [%s] a ${UU_UNSET}")
+        .succeeds()
+        .stdout_is("[a]");
+
+    scene
+        .ucmd()
+        .arg("-S${UU_UNSET} printf hi")
+        .succeeds()
+        .stdout_is("hi");
+
+    scene
+        .ucmd()
+        .env("UU_EMPTY", "")
+        .arg("-Sprintf [%s] a ${UU_EMPTY}")
+        .succeeds()
+        .stdout_is("[a][]");
+}
+
 #[test]
 #[allow(clippy::cognitive_complexity)] // Ignore clippy lint of too long function sign
 fn test_env_parsing_errors() {
@@ -1461,6 +1487,33 @@ mod tests_split_iterator {
             (r" w1#w2 ", &["w1#w2"]),
             (r"'not really a # comment'", &["not really a # comment"]),
             (" a # very long comment \n b # another comment", &["a", "b"]),
+        ]);
+    }
+
+    #[test]
+    fn split_unset_variable_on_its_own_adds_no_word() {
+        assert!(std::env::var_os("UU_UNSET").is_none());
+        split_ok(&[
+            ("${UU_UNSET}", &[]),
+            ("a ${UU_UNSET}", &["a"]),
+            ("a ${UU_UNSET} b", &["a", "b"]),
+            ("${UU_UNSET} a", &["a"]),
+            ("a ${UU_UNSET}#c d", &["a"]),
+            (r"a ${UU_UNSET}\_b", &["a", "b"]),
+            (r"a ${UU_UNSET}\c", &["a"]),
+        ]);
+    }
+
+    #[test]
+    fn split_unset_variable_next_to_other_text_keeps_the_word() {
+        assert!(std::env::var_os("UU_UNSET").is_none());
+        split_ok(&[
+            ("x${UU_UNSET}", &["x"]),
+            ("${UU_UNSET}x", &["x"]),
+            ("a ${UU_UNSET}${UU_UNSET}x", &["a", "x"]),
+            (r#""${UU_UNSET}""#, &[""]),
+            (r#"""${UU_UNSET}"#, &[""]),
+            (r#"${UU_UNSET}"""#, &[""]),
         ]);
     }
 

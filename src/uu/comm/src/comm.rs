@@ -210,9 +210,9 @@ fn comm(
         .read_line(rb)
         .map_err_context(|| filename2.maybe_quote().to_string())?;
 
-    let mut total_col_1 = 0;
-    let mut total_col_2 = 0;
-    let mut total_col_3 = 0;
+    let mut total_col_1: u64 = 0;
+    let mut total_col_2: u64 = 0;
+    let mut total_col_3: u64 = 0;
 
     let mode = if opts.get_flag(options::CHECK_ORDER) {
         CheckOrder::Always

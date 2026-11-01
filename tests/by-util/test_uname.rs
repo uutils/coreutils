@@ -12,6 +12,17 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_unexpected_numeric_operand_is_verbatim() {
+    for arg in ["007", "1e3", "1.50"] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .arg(arg)
+            .fails_with_code(1)
+            .stderr_contains(format!("unexpected argument '{arg}' found"));
+    }
+}
+
+#[test]
 fn test_uname() {
     new_ucmd!().succeeds();
 }
