@@ -297,10 +297,13 @@ fn name_to_gid(name: &str) -> Result<libc::gid_t, ChrootError> {
 /// According to the GNU documentation, "the supplementary groups are
 /// set according to the system defined list for that user". This
 /// function gets that list.
-fn supplemental_gids(uid: libc::uid_t) -> Vec<libc::gid_t> {
+///
+/// The list includes the user's primary group: `gid` if given, else the
+/// group from the password database.
+fn supplemental_gids(uid: libc::uid_t, gid: Option<libc::gid_t>) -> Vec<libc::gid_t> {
     match Passwd::locate(uid) {
         Err(_) => vec![],
-        Ok(passwd) => passwd.belongs_to(),
+        Ok(passwd) => passwd.belongs_to_with_gid(gid.unwrap_or(passwd.gid)),
     }
 }
 
@@ -348,27 +351,29 @@ fn set_uid(uid: libc::uid_t) -> std::io::Result<()> {
 enum Strategy {
     /// Do nothing.
     Nothing,
-    /// Use the list of supplemental groups for the given user.
+    /// Use the list of supplemental groups for the given user, with the
+    /// given group as primary group instead of the one from the password
+    /// database.
     ///
-    /// If the `bool` parameter is `false` and the list of groups for
-    /// the given user is empty, then this will result in an error.
-    FromUID(libc::uid_t, bool),
+    /// If no group is given and the list of groups for the given user is
+    /// empty, then this will result in an error.
+    FromUID(libc::uid_t, Option<libc::gid_t>),
 }
 
 /// Set supplemental groups when the `--groups` argument is not specified.
 fn handle_missing_groups(strategy: Strategy) -> Result<(), ChrootError> {
     match strategy {
         Strategy::Nothing => Ok(()),
-        Strategy::FromUID(uid, false) => {
-            let gids = supplemental_gids(uid);
+        Strategy::FromUID(uid, None) => {
+            let gids = supplemental_gids(uid, None);
             if gids.is_empty() {
                 Err(ChrootError::NoGroupSpecified(uid))
             } else {
                 set_supplemental_gids(&gids).map_err(ChrootError::SetGroupsFailed)
             }
         }
-        Strategy::FromUID(uid, true) => {
-            let gids = supplemental_gids(uid);
+        Strategy::FromUID(uid, Some(gid)) => {
+            let gids = supplemental_gids(uid, Some(gid));
             set_supplemental_gids(&gids).map_err(ChrootError::SetGroupsFailed)
         }
     }
@@ -402,7 +407,7 @@ fn set_context(options: &Options) -> UResult<()> {
         Some(UserSpec::UserOnly(user)) => {
             let uid = name_to_uid(user)?;
             let gid = usr2gid(user).map_err(|_| ChrootError::NoGroupSpecified(uid))?;
-            let strategy = Strategy::FromUID(uid, false);
+            let strategy = Strategy::FromUID(uid, None);
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
             enter_chroot(options, options.skip_chdir)?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(user.to_owned(), e))?;
@@ -418,7 +423,7 @@ fn set_context(options: &Options) -> UResult<()> {
         Some(UserSpec::UserAndGroup(user, group)) => {
             let uid = name_to_uid(user)?;
             let gid = name_to_gid(group)?;
-            let strategy = Strategy::FromUID(uid, true);
+            let strategy = Strategy::FromUID(uid, Some(gid));
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
             enter_chroot(options, options.skip_chdir)?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_owned(), e))?;
