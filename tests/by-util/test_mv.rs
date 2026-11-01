@@ -563,6 +563,23 @@ fn test_mv_file_keeps_broken_symlink(#[case] args: &[&str], #[case] succeeds: bo
 
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_update_dir_onto_newer_symlink_fails() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // The link is created last, so it is not older than the directory for -u,
+    // but a directory still can't replace it
+    at.mkdir("dir");
+    at.mkdir("target");
+    at.symlink_file("missing-target", "target/dir");
+
+    ucmd.arg("-u").arg("dir").arg("target").fails();
+
+    assert!(at.is_symlink("target/dir"));
+    assert!(at.dir_exists("dir"));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_mv_file_backs_up_broken_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
 
