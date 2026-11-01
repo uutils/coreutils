@@ -2281,6 +2281,22 @@ fn handle_existing_dest(
         options.overwrite.verify(dest, options.debug)?;
     }
 
+    // With -u, a destination that is not older than the source is left alone,
+    // so it must not be backed up either.
+    if options.update == UpdateMode::IfOlder {
+        let source_metadata = if options.dereference(source_in_command_line) {
+            fs::metadata(source)
+        } else {
+            fs::symlink_metadata(source)
+        };
+        if let (Ok(source_metadata), Ok(dest_metadata)) =
+            (source_metadata, fs::symlink_metadata(dest))
+            && source_metadata.modified()? <= dest_metadata.modified()?
+        {
+            return Err(CpError::Skipped(false));
+        }
+    }
+
     let mut is_dest_removed = false;
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
     if let Some(backup_path) = backup_path {

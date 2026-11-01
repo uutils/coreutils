@@ -3975,6 +3975,20 @@ fn test_copy_backup_dangling_symlink(#[case] backup_arg: &str, #[case] suffix: &
 }
 
 #[test]
+fn test_cp_update_older_does_not_back_up_skipped_destination() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("file", "new");
+    at.write("dest", "old");
+    let past = filetime::FileTime::from_unix_time(0, 0);
+    filetime::set_file_times(at.plus("file"), past, past).unwrap();
+    ucmd.args(&["-b", "-u", "file", "dest"])
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("dest"), "old");
+    assert!(!at.file_exists("dest~"));
+}
+
+#[test]
 #[cfg_attr(
     wasi_runner,
     ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
