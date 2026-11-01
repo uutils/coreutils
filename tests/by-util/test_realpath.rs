@@ -678,6 +678,6 @@ fn test_realpath_no_symlinks_existing_dangling_symlink_fails() {
     at.symlink_file("missing", "dangling");
     ucmd.args(&["-s", "-e", "dangling"])
         .fails_with_code(1)
-        .stdout_is("")
+        .no_stdout()
         .stderr_contains("No such file or directory");
 }
