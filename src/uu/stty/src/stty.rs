@@ -148,12 +148,15 @@ enum PrintSetting {
     Size,
 }
 
+type CFlags = [u32; 4];
+type CCFlags = [u8; nix::libc::NCCS];
+
 enum ArgOptions<'a> {
     Flags(AllFlags<'a>),
     Mapping((S, u8)),
     Special(SpecialSetting),
     Print(PrintSetting),
-    SavedState(Vec<u32>),
+    SavedState((CFlags, CCFlags)),
 }
 
 impl<'a> From<AllFlags<'a>> for ArgOptions<'a> {
@@ -449,30 +452,25 @@ fn parse_rows_cols(arg: &str) -> Option<u16> {
 /// - All parts must be non-empty valid hex values
 /// - Control characters must fit in u8 (0-255)
 /// - Returns `None` if format is invalid
-fn parse_saved_state(arg: &str) -> Option<Vec<u32>> {
-    let parts: Vec<&str> = arg.split(':').collect();
-    let expected_parts = 4 + nix::libc::NCCS;
+fn parse_saved_state(arg: &str) -> Option<(CFlags, CCFlags)> {
+    let mut parts = arg.split(':');
+    let mut c_flags = CFlags::default();
+    for c_flag in &mut c_flags {
+        let part = parts.next()?;
+        *c_flag = u32::from_str_radix(part, 16).ok()?;
+    }
 
+    let mut cc_flags = CCFlags::default();
+    for cc_flag in &mut cc_flags {
+        let part = parts.next()?;
+        *cc_flag = u8::from_str_radix(part, 16).ok()?;
+    }
     // GNU requires exactly the right number of parts for this platform
-    if parts.len() != expected_parts {
+    if parts.next().is_some() {
         return None;
     }
 
-    // Validate all parts are non-empty valid hex
-    let mut values = Vec::with_capacity(expected_parts);
-    for (i, part) in parts.iter().enumerate() {
-        if part.is_empty() {
-            return None; // GNU rejects empty hex values
-        }
-        let val = u32::from_str_radix(part, 16)
-            .ok()
-            // Control characters (indices 4+) must fit in u8
-            .filter(|&v| i < 4 || v <= 255)?;
-
-        values.push(val);
-    }
-
-    Some(values)
+    Some((c_flags, cc_flags))
 }
 
 fn check_flag_group<T>(flag: &Flag<T>, remove: bool) -> bool {
@@ -862,30 +860,23 @@ fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
 
 /// Apply a saved terminal state to the current termios.
 ///
-/// The state array contains:
-/// - `state[0]`: input flags
-/// - `state[1]`: output flags
-/// - `state[2]`: control flags
-/// - `state[3]`: local flags
-/// - `state[4..]`: control characters (optional)
+/// The state is a pair of 2 arrays:
+/// - (input flags ,output flags, control flags, local flags)
+/// - control characters
 ///
 /// If state has fewer than 4 elements, no changes are applied. This is a defensive
 /// check that should never trigger since `parse_saved_state` rejects such states.
-fn apply_saved_state(termios: &mut Termios, state: &[u32]) {
-    // Require at least 4 elements for the flags (defensive check)
-    let [s0, s1, s2, s3, rest @ ..] = state else {
-        return; // No-op for invalid state (already validated by parser)
-    };
-
+fn apply_saved_state(termios: &mut Termios, state: &(CFlags, CCFlags)) {
+    let (c_flags, cc_flags) = state;
     // Apply the four flag groups, done (as _) for MacOS size compatibility
-    termios.input_flags = InputFlags::from_bits_truncate(*s0 as _);
-    termios.output_flags = OutputFlags::from_bits_truncate(*s1 as _);
-    termios.control_flags = ControlFlags::from_bits_truncate(*s2 as _);
-    termios.local_flags = LocalFlags::from_bits_truncate(*s3 as _);
+    termios.input_flags = InputFlags::from_bits_truncate(c_flags[0] as _);
+    termios.output_flags = OutputFlags::from_bits_truncate(c_flags[1] as _);
+    termios.control_flags = ControlFlags::from_bits_truncate(c_flags[2] as _);
+    termios.local_flags = LocalFlags::from_bits_truncate(c_flags[3] as _);
 
-    // Apply control characters if present (stored as u32 but used as u8)
-    for (c, &cc_val) in termios.control_chars.iter_mut().zip(rest) {
-        *c = cc_val as u8;
+    // Apply control characters if present
+    for (c, &cc_val) in termios.control_chars.iter_mut().zip(cc_flags) {
+        *c = cc_val;
     }
 }
 
