@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars ioerrdir
+// spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars ioerrdir CTYPE
+// spell-checker:ignore (Vietnamese) Tiếng Việt chào
 
 use rstest::rstest;
 #[cfg(unix)]
@@ -83,6 +84,7 @@ fn test_stdin_explicit() {
 fn test_wc_fixture(#[case] args: &[&str], #[case] fixture: &str, #[case] expected: &str) {
     new_ucmd!()
         .args(args)
+        .env("LC_ALL", "en_US.UTF-8")
         .pipe_in_fixture(fixture)
         .succeeds()
         .stdout_only(expected);
@@ -759,4 +761,127 @@ fn test_posixly_correct_whitespace() {
         .pipe_in(input)
         .succeeds()
         .stdout_is("1\n");
+}
+
+#[test]
+fn test_wc_chars_c_locale() {
+    // In C/POSIX locale each byte is one character, so chars count equals bytes.
+    // Byte counts: "Tiếng" is 7 (ế is E1 BA BF, 3 bytes), "Tiếng Việt" is 14,
+    // "ệ" is 3, "Xin chào" is 9 (à is 2 bytes).
+    for (text, bytes) in [("Tiếng", 7), ("Tiếng Việt", 14), ("ệ", 3), ("Xin chào", 9)] {
+        let words = text.split_whitespace().count();
+        // Fast path (`-m` only).
+        new_ucmd!()
+            .arg("-m")
+            .env("LC_ALL", "C")
+            .pipe_in(text)
+            .succeeds()
+            .stdout_is(format!("{bytes}\n"));
+        // Decoder path (`-wm`): same char count plus word count.
+        new_ucmd!()
+            .arg("-wm")
+            .env("LC_ALL", "C")
+            .pipe_in(text)
+            .succeeds()
+            .stdout_is(format!("{words:>7} {bytes:>7}\n"));
+    }
+    // POSIX names the same single-byte locale.
+    new_ucmd!()
+        .arg("-m")
+        .env("LC_ALL", "POSIX")
+        .pipe_in("Tiếng")
+        .succeeds()
+        .stdout_is("7\n");
+}
+
+#[rstest]
+#[case::tieng("Tiếng", 5, 7, 1)]
+#[case::tieng_viet("Tiếng Việt", 10, 14, 2)]
+#[case::single_multibyte("ệ", 1, 3, 1)]
+#[case::mixed_ascii("Xin chào", 8, 9, 2)]
+fn test_wc_chars_utf8_locale(
+    #[case] text: &str,
+    #[case] chars: usize,
+    #[case] bytes: usize,
+    #[case] words: usize,
+) {
+    // In UTF-8 locale, wc -m counts Unicode characters, not bytes.
+    // Byte counts: ế is E1 BA BF and ệ is E1 BB 87 (3 bytes each), à is 2 bytes.
+    // Fast path (`-m` only).
+    new_ucmd!()
+        .arg("-m")
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(text)
+        .succeeds()
+        .stdout_is(format!("{chars}\n"));
+    // Decoder path (`-cmw`): same char count plus word and byte counts.
+    new_ucmd!()
+        .args(&["-cmw"])
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(text)
+        .succeeds()
+        .stdout_is(format!("{words:>7} {chars:>7} {bytes:>7}\n"));
+}
+
+#[test]
+fn test_wc_chars_default_locale() {
+    // With no locale configured, POSIX defaults to C.
+    let vietnamese_text = "Tiếng";
+
+    new_ucmd!()
+        .arg("-m")
+        .env("LC_ALL", "")
+        .env("LC_CTYPE", "")
+        .env("LANG", "")
+        .pipe_in(vietnamese_text)
+        .succeeds()
+        .stdout_is("7\n");
+
+    // Test with -w to trigger wc.rs path (word_count_from_reader_specialized)
+    // Order: words, chars
+    new_ucmd!()
+        .args(&["-mw"])
+        .env("LC_ALL", "")
+        .env("LC_CTYPE", "")
+        .env("LANG", "")
+        .pipe_in(vietnamese_text)
+        .succeeds()
+        .stdout_is("      1       7\n");
+}
+
+#[test]
+fn test_char_count_invalid_bytes_locale() {
+    // `\xC3\xA9` (2 bytes / 1 UTF-8 char, e-acute) + `0xFF` (invalid byte).
+    let input = vec![0xC3, 0xA9, 0xFF];
+    // Fast path (`-m` only) under C locale counts each byte.
+    new_ucmd!()
+        .arg("-m")
+        .env("LC_ALL", "C")
+        .pipe_in(input.clone())
+        .succeeds()
+        .stdout_is("3\n");
+    // NOTE: `-m` (fast path) with invalid bytes in a UTF-8 locale is
+    // intentionally unpinned: `bytecount` counts invalid lead bytes while
+    // GNU ignores encoding errors; fixing that is out of scope.
+    // Decoder path (`-wm`): GNU gives `1 3` under C and `1 1` under a UTF-8
+    // locale (encoding errors are not counted in a multibyte locale).
+    new_ucmd!()
+        .arg("-wm")
+        .env("LC_ALL", "C")
+        .pipe_in(input.clone())
+        .succeeds()
+        .stdout_is("      1       3\n");
+    new_ucmd!()
+        .arg("-wm")
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("      1       1\n");
+    // Invalid byte mid-buffer with word counting under C locale.
+    new_ucmd!()
+        .arg("-wm")
+        .env("LC_ALL", "C")
+        .pipe_in([b'a', 0xFF, b'b'])
+        .succeeds()
+        .stdout_is("      1       3\n");
 }

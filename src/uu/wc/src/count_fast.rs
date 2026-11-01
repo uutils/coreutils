@@ -5,6 +5,7 @@
 
 use crate::{wc_simd_allowed, word_count::WordCount};
 use uucore::hardware::SimdPolicy;
+use uucore::i18n::charmap::{Encoding, locale_encoding};
 
 use super::WordCountable;
 
@@ -196,6 +197,11 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
     let buf: &mut [u8] = &mut AlignedBuffer::default().data;
     let policy = SimdPolicy::detect();
     let simd_allowed = wc_simd_allowed(policy);
+
+    // In C/POSIX locale, characters are equivalent to bytes (MB_CUR_MAX == 1).
+    // This follows GNU coreutils behavior.
+    let chars_are_bytes = locale_encoding() == Encoding::SingleByte;
+
     loop {
         match handle.read(buf) {
             Ok(0) => return (total, None),
@@ -204,7 +210,9 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
                     total.bytes += n;
                 }
                 if COUNT_CHARS {
-                    total.chars += if simd_allowed {
+                    total.chars += if chars_are_bytes {
+                        n
+                    } else if simd_allowed {
                         bytecount::num_chars(&buf[..n])
                     } else {
                         bytecount::naive_num_chars(&buf[..n])
