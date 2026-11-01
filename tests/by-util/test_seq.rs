@@ -181,6 +181,37 @@ fn test_option_with_detected_negative_argument() {
 }
 
 #[test]
+fn test_option_like_argument_before_operands() {
+    // like GNU, an argument starting with "-" in front of the first operand is
+    // an option unless a digit or "." follows, so these are not numbers
+    for args in [&["--no-such-flag"][..], &["-x", "1"], &["-inf", "1"]] {
+        new_ucmd!()
+            .args(args)
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("unexpected argument");
+    }
+    // after the first operand, or after "--", they are operands again
+    new_ucmd!()
+        .args(&["1", "--no-such-flag"])
+        .fails()
+        .usage_error("invalid floating point argument: '--no-such-flag'");
+    new_ucmd!()
+        .args(&["--", "-x"])
+        .fails()
+        .usage_error("invalid floating point argument: '-x'");
+    // option values may still start with "-"
+    new_ucmd!()
+        .args(&["--separator", "-x", "1", "3"])
+        .succeeds()
+        .stdout_is("1-x2-x3\n");
+    new_ucmd!()
+        .args(&["-w", "-.5", "1"])
+        .succeeds()
+        .stdout_is("-0.5\n00.5\n");
+}
+
+#[test]
 fn test_negative_number_as_separator() {
     new_ucmd!()
         .arg("-s")
