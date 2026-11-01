@@ -1458,13 +1458,15 @@ fn copy_file_with_hardlinks_helper(
             .file_type(),
     ) {
         // rustix::fs::mkfifoat is linux only
-        nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666)).map_err(|err| {
-            RenameError::Formatted(translate!(
-                "mv-error-cannot-create-regular-file",
-                "to" => to.quote(),
-                "err" => strip_errno(&err.into())
-            ))
-        })?;
+        nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666)).map_err(
+            |err| {
+                RenameError::Formatted(translate!(
+                    "mv-error-cannot-create-regular-file",
+                    "to" => to.quote(),
+                    "err" => strip_errno(&err.into())
+                ))
+            },
+        )?;
         // Preserve ownership (uid/gid) from the source
         let _ = preserve_ownership(from, to);
     } else {
