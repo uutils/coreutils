@@ -51,10 +51,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     // Create the directed graph from pairs of tokens in the input data.
-    let mut g = Graph::new(input.to_string_lossy().to_string());
+    let graph = GraphBuilder::new(input.to_string_lossy().to_string());
 
-    if input == "-" {
-        process_input(io::stdin().lock(), &mut g)?;
+    let mut graph = if input == "-" {
+        process_input(io::stdin().lock(), graph)?
     } else {
         let mut options: OpenOptions;
         // Windows and WASI do not report a directory as a read error.
@@ -99,10 +99,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let _ = rustix::fs::fadvise(&file, 0, None, rustix::fs::Advice::Sequential);
 
         let reader = BufReader::new(file);
-        process_input(reader, &mut g)?;
-    }
+        process_input(reader, graph)?
+    };
 
-    g.run_tsort()?;
+    graph.run_tsort()?;
     Ok(())
 }
 
@@ -142,7 +142,7 @@ struct LoopNode<'a>(&'a [u8]);
 impl UError for Error {}
 impl UError for LoopNode<'_> {}
 
-fn process_input<R: BufRead>(reader: R, graph: &mut Graph) -> Result<(), Error> {
+fn process_input<R: BufRead>(reader: R, mut graph: GraphBuilder) -> Result<Graph, Error> {
     let mut pending: Option<Sym> = None;
 
     // Input is considered to be in the format
@@ -151,7 +151,8 @@ fn process_input<R: BufRead>(reader: R, graph: &mut Graph) -> Result<(), Error> 
     //
     // Tokens are kept as raw bytes so invalid UTF-8 can be preserved.
 
-    let result = parser::for_each_token(reader, |token| {
+    let input = graph.name();
+    parser::for_each_token(reader, &input, |token| {
         let token_sym = graph.interner.get_or_intern(token);
 
         if let Some(from) = pending.take() {
@@ -159,20 +160,13 @@ fn process_input<R: BufRead>(reader: R, graph: &mut Graph) -> Result<(), Error> 
         } else {
             pending = Some(token_sym);
         }
-    });
-
-    if let Err(e) = result {
-        if e.kind() == io::ErrorKind::IsADirectory {
-            return Err(ReadError::IsDir(graph.name()).into());
-        }
-        return Err(ReadError::Io(e).into());
-    }
+        Ok(())
+    })?;
 
     if pending.is_some() {
-        return Err(ReadError::NumTokensOdd(graph.name()).into());
+        return Err(ReadError::NumTokensOdd(input).into());
     }
-    graph.interner.finish_interning();
-    Ok(())
+    Ok(graph.build())
 }
 
 /// Find the element `x` in `vec` and remove it, returning its index.
@@ -203,13 +197,13 @@ impl Node {
     }
 }
 
-struct Graph {
+struct GraphBuilder {
     name: String,
     nodes: FxHashMap<Sym, Node>,
     interner: ByteInterner,
 }
 
-impl Graph {
+impl GraphBuilder {
     fn new(name: String) -> Self {
         Self {
             name,
@@ -222,10 +216,21 @@ impl Graph {
         self.name.clone()
     }
 
-    fn get_node_name(&self, node_sym: Sym) -> &[u8] {
-        self.interner
-            .resolve(node_sym)
-            .expect("symbol should be interned")
+    fn build(self) -> Graph {
+        let Self {
+            name,
+            nodes,
+            interner,
+        } = self;
+
+        let (bytes, offsets) = interner.into_parts();
+
+        Graph {
+            name,
+            nodes,
+            bytes,
+            offsets,
+        }
     }
 
     fn add_edge(&mut self, from: Sym, to: Sym) {
@@ -237,6 +242,26 @@ impl Graph {
             let to_node = self.nodes.entry(to).or_default();
             to_node.predecessor_count += 1;
         }
+    }
+}
+
+struct Graph {
+    name: String,
+    nodes: FxHashMap<Sym, Node>,
+    bytes: Vec<u8>,
+    offsets: Vec<usize>,
+}
+
+impl Graph {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn get_node_name(&self, node_sym: Sym) -> &[u8] {
+        let start = self.offsets[node_sym];
+        let end = self.offsets[node_sym + 1];
+
+        &self.bytes[start..end]
     }
 
     fn remove_edge(&mut self, u: Sym, v: Sym) {
