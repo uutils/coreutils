@@ -1341,8 +1341,8 @@ fn test_install_backup_dangling_symlink(#[case] backup_arg: &str, #[case] suffix
         .no_output();
 
     assert_eq!(at.read("dest"), "new");
-    assert!(at.is_symlink(&format!("dest{suffix}")));
-    assert_eq!(at.resolve_link(&format!("dest{suffix}")), "missing-target");
+    assert!(at.is_symlink(format!("dest{suffix}")));
+    assert_eq!(at.resolve_link(format!("dest{suffix}")), "missing-target");
 }
 
 #[test]
