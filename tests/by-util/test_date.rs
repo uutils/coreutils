@@ -1599,6 +1599,27 @@ fn test_date_tz_abbreviation_utc_gmt() {
 }
 
 #[test]
+fn test_date_abbreviation_in_local_dst_gap() {
+    // 02:30 does not exist in America/New_York on 2024-03-10, but the input
+    // names GMT, so the local DST rules must not shift it.
+    for input in ["Sun, 10 Mar 2024 02:30:00 GMT", "2024-03-10 02:30:00 UTC"] {
+        new_ucmd!()
+            .env("TZ", "America/New_York")
+            .args(&["-d", input, "+%s"])
+            .succeeds()
+            .stdout_only("1710037800\n");
+    }
+
+    // A relative offset counts in the named zone too: 24 hours of GMT, not
+    // the 23 hours of the local day that crosses the spring-forward.
+    new_ucmd!()
+        .env("TZ", "America/New_York")
+        .args(&["-d", "2024-03-09 12:00 24 hours GMT", "+%s"])
+        .succeeds()
+        .stdout_only("1710072000\n");
+}
+
+#[test]
 fn test_date_tz_abbreviation_us_timezones() {
     // Test US timezone abbreviations (uutils supports, GNU also supports these)
     let us_zones = vec![
