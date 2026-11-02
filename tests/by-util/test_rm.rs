@@ -495,7 +495,9 @@ fn test_invalid_symlink() {
 
 #[test]
 fn test_force_no_operand() {
-    new_ucmd!().arg("-f").succeeds().no_stderr();
+    for args in [&["-f"][..], &["-f", "--interactive=never"], &["-i", "-f"]] {
+        new_ucmd!().args(args).succeeds().no_stderr();
+    }
 }
 
 #[test]
@@ -505,27 +507,19 @@ fn test_no_operand() {
 
 #[test]
 fn test_force_then_interactive_no_operand() {
-    // A later -i cancels -f, so the missing operand must be reported.
-    new_ucmd!()
-        .args(&["-f", "-i"])
-        .fails()
-        .usage_error("missing operand");
-}
-
-#[test]
-fn test_force_then_prompt_once_no_operand() {
-    new_ucmd!()
-        .args(&["--force", "-I"])
-        .fails()
-        .usage_error("missing operand");
-}
-
-#[test]
-fn test_force_then_interactive_always_no_operand() {
-    new_ucmd!()
-        .args(&["-f", "--interactive=always"])
-        .fails()
-        .usage_error("missing operand");
+    // A later -i, -I or --interactive=always/once cancels -f,
+    // so the missing operand must be reported.
+    for args in [
+        &["-f", "-i"][..],
+        &["--force", "-I"],
+        &["-f", "--interactive=always"],
+        &["-f", "--interactive=once"],
+    ] {
+        new_ucmd!()
+            .args(args)
+            .fails()
+            .usage_error("missing operand");
+    }
 }
 
 #[test]

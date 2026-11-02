@@ -251,12 +251,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // If -f(--force) is before any -i (or variants) we want prompts else no prompts
     let force_prompt_never = force_flag && {
         let force_index = matches.index_of(OPT_FORCE).unwrap_or(0);
-        ![OPT_PROMPT_ALWAYS, OPT_PROMPT_ONCE, OPT_INTERACTIVE]
-            .iter()
-            .any(|flag| {
-                matches.value_source(flag) == Some(ValueSource::CommandLine)
-                    && matches.index_of(flag).unwrap_or(0) > force_index
-            })
+        let is_later = |flag: &str| {
+            matches.value_source(flag) == Some(ValueSource::CommandLine)
+                && matches.index_of(flag).unwrap_or(0) > force_index
+        };
+        // `--interactive=never` does not cancel an earlier `-f`.
+        let interactive_cancels_force = is_later(OPT_INTERACTIVE)
+            && matches
+                .get_one::<String>(OPT_INTERACTIVE)
+                .is_some_and(|mode| mode != "never");
+        !is_later(OPT_PROMPT_ALWAYS) && !is_later(OPT_PROMPT_ONCE) && !interactive_cancels_force
     };
 
     if files.is_empty() && !force_prompt_never {
