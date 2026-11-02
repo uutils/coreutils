@@ -87,8 +87,13 @@ pub fn compute_sort_key_utf8(input: &[u8], buf: &mut Vec<u8>) {
         .expect("ICU write_sort_key_utf8_to failed");
 }
 
-/// Compare both strings with regard to the current locale.
-pub fn locale_cmp(left: &[u8], right: &[u8]) -> Ordering {
+/// Compare both strings with the current locale's collator, as is.
+///
+/// `Equal` only means "sorts at the same position": strings that differ in
+/// characters the collator gives no weight, like punctuation or zero-width
+/// characters, compare `Equal`. Use this when the caller breaks such ties
+/// itself (as `sort` does); use [`locale_cmp`] to test for equality.
+pub fn locale_cmp_raw(left: &[u8], right: &[u8]) -> Ordering {
     // If the detected locale is 'C', just do byte-wise comparison
     if get_collating_locale().0 == DEFAULT_LOCALE {
         left.cmp(right)
@@ -98,4 +103,13 @@ pub fn locale_cmp(left: &[u8], right: &[u8]) -> Ordering {
             .get()
             .map_or_else(|| left.cmp(right), |c| c.compare_utf8(left, right))
     }
+}
+
+/// Compare both strings with regard to the current locale.
+///
+/// Returns `Equal` only for identical bytes: ties the collator cannot tell
+/// apart are broken by comparing the bytes, so callers may read `Equal` as
+/// "same string".
+pub fn locale_cmp(left: &[u8], right: &[u8]) -> Ordering {
+    locale_cmp_raw(left, right).then_with(|| left.cmp(right))
 }

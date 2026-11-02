@@ -48,7 +48,7 @@ use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 #[cfg(feature = "i18n-collator")]
-use uucore::i18n::collator::{compute_sort_key_utf8, locale_cmp};
+use uucore::i18n::collator::{compute_sort_key_utf8, locale_cmp, locale_cmp_raw};
 use uucore::i18n::datetime::get_locale_months;
 use uucore::line_ending::LineEnding;
 use uucore::numeric_str_cmp::{
@@ -2770,15 +2770,17 @@ pub fn merge_compare<'a>(
 }
 
 /// Lazy counterpart of the `fast_locale_collation` branch of `compare_by`: compare the
-/// line bytes directly rather than precomputed keys. `locale_cmp` (ICU `compare_utf8`)
-/// and the sort-key comparison agree on ordering by construction.
+/// line bytes directly rather than precomputed keys. `locale_cmp_raw` (ICU `compare_utf8`)
+/// and the sort-key comparison agree on ordering by construction. Not `locale_cmp`: its
+/// forward byte tie-break would differ from the reversed one below, which the
+/// precomputed-key path uses.
 ///
 /// Kept out of line so that `merge_compare` stays small enough to be inlined into the
 /// merge heap's comparator, which keeps the non-locale merge paths as fast as before.
 #[cfg(feature = "i18n-collator")]
 #[inline(never)]
 fn compare_lines_with_collator(a: &Line<'_>, b: &Line<'_>, settings: &GlobalSettings) -> Ordering {
-    let mut cmp = locale_cmp(a.line, b.line);
+    let mut cmp = locale_cmp_raw(a.line, b.line);
     if cmp == Ordering::Equal {
         // Equal keys for inputs like `01` and `0_1`; fall back to (reversed) byte order.
         cmp = b.line.cmp(a.line);

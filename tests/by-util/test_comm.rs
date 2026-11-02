@@ -792,6 +792,27 @@ fn test_locale_collation() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+fn test_locale_collation_does_not_match_punctuation_variants() {
+    // The collator gives no weight to `/` and `.`, but these lines differ.
+    let locale = "en_US.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("allowed", "/srv/uploads\n");
+    scene.fixtures.write("requested", "/srv/uploads/../..\n");
+
+    scene
+        .ucmd()
+        .env("LC_ALL", locale)
+        .args(&["-12", "allowed", "requested"])
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
+#[cfg(unix)]
 fn test_c_locale_still_orders_by_bytes() {
     let scene = TestScenario::new(util_name!());
     scene.fixtures.write("f1", "a-b\na1\n");

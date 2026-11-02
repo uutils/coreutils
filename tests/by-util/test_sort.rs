@@ -3874,6 +3874,54 @@ fn test_consistent_sorting_with_i18n_collate() {
 }
 
 #[test]
+fn test_unique_key_keeps_keys_the_collator_cannot_tell_apart() {
+    // The collator gives U+200B no weight, so these keys compare `Equal`
+    // there, but they are different strings and `-u` must keep both.
+    let locale = "en_US.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    let out = new_ucmd!()
+        .env("LC_ALL", locale)
+        .args(&["-u", "-k1,1"])
+        .pipe_in("ab x\na\u{200b}b y\n")
+        .succeeds()
+        .stdout_move_str();
+    // Only that both survive is pinned, not their order.
+    let mut lines: Vec<_> = out.lines().collect();
+    lines.sort_unstable();
+    assert_eq!(lines, ["ab x", "a\u{200b}b y"]);
+}
+
+#[test]
+fn test_merge_breaks_collator_ties_like_a_full_sort() {
+    // The collator gives U+200B no weight, so these lines tie there. A full
+    // sort orders such a tie by reversed bytes, and `-m` must do the same
+    // rather than fall back to the file order or to forward bytes.
+    let locale = "en_US.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    let ts = TestScenario::new("sort");
+    ts.fixtures.write("a.txt", "ab\n");
+    ts.fixtures.write("b.txt", "a\u{200b}b\n");
+
+    let full = ts
+        .ucmd()
+        .env("LC_ALL", locale)
+        .args(&["a.txt", "b.txt"])
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(full, "a\u{200b}b\nab\n");
+
+    ts.ucmd()
+        .env("LC_ALL", locale)
+        .args(&["-m", "a.txt", "b.txt"])
+        .succeeds()
+        .stdout_is(full);
+}
+
+#[test]
 fn test_merge_locale_collation() {
     // `sort -m` compares lines lazily with the collator instead of precomputed
     // sort keys; the result must match what a full sort produces.
