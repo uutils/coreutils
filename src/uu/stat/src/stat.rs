@@ -755,9 +755,9 @@ fn print_raw_byte(byte: u8) {
 
 impl Stater {
     fn process_flags(chars: &[char], i: &mut usize, bound: usize, flag: &mut Flags) {
-        while *i < bound {
+        for &c in &chars[*i..bound] {
             #[expect(clippy::match_same_arms)] // needs comment
-            match chars[*i] {
+            match c {
                 '#' => flag.alter = true,
                 '0' => flag.zero = true,
                 '-' => flag.left = true,
@@ -793,6 +793,17 @@ impl Stater {
         let mut flag = Flags::default();
 
         Self::process_flags(chars, i, bound, &mut flag);
+
+        // GNU rejects flag-only fragments closed by another '%', e.g. `%++-+%`.
+        if *i < bound && chars[*i] == '%' {
+            let invalid_directive: String = chars[old..=*i].iter().collect();
+            return Err(DirectiveError::new(
+                format_str,
+                &invalid_directive,
+                old,
+                *i + 1,
+            ));
+        }
 
         let mut width = 0;
         let mut precision = Precision::NotSpecified;
@@ -953,7 +964,19 @@ impl Stater {
         while i < bound {
             match chars.get(i) {
                 Some('%') => match Self::handle_percent_case(&chars, &mut i, bound, format_str) {
-                    Ok(token) => tokens.push(token),
+                    Ok(token) => {
+                        // A directive takes a single byte as its conversion, so
+                        // after a multibyte char (always an unknown directive,
+                        // printed as `?`) the rest of its bytes are printed as is.
+                        let rest = match token {
+                            Token::Directive { format, .. } if !format.is_ascii() => {
+                                format.encode_utf8(&mut [0; 4]).as_bytes()[1..].to_vec()
+                            }
+                            _ => Vec::new(),
+                        };
+                        tokens.push(token);
+                        tokens.extend(rest.into_iter().map(Token::Byte));
+                    }
                     Err(error) => return (tokens, Some(error)),
                 },
                 Some('\\') => {
@@ -969,9 +992,6 @@ impl Stater {
                 None => break,
             }
             i += 1;
-        }
-        if !use_printf && !format_str.ends_with('\n') {
-            tokens.push(Token::Char('\n'));
         }
         (tokens, None)
     }
@@ -1043,7 +1063,12 @@ impl Stater {
             }
             tokens
         } else {
-            let (tokens, error) = Self::generate_tokens(format_str, use_printf);
+            let (mut tokens, error) = Self::generate_tokens(format_str, use_printf);
+            // `--format` always prints a newline after the output, even when
+            // the format already ends with one; `--printf` never adds one.
+            if !use_printf && error.is_none() {
+                tokens.push(Token::Char('\n'));
+            }
             format_error = error;
             tokens
         };

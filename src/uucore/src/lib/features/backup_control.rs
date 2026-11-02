@@ -82,20 +82,15 @@
 //! }
 //! ```
 
-use crate::{
-    display::Quotable,
-    error::{UError, UResult},
-    fs::FileInformation,
-};
+use crate::display::Quotable;
+use crate::error::{UError, UResult};
+use crate::fs::FileInformation;
 use clap::ArgMatches;
-use std::{
-    env,
-    error::Error,
-    ffi::{OsStr, OsString},
-    fmt::{Debug, Display},
-    fs,
-    path::{Path, PathBuf},
-};
+use std::error::Error;
+use std::ffi::{OsStr, OsString};
+use std::fmt::{Debug, Display};
+use std::path::{Path, PathBuf};
+use std::{env, fs};
 
 pub static BACKUP_CONTROL_VALUES: &[&str] = &[
     "simple", "never", "numbered", "t", "existing", "nil", "none", "off",
@@ -226,7 +221,7 @@ pub mod arguments {
 /// In order of precedence, this function obtains the backup suffix
 ///
 /// 1. From the '-S' or '--suffix' CLI argument, if present
-/// 2. From the "SIMPLE_BACKUP_SUFFIX" environment variable, if present
+/// 2. From the `SIMPLE_BACKUP_SUFFIX` environment variable, if present
 /// 3. By using the default '~' if none of the others apply, or if they are empty or contain slashes
 ///
 /// This function directly takes [`ArgMatches`] as argument and looks for
@@ -329,14 +324,20 @@ pub fn determine_backup_mode(env_ctl: Option<String>, matches: &ArgMatches) -> U
         // is used but method is not specified, then the value of the
         // VERSION_CONTROL environment variable is used. And if VERSION_CONTROL
         // is not set, the default backup type is 'existing'.
-        if let Some(method) = matches.get_one::<String>(arguments::OPT_BACKUP) {
+        // An empty value (`--backup=`) behaves like a bare `--backup`: the value
+        // of `VERSION_CONTROL` decides, falling back to 'existing'.
+        if let Some(method) = matches
+            .get_one::<String>(arguments::OPT_BACKUP)
+            .filter(|method| !method.is_empty())
+        {
             // Second argument is for the error string that is returned.
             match_method(method, "backup type")
         } else if let Some(method) = env_ctl {
             // Second argument is for the error string that is returned.
             match_method(&method, "$VERSION_CONTROL")
         } else {
-            // Default if no argument is provided to '--backup'
+            // Default if no argument is provided to '--backup', or it is given
+            // without a value
             Ok(BackupMode::Existing)
         }
     } else if matches.get_flag(arguments::OPT_BACKUP_NO_ARG) {
@@ -566,6 +567,22 @@ mod tests {
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
         let result = determine_backup_mode(None, &matches).unwrap();
         assert_eq!(result, BackupMode::Existing);
+    }
+
+    // --backup= (empty value) behaves like a bare --backup
+    #[test]
+    fn test_backup_mode_long_with_empty_arg() {
+        let matches = make_app().get_matches_from(vec!["command", "--backup="]);
+        let result = determine_backup_mode(None, &matches).unwrap();
+        assert_eq!(result, BackupMode::Existing);
+    }
+
+    // --backup= (empty value) still consults VERSION_CONTROL
+    #[test]
+    fn test_backup_mode_long_with_empty_arg_and_env() {
+        let matches = make_app().get_matches_from(vec!["command", "--backup="]);
+        let result = determine_backup_mode(Some("numbered".into()), &matches).unwrap();
+        assert_eq!(result, BackupMode::Numbered);
     }
 
     // --backup can be passed with an argument only

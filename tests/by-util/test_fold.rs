@@ -6,6 +6,7 @@
 // spell-checker:ignore fullwidth refgh tefgh nefgh unflushed
 
 use bytecount::count;
+use rstest::rstest;
 use unicode_width::UnicodeWidthChar;
 #[cfg(target_os = "linux")]
 use uutests::at_and_ucmd;
@@ -77,31 +78,63 @@ fn test_default_wrap_with_newlines() {
         .stdout_is_fixture("lorem_ipsum_new_line_80_column.expected");
 }
 
-#[test]
-fn test_wide_characters_in_column_mode() {
+#[rstest]
+#[case::wide_characters_in_column_mode(&["-w", "5"], "\u{B250}\u{B250}\u{B250}\n", "\u{B250}\u{B250}\n\u{B250}\n")]
+#[case::wide_characters_with_characters_option(&["--characters", "-w", "5"], "\u{B250}\u{B250}\u{B250}\n", "\u{B250}\u{B250}\u{B250}\n")]
+#[case::wide_characters_with_characters_short_option(&["-c", "-w", "5"], "\u{B250}\u{B250}\u{B250}\n", "\u{B250}\u{B250}\u{B250}\n")]
+#[case::should_preserve_empty_line_without_final_newline(&["-w2"], "12\n\n34", "12\n\n34")]
+#[case::should_preserve_empty_line_and_final_newline(&["-w2"], "12\n\n34\n", "12\n\n34\n")]
+#[case::should_not_add_newline_when_line_longer_than_fold(&["-w2"], "1234", "12\n34")]
+#[case::should_not_add_newline_when_line_equal_to_fold(&["-w1"], " ", " ")]
+#[case::should_preserve_final_newline_when_line_longer_than_fold(&["-w2"], "1234\n", "12\n34\n")]
+#[case::should_preserve_final_newline_when_line_equal_to_fold(&["-w2"], "1\n", "1\n")]
+#[case::single_tab_should_not_add_extra_newline(&["-w1"], "\t", "\t")]
+#[case::initial_tab_counts_as_8_columns(&["-w8"], "\t1", "\t\n1")]
+#[case::fold_before_tab_with_narrow_width(&["-w7"], "a\t1", "a\n\t\n1")]
+#[case::fold_at_word_boundary(&["-w4", "-s"], "one two", "one \ntwo")]
+#[case::fold_at_leading_word_boundary(&["-w3", "-s"], " aaa", " \naaa")]
+#[case::fold_at_word_boundary_preserve_final_newline(&["-w4", "-s"], "one two\n", "one \ntwo\n")]
+#[case::fold_at_tab(&["-w8"], "a\tbbb\n", "a\t\nbbb\n")]
+#[case::fold_after_tab(&["-w10"], "a\tbbb\n", "a\tbb\nb\n")]
+#[case::fold_characters_tab_advances_to_next_tab_stop(&["-c", "-w", "4"], "ab\tcd\n", "ab\n\t\ncd\n")]
+#[case::fold_characters_tab_with_non_ascii(&["-c", "-w", "2"], "\u{00E9}\tb\n", "\u{00E9}\n\t\nb\n")]
+#[case::fold_at_tab_as_word_boundary(&["-w8", "-s"], "a\tbbb\n", "a\t\nbbb\n")]
+#[case::fold_after_tab_as_word_boundary(&["-w10", "-s"], "a\tbbb\n", "a\t\nbbb\n")]
+#[case::fold_at_word_boundary_only_whitespace(&["-w2", "-s"], "    ", "  \n  ")]
+#[case::fold_at_word_boundary_only_whitespace_preserve_final_newline(&["-w2", "-s"], "    \n", "  \n  \n")]
+#[case::backspace_should_decrease_column_count(&["-w2"], "1\x08345", "1\x0834\n5")]
+#[case::backspace_should_not_decrease_column_count_past_zero(&["-w2"], "1\x08\x083456", "1\x08\x0834\n56")]
+#[case::carriage_return_should_reset_column_count(&["-w6"], "12345\r123456789abcdef", "12345\r123456\n789abc\ndef")]
+#[case::bytewise_should_preserve_empty_line_without_final_newline(&["-w2", "-b"], "123\n\n45", "12\n3\n\n45")]
+#[case::bytewise_should_preserve_empty_line_and_final_newline(&["-w2", "-b"], "12\n\n34\n", "12\n\n34\n")]
+#[case::bytewise_should_not_add_newline_when_line_less_than_fold(&["-b"], "1234", "1234")]
+#[case::bytewise_should_not_add_newline_when_line_longer_than_fold(&["-w2", "-b"], "1234", "12\n34")]
+#[case::bytewise_should_not_add_newline_when_line_equal_to_fold(&["-w1", "-b"], " ", " ")]
+#[case::bytewise_should_preserve_final_newline_when_line_less_than_fold(&["-b"], "1234\n", "1234\n")]
+#[case::bytewise_should_preserve_final_newline_when_line_longer_than_fold(&["-w2", "-b"], "1234\n", "12\n34\n")]
+#[case::bytewise_should_preserve_final_newline_when_line_equal_to_fold(&["-w2", "-b"], "1\n", "1\n")]
+#[case::bytewise_single_tab_should_not_add_extra_newline(&["-w1", "-b"], "\t", "\t")]
+#[case::tab_counts_as_one_byte(&["-w2", "-b"], "1\t2\n", "1\t\n2\n")]
+#[case::bytewise_fold_before_tab_with_narrow_width(&["-w7", "-b"], "a\t1", "a\t1")]
+#[case::bytewise_fold_at_word_boundary_only_whitespace(&["-w2", "-s", "-b"], "    ", "  \n  ")]
+#[case::bytewise_fold_at_word_boundary_only_whitespace_preserve_final_newline(&["-w2", "-s", "-b"], "    \n", "  \n  \n")]
+#[case::bytewise_fold_line_longer_than_width_still_folds(&["-w7", "-s", "-b"], "aaa bbbb\n", "aaa \nbbbb\n")]
+#[case::bytewise_backspace_should_be_preserved(&["-b"], "\x08", "\x08")]
+#[case::bytewise_backspaced_char_should_be_preserved(&["-b"], "x\x08", "x\x08")]
+#[case::bytewise_backspace_should_not_decrease_column_count(&["-w2", "-b"], "1\x08345", "1\x08\n34\n5")]
+#[case::bytewise_carriage_return_should_be_preserved(&["-b"], "\r", "\r")]
+#[case::bytewise_carriage_return_overwritten_char_should_be_preserved(&["-b"], "x\ry", "x\ry")]
+#[case::bytewise_carriage_return_should_not_reset_column_count(&["-w6", "-b"], "12345\r123456789abcdef", "12345\r\n123456\n789abc\ndef")]
+// A bare `-` has no trailing `w`, so it must not be mistaken for one of the
+// short spellings that consumes the next argument as its width -- that once
+// swallowed whatever followed the `-` operand instead of scanning it.
+#[case::dash_operand_does_not_swallow_the_next_argument(&["-", "-5"], "hello\n", "hello\n")]
+fn test_fold_stdin(#[case] args: &[&str], #[case] input: &str, #[case] expected: &str) {
     new_ucmd!()
-        .args(&["-w", "5"])
-        .pipe_in("\u{B250}\u{B250}\u{B250}\n")
+        .args(args)
+        .pipe_in(input)
         .succeeds()
-        .stdout_is("\u{B250}\u{B250}\n\u{B250}\n");
-}
-
-#[test]
-fn test_wide_characters_with_characters_option() {
-    new_ucmd!()
-        .args(&["--characters", "-w", "5"])
-        .pipe_in("\u{B250}\u{B250}\u{B250}\n")
-        .succeeds()
-        .stdout_is("\u{B250}\u{B250}\u{B250}\n");
-}
-
-#[test]
-fn test_wide_characters_with_characters_short_option() {
-    new_ucmd!()
-        .args(&["-c", "-w", "5"])
-        .pipe_in("\u{B250}\u{B250}\u{B250}\n")
-        .succeeds()
-        .stdout_is("\u{B250}\u{B250}\u{B250}\n");
+        .stdout_only(expected);
 }
 
 #[test]
@@ -218,6 +251,18 @@ fn test_zero_width_spaces_in_column_mode() {
         .pipe_in(input.clone())
         .succeeds()
         .stdout_is(&input);
+}
+
+#[test]
+fn test_zero_width_after_newline_in_column_mode() {
+    let input = "abc\n\u{200B}From x\n\u{200D}\u{0301}\nb\n";
+    for args in [&[][..], &["-s"]] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is(input);
+    }
 }
 
 #[test]
@@ -400,24 +445,6 @@ fn tail_inclusive(text: &str, lines: usize) -> String {
 }
 
 #[test]
-fn test_should_preserve_empty_line_without_final_newline() {
-    new_ucmd!()
-        .arg("-w2")
-        .pipe_in("12\n\n34")
-        .succeeds()
-        .stdout_is("12\n\n34");
-}
-
-#[test]
-fn test_should_preserve_empty_line_and_final_newline() {
-    new_ucmd!()
-        .arg("-w2")
-        .pipe_in("12\n\n34\n")
-        .succeeds()
-        .stdout_is("12\n\n34\n");
-}
-
-#[test]
 fn test_should_preserve_empty_lines() {
     new_ucmd!().pipe_in("\n").succeeds().stdout_is("\n");
 
@@ -449,62 +476,8 @@ fn test_should_not_add_newline_when_line_less_than_fold() {
 }
 
 #[test]
-fn test_should_not_add_newline_when_line_longer_than_fold() {
-    new_ucmd!()
-        .arg("-w2")
-        .pipe_in("1234")
-        .succeeds()
-        .stdout_is("12\n34");
-}
-
-#[test]
-fn test_should_not_add_newline_when_line_equal_to_fold() {
-    new_ucmd!()
-        .arg("-w1")
-        .pipe_in(" ")
-        .succeeds()
-        .stdout_is(" ");
-}
-
-#[test]
 fn test_should_preserve_final_newline_when_line_less_than_fold() {
     new_ucmd!().pipe_in("1234\n").succeeds().stdout_is("1234\n");
-}
-
-#[test]
-fn test_should_preserve_final_newline_when_line_longer_than_fold() {
-    new_ucmd!()
-        .arg("-w2")
-        .pipe_in("1234\n")
-        .succeeds()
-        .stdout_is("12\n34\n");
-}
-
-#[test]
-fn test_should_preserve_final_newline_when_line_equal_to_fold() {
-    new_ucmd!()
-        .arg("-w2")
-        .pipe_in("1\n")
-        .succeeds()
-        .stdout_is("1\n");
-}
-
-#[test]
-fn test_single_tab_should_not_add_extra_newline() {
-    new_ucmd!()
-        .arg("-w1")
-        .pipe_in("\t")
-        .succeeds()
-        .stdout_is("\t");
-}
-
-#[test]
-fn test_initial_tab_counts_as_8_columns() {
-    new_ucmd!()
-        .arg("-w8")
-        .pipe_in("\t1")
-        .succeeds()
-        .stdout_is("\t\n1");
 }
 
 #[test]
@@ -526,114 +499,6 @@ fn test_all_tabs_should_advance_to_next_tab_stops() {
 }
 
 #[test]
-fn test_fold_before_tab_with_narrow_width() {
-    new_ucmd!()
-        .arg("-w7")
-        .pipe_in("a\t1")
-        .succeeds()
-        .stdout_is("a\n\t\n1");
-}
-
-#[test]
-fn test_fold_at_word_boundary() {
-    new_ucmd!()
-        .args(&["-w4", "-s"])
-        .pipe_in("one two")
-        .succeeds()
-        .stdout_is("one \ntwo");
-}
-
-#[test]
-fn test_fold_at_leading_word_boundary() {
-    new_ucmd!()
-        .args(&["-w3", "-s"])
-        .pipe_in(" aaa")
-        .succeeds()
-        .stdout_is(" \naaa");
-}
-
-#[test]
-fn test_fold_at_word_boundary_preserve_final_newline() {
-    new_ucmd!()
-        .args(&["-w4", "-s"])
-        .pipe_in("one two\n")
-        .succeeds()
-        .stdout_is("one \ntwo\n");
-}
-
-#[test]
-fn test_fold_at_tab() {
-    new_ucmd!()
-        .arg("-w8")
-        .pipe_in("a\tbbb\n")
-        .succeeds()
-        .stdout_is("a\t\nbbb\n");
-}
-
-#[test]
-fn test_fold_after_tab() {
-    new_ucmd!()
-        .arg("-w10")
-        .pipe_in("a\tbbb\n")
-        .succeeds()
-        .stdout_is("a\tbb\nb\n");
-}
-
-#[test]
-fn test_fold_characters_tab_advances_to_next_tab_stop() {
-    new_ucmd!()
-        .args(&["-c", "-w", "4"])
-        .pipe_in("ab\tcd\n")
-        .succeeds()
-        .stdout_is("ab\n\t\ncd\n");
-}
-
-#[test]
-fn test_fold_characters_tab_with_non_ascii() {
-    new_ucmd!()
-        .args(&["-c", "-w", "2"])
-        .pipe_in("\u{00E9}\tb\n")
-        .succeeds()
-        .stdout_is("\u{00E9}\n\t\nb\n");
-}
-
-#[test]
-fn test_fold_at_tab_as_word_boundary() {
-    new_ucmd!()
-        .args(&["-w8", "-s"])
-        .pipe_in("a\tbbb\n")
-        .succeeds()
-        .stdout_is("a\t\nbbb\n");
-}
-
-#[test]
-fn test_fold_after_tab_as_word_boundary() {
-    new_ucmd!()
-        .args(&["-w10", "-s"])
-        .pipe_in("a\tbbb\n")
-        .succeeds()
-        .stdout_is("a\t\nbbb\n");
-}
-
-#[test]
-fn test_fold_at_word_boundary_only_whitespace() {
-    new_ucmd!()
-        .args(&["-w2", "-s"])
-        .pipe_in("    ")
-        .succeeds()
-        .stdout_is("  \n  ");
-}
-
-#[test]
-fn test_fold_at_word_boundary_only_whitespace_preserve_final_newline() {
-    new_ucmd!()
-        .args(&["-w2", "-s"])
-        .pipe_in("    \n")
-        .succeeds()
-        .stdout_is("  \n  \n");
-}
-
-#[test]
 fn test_backspace_should_be_preserved() {
     new_ucmd!().pipe_in("\x08").succeeds().stdout_is("\x08");
 }
@@ -641,24 +506,6 @@ fn test_backspace_should_be_preserved() {
 #[test]
 fn test_backspaced_char_should_be_preserved() {
     new_ucmd!().pipe_in("x\x08").succeeds().stdout_is("x\x08");
-}
-
-#[test]
-fn test_backspace_should_decrease_column_count() {
-    new_ucmd!()
-        .arg("-w2")
-        .pipe_in("1\x08345")
-        .succeeds()
-        .stdout_is("1\x0834\n5");
-}
-
-#[test]
-fn test_backspace_should_not_decrease_column_count_past_zero() {
-    new_ucmd!()
-        .arg("-w2")
-        .pipe_in("1\x08\x083456")
-        .succeeds()
-        .stdout_is("1\x08\x0834\n56");
 }
 
 #[test]
@@ -681,15 +528,6 @@ fn test_carriage_return_overwritten_char_should_be_preserved() {
 }
 
 #[test]
-fn test_carriage_return_should_reset_column_count() {
-    new_ucmd!()
-        .arg("-w6")
-        .pipe_in("12345\r123456789abcdef")
-        .succeeds()
-        .stdout_is("12345\r123456\n789abc\ndef");
-}
-
-#[test]
 fn test_carriage_return_is_not_word_boundary() {
     new_ucmd!()
         .args(&["-w6", "-s"])
@@ -700,24 +538,6 @@ fn test_carriage_return_is_not_word_boundary() {
 
 //
 // bytewise tests
-
-#[test]
-fn test_bytewise_should_preserve_empty_line_without_final_newline() {
-    new_ucmd!()
-        .args(&["-w2", "-b"])
-        .pipe_in("123\n\n45")
-        .succeeds()
-        .stdout_is("12\n3\n\n45");
-}
-
-#[test]
-fn test_bytewise_should_preserve_empty_line_and_final_newline() {
-    new_ucmd!()
-        .args(&["-w2", "-b"])
-        .pipe_in("12\n\n34\n")
-        .succeeds()
-        .stdout_is("12\n\n34\n");
-}
 
 #[test]
 fn test_bytewise_should_preserve_empty_lines() {
@@ -750,105 +570,6 @@ fn test_bytewise_word_boundary_split_should_preserve_empty_lines() {
 }
 
 #[test]
-fn test_bytewise_should_not_add_newline_when_line_less_than_fold() {
-    new_ucmd!()
-        .arg("-b")
-        .pipe_in("1234")
-        .succeeds()
-        .stdout_is("1234");
-}
-
-#[test]
-fn test_bytewise_should_not_add_newline_when_line_longer_than_fold() {
-    new_ucmd!()
-        .args(&["-w2", "-b"])
-        .pipe_in("1234")
-        .succeeds()
-        .stdout_is("12\n34");
-}
-
-#[test]
-fn test_bytewise_should_not_add_newline_when_line_equal_to_fold() {
-    new_ucmd!()
-        .args(&["-w1", "-b"])
-        .pipe_in(" ")
-        .succeeds()
-        .stdout_is(" ");
-}
-
-#[test]
-fn test_bytewise_should_preserve_final_newline_when_line_less_than_fold() {
-    new_ucmd!()
-        .arg("-b")
-        .pipe_in("1234\n")
-        .succeeds()
-        .stdout_is("1234\n");
-}
-
-#[test]
-fn test_bytewise_should_preserve_final_newline_when_line_longer_than_fold() {
-    new_ucmd!()
-        .args(&["-w2", "-b"])
-        .pipe_in("1234\n")
-        .succeeds()
-        .stdout_is("12\n34\n");
-}
-
-#[test]
-fn test_bytewise_should_preserve_final_newline_when_line_equal_to_fold() {
-    new_ucmd!()
-        .args(&["-w2", "-b"])
-        .pipe_in("1\n")
-        .succeeds()
-        .stdout_is("1\n");
-}
-
-#[test]
-fn test_bytewise_single_tab_should_not_add_extra_newline() {
-    new_ucmd!()
-        .args(&["-w1", "-b"])
-        .pipe_in("\t")
-        .succeeds()
-        .stdout_is("\t");
-}
-
-#[test]
-fn test_tab_counts_as_one_byte() {
-    new_ucmd!()
-        .args(&["-w2", "-b"])
-        .pipe_in("1\t2\n")
-        .succeeds()
-        .stdout_is("1\t\n2\n");
-}
-
-#[test]
-fn test_bytewise_fold_before_tab_with_narrow_width() {
-    new_ucmd!()
-        .args(&["-w7", "-b"])
-        .pipe_in("a\t1")
-        .succeeds()
-        .stdout_is("a\t1");
-}
-
-#[test]
-fn test_bytewise_fold_at_word_boundary_only_whitespace() {
-    new_ucmd!()
-        .args(&["-w2", "-s", "-b"])
-        .pipe_in("    ")
-        .succeeds()
-        .stdout_is("  \n  ");
-}
-
-#[test]
-fn test_bytewise_fold_at_word_boundary_only_whitespace_preserve_final_newline() {
-    new_ucmd!()
-        .args(&["-w2", "-s", "-b"])
-        .pipe_in("    \n")
-        .succeeds()
-        .stdout_is("  \n  \n");
-}
-
-#[test]
 fn test_bytewise_fold_line_of_exactly_width_is_not_folded() {
     // A line that is exactly `width` bytes long already fits, so -s must not
     // break it at its last blank.
@@ -870,75 +591,12 @@ fn test_bytewise_fold_remainder_of_exactly_width_is_not_folded() {
 }
 
 #[test]
-fn test_bytewise_fold_line_longer_than_width_still_folds() {
-    new_ucmd!()
-        .args(&["-w7", "-s", "-b"])
-        .pipe_in("aaa bbbb\n")
-        .succeeds()
-        .stdout_is("aaa \nbbbb\n");
-}
-
-#[test]
-fn test_bytewise_backspace_should_be_preserved() {
-    new_ucmd!()
-        .arg("-b")
-        .pipe_in("\x08")
-        .succeeds()
-        .stdout_is("\x08");
-}
-
-#[test]
-fn test_bytewise_backspaced_char_should_be_preserved() {
-    new_ucmd!()
-        .arg("-b")
-        .pipe_in("x\x08")
-        .succeeds()
-        .stdout_is("x\x08");
-}
-
-#[test]
-fn test_bytewise_backspace_should_not_decrease_column_count() {
-    new_ucmd!()
-        .args(&["-w2", "-b"])
-        .pipe_in("1\x08345")
-        .succeeds()
-        .stdout_is("1\x08\n34\n5");
-}
-
-#[test]
 fn test_bytewise_backspace_is_not_word_boundary() {
     new_ucmd!()
         .args(&["-w10", "-s", "-b"])
         .pipe_in("foobar\x0889abcdef")
         .succeeds()
         .stdout_is("foobar\x0889a\nbcdef"); // spell-checker:disable-line
-}
-
-#[test]
-fn test_bytewise_carriage_return_should_be_preserved() {
-    new_ucmd!()
-        .arg("-b")
-        .pipe_in("\r")
-        .succeeds()
-        .stdout_is("\r");
-}
-
-#[test]
-fn test_bytewise_carriage_return_overwritten_char_should_be_preserved() {
-    new_ucmd!()
-        .arg("-b")
-        .pipe_in("x\ry")
-        .succeeds()
-        .stdout_is("x\ry");
-}
-
-#[test]
-fn test_bytewise_carriage_return_should_not_reset_column_count() {
-    new_ucmd!()
-        .args(&["-w6", "-b"])
-        .pipe_in("12345\r123456789abcdef")
-        .succeeds()
-        .stdout_is("12345\r\n123456\n789abc\ndef");
 }
 
 #[test]
@@ -1221,16 +879,4 @@ fn test_dash_operand_reads_stdin() {
         .ignore_stdin_write_error()
         .fails()
         .stderr_contains("invalid number of columns: '-'");
-}
-
-/// A bare `-` has no trailing `w`, so it must not be mistaken for one of the
-/// short spellings that consumes the next argument as its width -- that once
-/// swallowed whatever followed the `-` operand instead of scanning it.
-#[test]
-fn test_dash_operand_does_not_swallow_the_next_argument() {
-    new_ucmd!()
-        .args(&["-", "-5"])
-        .pipe_in("hello\n")
-        .succeeds()
-        .stdout_is("hello\n");
 }

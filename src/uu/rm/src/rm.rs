@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (path) eacces inacc rm-r4 unlinkat fstatat rootlink
 
+#![cfg(any(unix, windows, target_os = "wasi"))]
+
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, Command, parser::ValueSource};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -798,7 +800,7 @@ fn show_preserve_root_error(path: &Path) {
         show_error!(
             "{}",
             translate!("rm-error-dangerous-recursive-operation-same-as-root",
-            "path" => path.display())
+            "path" => path.quote())
         );
     }
     show_error!("{}", RmError::UseNoPreserveRoot);

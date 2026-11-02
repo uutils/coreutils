@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+#![cfg(all(unix, not(target_os = "redox")))]
+
 #[cfg(unix)]
 use std::fs::File;
 #[cfg(unix)]
@@ -208,7 +210,7 @@ fn test_more_non_utf8_paths() {
     let file_name = std::ffi::OsStr::from_bytes(b"test_\xFF\xFE.txt");
     // Create test file with normal name first
     at.write(
-        &file_name.to_string_lossy(),
+        file_name.to_string_lossy().to_string(),
         "test content for non-UTF-8 file",
     );
 

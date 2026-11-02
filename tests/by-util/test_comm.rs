@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (words) defaultcheck nocheck helpb helpz nwordb nwordwordz wordtotal
 
+use rstest::rstest;
 use uutests::util::TestScenario;
 #[cfg(unix)]
 use uutests::util::is_locale_available;
@@ -858,4 +859,54 @@ fn test_both_inputs_stdin() {
         .succeeds()
         .stdout_is("\ta\nb\n\t\tc\n")
         .no_stderr();
+}
+
+#[rstest]
+fn test_prefix_lines_remain_sorted(
+    #[values("", "--check-order", "--nocheck-order")] order: &str,
+    #[values(false, true)] reverse: bool,
+    #[values("\n", "\0")] ending: &str,
+) {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("empty");
+    scene
+        .fixtures
+        .write("sorted", &format!("{ending}\t{ending}"));
+    let mut cmd = scene.ucmd();
+    cmd.env("LC_ALL", "C");
+    if !order.is_empty() {
+        cmd.arg(order);
+    }
+    if ending == "\0" {
+        cmd.arg("-z");
+    }
+    let (files, expected) = if reverse {
+        (["sorted", "empty"], format!("{ending}\t{ending}"))
+    } else {
+        (["empty", "sorted"], format!("\t{ending}\t\t{ending}"))
+    };
+    cmd.args(&files).succeeds().stdout_only(expected);
+}
+
+#[rstest]
+fn test_merge_prefix_lines(
+    #[values(false, true)] reverse: bool,
+    #[values(false, true)] terminated: bool,
+    #[values("\n", "\0")] ending: &str,
+) {
+    let scene = TestScenario::new(util_name!());
+    let suffix = if terminated { ending } else { "" };
+    scene.fixtures.write("short", &format!("a{suffix}"));
+    scene.fixtures.write("long", &format!("a\tb{suffix}"));
+    let mut cmd = scene.ucmd();
+    cmd.env("LC_ALL", "C");
+    if ending == "\0" {
+        cmd.arg("-z");
+    }
+    let (files, expected) = if reverse {
+        (["long", "short"], format!("\ta{ending}a\tb{ending}"))
+    } else {
+        (["short", "long"], format!("a{ending}\ta\tb{ending}"))
+    };
+    cmd.args(&files).succeeds().stdout_only(expected);
 }

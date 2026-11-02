@@ -21,6 +21,15 @@ struct BreakArgs<'a> {
 }
 
 impl BreakArgs<'_> {
+    /// Number of spaces to add before a word, based on mode, newline, sentence start.
+    fn compute_slen(&self, newline: bool, start: bool, punct: bool) -> usize {
+        if self.uniform || newline {
+            if start || (newline && punct) { 2 } else { 1 }
+        } else {
+            0
+        }
+    }
+
     fn compute_width(&self, winfo: &WordInfo, posn: usize, fresh: bool) -> usize {
         if fresh {
             0
@@ -113,12 +122,7 @@ fn accum_words_simple<'a>(
     // compute the length of this word, considering how tabs will expand at this position on the line
     let wlen = winfo.word_nchars + args.compute_width(winfo, l, false);
 
-    let slen = compute_slen(
-        args.uniform,
-        winfo.new_line,
-        winfo.sentence_start,
-        prev_punct,
-    );
+    let slen = args.compute_slen(winfo.new_line, winfo.sentence_start, prev_punct);
 
     if l + wlen + slen > args.opts.width {
         write_newline(args.indent, args.ostream)?;
@@ -150,15 +154,7 @@ fn break_knuth_plass<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
             }
             // at each breakpoint, keep emitting words until we find the word matching this breakpoint
             for winfo in &mut iter {
-                let (slen, word) = slice_if_fresh(
-                    fresh,
-                    winfo.word,
-                    winfo.word_start,
-                    args.uniform,
-                    winfo.new_line,
-                    winfo.sentence_start,
-                    prev_punct,
-                );
+                let (slen, word) = slice_if_fresh(args, fresh, winfo, prev_punct);
                 fresh = false;
                 prev_punct = winfo.ends_punct;
 
@@ -188,15 +184,7 @@ fn break_knuth_plass<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
         if fresh {
             write_newline(args.indent, args.ostream)?;
         }
-        let (slen, word) = slice_if_fresh(
-            fresh,
-            winfo.word,
-            winfo.word_start,
-            args.uniform,
-            winfo.new_line,
-            winfo.sentence_start,
-            prev_punct,
-        );
+        let (slen, word) = slice_if_fresh(args, fresh, winfo, prev_punct);
         prev_punct = winfo.ends_punct;
         fresh = false;
         write_with_spaces(word, slen, args.ostream)?;
@@ -256,7 +244,7 @@ fn find_kp_breakpoints<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
         };
 
         // should we be adding extra space at the beginning of the next sentence?
-        let slen = compute_slen(args.uniform, w.new_line, is_sentence_start, false);
+        let slen = args.compute_slen(w.new_line, is_sentence_start, false);
 
         let mut best_active_demerits = i64::MAX;
         let mut ld_idx = 0;
@@ -503,30 +491,21 @@ fn restart_active_breaks<'a>(
     }
 }
 
-/// Number of spaces to add before a word, based on mode, newline, sentence start.
-fn compute_slen(uniform: bool, newline: bool, start: bool, punct: bool) -> usize {
-    if uniform || newline {
-        if start || (newline && punct) { 2 } else { 1 }
-    } else {
-        0
-    }
-}
-
 /// If we're on a fresh line, `slen=0` and we slice off leading whitespace.
 /// Otherwise, compute `slen` and leave whitespace alone.
-fn slice_if_fresh(
+fn slice_if_fresh<'a>(
+    args: &BreakArgs,
     fresh: bool,
-    word: &[u8],
-    start: usize,
-    uniform: bool,
-    newline: bool,
-    sstart: bool,
-    punct: bool,
-) -> (usize, &[u8]) {
+    winfo: &WordInfo<'a>,
+    prev_punct: bool,
+) -> (usize, &'a [u8]) {
     if fresh {
-        (0, &word[start..])
+        (0, &winfo.word[winfo.word_start..])
     } else {
-        (compute_slen(uniform, newline, sstart, punct), word)
+        (
+            args.compute_slen(winfo.new_line, winfo.sentence_start, prev_punct),
+            winfo.word,
+        )
     }
 }
 

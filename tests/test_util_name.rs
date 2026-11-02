@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore readelf memfd Memfd fexecve
+// spell-checker:ignore readelf
 
 use uutests::util::TestScenario;
 
@@ -73,16 +73,49 @@ fn binary_name_execfn_fallback() {
     assert!(res1 && res2);
 }
 
-#[test]
-fn test_coreutils_help_ignore_args() {
+#[rstest::rstest]
+fn test_coreutils_help_ignore_args(#[values("--h", "--he", "--hel", "--help", "-h")] flag: &str) {
     let scenario = TestScenario::new("help_ignoring_args");
     let output = std::process::Command::new(&scenario.bin_path)
-        .arg("--help")
+        .arg(flag)
         .arg("---")
         .output()
         .unwrap();
 
     assert_eq!(output.status.code(), Some(0));
+    assert!(output.stderr.is_empty());
+    assert!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("(multi-call binary)")
+    );
+}
+
+#[rstest::rstest]
+fn test_coreutils_help_near_misses(#[values("--", "--hell", "--helps", "--helpless")] flag: &str) {
+    let scenario = TestScenario::new("invalid_help");
+    let output = std::process::Command::new(&scenario.bin_path)
+        .arg(flag)
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains(&format!("unrecognized option '{flag}'"))
+    );
+}
+
+#[test]
+#[cfg(feature = "echo")]
+fn test_coreutils_help_argument_is_forwarded() {
+    TestScenario::new("echo")
+        .ucmd()
+        .arg("--hel")
+        .succeeds()
+        .stdout_only("--hel\n");
 }
 
 #[test]
@@ -263,7 +296,7 @@ fn util_version() {
         assert_eq!(output.status.code(), Some(0));
         assert_eq!(output.stderr, b"");
         let output_str = String::from_utf8(output.stdout).unwrap();
-        let ver = env::var("CARGO_PKG_VERSION").unwrap();
+        let ver = env!("CARGO_PKG_VERSION");
         assert_eq!(format!("coreutils {ver} (multi-call binary)\n"), output_str);
     }
 }

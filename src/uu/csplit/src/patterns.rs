@@ -8,7 +8,7 @@
 use std::ops::Range;
 
 use crate::csplit_error::{CsplitError, PatternProblem};
-use regex::Regex;
+use regex::{Regex, bytes::Regex as BytesRegex};
 use uucore::show_warning;
 use uucore::translate;
 
@@ -22,11 +22,11 @@ pub enum Pattern {
     /// integer is an offset relative to the matched line of what to include (if positive) or
     /// to exclude (if negative). The number of times the pattern is executed is detailed in
     /// [`ExecutePattern`].
-    UpToMatch(Regex, i32, ExecutePattern),
+    UpToMatch(BytesRegex, i32, ExecutePattern),
     /// Skip the file's content up to, not including, the line matching the regex. The integer
     /// is an offset relative to the matched line of what to include (if positive) or to exclude
     /// (if negative). The number of times the pattern is executed is detailed in [`ExecutePattern`].
-    SkipToMatch(Regex, i32, ExecutePattern),
+    SkipToMatch(BytesRegex, i32, ExecutePattern),
 }
 
 impl std::fmt::Display for Pattern {
@@ -140,11 +140,11 @@ fn extract_patterns(args: &[&str]) -> Result<Vec<Pattern>, CsplitError> {
                 Some(m) => m.as_str().parse().unwrap(),
             };
             if let Some(up_to_match) = captures.name("UPTO") {
-                let pattern = Regex::new(up_to_match.as_str())
+                let pattern = BytesRegex::new(up_to_match.as_str())
                     .map_err(|e| invalid_regex(arg, up_to_match.range(), &e))?;
                 patterns.push(Pattern::UpToMatch(pattern, offset, execute_ntimes));
             } else if let Some(skip_to_match) = captures.name("SKIPTO") {
-                let pattern = Regex::new(skip_to_match.as_str())
+                let pattern = BytesRegex::new(skip_to_match.as_str())
                     .map_err(|e| invalid_regex(arg, skip_to_match.range(), &e))?;
                 patterns.push(Pattern::SkipToMatch(pattern, offset, execute_ntimes));
             }

@@ -289,6 +289,38 @@ fn test_regex_trailing_backslash() {
 }
 
 #[test]
+fn test_regex_alternation_is_anchored() {
+    new_ucmd!()
+        .args(&["xab", ":", "a\\|b"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["xab", ":", "^a\\|b"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["file:///etc/shadow#ssh://", ":", "https://\\|ssh://"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["evil status", ":", "start$\\|stop$\\|status$"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["zabc", ":", "x\\|\\(abc\\)"])
+        .fails_with_code(1)
+        .stdout_only("\n");
+    new_ucmd!()
+        .args(&["match", "xab", "a\\|b"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["ssh://host", ":", "https://\\|ssh://"])
+        .succeeds()
+        .stdout_only("6\n");
+}
+
+#[test]
 fn test_regex_caret() {
     new_ucmd!()
         .args(&["a^b", ":", "a^b"])

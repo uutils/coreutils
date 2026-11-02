@@ -6,6 +6,7 @@
 // spell-checker:ignore (encodings) lsbf msbf
 // spell-checker:ignore autopad MFRGG MFRGGZDF abcdeabc baddecode CPNMUO
 
+use rstest::rstest;
 use uutests::{at_and_ucmd, new_ucmd};
 
 #[test]
@@ -24,7 +25,7 @@ fn test_z85_not_padded_decode() {
         .args(&["--z85", "-d"])
         .pipe_in("##########")
         .fails()
-        .stderr_only("basenc: error: invalid input\n");
+        .stderr_only("basenc: invalid input\n");
 }
 
 #[test]
@@ -34,7 +35,7 @@ fn test_z85_not_padded_encode() {
         .args(&["--z85"])
         .pipe_in("123")
         .fails()
-        .stderr_only("basenc: error: invalid input (length must be multiple of 4 characters)\n");
+        .stderr_only("basenc: invalid input (length must be multiple of 4 characters)\n");
 }
 
 #[test]
@@ -50,40 +51,33 @@ fn test_invalid_input() {
     }
 }
 
-#[test]
-fn test_base64() {
+#[rstest]
+#[case::base64(&["--base64"], "to>be?", "dG8+YmU/\n")]
+#[case::base64_decode(&["--base64", "-d"], "dG8+YmU/", "to>be?")]
+#[case::base64url(&["--base64url"], "to>be?", "dG8-YmU_\n")]
+#[case::base64url_decode(&["--base64url", "-d"], "dG8-YmU_", "to>be?")]
+#[case::base32_autopad_short_quantum(&["--base32", "--decode"], "MFRGG", "abc")]
+#[case::base32_autopad_multiline_stream(&["--base32", "--decode"], "MFRGGZDF\nMFRGG", "abcdeabc")]
+#[case::base32hex_autopad_short_quantum(&["--base32hex", "--decode"], "C5H66", "abc")]
+#[case::base16(&["--base16"], "Hello, World!", "48656C6C6F2C20576F726C6421\n")]
+#[case::base16_decode(&["--base16", "-d"], "48656C6C6F2C20576F726C6421", "Hello, World!")]
+#[case::base16_decode_lowercase(&["--base16", "-d"], "48656c6c6f2c20576f726c6421", "Hello, World!")]
+#[case::base16_decode_and_ignore_garbage_lowercase(&["--base16", "-d", "-i"], "48656c6c6f2c20576f726c6421", "Hello, World!")]
+#[case::base2msbf(&["--base2msbf"], "msbf", "01101101011100110110001001100110\n")]
+#[case::base2msbf_decode(&["--base2msbf", "-d"], "01101101011100110110001001100110", "msbf")]
+#[case::base2lsbf(&["--base2lsbf"], "lsbf", "00110110110011100100011001100110\n")]
+#[case::base2lsbf_decode(&["--base2lsbf", "-d"], "00110110110011100100011001100110", "lsbf")]
+#[case::z85_decode(&["--z85", "-d"], "nm=QNz.92jz/PV8", "Hello, World")]
+#[case::base58(&["--base58"], "Hello, World!", "72k1xXWG59fYdzSNoA\n")]
+#[case::base58_decode(&["--base58", "-d"], "72k1xXWG59fYdzSNoA", "Hello, World!")]
+#[case::choose_last_encoding_base2lsbf(&["--base64url", "--base16", "--base2msbf", "--base32", "--base64", "--z85", "--base32hex", "--base2lsbf"], "lsbf", "00110110110011100100011001100110\n")]
+#[case::choose_last_encoding_base58(&["--base64", "--base32", "--base16", "--z85", "--base58"], "Hello!", "d3yC1LKr\n")]
+fn test_basenc_stdin(#[case] args: &[&str], #[case] input: &str, #[case] expected: &str) {
     new_ucmd!()
-        .arg("--base64")
-        .pipe_in("to>be?")
+        .args(args)
+        .pipe_in(input)
         .succeeds()
-        .stdout_only("dG8+YmU/\n");
-}
-
-#[test]
-fn test_base64_decode() {
-    new_ucmd!()
-        .args(&["--base64", "-d"])
-        .pipe_in("dG8+YmU/")
-        .succeeds()
-        .stdout_only("to>be?");
-}
-
-#[test]
-fn test_base64url() {
-    new_ucmd!()
-        .arg("--base64url")
-        .pipe_in("to>be?")
-        .succeeds()
-        .stdout_only("dG8-YmU_\n");
-}
-
-#[test]
-fn test_base64url_decode() {
-    new_ucmd!()
-        .args(&["--base64url", "-d"])
-        .pipe_in("dG8-YmU_")
-        .succeeds()
-        .stdout_only("to>be?");
+        .stdout_only(expected);
 }
 
 #[test]
@@ -123,40 +117,13 @@ fn test_base32hex_decode() {
 }
 
 #[test]
-fn test_base32_autopad_short_quantum() {
-    new_ucmd!()
-        .args(&["--base32", "--decode"])
-        .pipe_in("MFRGG")
-        .succeeds()
-        .stdout_only("abc");
-}
-
-#[test]
-fn test_base32_autopad_multiline_stream() {
-    new_ucmd!()
-        .args(&["--base32", "--decode"])
-        .pipe_in("MFRGGZDF\nMFRGG")
-        .succeeds()
-        .stdout_only("abcdeabc");
-}
-
-#[test]
 fn test_base32_baddecode_keeps_prefix() {
     new_ucmd!()
         .args(&["--base32", "--decode"])
         .pipe_in("MFRGGZDF=")
         .fails()
         .stdout_is("abcde")
-        .stderr_is("basenc: error: invalid input\n");
-}
-
-#[test]
-fn test_base32hex_autopad_short_quantum() {
-    new_ucmd!()
-        .args(&["--base32hex", "--decode"])
-        .pipe_in("C5H66")
-        .succeeds()
-        .stdout_only("abc");
+        .stderr_is("basenc: invalid input\n");
 }
 
 #[test]
@@ -166,7 +133,7 @@ fn test_base32hex_rejects_trailing_garbage() {
         .pipe_in("VNC0FKD5W")
         .fails()
         .stdout_is_bytes(b"\xFD\xD8\x07\xD1\xA5")
-        .stderr_is("basenc: error: invalid input\n");
+        .stderr_is("basenc: invalid input\n");
 }
 
 #[test]
@@ -176,16 +143,7 @@ fn test_base32hex_truncated_block_keeps_prefix() {
         .pipe_in("CPNMUO")
         .fails()
         .stdout_is_bytes(b"foo")
-        .stderr_is("basenc: error: invalid input\n");
-}
-
-#[test]
-fn test_base16() {
-    new_ucmd!()
-        .arg("--base16")
-        .pipe_in("Hello, World!")
-        .succeeds()
-        .stdout_only("48656C6C6F2C20576F726C6421\n");
+        .stderr_is("basenc: invalid input\n");
 }
 
 // This test fails if the Base16 output buffer is not explicitly flushed.
@@ -199,96 +157,6 @@ fn test_base16_write_error_is_reported() {
         .set_stdout(std::fs::File::create("/dev/full").unwrap())
         .fails()
         .stderr_is("basenc: No space left on device\n");
-}
-
-#[test]
-fn test_base16_decode() {
-    new_ucmd!()
-        .args(&["--base16", "-d"])
-        .pipe_in("48656C6C6F2C20576F726C6421")
-        .succeeds()
-        .stdout_only("Hello, World!");
-}
-
-#[test]
-fn test_base16_decode_lowercase() {
-    new_ucmd!()
-        .args(&["--base16", "-d"])
-        .pipe_in("48656c6c6f2c20576f726c6421")
-        .succeeds()
-        .stdout_only("Hello, World!");
-}
-
-#[test]
-fn test_base16_decode_and_ignore_garbage_lowercase() {
-    new_ucmd!()
-        .args(&["--base16", "-d", "-i"])
-        .pipe_in("48656c6c6f2c20576f726c6421")
-        .succeeds()
-        .stdout_only("Hello, World!");
-}
-
-#[test]
-fn test_base2msbf() {
-    new_ucmd!()
-        .arg("--base2msbf")
-        .pipe_in("msbf")
-        .succeeds()
-        .stdout_only("01101101011100110110001001100110\n");
-}
-
-#[test]
-fn test_base2msbf_decode() {
-    new_ucmd!()
-        .args(&["--base2msbf", "-d"])
-        .pipe_in("01101101011100110110001001100110")
-        .succeeds()
-        .stdout_only("msbf");
-}
-
-#[test]
-fn test_base2lsbf() {
-    new_ucmd!()
-        .arg("--base2lsbf")
-        .pipe_in("lsbf")
-        .succeeds()
-        .stdout_only("00110110110011100100011001100110\n");
-}
-
-#[test]
-fn test_base2lsbf_decode() {
-    new_ucmd!()
-        .args(&["--base2lsbf", "-d"])
-        .pipe_in("00110110110011100100011001100110")
-        .succeeds()
-        .stdout_only("lsbf");
-}
-
-#[test]
-fn test_z85_decode() {
-    new_ucmd!()
-        .args(&["--z85", "-d"])
-        .pipe_in("nm=QNz.92jz/PV8")
-        .succeeds()
-        .stdout_only("Hello, World");
-}
-
-#[test]
-fn test_base58() {
-    new_ucmd!()
-        .arg("--base58")
-        .pipe_in("Hello, World!")
-        .succeeds()
-        .stdout_only("72k1xXWG59fYdzSNoA\n");
-}
-
-#[test]
-fn test_base58_decode() {
-    new_ucmd!()
-        .args(&["--base58", "-d"])
-        .pipe_in("72k1xXWG59fYdzSNoA")
-        .succeeds()
-        .stdout_only("Hello, World!");
 }
 
 #[test]
@@ -317,6 +185,26 @@ fn test_base58_large_file_no_chunking() {
 }
 
 #[test]
+fn test_base58_decode_large_input_round_trip() {
+    // Decoding must not cut the input into 1024-digit chunks either.
+    // spell-checker:disable
+    let input = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(50);
+    // spell-checker:enable
+    let encoded = new_ucmd!()
+        .arg("--base58")
+        .pipe_in(input.clone())
+        .succeeds()
+        .stdout_move_str();
+    assert!(encoded.len() > 1024);
+
+    new_ucmd!()
+        .args(&["--base58", "-d"])
+        .pipe_in(encoded)
+        .succeeds()
+        .stdout_is(input);
+}
+
+#[test]
 fn test_choose_last_encoding_base64() {
     new_ucmd!()
         .args(&[
@@ -332,33 +220,6 @@ fn test_choose_last_encoding_base64() {
         .pipe_in("Hello, World!")
         .succeeds()
         .stdout_only("SGVsbG8sIFdvcmxkIQ==\n"); // spell-checker:disable-line
-}
-
-#[test]
-fn test_choose_last_encoding_base2lsbf() {
-    new_ucmd!()
-        .args(&[
-            "--base64url",
-            "--base16",
-            "--base2msbf",
-            "--base32",
-            "--base64",
-            "--z85",
-            "--base32hex",
-            "--base2lsbf",
-        ])
-        .pipe_in("lsbf")
-        .succeeds()
-        .stdout_only("00110110110011100100011001100110\n");
-}
-
-#[test]
-fn test_choose_last_encoding_base58() {
-    new_ucmd!()
-        .args(&["--base64", "--base32", "--base16", "--z85", "--base58"])
-        .pipe_in("Hello!")
-        .succeeds()
-        .stdout_only("d3yC1LKr\n");
 }
 
 #[test]

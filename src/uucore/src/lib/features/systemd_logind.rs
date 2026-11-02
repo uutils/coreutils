@@ -257,12 +257,12 @@ mod login {
     ///
     /// TODO: This replicates GNU coreutils' fallback behavior for compatibility.
     /// GNU coreutils uses the mtime of /var/lib/systemd/random-seed as a heuristic for boot time
-    /// when utmp is unavailable, rather than querying systemd's authoritative KernelTimestamp.
+    /// when utmp is unavailable, rather than querying systemd's authoritative `KernelTimestamp`.
     /// This creates inconsistency: `uptime -s` shows the actual kernel boot time
     /// while `who -b` shows ~1 minute later when systemd services start.
     ///
-    /// Ideally, both should use the same source (KernelTimestamp) for semantic consistency.
-    /// Consider proposing to GNU coreutils to use systemd's KernelTimestamp property instead.
+    /// Ideally, both should use the same source (`KernelTimestamp`) for semantic consistency.
+    /// Consider proposing to GNU coreutils to use systemd's `KernelTimestamp` property instead.
     pub fn get_boot_time() -> Result<SystemTime, Box<dyn std::error::Error>> {
         use std::fs;
 
@@ -302,7 +302,7 @@ impl SystemdLoginRecord {
         !self.user.is_empty() && self.record_type == SystemdRecordType::UserProcess
     }
 
-    /// Get login time as time::OffsetDateTime compatible with utmpx
+    /// Get login time as [`time::OffsetDateTime`] compatible with utmpx
     pub fn login_time_offset(&self) -> time::OffsetDateTime {
         let duration = self
             .login_time
@@ -321,7 +321,7 @@ impl SystemdLoginRecord {
 }
 
 /// Read login records from systemd-logind using safe wrapper functions
-/// This matches the approach used by GNU coreutils read_utmp_from_systemd()
+/// This matches the approach used by GNU coreutils `read_utmp_from_systemd()`
 pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
     let mut records = Vec::new();
 
@@ -523,38 +523,38 @@ pub struct SystemdUtmpxCompat {
 }
 
 impl SystemdUtmpxCompat {
-    /// Create new instance from a SystemdLoginRecord
+    /// Create new instance from a [`SystemdLoginRecord`]
     pub fn new(record: SystemdLoginRecord) -> Self {
         Self { record }
     }
 
-    /// A.K.A. ut.ut_type
+    /// A.K.A. `ut.ut_type`
     pub fn record_type(&self) -> i16 {
         self.record.record_type as i16
     }
 
-    /// A.K.A. ut.ut_pid
+    /// A.K.A. `ut.ut_pid`
     pub fn pid(&self) -> i32 {
         self.record.pid as i32
     }
 
-    /// A.K.A. ut.ut_id
+    /// A.K.A. `ut.ut_id`
     pub fn terminal_suffix(&self) -> String {
         // Extract last part of session ID or use session ID
         self.record.session_id.clone()
     }
 
-    /// A.K.A. ut.ut_user
+    /// A.K.A. `ut.ut_user`
     pub fn user(&self) -> String {
         self.record.user.clone()
     }
 
-    /// A.K.A. ut.ut_host
+    /// A.K.A. `ut.ut_host`
     pub fn host(&self) -> String {
         self.record.host.clone()
     }
 
-    /// A.K.A. ut.ut_line
+    /// A.K.A. `ut.ut_line`
     pub fn tty_device(&self) -> String {
         // Return raw device name for device access if available, otherwise formatted seat_or_tty
         if self.record.raw_device.is_empty() {

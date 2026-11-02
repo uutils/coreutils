@@ -33,7 +33,7 @@ use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
-use uucore::translate;
+use uucore::{translate, translate_text};
 
 use uucore::{show, show_error};
 
@@ -127,7 +127,7 @@ fn tail_file(
         set_exit_code(1);
         show_error!(
             "{}",
-            translate!(
+            translate_text!(
                 "tail-error-cannot-open-no-such-file",
                 "file" => input.display_name,
                 "error" => translate!("tail-no-such-file-or-directory")
@@ -140,12 +140,12 @@ fn tail_file(
     if path.is_dir() {
         set_exit_code(1);
 
-        header_printer.print_input(input);
+        header_printer.print_input(input)?;
         let err_msg = translate!("tail-is-a-directory");
 
         show_error!(
             "{}",
-            translate!("tail-error-reading-file", "file" => input.display_name, "error" => err_msg)
+            translate_text!("tail-error-reading-file", "file" => input.display_name, "error" => err_msg)
         );
         if settings.follow.is_some() {
             let msg = if settings.retry {
@@ -155,7 +155,7 @@ fn tail_file(
             };
             show_error!(
                 "{}",
-                translate!("tail-error-cannot-follow-file-type", "file" => input.display_name, "msg" => msg)
+                translate_text!("tail-error-cannot-follow-file-type", "file" => input.display_name, "msg" => msg)
             );
         }
         if !observer.follow_name_retry() {
@@ -172,7 +172,7 @@ fn tail_file(
             Ok(mut file) => {
                 let st = file.metadata()?;
                 let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
-                header_printer.print_input(input);
+                header_printer.print_input(input)?;
                 let mut reader;
                 if !settings.presume_input_pipe
                     && file.is_seekable(if input.is_stdin() { offset } else { 0 })
@@ -198,13 +198,13 @@ fn tail_file(
             Err(e) if e.kind() == ErrorKind::PermissionDenied => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 show!(e.map_err_context(|| {
-                    translate!("tail-error-cannot-open-for-reading", "file" => input.display_name)
+                    translate_text!("tail-error-cannot-open-for-reading", "file" => input.display_name)
                 }));
             }
             Err(e) => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 return Err(e.map_err_context(|| {
-                    translate!("tail-error-cannot-open-for-reading", "file" => input.display_name)
+                    translate_text!("tail-error-cannot-open-for-reading", "file" => input.display_name)
                 }));
             }
         }
@@ -215,12 +215,12 @@ fn tail_file(
 
 /// Opens a file, using non-blocking mode for FIFOs when `use_nonblock_for_fifo` is true.
 ///
-/// When opening a FIFO with `--pid`, we need to use O_NONBLOCK so that:
-/// 1. The open() call doesn't block waiting for a writer
+/// When opening a FIFO with `--pid`, we need to use `O_NONBLOCK` so that:
+/// 1. The `open()` call doesn't block waiting for a writer
 /// 2. We can periodically check if the monitored process is still alive
 ///
-/// After opening, we clear O_NONBLOCK so subsequent reads block normally.
-/// Without `--pid`, FIFOs block on open() until a writer connects (GNU behavior).
+/// After opening, we clear `O_NONBLOCK` so subsequent reads block normally.
+/// Without `--pid`, FIFOs block on `open()` until a writer connects (GNU behavior).
 #[cfg(unix)]
 fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
     use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
@@ -263,7 +263,7 @@ fn tail_stdin(
         set_exit_code(1);
         show_error!(
             "{}",
-            translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name, "error" => translate!("tail-no-such-file-or-directory"))
+            translate_text!("tail-error-cannot-open-no-such-file", "file" => input.display_name, "error" => translate!("tail-no-such-file-or-directory"))
         );
         return Ok(());
     }
@@ -296,7 +296,7 @@ fn tail_stdin(
         )?;
     } else {
         // pipe
-        header_printer.print_input(input);
+        header_printer.print_input(input)?;
         if paths::stdin_is_bad_fd() {
             set_exit_code(1);
             show_error!(
@@ -592,7 +592,10 @@ fn print_target_section<
         }
     } else {
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        if uucore::pipes::splice_unbounded_auto(file, &mut stdout)?.is_err() {
+        if uucore::pipes::splice_unbounded_auto(file, &mut stdout)
+            .map_err(io::Error::from)?
+            .is_err()
+        {
             io::copy(file, &mut stdout)?;
         }
         #[cfg(not(any(target_os = "linux", target_os = "android")))]

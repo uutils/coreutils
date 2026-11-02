@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore rootlink dotdot rootfile deleteme keepme topfile mkdirat RDONLY FDCWD SIGSEGV rootbind submounts rprivate rbind overlayfs ENAMETOOLONG
+// spell-checker:ignore rootlink dotdot rootfile deleteme keepme topfile mkdirat RDONLY FDCWD SIGSEGV rootbind submounts rprivate rbind overlayfs ENAMETOOLONG NAMETOOLONG unlinkat
 
 #![allow(clippy::stable_sort_primitive)]
 
@@ -1289,7 +1289,7 @@ fn test_rm_recursive_long_path_safe_traversal() {
     }
 
     at.write("rm_deep/test1.txt", "content1");
-    at.write(&format!("{deep_path}/test2.txt"), "content2");
+    at.write(format!("{deep_path}/test2.txt"), "content2");
 
     ts.ucmd().arg("-rf").arg("rm_deep").succeeds();
 
@@ -1311,9 +1311,8 @@ fn test_rm_recursive_very_deep_hierarchy() {
 
     use std::time::Duration;
 
-    use nix::errno::Errno;
-    use nix::fcntl::{OFlag, openat};
-    use nix::sys::stat::{Mode, mkdirat};
+    use rustix::fs::{CWD, Mode, OFlags, mkdirat, openat};
+    use rustix::io::Errno;
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1321,8 +1320,8 @@ fn test_rm_recursive_very_deep_hierarchy() {
     // The path of the deepest directory is far longer than PATH_MAX, so it has
     // to be built one level at a time with openat/mkdirat.
     at.mkdir("deep");
-    let flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY;
-    let mut fd = openat(nix::fcntl::AT_FDCWD, &at.plus("deep"), flags, Mode::empty()).unwrap();
+    let flags = OFlags::RDONLY | OFlags::DIRECTORY;
+    let mut fd = openat(CWD, at.plus("deep"), flags, Mode::empty()).unwrap();
     // The recursion only ran out of stack around 5000 levels unoptimized and
     // 20000 optimized, so a shallower tree would not test anything. Some
     // filesystems resolve the whole path internally and refuse to go past
@@ -1332,12 +1331,12 @@ fn test_rm_recursive_very_deep_hierarchy() {
     while depth < DEPTH {
         match mkdirat(&fd, "a", Mode::from_bits_truncate(0o755)) {
             Ok(()) => {}
-            Err(Errno::ENAMETOOLONG) => break,
+            Err(Errno::NAMETOOLONG) => break,
             Err(e) => panic!("mkdirat at depth {depth} failed: {e}"),
         }
         fd = match openat(&fd, "a", flags, Mode::empty()) {
             Ok(fd) => fd,
-            Err(Errno::ENAMETOOLONG) => break,
+            Err(Errno::NAMETOOLONG) => break,
             Err(e) => panic!("openat at depth {depth} failed: {e}"),
         };
         depth += 1;
@@ -1567,6 +1566,22 @@ fn test_preserve_root_symlink_to_root() {
     assert!(at.symlink_exists("rootlink"));
 }
 
+/// Test that the "same as '/'" error escapes control characters in the name.
+#[cfg(unix)]
+#[test]
+fn test_preserve_root_symlink_to_root_escapes_name() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.symlink_dir("/", "root\x1blink");
+
+    ucmd.arg("-rf")
+        .arg("--preserve-root")
+        .arg("root\x1blink/")
+        .fails()
+        .stderr_contains("recursively on $'root\\x1Blink/' (same as '/')")
+        .stderr_does_not_contain("\x1b");
+}
+
 /// Test that --preserve-root properly detects nested symlinks pointing to root.
 #[cfg(unix)]
 #[test]
@@ -1685,6 +1700,56 @@ fn test_preserve_root_literal_root() {
         .fails()
         .stderr_contains("it is dangerous to operate recursively on '/'")
         .stderr_contains("use --no-preserve-root to override this failsafe");
+}
+
+/// `rm -rf / --no-preserve-root` must get past the failsafe. `strace` fakes the
+/// removals and sends SIGINT on the first one, so nothing is deleted.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_no_preserve_root_literal_root() {
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::Command;
+
+    // One expression: separate `-e inject=` options for the same syscalls
+    // override each other instead of combining.
+    const INJECT: [&str; 4] = [
+        "-o",
+        "/dev/null",
+        "-e",
+        "inject=unlink,unlinkat,rmdir:retval=0:signal=SIGINT",
+    ];
+
+    // As root a failed injection could really wipe the system, so never run.
+    if rustix::process::getuid().is_root() {
+        eprintln!("TEST SKIPPED: refusing to run `rm -rf /` as root");
+        return;
+    }
+
+    let ts = TestScenario::new(util_name!());
+    let bin = ts.bin_path.to_string_lossy().into_owned();
+
+    // Probe: the injection must stop `rm -r a` (unlinkat, as below) with SIGINT
+    // and leave a/b in place, else skip.
+    ts.fixtures.mkdir("a");
+    ts.fixtures.touch("a/b");
+    let probe = Command::new("strace")
+        .args(INJECT)
+        .args([&bin, "rm", "-r", &ts.fixtures.plus_as_string("a")])
+        .status();
+    if !probe.is_ok_and(|s| s.signal() == Some(libc::SIGINT)) || !ts.fixtures.file_exists("a/b") {
+        eprintln!("TEST SKIPPED: strace syscall injection is not available");
+        return;
+    }
+
+    let output = Command::new("strace")
+        .args(INJECT)
+        .args([&bin, "rm", "-rf", "/", "--no-preserve-root"])
+        .output()
+        .expect("failed to spawn strace");
+
+    // A refusal exits 1; SIGINT means rm reached its first (faked) removal.
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.signal(), Some(libc::SIGINT), "{stderr}");
 }
 
 // Regression tests for Issue #9749: rm -rf ./ and variants silently delete

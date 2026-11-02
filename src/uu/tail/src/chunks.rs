@@ -28,7 +28,7 @@ pub const BUFFER_SIZE: usize = 8192;
 
 /// An iterator over a file in non-overlapping chunks from the end of the file.
 ///
-/// Each chunk is a [`Vec`]<[`u8`]> of size [`BLOCK_SIZE`] (except
+/// Each chunk is a [`Vec<u8>`] of size [`BLOCK_SIZE`] (except
 /// possibly the last chunk, which might be smaller). Each call to
 /// [`ReverseChunks::next`] will seek backwards through the given file.
 pub struct ReverseChunks<'a> {

@@ -175,12 +175,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let padding = if options.equal_width {
             let precision_value = precision.unwrap_or(0);
+            // The increment is never printed, so only its fractional digits
+            // (through `precision`) matter, not its integral ones.
             // Saturate rather than overflow: a value with an astronomically large
             // exponent makes `num_integral_digits` near `usize::MAX`. The resulting
             // width is rejected later by the formatter's width check.
             first
                 .num_integral_digits
-                .max(increment.num_integral_digits)
                 .max(last.num_integral_digits)
                 .saturating_add(if precision_value > 0 {
                     precision_value.saturating_add(1)
@@ -244,6 +245,7 @@ pub fn uu_app() -> Command {
     Command::new("seq")
         .trailing_var_arg(true)
         .infer_long_args(true)
+        .args_override_self(true)
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("seq-about"))

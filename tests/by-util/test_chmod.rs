@@ -24,20 +24,20 @@ struct TestCase {
     umask: Option<libc::mode_t>,
 }
 
-fn make_file(file: &str, mode: u32) {
+fn make_file(file: impl AsRef<std::path::Path>, mode: u32) {
     OpenOptions::new()
         .mode(mode)
         .create(true)
         .write(true)
-        .open(file)
+        .open(&file)
         .unwrap();
-    let mut perms = metadata(file).unwrap().permissions();
+    let mut perms = metadata(&file).unwrap().permissions();
     perms.set_mode(mode);
     set_permissions(file, perms).unwrap();
 }
 
 fn run_single_test(test: &TestCase, at: &AtPath, mut ucmd: UCommand) {
-    make_file(&at.plus_as_string(TEST_FILE), test.before);
+    make_file(at.plus(TEST_FILE), test.before);
     let perms = at.metadata(TEST_FILE).permissions().mode();
 
     assert_eq!(
@@ -287,6 +287,63 @@ fn test_chmod_error_permissions() {
 }
 
 #[test]
+fn test_chmod_recursive_error_permissions() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("d");
+    set_permissions(at.plus("d"), Permissions::from_mode(0o755)).unwrap();
+
+    at.touch("d/file");
+    set_permissions(at.plus("d/file"), Permissions::from_mode(0o666)).unwrap();
+
+    ucmd.args(&["-R", "-w", "d"])
+        .umask(0o022)
+        .fails_with_code(1)
+        .stderr_is(
+            // spell-checker:disable-next-line
+            "chmod: d/file: new permissions are r--rw-rw-, not r--r--r--\n",
+        );
+    assert_eq!(
+        metadata(at.plus("d/file")).unwrap().permissions().mode(),
+        0o100_466
+    );
+}
+
+#[test]
+fn test_chmod_recursive_reports_each_umask_conflict() {
+    // Every entry the umask kept bits on is named, at any depth, and the
+    // others are not; the order of the lines depends on readdir.
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // The directories end up 0o555, so only the files can conflict.
+    at.mkdir_all("d/sub");
+    at.set_mode("d", 0o755);
+    at.set_mode("d/sub", 0o755);
+    for (file, mode) in [("d/a", 0o666), ("d/b", 0o644), ("d/sub/c", 0o666)] {
+        at.touch(file);
+        at.set_mode(file, mode);
+    }
+
+    let result = ucmd
+        .umask(0o022)
+        .args(&["-R", "-w", "d"])
+        .fails_with_code(1);
+    result
+        .stderr_contains("chmod: d/a: new permissions are")
+        .stderr_contains("chmod: d/sub/c: new permissions are")
+        .stderr_does_not_contain("d/b");
+    assert_eq!(result.stderr_str().lines().count(), 2);
+
+    for (file, mode) in [("d/a", 0o466), ("d/b", 0o444), ("d/sub/c", 0o466)] {
+        assert_eq!(
+            at.metadata(file).permissions().mode() & 0o7777,
+            mode,
+            "{file}"
+        );
+    }
+}
+
+#[test]
 fn test_chmod_permissions_too_large() {
     let scenario = TestScenario::new(util_name!());
     let at = &scenario.fixtures;
@@ -365,6 +422,31 @@ fn test_chmod_many_options() {
 }
 
 #[test]
+fn test_chmod_option_like_mode_starting_with_operator() {
+    let tests = vec![
+        TestCase {
+            args: vec!["-=r", TEST_FILE],
+            before: 0o100_644,
+            after: 0o100_444,
+            umask: Some(0o022),
+        },
+        TestCase {
+            args: vec!["-+x", TEST_FILE],
+            before: 0o100_644,
+            after: 0o100_755,
+            umask: Some(0o022),
+        },
+        TestCase {
+            args: vec!["-,u+x", TEST_FILE],
+            before: 0o100_644,
+            after: 0o100_744,
+            umask: Some(0o022),
+        },
+    ];
+    run_tests(tests);
+}
+
+#[test]
 #[allow(clippy::unreadable_literal)]
 fn test_chmod_reference_file() {
     let tests = [
@@ -382,8 +464,53 @@ fn test_chmod_reference_file() {
         },
     ];
     let (at, ucmd) = at_and_ucmd!();
-    make_file(&at.plus_as_string(REFERENCE_FILE), REFERENCE_PERMS);
+    make_file(at.plus(REFERENCE_FILE), REFERENCE_PERMS);
     run_single_test(&tests[0], &at, ucmd);
+}
+
+#[test]
+fn test_chmod_reference_keeps_operand_order() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("ref");
+    at.set_mode("ref", 0o644);
+    for name in ["a", "b", "c"] {
+        at.touch(name);
+        at.set_mode(name, 0o600);
+    }
+
+    ucmd.args(&["-v", "--reference=ref", "a", "b", "c"])
+        .succeeds()
+        .stdout_is(
+            "mode of 'a' changed from 0600 (rw-------) to 0644 (rw-r--r--)\n\
+             mode of 'b' changed from 0600 (rw-------) to 0644 (rw-r--r--)\n\
+             mode of 'c' changed from 0600 (rw-------) to 0644 (rw-r--r--)\n",
+        );
+}
+
+#[test]
+fn test_chmod_reference_first_operand_before_its_parent_dir() {
+    use rustix::process::geteuid;
+
+    // The reference mode drops the search bit of `dir`, so `dir/file` is only
+    // reachable if it is handled first. root ignores directory permissions.
+    if geteuid().is_root() {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("ref");
+    at.set_mode("ref", 0o644);
+    at.mkdir("dir");
+    at.touch("dir/file");
+    at.set_mode("dir/file", 0o600);
+    at.set_mode("dir", 0o755);
+
+    ucmd.args(&["--reference=ref", "dir/file", "dir"])
+        .succeeds();
+
+    assert_eq!(at.metadata("dir").permissions().mode() & 0o7777, 0o644);
+    at.set_mode("dir", 0o755);
+    assert_eq!(at.metadata("dir/file").permissions().mode() & 0o7777, 0o644);
 }
 
 #[test]
@@ -416,8 +543,8 @@ fn test_chmod_inaccessible_file_reports_permission_denied() {
     let at = &scene.fixtures;
 
     at.mkdir("locked");
-    make_file(&at.plus_as_string("locked/file"), 0o100_644);
-    set_permissions(at.plus_as_string("locked"), Permissions::from_mode(0o000)).unwrap();
+    make_file(at.plus("locked/file"), 0o100_644);
+    set_permissions(at.plus("locked"), Permissions::from_mode(0o000)).unwrap();
 
     scene
         .ucmd()
@@ -427,7 +554,46 @@ fn test_chmod_inaccessible_file_reports_permission_denied() {
         .stderr_is("chmod: cannot access 'locked/file': Permission denied\n");
 
     // Restore search permission so the fixture directory can be cleaned up.
-    set_permissions(at.plus_as_string("locked"), Permissions::from_mode(0o755)).unwrap();
+    set_permissions(at.plus("locked"), Permissions::from_mode(0o755)).unwrap();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_chmod_readonly_filesystem() {
+    let mut scene = TestScenario::new(util_name!());
+
+    let mountpoint = "readonly_mount";
+    scene.fixtures.mkdir(mountpoint);
+    let mountpoint_path = scene.fixtures.plus_as_string(mountpoint);
+    let file_path = format!("{mountpoint}/file.txt");
+
+    // Skip if the environment cannot create a mount.
+    if let Err(err) = scene.mount_temp_fs(&mountpoint_path) {
+        eprintln!("Skipping read-only filesystem test: {err}");
+        return;
+    }
+
+    scene.fixtures.touch(&file_path);
+
+    // Make the filesystem read-only.
+    scene
+        .cmd("mount")
+        .arg("-o")
+        .arg("remount,ro")
+        .arg(&mountpoint_path)
+        .succeeds();
+
+    // -R exercises safe_chmod_file() for the nested file.
+    scene
+        .ucmd()
+        .args(&["-R", "ugo+w", mountpoint])
+        .fails()
+        .stderr_contains(format!(
+            "chmod: changing permissions of '{file_path}': Read-only file system"
+        ));
+
+    // A read-only filesystem can be unmounted directly.
+    scene.umount_temp_fs();
 }
 
 #[test]
@@ -443,14 +609,10 @@ fn test_chmod_recursive_correct_exit_code() {
     // remove read permissions for folder a so the chmod command for a/b fails
     let mut perms = at.metadata("a").permissions();
     perms.set_mode(0o000);
-    set_permissions(at.plus_as_string("a"), perms).unwrap();
+    set_permissions(at.plus("a"), perms).unwrap();
 
-    // With safe_traversal enabled on all Unix platforms (except Redox),
-    // we get detailed error messages that include the file path
-    #[cfg(all(unix, not(target_os = "redox")))]
-    let err_msg = "chmod: cannot access 'a': Permission denied\n";
-    #[cfg(not(all(unix, not(target_os = "redox"))))]
-    let err_msg = "chmod: Permission denied\n";
+    // `a` is changed before it is read, so the failure is about reading it.
+    let err_msg = "chmod: cannot read directory 'a': Permission denied\n";
 
     // order of command is a, a/b then c
     // command is expected to fail and not just take the last exit code
@@ -461,7 +623,8 @@ fn test_chmod_recursive_correct_exit_code() {
         .arg("z")
         .umask(0)
         .fails()
-        .stderr_is(err_msg);
+        .stderr_is(err_msg)
+        .stdout_contains("'a' could not be accessed\n");
 }
 
 #[test]
@@ -487,13 +650,13 @@ fn test_chmod_recursive() {
     let a_perms_expected = (at.metadata("a").permissions().mode() & !0o444) | 0o222;
     let z_perms_expected = (at.metadata("z").permissions().mode() & !0o444) | 0o222;
 
-    make_file(&at.plus_as_string("a/a"), 0o100444);
-    make_file(&at.plus_as_string("a/b/b"), 0o100444);
-    make_file(&at.plus_as_string("a/b/c/c"), 0o100444);
-    make_file(&at.plus_as_string("z/y"), 0o100444);
-    // With safe_traversal enabled on all Unix platforms, the error message
-    // now includes the file path consistently across platforms
-    let err_msg = "chmod: cannot access 'z': Permission denied\n";
+    make_file(at.plus("a/a"), 0o100444);
+    make_file(at.plus("a/b/b"), 0o100444);
+    make_file(at.plus("a/b/c/c"), 0o100444);
+    make_file(at.plus("z/y"), 0o100444);
+    // Both operands become unreadable, and each failure is reported.
+    let err_msg = "chmod: cannot read directory 'a': Permission denied\n\
+                   chmod: cannot read directory 'z': Permission denied\n";
 
     // only the permissions of folder `a` and `z` are changed
     // folder can't be read after read permission is removed
@@ -516,6 +679,68 @@ fn test_chmod_recursive() {
 }
 
 #[test]
+fn test_chmod_recursive_reports_every_unreadable_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dirs = ["d/a", "d/b", "d/c"];
+    for dir in dirs {
+        at.mkdir_all(format!("{dir}/y"));
+        set_permissions(at.plus_as_string(dir), Permissions::from_mode(0o311)).unwrap();
+    }
+
+    let result = ucmd.args(&["-R", "o=r", "d"]).fails_with_code(1);
+    for dir in dirs {
+        result.stderr_contains(format!(
+            "chmod: cannot read directory '{dir}': Permission denied\n"
+        ));
+        // The directory itself is changed before its entries are listed.
+        assert_eq!(at.metadata(dir).permissions().mode() & 0o777, 0o314);
+        set_permissions(at.plus_as_string(dir), Permissions::from_mode(0o755)).unwrap();
+    }
+}
+
+#[test]
+fn test_chmod_recursive_quiet_unreadable_directory() {
+    // -f hides the diagnostic; the failure still sets the exit status.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("d/a/y");
+    set_permissions(at.plus_as_string("d/a"), Permissions::from_mode(0o311)).unwrap();
+
+    ucmd.args(&["-f", "-R", "o=r", "d"])
+        .fails_with_code(1)
+        .no_output();
+
+    set_permissions(at.plus_as_string("d/a"), Permissions::from_mode(0o755)).unwrap();
+}
+
+#[test]
+fn test_chmod_recursive_verbose_unreadable_directory() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("d/a/y");
+    set_permissions(at.plus_as_string("d/a"), Permissions::from_mode(0o311)).unwrap();
+
+    // -v names the directory that was changed but could not be read.
+    scene
+        .ucmd()
+        .args(&["-R", "-v", "o=r", "d"])
+        .fails_with_code(1)
+        .stderr_is("chmod: cannot read directory 'd/a': Permission denied\n")
+        .stdout_contains("mode of 'd/a' changed from 0311 (-wx--x--x) to 0314 (-wx--xr--)\n")
+        .stdout_contains("'d/a' could not be accessed\n");
+
+    // -c reports the change only.
+    scene
+        .ucmd()
+        .args(&["-R", "-c", "o=rw", "d"])
+        .fails_with_code(1)
+        .stderr_is("chmod: cannot read directory 'd/a': Permission denied\n")
+        .stdout_contains("mode of 'd/a' changed from 0314 (-wx--xr--) to 0316 (-wx--xrw-)\n")
+        .stdout_does_not_contain("could not be accessed");
+
+    set_permissions(at.plus_as_string("d/a"), Permissions::from_mode(0o755)).unwrap();
+}
+
+#[test]
 #[allow(clippy::unreadable_literal)]
 fn test_chmod_recursive_read_permission() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -523,8 +748,8 @@ fn test_chmod_recursive_read_permission() {
     at.mkdir("a/b");
     let mut perms = at.metadata("a/b").permissions();
     perms.set_mode(0o311);
-    set_permissions(at.plus_as_string("a/b"), perms.clone()).unwrap();
-    set_permissions(at.plus_as_string("a"), perms).unwrap();
+    set_permissions(at.plus("a/b"), perms.clone()).unwrap();
+    set_permissions(at.plus("a"), perms).unwrap();
 
     ucmd.arg("-R").arg("u+r").arg("a").succeeds();
 
@@ -710,7 +935,7 @@ fn test_chmod_symlink_non_existing_file_recursive() {
     let test_directory = "test_chmod_symlink_non_existing_file_directory";
 
     at.mkdir(test_directory);
-    at.symlink_file(non_existing, &format!("{test_directory}/{test_symlink}"));
+    at.symlink_file(non_existing, format!("{test_directory}/{test_symlink}"));
 
     // this should succeed
     scene
@@ -914,6 +1139,18 @@ fn test_gnu_invalid_mode() {
 }
 
 #[test]
+fn test_chmod_invalid_mode_checked_before_any_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("d/a");
+    at.touch("d/a/f");
+
+    // The mode is checked once, up front: one message, and no walk.
+    ucmd.args(&["-R", "g+rw?x", "d"])
+        .fails_with_code(1)
+        .stderr_only("chmod: invalid operator (expected +, -, or =, but found ?)\n");
+}
+
+#[test]
 #[cfg(not(target_os = "android"))]
 fn test_gnu_options() {
     let scene = TestScenario::new(util_name!());
@@ -946,7 +1183,7 @@ fn test_gnu_special_filenames() {
     let perms_before = Permissions::from_mode(0o100_640);
     let perms_after = Permissions::from_mode(0o100_440);
 
-    make_file(&at.plus_as_string("--"), perms_before.mode());
+    make_file(at.plus("--"), perms_before.mode());
     scene.ucmd().arg("-w").arg("--").arg("--").succeeds();
     assert_eq!(at.metadata("--").permissions(), perms_after);
     set_permissions(at.plus("--"), perms_before.clone()).unwrap();
@@ -954,7 +1191,7 @@ fn test_gnu_special_filenames() {
     assert_eq!(at.metadata("--").permissions(), perms_after);
     at.remove("--");
 
-    make_file(&at.plus_as_string("-w"), perms_before.mode());
+    make_file(at.plus("-w"), perms_before.mode());
     scene.ucmd().arg("-w").arg("--").arg("-w").succeeds();
     assert_eq!(at.metadata("-w").permissions(), perms_after);
     set_permissions(at.plus("-w"), perms_before).unwrap();
@@ -1018,7 +1255,7 @@ fn test_gnu_usage_matrix() {
         // 0o644 has no group or other write bit, so `-w` lands on 0o444 under any umask. This test
         // is about which operands get picked, not about umask arithmetic.
         for name in ["f", "--", "-w"] {
-            make_file(&at.plus_as_string(name), 0o644);
+            make_file(at.plus(name), 0o644);
         }
 
         let result = scene.ucmd().arg("-v").args(args).run();
@@ -1068,6 +1305,8 @@ fn test_umask_conflict_reported_only_for_option_like_mode() {
         (&["-w", "--", "file"], 0o466, true),
         (&["file", "-w"], 0o466, true),
         (&["-w", "-w", "--", "file"], 0o466, true),
+        // `-f` hides most diagnostics, but not this one, as in GNU.
+        (&["-f", "-w", "file"], 0o466, true),
         (&["--", "-w", "file"], 0o466, false),
         (&["--", "-rw", "file"], 0o022, false),
         // What matters is whether the argument itself began with a hyphen, not whether the mode
@@ -1083,7 +1322,7 @@ fn test_umask_conflict_reported_only_for_option_like_mode() {
         let at = &scene.fixtures;
         // 0o666 is required: on 0o644 the umask has nothing left to keep, so the conflict never
         // arises and every one of these cases would pass vacuously.
-        make_file(&at.plus_as_string("file"), 0o666);
+        make_file(at.plus("file"), 0o666);
 
         let result = scene.ucmd().umask(0o022).args(args).run();
         let context = format!("chmod {}", args.join(" "));
@@ -1329,7 +1568,7 @@ fn test_chmod_traverse_symlink_combo() {
 
         at.mkdir(directory);
         at.touch(target);
-        at.symlink_file(target, &format!("{directory}/{symlink}"));
+        at.symlink_file(target, format!("{directory}/{symlink}"));
 
         set_permissions(at.plus(target), Permissions::from_mode(0o664)).unwrap();
 
@@ -1348,7 +1587,7 @@ fn test_chmod_traverse_symlink_combo() {
         );
 
         let actual_symlink = at
-            .symlink_metadata(&format!("{directory}/{symlink}"))
+            .symlink_metadata(format!("{directory}/{symlink}"))
             .permissions()
             .mode();
         assert_eq!(
@@ -1394,7 +1633,7 @@ fn test_chmod_recursive_symlink_to_directory_command_line() {
             .no_stderr();
 
         let actual_file_perms = at
-            .metadata(&format!("{target_dir}/{file_in_target}"))
+            .metadata(format!("{target_dir}/{file_in_target}"))
             .permissions()
             .mode();
 
@@ -1436,7 +1675,7 @@ fn test_chmod_recursive_symlink_during_traversal() {
         at.mkdir(directory);
         at.mkdir(target_dir);
         at.touch(format!("{target_dir}/{file_in_target}"));
-        at.symlink_dir(target_dir, &format!("{directory}/{symlink_to_dir}"));
+        at.symlink_dir(target_dir, format!("{directory}/{symlink_to_dir}"));
 
         set_permissions(
             at.plus(format!("{target_dir}/{file_in_target}")),
@@ -1452,7 +1691,7 @@ fn test_chmod_recursive_symlink_during_traversal() {
             .no_stderr();
 
         let actual_file_perms = at
-            .metadata(&format!("{target_dir}/{file_in_target}"))
+            .metadata(format!("{target_dir}/{file_in_target}"))
             .permissions()
             .mode();
 
@@ -1488,8 +1727,8 @@ fn test_chmod_recursive_symlink_combinations() {
     at.mkdir(target_dir);
     at.touch(target_file);
     at.touch(format!("{target_dir}/{file_in_target}"));
-    at.symlink_dir(target_dir, &format!("{directory}/{symlink_to_dir}"));
-    at.symlink_file(target_file, &format!("{directory}/{symlink_to_file}"));
+    at.symlink_dir(target_dir, format!("{directory}/{symlink_to_dir}"));
+    at.symlink_file(target_file, format!("{directory}/{symlink_to_file}"));
 
     set_permissions(at.plus(target_file), Permissions::from_mode(0o644)).unwrap();
     set_permissions(
@@ -1511,7 +1750,7 @@ fn test_chmod_recursive_symlink_combinations() {
     // Both target file and file in target directory should have permissions changed
     assert_eq!(at.metadata(target_file).permissions().mode(), 0o100_600);
     assert_eq!(
-        at.metadata(&format!("{target_dir}/{file_in_target}"))
+        at.metadata(format!("{target_dir}/{file_in_target}"))
             .permissions()
             .mode(),
         0o100_600
@@ -1626,6 +1865,40 @@ fn test_chmod_operator_only_still_calls_syscall() {
             .code_is(1)
             .stderr_contains("changing permissions of '/'");
     }
+}
+
+#[test]
+fn test_chmod_reports_every_failing_operand() {
+    use rustix::process::geteuid;
+
+    // Every operand is tried and every failure reported, as GNU does: '-f'
+    // hides the messages but keeps the exit status, and '-v' still says what
+    // could not be changed. As above, '/' is a file a non-root user cannot
+    // chmod.
+    if geteuid().is_root() || metadata("/").map_or(0, |m| m.uid()) != 0 {
+        return;
+    }
+
+    // The errno text differs between systems: '/' is read-only on macOS.
+    let result = new_ucmd!().args(&["0", "/", "/"]).fails_with_code(1);
+    result.no_stdout();
+    let lines: Vec<&str> = result.stderr_str().lines().collect();
+    assert_eq!(lines.len(), 2, "{lines:?}");
+    for line in lines {
+        assert!(
+            line.starts_with("chmod: changing permissions of '/': "),
+            "{line}"
+        );
+    }
+    new_ucmd!()
+        .args(&["-f", "0", "/", "/"])
+        .fails_with_code(1)
+        .no_output();
+    new_ucmd!()
+        .args(&["-v", "-f", "0", "/", "/"])
+        .fails_with_code(1)
+        .no_stderr()
+        .stdout_contains("failed to change mode of file '/' from");
 }
 
 #[test]
@@ -1864,4 +2137,36 @@ mod diagnostics {
             .fails_with_code(1)
             .no_output();
     }
+}
+
+#[test]
+fn test_overlong_path_reports_os_error_and_continues() {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.touch("valid");
+    // Every component exists, but the unnormalized operand exceeds PATH_MAX.
+    let path = "./".repeat(4096);
+    let error = uucore::error::strip_errno(&std::io::Error::from_raw_os_error(libc::ENAMETOOLONG));
+    for flags in [vec![], vec!["-R"]] {
+        set_permissions(ts.fixtures.plus("valid"), Permissions::from_mode(0o600)).unwrap();
+        let result = ts
+            .ucmd()
+            .args(&flags)
+            .arg("700")
+            .arg(&path)
+            .arg("valid")
+            .fails_with_code(1);
+        result.stderr_is(format!("chmod: cannot access '{path}': {error}\n"));
+        assert_eq!(
+            ts.fixtures.metadata("valid").permissions().mode() & 0o777,
+            0o700
+        );
+    }
+    ts.ucmd()
+        .arg("--reference")
+        .arg(&path)
+        .arg("valid")
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "chmod: failed to get attributes of '{path}': {error}\n"
+        ));
 }

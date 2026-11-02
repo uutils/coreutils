@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) ttyname filedesc
 
-#![cfg(not(target_os = "fuchsia"))]
+#![cfg(any(all(unix, not(target_os = "fuchsia")), windows, target_os = "wasi"))]
 
 use clap::{Arg, ArgAction, Command};
 use std::io::{IsTerminal, Write};

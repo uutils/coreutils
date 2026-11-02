@@ -50,12 +50,13 @@ cp-help-progress = Afficher une barre de progression. Note : cette fonctionnalit
 cp-help-copy-contents = Non implémenté : copier le contenu des fichiers spéciaux lors de la récursion
 
 # Messages d'erreur
+cp-error-relative-symlink-not-in-cwd = { $dest } : les liens symboliques relatifs ne peuvent être créés que dans le répertoire courant
 cp-error-missing-file-operand = opérande fichier manquant
 cp-error-missing-destination-operand = opérande fichier de destination manquant après { $source }
 cp-error-extra-operand = opérande supplémentaire { $operand }
 cp-error-same-file = { $source } et { $dest } sont le même fichier
 cp-error-backing-up-destroy-source = sauvegarder { $dest } pourrait détruire la source ; { $source } non copié
-cp-error-cannot-open-for-reading = impossible d'ouvrir { $source } en lecture
+cp-error-cannot-open-for-reading = impossible d'ouvrir { $source } en lecture : permission refusée
 cp-error-not-writing-dangling-symlink = ne pas écrire à travers le lien symbolique pendant { $dest }
 cp-error-failed-to-clone = échec du clonage de { $dest } depuis { $source } : { $error }
 cp-error-cannot-change-attribute = impossible de changer l'attribut { $dest } : Le fichier source n'est pas un fichier régulier

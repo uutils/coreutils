@@ -33,7 +33,7 @@ use crate::multifile_reader::{HasError, InputSource, MultifileReader};
 use crate::output_info::OutputInfo;
 use crate::parse_formats::{ParsedFormatterItemInfo, parse_format_flags};
 use crate::parse_inputs::{CommandLineInputs, parse_inputs};
-use crate::parse_nrofbytes::parse_number_of_bytes;
+use crate::parse_nrofbytes::{parse_number_of_bytes, parse_width};
 use crate::partial_reader::PartialReader;
 use crate::peek_reader::{PeekRead, PeekReader};
 use crate::prn_char::format_ascii_dump;
@@ -70,7 +70,7 @@ struct OdOptions {
     skip_bytes: u64,
     read_bytes: Option<u64>,
     label: Option<u64>,
-    input_strings: Vec<String>,
+    input_strings: Vec<OsString>,
     formats: Vec<ParsedFormatterItemInfo>,
     line_bytes: usize,
     output_duplicates: bool,
@@ -145,7 +145,7 @@ impl OdOptions {
             matches.value_source(options::WIDTH),
         ) {
             let width_display = option_display_name(args, options::WIDTH, 'w');
-            let parsed = parse_number_of_bytes(s).map_err(|e| {
+            let parsed = parse_width(s).map_err(|e| {
                 let message = format_error_message(&e, s, &width_display);
                 e.size_value_error(
                     diag_args,
@@ -253,12 +253,16 @@ impl OdOptions {
 /// opens the input and calls `odfunc` to process the input.
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
-    let raw_args: Vec<OsString> = args.iter().map(OsString::from).collect();
+    let raw_args: Vec<OsString> = args.collect();
+    // Keep a text view for option scanning, but parse filenames from the raw arguments.
+    let args: Vec<String> = raw_args
+        .iter()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
 
     let clap_opts = uu_app();
 
-    let clap_matches = uucore::clap_localization::handle_clap_result(clap_opts, &args)?;
+    let clap_matches = uucore::clap_localization::handle_clap_result(clap_opts, &raw_args)?;
 
     // Kept for the caret in SIZE diagnostics, which echoes the command line.
     let diag_args = uucore::diagnostics::capture(&raw_args);
@@ -393,8 +397,11 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            // undocumented alias `B` because it is implemented in GNU for compatibility with other
+            // coreutils e.g. https://man.netbsd.org/od.1
             Arg::new("o")
                 .short('o')
+                .short_alias('B')
                 .help(translate!("od-help-o"))
                 .action(ArgAction::SetTrue),
         )
@@ -509,6 +516,7 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::FILENAME)
+                .value_parser(clap::builder::OsStringValueParser::new())
                 .hide(true)
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
@@ -597,7 +605,7 @@ where
 
 /// Extract and display printable strings from input (od -S option)
 fn extract_strings_from_input(
-    input_strings: &[String],
+    input_strings: &[OsString],
     skip_bytes: u64,
     read_bytes: Option<u64>,
     min_length: usize,
@@ -607,25 +615,19 @@ fn extract_strings_from_input(
     let inputs = map_input_strings(input_strings);
     let mut mf = MultifileReader::new(inputs);
 
-    // Apply skip_bytes by reading and discarding
-    let mut skipped = 0u64;
-    while skipped < skip_bytes {
-        let to_skip = cmp::min(8192, skip_bytes - skipped);
-        let mut skip_buf = vec![0u8; to_skip as usize];
-        match mf.read(&mut skip_buf) {
-            Ok(0) | Err(_) => break, // 0 is EOF
-            Ok(n) => skipped += n as u64,
-        }
-    }
+    // Skipping past the end of the input is an error, as without -S.
+    mf.skip(skip_bytes)
+        .map_err(|e| USimpleError::new(1, e.to_string()))?;
 
     // Helper function to format and print a string
     let mut print_string = |offset: u64, string: &[u8]| -> std::io::Result<()> {
         let string_content = String::from_utf8_lossy(string);
-        match radix {
-            Radix::NoPrefix => writeln!(writer, "{string_content}"),
-            Radix::Decimal => writeln!(writer, "{offset:07} {string_content}"),
-            Radix::Hexadecimal => writeln!(writer, "{offset:07x} {string_content}"),
-            Radix::Octal => writeln!(writer, "{offset:07o} {string_content}"),
+        if radix == Radix::NoPrefix {
+            writeln!(writer, "{string_content}")
+        } else {
+            // Same offset format as the normal dump
+            let offset = InputOffset::new(radix, offset, None);
+            writeln!(writer, "{offset} {string_content}")
         }
     };
 
@@ -787,13 +789,16 @@ fn write_bytes(
     Ok(())
 }
 
-/// Helper function to convert input strings to InputSource
-fn map_input_strings(input_strings: &[String]) -> Vec<InputSource<'_>> {
+/// Helper function to convert input strings to [`InputSource`]
+fn map_input_strings(input_strings: &[OsString]) -> Vec<InputSource<'_>> {
     input_strings
         .iter()
-        .map(|w| match w as &str {
-            "-" => InputSource::Stdin,
-            x => InputSource::FileName(x),
+        .map(|w| {
+            if w == "-" {
+                InputSource::Stdin
+            } else {
+                InputSource::FileName(w)
+            }
         })
         .collect()
 }
@@ -803,7 +808,7 @@ fn map_input_strings(input_strings: &[String]) -> Vec<InputSource<'_>> {
 /// `skip_bytes` is the number of bytes skipped from the input
 /// `read_bytes` is an optional limit to the number of bytes to read
 fn open_input_peek_reader(
-    input_strings: &[String],
+    input_strings: &[OsString],
     skip_bytes: u64,
     read_bytes: Option<u64>,
 ) -> UResult<PeekReader<BufReader<PartialReader<MultifileReader<'_>>>>> {

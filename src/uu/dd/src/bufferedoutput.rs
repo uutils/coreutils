@@ -41,8 +41,8 @@ impl<'a> BufferedOutput<'a> {
         Ok(Self { inner, buf })
     }
 
-    pub(crate) fn discard_cache(&self, offset: u64, len: u64) {
-        self.inner.discard_cache(offset, len);
+    pub(crate) fn discard_cache(&self, offset: u64, len: u64) -> std::io::Result<()> {
+        self.inner.discard_cache(offset, len)
     }
 
     /// Flush the partial block stored in the internal buffer.
@@ -58,9 +58,9 @@ impl<'a> BufferedOutput<'a> {
         self.inner.sync()
     }
 
-    /// Truncate the underlying file to the current stream position, if possible.
-    pub(crate) fn truncate(&mut self) -> std::io::Result<()> {
-        self.inner.dst.truncate()
+    /// Grow a sparse output file up to the current stream position.
+    pub(crate) fn extend_sparse(&mut self) -> std::io::Result<()> {
+        self.inner.dst.extend_sparse()
     }
 
     /// Write the given bytes one block at a time.

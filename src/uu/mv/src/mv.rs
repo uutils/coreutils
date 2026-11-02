@@ -396,7 +396,12 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         )
         .into());
     }
-    let Ok(source_metadata) = source.symlink_metadata() else {
+    // WASI may return file metadata even when a trailing slash requires a directory.
+    let Some(source_metadata) = source
+        .symlink_metadata()
+        .ok()
+        .filter(|metadata| !metadata.is_file() || !path_ends_with_terminator(source))
+    else {
         return Err(if path_ends_with_terminator(source) {
             MvError::CannotStatNotADirectory(source.quote().to_string()).into()
         } else {
@@ -462,7 +467,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         } else {
             move_files_into_dir(&[source.to_path_buf()], target, opts)
         }
-    } else if source_is_dir && target.exists() {
+    } else if source_is_dir && target.symlink_metadata().is_ok() {
         match opts.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => prompt_overwrite(target, None)?,
@@ -869,7 +874,15 @@ fn rename(
         .is_ok_and(|metadata| metadata.is_dir())
     {
         // normalize behavior between *nix and windows
-        if from.is_dir() {
+        // A symlink to a directory is not a directory: like any other
+        // non-directory, it must not replace the empty directory. Drop
+        // trailing slashes first, as they make lstat follow the symlink.
+        if from
+            .components()
+            .as_path()
+            .symlink_metadata()
+            .is_ok_and(|metadata| metadata.is_dir())
+        {
             if is_empty_dir(to) {
                 fs::remove_dir(to)?;
             } else {

@@ -83,6 +83,7 @@ dd-standard-output = 'sortie standard'
 dd-error-failed-to-open = échec de l'ouverture de { $path }
 dd-error-write-error = erreur d'écriture
 dd-error-failed-to-seek = échec de la recherche dans le fichier de sortie
+dd-error-failed-to-truncate = échec de la troncature à { $size } octets du fichier de sortie { $file }
 dd-error-io-error = erreur E/S
 dd-error-cannot-skip-offset = '{ $file }' : impossible d'ignorer jusqu'au décalage spécifié
 dd-error-cannot-skip-invalid = '{ $file }' : impossible d'ignorer : Argument invalide
@@ -101,7 +102,6 @@ dd-error-invalid-output-flag = indicateur de sortie invalide : '{ $flag }'
 dd-error-conv-flag-no-match = conversion invalide : '{ $flag }'
 dd-error-multiplier-parse-failure = nombre invalide : '{ $input }'
 dd-error-multiplier-overflow = La chaîne de multiplicateur déborderait sur le système actuel -> { $input }
-dd-error-block-without-cbs = conv=block ou conv=unblock spécifié sans cbs=N
 dd-error-status-not-recognized = niveau d'état invalide : '{ $level }'
 dd-error-unimplemented = fonctionnalité non implémentée sur ce système -> { $feature }
 dd-error-bs-out-of-range = { $param }=N ne peut pas tenir en mémoire

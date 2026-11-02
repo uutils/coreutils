@@ -151,7 +151,7 @@ utmp-classic = { workspace = true, optional = true }
 [features]
 default = ["signals"]
 # * non-default features
-backup-control = []
+backup-control = ["fs"]
 colors = []
 diagnostics = ["dep:ariadne"]
 checksum = ["base64-simd", "quoting-style", "rustix/fs", "sum"]
@@ -164,7 +164,6 @@ fsext = ["libc", "windows-sys", "bstr", "wide"]
 fsxattr = ["xattr", "itertools", "libc"]
 hardware = []
 lines = []
-feat_systemd_logind = ["utmpx", "libc"]
 format = [
   "bigdecimal",
   "extendedbigdecimal",
@@ -187,6 +186,7 @@ i18n-datetime = [
   "jiff",
 ]
 mode = ["libc", "quoting-style", "rustix/process"]
+numeric-str-cmp = ["i18n-decimal"]
 perms = ["entries", "libc", "safe-traversal", "walkdir"]
 buf-copy = ["pipes"]
 parser-num = ["extendedbigdecimal", "num-traits"]
@@ -201,7 +201,7 @@ ranges = []
 ringbuffer = []
 safe-copy = ["rustix/fs"]
 safe-traversal = ["libc", "nix/fs", "nix/dir", "nix/user", "rustix/fs"]
-selinux = ["dep:selinux"]
+selinux = ["dep:selinux", "libc"]
 smack = ["xattr"]
 signals = ["nix/fs", "nix/signal", "nix/poll"]
 sum = [
@@ -219,6 +219,7 @@ sum = [
   "crc-fast",
   "data-encoding",
 ]
+systemd_logind = ["utmpx", "libc"]
 # Use OpenSSL (libcrypto) for md5/sha1/sha2-family digests instead of the
 # pure-Rust crates. This dramatically speeds up checksum utilities on CPUs
 # without SHA-NI by using OpenSSL's optimized assembly implementations.

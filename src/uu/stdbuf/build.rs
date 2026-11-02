@@ -66,12 +66,23 @@ fn main() {
     cmd.current_dir(libstdbuf_src)
         .args(["build", "--target-dir", build_dir.to_str().unwrap()]);
 
-    // Get the current profile
-    let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
+    // Determine the actual profile from OUT_DIR since PROFILE env var only gives the base profile
+    // for inherited profiles (e.g., PROFILE=release for both release and release-small).
+    // OUT_DIR is .../target/[triple/]{profile}/build/{pkg-hash}/out, or with cargo's newer
+    // build-dir layout .../{profile}/build/{pkg}/{hash}/out, so the depth varies: look for the
+    // enclosing "build" directory and take its parent.
+    let profile_dir = Path::new(&out_dir)
+        .ancestors()
+        .find(|p| p.file_name().is_some_and(|n| n == "build"))
+        .and_then(Path::parent);
+    let profile = profile_dir
+        .and_then(|p| p.file_name())
+        .and_then(|s| s.to_str())
+        .unwrap_or("debug");
 
-    // Pass the release flag if we're in release mode
-    if profile == "release" || profile == "bench" {
-        cmd.arg("--release");
+    // Pass the profile to the nested build (for release, release-small, profiling, bench, etc.)
+    if profile != "debug" {
+        cmd.arg("--profile").arg(profile);
     }
 
     // Pass the target architecture if we're cross-compiling
@@ -93,17 +104,17 @@ fn main() {
     // Check multiple possible locations for the built library
     let possible_paths = if !target.is_empty() && target != "unknown" {
         vec![
-            build_dir.join(&target).join(&profile).join(&lib_name),
+            build_dir.join(&target).join(profile).join(&lib_name),
             build_dir
                 .join(&target)
-                .join(&profile)
+                .join(profile)
                 .join("deps")
                 .join(&lib_name),
         ]
     } else {
         vec![
-            build_dir.join(&profile).join(&lib_name),
-            build_dir.join(&profile).join("deps").join(&lib_name),
+            build_dir.join(profile).join(&lib_name),
+            build_dir.join(profile).join("deps").join(&lib_name),
         ]
     };
 
@@ -128,16 +139,9 @@ fn main() {
     // running tests and manual testing during development.
     #[cfg(all(unix, feature = "feat_external_libstdbuf"))]
     {
-        use std::path::PathBuf;
-
         // Get the main target directory (e.g., target/debug or target/release)
         // OUT_DIR is something like target/debug/build/uu_stdbuf-<hash>/out
-        let out_dir_path = PathBuf::from(&out_dir);
-        if let Some(target_dir) = out_dir_path
-            .parent()
-            .and_then(|p| p.parent())
-            .and_then(|p| p.parent())
-        {
+        if let Some(target_dir) = profile_dir {
             let lib_filename = format!("libstdbuf{dylib_ext}");
             let source = target_dir.join("deps").join(&lib_filename);
             let dest = target_dir.join(&lib_filename);

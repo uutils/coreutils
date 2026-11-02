@@ -117,14 +117,14 @@ impl UNameOutput {
         // This option is unsupported on modern Linux systems
         // See: https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
         //
-        // -a and -A omit an unknown processor or hardware platform, and since we never
-        // determine either one, they only ever show up when explicitly requested.
-        let processor = opts.processor.then(|| translate!("uname-unknown").into());
+        // -a and -A omit an unknown processor or hardware platform, even when
+        // -p or -i is explicitly requested.
+        let processor = (opts.processor && !opts.all && !opts.all_labeled)
+            .then(|| translate!("uname-unknown").into());
 
         // This option is unsupported on modern Linux systems
         // See: https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
-        let hardware_platform = opts
-            .hardware_platform
+        let hardware_platform = (opts.hardware_platform && !opts.all && !opts.all_labeled)
             .then(|| translate!("uname-unknown").into());
 
         Ok(Self {

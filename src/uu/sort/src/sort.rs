@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (misc) kKMGTPEZYRQ HFKJFK Mbdfhn getrlimit Nofile rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
+// spell-checker:ignore (misc) kKMGTPEZYRQ HFKJFK Mbdfhn getrlimit NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
 // spell-checker:ignore (misc) uppercased qsort getmonth juin juil
 
 // Although these links don't always seem to describe reality, check out the POSIX and GNU specs:
@@ -17,7 +17,6 @@ mod custom_str_cmp;
 mod diagnostics;
 mod ext_sort;
 mod merge;
-mod numeric_str_cmp;
 mod tmp_dir;
 
 use bigdecimal::BigDecimal;
@@ -28,7 +27,6 @@ use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use foldhash::fast::FoldHasher;
 use foldhash::{HashMap, SharedSeed};
-use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{RngExt as _, rng};
 #[cfg(not(target_os = "wasi"))]
 use rayon::slice::ParallelSliceMut;
@@ -52,8 +50,11 @@ use uucore::extendedbigdecimal::ExtendedBigDecimal;
 #[cfg(feature = "i18n-collator")]
 use uucore::i18n::collator::{compute_sort_key_utf8, locale_cmp};
 use uucore::i18n::datetime::get_locale_months;
-use uucore::i18n::decimal::locale_decimal_separator;
 use uucore::line_ending::LineEnding;
+use uucore::numeric_str_cmp::{
+    NumInfo, NumInfoParseSettings, human_numeric_str_cmp, is_blank, locale_decimal_pt,
+    numeric_str_cmp,
+};
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
@@ -115,14 +116,6 @@ mod options {
 
 const DECIMAL_PT: u8 = b'.';
 
-fn locale_decimal_pt() -> u8 {
-    match locale_decimal_separator().as_bytes().first().copied() {
-        Some(b'.') => b'.',
-        Some(b',') => b',',
-        _ => DECIMAL_PT,
-    }
-}
-
 const NEGATIVE: &u8 = &b'-';
 const POSITIVE: &u8 = &b'+';
 
@@ -143,23 +136,26 @@ pub enum SortError {
         silent: bool,
     },
 
-    #[error("{}", translate!("sort-open-failed", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
+    #[error("{}", translate_text!("sort-open-failed", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
     OpenFailed {
         path: PathBuf,
         error: std::io::Error,
     },
 
-    #[error("{}", translate!("sort-truncate-failed", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
+    #[error("{}", translate_text!("sort-truncate-failed", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
     TruncateFailed {
         path: PathBuf,
         error: std::io::Error,
     },
 
-    #[error("{}", translate!("sort-cannot-read", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
+    #[error("{}", translate_text!("sort-cannot-read", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
     ReadFailed {
         path: PathBuf,
         error: std::io::Error,
     },
+
+    #[error("{}", translate!("sort-read-failed", "error" => strip_errno(.error)))]
+    ChunkReadFailed { error: std::io::Error },
 
     #[error("{}", translate!("sort-open-tmp-file-failed", "error" => strip_errno(.error)))]
     OpenTmpFileFailed { error: std::io::Error },
@@ -170,10 +166,10 @@ pub enum SortError {
     #[error("{}", translate!("sort-compress-prog-terminated-abnormally", "prog" => .prog.quote()))]
     CompressProgTerminatedAbnormally { prog: String },
 
-    #[error("{}", translate!("sort-cannot-create-tmp-file", "path" => format!("{}", .path.quote())))]
+    #[error("{}", translate_text!("sort-cannot-create-tmp-file", "path" => format!("{}", .path.quote())))]
     TmpFileCreationFailed { path: PathBuf },
 
-    #[error("{}", translate!("sort-file-operands-combined", "file" => format!("{}", .file.quote()), "help" => uucore::execution_phrase()))]
+    #[error("{}", translate_text!("sort-file-operands-combined", "file" => format!("{}", .file.quote()), "help" => uucore::execution_phrase()))]
     FileOperandsCombined { file: PathBuf },
 
     #[error("{error}")]
@@ -182,16 +178,22 @@ pub enum SortError {
     #[error("{}", translate!("sort-multiple-output-files"))]
     MultipleOutputFiles,
 
+    #[error("{}", translate!("sort-multiple-compress-programs"))]
+    MultipleCompressPrograms,
+
+    #[error("{}", translate!("sort-incompatible-tabs"))]
+    IncompatibleTabs,
+
     #[error("{}", translate!("sort-minus-in-stdin"))]
     MinusInStdIn,
 
-    #[error("{}", translate!("sort-no-input-from", "file" => format!("{}", .file.quote())))]
+    #[error("{}", translate_text!("sort-no-input-from", "file" => format!("{}", .file.quote())))]
     EmptyInputFile { file: PathBuf },
 
-    #[error("{}", translate!("sort-random-source-end-of-file", "path" => format!("{}", .path.quote())))]
+    #[error("{}", translate_text!("sort-random-source-end-of-file", "path" => format!("{}", .path.quote())))]
     RandomSourceEndOfFile { path: PathBuf },
 
-    #[error("{}", translate!("sort-invalid-zero-length-filename", "file" => .file.maybe_quote(), "line_num" => .line_num))]
+    #[error("{}", translate_text!("sort-invalid-zero-length-filename", "file" => .file.maybe_quote(), "line_num" => .line_num))]
     ZeroLengthFileName { file: PathBuf, line_num: usize },
 }
 
@@ -289,7 +291,7 @@ impl Output {
             .as_output_name()
             .unwrap_or(OsStr::new("standard output"))
             .to_owned();
-        move || translate!("sort-error-write-failed", "output" => output_name.maybe_quote())
+        move || translate_text!("sort-error-write-failed", "output" => output_name.maybe_quote())
     }
 }
 
@@ -316,33 +318,8 @@ pub struct GlobalSettings {
     buffer_size_is_explicit: bool,
     compress_prog: Option<String>,
     merge_batch_size: usize,
-    numeric_locale: NumericLocaleSettings,
+    numeric_locale: NumInfoParseSettings,
     precomputed: Precomputed,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct NumericLocaleSettings {
-    thousands_sep: Option<u8>,
-    decimal_pt: Option<u8>,
-}
-
-impl Default for NumericLocaleSettings {
-    fn default() -> Self {
-        Self {
-            thousands_sep: None,
-            decimal_pt: Some(DECIMAL_PT),
-        }
-    }
-}
-
-impl NumericLocaleSettings {
-    fn num_info_settings(self, accept_si_units: bool) -> NumInfoParseSettings {
-        NumInfoParseSettings {
-            accept_si_units,
-            thousands_separator: self.thousands_sep,
-            decimal_pt: self.decimal_pt,
-        }
-    }
 }
 
 /// Data needed for sorting. Should be computed once before starting to sort
@@ -413,7 +390,7 @@ impl GlobalSettings {
             .any(|s| matches!(s.settings.mode, SortMode::HumanNumeric));
         self.precomputed.tokenize_blank_thousands_sep = self.separator.is_none()
             && uses_numeric
-            && self.numeric_locale.thousands_sep == Some(b' ');
+            && self.numeric_locale.thousands_separator == Some(b' ');
         self.precomputed.tokenize_allow_unit_after_blank =
             self.precomputed.tokenize_blank_thousands_sep && uses_human_numeric;
 
@@ -432,15 +409,16 @@ impl GlobalSettings {
     /// looking at any key. That is only the same comparison when the single
     /// key spans the entire line: `-n -k1.2` sorts on the line's second
     /// character onwards, and `-n -t. -k2` on its second field, neither of
-    /// which the line as a whole stands for. A key of its own `r` also has to
-    /// go the long way, since the shortcut only knows the global one.
+    /// which the line as a whole stands for. A key whose `r` differs from the
+    /// global one also has to go the long way, since the shortcut only knows
+    /// the global one.
     fn can_use_whole_line_numeric(&self) -> bool {
         let [selector] = &self.selectors[..] else {
             return false;
         };
         self.mode == SortMode::Numeric
             && selector.settings.mode == SortMode::Numeric
-            && !selector.settings.reverse
+            && selector.settings.reverse == self.reverse
             && selector.from.field == 1
             && selector.from.char == 1
             && selector.to.is_none()
@@ -449,7 +427,7 @@ impl GlobalSettings {
     /// Returns true when the fast lexicographic path can be used safely.
     /// Note: When i18n-collator is enabled, the caller must have already determined
     /// whether locale-aware collation is needed (via checking if we're in a UTF-8 locale).
-    /// This check is performed in uumain() before init_precomputed() is called.
+    /// This check is performed in [`uumain()`] before `init_precomputed()` is called.
     fn can_use_fast_lexicographic(&self) -> bool {
         let [selector] = &self.selectors[..] else {
             return false;
@@ -465,6 +443,7 @@ impl GlobalSettings {
             && !selector.settings.dictionary_order
             && !selector.settings.ignore_non_printing
             && !selector.settings.ignore_blanks
+            && selector.settings.reverse == self.reverse
     }
 
     /// Returns true when the ASCII case-insensitive fast path is valid.
@@ -483,6 +462,7 @@ impl GlobalSettings {
             && !selector.settings.dictionary_order
             && !selector.settings.ignore_non_printing
             && !selector.settings.ignore_blanks
+            && selector.settings.reverse == self.reverse
     }
 }
 
@@ -510,7 +490,7 @@ impl Default for GlobalSettings {
             buffer_size_is_explicit: false,
             compress_prog: None,
             merge_batch_size: default_merge_batch_size(),
-            numeric_locale: NumericLocaleSettings::default(),
+            numeric_locale: NumInfoParseSettings::default(),
             precomputed: Precomputed::default(),
         }
     }
@@ -556,6 +536,31 @@ struct ModeFlags {
 }
 
 impl ModeFlags {
+    fn from_matches(matches: &ArgMatches) -> Self {
+        let mut flags = Self {
+            human_numeric: matches.get_flag(options::modes::HUMAN_NUMERIC),
+            month: matches.get_flag(options::modes::MONTH),
+            general_numeric: matches.get_flag(options::modes::GENERAL_NUMERIC),
+            numeric: matches.get_flag(options::modes::NUMERIC),
+            version: matches.get_flag(options::modes::VERSION),
+            random: matches.get_flag(options::modes::RANDOM),
+        };
+        if let Some(sort_args) = matches.get_many::<String>(options::modes::SORT) {
+            for sort_arg in sort_args {
+                match sort_arg.as_str() {
+                    "human-numeric" => flags.human_numeric = true,
+                    "month" => flags.month = true,
+                    "general-numeric" => flags.general_numeric = true,
+                    "numeric" => flags.numeric = true,
+                    "version" => flags.version = true,
+                    "random" => flags.random = true,
+                    _ => {}
+                }
+            }
+        }
+        flags
+    }
+
     fn from_mode(mode: SortMode) -> Self {
         let mut flags = Self::default();
         match mode {
@@ -726,7 +731,7 @@ impl<'a> Line<'a> {
         for (selector, selection) in settings.selectors.iter().map(|selector| {
             (
                 selector,
-                selector.get_selection(line, token_buffer, settings.numeric_locale),
+                selector.get_selection(line, token_buffer, &settings.numeric_locale),
             )
         }) {
             match selection {
@@ -788,9 +793,12 @@ impl<'a> Line<'a> {
             match selector.settings.mode {
                 SortMode::Numeric | SortMode::HumanNumeric => {
                     // find out which range is used for numeric comparisons
-                    let mut parse_settings = settings
-                        .numeric_locale
-                        .num_info_settings(selector.settings.mode == SortMode::HumanNumeric);
+                    // GNU marks a lowercase unit as not part of the key, even with -f.
+                    let mut parse_settings = NumInfoParseSettings {
+                        accept_si_units: selector.settings.mode == SortMode::HumanNumeric,
+                        fold_si_units: false,
+                        ..settings.numeric_locale
+                    };
                     // Debug annotations should ignore thousands separators to match GNU output.
                     parse_settings.thousands_separator = None;
                     let (_, num_range) =
@@ -842,7 +850,7 @@ impl<'a> Line<'a> {
                     let initial_selection = &self.line[selection.clone()];
                     let first_non_blank = initial_selection
                         .iter()
-                        .position(|c| !c.is_ascii_whitespace())
+                        .position(|&c| !is_blank(c))
                         .unwrap_or(initial_selection.len());
 
                     let (parsed, match_len) = month_parse(initial_selection);
@@ -934,18 +942,12 @@ fn tokenize_default(
     // pretend that there was whitespace in front of the line
     let mut previous_was_whitespace = true;
     for (idx, char) in line.iter().enumerate() {
-        let is_whitespace = char.is_ascii_whitespace();
-        let treat_as_separator = if is_whitespace {
-            if blank_thousands_sep && *char == b' ' {
-                !is_blank_thousands_sep(line, idx, allow_unit_after_blank)
-            } else {
-                true
-            }
-        } else {
-            false
-        };
+        let is_separator = is_blank(*char)
+            && !(blank_thousands_sep
+                && *char == b' '
+                && is_blank_thousands_sep(line, idx, allow_unit_after_blank));
 
-        if treat_as_separator {
+        if is_separator {
             if !previous_was_whitespace {
                 token_buffer.last_mut().unwrap().end = idx;
                 token_buffer.push(idx..0);
@@ -1362,7 +1364,7 @@ impl FieldSelector {
         &self,
         line: &'a [u8],
         tokens: &[Field],
-        numeric_locale: NumericLocaleSettings,
+        numeric_locale: &NumInfoParseSettings,
     ) -> Selection<'a> {
         // `get_range` expects `None` when we don't need tokens and would get confused by an empty vector.
         let tokens = if self.needs_tokens {
@@ -1375,7 +1377,11 @@ impl FieldSelector {
             // Parse NumInfo for this number.
             let (info, num_range) = NumInfo::parse(
                 range_str,
-                &numeric_locale.num_info_settings(self.settings.mode == SortMode::HumanNumeric),
+                &NumInfoParseSettings {
+                    accept_si_units: self.settings.mode == SortMode::HumanNumeric,
+                    fold_si_units: self.settings.ignore_case,
+                    ..*numeric_locale
+                },
             );
             // Shorten the range to what we need to pass to numeric_str_cmp later.
             range_str = &range_str[num_range];
@@ -1436,7 +1442,7 @@ impl FieldSelector {
                     idx += line[idx..]
                         .iter()
                         .enumerate()
-                        .find(|(_, c)| !c.is_ascii_whitespace())
+                        .find(|(_, c)| !is_blank(**c))
                         .map_or(line[idx..].len(), |(idx, _)| idx);
                 }
                 // apply the character index
@@ -1488,33 +1494,6 @@ impl FieldSelector {
     }
 }
 
-fn detect_numeric_locale() -> NumericLocaleSettings {
-    let numeric_locale = i18n::get_numeric_locale();
-    let locale = &numeric_locale.0;
-    let encoding = numeric_locale.1;
-    let is_c_locale = encoding == i18n::UEncoding::Ascii && locale.to_string() == "und";
-
-    if is_c_locale {
-        return NumericLocaleSettings {
-            decimal_pt: Some(DECIMAL_PT),
-            thousands_sep: None,
-        };
-    }
-
-    let grouping = i18n::decimal::locale_grouping_separator();
-    NumericLocaleSettings {
-        decimal_pt: Some(locale_decimal_pt()),
-        // Upstream GNU coreutils ignore multibyte thousands separators
-        // (FIXME in C source). We keep the same single-byte behavior.
-        thousands_sep: match grouping.as_bytes() {
-            [b] => Some(*b),
-            // ICU returns NBSP as UTF-8 (0xC2 0xA0). In non-UTF8 locales like ISO-8859-1,
-            // the input byte is 0xA0, so map it to a single-byte separator.
-            [0xC2, 0xA0] if encoding != i18n::UEncoding::Utf8 => Some(0xA0),
-            _ => None,
-        },
-    }
-}
 /// Creates an `Arg` for a sort mode flag.
 fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
     Arg::new(mode)
@@ -1524,49 +1503,23 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
         .action(ArgAction::SetTrue)
 }
 
-#[cfg(all(
-    unix,
-    not(any(
-        target_os = "redox",
-        target_os = "fuchsia",
-        target_os = "haiku",
-        target_os = "solaris",
-        target_os = "illumos"
-    ))
-))]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 fn get_rlimit() -> UResult<usize> {
-    use rustix::process::{Resource, getrlimit};
+    use rlimit::{Resource, getrlimit};
 
-    let rlim_cur = getrlimit(Resource::Nofile)
-        .current
-        .ok_or_else(|| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))?;
+    let (rlim_cur, _) = getrlimit(Resource::NOFILE)
+        .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))?;
 
     usize::try_from(rlim_cur)
         .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))
 }
 
-#[cfg(all(
-    unix,
-    not(any(
-        target_os = "redox",
-        target_os = "fuchsia",
-        target_os = "haiku",
-        target_os = "solaris",
-        target_os = "illumos"
-    ))
-))]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
     get_rlimit().ok()
 }
 
-#[cfg(any(
-    not(unix),
-    target_os = "redox",
-    target_os = "fuchsia",
-    target_os = "haiku",
-    target_os = "solaris",
-    target_os = "illumos"
-))]
+#[cfg(not(all(unix, not(target_os = "fuchsia"))))]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
     None
 }
@@ -1673,19 +1626,11 @@ struct GlobalOptionFlags {
     ignore_case: bool,
     ignore_non_printing: bool,
     reverse: bool,
-    mode_numeric: bool,
-    mode_general: bool,
-    mode_human: bool,
-    mode_month: bool,
-    mode_random: bool,
-    mode_version: bool,
+    modes: ModeFlags,
 }
 
 impl GlobalOptionFlags {
     fn from_matches(matches: &ArgMatches) -> Self {
-        let sort_value = matches
-            .get_one::<String>(options::modes::SORT)
-            .map(String::as_str);
         Self {
             keys_specified: matches.contains_id(options::KEY),
             ignore_leading_blanks: matches.get_flag(options::IGNORE_LEADING_BLANKS),
@@ -1693,16 +1638,7 @@ impl GlobalOptionFlags {
             ignore_case: matches.get_flag(options::IGNORE_CASE),
             ignore_non_printing: matches.get_flag(options::IGNORE_NONPRINTING),
             reverse: matches.get_flag(options::REVERSE),
-            mode_human: matches.get_flag(options::modes::HUMAN_NUMERIC)
-                || sort_value == Some("human-numeric"),
-            mode_month: matches.get_flag(options::modes::MONTH) || sort_value == Some("month"),
-            mode_general: matches.get_flag(options::modes::GENERAL_NUMERIC)
-                || sort_value == Some("general-numeric"),
-            mode_numeric: matches.get_flag(options::modes::NUMERIC)
-                || sort_value == Some("numeric"),
-            mode_version: matches.get_flag(options::modes::VERSION)
-                || sort_value == Some("version"),
-            mode_random: matches.get_flag(options::modes::RANDOM) || sort_value == Some("random"),
+            modes: ModeFlags::from_matches(matches),
         }
     }
 }
@@ -2101,25 +2037,25 @@ fn emit_debug_warnings(
     if flags.ignore_non_printing && !uses_non_printing {
         ignored_opts.push('i');
     }
-    if flags.mode_general && !uses_mode(SortMode::GeneralNumeric) {
+    if flags.modes.general_numeric && !uses_mode(SortMode::GeneralNumeric) {
         ignored_opts.push('g');
     }
-    if flags.mode_human && !uses_mode(SortMode::HumanNumeric) {
+    if flags.modes.human_numeric && !uses_mode(SortMode::HumanNumeric) {
         ignored_opts.push('h');
     }
-    if flags.mode_month && !uses_mode(SortMode::Month) {
+    if flags.modes.month && !uses_mode(SortMode::Month) {
         ignored_opts.push('M');
     }
-    if flags.mode_numeric && !uses_mode(SortMode::Numeric) {
+    if flags.modes.numeric && !uses_mode(SortMode::Numeric) {
         ignored_opts.push('n');
     }
-    if flags.mode_random && !uses_mode(SortMode::Random) {
+    if flags.modes.random && !uses_mode(SortMode::Random) {
         ignored_opts.push('R');
     }
     if reverse_ignored {
         ignored_opts.push('r');
     }
-    if flags.mode_version && !uses_mode(SortMode::Version) {
+    if flags.modes.version && !uses_mode(SortMode::Version) {
         ignored_opts.push('V');
     }
 
@@ -2140,11 +2076,24 @@ fn emit_debug_warnings(
     }
 }
 
+/// Whether option `id` was given several times with differing values.
+/// Repeating an option is fine as long as every occurrence has the same value.
+fn has_conflicting_values<T>(matches: &ArgMatches, id: &str) -> bool
+where
+    T: Clone + PartialEq + Send + Sync + 'static,
+{
+    matches.get_many::<T>(id).is_some_and(|mut values| {
+        values
+            .next()
+            .is_some_and(|first| values.any(|value| value != first))
+    })
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut settings = GlobalSettings {
-        numeric_locale: detect_numeric_locale(),
+        numeric_locale: NumInfoParseSettings::from_locale(),
         ..Default::default()
     };
 
@@ -2180,16 +2129,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), processed_args, 2)?;
 
     // Prevent -o/--output to be specified multiple times
-    if matches
-        .get_many::<OsString>(options::OUTPUT)
-        .is_some_and(|mut outputs| {
-            outputs
-                .next()
-                .as_ref()
-                .is_some_and(|first| outputs.any(|out| out != *first))
-        })
-    {
+    if has_conflicting_values::<OsString>(&matches, options::OUTPUT) {
         return Err(SortError::MultipleOutputFiles.into());
+    }
+
+    // Same as -o: repeating --compress-program is fine as long as the value is the same
+    if has_conflicting_values::<String>(&matches, options::COMPRESS_PROG) {
+        return Err(SortError::MultipleCompressPrograms.into());
+    }
+
+    // Prevent -t/--field-separator from being given different values. Raw
+    // values suffice: `\0` is the only spelling rewritten later, and argv cannot hold a NUL.
+    if has_conflicting_values::<OsString>(&matches, options::SEPARATOR) {
+        return Err(SortError::IncompatibleTabs.into());
     }
 
     settings.debug = matches.get_flag(options::DEBUG);
@@ -2243,25 +2195,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .unwrap_or_default()
     };
 
-    let mut mode_flags = ModeFlags {
-        human_numeric: matches.get_flag(options::modes::HUMAN_NUMERIC),
-        month: matches.get_flag(options::modes::MONTH),
-        general_numeric: matches.get_flag(options::modes::GENERAL_NUMERIC),
-        numeric: matches.get_flag(options::modes::NUMERIC),
-        version: matches.get_flag(options::modes::VERSION),
-        random: matches.get_flag(options::modes::RANDOM),
-    };
-    if let Some(sort_arg) = matches.get_one::<String>(options::modes::SORT) {
-        match sort_arg.as_str() {
-            "human-numeric" => mode_flags.human_numeric = true,
-            "month" => mode_flags.month = true,
-            "general-numeric" => mode_flags.general_numeric = true,
-            "numeric" => mode_flags.numeric = true,
-            "version" => mode_flags.version = true,
-            "random" => mode_flags.random = true,
-            _ => {}
-        }
-    }
+    let mode_flags = ModeFlags::from_matches(&matches);
 
     let dictionary_order = matches.get_flag(options::DICTIONARY_ORDER);
     let ignore_non_printing = matches.get_flag(options::IGNORE_NONPRINTING);
@@ -2288,17 +2222,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.ignore_non_printing = ignore_non_printing;
     settings.ignore_case = ignore_case;
 
-    // WASI doesn't support threads, so we ignore the corresponding option
+    let threads = match matches.get_one::<String>(options::PARALLEL) {
+        Some(value) => parse_parallel(value)?,
+        None => std::thread::available_parallelism().map_or(1, |n| n.get() as u64),
+    };
+    // WASI doesn't support threads, so the value is only validated there
     #[cfg(not(target_os = "wasi"))]
-    {
-        let threads = matches
-            .get_one::<u64>(options::PARALLEL)
-            .copied()
-            .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get() as u64));
-        let _ = rayon::ThreadPoolBuilder::new()
-            .num_threads(threads as usize)
-            .build_global();
-    }
+    let _ = rayon::ThreadPoolBuilder::new()
+        .num_threads(threads as usize)
+        .build_global();
+    #[cfg(target_os = "wasi")]
+    let _ = threads;
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
         settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|error| {
@@ -2389,21 +2323,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
     settings.merge = matches.get_flag(options::MERGE);
 
-    settings.check = matches.contains_id(options::check::CHECK);
-    if settings.check && matches.get_flag(options::check::CHECK_SILENT) {
+    let check_modes: Vec<&str> = matches
+        .get_many::<String>(options::check::CHECK)
+        .map(|modes| modes.map(String::as_str).collect())
+        .unwrap_or_default();
+    let check_silent = matches.get_flag(options::check::CHECK_SILENT)
+        || check_modes
+            .iter()
+            .any(|m| matches!(*m, options::check::SILENT | options::check::QUIET));
+    let check_diagnose = check_modes.contains(&options::check::DIAGNOSE_FIRST);
+    if check_silent && check_diagnose {
         return Err(incompatible_options_error("cC"));
     }
-    if matches.get_flag(options::check::CHECK_SILENT)
-        || matches!(
-            matches
-                .get_one::<String>(options::check::CHECK)
-                .map(String::as_str),
-            Some(options::check::SILENT | options::check::QUIET)
-        )
-    {
-        settings.check_silent = true;
-        settings.check = true;
-    }
+    settings.check = check_silent || check_diagnose;
+    settings.check_silent = check_silent;
 
     if matches.contains_id(options::OUTPUT) && settings.check {
         let opts = if settings.check_silent { "Co" } else { "co" };
@@ -2422,7 +2355,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if settings.check && files.len() != 1 {
         return Err(UUsageError::new(
             2,
-            translate!("sort-extra-operand-not-allowed-with-c", "operand" => files[1].quote()),
+            translate_text!("sort-extra-operand-not-allowed-with-c", "operand" => files[1].quote()),
         ));
     }
 
@@ -2545,6 +2478,7 @@ pub fn uu_app() -> Command {
     .arg(
         Arg::new(options::modes::SORT)
             .long(options::modes::SORT)
+            .action(ArgAction::Append)
             .value_parser(ShortcutValueParser::new([
                 "general-numeric",
                 "human-numeric",
@@ -2612,6 +2546,8 @@ pub fn uu_app() -> Command {
             .long(options::check::CHECK)
             .require_equals(true)
             .num_args(0..)
+            .default_missing_value(options::check::DIAGNOSE_FIRST)
+            .action(ArgAction::Append)
             .value_parser(ShortcutValueParser::new([
                 options::check::SILENT,
                 options::check::QUIET,
@@ -2694,7 +2630,9 @@ pub fn uu_app() -> Command {
             .short('t')
             .long(options::SEPARATOR)
             .help(translate!("sort-help-separator"))
-            .value_parser(ValueParser::os_string()),
+            .value_parser(ValueParser::os_string())
+            // To detect differing occurrences and raise an error
+            .action(ArgAction::Append),
     )
     .arg(
         Arg::new(options::ZERO_TERMINATED)
@@ -2707,7 +2645,7 @@ pub fn uu_app() -> Command {
         Arg::new(options::PARALLEL)
             .long(options::PARALLEL)
             .help(translate!("sort-help-parallel"))
-            .value_parser(clap::value_parser!(u64).range(1..))
+            .allow_hyphen_values(true)
             .value_name("NUM_THREADS"),
     )
     .arg(
@@ -2730,7 +2668,9 @@ pub fn uu_app() -> Command {
             .long(options::COMPRESS_PROG)
             .help(translate!("sort-help-compress-prog"))
             .value_name("PROG")
-            .value_hint(clap::ValueHint::CommandName),
+            .value_hint(clap::ValueHint::CommandName)
+            // To detect multiple occurrences and raise an error
+            .action(ArgAction::Append),
     )
     .arg(
         Arg::new(options::BATCH_SIZE)
@@ -2766,9 +2706,10 @@ fn exec(
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
-    if settings.merge {
-        merge::merge(files, settings, output, tmp_dir)
-    } else if settings.check {
+    // GNU: --check takes precedence over --merge when both are given.
+    // With one file, check still runs; with multiple files, the earlier
+    // "extra operand … not allowed with -c" error already fired.
+    if settings.check {
         if files.len() > 1 {
             Err(UUsageError::new(
                 2,
@@ -2777,6 +2718,8 @@ fn exec(
         } else {
             check::check(files.first().unwrap(), settings)
         }
+    } else if settings.merge {
+        merge::merge(files, settings, output, tmp_dir)
     } else {
         // Open each input once, when it is reached, so that only one input is open
         // at a time and FIFOs are never reopened.
@@ -3263,7 +3206,7 @@ enum Month {
 }
 
 /// Cached locale month lookup table.
-/// Each entry is (uppercased_name, month_value).
+/// Each entry is (`uppercased_name`, `month_value`).
 type MonthTable = Vec<(Vec<u8>, Month)>;
 
 fn get_locale_month_table() -> Option<&'static MonthTable> {
@@ -3303,7 +3246,12 @@ fn get_locale_month_table() -> Option<&'static MonthTable> {
 /// Comparison against input is case-insensitive but NOT blank-insensitive:
 /// the input must match the stored name exactly (after leading blank trimming).
 fn month_parse(line: &[u8]) -> (Month, usize) {
-    let line = line.trim_ascii_start();
+    let mut line = line;
+    while let [first, rest @ ..] = line
+        && is_blank(*first)
+    {
+        line = rest;
+    }
 
     // Try locale-specific month names, keeping the longest match.
     // This handles cases where one name is a prefix of another
@@ -3429,6 +3377,33 @@ fn open_with_open_failed_error(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read 
             error,
         }
         .into()),
+    }
+}
+
+/// The thread count of `--parallel`, reported as GNU does: a leading `+`
+/// is accepted, zero is refused, and a value that is not a number, or has
+/// a suffix, is an invalid argument.
+fn parse_parallel(value: &str) -> UResult<u64> {
+    let digits = value.strip_prefix('+').unwrap_or(value);
+    let invalid = |key: &str| {
+        USimpleError::new(
+            2,
+            translate!(key, "option" => options::PARALLEL, "arg" => value.quote()),
+        )
+    };
+    if !digits.starts_with(|c: char| c.is_ascii_digit()) {
+        return Err(invalid("sort-invalid-option-arg"));
+    }
+    if !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(invalid("sort-invalid-suffix-in-option-arg"));
+    }
+    match digits.parse::<u64>() {
+        Ok(0) => Err(USimpleError::new(
+            2,
+            translate!("sort-parallel-must-be-nonzero"),
+        )),
+        Ok(threads) => Ok(threads),
+        Err(_) => Err(invalid("sort-option-arg-too-large")),
     }
 }
 

@@ -34,6 +34,8 @@ use uucore::locale::get_message;
 
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// Post-process a generated manpage to fix mandoc lint issues
 ///
 /// This function:
@@ -161,7 +163,7 @@ fn gen_manpage<T: Args>(
 
     // Generate the manpage to a buffer first so we can post-process it
     let mut buffer = Vec::new();
-    let man = Man::new(command);
+    let man = Man::new(command.version(VERSION));
     man.render(&mut buffer).expect("Man page generation failed");
 
     // Convert to string for processing
@@ -518,14 +520,8 @@ impl MDWriter<'_, '_> {
 
     /// # Errors
     /// Returns an error if the writer fails.
-    /// # Panics
-    /// Panics if the version is not found.
     fn version(&mut self) -> io::Result<()> {
-        writeln!(
-            self.w,
-            "<div class=\"version\">v{}</div>",
-            self.command.render_version().split_once(' ').unwrap().1
-        )
+        writeln!(self.w, "<div class=\"version\">v{VERSION}</div>")
     }
 
     /// # Errors
@@ -666,16 +662,22 @@ fn write_zip_examples(
     name: &str,
     output_markdown: bool,
 ) -> io::Result<String> {
-    let content = if let Some(f) = get_zip_content(archive, &format!("pages/common/{name}.md")) {
-        f
-    } else if let Some(f) = get_zip_content(archive, &format!("pages/linux/{name}.md")) {
-        f
+    // Linux pages for these utilities can describe other implementations or shell builtins.
+    let platforms = if matches!(name, "hostname" | "kill" | "more" | "uptime") {
+        ["common", "linux"]
     } else {
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("Could not find tldr examples for {name}"),
-        ));
+        // Prefer GNU-specific examples over generic POSIX examples.
+        ["linux", "common"]
     };
+    let content = platforms
+        .into_iter()
+        .find_map(|platform| get_zip_content(archive, &format!("pages/{platform}/{name}.md")))
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Could not find tldr examples for {name}"),
+            )
+        })?;
 
     match format_examples(content, output_markdown) {
         Err(e) => Err(io::Error::other(format!(
@@ -685,7 +687,7 @@ fn write_zip_examples(
     }
 }
 
-/// Format examples using std::fmt::Write
+/// Format examples using [`std::fmt::Write`]
 fn format_examples(content: String, output_markdown: bool) -> Result<String, std::fmt::Error> {
     use std::fmt::Write;
     let mut s = String::new();
@@ -718,6 +720,42 @@ fn format_examples(content: String, output_markdown: bool) -> Result<String, std
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[rstest::rstest]
+    #[case("head", &["common", "linux"], "linux")]
+    #[case("head", &["linux"], "linux")]
+    #[case("head", &["common"], "common")]
+    #[case("hostname", &["common", "linux"], "common")]
+    #[case("kill", &["common", "linux"], "common")]
+    #[case("more", &["common", "linux"], "common")]
+    #[case("uptime", &["common", "linux"], "common")]
+    #[case("uptime", &["linux"], "linux")]
+    #[case("uptime", &["common"], "common")]
+    fn test_tldr_page_selection(
+        #[case] name: &str,
+        #[case] platforms: &[&str],
+        #[case] expected: &str,
+        #[values(false, true)] markdown: bool,
+    ) {
+        let mut zip = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
+        for platform in platforms {
+            zip.start_file(
+                format!("pages/{platform}/{name}.md"),
+                zip::write::SimpleFileOptions::default(),
+            )
+            .unwrap();
+            writeln!(zip, "- {platform} example:\n\n`{name} file`").unwrap();
+        }
+        let mut archive = ZipArchive::new(zip.finish().unwrap()).unwrap();
+        let output = write_zip_examples(&mut archive, name, markdown).unwrap();
+        assert!(output.contains(&format!("{expected} example:")), "{output}");
+        let other = if expected == "linux" {
+            "common"
+        } else {
+            "linux"
+        };
+        assert!(!output.contains(&format!("{other} example:")), "{output}");
+    }
 
     #[test]
     fn test_post_process_manpage_fixes_th_header() {

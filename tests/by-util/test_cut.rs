@@ -265,6 +265,22 @@ fn test_output_delimiter() {
 }
 
 #[test]
+fn test_output_delimiter_starting_with_hyphen() {
+    for args in [
+        ["--output-delimiter", "-x"],
+        ["-O", "-x"],
+        ["--output-delimiter", "-1"],
+    ] {
+        new_ucmd!()
+            .args(&["-d,", "-f1,2"])
+            .args(&args)
+            .pipe_in("a,b\n")
+            .succeeds()
+            .stdout_only(format!("a{}b\n", args[1]));
+    }
+}
+
+#[test]
 fn test_complement() {
     for param in ["--complement", "--com"] {
         new_ucmd!()
@@ -349,6 +365,18 @@ fn test_equal_as_delimiter() {
             .succeeds()
             .stdout_only("./out/lib\n");
     }
+}
+
+#[test]
+fn test_equal_delimiter_file_operand_after_double_dash() {
+    // After `--`, a file named `-d=` is an operand and must not be rewritten
+    // to `--delimiter==`. #15806
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("-d=", "a:b:c\n");
+    at.write("--delimiter==", "x:y:z\n");
+    ucmd.args(&["-d:", "-f2", "--", "-d="])
+        .succeeds()
+        .stdout_only("b\n");
 }
 
 #[test]
@@ -685,6 +713,51 @@ fn test_output_delimiter_with_adjacent_ranges() {
 }
 
 #[test]
+fn test_output_delimiter_with_adjacent_field_ranges_unterminated_line() {
+    // The last field belongs to the second range; once the line has run out of
+    // fields it must not be written again for the ranges that follow.
+    new_ucmd!()
+        .args(&["-f1-2,3", "--output-delimiter=:"])
+        .pipe_in("a\tb")
+        .succeeds()
+        .stdout_only("a:b\n");
+    new_ucmd!()
+        .args(&["-d,", "-f2-3,4-", "--output-delimiter=:"])
+        .pipe_in("a,b,c")
+        .succeeds()
+        .stdout_only("b:c\n");
+    // Terminated lines were already right, including before an unterminated one.
+    new_ucmd!()
+        .args(&["-f1-2,3", "--output-delimiter=:"])
+        .pipe_in("a\tb\na\tb")
+        .succeeds()
+        .stdout_only("a:b\na:b\n");
+    new_ucmd!()
+        .args(&["-z", "-d,", "-f1-2,3", "-O:"])
+        .pipe_in(&b"a,b"[..])
+        .succeeds()
+        .stdout_only_bytes(&b"a:b\0"[..]);
+}
+
+#[test]
+fn test_whitespace_delimited_adjacent_field_ranges_unterminated_line() {
+    // These modes share the field writer and have a default output delimiter,
+    // so they hit the same case without --output-delimiter.
+    new_ucmd!()
+        .args(&["-F", "1-2,3"])
+        .pipe_in("a b")
+        .succeeds()
+        .stdout_only("a b\n");
+    // A trimmed line has lost its terminator by the time it is split, so even a
+    // terminated input line takes the unterminated path.
+    new_ucmd!()
+        .args(&["--whitespace-delimited=trimmed", "-f1-2,3"])
+        .pipe_in(" a b \n")
+        .succeeds()
+        .stdout_only("a\tb\n");
+}
+
+#[test]
 fn test_fields_merged() {
     // -F: merge adjacent delimiters, default delimiter whitespace, output a space.
     new_ucmd!()
@@ -771,6 +844,35 @@ fn test_whitespace_delimited_trimmed_zero_terminated() {
         .pipe_in(&b"\t \0 amber violet \0"[..])
         .succeeds()
         .stdout_only_bytes(&b"amber\0"[..]);
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+#[cfg(target_os = "linux")]
+fn test_whitespace_delimited_trimmed_unicode_blanks() {
+    // In a UTF-8 locale the field splitter treats Unicode blanks such as
+    // U+3000 (e3 80 80) as delimiters, so trimming must strip them too, or a
+    // leading one empties field 1 and a trailing one adds an empty last field.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-w=trimmed", "-f1"])
+        .pipe_in(&b"\xe3\x80\x80shutdown now\n"[..])
+        .succeeds()
+        .stdout_only("shutdown\n");
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-w=trimmed", "-f2-", "--output-delimiter=|"])
+        .pipe_in(&b" \xe3\x80\x80red\xe2\x80\x83blue \xe3\x80\x80\n"[..])
+        .succeeds()
+        .stdout_only("blue\n");
+    // A one-word line padded with Unicode blanks has no delimiter left after
+    // trimming, so -s drops it.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-s", "-w=trimmed", "-f1"])
+        .pipe_in(&b"\xe3\x80\x80alone\xe3\x80\x80\nnot alone\n"[..])
+        .succeeds()
+        .stdout_only("not\n");
 }
 
 #[test]

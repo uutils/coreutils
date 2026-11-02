@@ -189,37 +189,9 @@ static CHECKSUM_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 // each source is parsed and leaked once instead of on every switch
 static RESOURCES: Mutex<BTreeMap<String, &'static FluentResource>> = Mutex::new(BTreeMap::new());
 thread_local! {
-    #[cfg_attr(
-        any(
-            target_os = "android",
-            target_os = "haiku",
-            target_os = "illumos",
-            all(target_os = "linux", target_env = "ohos"),
-            target_os = "openbsd",
-            target_os = "solaris",
-            all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))),
-        allow(
-            clippy::missing_const_for_thread_local,
-            reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
-        )
-    )]
     static LOCALIZER: RefCell<Option<Localizer>> = const { RefCell::new(None) };
     /// Built on the first lookup that misses every ordinary bundle; `None`
     /// when there are no error strings to be found at all.
-    #[cfg_attr(
-        any(
-            target_os = "android",
-            target_os = "haiku",
-            target_os = "illumos",
-            all(target_os = "linux", target_env = "ohos"),
-            target_os = "openbsd",
-            target_os = "solaris",
-            all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))),
-        allow(
-            clippy::missing_const_for_thread_local,
-            reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
-        )
-    )]
     static ERRORS_BUNDLE: OnceLock<Option<FluentBundle<FluentResource>>> =
         const { OnceLock::new() };
 }
@@ -373,7 +345,7 @@ fn parse_fluent_resource_owned(content: &str) -> Result<FluentResource, Localiza
     )
 }
 
-/// Helper function to parse FluentResource from content string
+/// Helper function to parse [`FluentResource`] from content string
 fn parse_fluent_resource(
     content: &str,
     cache: &'static OnceLock<FluentResource>,
@@ -641,20 +613,6 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
 pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     // Avoid duplicated and high-cost localizer setup
     thread_local! {
-        #[cfg_attr(
-            any(
-                target_os = "android",
-                target_os = "haiku",
-                target_os = "illumos",
-                all(target_os = "linux", target_env = "ohos"),
-                target_os = "openbsd",
-                target_os = "solaris",
-                all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))),
-            allow(
-                clippy::missing_const_for_thread_local,
-                reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
-            )
-        )]
         static LOCALIZED_UTIL: RefCell<Option<String>> = const { RefCell::new(None) };
     }
     if LOCALIZED_UTIL.with_borrow(|util| util.as_deref() == Some(p)) {
@@ -900,7 +858,8 @@ macro_rules! translate {
 }
 
 // Re-export the macros for easier access
-pub use {translate, translate_text};
+pub use translate;
+pub use translate_text;
 
 #[cfg(test)]
 mod tests {
@@ -917,9 +876,8 @@ mod tests {
             "locale table uses a raw string; content containing `\"#` becomes code"
         );
     }
-    use std::env;
-    use std::fs;
     use std::path::PathBuf;
+    use std::{env, fs};
     use tempfile::TempDir;
 
     #[test]
@@ -1127,7 +1085,7 @@ invalid-syntax = This is { $missing
     /// have been loaded (`util_loaded`) and returns `Err` otherwise, allowing
     /// the embedded-locale fallback path to kick in.
     ///
-    /// https://github.com/uutils/coreutils/issues/11854
+    /// <https://github.com/uutils/coreutils/issues/11854>
     #[test]
     fn test_create_bundle_returns_err_when_util_locale_missing() {
         // Build a temporary directory structure that mimics the repo layout

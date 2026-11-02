@@ -156,8 +156,6 @@ else
         echo "strip t${i}.sh from Makefile and tests/local.mk"
         sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile tests/local.mk
     done
-    # Remove LD_PRELOAD implementation of no-mtab-status-masked-proc. not compatible with our binary
-    sed -i '/tests\/df\/no-mtab-status.sh/ D' Makefile
     # Remove tests checking for --version & --help
     # Not really interesting for us and logs are too big
     sed -i '/tests\/help\/help-version.sh/ D' Makefile
@@ -239,7 +237,7 @@ grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r "${SED}
 # we should not regress our project just to match what GNU is going.
 # So, do some changes on the fly
 
-# GNU uses read/write and the test depends on the fact that write:retval=1 losts byte due to read.
+# GNU uses read/write and the test depends on the fact that write:retval=1 loses byte due to read.
 # However, splice:retval=1 does not consume bytes in pipe. So verifying splice path needs different setup.
 # Fire read/write code path by disabling splice
 sed -i 's/-e trace=write /-e trace=write,splice -e fault=splice /' tests/tee/short-write.sh
@@ -284,9 +282,6 @@ sed -i -e "s|invalid suffix in --pages argument|invalid --pages argument|" \
 # it hit the decode error, while we don't write anything if the input is invalid.
 sed -i "s/\(baddecode.*OUT=>\"\).*\"/\1\"/g" tests/basenc/base64.pl
 sed -i "s/\(\(b2[ml]_[69]\|z85_8\|z85_35\).*OUT=>\)[^}]*\(.*\)/\1\"\"\3/g" tests/basenc/basenc.pl
-
-# add "error: " to the expected error message
-sed -i "s/\$prog: invalid input/\$prog: error: invalid input/g" tests/basenc/basenc.pl
 
 # basenc: swap out error message for unexpected arg
 sed -i "s/  {ERR=>\"\$prog: foobar\\\\n\" \. \$try_help }/  {ERR=>\"error: unexpected argument '--foobar' found\n\n  tip: to pass '--foobar' as a value, use '-- --foobar'\n\nUsage: basenc [OPTION]... [FILE]\n\nFor more information, try '--help'.\n\"}]/" tests/basenc/basenc.pl

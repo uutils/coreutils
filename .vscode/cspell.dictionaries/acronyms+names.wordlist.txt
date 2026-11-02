@@ -8,6 +8,7 @@ CATV # busybox cat -v feature flag
 CICD # continuous integration/deployment
 CPU
 CPUs
+cquotes
 DevOps
 Ext3
 FIFO

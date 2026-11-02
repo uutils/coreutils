@@ -4,19 +4,14 @@
 // file that was distributed with this source code.
 
 use super::ExtendedBigDecimal;
+use crate::error::set_exit_code;
 use crate::format::spec::ArgumentLocation;
-use crate::{
-    error::set_exit_code,
-    os_str_as_bytes,
-    parser::num_parser::{ExtendedParser, ExtendedParserError},
-    quoting_style::{QuotingStyle, locale_aware_escape_name},
-    show_error, show_warning,
-};
+use crate::parser::num_parser::{ExtendedParser, ExtendedParserError};
+use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
+use crate::{os_str_as_bytes, show_error, show_warning};
 use os_display::Quotable;
-use std::{
-    ffi::{OsStr, OsString},
-    num::NonZero,
-};
+use std::ffi::{OsStr, OsString};
+use std::num::NonZero;
 
 /// An argument for formatting
 ///
@@ -46,7 +41,7 @@ pub struct FormatArguments<'a> {
 }
 
 impl<'a> FormatArguments<'a> {
-    /// Create a new FormatArguments from a slice of FormatArgument
+    /// Create a new [`FormatArguments`] from a slice of [`FormatArgument`]
     pub fn new(args: &'a [FormatArgument]) -> Self {
         Self {
             args,
@@ -126,7 +121,7 @@ impl<'a> FormatArguments<'a> {
             return Err(ExtendedParserError::NotNumeric);
         };
 
-        let (Some((b'"', bytes)) | Some((b'\'', bytes))) = s.split_first() else {
+        let Some((b'"' | b'\'', bytes)) = s.split_first() else {
             // This really can't happen, the string we are given must start with '/".
             debug_assert!(false);
             return Err(ExtendedParserError::NotNumeric);
