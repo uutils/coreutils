@@ -154,6 +154,8 @@ fn test_date_rejects_input_that_cannot_take_a_timezone() {
         "2024-01-15 12:00 +0000 EST", // a numeric offset matching TZ
         "2024-01-15 12:00 -0500 EST", // a standalone negative offset
         "UTC 2024-01-15 12:00 EST",   // zone stated before the date
+        "2024-01-15 12:00-0500 EST",  // an offset glued to the time
+        "12-0500 EST",                // likewise, with an hour only
     ] {
         new_ucmd!()
             .env("LC_ALL", "C")
@@ -1576,6 +1578,37 @@ fn test_date_tz_abbreviation_utc_gmt() {
         .arg("2021-03-20 14:53:01 GMT")
         .arg("+%Y-%m-%d %H:%M:%S")
         .succeeds();
+}
+
+// 02:30 does not exist in America/New_York on 2024-03-10, but the input names
+// GMT, so the local DST rules must not shift it. A relative offset counts in
+// the named zone too: 24 hours of GMT, not the 23 hours of the local day that
+// crosses the spring-forward.
+#[rstest]
+#[case::rfc2822_gmt("Sun, 10 Mar 2024 02:30:00 GMT", "1710037800\n")]
+#[case::iso_utc("2024-03-10 02:30:00 UTC", "1710037800\n")]
+#[case::relative_hours("2024-03-09 12:00 24 hours GMT", "1710072000\n")]
+#[case::relative_hours_ago("2024-03-10 04:00 2 hours ago GMT", "1710036000\n")]
+#[case::relative_hours_across_fall_back("2024-11-03 00:00 3 hours GMT", "1730602800\n")]
+fn test_date_abbreviation_in_local_dst_gap(#[case] input: &str, #[case] expected: &str) {
+    new_ucmd!()
+        .env("TZ", "America/New_York")
+        .args(&["-d", input, "+%s"])
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
+fn test_date_file_abbreviation_in_local_dst_gap() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(
+        "dates",
+        "2024-03-31 02:30:00 UTC\nSun, 31 Mar 2024 02:30:00 GMT\n",
+    );
+    ucmd.env("TZ", "Europe/Berlin")
+        .args(&["-f", "dates", "+%s"])
+        .succeeds()
+        .stdout_only("1711852200\n1711852200\n");
 }
 
 #[test]
