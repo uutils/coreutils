@@ -4136,6 +4136,7 @@ dependencies = [
  "rstest",
  "rustc-hash",
  "rustix",
+ "tempfile",
  "uucore",
  "windows-sys",
 ]
