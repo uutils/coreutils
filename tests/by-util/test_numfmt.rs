@@ -2117,9 +2117,16 @@ fn test_repeated_field_is_an_error() {
 #[case::carriage_return("1\r2 3K\n", "1\r2 3000\n")]
 #[case::no_break_space("1\u{a0}2 3K\n", "1\u{a0}2 3000\n")]
 #[case::narrow_no_break_space("1\u{202f}2 3K\n", "1\u{202f}2 3000\n")]
-fn test_field_separator_is_a_blank(#[case] input: &str, #[case] expected: &str) {
-    // Only blanks separate fields, so these characters stay inside field 1.
+#[case::line_separator("1\u{2028}2 3K\n", "1\u{2028}2 3000\n")]
+fn test_field_separator_is_a_blank(
+    #[case] input: &str,
+    #[case] expected: &str,
+    #[values("C", "C.UTF-8")] locale: &str,
+) {
+    // Only blanks separate fields, so these characters stay inside field 1,
+    // in a UTF-8 locale too.
     new_ucmd!()
+        .env("LC_ALL", locale)
         .args(&["--from=si", "--field=2"])
         .pipe_in(input)
         .succeeds()
