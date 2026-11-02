@@ -131,20 +131,22 @@ impl Options {
                 (tmpdir, OsString::from(template))
             }
             Some(template) => {
-                let tmpdir = if let Some(tmpdir) =
-                    env::var_os(TMPDIR_ENV_VAR).filter(|val| !val.is_empty())
+                let tmpdir = if let Some(tmpdir) = env::var_os(TMPDIR_ENV_VAR)
                     && matches.get_flag(OPT_T)
                 {
-                    // A non-empty `$TMPDIR` has priority over `-p` when
-                    // `-t` is given. An empty `$TMPDIR` is treated as
-                    // unset, so `-p` or the system default is used instead.
                     Some(PathBuf::from(tmpdir))
                 } else if tmpdir.is_some() {
                     tmpdir
                 } else if matches.get_flag(OPT_T) || matches.contains_id(OPT_TMPDIR) {
-                    // If --tmpdir is given without an argument, or -t is given,
-                    // export in TMPDIR.
-                    Some(get_tmpdir_env_or_default())
+                    // If --tmpdir is given without an argument, or -t is given
+                    // export in TMPDIR
+                    #[cfg(target_os = "wasi")]
+                    // WASI's `std::env::temp_dir()` unconditionally panics
+                    let default_tmp_dir = env::var_os(TMPDIR_ENV_VAR)
+                        .map_or_else(|| PathBuf::from(FALLBACK_TMPDIR), PathBuf::from);
+                    #[cfg(not(target_os = "wasi"))]
+                    let default_tmp_dir = env::temp_dir();
+                    Some(default_tmp_dir)
                 } else {
                     None
                 };
