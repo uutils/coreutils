@@ -1068,12 +1068,14 @@ fn test_other_numeric_options_still_reject_values_above_the_limit() {
 }
 
 #[test]
-fn test_negative_starting_line_and_increment() {
-    new_ucmd!()
-        .args(&["-v", "-1"])
-        .pipe_in("a\nb\n")
-        .succeeds()
-        .stdout_is("    -1\ta\n     0\tb\n");
+fn test_negative_starting_line_as_a_separate_argument() {
+    for arg in ["-v", "--starting-line-number"] {
+        new_ucmd!()
+            .args(&[arg, "-1"])
+            .pipe_in("a\nb\n")
+            .succeeds()
+            .stdout_is("    -1\ta\n     0\tb\n");
+    }
 }
 
 #[test]
