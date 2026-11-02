@@ -958,7 +958,7 @@ fn test_empty_tmpdir_env_var_with_template() {
                 path.starts_with("/tmp"),
                 "expected a path under /tmp, got {path:?}",
             );
-            if args.contains(&"-d") {
+            if path.is_dir() {
                 let _ = std::fs::remove_dir(&path);
             } else {
                 let _ = std::fs::remove_file(&path);
