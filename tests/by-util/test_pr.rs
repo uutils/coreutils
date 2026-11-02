@@ -888,7 +888,7 @@ fn test_columns() {
     //
     //     "a\t\t\t\t    b\n";
     //
-    let data = "a                                  \tb                                  \n";
+    let data = "a                                  \tb\n";
     let blank_lines_60 = "\n".repeat(60);
     let pattern = format!("{header}{data}{blank_lines_60}");
     let regex = Regex::new(&pattern).unwrap();
@@ -912,7 +912,7 @@ fn test_columns_partly_filled_page() {
         .args(&["-t", "-2", "-w", "20"])
         .pipe_in("a\nb\nc\n")
         .succeeds()
-        .stdout_is("a        \tc        \nb        \n");
+        .stdout_is("a        \tc\nb\n");
 }
 
 #[test]
@@ -924,7 +924,7 @@ fn test_columns_partly_filled_page_across() {
         .args(&["-t", "-a", "-2", "-w", "20"])
         .pipe_in("a\nb\nc\n")
         .succeeds()
-        .stdout_is("a        \tb        \nc        \n");
+        .stdout_is("a        \tb\nc\n");
 }
 
 #[test]
@@ -936,14 +936,27 @@ fn test_columns_fewer_lines_than_columns() {
         .args(&["-t", "-3", "-w", "20"])
         .pipe_in("a\n")
         .succeeds()
-        .stdout_is("a     \n");
+        .stdout_is("a\n");
 
     // Command line: `printf "a\nb\n" | pr -t -3 -w 20`.
     new_ucmd!()
         .args(&["-t", "-3", "-w", "20"])
         .pipe_in("a\nb\n")
         .succeeds()
-        .stdout_is("a     \tb     \n");
+        .stdout_is("a     \tb\n");
+}
+
+#[test]
+fn test_columns_last_column_not_padded() {
+    // GNU pr pads a column only to line up the next one, so a line never ends
+    // with spaces.
+    //
+    // Command line: `printf "ab\nc\n" | pr -2 -t -w 9 -s'|'`.
+    new_ucmd!()
+        .args(&["-2", "-t", "-w", "9", "-s|"])
+        .pipe_in("ab\nc\n")
+        .succeeds()
+        .stdout_is("ab  |c\n");
 }
 
 #[test]
@@ -954,9 +967,9 @@ fn test_columns_last_page() {
     // Command line: `seq 9 | pr -2 -l 12 -w 20 -D DATE`.
     let header = "\n\nDATE          Page ";
     let expected = format!(
-        "{header}1\n\n\n1        \t3        \n2        \t4        \n{blank}\
-         {header}2\n\n\n5        \t7        \n6        \t8        \n{blank}\
-         {header}3\n\n\n9        \n\n\n\n\n\n\n",
+        "{header}1\n\n\n1        \t3\n2        \t4\n{blank}\
+         {header}2\n\n\n5        \t7\n6        \t8\n{blank}\
+         {header}3\n\n\n9\n\n\n\n\n\n\n",
         blank = "\n".repeat(5),
     );
     new_ucmd!()
@@ -982,9 +995,8 @@ fn test_merge() {
     //     "a\t\t\t\t    b\n";
     //
     // and the blank lines should actually be empty lines.
-    let data = "a                                  \tb                                  \n";
-    let blank_lines_55 =
-        "                                   \t                                   \n".repeat(55);
+    let data = "a                                  \tb\n";
+    let blank_lines_55 = "                                   \t\n".repeat(55);
     let footer = "\n".repeat(5);
     let pattern = format!("{header}{data}{blank_lines_55}{footer}");
     let regex = Regex::new(&pattern).unwrap();
@@ -1007,13 +1019,13 @@ fn test_merge_one_long_one_short() {
     let whitespace = " ".repeat(50);
     let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
     let header = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
-    let data = "a                                  \tb                                  \n";
+    let data = "a                                  \tb\n";
     let footer = "\n".repeat(5);
     let page1 = format!("{header}{data}{footer}");
 
     // Page 2 should have just the second line of `f`.
     let header = format!("\n\n{datetime_pattern}{whitespace}Page 2\n\n\n");
-    let data = "a                                  \t                                   \n";
+    let data = "a                                  \t\n";
     let page2 = format!("{header}{data}{footer}");
 
     let pattern = format!("{page1}{page2}");
