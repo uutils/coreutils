@@ -5,6 +5,8 @@
 
 // spell-checker:ignore nconfined
 
+use std::os::unix::fs::PermissionsExt;
+
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
 use uutests::new_ucmd;
@@ -63,6 +65,10 @@ fn test_comma_separated_symbolic_mode_is_accepted() {
     ts.ucmd().args(&["-m", "u=rwx,g=rx,o=", "fifo"]).succeeds();
     // A FIFO is not a regular file, so check the path itself.
     assert!(ts.fixtures.plus("fifo").exists());
+    assert_eq!(
+        ts.fixtures.metadata("fifo").permissions().mode() & 0o777,
+        0o750
+    );
 }
 
 #[test]
