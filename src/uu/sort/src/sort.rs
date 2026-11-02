@@ -2793,11 +2793,8 @@ pub fn merge_compare<'a>(
 #[cfg(feature = "i18n-collator")]
 #[inline(never)]
 fn compare_lines_with_collator(a: &Line<'_>, b: &Line<'_>, settings: &GlobalSettings) -> Ordering {
-    let mut cmp = locale_cmp(a.line, b.line);
-    if cmp == Ordering::Equal {
-        // Equal keys for inputs like `01` and `0_1`; fall back to (reversed) byte order.
-        cmp = b.line.cmp(a.line);
-    }
+    // `locale_cmp` already breaks collator ties by reversed bytes.
+    let cmp = locale_cmp(a.line, b.line);
     if settings.reverse { cmp.reverse() } else { cmp }
 }
 

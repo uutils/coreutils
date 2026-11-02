@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) ints (linux) NOFILE dfgi abmon avril naab
+// spell-checker:ignore (words) ints (linux) NOFILE dfgi abmon avril naab Xena
 
 #![allow(clippy::cast_possible_wrap)]
 
@@ -4134,6 +4134,56 @@ fn test_consistent_sorting_with_i18n_collate() {
         .arg("fix_i18n_collate_inconsistency_2.txt")
         .succeeds()
         .stdout_is(expected_output);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_unique_key_keeps_keys_the_collator_cannot_tell_apart() {
+    // The collator gives U+200B no weight, so these keys compare `Equal`
+    // there, but they are different strings and `-u` must keep both.
+    let locale = "en_US.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    let out = new_ucmd!()
+        .env("LC_ALL", locale)
+        .args(&["-u", "-k1,1"])
+        .pipe_in("ab x\na\u{200b}b y\n")
+        .succeeds()
+        .stdout_move_str();
+    // GNU orders the tie like a full sort does: by reversed bytes.
+    assert_eq!(out, "a\u{200b}b y\nab x\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_merge_breaks_collator_ties_like_a_full_sort() {
+    // The collator gives U+200B and `_` no weight, so these pairs tie there. A
+    // full sort orders such a tie by reversed bytes, and `-m` must do the same
+    // rather than fall back to the file order or to forward bytes.
+    let locale = "en_US.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    for (first, second, expected) in [
+        ("ab", "a\u{200b}b", "a\u{200b}b\nab\n"),
+        ("01", "0_1", "0_1\n01\n"),
+    ] {
+        let ts = TestScenario::new("sort");
+        ts.fixtures.write("a.txt", &format!("{first}\n"));
+        ts.fixtures.write("b.txt", &format!("{second}\n"));
+
+        ts.ucmd()
+            .env("LC_ALL", locale)
+            .args(&["a.txt", "b.txt"])
+            .succeeds()
+            .stdout_is(expected);
+        ts.ucmd()
+            .env("LC_ALL", locale)
+            .args(&["-m", "a.txt", "b.txt"])
+            .succeeds()
+            .stdout_is(expected);
+    }
 }
 
 #[test]

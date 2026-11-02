@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) autoformat nocheck FILENUM
+// spell-checker:ignore (words) autoformat nocheck FILENUM svcabc
 
 use rstest::rstest;
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
@@ -920,6 +920,24 @@ fn test_locale_collation() {
         .succeeds()
         .stdout_contains("abc:d 2 y")
         .stdout_contains("ab:d 1 x");
+}
+
+#[uutests::wasi_ignore(NoLocaleData)]
+#[cfg(unix)]
+#[test]
+fn test_locale_collation_does_not_pair_punctuation_variants() {
+    // The collator gives no weight to `-`, but the keys differ.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("accounts", "admin:1\n");
+    at.write("requests", "ad-min:2\n");
+
+    ts.ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["-t:", "accounts", "requests"])
+        .succeeds()
+        .no_stdout();
 }
 
 #[uutests::wasi_ignore(Usize32BitOverflow)]
