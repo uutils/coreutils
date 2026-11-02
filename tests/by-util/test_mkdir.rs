@@ -1270,6 +1270,8 @@ mod diagnostics {
 
     #[test]
     fn test_comma_separated_mode_is_rejected() {
+        use std::os::unix::fs::PermissionsExt;
+
         // A numeric mode has to be the whole mode, so it cannot share the
         // list with anything else.
         for mode in ["1,2", "755,u+w", "+1,2", "u=r,2", "1,u=w"] {
@@ -1285,7 +1287,6 @@ mod diagnostics {
         }
 
         // A purely symbolic comma-separated mode is still valid.
-        use std::os::unix::fs::PermissionsExt;
         let ts = TestScenario::new(util_name!());
         ts.ucmd()
             .args(&["-m", "u=rwx,g=rx,o=", "good_dir"])
@@ -1296,7 +1297,7 @@ mod diagnostics {
             .permissions()
             .mode()
             & 0o777;
-        assert_eq!(mode, 0o754);
+        assert_eq!(mode, 0o750);
     }
 
     #[test]

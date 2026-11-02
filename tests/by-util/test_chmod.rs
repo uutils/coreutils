@@ -2215,7 +2215,7 @@ fn test_numeric_mode_must_be_the_whole_mode() {
         ts.ucmd()
             .args(&[mode, "probe"])
             .fails_with_code(1)
-            .stderr_contains("invalid mode");
+            .stderr_contains("invalid operator");
     }
 
     // On its own the same number is fine.
