@@ -116,13 +116,14 @@ struct Context<'a> {
     root: &'a Path,
 }
 
-// True if the path ends with a dot component (e.g. ".", "./", "dir/.").
-fn ends_with_curdir(path: &Path) -> bool {
+// True if the path ends with a "." or ".." component (e.g. ".", "dir/.", "..", "dir/../").
+fn ends_with_dot_component(path: &Path) -> bool {
     let mut bytes = path.as_os_str().as_encoded_bytes();
     while let [rest @ .., b'/' | b'\\'] = bytes {
         bytes = rest;
     }
-    bytes == b"." || bytes.ends_with(b"/.") || bytes.ends_with(b"\\.")
+    let last = bytes.rsplit(|&b| b == b'/' || b == b'\\').next();
+    matches!(last, Some(b"." | b".."))
 }
 
 impl<'a> Context<'a> {
@@ -133,7 +134,7 @@ impl<'a> Context<'a> {
             env::current_dir()?
         };
         let root_path = current_dir.join(root);
-        let root_parent = if target.exists() && !ends_with_curdir(root) {
+        let root_parent = if target.exists() && !ends_with_dot_component(root) {
             root_path.parent().map(ToOwned::to_owned)
         } else {
             Some(root_path)
