@@ -1759,6 +1759,31 @@ fn test_final_offset_printed_when_an_input_fails() {
     // "Bad file descriptor"), so only the prefix is checked here.
     ucmd.args(&["a.txt", "d"])
         .fails_with_code(1)
-        .stdout_contains("0000002")
+        .stdout_is("0000000 005141\n0000002\n")
         .stderr_contains("od: d:");
+}
+
+#[test]
+#[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_final_offset_printed_for_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+
+    // A directory can be opened but not read, so GNU still prints the final
+    // offset even though no data was decoded.
+    ucmd.arg("d")
+        .fails_with_code(1)
+        .stdout_is("0000000\n")
+        .stderr_contains("od: d:");
+}
+
+#[test]
+fn test_no_final_offset_when_no_input_can_be_opened() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("missing")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("od: missing:");
 }
