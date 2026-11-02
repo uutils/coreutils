@@ -868,6 +868,29 @@ fn test_locale_collation() {
         .stdout_contains("ab:d 1 x");
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
+#[test]
+fn test_non_utf8_locale_orders_by_bytes_like_sort() {
+    // `sort` only collates in UTF-8 locales, so under `en_US` it writes `Zzz`
+    // before `sudo`. `join` has to read that order back the same way, or it
+    // rejects the input and drops the shared key.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("requested", "Zzz\nsudo\n");
+    at.write("denied", "adm\nsudo\n");
+
+    for locale in ["en_US", "ru_RU.KOI8-R"] {
+        ts.ucmd()
+            .env("LC_ALL", locale)
+            .arg("--check-order")
+            .arg("requested")
+            .arg("denied")
+            .succeeds()
+            .stdout_only("sudo\n");
+    }
+}
+
 #[uutests::wasi_ignore(Usize32BitOverflow)]
 #[test]
 fn test_incompatible_fields_reports_exact_field_number() {

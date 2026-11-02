@@ -790,6 +790,33 @@ fn test_locale_collation() {
         .stdout_only("a1\n");
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
+#[test]
+fn test_non_utf8_locale_orders_by_bytes_like_sort() {
+    // `sort` only collates in UTF-8 locales, so under `en_US` it writes `Zzz`
+    // before `sudo`. `comm` has to read that order back the same way, or it
+    // reports the shared `sudo` as unique to each file.
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("requested", "Zzz\nsudo\n");
+    scene.fixtures.write("denied", "adm\nsudo\n");
+
+    for locale in ["en_US", "ru_RU.KOI8-R"] {
+        scene
+            .ucmd()
+            .env("LC_ALL", locale)
+            .args(&["-23", "requested", "denied"])
+            .succeeds()
+            .stdout_only("Zzz\n");
+
+        scene
+            .ucmd()
+            .env("LC_ALL", locale)
+            .args(&["-12", "requested", "denied"])
+            .succeeds()
+            .stdout_only("sudo\n");
+    }
+}
+
 #[test]
 #[cfg(unix)]
 fn test_c_locale_still_orders_by_bytes() {
