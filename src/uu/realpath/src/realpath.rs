@@ -298,11 +298,6 @@ fn resolve_path(
     relative_base: Option<&Path>,
 ) -> std::io::Result<()> {
     let abs = canonicalize(p, can_mode, resolve)?;
-    if resolve == ResolveMode::None && can_mode == MissingHandling::Existing {
-        // `-s` stops symlink resolution, so `canonicalize` never looks at the
-        // final component; `-e` still requires it to exist.
-        abs.metadata()?;
-    }
     if can_mode == MissingHandling::Normal {
         let path_bytes = p.as_os_str().as_encoded_bytes();
         if path_bytes.ends_with(b"/.") || path_bytes.ends_with(b"/./") {
