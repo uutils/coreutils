@@ -1372,6 +1372,252 @@ fn test_du_time_unaffected_by_exclude() {
     assert!(stdout.contains("\td\n"), "missing dir entry: {stdout}");
 }
 
+/// `du -S -c` still totals every directory. `--separate-dirs` only changes
+/// the per-directory figure; the grand total keeps subdirectory usage.
+#[test]
+fn test_du_total_separate_dirs_includes_subdirectories() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("d/sub");
+    at.write("d/a.txt", "aaaaaaaa");
+    at.write("d/sub/nested.txt", "bbbb");
+
+    #[cfg(not(windows))]
+    let sub = "d/sub";
+    #[cfg(windows)]
+    let sub = "d\\sub";
+
+    let args = ["-b", "--separate-dirs", "--total", "d"];
+    ts.ucmd()
+        .args(&args)
+        .succeeds()
+        .stdout_only(format!("4\t{sub}\n8\td\n12\ttotal\n"));
+    assert_du_matches_gnu(&ts, &args);
+
+    // `--max-depth=0` hides the subdirectory line, but its bytes stay in the total.
+    let args = ["-b", "-S", "-c", "-d", "0", "d"];
+    ts.ucmd()
+        .args(&args)
+        .succeeds()
+        .stdout_only("8\td\n12\ttotal\n");
+    assert_du_matches_gnu(&ts, &args);
+
+    // Without -S the top entry already includes the subdirectory, so the total
+    // must not add it a second time.
+    let args = ["-b", "--total", "d"];
+    ts.ucmd()
+        .args(&args)
+        .succeeds()
+        .stdout_only(format!("4\t{sub}\n12\td\n12\ttotal\n"));
+    assert_du_matches_gnu(&ts, &args);
+
+    // `-a` lists files, which are already counted in their directory.
+    let args = ["-b", "-S", "-a", "-c", "d"];
+    let result = ts.ucmd().args(&args).succeeds();
+    let total = result.stdout_str().lines().next_back().unwrap();
+    assert_eq!(
+        total,
+        "12\ttotal",
+        "file lines double-counted: {}",
+        result.stdout_str()
+    );
+    assert_du_matches_gnu(&ts, &args);
+}
+
+/// Block size is applied to the summed byte count, not to each directory line.
+#[test]
+fn test_du_total_separate_dirs_block_size() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("d/sub");
+    at.write("d/a.txt", "aa");
+    at.write("d/sub/nested.txt", "bb");
+
+    #[cfg(not(windows))]
+    let sub = "d/sub";
+    #[cfg(windows)]
+    let sub = "d\\sub";
+
+    // ceil(2/3) = 1 per directory, ceil(4/3) = 2 for the total.
+    let args = ["--apparent-size", "-B", "3", "-S", "-c", "d"];
+    ts.ucmd()
+        .args(&args)
+        .succeeds()
+        .stdout_only(format!("1\t{sub}\n1\td\n2\ttotal\n"));
+    assert_du_matches_gnu(&ts, &args);
+}
+
+#[cfg(not(windows))]
+fn assert_du_matches_gnu(ts: &TestScenario, args: &[&str]) {
+    let result = ts.ucmd().args(args).succeeds();
+    let reference = unwrap_or_return!(expected_result(ts, args));
+    if reference.succeeded() {
+        assert_eq!(result.stdout_str(), reference.stdout_str());
+        assert_eq!(result.stderr_str(), reference.stderr_str());
+    }
+}
+
+#[cfg(windows)]
+fn assert_du_matches_gnu(_ts: &TestScenario, _args: &[&str]) {}
+
+#[cfg(feature = "touch")]
+#[test]
+fn test_du_total_time_column() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("d/sub");
+    at.write("d/old.txt", "a");
+    at.write("d/sub/new.txt", "b");
+
+    for path in ["d/old.txt", "d", "d/sub"] {
+        ts.ccmd("touch")
+            .env("TZ", "UTC")
+            .args(&["-m", "-t", "202001010000"])
+            .arg(at.plus(path))
+            .succeeds();
+    }
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .args(&["-m", "-t", "202403011800"])
+        .arg(at.plus("d/sub/new.txt"))
+        .succeeds();
+    // Touching the nested file bumps directory mtimes; put those back so -S
+    // reports the directory's own time, not "now".
+    for path in ["d", "d/sub"] {
+        ts.ccmd("touch")
+            .env("TZ", "UTC")
+            .args(&["-m", "-t", "202001010000"])
+            .arg(at.plus(path))
+            .succeeds();
+    }
+
+    #[cfg(not(windows))]
+    let sub = "d/sub";
+    #[cfg(windows)]
+    let sub = "d\\sub";
+
+    let args = ["-b", "--time", "--total", "d"];
+    ts.ucmd()
+        .env("TZ", "UTC")
+        .args(&args)
+        .succeeds()
+        .stdout_only(format!(
+            "1\t2024-03-01 18:00\t{sub}\n2\t2024-03-01 18:00\td\n2\t2024-03-01 18:00\ttotal\n"
+        ));
+    assert_du_matches_gnu(&ts, &args);
+
+    let args = ["-b", "--time", "--time-style=iso", "-c", "d"];
+    ts.ucmd()
+        .env("TZ", "UTC")
+        .args(&args)
+        .succeeds()
+        .stdout_only(format!(
+            "1\t2024-03-01\t{sub}\n2\t2024-03-01\td\n2\t2024-03-01\ttotal\n"
+        ));
+    assert_du_matches_gnu(&ts, &args);
+
+    let args = ["-b", "--time", "--time-style=full-iso", "-c", "d"];
+    ts.ucmd()
+        .env("TZ", "UTC")
+        .args(&args)
+        .succeeds()
+        .stdout_only(format!(
+            "1\t2024-03-01 18:00:00.000000000 +0000\t{sub}\n\
+             2\t2024-03-01 18:00:00.000000000 +0000\td\n\
+             2\t2024-03-01 18:00:00.000000000 +0000\ttotal\n"
+        ));
+    assert_du_matches_gnu(&ts, &args);
+
+    // -S keeps the subdirectory's newer mtime off the top line, but the total
+    // still uses the newest time in the tree. `--max-depth=0` hides the sub line.
+    let args = ["-b", "--time", "-S", "-c", "-d", "0", "d"];
+    ts.ucmd()
+        .env("TZ", "UTC")
+        .args(&args)
+        .succeeds()
+        .stdout_only("1\t2020-01-01 00:00\td\n2\t2024-03-01 18:00\ttotal\n");
+    assert_du_matches_gnu(&ts, &args);
+}
+
+#[cfg(feature = "touch")]
+#[test]
+fn test_du_total_time_atime_ctime() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("file", "z");
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .args(&["-a", "-t", "201505150000"])
+        .arg(at.plus("file"))
+        .succeeds();
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .args(&["-m", "-t", "201606160000"])
+        .arg(at.plus("file"))
+        .succeeds();
+
+    let args = ["-b", "--time=atime", "--total", "file"];
+    ts.ucmd()
+        .env("TZ", "UTC")
+        .args(&args)
+        .succeeds()
+        .stdout_only("1\t2015-05-15 00:00\tfile\n1\t2015-05-15 00:00\ttotal\n");
+    assert_du_matches_gnu(&ts, &args);
+
+    // ctime cannot be set from touch. The total line carries the same stamp.
+    let args = ["-b", "--time=ctime", "-c", "file"];
+    let result = ts.ucmd().env("TZ", "UTC").args(&args).succeeds();
+    #[cfg(windows)]
+    result.stdout_only("1\t???\tfile\n1\t1970-01-01 00:00\ttotal\n");
+    #[cfg(not(windows))]
+    {
+        let lines: Vec<&str> = result.stdout_str().lines().collect();
+        assert_eq!(lines.len(), 2, "{}", result.stdout_str());
+        let file_time = lines[0].split('\t').nth(1).unwrap();
+        assert_eq!(
+            lines[1].split('\t').collect::<Vec<_>>(),
+            ["1", file_time, "total"],
+            "{}",
+            result.stdout_str()
+        );
+        assert_du_matches_gnu(&ts, &args);
+    }
+}
+
+#[cfg(feature = "touch")]
+#[test]
+fn test_du_total_time_before_epoch() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // The file keeps its pre-1970 mtime. The total does not move backward.
+    at.write("old", "x");
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .args(&["-m", "-t", "196001011200"])
+        .arg(at.plus("old"))
+        .succeeds();
+    let args = ["-b", "--time", "-c", "old"];
+    ts.ucmd()
+        .env("TZ", "UTC")
+        .args(&args)
+        .succeeds()
+        .stdout_only("1\t1960-01-01 12:00\told\n1\t1970-01-01 00:00\ttotal\n");
+    assert_du_matches_gnu(&ts, &args);
+
+    // A path that cannot be statted still prints the epoch on the total line.
+    ts.ucmd()
+        .env("TZ", "UTC")
+        .args(&["--time", "-c", "missing"])
+        .fails()
+        .stdout_is("0\t1970-01-01 00:00\ttotal\n")
+        .stderr_contains("cannot access 'missing'");
+}
+
 #[cfg(not(any(windows, target_os = "openbsd")))]
 #[cfg(feature = "chmod")]
 #[test]
