@@ -1620,6 +1620,26 @@ mod locale_aware {
                 .stdout_only(output);
         }
     }
+
+    #[uutests::wasi_ignore(NoLocaleData)]
+    #[test]
+    fn test_expr_equality_is_exact_in_locale() {
+        // The collator gives no weight to punctuation, but `=` must still
+        // tell these strings apart.
+        for (left, right) in [("/srv/uploads/../..", "/srv/uploads"), ("r.o.o.t", "root")] {
+            new_ucmd!()
+                .args(&[left, "=", right])
+                .env("LC_ALL", "en_US.UTF-8")
+                .run()
+                .code_is(1)
+                .stdout_only("0\n");
+            new_ucmd!()
+                .args(&[left, "!=", right])
+                .env("LC_ALL", "en_US.UTF-8")
+                .succeeds()
+                .stdout_only("1\n");
+        }
+    }
 }
 
 /// Tests for multibyte character arithmetic in expr
