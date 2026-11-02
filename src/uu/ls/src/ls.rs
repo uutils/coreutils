@@ -38,7 +38,7 @@ use uucore::{
     fsext::metadata_get_time,
     os_str_as_bytes_lossy,
     parser::shortcut_value_parser::ShortcutValueParser,
-    show, translate,
+    quoting_style, show, translate,
     version_cmp::version_cmp,
 };
 
@@ -297,27 +297,12 @@ pub fn uu_app() -> Command {
     )
     // Quoting style
     .arg(
-        Arg::new(QUOTING_STYLE)
-            .long(QUOTING_STYLE)
-            .help(translate!("ls-help-set-quoting-style"))
-            .value_parser(ShortcutValueParser::new([
-                PossibleValue::new("literal"),
-                PossibleValue::new("locale"),
-                PossibleValue::new("shell"),
-                PossibleValue::new("shell-escape"),
-                PossibleValue::new("shell-always"),
-                PossibleValue::new("shell-escape-always"),
-                PossibleValue::new("clocale"),
-                PossibleValue::new("c"),
-                PossibleValue::new("c-maybe"),
-                PossibleValue::new("escape"),
-            ]))
-            .overrides_with_all([
-                QUOTING_STYLE,
-                options::quoting::LITERAL,
-                options::quoting::ESCAPE,
-                options::quoting::C,
-            ]),
+        quoting_style::parser::clap_quoting_argument().overrides_with_all([
+            QUOTING_STYLE,
+            options::quoting::LITERAL,
+            options::quoting::ESCAPE,
+            options::quoting::C,
+        ]),
     )
     .arg(
         Arg::new(options::quoting::LITERAL)

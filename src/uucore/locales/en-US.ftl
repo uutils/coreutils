@@ -26,6 +26,8 @@ common-help-suggestion = For more information, try '--help'.
 help-flag-help = Print help information
 help-flag-version = Print version information
 
+help-set-quoting-style = Set quoting style
+
 # Common error contexts
 error-io = I/O error
 error-permission-denied = Permission denied

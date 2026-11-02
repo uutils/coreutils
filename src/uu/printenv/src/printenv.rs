@@ -6,19 +6,18 @@
 use std::env;
 use std::io::{IsTerminal, Write};
 
-use clap::builder::PossibleValue;
 use clap::{Arg, ArgAction, Command};
 
 use uucore::display::{OsWrite, print_all_env_vars, print_all_env_vars_quoted};
 use uucore::error::UResult;
 use uucore::i18n::get_ctype_encoding;
 use uucore::line_ending::LineEnding;
-use uucore::parser::shortcut_value_parser::ShortcutValueParser;
-use uucore::quoting_style::{QuotingStyle, escape_name, quoting_style_from_env};
+use uucore::quoting_style::{
+    QuotingStyle, escape_name, parser as qs_parser, quoting_style_from_env,
+};
 use uucore::{format_usage, translate};
 
 static OPT_NULL: &str = "null";
-static OPT_QUOTING_STYLE: &str = "quoting-style";
 static ARG_VARIABLES: &str = "variables";
 
 #[uucore::main(no_signals)]
@@ -31,7 +30,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap_or_default();
 
     let maybe_quoting_style = matches
-        .get_one::<String>(OPT_QUOTING_STYLE)
+        .get_one::<String>(qs_parser::QUOTING_STYLE)
         .and_then(QuotingStyle::parse)
         .or_else(|| {
             std::io::stdout()
@@ -97,23 +96,7 @@ pub fn uu_app() -> Command {
                 .help(translate!("printenv-help-null"))
                 .action(ArgAction::SetTrue),
         )
-        .arg(
-            Arg::new(OPT_QUOTING_STYLE)
-                .long(OPT_QUOTING_STYLE)
-                .help(translate!("printenv-help-quoting-style"))
-                .value_parser(ShortcutValueParser::new([
-                    PossibleValue::new("literal"),
-                    PossibleValue::new("locale"),
-                    PossibleValue::new("shell"),
-                    PossibleValue::new("shell-escape"),
-                    PossibleValue::new("shell-always"),
-                    PossibleValue::new("shell-escape-always"),
-                    PossibleValue::new("clocale"),
-                    PossibleValue::new("c"),
-                    PossibleValue::new("c-maybe"),
-                    PossibleValue::new("escape"),
-                ])),
-        )
+        .arg(qs_parser::clap_quoting_argument())
         .arg(
             Arg::new(ARG_VARIABLES)
                 .action(ArgAction::Append)

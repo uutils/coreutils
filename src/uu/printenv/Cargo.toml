@@ -19,7 +19,7 @@ doctest = false
 [dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
-uucore = { workspace = true, features = ["quoting-style", "parser"] }
+uucore = { workspace = true, features = ["quoting-style", "parser-num"] }
 
 [lints]
 workspace = true

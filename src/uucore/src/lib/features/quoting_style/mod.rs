@@ -381,6 +381,35 @@ pub fn locale_aware_escape_dir_name(name: &OsStr, style: QuotingStyle) -> OsStri
     escape_dir_name(name, style, i18n::get_ctype_encoding())
 }
 
+#[cfg(any(feature = "parser", feature = "parser-num"))]
+pub mod parser {
+    use clap::Arg;
+    use clap::builder::PossibleValue;
+
+    use crate::parser::shortcut_value_parser::ShortcutValueParser;
+    use crate::translate;
+
+    pub const QUOTING_STYLE: &str = "quoting-style";
+
+    pub fn clap_quoting_argument() -> Arg {
+        Arg::new(QUOTING_STYLE)
+            .long(QUOTING_STYLE)
+            .help(translate!("help-set-quoting-style"))
+            .value_parser(ShortcutValueParser::new([
+                PossibleValue::new("literal"),
+                PossibleValue::new("locale"),
+                PossibleValue::new("shell"),
+                PossibleValue::new("shell-escape"),
+                PossibleValue::new("shell-always"),
+                PossibleValue::new("shell-escape-always"),
+                PossibleValue::new("clocale"),
+                PossibleValue::new("c"),
+                PossibleValue::new("c-maybe"),
+                PossibleValue::new("escape"),
+            ]))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::i18n::UEncoding;
