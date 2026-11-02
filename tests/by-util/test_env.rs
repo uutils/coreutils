@@ -1109,39 +1109,37 @@ fn test_env_list_signal_handling_reports_inherited_ignore() {
 #[test]
 #[cfg(unix)]
 fn test_env_signal_options_are_applied_in_the_order_given() {
+    // A signal back at its default is not listed; resetting the action keeps it blocked.
     for (args, expected) in [
-        (
-            &["--ignore-signal=INT", "--default-signal=INT"][..],
-            "DEFAULT",
-        ),
+        (&["--ignore-signal=INT", "--default-signal=INT"][..], None),
         (
             &["--default-signal=INT", "--ignore-signal=INT"][..],
-            "IGNORE",
+            Some("IGNORE"),
         ),
         (
             &["--block-signal=INT", "--default-signal=INT"][..],
-            "DEFAULT",
+            Some("BLOCK"),
         ),
-        (&["--ignore-signal=INT", "--default-signal"][..], "DEFAULT"),
-        (&["--default-signal", "--ignore-signal=INT"][..], "IGNORE"),
-        (&["--block-signal=INT", "--ignore-signal=INT"][..], "IGNORE"),
+        (&["--ignore-signal=INT", "--default-signal"][..], None),
+        (
+            &["--default-signal", "--ignore-signal=INT"][..],
+            Some("IGNORE"),
+        ),
+        (
+            &["--block-signal=INT", "--ignore-signal=INT"][..],
+            Some("BLOCK,IGNORE"),
+        ),
     ] {
         let mut cmd_args = args.to_vec();
         cmd_args.extend(["--list-signal-handling", "true"]);
 
         let result = new_ucmd!().env("PATH", path()).args(&cmd_args).succeeds();
-        let stderr = result.stderr_str();
-
-        assert!(
-            stderr.contains("INT") && stderr.contains(expected),
-            "{args:?}: expected INT to be {expected}, got: {stderr}"
-        );
-        for other in ["DEFAULT", "IGNORE", "BLOCK"] {
-            assert!(
-                other == expected || !stderr.contains(other),
-                "{args:?}: unexpected {other} for INT in: {stderr}"
-            );
-        }
+        let state = result
+            .stderr_str()
+            .lines()
+            .find(|line| line.starts_with("INT "))
+            .and_then(|line| line.rsplit(": ").next());
+        assert_eq!(state, expected, "{args:?}");
     }
 }
 
@@ -1172,7 +1170,7 @@ fn test_env_signal_option_without_value_applies_to_every_signal() {
         .succeeds();
     let stderr = result.stderr_str();
     assert!(
-        stderr.contains("INT") && stderr.contains("DEFAULT"),
+        stderr.contains("TERM") && !stderr.contains("INT "),
         "a later explicit option must win over a bare one, got: {stderr}"
     );
 }

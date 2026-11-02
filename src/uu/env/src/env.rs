@@ -1070,10 +1070,7 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
 }
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
-fn apply_signal_action(
-    request: &SignalRequest,
-    action_kind: SignalActionKind,
-) -> UResult<()> {
+fn apply_signal_action(request: &SignalRequest, action_kind: SignalActionKind) -> UResult<()> {
     request.for_each_signal(|sig_value| {
         // On some platforms ALL_SIGNALS may contain values that are not valid in libc.
         // Skip those invalid ones and continue (GNU env also ignores undefined signals).
