@@ -3017,10 +3017,12 @@ fn test_last_of_dereference_args_no_dereference_wins() {
     scene
         .ucmd()
         .args(&["--dereference-args", "-P", "dangling"])
-        .succeeds();
+        .succeeds()
+        .stdout_contains("dangling");
     // --dereference-args last wins: dereferencing the dangling argument fails.
     scene
         .ucmd()
         .args(&["-P", "--dereference-args", "dangling"])
-        .fails();
+        .fails()
+        .stderr_contains("cannot access 'dangling'");
 }
