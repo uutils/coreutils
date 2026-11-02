@@ -450,6 +450,18 @@ fn push_bytes<W: Write>(ctx: &mut FoldContext<'_, W>, bytes: &[u8]) -> UResult<(
     maybe_flush_unbroken_output(ctx)
 }
 
+fn advance_tab<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
+    loop {
+        let next_stop = next_tab_stop(*ctx.col_count);
+        if next_stop > ctx.width && !ctx.output.is_empty() {
+            emit_output(ctx)?;
+            continue;
+        }
+        *ctx.col_count = next_stop;
+        return Ok(());
+    }
+}
+
 fn process_ascii_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UResult<()> {
     let mut idx = 0;
     let len = line.len();
@@ -472,15 +484,7 @@ fn process_ascii_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UR
                 idx += 1;
             }
             TAB => {
-                loop {
-                    let next_stop = next_tab_stop(*ctx.col_count);
-                    if next_stop > ctx.width && !ctx.output.is_empty() {
-                        emit_output(ctx)?;
-                        continue;
-                    }
-                    *ctx.col_count = next_stop;
-                    break;
-                }
+                advance_tab(ctx)?;
                 if ctx.spaces {
                     *ctx.last_space = Some(ctx.output.len());
                 } else {
@@ -613,15 +617,7 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
         }
 
         if ch == '\t' {
-            loop {
-                let next_stop = next_tab_stop(*ctx.col_count);
-                if next_stop > ctx.width && !ctx.output.is_empty() {
-                    emit_output(ctx)?;
-                    continue;
-                }
-                *ctx.col_count = next_stop;
-                break;
-            }
+            advance_tab(ctx)?;
             if ctx.spaces {
                 *ctx.last_space = Some(ctx.output.len());
             } else {
@@ -670,15 +666,7 @@ fn process_non_utf8_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) ->
         match byte {
             CR => *ctx.col_count = 0,
             TAB => {
-                loop {
-                    let next_stop = next_tab_stop(*ctx.col_count);
-                    if next_stop > ctx.width && !ctx.output.is_empty() {
-                        emit_output(ctx)?;
-                        continue;
-                    }
-                    *ctx.col_count = next_stop;
-                    break;
-                }
+                advance_tab(ctx)?;
                 *ctx.last_space = if ctx.spaces {
                     Some(ctx.output.len())
                 } else {
