@@ -1746,3 +1746,18 @@ fn test_stdin_clean_error_message() {
         .fails()
         .stderr_is("factor: error reading input: Is a directory\n");
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_final_flush_error_sets_exit_code() {
+    new_ucmd!()
+        .arg("2")
+        .set_stdout(
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open("/dev/full")
+                .unwrap(),
+        )
+        .fails_with_code(1)
+        .stderr_is("factor: write error: No space left on device\n");
+}

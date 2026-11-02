@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::io::BufRead;
-use std::io::{self, Write, stdin, stdout};
+use std::io::{self, IsTerminal, Write, stdin, stdout};
 use std::iter::once;
 use std::num::IntErrorKind;
 
@@ -43,6 +43,7 @@ enum Number {
 fn write_factors_str(
     num_str: &[u8],
     w: &mut io::BufWriter<impl Write>,
+    record: &mut Vec<u8>,
     print_exponents: bool,
 ) -> UResult<()> {
     let parsed = parse_num(num_str);
@@ -54,10 +55,16 @@ fn write_factors_str(
 
     match x {
         // use num_prime's factorize64 algorithm for u64 integers
-        Number::U64(x) if x > 1 => write_result(w, &x, factorize64(x), print_exponents),
-        Number::U64(x) => write_result(w, &x, BTreeMap::<u64, usize>::new(), print_exponents),
+        Number::U64(x) if x > 1 => write_result(w, record, &x, factorize64(x), print_exponents),
+        Number::U64(x) => write_result(
+            w,
+            record,
+            &x,
+            BTreeMap::<u64, usize>::new(),
+            print_exponents,
+        ),
         // use num_prime's factorize128 algorithm for u128 integers
-        Number::U128(x) => write_result(w, &x, factorize128(x), print_exponents),
+        Number::U128(x) => write_result(w, record, &x, factorize128(x), print_exponents),
         // use num_prime's fallible factorization for anything greater than u128::MAX
         Number::BigUint(x) => {
             let (prime_factors, remaining) = factors(x.clone(), None);
@@ -67,7 +74,7 @@ fn write_factors_str(
                     translate!("factor-error-factorization-incomplete"),
                 ));
             }
-            write_result(w, &x, prime_factors, print_exponents)
+            write_result(w, record, &x, prime_factors, print_exponents)
         }
     }
     .map_err_context(|| translate!("factor-error-write-error"))
@@ -126,24 +133,28 @@ impl Display for NumError<'_> {
 /// Writing out the prime factors for integers
 fn write_result(
     w: &mut io::BufWriter<impl Write>,
+    record: &mut Vec<u8>,
     x: &impl Display,
     factorization: BTreeMap<impl Display, usize>,
     print_exponents: bool,
 ) -> io::Result<()> {
-    write!(w, "{x}:")?;
+    // Submit a complete record in one call so BufWriter never splits it
+    // across flushes when several factor processes append to the same file.
+    record.clear();
+    write!(record, "{x}:")?;
     for (factor, n) in factorization {
         if print_exponents {
             if n > 1 {
-                write!(w, " {factor}^{n}")?;
+                write!(record, " {factor}^{n}")?;
             } else {
-                write!(w, " {factor}")?;
+                write!(record, " {factor}")?;
             }
         } else {
-            w.write_all(format!(" {factor}").repeat(n).as_bytes())?;
+            record.write_all(format!(" {factor}").repeat(n).as_bytes())?;
         }
     }
-    writeln!(w)?;
-    w.flush()
+    record.push(b'\n');
+    w.write_all(record)
 }
 
 #[uucore::main]
@@ -152,14 +163,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // If matches find --exponents flag than variable print_exponents is true and p^e output format will be used.
     let print_exponents = matches.get_flag(options::EXPONENTS);
+    let values = matches.get_many::<String>(options::NUMBER);
 
     let stdout = stdout();
-    // use a smaller buffer here to pass a GNU test.
-    let mut w = io::BufWriter::with_capacity(4 * 1024, stdout.lock());
+    // Interactive output is immediate; pipes and files can batch whole records.
+    let capacity = if stdout.is_terminal() || (values.is_none() && stdin().is_terminal()) {
+        0
+    } else {
+        4 * 1024
+    };
+    let mut w = io::BufWriter::with_capacity(capacity, stdout.lock());
 
-    if let Some(values) = matches.get_many::<String>(options::NUMBER) {
+    let mut record = Vec::new();
+    if let Some(values) = values {
         for number in values {
-            write_factors_str(number.trim().as_bytes(), &mut w, print_exponents)?;
+            write_factors_str(
+                number.trim().as_bytes(),
+                &mut w,
+                &mut record,
+                print_exponents,
+            )?;
         }
     } else {
         let stdin = stdin();
@@ -182,7 +205,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     {
                         let has_null = line.get(i) == Some(&DELIM_NULL);
                         if display && (prev != i || has_null) {
-                            write_factors_str(&line[prev..i], &mut w, print_exponents)?;
+                            write_factors_str(
+                                &line[prev..i],
+                                &mut w,
+                                &mut record,
+                                print_exponents,
+                            )?;
                         }
                         (display, prev) = (!has_null, i + 1);
                     }
@@ -199,9 +227,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    if let Err(e) = w.flush() {
-        show_error!("{e}");
-    }
+    w.flush()
+        .map_err_context(|| translate!("factor-error-write-error"))?;
 
     Ok(())
 }
@@ -233,8 +260,7 @@ pub fn uu_app() -> Command {
 
 #[cfg(test)]
 mod tests {
-    use crate::Number;
-    use crate::parse_num;
+    use super::*;
 
     #[test]
     fn test_correct_parsing() {
@@ -261,5 +287,49 @@ mod tests {
     fn test_incorrect_parsing() {
         parse_num(b"abcd").unwrap();
         parse_num(b"12\x00\xFF\x1D").unwrap();
+    }
+
+    #[derive(Default)]
+    struct RecordWriter(Vec<Vec<u8>>);
+
+    impl Write for RecordWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.0.push(buf.to_vec());
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn batch_output_without_splitting_records() {
+        let mut writer = io::BufWriter::with_capacity(32, RecordWriter::default());
+        let mut record = Vec::new();
+        for _ in 0..50 {
+            write_result(
+                &mut writer,
+                &mut record,
+                &2,
+                BTreeMap::from([(2, 1)]),
+                false,
+            )
+            .unwrap();
+        }
+        // A record larger than the buffer is still one write.
+        write_result(
+            &mut writer,
+            &mut record,
+            &1_048_576,
+            BTreeMap::from([(2, 20)]),
+            false,
+        )
+        .unwrap();
+        writer.flush().unwrap();
+        let writes = &writer.get_ref().0;
+        assert!(writes.len() < 50);
+        assert!(writes.iter().all(|write| write.ends_with(b"\n")));
+        let expected = format!("{}1048576:{}\n", "2: 2\n".repeat(50), " 2".repeat(20));
+        assert_eq!(writes.concat(), expected.as_bytes());
     }
 }
