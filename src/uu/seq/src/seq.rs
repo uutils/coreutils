@@ -79,8 +79,8 @@ fn split_short_args_with_value(args: impl uucore::Args) -> impl uucore::Args {
     v.into_iter()
 }
 
-/// Insert "--" in front of the first operand, the way GNU seq stops option
-/// parsing there. An argument starting with "-" is an operand only when a
+/// Insert "--" in front of the first operand, so option parsing stops there.
+/// An argument starting with "-" is an operand only when a
 /// digit or "." follows (a negative number); anything else in front of the
 /// first operand is an option, so `seq --foo` and `seq -inf 1` are rejected as
 /// options instead of being parsed as numbers.
@@ -101,8 +101,10 @@ fn mark_first_operand(args: Vec<OsString>) -> Vec<OsString> {
             out.push(arg);
             break;
         }
-        let is_option =
-            bytes.len() > 1 && bytes[0] == b'-' && !(bytes[1].is_ascii_digit() || bytes[1] == b'.');
+        let is_option = Some(&b'-') == bytes.first()
+            && bytes
+                .get(1)
+                .is_some_and(|c| !(c.is_ascii_digit() || *c == b'.'));
         if !is_option {
             out.push(OsString::from("--"));
             out.push(arg);
@@ -117,11 +119,12 @@ fn mark_first_operand(args: Vec<OsString>) -> Vec<OsString> {
         } else {
             // a cluster of short options like "-ws", where the last one may
             // need the next argument as its value
-            for (i, c) in bytes.iter().enumerate().skip(1) {
-                if matches!(c, b's' | b't' | b'f') {
-                    takes_value = i == bytes.len() - 1;
-                    break;
-                }
+            if let Some(i) = bytes
+                .iter()
+                .skip(1)
+                .position(|c| matches!(c, b's' | b't' | b'f'))
+            {
+                takes_value = i + 2 == bytes.len();
             }
         }
         out.push(arg);
