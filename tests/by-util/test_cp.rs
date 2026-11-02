@@ -9827,6 +9827,49 @@ fn test_cp_d_overwrites_existing_symlink_dest() {
     assert!(at.read_symlink("slink").ends_with("slink-target"));
 }
 
+#[rstest]
+#[case("always")]
+#[case("auto")]
+#[case("never")]
+#[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
+fn test_cp_open_once(#[case] reflink_mode: &str) {
+    let (at, mut _ucmd) = at_and_ucmd!();
+    let file = "source_file";
+    at.touch(file);
+    if std::process::Command::new("strace")
+        .args([
+            "-e",
+            "trace=open,openat",
+            "-o",
+            "strace.out",
+            uutests::util::get_tests_binary(),
+            "cp",
+            &format!("--reflink={reflink_mode}"),
+            file,
+            "target_file",
+        ])
+        .current_dir(at.as_string())
+        .output()
+        .is_err()
+    {
+        return; // missing strace
+    }
+    // don't theck that `cp` succeed for the system missing reflink support
+    let open_count = at
+        .read("strace.out")
+        .lines()
+        .filter(|l| {
+            let trimmed = l.trim();
+            trimmed.starts_with("open(")
+                || trimmed.starts_with("openat(")
+                    && (trimmed.contains(file) || trimmed.contains("target_file"))
+        })
+        .count();
+    // don't use assert_eq! for the system missing reflink support
+    assert!(open_count <= 2);
+}
+
 // Regression for GNU tests/cp/acl: `cp -p` must preserve POSIX ACLs on
 // Linux. ACLs are part of GNU's `mode` preservation, not its `xattr`
 // preservation, so the default-no-xattr change in #9704 must not strip
