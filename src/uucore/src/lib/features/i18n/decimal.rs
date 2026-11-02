@@ -128,11 +128,24 @@ fn read_grouping_separator_bytes() -> Vec<u8> {
     }
 }
 
+/// Insert `separator` between each group of three `digits`, counting from the right.
+pub fn group_digits(digits: &[u8], separator: &[u8]) -> Vec<u8> {
+    let separators = digits.len().saturating_sub(1) / 3;
+    let mut grouped = Vec::with_capacity(digits.len() + separators * separator.len());
+    for (index, digit) in digits.iter().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            grouped.extend_from_slice(separator);
+        }
+        grouped.push(*digit);
+    }
+    grouped
+}
+
 #[cfg(test)]
 mod tests {
     use icu_locale::locale;
 
-    use super::{get_decimal_separator, get_grouping_separator};
+    use super::{get_decimal_separator, get_grouping_separator, group_digits};
 
     #[test]
     fn test_simple_decimal_separator() {
@@ -144,5 +157,14 @@ mod tests {
     fn test_simple_grouping_separator() {
         assert_eq!(get_grouping_separator(locale!("en")), ",");
         assert_eq!(get_grouping_separator(locale!("fr")), "\u{202f}");
+    }
+
+    #[test]
+    fn test_group_digits() {
+        assert_eq!(group_digits(b"", b","), b"");
+        assert_eq!(group_digits(b"512", b","), b"512");
+        assert_eq!(group_digits(b"4096", b","), b"4,096");
+        assert_eq!(group_digits(b"7340032", b"\xa0"), b"7\xa0340\xa0032");
+        assert_eq!(group_digits(b"640000", b"--"), b"640--000");
     }
 }
