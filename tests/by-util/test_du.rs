@@ -3033,9 +3033,9 @@ fn test_dereference_args_after_dereference_wins() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.mkdir("dir");
-    at.mkdir("dir/sub");
-    at.write("dir/sub/file", "x");
-    at.symlink_dir("dir/sub", "dir/link");
+    at.mkdir("outside");
+    at.write("outside/file", "x");
+    at.symlink_dir("outside", "dir/link");
 
     // `--dereference-args` last wins over `-L`: only command-line arguments
     // are dereferenced, so the symlink inside `dir` is not followed.
