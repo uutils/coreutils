@@ -814,6 +814,15 @@ impl EnvAppData {
             }
         }
 
+        // GNU env requires a command when --argv0 is given. Validate before
+        // apply_change_directory performs its side effect.
+        if opts.program.is_empty() && opts.argv0.is_some() {
+            return Err(UUsageError::new(
+                125,
+                translate!("env-error-must-specify-command-with-argv0"),
+            ));
+        }
+
         apply_change_directory(&opts)?;
         if opts.program.is_empty() {
             // no program provided, so just dump all env vars to stdout
@@ -1036,14 +1045,6 @@ fn apply_change_directory(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
         return Err(UUsageError::new(
             125,
             translate!("env-error-must-specify-command-with-chdir"),
-        ));
-    }
-
-    // GNU env requires a command when --argv0 is given.
-    if opts.program.is_empty() && opts.argv0.is_some() {
-        return Err(UUsageError::new(
-            125,
-            translate!("env-error-must-specify-command-with-argv0"),
         ));
     }
 

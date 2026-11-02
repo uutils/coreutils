@@ -479,17 +479,13 @@ fn test_fail_change_directory() {
 
 #[test]
 fn test_argv0_without_command_fails() {
-    let out = new_ucmd!()
-        .args(&["-a", "foo"])
-        .fails_with_code(125)
-        .stderr_move_str();
-    assert!(out.contains("must specify command with --argv0 (-a)"));
-
-    let out = new_ucmd!()
-        .args(&["--argv0", "foo"])
-        .fails_with_code(125)
-        .stderr_move_str();
-    assert!(out.contains("must specify command with --argv0 (-a)"));
+    for arg in ["-a", "--argv0"] {
+        let out = new_ucmd!()
+            .args(&[arg, "foo"])
+            .fails_with_code(125)
+            .stderr_move_str();
+        assert!(out.contains("must specify command with --argv0 (-a)"));
+    }
 }
 
 #[cfg(not(windows))] // windows has no executable "echo", its only supported as part of a batch-file
