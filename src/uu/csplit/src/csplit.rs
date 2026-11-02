@@ -403,6 +403,8 @@ impl SplitWriter<'_> {
         if self.options.suppress_matched && last_ln.is_some_and(|ln| ln + 2 == n) {
             ret = Ok(());
         }
+        // An empty split can stop before rewind is exhausted; later patterns must not replay it.
+        input_iter.rewind = false;
         self.finish_split()?;
         ret
     }
