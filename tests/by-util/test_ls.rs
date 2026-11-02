@@ -6655,6 +6655,15 @@ fn test_ls_invalid_block_size() {
         .fails_with_code(2)
         .no_stdout()
         .stderr_is("ls: invalid --block-size argument 'invalid'\n");
+
+    // --block-size and its value can be two separate arguments.
+    new_ucmd!()
+        .arg("--block-size")
+        .arg("0")
+        .arg("-h")
+        .fails_with_code(2)
+        .no_stdout()
+        .stderr_is("ls: invalid --block-size argument '0'\n");
 }
 
 #[cfg(all(unix, feature = "dd"))]

@@ -20,7 +20,7 @@ use term_grid::SPACES_IN_TAB;
 use uucore::{
     diagnostics::OptionValue,
     display::Quotable,
-    error::UResult,
+    error::{UError, UResult},
     format::human::SizeFormat,
     fsext::MetadataTimeField,
     line_ending::LineEnding,
@@ -622,6 +622,20 @@ fn parse_width(width_match: Option<&String>) -> Result<u16, LsError> {
     Ok(ret)
 }
 
+/// The report for an invalid `--block-size` value, with the caret under the value.
+fn block_size_error(value: &str, diag_args: Option<&[OsString]>) -> Box<dyn UError> {
+    let ls_error = LsError::BlockSizeParseError(value.to_string());
+    let message = ls_error.to_string();
+    let parse_error = parse_size_non_zero_u64(value).expect_err("the value was rejected above");
+    parse_error.size_value_error(
+        diag_args,
+        &OptionValue::with_names(value, None, Some(options::size::BLOCK_SIZE)),
+        0,
+        &message,
+        ls_error,
+    )
+}
+
 /// Parses the tab size value from the command line
 fn parse_tab_size(size_str: &str) -> Result<usize, LsError> {
     size_str
@@ -720,53 +734,68 @@ impl Config {
         let mut needs_color = extract_color(options);
         let hyperlink = extract_hyperlink(options);
 
-        let opt_block_size = options.get_one::<String>(options::size::BLOCK_SIZE);
-        let opt_si = opt_block_size.is_some_and(|x| x == options::size::SI)
-            || options.get_flag(options::size::SI);
-        let opt_hr = opt_block_size.is_some_and(|x| x == options::size::HUMAN_READABLE)
-            || options.get_flag(options::size::HUMAN_READABLE);
-        let opt_kb = options.get_flag(options::size::KIBIBYTES);
+        // Every --block-size value must be valid, even when a later -h/--si
+        // overrides it (GNU ls rejects all of them). The last of the size mode
+        // options on the command line decides the display format.
+        let block_sizes: Vec<(&String, usize)> = options
+            .get_many::<String>(options::size::BLOCK_SIZE)
+            .map(|values| values.collect::<Vec<&String>>())
+            .unwrap_or_default()
+            .into_iter()
+            .zip(
+                options
+                    .indices_of(options::size::BLOCK_SIZE)
+                    .into_iter()
+                    .flatten(),
+            )
+            .collect();
 
-        let size_format = if opt_si {
+        for (value, _) in &block_sizes {
+            if value.as_str() != options::size::SI
+                && value.as_str() != options::size::HUMAN_READABLE
+                && parse_size_non_zero_u64(value).is_err()
+            {
+                return Err(block_size_error(value, diag_args));
+            }
+        }
+
+        let mut size_mode: Option<(usize, &str)> = None;
+        for (value, index) in &block_sizes {
+            if size_mode.is_none_or(|(latest, _)| *index > latest) {
+                size_mode = Some((*index, value.as_str()));
+            }
+        }
+        for arg in [options::size::SI, options::size::HUMAN_READABLE] {
+            if options.get_flag(arg)
+                && let Some(index) = options.indices_of(arg).and_then(|indices| indices.max())
+                && size_mode.is_none_or(|(latest, _)| index > latest)
+            {
+                size_mode = Some((index, arg));
+            }
+        }
+        let size_mode = size_mode.map(|(_, mode)| mode);
+
+        let size_format = if size_mode == Some(options::size::SI) {
             SizeFormat::Decimal
-        } else if opt_hr {
+        } else if size_mode == Some(options::size::HUMAN_READABLE) {
             SizeFormat::Binary
         } else {
             SizeFormat::Bytes
         };
 
-        let (file_size_block_size, block_size) = if let Some(opt_block_size) = opt_block_size {
-            // --block-size command-line argument: parse it, error on invalid
-            // If --block-size=si or --block-size=human-readable, skip numeric parsing
-            if opt_si {
+        let (file_size_block_size, block_size) = if let Some(value) = size_mode {
+            if value == options::size::SI {
                 (DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
-            } else if opt_hr {
+            } else if value == options::size::HUMAN_READABLE {
                 (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
             } else {
-                let size = parse_size_non_zero_u64(opt_block_size).map_err(|error| {
-                    let ls_error = LsError::BlockSizeParseError(opt_block_size.clone());
-                    let message = ls_error.to_string();
-                    error.size_value_error(
-                        diag_args,
-                        &OptionValue::with_names(
-                            opt_block_size,
-                            None,
-                            Some(options::size::BLOCK_SIZE),
-                        ),
-                        0,
-                        &message,
-                        ls_error,
-                    )
-                })?;
-                // --block-size overrides -k
+                // --block-size also overrides -k.
+                let size =
+                    parse_size_non_zero_u64(value).expect("invalid values were rejected above");
                 (size, size)
             }
-        } else if !opt_si && !opt_hr {
-            resolve_block_sizes_from_env(opt_kb)
-        } else if opt_si {
-            (DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
         } else {
-            (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+            resolve_block_sizes_from_env(options.get_flag(options::size::KIBIBYTES))
         };
 
         let long = {
