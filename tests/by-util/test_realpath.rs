@@ -681,3 +681,12 @@ fn test_realpath_no_symlinks_existing_dangling_symlink_fails() {
         .no_stdout()
         .stderr_contains("No such file or directory");
 }
+
+#[test]
+fn test_realpath_no_symlinks_existing_missing_parent_component_fails() {
+    // `-s` must not let a missing intermediate component disappear via `..`.
+    let (_at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-s", "-e", "missing/.."])
+        .fails_with_code(1)
+        .no_stdout();
+}

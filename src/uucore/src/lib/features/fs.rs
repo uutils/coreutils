@@ -384,6 +384,12 @@ pub fn canonicalize<P: AsRef<Path>>(
             }
         }
         if res_mode == ResolveMode::None {
+            // With `-e`, every component of the path must exist even though
+            // symlinks are not expanded. `Path::metadata` follows symlinks,
+            // so a dangling final symlink is rejected as expected.
+            if miss_mode == MissingHandling::Existing {
+                result.metadata()?;
+            }
             continue;
         }
         match resolve_symlink(&result) {
