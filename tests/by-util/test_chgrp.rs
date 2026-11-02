@@ -11,7 +11,6 @@ use rustix::process::getgroups;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use uutests::{at_and_ucmd, new_ucmd};
-#[cfg(not(target_vendor = "apple"))]
 use uutests::{util::TestScenario, util_name};
 
 #[test]
@@ -432,8 +431,6 @@ fn test_traverse_symlinks() {
 
 #[test]
 fn test_chgrp_dereference_then_no_dereference() {
-    use uutests::{util::TestScenario, util_name};
-
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.symlink_file("missing", "link");
