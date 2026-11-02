@@ -22,6 +22,7 @@ fluent = { workspace = true }
 itertools = { workspace = true }
 memchr = { workspace = true }
 regex = { workspace = true }
+rustix = { workspace = true, features = ["fs"] }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["entries", "time"] }
 
