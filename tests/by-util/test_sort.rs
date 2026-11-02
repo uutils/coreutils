@@ -4269,6 +4269,12 @@ fn test_numeric_looking_file_names_are_kept_verbatim(
     "é日 b\n".as_bytes(),
     "é日 b\n   __\n___\n_____\n".as_bytes()
 )]
+#[case::control_char_in_utf8_locale(
+    "en_US.UTF-8",
+    &["--debug", "-k2", "-k1,1"],
+    "é\x01 b\n".as_bytes(),
+    "é\x01 b\n __\n_\n___\n".as_bytes()
+)]
 fn test_debug_underline_uses_display_width(
     #[case] locale: &str,
     #[case] args: &[&str],
