@@ -263,17 +263,17 @@ fn stty(opts: &Options) -> UResult<()> {
                 }
                 "line" => {
                     let line = args_iter.next().ok_or_else(|| missing_arg(arg))?;
-                    let n = parse_u8_or_err(line).map_err(|e| USimpleError::new(1, e))?;
+                    let n = line.parse::<u8>().map_err(|e| create_parse_err(&e, line))?;
                     valid_args.push(ArgOptions::Special(SpecialSetting::Line(n)));
                 }
                 "min" => {
                     let min = args_iter.next().ok_or_else(|| missing_arg(arg))?;
-                    let n = parse_u8_or_err(min).map_err(|e| USimpleError::new(1, e))?;
+                    let n = min.parse::<u8>().map_err(|e| create_parse_err(&e, min))?;
                     valid_args.push(ArgOptions::Mapping((S::VMIN, n)));
                 }
                 "time" => {
                     let time = args_iter.next().ok_or_else(|| missing_arg(arg))?;
-                    let n = parse_u8_or_err(time).map_err(|e| USimpleError::new(1, e))?;
+                    let n = time.parse::<u8>().map_err(|e| create_parse_err(&e, time))?;
                     valid_args.push(ArgOptions::Mapping((S::VTIME, n)));
                 }
                 "rows" => {
@@ -418,15 +418,14 @@ fn invalid_speed(arg: &str, speed: &str) -> Box<dyn UError> {
 }
 
 /// GNU uses different error messages if values overflow or underflow a u8,
-/// this function returns the appropriate error message in the case of overflow or underflow, or u8 on success
-fn parse_u8_or_err(arg: &str) -> Result<u8, String> {
-    arg.parse::<u8>().map_err(|e| {
-        if *e.kind() == IntErrorKind::PosOverflow {
-            translate!("stty-error-invalid-integer-argument-value-too-large", "value" => format!("'{arg}'"))
-        } else {
-            translate!("stty-error-invalid-integer-argument", "value" => format!("'{arg}'"))
-        }
-    })
+/// this function returns the appropriate error message in the case of overflow or underflow
+fn create_parse_err(e: &std::num::ParseIntError, arg: &str) -> Box<dyn UError> {
+    let msg = if *e.kind() == IntErrorKind::PosOverflow {
+        translate!("stty-error-invalid-integer-argument-value-too-large", "value" => format!("'{arg}'"))
+    } else {
+        translate!("stty-error-invalid-integer-argument", "value" => format!("'{arg}'"))
+    };
+    USimpleError::new(1, msg)
 }
 
 /// Parse an integer with hex (0x/0X) and octal (0) prefix support, wrapping to u16.
@@ -1378,47 +1377,32 @@ mod tests {
         assert_eq!(get_sane_control_char(S::VDISCARD), 15); // ^O
     }
 
-    // Tests for parse_u8_or_err
+    // Tests for create_parse_err
     #[test]
-    fn test_parse_u8_or_err_valid() {
-        assert_eq!(parse_u8_or_err("0").unwrap(), 0);
-        assert_eq!(parse_u8_or_err("255").unwrap(), 255);
-        assert_eq!(parse_u8_or_err("128").unwrap(), 128);
-        assert_eq!(parse_u8_or_err("1").unwrap(), 1);
-    }
-
-    #[test]
-    fn test_parse_u8_or_err_overflow() {
-        // Test that overflow values return an error
+    fn test_create_parse_err_overflow() {
+        // Test error message for overflow
         // Note: In test environment, translate!() returns the key, not the translated string
         // spell-checker:ignore Valeur
-        let err = parse_u8_or_err("256").unwrap_err();
+        let err = create_parse_err(&"256".parse::<u8>().unwrap_err(), "256").to_string();
         assert!(
             err.contains("value-too-large")
                 || err.contains("Value too large")
                 || err.contains("Valeur trop grande"),
             "Expected overflow error, got: {err}"
         );
-
-        assert!(parse_u8_or_err("1000").is_err());
-        assert!(parse_u8_or_err("65536").is_err());
     }
 
     #[test]
-    fn test_parse_u8_or_err_invalid() {
-        // Test that invalid values return an error
+    fn test_create_parse_err_invalid() {
+        // Test error message for invalid values
         // Note: In test environment, translate!() returns the key, not the translated string
         // spell-checker:ignore entier invalide
-        let err = parse_u8_or_err("-1").unwrap_err();
+        let err = create_parse_err(&"-1".parse::<u8>().unwrap_err(), "-1").to_string();
         assert!(
             err.contains("invalid-integer-argument")
                 || err.contains("invalid integer argument")
                 || err.contains("argument entier invalide"),
             "Expected invalid argument error, got: {err}"
         );
-
-        assert!(parse_u8_or_err("abc").is_err());
-        assert!(parse_u8_or_err("").is_err());
-        assert!(parse_u8_or_err("12.5").is_err());
     }
 }
