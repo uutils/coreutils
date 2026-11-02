@@ -2344,8 +2344,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(incompatible_options_error(opts));
     }
 
-    // `-o` writes to a file, which is incompatible with the diagnostic output of
-    // `--debug`.
     if matches.contains_id(options::OUTPUT) && matches.get_flag(options::DEBUG) {
         return Err(incompatible_options_error("o --debug"));
     }
