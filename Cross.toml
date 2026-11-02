@@ -1,4 +1,4 @@
-# spell-checker:ignore (misc) dpkg noninteractive tzdata
+# spell-checker:ignore (misc) noninteractive tzdata
 
 [build]
 pre-build = [
