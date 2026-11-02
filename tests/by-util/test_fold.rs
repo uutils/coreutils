@@ -917,13 +917,7 @@ fn test_dash_operand_reads_stdin() {
         .stderr_contains("invalid number of columns: '-'");
 }
 
-/// fold writes out a long unbroken line in pieces before it is complete. A
-/// tab or wide character that no longer fits right after such a write must
-/// still go to the next line.
-///
-/// The first lines are sized so that the write happens right before the tab
-/// or wide character: the buffer is written out at 8 KiB
-/// (`STREAMING_FLUSH_THRESHOLD`), and ASCII input is read in 8 KiB chunks.
+/// A tab or wide character must fold correctly after the 8 KiB streaming flush.
 #[rstest]
 #[case::ascii_tab(vec![b'a'; 8192], "-w8192", b"\tX\n")]
 #[case::utf8_tab("\u{E9}".repeat(4096).into_bytes(), "-w4100", "\t\u{E9}\n".as_bytes())]
