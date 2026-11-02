@@ -12,7 +12,7 @@
 
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::{BufRead, Read, Seek, SeekFrom, Write};
+use std::io::{BufRead, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::error::UResult;
 
 /// When reading files in reverse in `bounded_tail`, this is the size of each
@@ -90,11 +90,18 @@ impl Iterator for ReverseChunks<'_> {
             .file
             .seek(SeekFrom::Current(-(block_size as i64)))
             .unwrap();
-        // The file may have been truncated after its size was measured. In
-        // that case treat the end of the data as the start of the file instead
-        // of panicking; GNU tail exits successfully in the same situation.
-        if self.file.read_exact(&mut buf).is_err() {
-            return None;
+        match self.file.read_exact(&mut buf) {
+            Ok(()) => {}
+            // The file may have been truncated after its size was measured.
+            // Treat the remaining bytes as the start of the file instead of
+            // panicking; GNU tail exits successfully in the same situation.
+            // Rewind so the caller prints whatever is left of the file.
+            Err(err) if err.kind() == ErrorKind::UnexpectedEof => {
+                self.file.seek(SeekFrom::Start(0)).unwrap();
+                return None;
+            }
+            // Do not silently swallow real I/O errors (EIO, etc.).
+            Err(err) => panic!("failed to read file while scanning backwards: {err}"),
         }
         let pos2 = self
             .file
@@ -630,15 +637,14 @@ impl LinesChunkBuffer {
 mod tests {
     use crate::chunks::{BLOCK_SIZE, BUFFER_SIZE, BytesChunk, ReverseChunks};
     use std::io::Write;
+    use tempfile::tempdir;
 
     // WASI has no temporary directory, so this file-backed case is skipped there.
     #[cfg(not(target_os = "wasi"))]
     #[test]
     fn test_reverse_chunks_stops_gracefully_when_file_is_truncated() {
-        let path = std::env::temp_dir().join(format!(
-            "uutils-tail-reverse-chunks-truncated-{}",
-            std::process::id()
-        ));
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("truncated");
         {
             let mut file = std::fs::File::create(&path).unwrap();
             file.write_all(&vec![b'a'; BLOCK_SIZE as usize + 1])
@@ -661,8 +667,6 @@ mod tests {
                 .unwrap();
             assert!(chunks.next().is_none());
         }
-
-        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
