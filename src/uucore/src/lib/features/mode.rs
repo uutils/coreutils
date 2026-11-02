@@ -195,11 +195,26 @@ impl ModeError {
     }
 }
 
-pub fn parse_numeric(fperm: u32, mode: &str, considering_dir: bool) -> Result<u32, ModeError> {
+pub fn parse_numeric(mut fperm: u32, mode: &str, considering_dir: bool) -> Result<u32, ModeError> {
     let original = mode;
-    let (op, pos) = parse_op(mode).map_or_else(|_| (None, 0), |(op, pos)| (Some(op), pos));
-    let digits = mode[pos..].trim();
-    let mode = digits;
+    let mut rest = mode;
+    let mut pos = 0;
+    let mut op = None;
+
+    // GNU accepts consecutive operators before the number, as in `=+755`
+    // or `-+755`. An operator without a number is normally a no-op; `=`
+    // resets ordinary permission bits, but keeps a directory's setuid/setgid
+    // bits until the final clause.
+    while let Ok((next_op, op_len)) = parse_op(rest) {
+        if op == Some('=') {
+            fperm = if considering_dir { fperm & 0o6000 } else { 0 };
+        }
+        op = Some(next_op);
+        pos += op_len;
+        rest = &rest[op_len..];
+    }
+
+    let mode = rest.trim();
     let change = if mode.is_empty() {
         0
     } else {
@@ -354,21 +369,33 @@ fn parse_change(mode: &str, fperm: u32, considering_dir: bool) -> (u32, usize) {
 /// Whether a single mode clause is numeric.
 ///
 /// In a comma-separated list, GNU only treats a numeric clause as a number
-/// when it has an explicit `+`, `-`, or `=` operator. A bare octal such as
-/// `644,u+x` is a symbolic syntax error instead. A whole mode may still be a
-/// bare number, as in `chmod 644 file`.
+/// when it starts with a run of `+`, `-`, or `=` operators. A bare octal
+/// such as `644,u+x` is a symbolic syntax error instead. A whole mode may
+/// still be a bare number, as in `chmod 644 file`.
 pub fn is_numeric_clause(mode: &str, in_list: bool) -> bool {
     let mode = mode.trim();
     if !in_list {
         return mode.chars().any(|c| c.is_ascii_digit());
     }
-    let Some(rest) = mode
+    let Some(mut rest) = mode
         .strip_prefix('+')
         .or_else(|| mode.strip_prefix('-'))
         .or_else(|| mode.strip_prefix('='))
     else {
         return false;
     };
+    // GNU accepts a run of operators before the number, as in `=+755`, but
+    // does not allow whitespace between them.
+    loop {
+        let Some(stripped) = rest
+            .strip_prefix('+')
+            .or_else(|| rest.strip_prefix('-'))
+            .or_else(|| rest.strip_prefix('='))
+        else {
+            break;
+        };
+        rest = stripped;
+    }
     !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit())
 }
 
@@ -590,10 +617,20 @@ mod tests {
             assert!(parse(mode, false, 0).is_err(), "{mode}");
         }
 
+        // Whitespace between operators is not part of a numeric clause.
+        for mode in ["u+x,+ 755", "u+x,=+ 755"] {
+            assert!(parse(mode, false, 0).is_err(), "{mode}");
+        }
+
         // A numeric clause with an explicit operator is valid in a list.
         assert_eq!(parse("=7777,-5022", false, 0).unwrap(), 0o2755);
         assert_eq!(parse("+644,u+x", false, 0).unwrap(), 0o744);
         assert_eq!(parse("u+rw,=755", false, 0).unwrap(), 0o755);
+        assert_eq!(parse("u+x,=+755", false, 0).unwrap(), 0o755);
+        assert_eq!(parse("u+x,++755", false, 0).unwrap(), 0o755);
+        assert_eq!(parse("u+x,-+755", false, 0).unwrap(), 0o755);
+        assert_eq!(parse("u+x,=-755", false, 0).unwrap(), 0);
+        assert_eq!(parse("u+x,+++755", false, 0).unwrap(), 0o755);
 
         // On its own a number, with or without an operator, still parses.
         assert_eq!(parse("755", false, 0).unwrap(), 0o755);
@@ -626,6 +663,13 @@ mod tests {
 
         // Numeric modes for directories preserve setuid/setgid bits
         assert_eq!(parse("755", true, 0).unwrap(), 0o755);
+
+        // An empty `=` inside a run of operators resets ordinary permission
+        // bits but keeps the directory's setuid/setgid bits.
+        assert_eq!(parse_chmod(0o6755, "=+755", true, 0).unwrap(), 0o6755);
+        assert_eq!(parse_chmod(0o6755, "=-755", true, 0).unwrap(), 0o6000);
+        assert_eq!(parse_chmod(0o6755, "=+0", true, 0).unwrap(), 0o6000);
+        assert_eq!(parse_chmod(0o6755, "=755", true, 0).unwrap(), 0o755);
     }
 
     #[test]

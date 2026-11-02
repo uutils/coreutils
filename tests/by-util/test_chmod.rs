@@ -2208,6 +2208,7 @@ fn test_chmod_changes_does_not_report_inaccessible_operand() {
 fn test_numeric_mode_must_be_the_whole_mode() {
     let ts = TestScenario::new(util_name!());
     ts.fixtures.touch("probe");
+    let initial_mode = ts.fixtures.metadata("probe").permissions().mode() & 0o777;
 
     // A comma-separated mode is a list of symbolic clauses, so a number in it
     // is invalid rather than applied to one clause.
@@ -2216,6 +2217,11 @@ fn test_numeric_mode_must_be_the_whole_mode() {
             .args(&[mode, "probe"])
             .fails_with_code(1)
             .stderr_contains("invalid operator");
+        assert_eq!(
+            ts.fixtures.metadata("probe").permissions().mode() & 0o777,
+            initial_mode,
+            "{mode} changed the mode"
+        );
     }
 
     // Numeric clauses with an explicit operator are valid in a list.
