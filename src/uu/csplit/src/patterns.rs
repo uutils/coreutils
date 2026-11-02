@@ -109,7 +109,7 @@ fn extract_patterns(args: &[&str]) -> Result<Vec<Pattern>, CsplitError> {
     // An empty regex between the delimiters is allowed and matches every line.
     let to_match_reg =
         Regex::new(r"^(/(?P<UPTO>.*)/|%(?P<SKIPTO>.*)%)(?P<OFFSET>[\+-]?[0-9]+)?$").unwrap();
-    let execute_ntimes_reg = Regex::new(r"^\{(?P<TIMES>[0-9]+)|\*\}$").unwrap();
+    let execute_ntimes_reg = Regex::new(r"^\{(?:(?P<TIMES>[0-9]+)|\*)\}$").unwrap();
     let mut iter = args.iter().copied().peekable();
 
     while let Some(arg) = iter.next() {

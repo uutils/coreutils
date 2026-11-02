@@ -1944,3 +1944,15 @@ fn test_empty_skip_to_regex_is_accepted() {
     ucmd.args(&["letters", "%%"]).succeeds().stdout_only("19\n");
     assert_eq!(at.read("xx00"), "delta\necho\nfoxtrot\n");
 }
+
+#[test]
+fn test_unterminated_repeat_is_rejected() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-", "2", "{1"])
+        .pipe_in("a\nb\nc\nd\ne\n")
+        .ignore_stdin_write_error()
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("csplit: '{1': invalid pattern\n");
+    assert!(!at.file_exists("xx00"));
+}
