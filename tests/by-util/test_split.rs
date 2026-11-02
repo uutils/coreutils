@@ -2378,10 +2378,44 @@ fn test_number_with_plus_prefix() {
     assert_eq!(at.read("xaa"), "a\n");
     assert_eq!(at.read("xab"), "b\n");
 
-    // Every spelling that carries a number accepts the prefix.
-    for number in ["l/+2", "+1/2", "l/+1/2", "r/+2", "r/+1/2"] {
-        let (at, mut ucmd) = at_and_ucmd!();
-        at.write("a.txt", "a\nb\n");
-        ucmd.args(&["-n", number, "a.txt"]).succeeds();
+    // Every spelling that carries a number accepts the prefix, and the
+    // prefixed spelling splits exactly like the plain one.
+    for (prefixed, plain) in [
+        ("l/+2", "l/2"),
+        ("r/+2", "r/2"),
+        ("+1/2", "1/2"),
+        ("l/+1/2", "l/1/2"),
+        ("r/+1/2", "r/1/2"),
+    ] {
+        let prefixed_chunks = split_into_chunks(prefixed);
+        let plain_chunks = split_into_chunks(plain);
+        assert_eq!(
+            prefixed_chunks, plain_chunks,
+            "-n {prefixed} does not split like -n {plain}"
+        );
     }
+}
+
+/// Run `split -n <number> a.txt` in a fresh fixture and return what it produced:
+/// the concatenated `x*` files when chunks were written, or the stdout when the
+/// spelling selects a single chunk.
+fn split_into_chunks(number: &str) -> (Vec<(String, String)>, String) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a.txt", "a\nb\nc\nd\n");
+    let stdout = ucmd
+        .args(&["-n", number, "a.txt"])
+        .succeeds()
+        .stdout_move_str();
+
+    let mut files: Vec<(String, String)> = fs::read_dir(at.as_string())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .filter(|name| name.to_string_lossy().starts_with('x'))
+        .map(|name| {
+            let contents = at.read(at.plus(&name));
+            (name.to_string_lossy().into_owned(), contents)
+        })
+        .collect();
+    files.sort();
+    (files, stdout)
 }
