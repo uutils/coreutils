@@ -591,8 +591,8 @@ fn test_couldnt_rename() {
 }
 
 #[rstest::rstest]
-#[case(&["1e3"], "shred: 1e3: No such file or directory\n")]
-#[case(&["007"], "shred: 007: Not a file\n")]
+#[case(&["1e3"], "shred: 1e3: failed to open for writing: No such file or directory\n")]
+#[case(&["007"], "shred: 007: failed to open for writing: Is a directory\n")]
 #[cfg(not(windows))]
 fn test_numeric_looking_file_names_are_kept_verbatim(
     #[case] args: &[&str],
