@@ -2218,6 +2218,13 @@ fn test_numeric_mode_must_be_the_whole_mode() {
             .stderr_contains("invalid operator");
     }
 
+    // Numeric clauses with an explicit operator are valid in a list.
+    ts.ucmd().args(&["=666,-002", "probe"]).succeeds();
+    assert_eq!(
+        ts.fixtures.metadata("probe").permissions().mode() & 0o777,
+        0o664
+    );
+
     // On its own the same number is fine.
     ts.ucmd().args(&["700", "probe"]).succeeds();
     assert_eq!(

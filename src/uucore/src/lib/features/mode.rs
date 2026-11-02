@@ -351,6 +351,27 @@ fn parse_change(mode: &str, fperm: u32, considering_dir: bool) -> (u32, usize) {
     (srwx, pos)
 }
 
+/// Whether a single mode clause is numeric.
+///
+/// In a comma-separated list, GNU only treats a numeric clause as a number
+/// when it has an explicit `+`, `-`, or `=` operator. A bare octal such as
+/// `644,u+x` is a symbolic syntax error instead. A whole mode may still be a
+/// bare number, as in `chmod 644 file`.
+pub fn is_numeric_clause(mode: &str, in_list: bool) -> bool {
+    let mode = mode.trim();
+    if !in_list {
+        return mode.chars().any(|c| c.is_ascii_digit());
+    }
+    let Some(rest) = mode
+        .strip_prefix('+')
+        .or_else(|| mode.strip_prefix('-'))
+        .or_else(|| mode.strip_prefix('='))
+    else {
+        return false;
+    };
+    !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit())
+}
+
 /// Modify a file mode based on a user-supplied string.
 /// Supports comma-separated mode strings like "ug+rwX,o+rX" (same as chmod).
 pub fn parse_chmod(
@@ -361,9 +382,11 @@ pub fn parse_chmod(
 ) -> Result<u32, ModeError> {
     let mut new_mode: u32 = current_mode;
 
-    // A numeric mode has to be the whole mode: GNU reads a comma-separated
-    // mode as a list of symbolic clauses, so `755,u+w` and `u=r,2` are
-    // invalid rather than the number being applied to one clause.
+    // A bare numeric mode has to be the whole mode: GNU reads a
+    // comma-separated mode as a list of clauses, so `755,u+w` and `u=r,2`
+    // are invalid rather than the number being applied to one clause. A
+    // numeric clause with an explicit operator is still valid in a list, as in
+    // GNU's own `=7777,-5022` test case.
     let list = mode_string.contains(',');
 
     // Split by commas and process each mode part sequentially
@@ -378,10 +401,10 @@ pub fn parse_chmod(
             continue;
         }
 
-        new_mode = if list || !mode_part.chars().any(|c| c.is_ascii_digit()) {
-            parse_symbolic(new_mode, mode_part, umask, considering_dir)
-        } else {
+        new_mode = if is_numeric_clause(mode_part, list) {
             parse_numeric(new_mode, mode_part, considering_dir)
+        } else {
+            parse_symbolic(new_mode, mode_part, umask, considering_dir)
         }
         .map_err(|err| err.shift(start))?;
     }
@@ -561,11 +584,16 @@ mod tests {
 
     #[test]
     fn test_numeric_mode_must_stand_alone() {
-        // A comma-separated mode is a list of symbolic clauses, so a number
-        // inside it is invalid rather than applied to one clause.
+        // A bare number inside a comma-separated list is invalid rather than
+        // applied to one clause.
         for mode in ["644,u+x", "u+rw,755", "755,644", "u=r,2", "1,u=w", "+1,2"] {
             assert!(parse(mode, false, 0).is_err(), "{mode}");
         }
+
+        // A numeric clause with an explicit operator is valid in a list.
+        assert_eq!(parse("=7777,-5022", false, 0).unwrap(), 0o2755);
+        assert_eq!(parse("+644,u+x", false, 0).unwrap(), 0o744);
+        assert_eq!(parse("u+rw,=755", false, 0).unwrap(), 0o755);
 
         // On its own a number, with or without an operator, still parses.
         assert_eq!(parse("755", false, 0).unwrap(), 0o755);
