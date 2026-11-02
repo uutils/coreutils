@@ -1684,9 +1684,9 @@ dependencies = [
 
 [[package]]
 name = "jiff-icu"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e67c2beaae8b10a82d849b9aabb698a43a682f32b17bcdc035d5ecadb44d646"
+checksum = "0635c26744fc68e8fbc6120ba5af632d1eef6f4e951a665509c0a4552caa513f"
 dependencies = [
  "icu_calendar",
  "icu_time",
