@@ -27,8 +27,7 @@ use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::fs::SYMLINK_FOLLOW_LIMIT;
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
-use uucore::i18n::decimal::locale_grouping_separator;
-use uucore::i18n::{UEncoding, get_numeric_locale};
+use uucore::i18n::decimal::{group_digits, locale_grouping_separator_bytes};
 use uucore::line_ending::LineEnding;
 #[cfg(all(unix, not(target_os = "redox")))]
 use uucore::safe_traversal::{DirFd, SymlinkBehavior};
@@ -115,7 +114,54 @@ enum Deref {
 enum SizeFormat {
     HumanDecimal,
     HumanBinary,
-    BlockSize(u64, Option<String>),
+    BlockSize(BlockSize),
+}
+
+/// A block size and how the sizes counted in it are printed.
+#[derive(Clone)]
+struct BlockSize {
+    bytes: u64,
+    /// Printed after each size when SIZE has no number, as in `MiB`.
+    unit: Option<String>,
+    /// Set by a leading `'` in SIZE: group the digits with the locale's separator.
+    group_digits: bool,
+}
+
+impl BlockSize {
+    fn bytes(bytes: u64) -> Self {
+        Self {
+            bytes,
+            unit: None,
+            group_digits: false,
+        }
+    }
+
+    /// Parse a SIZE such as `1M`, `'1K` or `MiB`.
+    fn parse(spec: &str) -> Result<Self, ParseSizeError> {
+        let (group_digits, size) = match spec.strip_prefix('\'') {
+            Some(size) => (true, size),
+            None => (false, spec),
+        };
+        let bytes = parse_size_u64(size)?;
+        if bytes == 0 {
+            return Err(ParseSizeError::ParseFailure(spec.to_string()));
+        }
+        Ok(Self {
+            bytes,
+            unit: unit_label(size),
+            group_digits,
+        })
+    }
+
+    /// The digits of `count`, grouped when SIZE asked for it.
+    fn digits(&self, count: u64) -> Vec<u8> {
+        let digits = count.to_string();
+        if self.group_digits {
+            group_digits(digits.as_bytes(), locale_grouping_separator_bytes())
+        } else {
+            digits.into_bytes()
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
@@ -303,66 +349,49 @@ fn get_file_info(path: &Path, _metadata: &Metadata) -> Option<FileInfo> {
     result
 }
 
-fn read_block_size(
-    s: Option<&str>,
-    diag_args: Option<&[OsString]>,
-) -> UResult<(u64, Option<String>)> {
-    let vars = ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"];
+fn read_block_size(s: Option<&str>, diag_args: Option<&[OsString]>) -> UResult<BlockSize> {
     if let Some(s) = s {
-        let parsed = s.strip_prefix('\'').unwrap_or(s);
-        parse_size_u64(parsed)
-            .and_then(|bytes| {
-                // A block size of zero is rejected here rather than by the
-                // caller, so that it goes through the caret path like every
-                // other bad SIZE.
-                if bytes == 0 {
-                    Err(ParseSizeError::ParseFailure(s.to_string()))
-                } else {
-                    Ok((bytes, suffix_from_parsed_block_size(s)))
-                }
-            })
-            .map_err(|e| {
-                let message = format_error_message(&e, s, options::BLOCK_SIZE);
-                e.size_value_error(
-                    diag_args,
-                    &OptionValue::new(s, 'B', options::BLOCK_SIZE),
-                    0,
-                    &message,
-                    USimpleError::new(1, message.clone()),
-                )
-            })
+        // A block size of zero is rejected by `BlockSize::parse` rather than by
+        // the caller, so that it goes through the caret path like every other
+        // bad SIZE.
+        BlockSize::parse(s).map_err(|e| {
+            let message = format_error_message(&e, s, options::BLOCK_SIZE);
+            // The caret points past the `'` that asks for digit grouping.
+            let size_at = usize::from(s.starts_with('\''));
+            e.size_value_error(
+                diag_args,
+                &OptionValue::new(s, 'B', options::BLOCK_SIZE),
+                size_at,
+                &message,
+                USimpleError::new(1, message.clone()),
+            )
+        })
     } else {
-        for var in vars {
-            if let Ok(value) = env::var(var) {
-                let parsed = value.strip_prefix('\'').unwrap_or(&value);
-                return match parse_size_u64(parsed) {
-                    Ok(bytes) if bytes != 0 => Ok((bytes, suffix_from_parsed_block_size(&value))),
-                    _ => Ok((parse_block_size::default_block_size(), None)),
-                };
-            }
-        }
-        Ok((parse_block_size::default_block_size(), None))
+        // The first variable set wins, even when its value is invalid.
+        let from_env = parse_block_size::block_size_spec_from_env(&[
+            "DU_BLOCK_SIZE",
+            "BLOCK_SIZE",
+            "BLOCKSIZE",
+        ])
+        .and_then(|spec| BlockSize::parse(&spec).ok());
+        Ok(from_env.unwrap_or_else(|| BlockSize::bytes(parse_block_size::default_block_size())))
     }
 }
 
-fn suffix_from_parsed_block_size(s: &str) -> Option<String> {
-    let grouping = s.starts_with('\'');
-    let s = s.strip_prefix('\'').unwrap_or(s);
-    let mut chars = s.chars();
-    let unit = chars.next()?.to_ascii_uppercase();
-    if !unit.is_ascii_alphabetic() || unit == 'B' {
-        return grouping.then(|| "'".to_string());
+/// The unit printed after the sizes of a SIZE without a number, or `None`.
+///
+/// The prefix letter is uppercased, `kB` keeps its lowercase `k`, and the
+/// `D` of `KD`, `MD`... is dropped.
+fn unit_label(size: &str) -> Option<String> {
+    let mut chars = size.chars();
+    let prefix = chars.next()?.to_ascii_uppercase();
+    if !prefix.is_ascii_alphabetic() || prefix == 'B' {
+        return None;
     }
-
-    let suffix = match chars.as_str() {
-        "" | "D" => unit.to_string(),
-        "B" if unit == 'K' => "kB".to_string(),
-        suffix => format!("{unit}{suffix}"),
-    };
-    Some(if grouping {
-        format!("'{suffix}")
-    } else {
-        suffix
+    Some(match chars.as_str() {
+        "" | "D" => prefix.to_string(),
+        "B" if prefix == 'K' => "kB".to_string(),
+        rest => format!("{prefix}{rest}"),
     })
 }
 
@@ -878,36 +907,6 @@ struct StatPrintInfo {
     depth: usize,
 }
 
-/// Add the locale grouping requested by a leading apostrophe in SIZE.
-fn format_block_count(blocks: u64, grouping: bool) -> Vec<u8> {
-    if !grouping {
-        return blocks.to_string().into_bytes();
-    }
-
-    let digits = blocks.to_string();
-    let separator = locale_grouping_separator();
-    if separator.is_empty() || digits.len() < 4 {
-        return digits.into_bytes();
-    }
-
-    let separator = if get_numeric_locale().1 == UEncoding::Ascii && separator == "\u{202f}" {
-        &b"\xa0"[..]
-    } else {
-        separator.as_bytes()
-    };
-    let first_group = match digits.len() % 3 {
-        0 => 3,
-        n => n,
-    };
-    let mut grouped = Vec::with_capacity(digits.len() + separator.len());
-    grouped.extend_from_slice(&digits.as_bytes()[..first_group]);
-    for chunk in digits.as_bytes()[first_group..].chunks(3) {
-        grouped.extend_from_slice(separator);
-        grouped.extend_from_slice(chunk);
-    }
-    grouped
-}
-
 impl StatPrinter {
     fn choose_size(&self, stat: &Stat) -> u64 {
         if self.inodes {
@@ -967,20 +966,14 @@ impl StatPrinter {
                 uucore::format::human::SizeFormat::Binary,
             )
             .into_bytes(),
-            SizeFormat::BlockSize(block_size, suffix) => {
+            SizeFormat::BlockSize(block_size) => {
                 if self.inodes {
-                    // we ignore block size (-B) with --inodes
-                    format_block_count(size, suffix.as_deref().is_some_and(|s| s.starts_with('\'')))
+                    // --inodes ignores the block size (-B), but not its digit grouping
+                    block_size.digits(size)
                 } else {
-                    let blocks = size.div_ceil(*block_size);
-                    let mut blocks = format_block_count(
-                        blocks,
-                        suffix.as_deref().is_some_and(|s| s.starts_with('\'')),
-                    );
-                    if let Some(suffix) = suffix {
-                        blocks.extend_from_slice(
-                            suffix.strip_prefix('\'').unwrap_or(suffix).as_bytes(),
-                        );
+                    let mut blocks = block_size.digits(size.div_ceil(block_size.bytes));
+                    if let Some(unit) = &block_size.unit {
+                        blocks.extend_from_slice(unit.as_bytes());
                     }
                     blocks
                 }
@@ -1079,24 +1072,23 @@ fn get_size_format_flag_arg_index_if_present(matches: &ArgMatches, arg: &str) ->
 fn parse_size_format(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<SizeFormat> {
     // `read_block_size` falls back to the environment and rejects a zero block
     // size itself, so that the caret can point at the offending value.
-    let (block_size, suffix) = read_block_size(
+    let block_size_value_or_default_fallback = SizeFormat::BlockSize(read_block_size(
         matches
             .get_one::<String>(options::BLOCK_SIZE)
             .map(AsRef::as_ref),
         diag_args,
-    )?;
-    let block_size_value_or_default_fallback = SizeFormat::BlockSize(block_size, suffix);
+    )?);
     let candidates = [
         (
-            SizeFormat::BlockSize(1, None),
+            SizeFormat::BlockSize(BlockSize::bytes(1)),
             get_size_format_flag_arg_index_if_present(matches, options::BYTES),
         ),
         (
-            SizeFormat::BlockSize(1024, None),
+            SizeFormat::BlockSize(BlockSize::bytes(1024)),
             get_size_format_flag_arg_index_if_present(matches, options::BLOCK_SIZE_1K),
         ),
         (
-            SizeFormat::BlockSize(1024 * 1024, None),
+            SizeFormat::BlockSize(BlockSize::bytes(1024 * 1024)),
             get_size_format_flag_arg_index_if_present(matches, options::BLOCK_SIZE_1M),
         ),
         (
@@ -1706,7 +1698,7 @@ mod test_du {
         for it in &test_data {
             assert!(matches!(
                 read_block_size(it.as_deref(), None),
-                Ok((1024, _))
+                Ok(BlockSize { bytes: 1024, .. })
             ));
         }
     }

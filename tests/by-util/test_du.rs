@@ -9,6 +9,7 @@
 #[cfg(not(windows))]
 use regex::Regex;
 
+use rstest::rstest;
 #[cfg(not(windows))]
 use uutests::unwrap_or_return;
 use uutests::util::TestScenario;
@@ -298,73 +299,79 @@ fn test_du_env_block_size_hierarchy() {
     assert_eq!(expected, result2);
 }
 
-#[test]
-fn test_du_suffix_only_block_size() {
+#[rstest]
+#[case::bare_prefix(Some("-BM"), None, "3M")]
+#[case::number_hides_unit(Some("-B1M"), None, "3")]
+#[case::grouped_bare_prefix(Some("-B'M"), None, "3M")]
+#[case::grouped_number(Some("-B'1M"), None, "3")]
+#[case::decimal_alias(Some("-BKD"), None, "2500K")]
+#[case::lowercase_decimal_alias(Some("-BmD"), None, "3M")]
+#[case::du_env(None, Some(("DU_BLOCK_SIZE", "M")), "3M")]
+#[case::decimal_kilo_env(None, Some(("BLOCK_SIZE", "KB")), "2500kB")]
+#[case::blocksize_env(None, Some(("BLOCKSIZE", "MiB")), "3MiB")]
+#[case::grouped_env(None, Some(("DU_BLOCK_SIZE", "'KiB")), "2442KiB")]
+#[case::grouped_number_env(None, Some(("DU_BLOCK_SIZE", "'1KiB")), "2442")]
+#[case::number_env(None, Some(("DU_BLOCK_SIZE", "1M")), "3")]
+fn test_du_suffix_only_block_size(
+    #[case] arg: Option<&str>,
+    #[case] env: Option<(&str, &str)>,
+    #[case] expected: &str,
+) {
     let ts = TestScenario::new(util_name!());
-    let file = "file";
-    ts.fixtures.write(file, "x");
+    ts.fixtures.make_file("plum").set_len(2_500_000).unwrap();
 
-    for (arg, env, expected) in [
-        (Some("-BM"), None, "1M"),
-        (Some("-B1M"), None, "1"),
-        (Some("-B'M"), None, "1M"),
-        (Some("-B'1M"), None, "1"),
-        (None, Some(("DU_BLOCK_SIZE", "M")), "1M"),
-        (None, Some(("BLOCK_SIZE", "KB")), "1kB"),
-        (None, Some(("BLOCKSIZE", "MiB")), "1MiB"),
-        (None, Some(("DU_BLOCK_SIZE", "'KiB")), "1KiB"),
-        (None, Some(("DU_BLOCK_SIZE", "'1KiB")), "1"),
-        (None, Some(("DU_BLOCK_SIZE", "1M")), "1"),
-    ] {
-        let mut cmd = ts.ucmd();
-        if let Some(arg) = arg {
-            cmd.arg(arg);
-        }
-        if let Some((var, value)) = env {
-            cmd.env(var, value);
-        }
-        cmd.arg("--apparent-size")
-            .arg(file)
-            .succeeds()
-            .stdout_only(format!("{expected}\t{file}\n"));
+    let mut cmd = ts.ucmd();
+    cmd.args(&["--apparent-size", "plum"]);
+    if let Some(arg) = arg {
+        cmd.arg(arg);
     }
+    if let Some((var, value)) = env {
+        cmd.env(var, value);
+    }
+    cmd.succeeds().stdout_only(format!("{expected}\tplum\n"));
 }
 
-#[test]
-fn test_du_block_size_locale_grouping() {
-    let ts = TestScenario::new(util_name!());
-    let file = "file";
-    let fpath = ts.fixtures.plus(file);
-    std::fs::File::create(&fpath)
-        .expect("cannot create test file")
-        .set_len(100_000_000)
-        .expect("cannot set file size");
-
-    for (block_size, expected) in [("'KiB", "97\u{202f}657KiB"), ("'1KiB", "97\u{202f}657")] {
-        ts.ucmd()
-            .arg("--apparent-size")
-            .arg(format!("--block-size={block_size}"))
-            .arg(file)
-            .env("LC_ALL", "fr_FR.UTF-8")
-            .succeeds()
-            .stdout_only(format!("{expected}\t{file}\n"));
+#[cfg(target_os = "linux")]
+#[rstest]
+#[case::unit("fr_FR.UTF-8", "UTF-8", "'KiB", "2\u{202f}442KiB".as_bytes())]
+#[case::number("fr_FR.UTF-8", "UTF-8", "'1KiB", "2\u{202f}442".as_bytes())]
+#[case::latin1("fr_FR", "ISO-8859-1", "'KiB", b"2\xa0442KiB")]
+#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+fn test_du_block_size_locale_grouping(
+    #[case] locale: &str,
+    #[case] charmap: &str,
+    #[case] block_size: &str,
+    #[case] expected: &[u8],
+) {
+    let installed = std::process::Command::new("locale")
+        .env("LC_ALL", locale)
+        .arg("charmap")
+        .output()
+        .is_ok_and(|output| {
+            output.status.success()
+                && output.stderr.is_empty()
+                && String::from_utf8_lossy(&output.stdout).trim() == charmap
+        });
+    if !installed {
+        println!("test skipped: {locale} is not installed");
+        return;
     }
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.make_file("plum").set_len(2_500_000).unwrap();
 
+    let mut line = expected.to_vec();
+    line.extend_from_slice(b"\tplum\n");
     ts.ucmd()
-        .arg("--apparent-size")
-        .arg(file)
-        .env("BLOCK_SIZE", "'KiB")
-        .env("LC_ALL", "fr_FR.UTF-8")
+        .args(&["--apparent-size", "-B", block_size, "plum"])
+        .env("LC_ALL", locale)
         .succeeds()
-        .stdout_only(format!("97\u{202f}657KiB\t{file}\n"));
-
+        .stdout_is_bytes(&line);
     ts.ucmd()
-        .arg("--apparent-size")
-        .arg("--block-size='KiB")
-        .arg(file)
-        .env("LC_ALL", "fr_FR")
+        .args(&["--apparent-size", "plum"])
+        .env("LC_ALL", locale)
+        .env("BLOCK_SIZE", block_size)
         .succeeds()
-        .stdout_only_bytes(&b"97\xa0657KiB\tfile\n"[..]);
+        .stdout_is_bytes(&line);
 }
 
 #[test]
@@ -2943,6 +2950,18 @@ du: invalid suffix in --block-size argument '1fb'
             "{}",
             result.stderr_as_displayed()
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_skips_the_grouping_quote_of_a_block_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .arg("--block-size='7zb")
+            .fails_with_code(1);
+
+        // `du --block-size='7` puts the unit at column 19.
+        assert_eq!(result.caret_column(), Some(19));
     }
 
     #[cfg(unix)]
