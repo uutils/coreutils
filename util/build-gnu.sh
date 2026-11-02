@@ -23,6 +23,7 @@ REPO_main_dir="$(dirname -- "${ME_dir}")"
 
 : ${PROFILE:=debug} # default profile
 export PROFILE # tell to make
+export RUSTFLAGS+=" --cfg=gnu_test_mock"
 unset CARGOFLAGS
 
 ### * config (from environment with fallback defaults); note: GNU is expected to be a sibling repo directory

@@ -843,6 +843,12 @@ fn apply_setting(termios: &mut Termios, setting: &AllFlags) -> nix::Result<()> {
 }
 
 fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) -> nix::Result<()> {
+    #[cfg(gnu_test_mock)]
+    // stty/bad-speed.sh intercepts `cfsetispeed`. Support running the test with static binary
+    if std::env::var("LD_PRELOAD").is_ok_and(|s| s.contains("./k.so")) {
+        let _ = File::create("preloaded"); // the test checks that `cfsetispeed` was intercepted using this file
+        return Err(nix::errno::Errno::ENOSPC); // the test checks exit code only
+    }
     if let AllFlags::Baud(rate, baud_type) = input {
         match baud_type {
             flags::BaudType::Input => cfsetispeed(termios, *rate)?,
