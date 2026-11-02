@@ -677,6 +677,20 @@ fn test_cp_no_target_directory_keeps_source_named_subdir(
 }
 
 #[test]
+#[cfg(unix)]
+fn test_cp_archive_no_target_directory_preserves_outer_mode() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("dir/dir");
+    at.set_mode("dir", 0o700);
+    at.set_mode("dir/dir", 0o755);
+
+    ucmd.args(&["-aT", "dir", "new"]).succeeds().no_output();
+
+    assert_eq!(at.metadata("new").permissions().mode() & 0o777, 0o700);
+    assert_eq!(at.metadata("new/dir").permissions().mode() & 0o777, 0o755);
+}
+
+#[test]
 fn test_cp_target_directory_is_file() {
     new_ucmd!()
         .arg("-t")
