@@ -229,6 +229,20 @@ fn test_mknod_mode_comma_separated() {
 }
 
 #[test]
+fn test_mknod_mode_capital_x_adds_no_execute() {
+    for mode in ["a+X", "u+X", "go+rX", "a-x+X", "a+rwX", "u=rwX"] {
+        let ts = TestScenario::new(util_name!());
+        ts.ucmd().args(&["-m", mode, "test_fifo", "p"]).succeeds();
+        assert!(ts.fixtures.is_fifo("test_fifo"));
+        assert_eq!(
+            ts.fixtures.metadata("test_fifo").permissions().mode() & 0o777,
+            0o666,
+            "mode {mode}"
+        );
+    }
+}
+
+#[test]
 fn test_mknod_fifo_with_mode_and_umask() {
     use uucore::fs::display_permissions;
     let ts = TestScenario::new(util_name!());
