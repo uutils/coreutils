@@ -13,6 +13,8 @@
 
 use std::ffi::OsString;
 #[cfg(unix)]
+use std::os::unix::fs::FileTypeExt;
+#[cfg(unix)]
 use std::path::Path;
 
 use uucore::fsext::{FsUsage, MountInfo};
@@ -84,18 +86,32 @@ where
         path.as_ref().to_path_buf()
     };
 
-    // Find the potential mount point that matches entered path
-    let maybe_mount_point = mounts
-        .iter()
-        // Create pair MountInfo, canonicalized device name
-        // TODO Abstract from accessing real filesystem to
-        // make code more testable
-        .map(|m| (m, std::fs::canonicalize(&m.dev_name)))
-        // Ignore non existing paths
-        .filter_map(|m| m.1.ok().map(|m1| (m.0, m1)))
-        // Try to find canonicalized device name corresponding to entered path
-        .find(|m| m.1.eq(&path))
-        .map(|m| m.0);
+    // Match on the device only when the operand is one (`df /dev/sda1`).
+    // For any other file the mount directory decides: a mount whose source is
+    // `/` or a symlink to a directory must not capture `df /`.
+    let is_device = std::fs::metadata(&path).is_ok_and(|m| {
+        let file_type = m.file_type();
+        file_type.is_block_device() || file_type.is_char_device()
+    });
+    let maybe_mount_point = if is_device {
+        mounts
+            .iter()
+            // Only absolute sources are device paths. Others, like "tmpfs" or
+            // "proc", are labels, and canonicalizing them would resolve a file
+            // of that name in the working directory.
+            .filter(|m| Path::new(&m.dev_name).is_absolute())
+            // Create pair MountInfo, canonicalized device name
+            // TODO Abstract from accessing real filesystem to
+            // make code more testable
+            .map(|m| (m, std::fs::canonicalize(&m.dev_name)))
+            // Ignore non existing paths
+            .filter_map(|m| m.1.ok().map(|m1| (m.0, m1)))
+            // Try to find canonicalized device name corresponding to entered path
+            .find(|m| m.1.eq(&path))
+            .map(|m| m.0)
+    } else {
+        None
+    };
 
     maybe_mount_point
         .or_else(|| {
@@ -243,16 +259,22 @@ mod tests {
 
         #[test]
         fn test_dev_name_match() {
-            let tmp = tempfile::TempDir::new().expect("Failed to create temp dir");
-            let dev_name = std::fs::canonicalize(tmp.path())
-                .expect("Failed to canonicalize tmp path")
-                .to_string_lossy()
-                .to_string();
-
+            // /dev/null is a character device on every unix we build for.
             let mut mount_info = mount_info("/foo");
-            mount_info.dev_name = dev_name.clone();
+            mount_info.dev_name = "/dev/null".to_string();
             let mounts = [mount_info];
-            let actual = mount_info_from_path(&mounts, dev_name, false).unwrap();
+            let actual = mount_info_from_path(&mounts, "/dev/null", false).unwrap();
+            assert!(mount_info_eq(actual, &mounts[0]));
+        }
+
+        #[test]
+        fn test_directory_operand_ignores_dev_name() {
+            // A mount whose source is "/" (a bind mount or a btrfs subvolume)
+            // must not capture a directory operand through its device name.
+            let mut bound = mount_info("/mnt/bound");
+            bound.dev_name = "/".to_string();
+            let mounts = [mount_info("/"), bound];
+            let actual = mount_info_from_path(&mounts, "/", false).unwrap();
             assert!(mount_info_eq(actual, &mounts[0]));
         }
     }
