@@ -509,40 +509,20 @@ fn test_backspaces_before_last_tab_stop_resume_conversion() {
         .stdout_is("abcde\x08\x08\tX\n");
 }
 
-#[test]
-fn test_repeated_flags_are_accepted() {
-    // clap treats a repeated boolean flag as a conflict unless the command
-    // allows an argument to override itself.
-    let input = "        A     B\n";
-
-    let all_once = new_ucmd!()
-        .args(&["-a"])
-        .pipe_in(input)
+// clap treats a repeated boolean flag as a conflict unless the command
+// allows an argument to override itself.
+#[rstest]
+#[case::all(&["-a"], "\tA\t B\n")]
+#[case::all_repeated(&["-a", "-a"], "\tA\t B\n")]
+#[case::first_only(&["--first-only"], "\tA        B\n")]
+#[case::first_only_repeated(&["--first-only", "--first-only"], "\tA        B\n")]
+#[case::first_only_repeated_short_long(&["-f", "--first-only"], "\tA        B\n")]
+#[case::no_utf8(&["-U"], "\tA        B\n")]
+#[case::no_utf8_repeated(&["-U", "-U"], "\tA        B\n")]
+fn test_repeated_flags_are_accepted(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in("        A        B\n")
         .succeeds()
-        .stdout_move_str();
-    let all_twice = new_ucmd!()
-        .args(&["-a", "-a"])
-        .pipe_in(input)
-        .succeeds()
-        .stdout_move_str();
-    assert_eq!(all_twice, all_once);
-
-    let first_once = new_ucmd!()
-        .args(&["--first-only"])
-        .pipe_in(input)
-        .succeeds()
-        .stdout_move_str();
-    let first_twice = new_ucmd!()
-        .args(&["-f", "--first-only"])
-        .pipe_in(input)
-        .succeeds()
-        .stdout_move_str();
-    assert_eq!(first_twice, first_once);
-
-    let short_twice = new_ucmd!()
-        .args(&["-U", "-U"])
-        .pipe_in(input)
-        .succeeds()
-        .stdout_move_str();
-    assert_eq!(short_twice, first_once);
+        .stdout_only(expected);
 }
