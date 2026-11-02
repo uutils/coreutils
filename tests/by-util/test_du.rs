@@ -3012,7 +3012,8 @@ du: invalid suffix in --block-size argument '1fb'
 #[test]
 fn test_last_of_dereference_args_no_dereference_wins() {
     let scene = TestScenario::new(util_name!());
-    std::os::unix::fs::symlink("missing", scene.fixtures.plus("dangling")).unwrap();
+    let at = &scene.fixtures;
+    at.symlink_file("missing", "dangling");
     // -P last wins: the dangling symlink argument is not dereferenced, so du succeeds.
     scene
         .ucmd()
