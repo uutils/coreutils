@@ -51,7 +51,6 @@ ls-help-long-format-no-group = Long format without group information.
   Identical to --format=long with --no-group.
 ls-help-long-no-owner = Long format without owner information.
 ls-help-long-numeric-uid-gid = -l with numeric UIDs and GIDs.
-ls-help-set-quoting-style = Set quoting style.
 ls-help-literal-quoting-style = Use literal quoting style. Equivalent to `--quoting-style=literal`
 ls-help-escape-quoting-style = Use escape quoting style. Equivalent to `--quoting-style=escape`
 ls-help-c-quoting-style = Use C quoting style. Equivalent to `--quoting-style=c`
