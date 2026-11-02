@@ -326,23 +326,9 @@ impl Chmoder {
             Ok((mode, mode))
         } else {
             let cmode_unwrapped = self.cmode.clone().unwrap();
-
-            // GNU reads a comma-separated mode as a list of symbolic clauses, so a
-            // clause that is plain octal makes the whole mode invalid: `755,644` is
-            // rejected instead of the number being applied to a single clause.
-            if cmode_unwrapped.contains(',')
-                && cmode_unwrapped
-                    .split(',')
-                    .any(|clause| clause.chars().all(|c| c.is_ascii_digit()))
-            {
-                if self.quiet {
-                    return Err(ExitCode::new(1));
-                }
-                return Err(USimpleError::new(
-                    1,
-                    format!("invalid mode: {}", cmode_unwrapped.quote()),
-                ));
-            }
+            // A numeric mode has to be the whole mode: once the mode is a
+            // comma-separated list, every clause is symbolic.
+            let has_comma = cmode_unwrapped.contains(',');
             let mut new_mode = current_mode;
             let mut naively_expected_new_mode = current_mode;
 
@@ -353,11 +339,7 @@ impl Chmoder {
                 let clause_start = offset;
                 offset += mode.len() + 1; // past the clause and its comma
 
-                // A numeric mode has to be the whole mode: once the mode is a
-                // comma-separated list, every clause is symbolic, so `755,644`
-                // and `u=r,2` are rejected just like GNU does.
-                let numeric = !cmode_unwrapped.contains(',');
-                let result = if numeric && mode.chars().any(|c| c.is_ascii_digit()) {
+                let result = if !has_comma && mode.chars().any(|c| c.is_ascii_digit()) {
                     mode::parse_numeric(new_mode, mode, is_dir).map(|v| (v, v))
                 } else {
                     mode::parse_symbolic(new_mode, mode, mode::get_umask(), is_dir).map(|m| {

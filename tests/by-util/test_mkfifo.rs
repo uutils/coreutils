@@ -53,7 +53,7 @@ fn test_comma_separated_numeric_mode_is_rejected() {
             .args(&["-m", mode, "fifo"])
             .fails_with_code(1)
             .stderr_contains("invalid mode");
-        assert!(!ts.fixtures.file_exists("fifo"), "{mode} made the FIFO");
+        assert!(!ts.fixtures.plus("fifo").exists(), "{mode} made the FIFO");
     }
 }
 

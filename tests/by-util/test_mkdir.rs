@@ -1279,7 +1279,7 @@ mod diagnostics {
                 .fails_with_code(1)
                 .stderr_only(format!("mkdir: invalid mode '{mode}'\n"));
             assert!(
-                !ts.fixtures.file_exists("some_dir"),
+                !ts.fixtures.dir_exists("some_dir"),
                 "{mode} made the directory"
             );
         }
