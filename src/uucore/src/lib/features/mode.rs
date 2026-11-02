@@ -405,11 +405,6 @@ pub fn parse_chmod(
 ) -> Result<u32, ModeError> {
     let mut new_mode: u32 = current_mode;
 
-    // A bare numeric mode has to be the whole mode: GNU reads a
-    // comma-separated mode as a list of clauses, so `755,u+w` and `u=r,2`
-    // are invalid rather than the number being applied to one clause. A
-    // numeric clause with an explicit operator is still valid in a list, as in
-    // GNU's own `=7777,-5022` test case.
     let list = mode_string.contains(',');
 
     // Split by commas and process each mode part sequentially

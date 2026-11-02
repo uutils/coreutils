@@ -326,9 +326,6 @@ impl Chmoder {
             Ok((mode, mode))
         } else {
             let cmode_unwrapped = self.cmode.clone().unwrap();
-            // A bare numeric mode has to be the whole mode; a numeric clause
-            // with an explicit `+`, `-`, or `=` operator may appear in a
-            // comma-separated list, as in GNU's `=7777,-5022` test case.
             let has_comma = cmode_unwrapped.contains(',');
             let mut new_mode = current_mode;
             let mut naively_expected_new_mode = current_mode;
