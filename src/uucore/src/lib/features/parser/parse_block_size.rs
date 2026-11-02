@@ -51,15 +51,21 @@ impl BlockSizeEnv {
 ///   (`BLOCKSIZE` excluded because it only affects allocation display)
 /// - `ls` (allocation): `block_size_from_env(&["BLOCKSIZE"])`
 pub fn block_size_from_env(vars: &[&str]) -> BlockSizeEnv {
-    for var in vars {
-        if let Ok(s) = std::env::var(var) {
-            return match parse_size_non_zero_u64(&s) {
-                Ok(n) => BlockSizeEnv::Found(n),
-                Err(_) => BlockSizeEnv::SetButInvalid,
-            };
-        }
+    match block_size_spec_from_env(vars) {
+        Some(s) => match parse_size_non_zero_u64(&s) {
+            Ok(n) => BlockSizeEnv::Found(n),
+            Err(_) => BlockSizeEnv::SetButInvalid,
+        },
+        None => BlockSizeEnv::NotSet,
     }
-    BlockSizeEnv::NotSet
+}
+
+/// Return the raw value of the first of `vars` that is set, valid or not.
+///
+/// For utilities that print more than the size, such as the unit of `MiB`
+/// or the digit grouping asked by a leading `'`.
+pub fn block_size_spec_from_env(vars: &[&str]) -> Option<String> {
+    vars.iter().find_map(|var| std::env::var(var).ok())
 }
 
 /// Default block size when no env var or flag is set.
