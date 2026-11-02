@@ -1563,7 +1563,8 @@ fn get_line_for_printing(
 
     let display_length = complete_line.len() + (tab_count * 7);
 
-    let sep = if (index + 1) == indexes {
+    let is_last_cell = (index + 1) == indexes;
+    let sep = if is_last_cell {
         &blank_line
     } else {
         &options.col_sep_for_printing
@@ -1574,7 +1575,9 @@ fn get_line_for_printing(
         line_width
             .map(|i| {
                 let min_width = i.saturating_sub(columns - 1) / columns;
-                if display_length < min_width {
+                // Like GNU pr, the last cell of a row is not padded, so the
+                // line has no trailing spaces.
+                if display_length < min_width && !is_last_cell {
                     for _i in 0..(min_width - display_length) {
                         complete_line.push(' ');
                     }
