@@ -357,7 +357,15 @@ fn opt_parsed(opt_name: &str, matches: &ArgMatches) -> UResult<Option<usize>> {
         Some(arg_str) => match arg_str.parse::<usize>() {
             Ok(v) => Ok(Some(v)),
             Err(e) => match e.kind() {
-                IntErrorKind::PosOverflow => Ok(Some(usize::MAX)),
+                IntErrorKind::PosOverflow
+                    if arg_str
+                        .strip_prefix('+')
+                        .unwrap_or(arg_str)
+                        .chars()
+                        .all(|c| c.is_ascii_digit()) =>
+                {
+                    Ok(Some(usize::MAX))
+                }
                 _ => Err(USimpleError::new(
                     1,
                     translate!("uniq-error-invalid-argument", "opt_name" => opt_name, "arg" => arg_str.maybe_quote()),
