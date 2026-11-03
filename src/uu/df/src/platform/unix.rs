@@ -6,7 +6,7 @@
 //! Unix backend of `df`: `statfs` usage probes, over-mount detection and the
 //! fallback used when the mount table is unavailable.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
@@ -23,14 +23,13 @@ pub(crate) fn sync() {
     rustix::fs::sync();
 }
 
-/// Usage of the filesystem at `mount_info`, `None` if it cannot be queried.
-pub(crate) fn fs_usage(mount_info: &MountInfo) -> Option<FsUsage> {
-    let stat_path = if mount_info.mount_dir.is_empty() {
+/// The path `statfs` is called on to query the filesystem at `mount_info`.
+fn stat_path(mount_info: &MountInfo) -> &OsStr {
+    if mount_info.mount_dir.is_empty() {
         mount_info.dev_name.as_ref()
     } else {
         mount_info.mount_dir.as_os_str()
-    };
-    Some(FsUsage::new(statfs(stat_path).ok()?))
+    }
 }
 
 /// Check whether `mount` has been over-mounted.
@@ -56,10 +55,22 @@ pub(crate) fn filesystem_from_mount(
     file: Option<OsString>,
 ) -> Result<Filesystem, FsError> {
     if is_over_mounted(mounts, mount) {
-        Err(FsError::OverMounted)
-    } else {
-        Filesystem::new(mount.clone(), file).ok_or(FsError::MountMissing)
+        return Err(FsError::OverMounted);
     }
+
+    // Like GNU, report why the mount point could not be queried, e.g.
+    // "Permission denied", instead of skipping the mount.
+    let path = stat_path(mount);
+    let usage = statfs(path).map_err(|error| FsError::StatFailed {
+        path: path.to_owned(),
+        error,
+    })?;
+
+    Ok(Filesystem {
+        file,
+        mount_info: mount.clone(),
+        usage: FsUsage::new(usage),
+    })
 }
 
 /// Find and create the filesystem that contains `path`, through the mount
@@ -254,10 +265,10 @@ mod tests {
             Some("/dev/null"),
         ));
 
-        assert_eq!(
+        assert!(matches!(
             filesystem_for_path(&mounts, false, "/dev/null").unwrap_err(),
-            FsError::MountMissing
-        );
+            FsError::StatFailed { path, .. } if path == "/non-existent-dir"
+        ));
     }
 
     #[test]
