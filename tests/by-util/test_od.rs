@@ -1766,15 +1766,29 @@ fn test_final_offset_printed_when_an_input_fails() {
 #[test]
 #[cfg(not(windows))]
 #[cfg_attr(wasi_runner, ignore)]
-fn test_final_offset_printed_for_directory() {
+fn test_no_final_offset_for_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("d");
 
-    // A directory can be opened but not read, so GNU still prints the final
-    // offset even though no data was decoded.
+    // A directory can be opened but not read; with no input consumed, there is
+    // no final offset to report.
     ucmd.arg("d")
         .fails_with_code(1)
-        .stdout_is("0000000\n")
+        .no_stdout()
+        .stderr_contains("od: d:");
+}
+
+#[test]
+#[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_no_final_offset_for_directory_with_limited_read() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+
+    // Same as above, with -N limiting the read to one byte.
+    ucmd.args(&["-N1", "d"])
+        .fails_with_code(1)
+        .no_stdout()
         .stderr_contains("od: d:");
 }
 

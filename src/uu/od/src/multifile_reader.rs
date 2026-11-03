@@ -56,7 +56,6 @@ pub struct MultifileReader<'a> {
     ni: Vec<InputSource<'a>>,
     curr_file: Option<CurrentReader>,
     any_err: bool,
-    any_opened: bool,
     file_name: Option<&'a OsStr>,
 }
 
@@ -70,17 +69,10 @@ impl MultifileReader<'_> {
             ni: fnames,
             curr_file: None, // normally this means done; call next_file()
             any_err: false,
-            any_opened: false,
             file_name: None,
         };
         mf.next_file();
         mf
-    }
-
-    /// Whether at least one input was opened successfully, even if reading it
-    /// failed afterwards.
-    pub fn has_input(&self) -> bool {
-        self.any_opened
     }
 
     fn next_file(&mut self) {
@@ -112,7 +104,6 @@ impl MultifileReader<'_> {
                     {
                         self.curr_file = Some(CurrentReader::Stdin(io::stdin()));
                     }
-                    self.any_opened = true;
                     break;
                 }
                 InputSource::FileName(fname) => {
@@ -122,7 +113,6 @@ impl MultifileReader<'_> {
                             // No need to wrap `f` in a BufReader - buffered reading is taken care
                             // of elsewhere.
                             self.curr_file = Some(CurrentReader::File(f));
-                            self.any_opened = true;
                             break;
                         }
                         Err(e) => {

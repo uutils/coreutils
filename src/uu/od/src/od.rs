@@ -283,7 +283,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let mut input_offset =
             InputOffset::new(od_options.radix, od_options.skip_bytes, od_options.label);
 
-        let (mut input, input_was_opened) = open_input_peek_reader(
+        let mut input = open_input_peek_reader(
             &od_options.input_strings,
             od_options.skip_bytes,
             od_options.read_bytes,
@@ -305,7 +305,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             &mut input_offset,
             &mut input_decoder,
             &output_info,
-            input_was_opened,
             &mut out,
         )
     }
@@ -529,7 +528,6 @@ fn odfunc<I, W>(
     input_offset: &mut InputOffset,
     input_decoder: &mut InputDecoder<I>,
     output_info: &OutputInfo,
-    input_was_opened: bool,
     writer: &mut W,
 ) -> UResult<()>
 where
@@ -548,11 +546,10 @@ where
                 let length = memory_decoder.length();
 
                 if length == 0 {
-                    // GNU prints the final offset for an input it managed to open,
-                    // even if reading it failed (e.g. `od directory`), but stays
-                    // silent when no input could be opened at all (e.g.
-                    // `od missing-file`).
-                    if input_was_opened || !input_decoder.has_error() {
+                    // After a read error, print the final offset only when
+                    // some input was already consumed; otherwise stay silent
+                    // (e.g. `od directory` or `od missing`).
+                    if !input_decoder.has_error() || !input_offset.is_at_start() {
                         input_offset.write_final_offset(writer)?;
                     }
                     break;
@@ -822,23 +819,19 @@ fn open_input_peek_reader(
     input_strings: &[OsString],
     skip_bytes: u64,
     read_bytes: Option<u64>,
-) -> UResult<(
-    PeekReader<BufReader<PartialReader<MultifileReader<'_>>>>,
-    bool,
-)> {
+) -> UResult<PeekReader<BufReader<PartialReader<MultifileReader<'_>>>>> {
     // should return  "impl PeekRead + Read + HasError" when supported in (stable) rust
     let inputs = map_input_strings(input_strings);
     let mut mf = MultifileReader::new(inputs);
     mf.skip(skip_bytes)
         .map_err(|e| USimpleError::new(1, e.to_string()))?;
-    let input_was_opened = mf.has_input();
     let pr = PartialReader::new(mf, read_bytes);
     // Add a BufReader over the top of the PartialReader. This will have the
     // effect of generating buffered reads to files/stdin, but since these reads
     // go through MultifileReader (which limits the maximum number of bytes read)
     // we won't ever read more bytes than were specified with the `-N` flag.
     let buf_pr = BufReader::new(pr);
-    Ok((PeekReader::new(buf_pr), input_was_opened))
+    Ok(PeekReader::new(buf_pr))
 }
 
 impl<R: HasError> HasError for BufReader<R> {

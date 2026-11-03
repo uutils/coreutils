@@ -35,6 +35,11 @@ impl InputOffset {
         }
     }
 
+    /// Whether no input has been consumed yet, including skipped bytes.
+    pub fn is_at_start(&self) -> bool {
+        self.byte_pos == 0
+    }
+
     /// Increase `byte_pos` and `label` if a label is used.
     pub fn increase_position(&mut self, n: u64) {
         self.byte_pos += n;
