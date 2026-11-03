@@ -739,7 +739,7 @@ impl Config {
         // options on the command line decides the display format.
         let block_sizes: Vec<(&String, usize)> = options
             .get_many::<String>(options::size::BLOCK_SIZE)
-            .map(|values| values.collect::<Vec<&String>>())
+            .map(Iterator::collect::<Vec<&String>>)
             .unwrap_or_default()
             .into_iter()
             .zip(
@@ -767,7 +767,7 @@ impl Config {
         }
         for arg in [options::size::SI, options::size::HUMAN_READABLE] {
             if options.get_flag(arg)
-                && let Some(index) = options.indices_of(arg).and_then(|indices| indices.max())
+                && let Some(index) = options.indices_of(arg).and_then(Iterator::max)
                 && size_mode.is_none_or(|(latest, _)| index > latest)
             {
                 size_mode = Some((index, arg));
