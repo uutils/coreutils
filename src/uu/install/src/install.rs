@@ -196,13 +196,26 @@ static ARG_FILES: &str = "files";
 ///
 /// An empty value passed as `--context=` still has to be reported, but clap
 /// hands both spellings to us the same way, so the arguments are inspected.
-fn has_bare_context(args: &[OsString]) -> bool {
+/// Long-option inference also lets an unambiguous prefix such as `--con` or
+/// `--cont` mean `--context`, so prefixes are resolved against the command's
+/// declared long options.
+fn has_bare_context(args: &[OsString], app: &Command) -> bool {
     for arg in args {
         let text = arg.to_string_lossy();
         if text == "--" {
             break;
         }
-        if text == "--context" {
+        let Some(flag) = text.strip_prefix("--") else {
+            continue;
+        };
+        if flag.is_empty() || flag.contains('=') {
+            continue;
+        }
+        let mut matching = app
+            .get_arguments()
+            .filter_map(|arg| arg.get_long())
+            .filter(|long| long.starts_with(flag));
+        if matching.next() == Some(OPT_CONTEXT) && matching.next().is_none() {
             return true;
         }
     }
@@ -218,8 +231,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<OsString> = args.collect();
     // Kept for the caret in mode diagnostics, which needs the mode as typed.
     let diag_args = uucore::diagnostics::operands(&args);
-    let bare_context = has_bare_context(&args);
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let app = uu_app();
+    let bare_context = has_bare_context(&args, &app);
+    let matches = uucore::clap_localization::handle_clap_result(app, args)?;
 
     let paths: Vec<OsString> = matches
         .get_many::<OsString>(ARG_FILES)
@@ -1637,8 +1651,36 @@ pub fn set_selinux_context_for_directories_install(target_path: &Path, context: 
 
 #[cfg(test)]
 mod tests {
+    use super::{has_bare_context, uu_app};
+    use std::ffi::OsString;
+
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     use super::derive_context_from_parent;
+
+    fn os_args(values: &[&str]) -> Vec<OsString> {
+        values.iter().map(|value| OsString::from(*value)).collect()
+    }
+
+    #[test]
+    fn test_has_bare_context_with_long_option_prefixes() {
+        let app = uu_app();
+        for arg in ["--con", "--cont", "--context"] {
+            assert!(
+                has_bare_context(&os_args(&["install", arg]), &app),
+                "{arg} should be a bare context"
+            );
+        }
+        for arg in ["--context=", "--context=foo", "--con=foo", "--cont=foo"] {
+            assert!(
+                !has_bare_context(&os_args(&["install", arg]), &app),
+                "{arg} has an explicit value"
+            );
+        }
+        assert!(
+            !has_bare_context(&os_args(&["install", "--", "--context"]), &app),
+            "arguments after -- are operands"
+        );
+    }
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     #[test]
