@@ -678,6 +678,10 @@ fn test_cp_no_target_directory_keeps_source_named_subdir(
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: directory modes are not faithfully reproduced"
+)]
 fn test_cp_archive_no_target_directory_preserves_outer_mode() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir_all("dir/dir");
