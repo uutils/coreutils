@@ -46,6 +46,12 @@ pub struct Filesystem {
 pub(crate) enum FsError {
     #[cfg(not(windows))]
     OverMounted,
+    /// `statfs` failed on the mount point at `path` with `error`.
+    #[cfg(not(windows))]
+    StatFailed {
+        path: OsString,
+        error: String,
+    },
     InvalidPath,
     MountMissing,
 }
@@ -109,6 +115,7 @@ where
 
 impl Filesystem {
     // TODO: resolve uuid in `mount_info.dev_name` if exists
+    #[cfg(windows)]
     pub(crate) fn new(mount_info: MountInfo, file: Option<OsString>) -> Option<Self> {
         let usage = platform::fs_usage(&mount_info)?;
         Some(Self {
