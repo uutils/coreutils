@@ -18,7 +18,7 @@ use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::mode;
 use uucore::quoting_style::locale_aware_c_single_escape;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
-use uucore::{format_usage, show_if_err};
+use uucore::{format_usage, show_if_err, show_warning};
 use uucore::{translate, translate_text};
 
 static DEFAULT_PERM: u32 = 0o777;
@@ -104,6 +104,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Extract the SELinux related flags and options
     let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
     let context = matches.get_one::<String>(options::CONTEXT);
+
+    #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
+    let selinux_enabled = uucore::selinux::is_selinux_enabled();
+    #[cfg(not(all(feature = "selinux", any(target_os = "android", target_os = "linux"))))]
+    let selinux_enabled = false;
+    #[cfg(all(feature = "smack", target_os = "linux"))]
+    let smack_enabled = uucore::smack::is_smack_enabled();
+    #[cfg(not(all(feature = "smack", target_os = "linux")))]
+    let smack_enabled = false;
+
+    if context.is_some() && !selinux_enabled && !smack_enabled {
+        show_warning!("{}", translate!("mkdir-warning-context-ignored"));
+    }
 
     let config = Config {
         recursive,
