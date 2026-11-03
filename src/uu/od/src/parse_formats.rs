@@ -157,37 +157,7 @@ pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo
         return Err(translate!("od-error-missing-format-spec"));
     }
 
-    if formats.is_empty() {
-        formats.push(ParsedFormatterItemInfo::new(FORMAT_ITEM_OCT16, false)); // 2 byte octal is the default
-    }
-
     Ok(formats)
-}
-
-/// Returns whether any output type was requested on the command line, either via
-/// \`-t\`/\`--format\` or one of the traditional format flags (\`-c\`, \`-x\`, ...).
-pub fn has_type_option(args: &[String]) -> bool {
-    for arg in args.iter().skip(1) {
-        if arg.starts_with("--") {
-            if arg.len() == 2 {
-                break;
-            }
-            if arg.starts_with("--format") {
-                return true;
-            }
-        } else if arg.starts_with('-') {
-            for c in arg.chars().skip(1) {
-                if od_argument_with_option(c) {
-                    break;
-                }
-                if c == 't' || od_argument_traditional_format(c).is_some() {
-                    return true;
-                }
-            }
-        }
-    }
-
-    false
 }
 
 #[derive(PartialEq, Eq, Debug, Copy, Clone)]
@@ -391,13 +361,16 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
 #[cfg(test)]
 pub fn parse_format_flags_str(args_str: &[&'static str]) -> Result<Vec<FormatterItemInfo>, String> {
     let args: Vec<String> = args_str.iter().map(|s| (*s).to_string()).collect();
-    parse_format_flags(&args).map(|v| {
+    let mut formats = parse_format_flags(&args)?;
+    if formats.is_empty() {
+        formats.push(ParsedFormatterItemInfo::new(FORMAT_ITEM_OCT16, false)); // 2 byte octal is the default
+    }
+    Ok(formats
+        .into_iter()
         // tests using this function assume add_ascii_dump is not set
-        v.into_iter()
-            .inspect(|f| assert!(!f.add_ascii_dump))
-            .map(|f| f.formatter_item_info)
-            .collect()
-    })
+        .inspect(|f| assert!(!f.add_ascii_dump))
+        .map(|f| f.formatter_item_info)
+        .collect())
 }
 
 #[test]
