@@ -381,20 +381,8 @@ pub fn canonicalize<P: AsRef<Path>>(
             OwningComponent::CurDir => {}
             OwningComponent::ParentDir => {
                 // checking for current component
-                if !result.as_os_str().is_empty() {
-                    match fs::metadata(&result) {
-                        Ok(meta) if meta.is_dir() => {}
-                        Ok(_) => {
-                            return Err(Error::new(ErrorKind::NotADirectory, "Not a directory"));
-                        }
-                        Err(e) if e.kind() == ErrorKind::NotFound => {
-                            return Err(Error::new(
-                                ErrorKind::NotFound,
-                                "No such file or directory",
-                            ));
-                        }
-                        Err(e) => return Err(e),
-                    }
+                if !result.as_os_str().is_empty() && miss_mode != MissingHandling::Missing {
+                    ensure_is_directory(&result)?;
                 }
                 result.pop();
             }

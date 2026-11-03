@@ -5,7 +5,6 @@
 
 // spell-checker:ignore nusr
 
-use uucore::util_name;
 use uutests::new_ucmd;
 use uutests::path_concat;
 use uutests::util::{TestScenario, get_root_path};
@@ -694,5 +693,22 @@ fn test_realpath_directory_followed_by_parent_dir() {
 
     at.mkdir("directory");
 
-    scene.ucmd().arg("directory/..").succeeds();
+    scene
+        .ucmd()
+        .arg("directory/..")
+        .succeeds()
+        .stdout_is(format!("{}\n", at.root_dir_resolved()));
+}
+
+#[test]
+fn test_realpath_directory_followed_by_parent_dir_missing_mode() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene
+        .ucmd()
+        .arg("-m")
+        .arg("missing/..")
+        .succeeds()
+        .stdout_is(format!("{}\n", at.root_dir_resolved()));
 }
