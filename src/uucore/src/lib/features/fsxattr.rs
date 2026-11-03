@@ -235,7 +235,7 @@ pub fn apply_xattrs_fd(
     Ok(())
 }
 
-/// Like [`apply_xattrs_fd`], but maps `ENOTSUP` / `EOPNOTSUPP` to `Ok(())`.
+/// Like [`apply_xattrs_fd`],  but skips unsupported attributes.
 #[cfg(unix)]
 pub fn apply_xattrs_fd_ignore_unsupported(
     dest: &std::fs::File,
@@ -245,7 +245,8 @@ pub fn apply_xattrs_fd_ignore_unsupported(
     for (attr, value) in xattrs {
         match dest.set_xattr(&attr, &value) {
             Err(e) if is_xattr_unsupported(&e) => {}
-            res => res?,
+            Err(e) => return Err(e),
+            Ok(()) => {}
         }
     }
     Ok(())
@@ -613,5 +614,51 @@ mod tests {
                 .unwrap(),
             test_value
         );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_apply_xattrs_fd_ignore_unsupported() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("test_file.txt");
+
+        File::create(&file_path).unwrap();
+
+        // Skip silently if the test fs doesn't support user xattrs.
+        if xattr::set(&file_path, "user.probe", b"probe").is_err() {
+            return;
+        }
+        xattr::remove(&file_path, "user.probe").unwrap();
+
+        // Names in an unknown namespace get EOPNOTSUPP from the kernel.
+        let unsupported = ["foo.x", "bar.x", "baz.x"];
+        for name in unsupported {
+            let err = xattr::set(&file_path, name, b"unsupported").unwrap_err();
+            assert!(is_xattr_unsupported(&err));
+        }
+
+        let supported = ["user.a", "user.b", "user.c", "user.d", "user.e"];
+
+        let mut test_xattrs = FxHashMap::default();
+        for name in unsupported {
+            test_xattrs.insert(OsString::from(name), b"unsupported".to_vec());
+        }
+        for name in supported {
+            test_xattrs.insert(OsString::from(name), name.as_bytes().to_vec());
+        }
+
+        let dest = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&file_path)
+            .unwrap();
+
+        apply_xattrs_fd_ignore_unsupported(&dest, test_xattrs).unwrap();
+
+        for name in supported {
+            assert_eq!(
+                xattr::get(&file_path, name).unwrap().unwrap(),
+                name.as_bytes()
+            );
+        }
     }
 }
