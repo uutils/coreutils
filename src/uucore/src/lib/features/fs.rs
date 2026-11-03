@@ -380,10 +380,23 @@ pub fn canonicalize<P: AsRef<Path>>(
             }
             OwningComponent::CurDir => {}
             OwningComponent::ParentDir => {
+                // `..` may only leave a directory, so `file/..` has to fail
+                // with "Not a directory" instead of silently resolving to the
+                // parent. Check before popping: afterwards `result` is the
+                // parent, which exists and hides the problem.
+                if res_mode == ResolveMode::None && miss_mode != MissingHandling::Missing {
+                    ensure_is_directory(&result)?;
+                }
                 result.pop();
             }
         }
         if res_mode == ResolveMode::None {
+            // With `-e`, every component of the path must exist even though
+            // symlinks are not expanded. `Path::metadata` follows symlinks,
+            // so a dangling final symlink is rejected as expected.
+            if miss_mode == MissingHandling::Existing {
+                result.metadata()?;
+            }
             continue;
         }
         match resolve_symlink(&result) {
