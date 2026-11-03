@@ -5,6 +5,7 @@
 
 // spell-checker:ignore nusr
 
+use uucore::util_name;
 use uutests::new_ucmd;
 use uutests::path_concat;
 use uutests::util::{TestScenario, get_root_path};
@@ -669,4 +670,29 @@ fn test_realpath_canonicalize_vs_existing() {
             ucmd.fails();
         }
     }
+}
+
+#[test]
+fn test_realpath_followed_by_parent_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("regular_file");
+
+    scene
+        .ucmd()
+        .arg("regular_file/..")
+        .fails()
+        .code_is(1)
+        .stderr_contains("Not a directory");
+}
+
+#[test]
+fn test_realpath_directory_followed_by_parent_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("directory");
+
+    scene.ucmd().arg("directory/..").succeeds();
 }
