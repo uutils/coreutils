@@ -1422,6 +1422,7 @@ fn test_missing_non_utf8_input_does_not_read_stdin() {
 
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
+#[ignore = "https://github.com/uutils/coreutils/issues/16147"]
 #[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
 fn test_merge_non_utf8_input_filename() {
     use std::ffi::OsStr;
