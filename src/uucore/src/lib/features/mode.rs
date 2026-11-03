@@ -203,7 +203,7 @@ pub fn parse_numeric(mut fperm: u32, mode: &str, considering_dir: bool) -> Resul
 
     // GNU accepts consecutive operators before the number, as in `=+755`
     // or `-+755`. An operator without a number is normally a no-op; `=`
-    // resets ordinary permission bits, but keeps a directory's setuid/setgid
+    // resets ordinary permission bits, but keeps a directory setuid/setgid
     // bits until the final clause.
     while let Ok((next_op, op_len)) = parse_op(rest) {
         if op == Some('=') {
@@ -214,7 +214,7 @@ pub fn parse_numeric(mut fperm: u32, mode: &str, considering_dir: bool) -> Resul
         rest = &rest[op_len..];
     }
 
-    let mode = rest.trim();
+    let mode = rest;
     let change = if mode.is_empty() {
         0
     } else {
