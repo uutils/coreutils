@@ -886,24 +886,28 @@ fn test_incompatible_fields_reports_exact_field_number() {
     new_ucmd!()
         .args(&["-j", "3", "-1", "5", "/dev/null", "/dev/null"])
         .fails()
-        .stderr_contains("incompatible join fields 3, 5");
+        .stderr_only("join: incompatible join fields 2, 4\n");
 
     // Values at or above `usize::MAX` saturate to `usize::MAX` on every
     // platform; the localization layer must carry that ceiling as an exact
     // decimal string rather than rounding it through Fluent's f64-backed number
     // type.
     for field in ["18446744073709551615", "99999999999999999999999"] {
+        // Field numbers are shown zero-based, like GNU.
+        let expected = field
+            .parse::<usize>()
+            .map_or(max_field.clone(), |n| (n - 1).to_string());
         new_ucmd!()
             .args(&["-j", field, "-1", "5", "/dev/null", "/dev/null"])
             .fails()
-            .stderr_contains(format!("incompatible join fields {max_field}, 5"));
+            .stderr_only(format!("join: incompatible join fields {expected}, 4\n"));
     }
 
     // A value above f64 precision (2^53) but below `usize::MAX` is reported
     // exactly on 64-bit (where `usize` holds it); on 32-bit it saturates to
     // `usize::MAX` like the cases above.
     #[cfg(target_pointer_width = "64")]
-    let expected_above: String = "9007199254740993".to_string();
+    let expected_above: String = "9007199254740992".to_string();
     #[cfg(not(target_pointer_width = "64"))]
     let expected_above: String = max_field.clone();
     new_ucmd!()
@@ -916,7 +920,9 @@ fn test_incompatible_fields_reports_exact_field_number() {
             "/dev/null",
         ])
         .fails()
-        .stderr_contains(format!("incompatible join fields {expected_above}, 5"));
+        .stderr_only(format!(
+            "join: incompatible join fields {expected_above}, 4\n"
+        ));
 }
 
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
@@ -1076,9 +1082,37 @@ fn test_repeated_options() {
         .succeeds()
         .stdout_only_fixture("semicolon_separated.expected");
     new_ucmd!()
+        .args(&["-j", "1", "-j", "1", "fields_1.txt", "fields_2.txt"])
+        .succeeds()
+        .stdout_only_fixture("default.expected");
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("z", "a 1\0b 2\0");
+    ucmd.args(&["-z", "-z", "z", "z"])
+        .succeeds()
+        .stdout_only("a 1 1\0b 2 2\0");
+    // GNU shows the zero-based fields, the earlier value first.
+    new_ucmd!()
         .args(&["-1", "1", "-1", "2", "fields_1.txt", "fields_2.txt"])
         .fails_with_code(1)
-        .stderr_contains("join: incompatible join fields");
+        .stderr_only("join: incompatible join fields 0, 1\n");
+    new_ucmd!()
+        .args(&[
+            "-1",
+            "1",
+            "-2",
+            "2",
+            "-j",
+            "1",
+            "fields_1.txt",
+            "fields_2.txt",
+        ])
+        .fails_with_code(1)
+        .stderr_only("join: incompatible join fields 1, 0\n");
+    // Each -t is parsed before the values are compared.
+    new_ucmd!()
+        .args(&["-t", ",", "-t", "ab", "fields_1.txt", "fields_2.txt"])
+        .fails_with_code(1)
+        .stderr_only("join: multi-character tab 'ab'\n");
     new_ucmd!()
         .args(&["-t", ";", "-t", ","])
         .args(&["semicolon_fields_1.txt", "semicolon_fields_2.txt"])
