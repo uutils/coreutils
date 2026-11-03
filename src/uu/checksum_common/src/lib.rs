@@ -213,14 +213,13 @@ pub fn checksum_main(
     let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
-    let explicit_stdin_filename =
-        matches.value_source(options::FILE) == Some(ValueSource::CommandLine);
+    let has_file_operands = matches.value_source(options::FILE) == Some(ValueSource::CommandLine);
 
     let opts = ChecksumComputeOptions {
         algo_kind: algo,
         output_format,
         line_ending,
-        explicit_stdin_filename,
+        has_file_operands,
     };
 
     perform_checksum_computation(io::stdout(), opts, files)?;
