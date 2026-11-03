@@ -88,8 +88,7 @@ impl EscapeOctal {
         }
 
         let mut buf = [0; 4];
-        let len = c.len_utf8();
-        c.encode_utf8(&mut buf);
+        let len = c.encode_utf8(&mut buf).len();
         Self {
             bytes: buf,
             len,
