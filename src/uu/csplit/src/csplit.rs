@@ -359,9 +359,13 @@ impl SplitWriter<'_> {
     fn delete_all_splits(&self) -> io::Result<()> {
         let mut ret = Ok(());
         for ith in 0..self.counter {
-            let file_name = self.options.split_name.get(ith)?;
-            if let Err(err) = remove_file(file_name) {
-                ret = Err(err);
+            match self.options.split_name.get(ith) {
+                Ok(file_name) => {
+                    if let Err(err) = remove_file(file_name) {
+                        ret = Err(err);
+                    }
+                }
+                Err(err) => ret = Err(err),
             }
         }
         ret
