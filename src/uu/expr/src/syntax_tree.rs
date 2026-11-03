@@ -439,36 +439,23 @@ fn find_match(regex: Regex, left_bytes: Vec<u8>) -> String {
     // Match against the input using the appropriate encoding
     match encoding {
         UEncoding::Utf8 => {
-            // In UTF-8 locale, check if input is valid UTF-8
-            if let Ok(left_str) = std::str::from_utf8(&left_bytes) {
-                // Valid UTF-8, match as UTF-8
-                if let Ok(Some(caps)) = regex.captures(left_str) {
-                    return if has_captures {
-                        // Get first capture group
-                        caps.get(1)
-                            .map_or(String::new(), |m| m.as_str().to_string())
-                    } else {
-                        // Count characters in the match
-                        caps.get(0).unwrap().as_str().chars().count().to_string()
-                    };
-                }
-            } else {
-                // Invalid UTF-8 in UTF-8 locale: match on Latin-1 byte mapping
-                let left_str: String = left_bytes.iter().map(|&b| b as char).collect();
-                if let Ok(Some(caps)) = regex.captures(&left_str) {
-                    if has_captures {
-                        if let Some(m) = caps.get(1) {
-                            let bytes: Vec<u8> = m.as_str().chars().map(|c| c as u8).collect();
-                            // Return empty string for invalid UTF-8 capture in UTF-8 locale
-                            if let Ok(s) = String::from_utf8(bytes) {
-                                return s;
-                            }
-                        }
-                        return String::new();
-                    }
-                    // No capture groups - return 0 for invalid UTF-8 in UTF-8 locale
-                    return "0".to_string();
-                }
+            // Nothing matches an invalid byte sequence, but the valid characters
+            // in front of it still match as usual, so run the regex on the
+            // longest valid prefix. The slice up to `valid_up_to` is valid UTF-8
+            // by construction.
+            let left_str = match std::str::from_utf8(&left_bytes) {
+                Ok(left_str) => left_str,
+                Err(e) => std::str::from_utf8(&left_bytes[..e.valid_up_to()]).unwrap_or_default(),
+            };
+            if let Ok(Some(caps)) = regex.captures(left_str) {
+                return if has_captures {
+                    // Get first capture group
+                    caps.get(1)
+                        .map_or(String::new(), |m| m.as_str().to_string())
+                } else {
+                    // Count characters in the match
+                    caps.get(0).unwrap().as_str().chars().count().to_string()
+                };
             }
         }
         UEncoding::Ascii => {
@@ -1685,13 +1672,19 @@ mod test {
         use super::evaluate_match_expression;
         use uucore::i18n::{UEncoding, get_locale_encoding};
 
-        // Input contains non-UTF-8 byte >= 0x80 (0xFF) before a valid ASCII capture
+        // A high byte (0xFF) in front of a valid ASCII capture. The match is anchored,
+        // so in a UTF-8 locale the leading `.` has to match the invalid byte, nothing
+        // does, and the match fails; in a single byte locale it is an ordinary octet.
         let result =
             evaluate_match_expression(vec![0xff, b'a', b'b', b'c'], br".\(abc\)".to_vec()).unwrap();
-        assert_eq!(result.eval_as_string(), b"abc");
+        match get_locale_encoding() {
+            UEncoding::Utf8 => assert_eq!(result.eval_as_string(), b""),
+            UEncoding::Ascii => assert_eq!(result.eval_as_string(), b"abc"),
+        }
 
-        // In UTF-8 locale, capture group containing invalid UTF-8 returns empty string;
-        // in ASCII/C locale (e.g. WASI default), raw bytes are captured.
+        // The same input with a greedy group: the valid prefix in front of the invalid
+        // byte is empty, so the UTF-8 locale captures nothing, while the single byte
+        // locale (e.g. WASI default) takes every octet.
         let result =
             evaluate_match_expression(vec![0xff, b'a', b'b', b'c'], br"\(.*\)".to_vec()).unwrap();
         match get_locale_encoding() {

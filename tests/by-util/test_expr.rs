@@ -2072,6 +2072,32 @@ mod expr_multibyte_arithmetic {
             check_test_case(args, tc);
         }
     }
+
+    // An invalid sequence is matched by nothing, but the valid characters in
+    // front of it still match as usual.
+    #[test]
+    fn test_m8() {
+        let args: &[&[u8]] = &[b"match", b"/etc/x\xFF", b"/"];
+
+        let cases = &[TestCase::FR.out("1"), TestCase::C.out("1")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    // The same with a group: in the multibyte locale the capture stops at the
+    // invalid byte, while the single byte locale takes it as an octet.
+    #[test]
+    fn test_m9() {
+        let args: &[&[u8]] = &[b"match", b"a/../\xFF", b"\\(.*\\)"];
+
+        let cases = &[TestCase::FR.out("a/../"), TestCase::C.out(b"a/../\xFF")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
 }
 
 #[test]
