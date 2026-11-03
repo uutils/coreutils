@@ -165,7 +165,7 @@ fn test_du_with_posixly_correct() {
     let dir = "a";
 
     at.mkdir(dir);
-    at.write(&format!("{dir}/file"), "some content");
+    at.write(format!("{dir}/file"), "some content");
 
     let expected = ts
         .ucmd()
@@ -206,7 +206,7 @@ fn test_du_zero_env_block_size() {
     let dir = "a";
 
     at.mkdir(dir);
-    at.write(&format!("{dir}/file"), "some content");
+    at.write(format!("{dir}/file"), "some content");
 
     let expected = ts
         .ucmd()
@@ -232,7 +232,7 @@ fn test_du_zero_env_block_size_hierarchy() {
     let dir = "a";
 
     at.mkdir(dir);
-    at.write(&format!("{dir}/file"), "some content");
+    at.write(format!("{dir}/file"), "some content");
 
     let expected = ts
         .ucmd()
@@ -269,7 +269,7 @@ fn test_du_env_block_size_hierarchy() {
     let dir = "a";
 
     at.mkdir(dir);
-    at.write(&format!("{dir}/file"), "some content");
+    at.write(format!("{dir}/file"), "some content");
 
     let expected = ts
         .ucmd()
@@ -296,6 +296,75 @@ fn test_du_env_block_size_hierarchy() {
 
     assert_eq!(expected, result1);
     assert_eq!(expected, result2);
+}
+
+#[test]
+fn test_du_suffix_only_block_size() {
+    let ts = TestScenario::new(util_name!());
+    let file = "file";
+    ts.fixtures.write(file, "x");
+
+    for (arg, env, expected) in [
+        (Some("-BM"), None, "1M"),
+        (Some("-B1M"), None, "1"),
+        (Some("-B'M"), None, "1M"),
+        (Some("-B'1M"), None, "1"),
+        (None, Some(("DU_BLOCK_SIZE", "M")), "1M"),
+        (None, Some(("BLOCK_SIZE", "KB")), "1kB"),
+        (None, Some(("BLOCKSIZE", "MiB")), "1MiB"),
+        (None, Some(("DU_BLOCK_SIZE", "'KiB")), "1KiB"),
+        (None, Some(("DU_BLOCK_SIZE", "'1KiB")), "1"),
+        (None, Some(("DU_BLOCK_SIZE", "1M")), "1"),
+    ] {
+        let mut cmd = ts.ucmd();
+        if let Some(arg) = arg {
+            cmd.arg(arg);
+        }
+        if let Some((var, value)) = env {
+            cmd.env(var, value);
+        }
+        cmd.arg("--apparent-size")
+            .arg(file)
+            .succeeds()
+            .stdout_only(format!("{expected}\t{file}\n"));
+    }
+}
+
+#[test]
+fn test_du_block_size_locale_grouping() {
+    let ts = TestScenario::new(util_name!());
+    let file = "file";
+    let fpath = ts.fixtures.plus(file);
+    std::fs::File::create(&fpath)
+        .expect("cannot create test file")
+        .set_len(100_000_000)
+        .expect("cannot set file size");
+
+    for (block_size, expected) in [("'KiB", "97\u{202f}657KiB"), ("'1KiB", "97\u{202f}657")] {
+        ts.ucmd()
+            .arg("--apparent-size")
+            .arg(format!("--block-size={block_size}"))
+            .arg(file)
+            .env("LC_ALL", "fr_FR.UTF-8")
+            .succeeds()
+            .stdout_only(format!("{expected}\t{file}\n"));
+    }
+
+    ts.ucmd()
+        .arg("--apparent-size")
+        .arg(file)
+        .env("BLOCK_SIZE", "'KiB")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .succeeds()
+        .stdout_only(format!("97\u{202f}657KiB\t{file}\n"));
+
+    ts.ucmd()
+        .arg("--apparent-size")
+        .arg("--block-size='KiB")
+        .arg(file)
+        .env("LC_ALL", "fr_FR")
+        .succeeds()
+        .stdout_only_bytes(&b"97\xa0657KiB\tfile\n"[..]);
 }
 
 #[test]
@@ -396,7 +465,7 @@ fn test_du_invalid_env_block_size_stops_lookup() {
     let dir = "a";
 
     at.mkdir(dir);
-    at.write(&format!("{dir}/file"), "some content");
+    at.write(format!("{dir}/file"), "some content");
 
     let default_output = ts
         .ucmd()
@@ -436,7 +505,7 @@ fn test_du_posixly_correct_default() {
     let dir = "a";
 
     at.mkdir(dir);
-    at.write(&format!("{dir}/file"), "some content");
+    at.write(format!("{dir}/file"), "some content");
 
     let expected = ts
         .ucmd()
@@ -2105,7 +2174,7 @@ fn test_du_inodes_blocksize_ineffective() {
     let at = &ts.fixtures;
     let fpath = at.plus("test.txt");
     at.touch(fpath);
-    for method in ["-B3", "--block-size=3"] {
+    for method in ["-B3", "--block-size=3", "-BM"] {
         // No warning
         ts.ucmd()
             .arg(method)
@@ -2198,7 +2267,7 @@ fn test_du_very_deep_directory() {
         at.mkdir_all(&current_path);
     }
 
-    at.write(&format!("{current_path}/file.txt"), "deep file");
+    at.write(format!("{current_path}/file.txt"), "deep file");
 
     let result = ts.ucmd().arg("-s").arg("x").succeeds();
     assert!(result.stdout_str().contains('x'));
@@ -2222,9 +2291,9 @@ fn test_du_safe_traversal_with_symlinks() {
         at.mkdir_all(&deep_path);
     }
 
-    at.write(&format!("{deep_path}/target.txt"), "target content");
+    at.write(format!("{deep_path}/target.txt"), "target content");
 
-    at.symlink_file(&format!("{deep_path}/target.txt"), "shallow_link.txt");
+    at.symlink_file(format!("{deep_path}/target.txt"), "shallow_link.txt");
 
     let result = ts.ucmd().arg("-L").arg("shallow_link.txt").succeeds();
     assert!(!result.stdout_str().is_empty());
@@ -2357,7 +2426,7 @@ fn test_du_long_path_from_unreadable() {
         at.mkdir_all(&current_path);
     }
 
-    at.write(&format!("{current_path}/test.txt"), "test content");
+    at.write(format!("{current_path}/test.txt"), "test content");
 
     at.mkdir("inaccessible");
 

@@ -34,7 +34,7 @@ fn get_symlink_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
 }
 
 fn set_file_times(at: &AtPath, path: &str, atime: FileTime, mtime: FileTime) {
-    filetime::set_file_times(at.plus_as_string(path), atime, mtime).unwrap();
+    filetime::set_file_times(at.plus(path), atime, mtime).unwrap();
 }
 
 fn str_to_filetime(format: &str, s: &str) -> FileTime {

@@ -1271,6 +1271,54 @@ fn test_repeat_in_set1_padded_by_star_in_set2() {
         .stdout_only("yyz");
 }
 
+// With `-d -s` set2 is only the set to squeeze, which a star cannot fill.
+#[rstest]
+#[case::star("[b*]")]
+#[case::star_zero("[b*0]")]
+#[case::star_in_middle("b[b*]c")]
+#[case::star_after_equivalence("[=b=][b*]")]
+fn test_star_in_set2_only_when_translating(#[case] set2: &str) {
+    new_ucmd!()
+        .args(&["-ds", "a", set2])
+        .fails_with_code(1)
+        .stderr_only("tr: the [c*] construct may appear in string2 only when translating\n");
+}
+
+#[rstest]
+#[case::translate(&["a", "[=b=]"])]
+#[case::translate_after_char(&["a", "b[=b=]"])]
+#[case::translate_and_squeeze(&["-s", "a", "[=b=]"])]
+#[case::truncate(&["-t", "a", "[=b=]"])]
+#[case::complement(&["-c", "a", "[=b=]"])]
+#[case::before_class(&["a", "[=b=][:digit:]"])]
+fn test_equivalence_class_in_set2_only_with_delete_and_squeeze(#[case] args: &[&str]) {
+    new_ucmd!()
+        .args(args)
+        .fails_with_code(1)
+        .stderr_only("tr: [=c=] expressions may not appear in string2 when translating\n");
+}
+
+// A repeat with a count still fills set2 with `-d -s`.
+#[rstest]
+#[case::repeat("[b*3]")]
+#[case::equivalence("[=b=]")]
+fn test_set2_constructs_allowed_with_delete_and_squeeze(#[case] set2: &str) {
+    new_ucmd!()
+        .args(&["-ds", "a", set2])
+        .pipe_in("xaabb")
+        .succeeds()
+        .stdout_only("xb");
+}
+
+#[test]
+fn test_equivalence_class_in_set1_when_translating() {
+    new_ucmd!()
+        .args(&["[=a=]", "b"])
+        .pipe_in("xaab")
+        .succeeds()
+        .stdout_only("xbbb");
+}
+
 #[test]
 fn test_non_digit_repeat() {
     new_ucmd!()
