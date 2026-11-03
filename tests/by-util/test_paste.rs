@@ -615,5 +615,17 @@ fn test_missing_file_error_includes_filename() {
     new_ucmd!()
         .arg("missing.txt")
         .fails_with_code(1)
-        .stderr_contains("missing.txt");
+        .stderr_is("paste: missing.txt: No such file or directory\n");
+}
+
+#[test]
+fn test_directory_error_includes_filename() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a.txt", "a\n");
+    at.mkdir("d");
+
+    ucmd.args(&["a.txt", "d"])
+        .fails_with_code(1)
+        .stdout_is("a\t\n")
+        .stderr_is("paste: d: Is a directory\n");
 }
