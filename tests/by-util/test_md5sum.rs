@@ -120,6 +120,57 @@ fn test_check_md5sum_only_one_space() {
         .stdout_only("a: OK\n' b': OK\nc: OK\n");
 }
 
+// A line starting with a backslash has an escaped file name, which is how
+// md5sum itself writes names containing a backslash or a newline. Names on
+// other lines are taken as they are.
+#[test]
+#[cfg(not(windows))]
+fn test_check_escaped_file_names() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a\\b", "hello\n");
+    at.write("n\nl", "hello\n");
+    at.write(
+        "check.md5sum",
+        "\\b1946ac92492d2347c6235b4d2611184  a\\\\b\n\
+        \\b1946ac92492d2347c6235b4d2611184 *n\\nl\n",
+    );
+    scene
+        .ccmd("md5sum")
+        .arg("-c")
+        .arg("check.md5sum")
+        .succeeds()
+        .stdout_only("'a\\b': OK\n'n'$'\\n''l': OK\n");
+
+    // The md5sum output for these files must verify too.
+    let sums = scene
+        .ccmd("md5sum")
+        .arg("a\\b")
+        .succeeds()
+        .stdout_move_str();
+    at.write("generated.md5sum", &sums);
+    scene
+        .ccmd("md5sum")
+        .arg("-c")
+        .arg("generated.md5sum")
+        .succeeds()
+        .stdout_only("'a\\b': OK\n");
+
+    // Without the leading backslash, the name is not unescaped.
+    at.write(
+        "literal.md5sum",
+        "b1946ac92492d2347c6235b4d2611184  a\\\\b\n",
+    );
+    scene
+        .ccmd("md5sum")
+        .arg("-c")
+        .arg("literal.md5sum")
+        .fails()
+        .stdout_is("'a\\\\b': FAILED open or read\n")
+        .stderr_contains("'a\\\\b': No such file or directory");
+}
+
 // A generated checksum file must verify against the same file on all
 // platforms: generation and --check both hash raw bytes, so on Windows a file
 // containing CRLFs must not be hashed with CRLF -> LF conversion in check mode.
