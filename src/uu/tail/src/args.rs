@@ -479,7 +479,17 @@ fn validate_count_options(args: &[OsString]) -> UResult<()> {
 
 pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     let args_vec: Vec<OsString> = args.collect();
-    validate_count_options(&args_vec)?;
+    // Validate every count value up front, including ones clap would override.
+    // Skip that when the arguments are actually obsolete syntax (e.g. `tail -cf`),
+    // which has its own parser below.
+    let obsolete_preview = if args_vec.len() == 2 || args_vec.len() == 3 {
+        parse_obsolete(&args_vec[1], args_vec.get(2))?
+    } else {
+        None
+    };
+    if obsolete_preview.is_none() {
+        validate_count_options(&args_vec)?;
+    }
     let clap_args = uu_app().try_get_matches_from(args_vec.clone());
     let mut settings_failed = false;
     let clap_result = match clap_args {
