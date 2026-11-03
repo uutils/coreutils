@@ -1537,10 +1537,14 @@ fn write_columns(
             };
 
             write_offset_spaces(writer, options.offset_spaces)?;
-            writer.write_all(
-                get_line_for_printing(options, line_to_print, columns, i, line_width, indexes)
-                    .as_bytes(),
-            )?;
+            writer.write_all(&get_line_for_printing(
+                options,
+                line_to_print,
+                columns,
+                i,
+                line_width,
+                indexes,
+            ))?;
             cells_written += 1;
         }
         // The last row of a partly filled page has content in its leading
@@ -1562,42 +1566,58 @@ fn get_line_for_printing(
     index: usize,
     line_width: Option<usize>,
     indexes: usize,
-) -> String {
-    let blank_line = String::new();
+) -> Vec<u8> {
     let formatted_line_number = get_formatted_line_number(options, file_line.line_number, index);
 
-    // TODO: support non-UTF-8 bytes (currently replaced with U+FFFD)
-    let content = String::from_utf8_lossy(&file_line.line_content);
-    let mut complete_line = format!("{formatted_line_number}{content}");
+    // The content is kept as raw bytes, so input that is not valid UTF-8 is
+    // written out unchanged.
+    let mut complete_line = formatted_line_number.into_bytes();
+    complete_line.extend_from_slice(&file_line.line_content);
 
-    let tab_count = complete_line.chars().filter(|i| i == &TAB).count();
+    let tab_count = memchr::memchr_iter(TAB as u8, &complete_line).count();
+    // Like GNU pr, a byte that is not part of a valid UTF-8 sequence is not
+    // printable and takes no width.
+    let invalid_count: usize = complete_line
+        .utf8_chunks()
+        .map(|chunk| chunk.invalid().len())
+        .sum();
 
-    let display_length = complete_line.len() + (tab_count * 7);
+    let display_length = complete_line.len() - invalid_count + (tab_count * 7);
 
     let is_last_cell = (index + 1) == indexes;
-    let sep = if is_last_cell {
-        &blank_line
-    } else {
-        &options.col_sep_for_printing
-    };
+    if let Some(i) = line_width {
+        let min_width = i.saturating_sub(columns - 1) / columns;
+        // Like GNU pr, the last cell of a row is not padded, so the line has
+        // no trailing spaces.
+        if display_length < min_width && !is_last_cell {
+            complete_line.resize(complete_line.len() + (min_width - display_length), b' ');
+        }
+        complete_line.truncate(char_prefix_len(&complete_line, min_width));
+    }
 
-    format!(
-        "{}{sep}",
-        line_width
-            .map(|i| {
-                let min_width = i.saturating_sub(columns - 1) / columns;
-                // Like GNU pr, the last cell of a row is not padded, so the
-                // line has no trailing spaces.
-                if display_length < min_width && !is_last_cell {
-                    for _i in 0..(min_width - display_length) {
-                        complete_line.push(' ');
-                    }
-                }
+    if !is_last_cell {
+        complete_line.extend_from_slice(options.col_sep_for_printing.as_bytes());
+    }
+    complete_line
+}
 
-                complete_line.chars().take(min_width).collect()
-            })
-            .unwrap_or(complete_line),
-    )
+/// Returns the length in bytes of the first `n` characters of `bytes`. A byte
+/// that is not part of a valid UTF-8 sequence takes no width, so it is kept
+/// unless a character before it is already cut off.
+fn char_prefix_len(bytes: &[u8], n: usize) -> usize {
+    let mut len = 0;
+    let mut count = 0;
+    for chunk in bytes.utf8_chunks() {
+        for c in chunk.valid().chars() {
+            if count == n {
+                return len;
+            }
+            len += c.len_utf8();
+            count += 1;
+        }
+        len += chunk.invalid().len();
+    }
+    len
 }
 
 fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: usize) -> String {

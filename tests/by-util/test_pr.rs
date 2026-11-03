@@ -1453,3 +1453,37 @@ fn test_header_preserves_non_utf8_filename() {
         .succeeds()
         .stdout_only_bytes(b"\n\ndate input-\xff  Page 1\n\n\n01234567890123456789\n\n\n\n\n\n\n");
 }
+
+#[test]
+fn test_non_utf8_input_is_written_unchanged() {
+    new_ucmd!()
+        .arg("-t")
+        .pipe_in(b"\xff\xfe abc\n\xc3( x\n\x80\n")
+        .succeeds()
+        .stdout_is_bytes(b"\xff\xfe abc\n\xc3( x\n\x80\n");
+
+    new_ucmd!()
+        .args(&["-n", "-t"])
+        .pipe_in(b"\xff\n")
+        .succeeds()
+        .stdout_is_bytes(b"    1\t\xff\n");
+}
+
+#[test]
+fn test_non_utf8_input_in_columns() {
+    // As in GNU pr, an invalid byte takes no width, so "\xff\xfeab" is padded
+    // like "ab" to the column width of 4.
+    new_ucmd!()
+        .args(&["-2", "-t", "-w", "9", "-s|"])
+        .pipe_in(b"\xff\xfeab\nc\n")
+        .succeeds()
+        .stdout_is_bytes(b"\xff\xfeab  |c\n");
+
+    // An invalid byte right after a full column is kept, and the next
+    // character is cut off.
+    new_ucmd!()
+        .args(&["-2", "-t", "-w", "9", "-s|"])
+        .pipe_in(b"abcd\xffe\nc\n")
+        .succeeds()
+        .stdout_is_bytes(b"abcd\xff|c\n");
+}
