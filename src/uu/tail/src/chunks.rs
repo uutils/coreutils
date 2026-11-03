@@ -12,7 +12,7 @@
 
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::{BufRead, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{self, BufRead, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::error::UResult;
 
 /// When reading files in reverse in `bounded_tail`, this is the size of each
@@ -47,7 +47,7 @@ pub struct ReverseChunks<'a> {
 
 impl<'a> ReverseChunks<'a> {
     /// Iterates backwards from `end`, the position seen as the end of the file.
-    pub fn new(file: &'a mut File, end: SeekFrom) -> std::io::Result<Self> {
+    pub fn new(file: &'a mut File, end: SeekFrom) -> io::Result<Self> {
         let current = file.stream_position()?;
         let size = file.seek(end)?.saturating_sub(current);
         if size == 0 {
@@ -62,15 +62,11 @@ impl<'a> ReverseChunks<'a> {
             block_idx,
         })
     }
-}
 
-impl Iterator for ReverseChunks<'_> {
-    type Item = Vec<u8>;
-
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next_chunk(&mut self) -> io::Result<Option<Vec<u8>>> {
         // If there are no more chunks to read, terminate the iterator.
         if self.block_idx >= self.max_blocks_to_read {
-            return None;
+            return Ok(None);
         }
 
         // The chunk size is `BLOCK_SIZE` for all but the last chunk
@@ -86,10 +82,7 @@ impl Iterator for ReverseChunks<'_> {
         // Seek backwards by the next chunk, read the full chunk into
         // `buf`, and then seek back to the start of the chunk again.
         let mut buf = vec![0; block_size as usize];
-        let pos = self
-            .file
-            .seek(SeekFrom::Current(-(block_size as i64)))
-            .unwrap();
+        let pos = self.file.seek(SeekFrom::Current(-(block_size as i64)))?;
         match self.file.read_exact(&mut buf) {
             Ok(()) => {}
             // The file may have been truncated after its size was measured.
@@ -97,21 +90,26 @@ impl Iterator for ReverseChunks<'_> {
             // panicking; GNU tail exits successfully in the same situation.
             // Rewind so the caller prints whatever is left of the file.
             Err(err) if err.kind() == ErrorKind::UnexpectedEof => {
-                self.file.seek(SeekFrom::Start(0)).unwrap();
-                return None;
+                self.file.seek(SeekFrom::Start(0))?;
+                return Ok(None);
             }
-            // Do not silently swallow real I/O errors (EIO, etc.).
-            Err(err) => panic!("failed to read file while scanning backwards: {err}"),
+            // Propagate real I/O errors (EIO, etc.) to the caller.
+            Err(err) => return Err(err),
         }
-        let pos2 = self
-            .file
-            .seek(SeekFrom::Current(-(block_size as i64)))
-            .unwrap();
+        let pos2 = self.file.seek(SeekFrom::Current(-(block_size as i64)))?;
         assert_eq!(pos, pos2);
 
         self.block_idx += 1;
 
-        Some(buf)
+        Ok(Some(buf))
+    }
+}
+
+impl Iterator for ReverseChunks<'_> {
+    type Item = io::Result<Vec<u8>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next_chunk().transpose()
     }
 }
 
@@ -639,7 +637,7 @@ impl LinesChunkBuffer {
 mod tests {
     use crate::chunks::{BLOCK_SIZE, BUFFER_SIZE, BytesChunk, BytesChunkBuffer, ReverseChunks};
     use std::collections::VecDeque;
-    use std::io::{BufReader, Read, SeekFrom, Write};
+    use std::io::{BufReader, Read, Seek, SeekFrom, Write};
     use tempfile::tempdir;
 
     /// A reader which returns each of its segments in a separate `read` call, like a pipe whose
@@ -677,7 +675,7 @@ mod tests {
         {
             let mut file = std::fs::File::open(&path).unwrap();
             let mut chunks = ReverseChunks::new(&mut file, SeekFrom::End(0)).unwrap();
-            assert!(chunks.next().is_some());
+            assert!(matches!(chunks.next(), Some(Ok(_))));
 
             // Truncate through a second handle while the iterator still holds its
             // previously measured size, then make sure the next read stops instead
@@ -689,6 +687,10 @@ mod tests {
                 .set_len(0)
                 .unwrap();
             assert!(chunks.next().is_none());
+
+            // The rewind must leave the file at the start so the caller can
+            // print whatever is left of the truncated file.
+            assert_eq!(file.stream_position().unwrap(), 0);
         }
     }
 

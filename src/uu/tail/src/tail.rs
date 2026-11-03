@@ -459,6 +459,7 @@ fn backwards_thru_file(
     let mut counter = 0;
     let mut first_slice = true;
     for slice in ReverseChunks::new(file, end)? {
+        let slice = slice?;
         // Iterate over each byte in the slice in reverse order.
         let mut iter = memrchr_iter(delimiter, &slice);
 
