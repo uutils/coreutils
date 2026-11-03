@@ -330,11 +330,14 @@ impl SplitWriter<'_> {
         if !self.dev_null {
             // Flush the writer to ensure all data is written and errors are detected
             if let Some(ref mut writer) = self.current_writer {
-                let file_name = self.options.split_name.get(self.counter - 1)?;
-                writer
-                    .flush()
-                    .map_err_context(|| file_name.clone())
-                    .map_err(CsplitError::from)?;
+                let flushed = writer.flush();
+                if flushed.is_err() {
+                    // Flush first; only format the split name for the error context.
+                    let file_name = self.options.split_name.get(self.counter - 1)?;
+                    flushed
+                        .map_err_context(|| file_name)
+                        .map_err(CsplitError::from)?;
+                }
             }
             if self.options.elide_empty_files && self.size == 0 {
                 self.counter -= 1;
