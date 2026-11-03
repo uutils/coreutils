@@ -494,6 +494,20 @@ fn test_shred_on_dir(#[case] arg: &str) {
 
 #[test]
 #[cfg(unix)]
+fn test_shred_force_on_read_only_dir() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    at.set_mode("d", 0o555);
+    ucmd.args(&["-f", "d"])
+        .fails_with_code(1)
+        .stderr_only("shred: d: failed to open for writing: Is a directory\n");
+    assert_eq!(at.metadata("d").permissions().mode() & 0o777, 0o555);
+}
+
+#[test]
+#[cfg(unix)]
 fn test_shred_inaccessible_file_reports_real_error() {
     // A file whose parent directory lacks search permission must not be
     // misreported as "No such file or directory": `Path::exists()` and

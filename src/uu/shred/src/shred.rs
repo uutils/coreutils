@@ -706,8 +706,9 @@ fn wipe_file(
 
     let metadata = get_metadata().map_err_context(|| translate!("shred-failed-to-get-metadata"))?;
 
-    // If force is true, set file permissions to not-readonly.
-    if force && !is_stdout {
+    // If force is true, set file permissions to not-readonly. Directories
+    // are left alone, since opening them for writing fails anyway.
+    if force && !is_stdout && !metadata.is_dir() {
         let mut perms = metadata.permissions();
         #[cfg(unix)]
         #[allow(clippy::useless_conversion, clippy::unnecessary_cast)]
