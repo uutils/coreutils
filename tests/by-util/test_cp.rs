@@ -536,6 +536,22 @@ fn test_cp_recurse_source_path_ends_with_slash_dot() {
     assert!(at.file_exists(format!("{target_dir}/{file}")));
 }
 
+#[rstest]
+#[case::dotdot("src/sub/..")]
+#[case::dotdot_slash("src/sub/../")]
+fn test_cp_recurse_source_ends_with_dotdot_existing_target(#[case] source: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("src/sub");
+    at.touch("src/f");
+    at.mkdir("dst");
+
+    ucmd.args(&["-r", source, "dst"]).succeeds().no_output();
+    assert!(at.file_exists("dst/f"));
+    assert!(at.dir_exists("dst/sub"));
+    assert!(!at.file_exists("f"));
+    assert!(!at.dir_exists("sub"));
+}
+
 #[test]
 fn test_cp_with_dirs_t() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1528,6 +1544,7 @@ fn test_cp_arg_remove_destination() {
 #[case::short(&["-b"], Some("~"))]
 #[case::combined_short_flags(&["-vbL"], Some("~"))]
 #[case::long(&["--backup"], Some("~"))]
+#[case::empty_value(&["--backup="], Some("~"))]
 #[case::suffix(&["-b", "--suffix", ".bak"], Some(".bak"))]
 #[case::suffix_implies_backup(&["--suffix", ".bak"], Some(".bak"))]
 #[case::suffix_hyphen_value(&["-b", "--suffix", "-v"], Some("-v"))]

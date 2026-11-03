@@ -135,11 +135,7 @@ where
         if let Some((_, line)) = input_iter.next() {
             // There is remaining input: create a final split and copy remainder
             split_writer.new_writer()?;
-            split_writer.writeln(&line?)?;
-            for (_, line) in input_iter {
-                split_writer.writeln(&line?)?;
-            }
-            split_writer.finish_split()
+            copy_remainder(&mut split_writer, line, input_iter)
         } else if !repeats_forever {
             // GNU semantics: even if no remaining input, create a final
             // (possibly empty) split
@@ -162,6 +158,25 @@ where
         split_writer.delete_all_splits()?;
     }
     ret
+}
+
+/// Copies the rest of the input into the split that was just created.
+///
+/// Errors are returned rather than propagated past [`csplit`], so that the
+/// split is still finished, and removed if it is empty and `-z` is given.
+fn copy_remainder<I>(
+    split_writer: &mut SplitWriter,
+    first_line: UResult<Vec<u8>>,
+    input_iter: InputSplitter<I>,
+) -> Result<(), CsplitError>
+where
+    I: Iterator<Item = (usize, UResult<Vec<u8>>)>,
+{
+    split_writer.writeln(&first_line?)?;
+    for (_, line) in input_iter {
+        split_writer.writeln(&line?)?;
+    }
+    split_writer.finish_split()
 }
 
 fn do_csplit<I>(
@@ -249,22 +264,6 @@ struct SplitWriter<'a> {
     split_finished: bool,
 }
 
-impl Drop for SplitWriter<'_> {
-    fn drop(&mut self) {
-        if self.options.elide_empty_files
-            && self.size == 0
-            && let Ok(file_name) = self.options.split_name.get(self.counter)
-        {
-            // In the case of `echo a | csplit -z - %a%1`, the file
-            // `xx00` does not exist because the positive offset
-            // advanced past the end of the input. Since there is no
-            // file to remove in that case, `remove_file` would return
-            // an error, so we just ignore it.
-            let _ = remove_file(file_name);
-        }
-    }
-}
-
 impl SplitWriter<'_> {
     fn new(options: &CsplitOptions) -> SplitWriter<'_> {
         SplitWriter {
@@ -339,6 +338,12 @@ impl SplitWriter<'_> {
             }
             if self.options.elide_empty_files && self.size == 0 {
                 self.counter -= 1;
+                // Remove the empty split now, while we know this run created it.
+                // Close it first, as an open file cannot be removed on Windows.
+                self.current_writer = None;
+                if let Ok(file_name) = self.options.split_name.get(self.counter) {
+                    let _ = remove_file(file_name);
+                }
             } else if !self.options.quiet {
                 writeln!(io::stdout(), "{}", self.size).map_err(CsplitError::IoError)?;
             }

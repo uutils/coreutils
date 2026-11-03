@@ -702,6 +702,29 @@ fn test_join_lines_keeps_column_separator() {
 }
 
 #[test]
+fn test_merge_stops_after_last_line_without_header() {
+    // without a page trailer there is nothing to pad to: like GNU pr, stop
+    // after the last merged line (-F still prints the 5 header lines and a form feed)
+    // -J keeps the columns from being padded, so the lines are short
+    let body = "a\tc\nb\td\n";
+    let header = format!("\n\nX{}Page 1\n\n\n", " ".repeat(65));
+    for (args, expected) in [
+        (vec!["-J", "-t"], body.to_string()),
+        (vec!["-J", "-T"], body.to_string()),
+        (vec!["-J", "-F", "-D", "X"], format!("{header}{body}\x0c")),
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("one", "a\nb\n");
+        at.write("two", "c\nd\n");
+        ucmd.arg("-m")
+            .args(&args)
+            .args(&["one", "two"])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
 fn test_value_for_number_lines() {
     // *5 is of the form [SEP[NUMBER]] so is accepted and succeeds
     new_ucmd!().args(&["-n", "*5", "test.log"]).succeeds();
@@ -888,7 +911,7 @@ fn test_columns() {
     //
     //     "a\t\t\t\t    b\n";
     //
-    let data = "a                                  \tb                                  \n";
+    let data = "a                                  \tb\n";
     let blank_lines_60 = "\n".repeat(60);
     let pattern = format!("{header}{data}{blank_lines_60}");
     let regex = Regex::new(&pattern).unwrap();
@@ -912,7 +935,7 @@ fn test_columns_partly_filled_page() {
         .args(&["-t", "-2", "-w", "20"])
         .pipe_in("a\nb\nc\n")
         .succeeds()
-        .stdout_is("a        \tc        \nb        \n");
+        .stdout_is("a        \tc\nb\n");
 }
 
 #[test]
@@ -924,7 +947,7 @@ fn test_columns_partly_filled_page_across() {
         .args(&["-t", "-a", "-2", "-w", "20"])
         .pipe_in("a\nb\nc\n")
         .succeeds()
-        .stdout_is("a        \tb        \nc        \n");
+        .stdout_is("a        \tb\nc\n");
 }
 
 #[test]
@@ -936,14 +959,27 @@ fn test_columns_fewer_lines_than_columns() {
         .args(&["-t", "-3", "-w", "20"])
         .pipe_in("a\n")
         .succeeds()
-        .stdout_is("a     \n");
+        .stdout_is("a\n");
 
     // Command line: `printf "a\nb\n" | pr -t -3 -w 20`.
     new_ucmd!()
         .args(&["-t", "-3", "-w", "20"])
         .pipe_in("a\nb\n")
         .succeeds()
-        .stdout_is("a     \tb     \n");
+        .stdout_is("a     \tb\n");
+}
+
+#[test]
+fn test_columns_last_column_not_padded() {
+    // GNU pr pads a column only to line up the next one, so a line never ends
+    // with spaces.
+    //
+    // Command line: `printf "ab\nc\n" | pr -2 -t -w 9 -s'|'`.
+    new_ucmd!()
+        .args(&["-2", "-t", "-w", "9", "-s|"])
+        .pipe_in("ab\nc\n")
+        .succeeds()
+        .stdout_is("ab  |c\n");
 }
 
 #[test]
@@ -954,9 +990,9 @@ fn test_columns_last_page() {
     // Command line: `seq 9 | pr -2 -l 12 -w 20 -D DATE`.
     let header = "\n\nDATE          Page ";
     let expected = format!(
-        "{header}1\n\n\n1        \t3        \n2        \t4        \n{blank}\
-         {header}2\n\n\n5        \t7        \n6        \t8        \n{blank}\
-         {header}3\n\n\n9        \n\n\n\n\n\n\n",
+        "{header}1\n\n\n1        \t3\n2        \t4\n{blank}\
+         {header}2\n\n\n5        \t7\n6        \t8\n{blank}\
+         {header}3\n\n\n9\n\n\n\n\n\n\n",
         blank = "\n".repeat(5),
     );
     new_ucmd!()
@@ -982,9 +1018,8 @@ fn test_merge() {
     //     "a\t\t\t\t    b\n";
     //
     // and the blank lines should actually be empty lines.
-    let data = "a                                  \tb                                  \n";
-    let blank_lines_55 =
-        "                                   \t                                   \n".repeat(55);
+    let data = "a                                  \tb\n";
+    let blank_lines_55 = "                                   \t\n".repeat(55);
     let footer = "\n".repeat(5);
     let pattern = format!("{header}{data}{blank_lines_55}{footer}");
     let regex = Regex::new(&pattern).unwrap();
@@ -1007,13 +1042,13 @@ fn test_merge_one_long_one_short() {
     let whitespace = " ".repeat(50);
     let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
     let header = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
-    let data = "a                                  \tb                                  \n";
+    let data = "a                                  \tb\n";
     let footer = "\n".repeat(5);
     let page1 = format!("{header}{data}{footer}");
 
     // Page 2 should have just the second line of `f`.
     let header = format!("\n\n{datetime_pattern}{whitespace}Page 2\n\n\n");
-    let data = "a                                  \t                                   \n";
+    let data = "a                                  \t\n";
     let page2 = format!("{header}{data}{footer}");
 
     let pattern = format!("{page1}{page2}");
@@ -1351,4 +1386,103 @@ fn test_missing_file_error_message() {
         .fails_with_code(1)
         .stderr_contains("pr: nonexistent_file: ")
         .stderr_does_not_contain("(os error");
+}
+
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
+fn test_non_utf8_input_filename() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = OsStr::from_bytes(b"input-\xff");
+    std::fs::write(at.plus(name), b"from file\n").unwrap();
+    ucmd.arg("-t")
+        .arg(name)
+        .pipe_in("from stdin\n")
+        .succeeds()
+        .stdout_only("from file\n");
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
+fn test_missing_non_utf8_input_does_not_read_stdin() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    new_ucmd!()
+        .arg("-t")
+        .arg(OsStr::from_bytes(b"missing-\xff"))
+        .pipe_in("from stdin\n")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("missing-")
+        .stderr_does_not_contain("(os error");
+}
+
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
+fn test_merge_non_utf8_input_filename() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = OsStr::from_bytes(b"input-\xff");
+    std::fs::write(at.plus(name), b"left\n").unwrap();
+    at.write("right", "right\n");
+    ucmd.args(&["-T", "-m", "-l1"])
+        .arg(name)
+        .arg("right")
+        .succeeds()
+        .stdout_only(format!("{:<35}\t{}\n", "left", "right"));
+}
+
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
+fn test_header_preserves_non_utf8_filename() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    let (at, mut command) = at_and_ucmd!();
+    let name = OsStr::from_bytes(b"input-\xff");
+    std::fs::write(at.plus(name), b"01234567890123456789\n").unwrap();
+    command
+        .args(&["-D", "date", "-W20", "-l12"])
+        .arg(name)
+        .succeeds()
+        .stdout_only_bytes(b"\n\ndate input-\xff  Page 1\n\n\n01234567890123456789\n\n\n\n\n\n\n");
+}
+
+#[test]
+fn test_non_utf8_input_is_written_unchanged() {
+    new_ucmd!()
+        .arg("-t")
+        .pipe_in(b"\xff\xfe abc\n\xc3( x\n\x80\n")
+        .succeeds()
+        .stdout_is_bytes(b"\xff\xfe abc\n\xc3( x\n\x80\n");
+
+    new_ucmd!()
+        .args(&["-n", "-t"])
+        .pipe_in(b"\xff\n")
+        .succeeds()
+        .stdout_is_bytes(b"    1\t\xff\n");
+}
+
+#[test]
+fn test_non_utf8_input_in_columns() {
+    // As in GNU pr, an invalid byte takes no width, so "\xff\xfeab" is padded
+    // like "ab" to the column width of 4.
+    new_ucmd!()
+        .args(&["-2", "-t", "-w", "9", "-s|"])
+        .pipe_in(b"\xff\xfeab\nc\n")
+        .succeeds()
+        .stdout_is_bytes(b"\xff\xfeab  |c\n");
+
+    // An invalid byte right after a full column is kept, and the next
+    // character is cut off.
+    new_ucmd!()
+        .args(&["-2", "-t", "-w", "9", "-s|"])
+        .pipe_in(b"abcd\xffe\nc\n")
+        .succeeds()
+        .stdout_is_bytes(b"abcd\xff|c\n");
 }

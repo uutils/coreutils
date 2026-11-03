@@ -1976,3 +1976,34 @@ fn test_empty_skip_to_regex_is_accepted() {
     ucmd.args(&["letters", "%%"]).succeeds().stdout_only("19\n");
     assert_eq!(at.read("xx00"), "delta\necho\nfoxtrot\n");
 }
+
+/// `-z` must not remove an existing file that this run never created.
+#[test]
+fn test_elide_empty_files_keeps_input_on_invalid_pattern() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("xx00", "original data\n");
+
+    ucmd.args(&["-z", "-k", "xx00", "/[/"]).fails_with_code(1);
+
+    assert_eq!(at.read("xx00"), "original data\n");
+}
+
+/// `-z` must not remove an existing split file that could not be opened for writing.
+#[test]
+#[cfg(unix)]
+fn test_elide_empty_files_keeps_file_it_failed_to_create() {
+    // Root can open a read-only file for writing, so File::create would not fail.
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input", "a\nb\n");
+    at.write("xx00", "KEEP THIS\n");
+    at.set_mode("xx00", 0o444);
+
+    ucmd.args(&["-z", "-k", "input", "2"])
+        .fails_with_code(1)
+        .stderr_is("csplit: xx00: Permission denied\n");
+
+    assert_eq!(at.read("xx00"), "KEEP THIS\n");
+}

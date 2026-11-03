@@ -151,7 +151,7 @@ utmp-classic = { workspace = true, optional = true }
 [features]
 default = ["signals"]
 # * non-default features
-backup-control = []
+backup-control = ["fs"]
 colors = []
 diagnostics = ["dep:ariadne"]
 checksum = ["base64-simd", "quoting-style", "rustix/fs", "sum"]
