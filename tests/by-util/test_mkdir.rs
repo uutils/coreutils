@@ -1274,7 +1274,9 @@ mod diagnostics {
 
         // A numeric mode has to be the whole mode, so it cannot share the
         // list with anything else.
-        for mode in ["1,2", "755,u+w", "+1,2", "u=r,2", "1,u=w"] {
+        for mode in [
+            "1,2", "755,u+w", "+1,2", "u=r,2", "1,u=w", "u+w,755", "a=rx,700",
+        ] {
             let ts = TestScenario::new(util_name!());
             ts.ucmd()
                 .args(&["-m", mode, "some_dir"])
