@@ -23,7 +23,7 @@ use std::os::unix::fs::MetadataExt;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
-use std::path::{Component, Path, PathBuf, MAIN_SEPARATOR};
+use std::path::{Component, MAIN_SEPARATOR, Path, PathBuf};
 #[cfg(unix)]
 use std::sync::OnceLock;
 use std::{env, fs};
@@ -31,12 +31,12 @@ use std::{env, fs};
 use windows_sys::Win32::Foundation::MAX_PATH;
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::{
-    GetDiskFreeSpaceW, GetFileInformationByHandle, GetVolumePathNameW, BY_HANDLE_FILE_INFORMATION,
+    BY_HANDLE_FILE_INFORMATION, GetDiskFreeSpaceW, GetFileInformationByHandle, GetVolumePathNameW,
 };
 #[cfg(windows)]
-use windows_sys::Win32::System::Ioctl::FSCTL_SET_SPARSE;
-#[cfg(windows)]
 use windows_sys::Win32::System::IO::DeviceIoControl;
+#[cfg(windows)]
+use windows_sys::Win32::System::Ioctl::FSCTL_SET_SPARSE;
 
 /// Maximum number of symlinks followed while resolving a single path.
 ///
@@ -410,7 +410,6 @@ pub fn canonicalize<P: AsRef<Path>>(
             }
             OwningComponent::CurDir => {}
             OwningComponent::ParentDir => {
-                // checking for current component
                 if !result.as_os_str().is_empty() && miss_mode != MissingHandling::Missing {
                     ensure_is_directory(&result)?;
                 }
@@ -577,11 +576,7 @@ pub fn display_permissions_unix(mode: u32, display_file_type: bool) -> String {
     result.push(if mode & S_IRUSR != 0 { 'r' } else { '-' });
     result.push(if mode & S_IWUSR != 0 { 'w' } else { '-' });
     result.push(if mode & S_ISUID != 0 {
-        if mode & S_IXUSR != 0 {
-            's'
-        } else {
-            'S'
-        }
+        if mode & S_IXUSR != 0 { 's' } else { 'S' }
     } else if mode & S_IXUSR != 0 {
         'x'
     } else {
@@ -591,11 +586,7 @@ pub fn display_permissions_unix(mode: u32, display_file_type: bool) -> String {
     result.push(if mode & S_IRGRP != 0 { 'r' } else { '-' });
     result.push(if mode & S_IWGRP != 0 { 'w' } else { '-' });
     result.push(if mode & S_ISGID != 0 {
-        if mode & S_IXGRP != 0 {
-            's'
-        } else {
-            'S'
-        }
+        if mode & S_IXGRP != 0 { 's' } else { 'S' }
     } else if mode & S_IXGRP != 0 {
         'x'
     } else {
@@ -605,11 +596,7 @@ pub fn display_permissions_unix(mode: u32, display_file_type: bool) -> String {
     result.push(if mode & S_IROTH != 0 { 'r' } else { '-' });
     result.push(if mode & S_IWOTH != 0 { 'w' } else { '-' });
     result.push(if mode & S_ISVTX != 0 {
-        if mode & S_IXOTH != 0 {
-            't'
-        } else {
-            'T'
-        }
+        if mode & S_IXOTH != 0 { 't' } else { 'T' }
     } else if mode & S_IXOTH != 0 {
         'x'
     } else {
@@ -703,7 +690,7 @@ pub fn path_is_root_dir<P: AsRef<Path>>(path: P, dereference: bool) -> bool {
 /// assert!(are_files_identical(file1.path(), file2.path()).unwrap());
 /// ```
 pub fn are_files_identical(path1: impl AsRef<Path>, path2: impl AsRef<Path>) -> IOResult<bool> {
-    use std::fs::{metadata, File};
+    use std::fs::{File, metadata};
     use std::io::{BufReader, ErrorKind, Read};
 
     let path1 = path1.as_ref();
@@ -1155,7 +1142,7 @@ pub fn get_filename(file: &Path) -> Option<&str> {
 pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> {
     #[cfg(all(unix, not(target_os = "redox")))]
     {
-        use rustix::fs::{openat, renameat, unlinkat, AtFlags, Mode, OFlags, CWD};
+        use rustix::fs::{AtFlags, CWD, Mode, OFlags, openat, renameat, unlinkat};
         use std::ffi::OsStr;
         use std::io::Read;
         use std::os::unix::ffi::OsStrExt;
@@ -1231,7 +1218,7 @@ pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> 
 /// `symlinkat`/`linkat` relative to an open directory.
 #[cfg(all(unix, not(target_os = "redox")))]
 fn link_at<Fd: AsFd>(target: &Path, dir: Fd, name: &OsStr, symbolic: bool) -> IOResult<()> {
-    use rustix::fs::{linkat, symlinkat, AtFlags, CWD};
+    use rustix::fs::{AtFlags, CWD, linkat, symlinkat};
 
     if symbolic {
         symlinkat(target, dir, name).map_err(Into::into)
@@ -1273,7 +1260,7 @@ mod tests {
     #[cfg(unix)]
     use std::os::unix;
     #[cfg(unix)]
-    use tempfile::{tempdir, NamedTempFile};
+    use tempfile::{NamedTempFile, tempdir};
 
     // `tempfile` is unusable on WASI (`std::env::temp_dir` aborts there), so
     // tests create a uniquely named directory under the current (preopened,
