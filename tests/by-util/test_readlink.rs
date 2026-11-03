@@ -563,3 +563,19 @@ fn test_verbose_or_silent() {
         )
         .no_stdout();
 }
+#[test]
+fn test_readlink_canonicalize_regular_file_followed_by_parent_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("regular_file");
+
+    scene
+        .ucmd()
+        .arg("-v")
+        .arg("-f")
+        .arg("regular_file/..")
+        .fails()
+        .code_is(1)
+        .stderr_contains("Not a directory");
+}

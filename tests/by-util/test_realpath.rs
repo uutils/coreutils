@@ -712,3 +712,35 @@ fn test_realpath_directory_followed_by_parent_dir_missing_mode() {
         .succeeds()
         .stdout_is(format!("{}\n", at.root_dir_resolved()));
 }
+
+#[test]
+fn test_realpath_logical_followed_by_parent_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("regular_file");
+
+    scene
+        .ucmd()
+        .arg("-L")
+        .arg("regular_file/..")
+        .fails()
+        .code_is(1)
+        .stderr_contains("Not a directory");
+}
+
+#[test]
+fn test_realpath_existing_followed_by_parent_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("regular_file");
+
+    scene
+        .ucmd()
+        .arg("-e")
+        .arg("regular_file/..")
+        .fails()
+        .code_is(1)
+        .stderr_contains("Not a directory");
+}

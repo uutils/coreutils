@@ -317,6 +317,28 @@ fn ensure_is_directory(path: &Path) -> IOResult<()> {
     }
 }
 
+fn validate_parent_compoenent(path: &Path) -> IOResult<()> {
+    let mut current = PathBuf::new();
+
+    for component in path.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir | Component::Normal(_) => {
+                current.push(component.as_os_str());
+            }
+
+            Component::CurDir => {}
+
+            Component::ParentDir => {
+                if !current.as_os_str().is_empty() {
+                    ensure_is_directory(&current)?;
+                }
+                current.pop();
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Return the canonical, absolute form of a path.
 ///
 /// This function is a generalization of [`std::fs::canonicalize`] that
@@ -362,6 +384,9 @@ pub fn canonicalize<P: AsRef<Path>>(
         dunce::canonicalize(current_dir)?.join(original)
     };
     let path = if res_mode == ResolveMode::Logical {
+        if miss_mode != MissingHandling::Missing {
+            validate_parent_compoenent(&original)?
+        }
         normalize_path(&original)
     } else {
         original
