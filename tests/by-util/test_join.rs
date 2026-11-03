@@ -1056,3 +1056,56 @@ fn test_last_of_check_order_nocheck_order_wins() {
         .fails_with_code(1)
         .stderr_is("join: a.txt:2: is not sorted: a\n");
 }
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+fn test_one_byte_separator_inside_multibyte_char() {
+    // In GB18030/GBK and Big5 the second byte of a two-byte character can be
+    // `|`: 東 is `96 7C` in GB18030 and 四 is `A5 7C` in Big5. That byte is not
+    // a separator, so the record still has three fields.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("homes", "mallory|/home/mallory\n");
+
+    for (locale, display_name) in [
+        ("zh_CN.gb18030", b"\x96\x7c".as_slice()),
+        ("zh_CN.GBK", b"\x96\x7c".as_slice()),
+        ("zh_TW.BIG5", b"\xa5\x7c".as_slice()),
+    ] {
+        let mut users = b"mallory|".to_vec();
+        users.extend_from_slice(display_name);
+        users.extend_from_slice(b"admin|guest\n");
+        at.write_bytes("users", &users);
+
+        ts.ucmd()
+            .env("LC_ALL", locale)
+            .args(&["-t", "|", "-o", "0,1.3,2.2", "users", "homes"])
+            .succeeds()
+            .stdout_only("mallory|guest|/home/mallory\n");
+    }
+
+    // A digit is the second and fourth byte of a GB18030 four-byte character.
+    at.write_bytes("f1", b"k5\x81\x35\x81\x35x5v\n");
+    at.write("f2", "k5w\n");
+    ts.ucmd()
+        .env("LC_ALL", "zh_CN.gb18030")
+        .args(&["-t", "5", "-o", "1.3,2.2", "f1", "f2"])
+        .succeeds()
+        .stdout_only("v5w\n");
+}
+
+#[test]
+fn test_one_byte_separator_splits_bytes_in_c_locale() {
+    // Without a multi-byte locale every byte is a character, so `|` after
+    // `\x96` still separates fields.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write_bytes("users", b"mallory|\x96|admin|guest\n");
+    at.write("homes", "mallory|/home/mallory\n");
+
+    ts.ucmd()
+        .env("LC_ALL", "C")
+        .args(&["-t", "|", "-o", "0,1.3,2.2", "users", "homes"])
+        .succeeds()
+        .stdout_only("mallory|admin|/home/mallory\n");
+}

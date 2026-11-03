@@ -18,6 +18,7 @@ use std::os::unix::ffi::OsStrExt;
 use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::i18n::charmap::{Encoding, locale_encoding};
 use uucore::i18n::collator::{
     AlternateHandling, CollatorOptions, locale_cmp, should_use_locale_collation, try_init_collator,
 };
@@ -70,6 +71,23 @@ trait Separator: Clone {
 #[derive(Copy, Clone)]
 struct OneByteSep {
     byte: [u8; 1],
+    /// Set for encodings where the separator byte can also be a byte inside a
+    /// longer character (GB18030, GBK and Big5). Fields are then split only
+    /// where a whole character is the separator.
+    char_aware: Option<Encoding>,
+}
+
+impl OneByteSep {
+    fn new(byte: u8) -> Self {
+        // In UTF-8 and the EUC encodings no byte below 0x80 is part of a longer
+        // character, so a plain byte search is correct there.
+        let encoding = locale_encoding();
+        let char_aware = matches!(encoding, Encoding::Gb18030 | Encoding::Big5).then_some(encoding);
+        Self {
+            byte: [byte],
+            char_aware,
+        }
+    }
 }
 
 impl Separator for OneByteSep {
@@ -77,9 +95,21 @@ impl Separator for OneByteSep {
         let mut field_ranges = Vec::with_capacity(len_guess);
         let mut last_end = 0;
 
-        for i in memchr_iter(self.byte[0], haystack) {
-            field_ranges.push((last_end, i));
-            last_end = i + 1;
+        if let Some(encoding) = self.char_aware {
+            let mut i = 0;
+            while i < haystack.len() {
+                let len = encoding.char_len(&haystack[i..]);
+                if len == 1 && haystack[i] == self.byte[0] {
+                    field_ranges.push((last_end, i));
+                    last_end = i + 1;
+                }
+                i += len;
+            }
+        } else {
+            for i in memchr_iter(self.byte[0], haystack) {
+                field_ranges.push((last_end, i));
+                last_end = i + 1;
+            }
         }
         field_ranges.push((last_end, haystack.len()));
         field_ranges
@@ -916,7 +946,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let sep = settings.separator.clone();
     match sep {
-        SepSetting::Byte(byte) => exec(file1, file2, settings, OneByteSep { byte: [byte] }),
+        SepSetting::Byte(byte) => exec(file1, file2, settings, OneByteSep::new(byte)),
         SepSetting::Char(c) => exec(
             file1,
             file2,
