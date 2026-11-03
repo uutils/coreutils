@@ -259,6 +259,45 @@ fn test_preserve_root_all_same_device() {
     assert!(!at.dir_exists(dir));
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_preserve_root_all_skips_mount_reached_through_symlink() {
+    // A symbolic link stored on a mounted file system that points at the mount
+    // root must still be seen as a mount point when the operand ends in a slash.
+    // Mounting needs root privileges, so the test stops early without them.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("mnt");
+    let mount_point = at.plus_as_string("mnt");
+    let mounted = std::process::Command::new("mount")
+        .args(["-t", "tmpfs", "tmpfs", &mount_point])
+        .status()
+        .is_ok_and(|status| status.success());
+    if !mounted {
+        return;
+    }
+
+    at.touch("mnt/file");
+    at.mkdir("mnt/scratch");
+    at.symlink_dir(&mount_point, "mnt/scratch/link");
+
+    let result = ucmd
+        .arg("--preserve-root=all")
+        .arg("-rf")
+        .arg("mnt/scratch/link/")
+        .run();
+    let still_there = at.file_exists("mnt/file");
+
+    // Unmount before asserting, so a failure does not leave the mount behind.
+    let _ = std::process::Command::new("umount")
+        .arg(&mount_point)
+        .status();
+
+    result
+        .failure()
+        .stderr_contains("since it's on a different device");
+    assert!(still_there);
+}
+
 #[test]
 fn test_preserve_root_rejects_unknown_value() {
     new_ucmd!()
