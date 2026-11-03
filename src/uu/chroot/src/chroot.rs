@@ -390,7 +390,7 @@ fn set_supplemental_gids_with_strategy(
                     Err(_) => unknown.push(group.clone()),
                 }
             }
-            // Report every unknown group, like GNU.
+            // Report every unknown group.
             if let Some(last) = unknown.pop() {
                 for group in unknown {
                     show!(ChrootError::InvalidGroup(group));
