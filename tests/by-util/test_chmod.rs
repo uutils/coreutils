@@ -600,22 +600,30 @@ fn test_chmod_readonly_filesystem() {
 fn test_chmod_recursive_reports_real_error_below_operand() {
     use rustix::process::geteuid;
 
-    // A file found while recursing that the user does not own must be
-    // reported with the real error (EPERM), like the operand itself, not as
-    // "cannot access ... Permission denied". '-L' makes the walk chmod the
-    // root-owned target of the symlink. 'u+r' keeps the mode the same.
+    // '-L' makes chmod follow the link to a root-owned file: EPERM
     let target = "/etc/passwd";
-    if geteuid().is_root() || metadata(target).map_or(1, |m| m.uid()) != 0 {
+    let Ok(meta) = metadata(target) else { return };
+    if geteuid().is_root() || meta.uid() != 0 {
         return;
     }
+    let mode = meta.mode() & 0o7777;
 
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.mkdir("tree");
-    at.symlink_file(target, "tree/link");
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkdir("tree");
+    ts.fixtures.symlink_file(target, "tree/link");
 
-    ucmd.args(&["-R", "-L", "u+r", "tree"])
+    ts.ucmd()
+        .args(&["-R", "-L", "u+r", "tree"])
         .fails_with_code(1)
         .stderr_is("chmod: changing permissions of 'tree/link': Operation not permitted\n");
+
+    ts.ucmd()
+        .args(&["-v", "-R", "-L", "u+r", "tree"])
+        .fails_with_code(1)
+        .stdout_contains(format!(
+            "failed to change mode of 'tree/link' from {mode:04o} ("
+        ))
+        .stdout_contains(format!(") to {:04o} (", mode | 0o400));
 }
 
 #[test]
@@ -1916,7 +1924,7 @@ fn test_chmod_reports_every_failing_operand() {
         .args(&["-v", "-f", "0", "/", "/"])
         .fails_with_code(1)
         .no_stderr()
-        .stdout_contains("failed to change mode of file '/' from");
+        .stdout_contains("failed to change mode of '/' from");
 }
 
 #[test]

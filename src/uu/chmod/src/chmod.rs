@@ -838,14 +838,8 @@ impl Chmoder {
 
         // Use safe traversal to change the mode
         if let Err(e) = dir_fd.chmod_at(entry_name, new_mode, symlink_behavior) {
-            if self.verbose {
-                println!(
-                    "failed to change mode of {} to {new_mode:o}",
-                    file_path.quote(),
-                );
-            }
-
-            return Err(ChmodError::ChangingPermissions(file_path.into(), e).into());
+            self.report_failed_change(file_path, e, current_mode, new_mode);
+            return Ok(());
         }
 
         // Report the change using the helper method
@@ -901,32 +895,39 @@ impl Chmoder {
             return Ok(());
         }
 
-        self.change_file(fperm, self.fmode.unwrap_or(new_mode), file)?;
-
-        self.report_umask_conflict(file, new_mode, naively_expected_new_mode);
+        if self.change_file(fperm, self.fmode.unwrap_or(new_mode), file) {
+            self.report_umask_conflict(file, new_mode, naively_expected_new_mode);
+        }
 
         Ok(())
     }
 
-    fn change_file(&self, fperm: u32, mode: u32, file: &Path) -> UResult<()> {
+    /// Returns false if the mode could not be changed (already reported).
+    fn change_file(&self, fperm: u32, mode: u32, file: &Path) -> bool {
         // Always issue the chmod(2) call, even when the bits are unchanged: the
         // syscall can still fail (e.g. lacking permission on the file) and that
         // failure must be reported, matching GNU.
         if let Err(err) = fs::set_permissions(file, fs::Permissions::from_mode(mode)) {
-            if self.verbose {
-                println!(
-                    "failed to change mode of file {} from {fperm:04o} ({}) to {mode:04o} ({})",
-                    file.quote(),
-                    display_permissions_unix(fperm, false),
-                    display_permissions_unix(mode, false)
-                );
-            }
-            return Err(ChmodError::ChangingPermissions(file.into(), err).into());
+            self.report_failed_change(file, err, fperm, mode);
+            return false;
         }
 
         // Use the helper method for consistent reporting
         self.report_permission_change(file, fperm, mode);
-        Ok(())
+        true
+    }
+
+    /// Report a failed chmod: the error first, then the `-v` line, like GNU.
+    fn report_failed_change(&self, file: &Path, err: std::io::Error, old_mode: u32, new_mode: u32) {
+        self.report_failure(ChmodError::ChangingPermissions(file.into(), err).into());
+        if self.verbose {
+            println!(
+                "failed to change mode of {} from {old_mode:04o} ({}) to {new_mode:04o} ({})",
+                file.quote(),
+                display_permissions_unix(old_mode, false),
+                display_permissions_unix(new_mode, false)
+            );
+        }
     }
 }
 
