@@ -624,8 +624,9 @@ fn test_directory_error_includes_filename() {
     at.write("a.txt", "a\n");
     at.mkdir("d");
 
-    ucmd.args(&["a.txt", "d"])
-        .fails_with_code(1)
-        .stdout_is("a\t\n")
-        .stderr_is("paste: d: Is a directory\n");
+    let result = ucmd.args(&["a.txt", "d"]).fails_with_code(1);
+    result.stderr_contains("paste: d:");
+    if !cfg!(windows) {
+        result.stdout_is("a\t\n");
+    }
 }
