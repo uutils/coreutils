@@ -294,12 +294,12 @@ fn print_but_last_n_lines(mut input: impl Read, n: u64, separator: u8) -> io::Re
     Ok(bytes_written)
 }
 
-/// Return the index in `input` just after the `n`th line from the end.
+/// Return the byte offset, relative to the current position, just after the
+/// `n`th line from the end of the remaining input.
 ///
-/// If `n` exceeds the number of lines in this file, then return 0.
-/// This function rewinds the cursor to the
-/// beginning of the input just before returning unless there is an
-/// I/O error.
+/// If `n` exceeds the number of lines in the remaining input, then return 0.
+/// This function restores the cursor to its original position just before
+/// returning unless there is an I/O error.
 ///
 /// # Errors
 ///
@@ -331,9 +331,7 @@ fn find_nth_line_from_end<R>(input: &mut R, n: u64, separator: u8) -> io::Result
 where
     R: Read + Seek,
 {
-    // Only search the data after the current position, so a partly consumed
-    // seekable input (such as a regular file used as stdin) is handled
-    // relative to where the descriptor currently stands.
+    // Search only after the current position, so a partly consumed seekable input is handled relative to it.
     let start_offset = input.stream_position()?;
     let file_size = input.seek(SeekFrom::End(0))?;
 
@@ -341,7 +339,7 @@ where
 
     let mut lines = 0u64;
     let mut check_last_byte_first_loop = true;
-    let mut bytes_remaining_to_search = file_size - start_offset;
+    let mut bytes_remaining_to_search = file_size.saturating_sub(start_offset);
 
     loop {
         // the casts here are ok, `buffer.len()` should never be above a few k
@@ -417,10 +415,10 @@ fn head_backwards_without_seek_file(input: &mut File, options: &HeadOptions) -> 
 fn head_backwards_on_seekable_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
     match options.mode {
         Mode::AllButLastBytes(n) => {
-            let start_offset = input.stream_position()?;
-            let size = input.seek(SeekFrom::End(0))?;
-            let remaining = size - start_offset;
-            input.seek(SeekFrom::Start(start_offset))?;
+            let remaining = input
+                .metadata()?
+                .len()
+                .saturating_sub(input.stream_position()?);
             if n >= remaining {
                 Ok(0)
             } else {
