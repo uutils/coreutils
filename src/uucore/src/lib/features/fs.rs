@@ -317,7 +317,12 @@ fn ensure_is_directory(path: &Path) -> IOResult<()> {
     }
 }
 
-fn validate_parent_compoenent(path: &Path) -> IOResult<()> {
+/// Validates path components preceding each `..` component
+///
+/// Ensures that the accumulated path is a directory before traversing
+/// to its parent. This prevents paths containing a regular file followed
+/// by `..` from being incorrectly accepted after logical normalization..
+fn validate_parent_component(path: &Path) -> IOResult<()> {
     let mut current = PathBuf::new();
 
     for component in path.components() {

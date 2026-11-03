@@ -16,6 +16,11 @@ use std::path::{MAIN_SEPARATOR, Path};
 
 static GIBBERISH: &str = "supercalifragilisticexpialidocious";
 
+#[cfg(not(windows))]
+static NOT_A_DIRECTORY: &str = "Not a directory";
+#[cfg(windows)]
+static NOT_A_DIRECTORY: &str = "The directory name is invalid.";
+
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_realpath_current_directory() {
@@ -683,10 +688,11 @@ fn test_realpath_followed_by_parent_dir() {
         .arg("regular_file/..")
         .fails()
         .code_is(1)
-        .stderr_contains("Not a directory");
+        .stderr_contains(NOT_A_DIRECTORY);
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_realpath_directory_followed_by_parent_dir() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -701,6 +707,7 @@ fn test_realpath_directory_followed_by_parent_dir() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_realpath_directory_followed_by_parent_dir_missing_mode() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -726,7 +733,7 @@ fn test_realpath_logical_followed_by_parent_dir() {
         .arg("regular_file/..")
         .fails()
         .code_is(1)
-        .stderr_contains("Not a directory");
+        .stderr_contains(NOT_A_DIRECTORY);
 }
 
 #[test]
@@ -742,5 +749,5 @@ fn test_realpath_existing_followed_by_parent_dir() {
         .arg("regular_file/..")
         .fails()
         .code_is(1)
-        .stderr_contains("Not a directory");
+        .stderr_contains(NOT_A_DIRECTORY);
 }
