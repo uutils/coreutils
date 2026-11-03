@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore abcdefghijklmnopqrstuvwxyz Anone fdbb littl bfloat
+// spell-checker:ignore abcdefghijklmnopqrstuvwxyz Anone fdbb littl bfloat doxn
 
 #[cfg(unix)]
 use std::io::Read;
@@ -537,6 +537,49 @@ fn test_invalid_width() {
         .success()
         .stderr_is_bytes("od: warning: invalid width 5; using 2 instead\n".as_bytes())
         .stdout_is(expected_output);
+}
+
+#[test]
+fn test_invalid_radix_error() {
+    new_ucmd!()
+        .arg("-Aqq")
+        .fails_with_code(1)
+        .stderr_is("od: invalid output address radix 'q'; it must be one character from [doxn]\n");
+}
+
+#[test]
+fn test_invalid_type_string_errors() {
+    for (spec, expected) in [
+        ("q", "od: invalid character 'q' in type string 'q'\n"),
+        ("a1", "od: invalid character '1' in type string 'a1'\n"),
+        (
+            "d3",
+            "od: invalid type string 'd3';\nthis system doesn't provide a 3-byte integral type\n",
+        ),
+        (
+            "u256",
+            "od: invalid type string 'u256';\nthis system doesn't provide a 256-byte integral type\n",
+        ),
+        (
+            "f3",
+            "od: invalid type string 'f3';\nthis system doesn't provide a 3-byte floating point type\n",
+        ),
+        (
+            "d2147483647",
+            "od: invalid type string 'd2147483647';\nthis system doesn't provide a 2147483647-byte integral type\n",
+        ),
+        ("d2147483648", "od: invalid type string 'd2147483648'\n"),
+        ("f2147483648", "od: invalid type string 'f2147483648'\n"),
+        (
+            "d99999999999999999999",
+            "od: invalid type string 'd99999999999999999999'\n",
+        ),
+    ] {
+        new_ucmd!()
+            .arg(format!("-t{spec}"))
+            .fails_with_code(1)
+            .stderr_is(expected);
+    }
 }
 
 #[test]
@@ -1390,6 +1433,25 @@ fn test_od_strings_option() {
         .succeeds()
         .stdout_is("0000000 hello\n0000006 world\n");
 
+    // Test -S0 with empty strings and consecutive NUL bytes (issue #16134)
+    new_ucmd!()
+        .args(&["--strings=0", "-Ad"])
+        .pipe_in(b"abc\x00\x00def\x00")
+        .succeeds()
+        .stdout_is("0000000 abc\n0000004 \n0000005 def\n");
+
+    new_ucmd!()
+        .args(&["-S0", "-Ad"])
+        .pipe_in(b"\x00\x00")
+        .succeeds()
+        .stdout_is("0000000 \n0000001 \n");
+
+    new_ucmd!()
+        .args(&["--strings=0", "-Ad", "-j4"])
+        .pipe_in(b"abc\x00\x00def\x00")
+        .succeeds()
+        .stdout_is("0000004 \n0000005 def\n");
+
     // Test -S0 with single character strings
     new_ucmd!()
         .arg("-S0")
@@ -1713,11 +1775,15 @@ fn test_width_invalid_numbers() {
 #[test]
 fn test_od_zero_byte_type_size() {
     for spec in ["x0", "d0", "o00", "u0", "f0"] {
+        // od can exit before reading its input, so writing it may fail with
+        // a broken pipe.
         new_ucmd!()
             .arg(format!("-t{spec}"))
             .pipe_in("abcd")
+            .ignore_stdin_write_error()
             .fails_with_code(1)
-            .stderr_contains("invalid")
+            .stderr_contains(format!("invalid type string '{spec}';"))
+            .stderr_contains("this system doesn't provide a 0-byte")
             .no_stdout();
     }
     new_ucmd!()

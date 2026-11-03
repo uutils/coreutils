@@ -908,11 +908,15 @@ impl<'a> Output<'a> {
         let fx = OwnedFileDescriptorOrHandle::from(io::stdout())?;
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
-            rustix::fs::fcntl_setfl(
+            use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
+            // `F_SETFL` replaces the status flags, so add to the current ones
+            // to keep e.g. the `O_APPEND` set by a `>>` shell redirection.
+            let current = fcntl_getfl(fx.as_raw()).map_err(io::Error::from)?;
+            fcntl_setfl(
                 fx.as_raw(),
-                rustix::fs::OFlags::from_bits_retain(libc_flags as _),
+                current | OFlags::from_bits_retain(libc_flags as _),
             )
-            .map_err(|e| uucore::error::UIoError::from(io::Error::from(e)))?;
+            .map_err(io::Error::from)?;
         }
 
         Self::prepare_file(fx.into_file(), settings)

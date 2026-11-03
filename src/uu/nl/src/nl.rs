@@ -146,7 +146,7 @@ impl NumberFormat {
             }
             Self::RightZero if number < 0 => {
                 writer.write_all(b"-")?;
-                let num = buffer.format(number.abs());
+                let num = buffer.format(number.unsigned_abs());
                 for _ in num.len()..min_width.saturating_sub(1) {
                     writer.write_all(b"0")?;
                 }
@@ -353,6 +353,7 @@ pub fn uu_app() -> Command {
                 .long(options::LINE_INCREMENT)
                 .help(translate!("nl-help-line-increment"))
                 .value_name("NUMBER")
+                .allow_negative_numbers(true)
                 .value_parser(clap::value_parser!(i64)),
         )
         .arg(
@@ -392,6 +393,7 @@ pub fn uu_app() -> Command {
                 .long(options::STARTING_LINE_NUMBER)
                 .help(translate!("nl-help-starting-line-number"))
                 .value_name("NUMBER")
+                .allow_negative_numbers(true)
                 .value_parser(clap::value_parser!(i64)),
         )
         .arg(

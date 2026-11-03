@@ -2051,8 +2051,14 @@ fn test_install_root_combined() {
     run_and_check(&["-Cv", "-o1", "-g1", "a", "b"], "b", 1, 1);
     run_and_check(&["-Cv", "-o2", "-g1", "a", "b"], "b", 2, 1);
     run_and_check(&["-Cv", "-o2", "-g2", "a", "b"], "b", 2, 2);
+    // Without -o, -C must still give the file to the invoker.
+    run_and_check(&["-Cv", "-g2", "a", "b"], "b", 0, 2);
 
     run_and_check(&["-Cv", "-o2", "c", "d"], "d", 2, 0);
+    // -o alone must compare against that owner, so nothing is copied again.
+    if let Ok(result) = run_ucmd_as_root(&ts, &["-Cv", "-o2", "c", "d"]) {
+        result.success().no_stdout();
+    }
     run_and_check(&["-Cv", "c", "d"], "d", 0, 0);
     run_and_check(&["-Cv", "c", "d"], "d", 0, 0);
 }
@@ -2822,15 +2828,11 @@ fn test_install_d_dangling_symlink_in_path_errors() {
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
-    target_os = "macos",
-    target_os = "ios",
-    target_os = "tvos",
-    target_os = "watchos",
-    target_os = "visionos",
     target_os = "freebsd",
     target_os = "netbsd",
     target_os = "illumos",
-    target_os = "solaris"
+    target_os = "solaris",
+    target_vendor = "apple"
 ))]
 fn test_install_d_leading_dirs_in_write_only_directory() {
     // mkdir needs write and execute on the parent, not read, so -D must be

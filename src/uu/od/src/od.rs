@@ -223,7 +223,7 @@ impl OdOptions {
                         _ => {
                             return Err(USimpleError::new(
                                 1,
-                                translate!("od-error-radix-invalid", "radix" => s),
+                                translate!("od-error-radix-invalid", "radix" => s.chars().next().unwrap_or_default()),
                             ));
                         }
                     }
@@ -632,7 +632,7 @@ fn extract_strings_from_input(
     };
 
     let mut current_string = Vec::new();
-    let mut string_start_offset = 0u64;
+    let mut string_start_offset = skip_bytes;
     let mut current_offset = skip_bytes;
     let mut bytes_read = 0u64;
     let mut buf = [0u8; 1];
@@ -665,7 +665,12 @@ fn extract_strings_from_input(
                     // Either null terminator or non-printable character
                     if byte == 0 && current_string.len() >= min_length {
                         // Null terminator found with valid string
-                        print_string(string_start_offset, &current_string)?;
+                        let offset = if current_string.is_empty() {
+                            current_offset
+                        } else {
+                            string_start_offset
+                        };
+                        print_string(offset, &current_string)?;
                     }
                     current_string.clear();
                 }
