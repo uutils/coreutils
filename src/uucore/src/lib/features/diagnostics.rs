@@ -892,7 +892,9 @@ impl<'a> SourceLine<'a> {
                 // ariadne counts the header's column in characters, not bytes.
                 let drawn = format!(" {}:1:", self.name);
                 let from = line.find(&drawn)? + 1;
-                let to = from + line[from..].find(' ')?;
+                // The name may hold spaces of its own: look past it.
+                let column = from + drawn.len() - 1;
+                let to = column + line[column..].find(' ')?;
                 let location = format!("{}:{number}:{}", self.name, start + 1);
                 let _ = write!(
                     out,
@@ -996,6 +998,14 @@ mod tests {
                 "────╯",
             )
         );
+    }
+
+    #[test]
+    fn a_source_line_name_may_contain_spaces() {
+        let report = SourceLine::new("my prog", 3, "a = (b")
+            .report_colored(4..6, None, None, false)
+            .unwrap();
+        assert_eq!(report.lines().next(), Some("   ╭─[ my prog:3:5 ]"));
     }
 
     #[test]
