@@ -9,6 +9,7 @@ use rand::{RngExt as _, SeedableRng, rng};
 use regex::Regex;
 #[cfg(target_os = "linux")]
 use rlimit::Resource;
+use rstest::rstest;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::path::Path;
@@ -2370,42 +2371,26 @@ fn test_obsolete_lines_not_read_after_double_dash() {
         .stderr_contains("cannot open '-1' for reading");
 }
 
-#[test]
-fn test_number_with_plus_prefix() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.write("a.txt", "a\nb\n");
-    ucmd.args(&["-n", "+2", "a.txt"]).succeeds();
-    assert_eq!(at.read("xaa"), "a\n");
-    assert_eq!(at.read("xab"), "b\n");
-
-    // Every spelling that carries a number accepts the prefix, and the
-    // prefixed spelling splits exactly like the plain one.
-    for (prefixed, plain) in [
-        ("l/+2", "l/2"),
-        ("r/+2", "r/2"),
-        ("+1/2", "1/2"),
-        ("l/+1/2", "l/1/2"),
-        ("r/+1/2", "r/1/2"),
-    ] {
-        let prefixed_chunks = split_into_chunks(prefixed);
-        let plain_chunks = split_into_chunks(plain);
-        assert_eq!(
-            prefixed_chunks, plain_chunks,
-            "-n {prefixed} does not split like -n {plain}"
-        );
-    }
-}
-
-/// Run `split -n <number> a.txt` in a fresh fixture and return what it produced:
-/// the concatenated `x*` files when chunks were written, or the stdout when the
-/// spelling selects a single chunk.
-fn split_into_chunks(number: &str) -> (Vec<(String, String)>, String) {
+#[rstest]
+#[case::bytes("+2", &[("xaa", "a\nb\n"), ("xab", "c\nd\n")], "")]
+#[case::lines("l/+2", &[("xaa", "a\nb\n"), ("xab", "c\nd\n")], "")]
+#[case::round_robin("r/+2", &[("xaa", "a\nc\n"), ("xab", "b\nd\n")], "")]
+#[case::bytes_first_half("+1/2", &[], "a\nb\n")]
+#[case::lines_first_half("l/+1/2", &[], "a\nb\n")]
+#[case::round_robin_first_half("r/+1/2", &[], "a\nc\n")]
+fn test_number_with_plus_prefix(
+    #[case] number: &str,
+    #[case] expected_files: &[(&str, &str)],
+    #[case] expected_stdout: &str,
+) {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("a.txt", "a\nb\nc\nd\n");
+
     let stdout = ucmd
         .args(&["-n", number, "a.txt"])
         .succeeds()
         .stdout_move_str();
+    assert_eq!(stdout, expected_stdout, "-n {number}");
 
     let mut files: Vec<(String, String)> = fs::read_dir(at.as_string())
         .unwrap()
@@ -2417,5 +2402,10 @@ fn split_into_chunks(number: &str) -> (Vec<(String, String)>, String) {
         })
         .collect();
     files.sort();
-    (files, stdout)
+
+    let expected_files: Vec<(String, String)> = expected_files
+        .iter()
+        .map(|(name, contents)| (name.to_string(), contents.to_string()))
+        .collect();
+    assert_eq!(files, expected_files, "-n {number}");
 }
