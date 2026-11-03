@@ -688,7 +688,8 @@ fn test_realpath_followed_by_parent_dir() {
         .arg("regular_file/..")
         .fails()
         .code_is(1)
-        .stderr_contains(NOT_A_DIRECTORY);
+        .stderr_contains(NOT_A_DIRECTORY)
+        .no_stdout();
 }
 
 #[test]
@@ -733,7 +734,8 @@ fn test_realpath_logical_followed_by_parent_dir() {
         .arg("regular_file/..")
         .fails()
         .code_is(1)
-        .stderr_contains(NOT_A_DIRECTORY);
+        .stderr_contains(NOT_A_DIRECTORY)
+        .no_stdout();
 }
 
 #[test]
@@ -749,5 +751,6 @@ fn test_realpath_existing_followed_by_parent_dir() {
         .arg("regular_file/..")
         .fails()
         .code_is(1)
-        .stderr_contains(NOT_A_DIRECTORY);
+        .stderr_contains(NOT_A_DIRECTORY)
+        .no_stdout();
 }

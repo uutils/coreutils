@@ -577,5 +577,6 @@ fn test_readlink_canonicalize_regular_file_followed_by_parent_dir() {
         .arg("regular_file/..")
         .fails()
         .code_is(1)
-        .stderr_contains("Not a directory");
+        .stderr_contains(NOT_A_DIRECTORY)
+        .no_stdout();
 }

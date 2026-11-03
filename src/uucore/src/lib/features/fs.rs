@@ -390,7 +390,7 @@ pub fn canonicalize<P: AsRef<Path>>(
     };
     let path = if res_mode == ResolveMode::Logical {
         if miss_mode != MissingHandling::Missing {
-            validate_parent_compoenent(&original)?
+            validate_parent_component(&original)?
         }
         normalize_path(&original)
     } else {
