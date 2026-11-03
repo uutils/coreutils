@@ -2145,7 +2145,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     settings.debug = matches.get_flag(options::DEBUG);
-
     if let Some(path) = matches.get_one::<OsString>(options::RANDOM_SOURCE) {
         settings.random_source = Some(PathBuf::from(path));
     }
@@ -2344,7 +2343,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(incompatible_options_error(opts));
     }
 
-    if matches.contains_id(options::OUTPUT) && matches.get_flag(options::DEBUG) {
+    if matches.contains_id(options::OUTPUT) && settings.debug {
         return Err(incompatible_options_error("o --debug"));
     }
 
