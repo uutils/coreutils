@@ -1435,7 +1435,7 @@ fn test_merge_non_utf8_input_filename() {
         .arg(name)
         .arg("right")
         .succeeds()
-        .stdout_only(format!("{:<35}\t{:<35}\n", "left", "right"));
+        .stdout_only(format!("{:<35}\t{}\n", "left", "right"));
 }
 
 #[test]
