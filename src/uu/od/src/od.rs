@@ -546,7 +546,10 @@ where
                 let length = memory_decoder.length();
 
                 if length == 0 {
-                    if !input_decoder.has_error() {
+                    // After a read error, print the final offset only when
+                    // some input was already consumed; otherwise stay silent
+                    // (e.g. `od directory` or `od missing`).
+                    if !input_decoder.has_error() || !input_offset.is_at_start() {
                         input_offset.write_final_offset(writer)?;
                     }
                     break;
