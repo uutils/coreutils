@@ -89,14 +89,17 @@ fn test_stdin() {
         .stdout_is_fixture("crc_stdin.expected");
 }
 
-#[test]
-fn test_explicit_dash_prints_filename() {
+#[rstest]
+#[case::crc("crc", "4294967295 0 -\n")]
+#[case::bsd("bsd", "00000     0 -\n")]
+#[case::sysv("sysv", "0 0 -\n")]
+fn test_explicit_dash_prints_filename(#[case] algo: &str, #[case] expected: &str) {
     new_ucmd!()
-        .arg("-")
+        .args(&["--algorithm", algo, "-"])
         .pipe_in(b"")
         .succeeds()
         .no_stderr()
-        .normalized_newlines_stdout_is("4294967295 0 -\n");
+        .stdout_is(expected);
 }
 
 #[test]
