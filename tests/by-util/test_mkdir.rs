@@ -73,6 +73,33 @@ fn test_mkdir_mkdir() {
     new_ucmd!().arg("test_dir").succeeds();
 }
 
+#[rstest::rstest]
+#[case("-Z", "")]
+#[case(
+    "--context=some_context",
+    "mkdir: warning: ignoring --context; it requires an SELinux/SMACK-enabled kernel\n"
+)]
+#[case(
+    "--context=",
+    "mkdir: warning: ignoring --context; it requires an SELinux/SMACK-enabled kernel\n"
+)]
+#[cfg(all(target_os = "linux", feature = "feat_selinux", feature = "feat_smack"))]
+fn test_security_contexts_disabled(#[case] option: &str, #[case] warning: &str) {
+    if !uutests::util::security_contexts_disabled() {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .args(&[option, "--", "one", "two"])
+        .succeeds()
+        .no_stdout()
+        .stderr_is(warning);
+    for name in ["one", "two"] {
+        assert!(scene.fixtures.dir_exists(name));
+    }
+}
+
 #[cfg(feature = "test_risky_names")]
 #[test]
 fn test_mkdir_non_unicode() {
