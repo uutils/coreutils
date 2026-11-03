@@ -1795,10 +1795,16 @@ fn test_od_zero_byte_type_size() {
 
 #[test]
 fn test_strings_with_type_option_is_error() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.write("a.txt", "a\n");
-    ucmd.args(&["--strings=1", "-c", "a.txt"])
-        .fails()
-        .code_is(1)
-        .stderr_contains("no type may be specified when dumping strings");
+    for args in [
+        &["--strings=1", "-t", "x1", "a.txt"][..],
+        &["--strings=1", "--format=x1", "a.txt"][..],
+        &["-S1", "-x", "a.txt"][..],
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("a.txt", "a\n");
+        ucmd.args(args)
+            .fails()
+            .code_is(1)
+            .stderr_contains("no type may be specified when dumping strings");
+    }
 }
