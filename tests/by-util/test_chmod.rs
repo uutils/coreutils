@@ -1489,6 +1489,18 @@ fn test_chmod_dangling_symlink_recursive_combos() {
 }
 
 #[test]
+fn test_chmod_recursive_dereference_dangling_symlink_below_operand() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    at.symlink_file("missing", "d/dang");
+
+    ucmd.args(&["-v", "-R", "-L", "755", "d"])
+        .fails_with_code(1)
+        .stderr_is("chmod: cannot operate on dangling symlink 'd/dang'\n")
+        .stdout_contains("'d/dang' could not be accessed\n");
+}
+
+#[test]
 fn test_chmod_traverse_symlink_combo() {
     let scenarios = [
         (

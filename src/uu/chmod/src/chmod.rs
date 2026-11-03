@@ -718,13 +718,22 @@ impl Chmoder {
             let meta = match dir_fd.metadata_at(&entry_name, should_follow_symlink.into()) {
                 Ok(meta) => meta,
                 Err(err) => {
-                    // Handle permission denied with proper file path context
-                    let error = if err.kind() == std::io::ErrorKind::PermissionDenied {
-                        ChmodError::PermissionDenied(entry_path).into()
-                    } else {
-                        err.into()
+                    let dangling =
+                        err.kind() == std::io::ErrorKind::NotFound && entry_path.is_symlink();
+                    let error = match err.kind() {
+                        _ if dangling => ChmodError::DanglingSymlink(entry_path.clone()).into(),
+                        std::io::ErrorKind::PermissionDenied => {
+                            ChmodError::PermissionDenied(entry_path.clone()).into()
+                        }
+                        _ => err.into(),
                     };
                     self.report_failure(error);
+                    if dangling && self.verbose {
+                        println!(
+                            "{}",
+                            translate!("chmod-verbose-could-not-be-accessed", "file" => entry_path.quote())
+                        );
+                    }
                     continue;
                 }
             };
