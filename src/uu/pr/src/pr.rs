@@ -1203,6 +1203,7 @@ fn get_pages(
                 let file_line =
                     FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options);
                 page.push(file_line);
+                line_num += 1;
             }
 
             // Remember where the last line ended.
