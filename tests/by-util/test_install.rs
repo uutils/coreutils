@@ -3444,9 +3444,10 @@ fn test_install_strip_program_sees_caller_umask() {
 
 #[test]
 fn test_context_without_value_does_not_consume_operand() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.write("source", "installed data");
-    ucmd.args(&["--context", "-D", "source", "parent/file"])
-        .succeeds();
-    assert_eq!(at.read("parent/file"), "installed data");
+    for arg in ["--context", "--con", "--cont"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("source", "installed data");
+        ucmd.args(&[arg, "-D", "source", "parent/file"]).succeeds();
+        assert_eq!(at.read("parent/file"), "installed data");
+    }
 }
