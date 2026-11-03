@@ -902,6 +902,30 @@ fn test_form_feed_followed_by_new_line() {
 }
 
 #[test]
+fn test_line_numbers_continue_after_form_feed() {
+    // Command line: `printf "a\fb\nc\n" | pr -T -n:1`.
+    new_ucmd!()
+        .args(&["-T", "-n:1"])
+        .pipe_in("a\x0cb\nc\n")
+        .succeeds()
+        .stdout_is("1:a\n2:b\n3:c\n");
+
+    // Command line: `printf "a\fb\fc\n" | pr -T -n:1`.
+    new_ucmd!()
+        .args(&["-T", "-n:1"])
+        .pipe_in("a\x0cb\x0cc\n")
+        .succeeds()
+        .stdout_is("1:a\n2:b\n3:c\n");
+
+    // Command line: `printf "a\n\fb\nc\n" | pr -T -n:1`.
+    new_ucmd!()
+        .args(&["-T", "-n:1"])
+        .pipe_in("a\n\x0cb\nc\n")
+        .succeeds()
+        .stdout_is("1:a\n2:b\n3:c\n");
+}
+
+#[test]
 fn test_columns() {
     let whitespace = " ".repeat(50);
     let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
