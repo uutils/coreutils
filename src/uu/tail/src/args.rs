@@ -460,7 +460,7 @@ fn validate_count_options(args: &[OsString]) -> UResult<()> {
                     "lines",
                     translate!(
                         "tail-error-invalid-number-of-lines",
-                        "arg" => argument.value.quote()
+                        "arg" => error.to_string()
                     ),
                 ),
             };
