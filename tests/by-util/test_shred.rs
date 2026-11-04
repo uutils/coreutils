@@ -217,19 +217,25 @@ fn test_shred_fail_no_perm() {
     let dir = "dir";
 
     let file = "test_shred_remove_a";
+    let other = "test_shred_remove_b";
 
     let binding = Path::new("dir").join(file);
     let path = binding.to_str().unwrap();
     at.mkdir(dir);
     at.touch(path);
+    at.touch(other);
     scene.ccmd("chmod").arg("a-w").arg(dir).succeeds();
 
     scene
         .ucmd()
         .arg("-uv")
         .arg(path)
+        .arg(other)
         .fails()
-        .stderr_contains("Couldn't rename to");
+        .stderr_contains(format!("{path}: failed to remove: Permission denied\n"));
+
+    assert!(at.file_exists(path));
+    assert!(!at.file_exists(other));
 }
 
 #[test]
@@ -583,7 +589,7 @@ fn test_couldnt_rename() {
     new_ucmd!()
         .args(&["-u", "/proc/self/mem"])
         .fails_with_code(1)
-        .stderr_is("shred: /proc/self/mem: Couldn't rename to '/proc/self/000': No such file or directory\n");
+        .stderr_is("shred: /proc/self/mem: failed to remove: Operation not permitted\n");
 }
 
 #[rstest::rstest]
