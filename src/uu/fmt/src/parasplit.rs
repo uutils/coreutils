@@ -107,19 +107,24 @@ fn byte_width(bytes: &[u8]) -> usize {
     width
 }
 
+/// Returns the width after the character at `idx` and the bytes it uses, with tabs
+/// advancing to the next multiple of `tabwidth`.
+fn advance_indent(width: usize, bytes: &[u8], idx: usize, tabwidth: usize) -> (usize, usize) {
+    if bytes[idx] == b'\t' {
+        return ((width / tabwidth + 1) * tabwidth, 1);
+    }
+    let info = decode_char_info(bytes, idx);
+    (width + info.width, info.consumed)
+}
+
 /// Like [`byte_width`], with tabs advancing to the next multiple of `tabwidth`.
 fn indent_width(bytes: &[u8], tabwidth: usize) -> usize {
     let mut width = 0;
     let mut idx = 0;
     while idx < bytes.len() {
-        if bytes[idx] == b'\t' {
-            width = (width / tabwidth + 1) * tabwidth;
-            idx += 1;
-            continue;
-        }
-        let info = decode_char_info(bytes, idx);
-        width += info.width;
-        idx += info.consumed;
+        let consumed;
+        (width, consumed) = advance_indent(width, bytes, idx, tabwidth);
+        idx += consumed;
     }
     width
 }
@@ -257,15 +262,9 @@ impl FileLines<'_> {
                 break;
             }
 
-            if byte == b'\t' {
-                indent_len = (indent_len / self.opts.tabwidth + 1) * self.opts.tabwidth;
-                idx += 1;
-                continue;
-            }
-
-            let info = decode_char_info(bytes, idx);
-            indent_len += info.width;
-            idx += info.consumed;
+            let consumed;
+            (indent_len, consumed) = advance_indent(indent_len, bytes, idx, self.opts.tabwidth);
+            idx += consumed;
         }
         if indent_end == bytes.len() {
             indent_end = idx;
