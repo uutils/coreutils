@@ -1786,3 +1786,19 @@ fn test_od_zero_byte_type_size() {
         .succeeds()
         .stdout_is("0000000 64636261\n0000004\n");
 }
+
+#[test]
+fn test_strings_with_type_option_is_error() {
+    for args in [
+        &["--strings=1", "-t", "x1", "a.txt"][..],
+        &["--strings=1", "--format=x1", "a.txt"][..],
+        &["-S1", "-x", "a.txt"][..],
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("a.txt", "a\n");
+        ucmd.args(args)
+            .fails()
+            .code_is(1)
+            .stderr_contains("no type may be specified when dumping strings");
+    }
+}

@@ -157,10 +157,6 @@ pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo
         return Err(translate!("od-error-missing-format-spec"));
     }
 
-    if formats.is_empty() {
-        formats.push(ParsedFormatterItemInfo::new(FORMAT_ITEM_OCT16, false)); // 2 byte octal is the default
-    }
-
     Ok(formats)
 }
 
@@ -365,13 +361,16 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
 #[cfg(test)]
 pub fn parse_format_flags_str(args_str: &[&'static str]) -> Result<Vec<FormatterItemInfo>, String> {
     let args: Vec<String> = args_str.iter().map(|s| (*s).to_string()).collect();
-    parse_format_flags(&args).map(|v| {
+    let mut formats = parse_format_flags(&args)?;
+    if formats.is_empty() {
+        formats.push(ParsedFormatterItemInfo::new(FORMAT_ITEM_OCT16, false)); // 2 byte octal is the default
+    }
+    Ok(formats
+        .into_iter()
         // tests using this function assume add_ascii_dump is not set
-        v.into_iter()
-            .inspect(|f| assert!(!f.add_ascii_dump))
-            .map(|f| f.formatter_item_info)
-            .collect()
-    })
+        .inspect(|f| assert!(!f.add_ascii_dump))
+        .map(|f| f.formatter_item_info)
+        .collect())
 }
 
 #[test]
