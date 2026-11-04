@@ -109,7 +109,7 @@ pub(super) struct CQuoter {
     /// If true and `quotes` is [`CQuotesEnforce::Maybe`], use quotes.
     must_quote: bool,
 
-    /// Passed to EscapeChar, changes the set of escaped characters.
+    /// Passed to `EscapeChar`, changes the set of escaped characters.
     dirname: bool,
 
     buffer: Vec<u8>,

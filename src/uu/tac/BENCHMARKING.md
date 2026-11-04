@@ -20,7 +20,7 @@ in release mode
 cargo build --release --package uu_tac
 ```
 
-and then you can time how it long it takes to extract the last 10M lines by
+and then you can time how long it takes to extract the last 10M lines by
 running
 
 ```shell

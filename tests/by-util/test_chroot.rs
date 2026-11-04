@@ -70,7 +70,7 @@ fn test_no_such() {
 #[cfg(target_env = "gnu")] // todo: override by proper error message on other platforms
 fn test_not_a_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
-    at.touch(at.plus_as_string("a"));
+    at.touch(at.plus("a"));
     ucmd.arg("a")
         .fails_with_code(125)
         .stderr_only("chroot: cannot chroot to 'a': Not a directory\n");

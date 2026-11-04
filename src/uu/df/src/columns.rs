@@ -71,7 +71,7 @@ impl Column {
     ///
     /// The set of columns that will appear in the output table can be
     /// specified by command-line arguments. This function converts
-    /// those arguments to a [`Vec`] of [`Column`] variants.
+    /// those arguments to a [`Vec<Column>`].
     ///
     /// # Errors
     ///

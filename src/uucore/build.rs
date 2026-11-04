@@ -17,15 +17,11 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         // tests/by-util/test_install.rs repeats the union of these targets.
         has_o_path: { any(target_os = "linux", target_os = "android") },
         has_o_search: { any(
-            target_os = "macos",
-            target_os = "ios",
-            target_os = "tvos",
-            target_os = "watchos",
-            target_os = "visionos",
             target_os = "freebsd",
             target_os = "netbsd",
             target_os = "illumos",
-            target_os = "solaris"
+            target_os = "solaris",
+            target_vendor = "apple"
         ) },
     }
 
@@ -42,7 +38,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     writeln!(embedded_file)?;
 
     // Generate optimized lookup function instead of HashMap
-    writeln!(embedded_file, "#[expect(clippy::match_same_arms)]")?; // needed for dir and vdir aliases for ls
+    writeln!(embedded_file, "#[allow(clippy::match_same_arms)]")?; // needed for dir and vdir aliases for ls
     writeln!(
         embedded_file,
         "pub fn get_embedded_locale(key: &str) -> Option<&'static str> {{"

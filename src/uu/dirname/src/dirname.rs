@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io::{Write as _, stdout};
 #[cfg(unix)]
 use uucore::display::print_verbatim;
@@ -33,19 +33,16 @@ fn is_sep(b: u8) -> bool {
 }
 
 #[cfg(not(windows))]
-fn root_prefix_len(_: &[u8]) -> usize {
+fn root_prefix_len(_: &OsStr) -> usize {
     0
 }
 
 #[cfg(windows)]
-fn root_prefix_len(bytes: &[u8]) -> usize {
-    use std::ffi::OsStr;
-    use std::path::Component;
-    use std::path::Path;
+fn root_prefix_len(path: &OsStr) -> usize {
+    use std::path::{Component, Path};
 
-    // SAFETY: These bytes came from `OsStr` via `uucore::os_str_as_bytes`.
-    let path = Path::new(unsafe { OsStr::from_encoded_bytes_unchecked(bytes) });
-    let Some(Component::Prefix(p)) = path.components().next() else {
+    let bytes = path.as_encoded_bytes();
+    let Some(Component::Prefix(p)) = Path::new(path).components().next() else {
         return 0;
     };
 
@@ -82,13 +79,14 @@ fn root_prefix_len(bytes: &[u8]) -> usize {
 /// - GNU: <https://www.gnu.org/software/coreutils/manual/html_node/dirname-invocation.html>
 ///
 /// See issue #8910 and similar fix in basename (#8373, commit c5268a897).
-fn dirname_string_manipulation(path_bytes: &[u8]) -> &[u8] {
+fn dirname_string_manipulation(path: &OsStr) -> &[u8] {
+    let path_bytes = uucore::os_str_as_bytes(path).unwrap_or(&[]);
     if path_bytes.is_empty() {
         return b".";
     }
 
     let mut bytes = path_bytes;
-    let root_len = root_prefix_len(bytes);
+    let root_len = root_prefix_len(path);
 
     // Step 1: Strip trailing slashes (but not if the entire path is slashes)
     if bytes[root_len..].iter().copied().all(is_sep) {
@@ -166,13 +164,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect();
 
     for path in &dirnames {
-        let path_bytes = uucore::os_str_as_bytes(path.as_os_str()).unwrap_or(&[]);
-        let result = dirname_string_manipulation(path_bytes);
+        let result = dirname_string_manipulation(path.as_os_str());
 
         #[cfg(unix)]
         {
             use std::os::unix::ffi::OsStrExt;
-            let result_os = std::ffi::OsStr::from_bytes(result);
+            let result_os = OsStr::from_bytes(result);
             print_verbatim(result_os)?;
         }
         #[cfg(not(unix))]

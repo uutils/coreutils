@@ -39,6 +39,10 @@ fn test_manpage_generation() {
     assert!(output_str.contains("\n.TH LS"), "{output_str}");
     assert!(output_str.contains('1'), "{output_str}");
     assert!(output_str.contains("\n.SH NAME\nls"), "{output_str}");
+    assert!(
+        output_str.contains(&format!("\n.SH VERSION\nv{}\n", env!("CARGO_PKG_VERSION"))),
+        "{output_str}"
+    );
 }
 
 #[test]
@@ -65,6 +69,10 @@ fn test_manpage_coreutils() {
     assert!(output_str.contains("\n.TH COREUTILS"), "{output_str}");
     assert!(output_str.contains("coreutils"), "{output_str}");
     assert!(output_str.contains("\n.SH NAME\ncoreutils"), "{output_str}");
+    assert!(
+        output_str.contains(&format!("\n.SH VERSION\nv{}\n", env!("CARGO_PKG_VERSION"))),
+        "{output_str}"
+    );
 }
 
 #[test]

@@ -14,16 +14,14 @@
 //! Even though they are distinct classes, they share common functionality.
 //! Access to this common functionality is provided in `OwnedFileDescriptorOrHandle`.
 
+use std::fs::{File, OpenOptions};
+use std::io;
 #[cfg(not(windows))]
 use std::os::fd::{AsFd, OwnedFd};
 #[cfg(windows)]
 use std::os::windows::io::{AsHandle, OwnedHandle};
-use std::{
-    fs::{File, OpenOptions},
-    io,
-    path::Path,
-    process::Stdio,
-};
+use std::path::Path;
+use std::process::Stdio;
 
 #[cfg(windows)]
 type NativeType = OwnedHandle;
@@ -102,7 +100,7 @@ impl OwnedFileDescriptorOrHandle {
         Stdio::from(self.fx)
     }
 
-    /// WASI: Stdio::from(OwnedFd) is not available, convert via File instead.
+    /// WASI: `Stdio::from(OwnedFd)` is not available, convert via File instead.
     #[cfg(target_os = "wasi")]
     pub fn into_stdio(self) -> Stdio {
         Stdio::from(File::from(self.fx))

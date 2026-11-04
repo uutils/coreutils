@@ -831,18 +831,20 @@ fn hardware_feature_label(feature: HardwareFeature) -> &'static str {
     match feature {
         HardwareFeature::Avx512 => "AVX512F",
         HardwareFeature::Avx2 => "AVX2",
-        HardwareFeature::PclMul => "PCLMUL",
-        HardwareFeature::Vmull => "VMULL",
+        HardwareFeature::Pclmulqdq => "PCLMUL",
+        HardwareFeature::Pmull => "VMULL",
         HardwareFeature::Sse2 => "SSE2",
         HardwareFeature::Asimd => "ASIMD",
     }
 }
 
 fn is_simd_runtime_feature(feature: HardwareFeature) -> bool {
-    matches!(
-        feature,
-        HardwareFeature::Avx2 | HardwareFeature::Sse2 | HardwareFeature::Asimd
-    )
+    match feature {
+        HardwareFeature::Avx2 | HardwareFeature::Sse2 => true,
+        // bytecount v0.6.9 compiles its NEON path only on little-endian targets.
+        HardwareFeature::Asimd => cfg!(target_endian = "little"),
+        _ => false,
+    }
 }
 
 fn is_simd_debug_feature(feature: HardwareFeature) -> bool {

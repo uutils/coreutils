@@ -37,6 +37,7 @@ use uucore::entries;
     target_os = "freebsd",
     target_os = "hurd",
     target_os = "linux",
+    target_os = "macos",
     target_os = "netbsd"
 ))]
 use uucore::fsxattr::has_acl;
@@ -673,7 +674,7 @@ fn display_date(
 }
 
 fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "illumos")))]
     {
         let ft = metadata.file_type();
         if ft.is_char_device() || ft.is_block_device() {
@@ -952,14 +953,15 @@ fn display_item_long(
             target_os = "freebsd",
             target_os = "hurd",
             target_os = "linux",
+            target_os = "macos",
             target_os = "netbsd"
         )))]
-        // TODO: See how Mac should work here
         let is_acl_set = false;
         #[cfg(any(
             target_os = "freebsd",
             target_os = "hurd",
             target_os = "linux",
+            target_os = "macos",
             target_os = "netbsd"
         ))]
         let is_acl_set = has_acl(item.path(), item.must_dereference);
@@ -1381,14 +1383,15 @@ fn calculate_padding_collection(
                 target_os = "freebsd",
                 target_os = "hurd",
                 target_os = "linux",
+                target_os = "macos",
                 target_os = "netbsd"
             )))]
-            // TODO: See how Mac should work here
             let is_acl_set = false;
             #[cfg(any(
                 target_os = "freebsd",
                 target_os = "hurd",
                 target_os = "linux",
+                target_os = "macos",
                 target_os = "netbsd"
             ))]
             let is_acl_set = has_acl(item.path(), item.must_dereference);

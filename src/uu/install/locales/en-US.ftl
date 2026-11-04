@@ -28,7 +28,9 @@ install-error-chmod-failed = failed to chmod { $path }
 install-error-chmod-failed-detailed = { $path }: chmod failed with error { $error }
 install-error-chown-failed = failed to chown { $path }: { $error }
 install-error-invalid-target = invalid target { $path }: No such file or directory
-install-error-target-not-dir = target { $path } is not a directory
+install-error-target-not-dir = target { $path }: { $error }
+install-error-target-stat = cannot stat { $path }: { $error }
+install-error-create-regular-file = cannot create regular file { $path }: { $error }
 install-error-backup-failed = cannot backup { $from }: { $error }
 install-error-install-failed = cannot install { $from } to { $to }: { $error }
 install-error-strip-failed = strip program failed: { $error }
@@ -55,6 +57,7 @@ install-error-failed-to-remove = Failed to remove existing file { $path }. { $er
 install-error-will-not-overwrite-just-created = will not overwrite just-created { $dest } with { $source }
 
 # Warning messages
+install-warning-context-ignored = ignoring --context; it requires an SELinux-enabled kernel
 install-warning-compare-ignored = the --compare (-C) option is ignored when you specify a mode with non-permission bits
 install-warning-no-strip-with-program = WARNING: ignoring --strip-program option as -s option was not specified
 

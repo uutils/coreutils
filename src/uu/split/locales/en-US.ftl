@@ -36,7 +36,6 @@ split-error-output-file-suffixes-exhausted = output file suffixes exhausted
 split-error-numerical-suffix-start-too-large = numerical suffix start value is too large for the suffix length
 split-error-cannot-open-for-reading = cannot open { $file } for reading
 split-error-would-overwrite-input = { $file } would overwrite input; aborting
-split-error-cannot-determine-input-size = { $input }: cannot determine input size
 split-error-cannot-determine-file-size = { $input }: cannot determine file size
 split-error-cannot-read-from-input = { $input }: cannot read from input: { $error }
 split-error-unable-to-open-file = unable to open { $file }; aborting

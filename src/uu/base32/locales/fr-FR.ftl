@@ -47,6 +47,7 @@ base-common-extra-operand = opérande supplémentaire {$operand}
 base-common-no-such-file = {$file} : Aucun fichier ou répertoire de ce type
 base-common-invalid-wrap-size = taille de retour à la ligne invalide : {$size}
 base-common-read-error = erreur de lecture : {$error}
+base-common-invalid-input = entrée invalide
 
 # Messages d'aide partagés de base_common
 base-common-help-decode = décoder les données

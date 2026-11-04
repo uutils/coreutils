@@ -32,3 +32,6 @@ mknod-error-invalid-mode = invalid mode ({ $error })
 mknod-error-mode-permission-bits-only = mode must specify only file permission bits
 mknod-error-missing-device-type = missing device type
 mknod-error-invalid-device-type = invalid device type { $type }
+
+# Warning messages
+mknod-warning-context-ignored = ignoring --context; it requires an SELinux/SMACK-enabled kernel

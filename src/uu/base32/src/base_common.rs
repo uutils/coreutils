@@ -643,6 +643,7 @@ pub mod fast_decode {
     use uucore::{
         encoding::SupportsFastDecodeAndEncode,
         error::{UResult, USimpleError},
+        translate,
     };
 
     // Start of helper functions
@@ -745,9 +746,14 @@ pub mod fast_decode {
             } else if ignore_garbage {
                 continue;
             } else {
-                return Err(USimpleError::new(1, "error: invalid input"));
+                return Err(USimpleError::new(
+                    1,
+                    translate!("base-common-invalid-input"),
+                ));
             }
 
+            // Encodings without partial decode (base58) are one big number, so
+            // they are decoded in one go after the loop, never in chunks.
             if supports_partial_decode {
                 flush_ready_chunks(
                     &mut buffer,
@@ -757,14 +763,6 @@ pub mod fast_decode {
                     &mut decoded_buffer,
                     output,
                 )?;
-            } else if buffer.len() == decode_in_chunks_of_size {
-                decode_in_chunks_to_buffer(
-                    supports_fast_decode_and_encode,
-                    &buffer,
-                    &mut decoded_buffer,
-                )?;
-                write_to_output(&mut decoded_buffer, output)?;
-                buffer.clear();
             }
         }
 
@@ -794,7 +792,10 @@ pub mod fast_decode {
             write_to_output(&mut decoded_buffer, output)?;
 
             if had_invalid_tail {
-                return Err(USimpleError::new(1, "error: invalid input"));
+                return Err(USimpleError::new(
+                    1,
+                    translate!("base-common-invalid-input"),
+                ));
             }
         }
 
@@ -857,7 +858,10 @@ pub mod fast_decode {
                             buffer.drain(..decode_in_chunks_of_size);
                         }
                     }
-                    return Err(USimpleError::new(1, "error: invalid input"));
+                    return Err(USimpleError::new(
+                        1,
+                        translate!("base-common-invalid-input"),
+                    ));
                 }
 
                 if supports_partial_decode {
@@ -909,7 +913,10 @@ pub mod fast_decode {
             write_to_output(&mut decoded_buffer, output)?;
 
             if had_invalid_tail {
-                return Err(USimpleError::new(1, "error: invalid input"));
+                return Err(USimpleError::new(
+                    1,
+                    translate!("base-common-invalid-input"),
+                ));
             }
         }
 

@@ -23,6 +23,7 @@ use core::ffi::CStr;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::ffi::{CString, OsStr, OsString};
+use std::io::Write;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
 use std::path::{Path, PathBuf};
 use std::{fs, io};
@@ -519,12 +520,17 @@ fn relabel_all(
         // Directories reached on the way down, so a symlink loop is noticed
         // instead of followed forever.
         open_ancestors: HashSet::new(),
+        write_error: None,
         errors,
     };
 
     for operand in &options.files {
         let behavior = follows_symlinks(options.recursive_mode, true);
         walk.visit(&start, operand.as_os_str(), operand, behavior, true);
+    }
+
+    if let Some(err) = walk.write_error {
+        walk.errors.push(Error::Write(err));
     }
 
     walk.errors
@@ -537,6 +543,7 @@ struct Walk<'a> {
     context: &'a SELinuxSecurityContext<'a>,
     root_id: Option<DeviceAndINode>,
     open_ancestors: HashSet<DeviceAndINode>,
+    write_error: Option<io::Error>,
     errors: Vec<Error>,
 }
 
@@ -645,11 +652,13 @@ impl Walk<'_> {
     }
 
     fn relabel(&mut self, parent: &DirFd, name: &OsStr, display: &Path) {
-        if self.options.verbose {
-            println!(
+        if self.options.verbose && self.write_error.is_none() {
+            self.write_error = writeln!(
+                io::stdout(),
                 "{}",
                 translate!("chcon-verbose-changing-context", "util_name" => "chcon", "file" => display.quote())
-            );
+            )
+            .err();
         }
 
         if let Err(err) = apply_context(
