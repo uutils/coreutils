@@ -277,9 +277,7 @@ impl LineFormat {
         //   r"\MD5 (a\\ b) = abc123",
         //   BLAKE2b(44)= a45a4c4883cce4b50d844fab460414cc2080ca83690e74d850a9253e757384366382625b218c8585daee80f34dc9eb2f2fde5fb959db81cd48837f9216e7b0fa
         // Other whitespace before the algorithm name makes a tagged line malformed.
-        let trimmed = line.trim_blanks_start();
-        let escaped = trimmed.starts_with(b"\\");
-        let rest = &trimmed[usize::from(escaped)..];
+        let (rest, escaped) = Self::strip_escape_marker(line);
 
         // find the next parenthesis  using byte search (not next whitespace) because openssl's
         // tagged format does not put a space before (filename)
