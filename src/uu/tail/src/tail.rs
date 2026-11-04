@@ -33,6 +33,7 @@ use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
+use uucore::fs::FileInformation;
 use uucore::{translate, translate_text};
 
 use uucore::{show, show_error};
@@ -172,18 +173,25 @@ fn tail_file(
             Ok(mut file) => {
                 let st = file.metadata()?;
                 let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
+                // When our output goes to this very file (`tail f >> f`), it
+                // ends where it ended when we opened it. Reading on to the
+                // moving end of file would copy our own output back, forever.
+                let end = (st.is_file() && is_stdout(&file)).then_some(st.len());
                 header_printer.print_input(input)?;
-                let mut reader;
                 if !settings.presume_input_pipe
                     && file.is_seekable(if input.is_stdin() { offset } else { 0 })
                     && (!st.is_file() || st.len() > blksize_limit)
                 {
-                    bounded_tail(&mut file, settings)?;
-                    reader = BufReader::new(file);
+                    bounded_tail(&mut file, settings, end)?;
                 } else {
-                    reader = BufReader::new(file);
-                    unbounded_tail(&mut reader, settings)?;
+                    let remaining = match end {
+                        Some(end) => end.saturating_sub(file.stream_position()?),
+                        None => u64::MAX,
+                    };
+                    // Dropping this reader loses nothing: unbounded_tail reads to EOF or not at all.
+                    unbounded_tail(&mut BufReader::new((&file).take(remaining)), settings)?;
                 }
+                let reader = BufReader::new(file);
                 if input.is_tailable() {
                     observer.add_path(
                         path,
@@ -244,6 +252,14 @@ fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
     } else {
         File::open(path)
     }
+}
+
+/// Whether `file` is the file that standard output writes to.
+fn is_stdout(file: &File) -> bool {
+    matches!(
+        (FileInformation::from_file(file), FileInformation::from_file(&stdout())),
+        (Ok(input), Ok(output)) if input == output
+    )
 }
 
 fn tail_stdin(
@@ -404,18 +420,18 @@ fn forwards_thru_file(
 }
 
 /// Iterate over bytes in the file, in reverse, until we find the
-/// `num_delimiters` instance of `delimiter`. The `file` is left seek'd to the
-/// position just after that delimiter.
-fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
+/// `num_delimiters` instance of `delimiter`, starting from `end`. The `file` is
+/// left seek'd to the position just after that delimiter.
+fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8, end: SeekFrom) {
     if num_delimiters == 0 {
-        file.seek(SeekFrom::End(0)).unwrap();
+        file.seek(end).unwrap();
         return;
     }
     // This variable counts the number of delimiters found in the file
     // so far (reading from the end of the file toward the beginning).
     let mut counter = 0;
     let mut first_slice = true;
-    for slice in ReverseChunks::new(file) {
+    for slice in ReverseChunks::new(file, end) {
         // Iterate over each byte in the slice in reverse order.
         let mut iter = memrchr_iter(delimiter, &slice);
 
@@ -452,27 +468,36 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
 /// end of the file, and then read the file "backwards" in blocks of size
 /// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
 /// being a nice performance win for very large files.
-fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
+///
+/// If `end` is given, nothing at or beyond that offset is printed.
+fn bounded_tail(file: &mut File, settings: &Settings, end: Option<u64>) -> UResult<()> {
     debug_assert!(!settings.presume_input_pipe);
     let mut limit = None;
+    // Counting from the end starts at `end`: our own output, such as the
+    // header, may already have been appended beyond it.
+    let eof = end.map_or(SeekFrom::End(0), SeekFrom::Start);
 
     // Find the position in the file to start printing from.
     match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), delimiter) => {
-            backwards_thru_file(file, *count, *delimiter);
+            backwards_thru_file(file, *count, *delimiter, eof);
         }
         FilterMode::Lines(Signum::Positive(count), delimiter) if count > &1 => {
             let i = forwards_thru_file(file, *count - 1, *delimiter).unwrap();
             file.seek(SeekFrom::Start(i as u64)).unwrap();
         }
         FilterMode::Lines(Signum::MinusZero, _) | FilterMode::Bytes(Signum::MinusZero) => {
-            file.seek(SeekFrom::End(0)).unwrap();
+            file.seek(eof).unwrap();
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
             // A count that does not fit into an `i64` cannot be negated for
             // the seek; like a seek before the start, it means the whole file.
             match i64::try_from(*count) {
-                Ok(count) if file.seek(SeekFrom::End(-count)).is_ok() => {}
+                Ok(count)
+                    if file
+                        .seek(eof)
+                        .and_then(|_| file.seek(SeekFrom::Current(-count)))
+                        .is_ok() => {}
                 _ => {
                     file.seek(SeekFrom::Start(0)).unwrap();
                 }
@@ -490,6 +515,11 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
                 .unwrap();
         }
         _ => {}
+    }
+
+    if let Some(end) = end {
+        let remaining = end.saturating_sub(file.stream_position()?);
+        limit = Some(limit.map_or(remaining, |limit| limit.min(remaining)));
     }
 
     print_target_section(file, limit)?;
