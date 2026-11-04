@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore getxattr posix_acl_default posix_acl_access ENOTSUP EOPNOTSUPP renamer nfsace
+// spell-checker:ignore getxattr posix_acl_default posix_acl_access ENOTSUP EOPNOTSUPP renamer posix1e nfsace
 
 //! Set of functions to manage xattr on files and dirs
 
@@ -284,7 +284,7 @@ pub fn has_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
         // Only ACL attributes count; other xattrs such as security.selinux don't.
         let mut has_nfs4_acl = false;
         for name in names {
-            if POSIX_ACL_XATTRS.iter().any(|acl| name == *acl) {
+            if is_acl_xattr(&name) {
                 return true;
             }
             has_nfs4_acl |= name == NFS4_ACL_XATTR;
@@ -299,6 +299,21 @@ pub fn has_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
         };
         matches!(value, Ok(Some(acl)) if nfs4_acl_is_nontrivial(&acl))
     }
+}
+
+/// Whether `name` is an xattr that stores an ACL.
+#[cfg(not(target_os = "macos"))]
+fn is_acl_xattr(name: &OsStr) -> bool {
+    // FreeBSD and NetBSD expose UFS POSIX.1e and NFSv4 ACLs under these names.
+    #[cfg(any(target_os = "freebsd", target_os = "netbsd"))]
+    const NAMES: &[&str] = &[
+        "system.posix1e.acl_access",
+        "system.posix1e.acl_default",
+        "system.nfs4.acl",
+    ];
+    #[cfg(not(any(target_os = "freebsd", target_os = "netbsd")))]
+    const NAMES: &[&str] = &POSIX_ACL_XATTRS;
+    NAMES.iter().any(|acl| name == *acl)
 }
 
 /// The xattr the Linux `NFSv4` client exposes a file's ACL through.
@@ -636,6 +651,25 @@ mod tests {
         assert!(nfs4_acl_is_nontrivial(&nfs4_acl(&[(2, 0, "EVERYONE@")])));
         let truncated = nfs4_acl(&mode_only);
         assert!(nfs4_acl_is_nontrivial(&truncated[..truncated.len() - 4]));
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn test_is_acl_xattr() {
+        #[cfg(any(target_os = "freebsd", target_os = "netbsd"))]
+        let acl_names = [
+            "system.posix1e.acl_access",
+            "system.posix1e.acl_default",
+            "system.nfs4.acl",
+        ];
+        #[cfg(not(any(target_os = "freebsd", target_os = "netbsd")))]
+        let acl_names = ["system.posix_acl_access", "system.posix_acl_default"];
+        for name in acl_names {
+            assert!(is_acl_xattr(OsStr::new(name)), "{name}");
+        }
+        for name in ["user.test", "security.selinux", "security.capability"] {
+            assert!(!is_acl_xattr(OsStr::new(name)), "{name}");
+        }
     }
 
     #[test]
