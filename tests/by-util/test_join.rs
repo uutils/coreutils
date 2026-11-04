@@ -1058,6 +1058,7 @@ fn test_last_of_check_order_nocheck_order_wins() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 #[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
 fn test_one_byte_separator_inside_multibyte_char() {
     // In GB18030/GBK and Big5 the second byte of a two-byte character can be

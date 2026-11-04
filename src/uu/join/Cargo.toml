@@ -21,7 +21,11 @@ clap = { workspace = true }
 fluent = { workspace = true }
 memchr = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["i18n-charmap", "i18n-collator", "numeric-str-cmp"] }
+uucore = { workspace = true, features = [
+  "i18n-charmap",
+  "i18n-collator",
+  "numeric-str-cmp",
+] }
 
 [[bin]]
 name = "join"
