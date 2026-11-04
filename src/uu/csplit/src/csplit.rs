@@ -256,6 +256,8 @@ struct SplitWriter<'a> {
     counter: usize,
     /// the writer to the current split
     current_writer: Option<BufWriter<File>>,
+    /// the file name of the current split, kept so it is not formatted twice
+    current_file_name: String,
     /// the size in bytes of the current split
     size: usize,
     /// flag to indicate that no content should be written to a split
@@ -270,6 +272,7 @@ impl SplitWriter<'_> {
             options,
             counter: 0,
             current_writer: None,
+            current_file_name: String::new(),
             size: 0,
             dev_null: false,
             split_finished: true,
@@ -288,6 +291,7 @@ impl SplitWriter<'_> {
             .map_err_context(|| file_name.clone())
             .map_err(CsplitError::from)?;
         self.current_writer = Some(BufWriter::new(file));
+        self.current_file_name = file_name;
         self.counter += 1;
         self.size = 0;
         self.dev_null = false;
@@ -330,26 +334,17 @@ impl SplitWriter<'_> {
         if !self.dev_null {
             // Flush the writer to ensure all data is written and errors are detected
             if let Some(ref mut writer) = self.current_writer {
-                let flushed = writer.flush();
-                if flushed.is_err() {
-                    // Flush first; only format the split name for the error context.
-                    // If the name cannot be formatted, keep the flush error as is.
-                    match self.options.split_name.get(self.counter - 1) {
-                        Ok(file_name) => flushed
-                            .map_err_context(|| file_name)
-                            .map_err(CsplitError::from)?,
-                        Err(_) => flushed.map_err(CsplitError::from)?,
-                    }
-                }
+                writer
+                    .flush()
+                    .map_err_context(|| self.current_file_name.clone())
+                    .map_err(CsplitError::from)?;
             }
             if self.options.elide_empty_files && self.size == 0 {
                 self.counter -= 1;
                 // Remove the empty split now, while we know this run created it.
                 // Close it first, as an open file cannot be removed on Windows.
                 self.current_writer = None;
-                if let Ok(file_name) = self.options.split_name.get(self.counter) {
-                    let _ = remove_file(file_name);
-                }
+                let _ = remove_file(&self.current_file_name);
             } else if !self.options.quiet {
                 writeln!(io::stdout(), "{}", self.size).map_err(CsplitError::from)?;
             }
