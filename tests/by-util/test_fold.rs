@@ -208,6 +208,33 @@ fn test_fold_preserves_invalid_utf8_sequences() {
         .stdout_is_bytes(bad_input);
 }
 
+#[rstest]
+#[case::utf8_crlf(b"abc\r\n\xc3\xa9\n")]
+#[case::utf8_backspace(b"abc\x08X\n\xc3\xa9\n")]
+#[case::invalid_crlf(b"abc\r\n\xff\n")]
+#[case::invalid_backspace(b"abc\x08X\n\xff\n")]
+fn test_full_width_before_column_reducing_control(#[case] input: &[u8]) {
+    for extra in [None, Some("-s"), Some("-c")] {
+        let mut cmd = new_ucmd!();
+        cmd.arg("-w3");
+        if let Some(option) = extra {
+            cmd.arg(option);
+        }
+        cmd.pipe_in(input.to_vec())
+            .succeeds()
+            .stdout_is_bytes(input);
+    }
+}
+
+#[test]
+fn test_full_width_before_cr_in_byte_mode() {
+    new_ucmd!()
+        .args(&["-b", "-w3"])
+        .pipe_in(b"abc\r\n\xc3\xa9\n".to_vec())
+        .succeeds()
+        .stdout_is_bytes(b"abc\n\r\n\xc3\xa9\n");
+}
+
 #[test]
 fn test_fold_preserves_incomplete_utf8_at_eof() {
     let trailing_byte: &[u8] = b"\xC3";
