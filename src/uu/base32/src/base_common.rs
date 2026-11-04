@@ -9,6 +9,7 @@ use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
+use std::num::IntErrorKind;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::encoding::{
@@ -69,13 +70,15 @@ impl Config {
 
         let wrap_cols = options
             .get_one::<String>(options::WRAP)
-            .map(|num| {
-                num.parse::<usize>().map_err(|_| {
-                    USimpleError::new(
-                        BASE_CMD_PARSE_ERROR,
-                        translate!("base-common-invalid-wrap-size", "size" => num.quote()),
-                    )
-                })
+            .map(|num| match num.parse::<usize>() {
+                // A size too large to represent turns wrapping off.
+                Ok(cols) if cols > isize::MAX as usize => Ok(0),
+                Ok(cols) => Ok(cols),
+                Err(e) if *e.kind() == IntErrorKind::PosOverflow => Ok(0),
+                Err(_) => Err(USimpleError::new(
+                    BASE_CMD_PARSE_ERROR,
+                    translate!("base-common-invalid-wrap-size", "size" => num.quote()),
+                )),
             })
             .transpose()?;
 
