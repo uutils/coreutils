@@ -348,7 +348,7 @@ impl SplitWriter<'_> {
                     let _ = remove_file(file_name);
                 }
             } else if !self.options.quiet {
-                writeln!(io::stdout(), "{}", self.size).map_err(CsplitError::IoError)?;
+                writeln!(io::stdout(), "{}", self.size).map_err(CsplitError::from)?;
             }
         }
         Ok(())
