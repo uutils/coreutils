@@ -2795,7 +2795,6 @@ fn copy_file(
     let dest_is_symlink = initial_dest_metadata
         .as_ref()
         .is_some_and(|md| md.file_type().is_symlink());
-    let dest_target_exists = dest.try_exists().unwrap_or(false);
     // Fail if dest is a dangling symlink or a symlink this program created previously
     if dest_is_symlink {
         if FileInformation::from_path(dest, false).is_ok_and(|info| symlinked_files.contains(&info))
@@ -2815,17 +2814,30 @@ fn copy_file(
 
         let copy_contents = options.dereference(source_in_command_line) || !source_is_symlink;
         if copy_contents
-            && !dest_target_exists
             && !matches!(
                 options.overwrite,
                 OverwriteMode::Clobber(ClobberMode::RemoveDestination)
             )
             && !is_symlink_loop(dest)
-            && std::env::var_os("POSIXLY_CORRECT").is_none()
         {
-            return Err(CpError::Error(
-                translate!("cp-error-not-writing-dangling-symlink", "dest" => dest.quote()),
-            ));
+            let target_missing = match dest.try_exists() {
+                Ok(exists) => !exists,
+                Err(error)
+                    if options.backup == BackupMode::None
+                        && !matches!(options.copy_mode, CopyMode::Link | CopyMode::SymLink) =>
+                {
+                    return Err(CpError::IoErrContext(
+                        error,
+                        format!("cannot stat {}", dest.quote()),
+                    ));
+                }
+                Err(_) => false,
+            };
+            if target_missing && std::env::var_os("POSIXLY_CORRECT").is_none() {
+                return Err(CpError::Error(
+                    translate!("cp-error-not-writing-dangling-symlink", "dest" => dest.quote()),
+                ));
+            }
         }
         if paths_refer_to_same_file(source, dest, true)
             && matches!(
