@@ -2828,15 +2828,11 @@ fn test_install_d_dangling_symlink_in_path_errors() {
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
-    target_os = "macos",
-    target_os = "ios",
-    target_os = "tvos",
-    target_os = "watchos",
-    target_os = "visionos",
     target_os = "freebsd",
     target_os = "netbsd",
     target_os = "illumos",
-    target_os = "solaris"
+    target_os = "solaris",
+    target_vendor = "apple"
 ))]
 fn test_install_d_leading_dirs_in_write_only_directory() {
     // mkdir needs write and execute on the parent, not read, so -D must be

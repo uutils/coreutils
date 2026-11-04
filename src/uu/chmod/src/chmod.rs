@@ -461,15 +461,13 @@ impl Chmoder {
     /// changed before the attempt, so with `-v` GNU also says that the
     /// subtree was left alone.
     fn report_unreadable_dir(&self, path: &Path, err: std::io::Error) {
-        self.report_inaccessible(
-            path,
-            ChmodError::CannotReadDirectory(path.into(), err).into(),
-        );
+        self.report_failure(ChmodError::CannotReadDirectory(path.into(), err).into());
+        self.report_not_accessed(path);
     }
 
-    /// Report `error`, plus the "could not be accessed" line under `-v`.
-    fn report_inaccessible(&self, path: &Path, error: Box<dyn UError>) {
-        self.report_failure(error);
+    /// With --verbose, GNU follows a failure to stat or read FILE with
+    /// "'FILE' could not be accessed" on stdout, even with --quiet.
+    fn report_not_accessed(&self, path: &Path) {
         if self.verbose {
             println!(
                 "{}",
@@ -517,16 +515,10 @@ impl Chmoder {
                             show!(ChmodError::DanglingSymlink(filename.into()));
                             set_exit_code(1);
                         }
-
-                        if self.verbose {
-                            println!(
-                                "{}",
-                                translate!("chmod-verbose-failed-dangling", "file" => filename.quote())
-                            );
-                        }
                     } else if !self.quiet {
                         show!(ChmodError::NoSuchFile(filename.into()));
                     }
+                    self.report_not_accessed(file);
                     // GNU exits with exit code 1 even if -q or --quiet are passed
                     // So we set the exit code, because it hasn't been set yet if `self.quiet` is true.
                     set_exit_code(1);
@@ -536,6 +528,7 @@ impl Chmoder {
                     if !self.quiet {
                         show!(ChmodError::PermissionDenied(filename.into()));
                     }
+                    self.report_not_accessed(file);
                     set_exit_code(1);
                     continue;
                 }
@@ -728,10 +721,8 @@ impl Chmoder {
                 Ok(meta) => meta,
                 Err(err) => {
                     if err.kind() == std::io::ErrorKind::NotFound && entry_path.is_symlink() {
-                        self.report_inaccessible(
-                            &entry_path,
-                            ChmodError::DanglingSymlink(entry_path.clone()).into(),
-                        );
+                        self.report_failure(ChmodError::DanglingSymlink(entry_path.clone()).into());
+                        self.report_not_accessed(&entry_path);
                     } else if err.kind() == std::io::ErrorKind::PermissionDenied {
                         self.report_failure(ChmodError::PermissionDenied(entry_path).into());
                     } else {
@@ -890,10 +881,13 @@ impl Chmoder {
                         Self::print_neither_changed(file.into())?;
                     }
                     Ok(()) // Skip dangling symlinks
-                } else if err.kind() == std::io::ErrorKind::PermissionDenied {
-                    Err(ChmodError::PermissionDenied(file.into()).into())
                 } else {
-                    Err(ChmodError::CannotStat(file.into(), err).into())
+                    self.report_not_accessed(file);
+                    if err.kind() == std::io::ErrorKind::PermissionDenied {
+                        Err(ChmodError::PermissionDenied(file.into()).into())
+                    } else {
+                        Err(ChmodError::CannotStat(file.into(), err).into())
+                    }
                 };
             }
         };
