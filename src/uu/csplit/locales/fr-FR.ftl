@@ -23,6 +23,7 @@ csplit-error-invalid-number = nombre invalide : { $number }
 csplit-error-suffix-format-incorrect = spécification de conversion incorrecte dans le suffixe
 csplit-error-suffix-format-too-many-percents = trop de spécifications de conversion % dans le suffixe
 csplit-error-not-regular-file = { $file } n'est pas un fichier régulier
+csplit-error-memory-exhausted = mémoire épuisée
 csplit-warning-line-number-same-as-previous = le numéro de ligne '{ $line_number }' est identique au numéro de ligne précédent
 csplit-read-error = erreur de lecture
 csplit-write-split-not-created = tentative d'écriture dans une division qui n'a pas été créée
