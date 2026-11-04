@@ -103,10 +103,7 @@ where
 {
     let file = path.as_ref().as_os_str().to_owned();
 
-    let canonical_path = path
-        .as_ref()
-        .canonicalize()
-        .map_err(|_| FsError::InvalidPath)?;
+    let canonical_path = path.as_ref().canonicalize().map_err(FsError::InvalidPath)?;
 
     let stat_result = statfs(canonical_path.as_os_str()).map_err(|_| FsError::MountMissing)?;
 
@@ -133,7 +130,7 @@ where
     let path = path.as_ref();
     let file = path.as_os_str().to_owned();
 
-    let canonical_path = path.canonicalize().map_err(|_| FsError::InvalidPath)?;
+    let canonical_path = path.canonicalize().map_err(FsError::InvalidPath)?;
 
     let stat_result = statfs(canonical_path.as_os_str()).map_err(|_| FsError::MountMissing)?;
     let mount_dir = find_mount_point(&canonical_path).map_err(|_| FsError::MountMissing)?;
@@ -208,9 +205,9 @@ mod tests {
 
         let mounts = [mount_info1, mount_info2];
 
-        assert_eq!(
+        assert!(matches!(
             filesystem_from_mount(&mounts, &mounts[0], None).unwrap_err(),
             FsError::OverMounted
-        );
+        ));
     }
 }

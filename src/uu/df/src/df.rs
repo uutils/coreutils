@@ -16,7 +16,7 @@ use clap::builder::ValueParser;
 use table::HeaderMode;
 use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult, USimpleError, get_exit_code};
+use uucore::error::{FromIo, UError, UResult, USimpleError, get_exit_code};
 use uucore::fsext::{MountInfo, read_fs_list};
 use uucore::parser::parse_size::ParseSizeError;
 use uucore::translate;
@@ -406,11 +406,8 @@ where
                     result.push(fs);
                 }
             }
-            Err(FsError::InvalidPath) => {
-                show!(USimpleError::new(
-                    1,
-                    translate!("df-error-no-such-file-or-directory", "path" => path.as_ref().maybe_quote())
-                ));
+            Err(FsError::InvalidPath(e)) => {
+                show!(e.map_err_context(|| path.as_ref().maybe_quote().to_string()));
             }
             Err(FsError::MountMissing) => {
                 show!(USimpleError::new(

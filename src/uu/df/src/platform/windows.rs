@@ -50,8 +50,8 @@ where
     let file = path.as_os_str().to_owned();
     // Not `canonicalize`: it resolves SUBST drives and junctions away and
     // yields `\\?\` prefixes that never match a mount directory.
-    let absolute = std::path::absolute(path).map_err(|_| FsError::InvalidPath)?;
-    absolute.metadata().map_err(|_| FsError::InvalidPath)?;
+    let absolute = std::path::absolute(path).map_err(FsError::InvalidPath)?;
+    absolute.metadata().map_err(FsError::InvalidPath)?;
     let longest = mounts
         .iter()
         .filter(|m| absolute.starts_with(&m.mount_dir))
