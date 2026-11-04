@@ -1089,6 +1089,10 @@ mod tests {
                 "{arg:?} reached the source line raw: {:?}",
                 snap.text
             );
+            assert_eq!(
+                &snap.text[snap.span_at(0).unwrap()],
+                snap.text.strip_suffix(" + 1").unwrap()
+            );
             assert_eq!(&snap.text[snap.span_at(2).unwrap()], "1");
         }
     }
