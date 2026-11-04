@@ -226,6 +226,32 @@ fn test_output_appended_to_input(
     assert_eq!(at.read("f"), format!("{content}{expected_tail}"));
 }
 
+// Same as above with `tail < f >> f`: standard input is the file as well.
+#[uutests::wasi_ignore(NoRlimitSetrlimitSupport)]
+#[test]
+#[cfg(any(unix, windows))]
+fn test_output_appended_to_stdin() {
+    use std::fs::OpenOptions;
+
+    let header = new_ucmd!()
+        .args(&["-v", "-c1"])
+        .pipe_in("")
+        .succeeds()
+        .stdout_move_str();
+    let (at, mut ucmd) = at_and_ucmd!();
+    let content = format!("{}\nlast\n", "x".repeat(100 * 1024));
+    at.write("f", &content);
+    let out = OpenOptions::new().append(true).open(at.plus("f")).unwrap();
+
+    run_appending_to_input(
+        &at,
+        ucmd.args(&["-v", "-c+1"])
+            .set_stdin(File::open(at.plus("f")).unwrap())
+            .set_stdout(out),
+    );
+    assert_eq!(at.read("f"), format!("{content}{header}{content}"));
+}
+
 #[test]
 fn test_stdin_redirect_offset2() {
     // like test_stdin_redirect_offset but with multiple files
