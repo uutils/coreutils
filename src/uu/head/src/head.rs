@@ -554,6 +554,18 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 continue;
             }
             if let Err(err) = head_file(&mut file_handle, options) {
+                if matches!(
+                    err.kind(),
+                    io::ErrorKind::StorageFull
+                        | io::ErrorKind::QuotaExceeded
+                        | io::ErrorKind::FileTooLarge
+                        | io::ErrorKind::ReadOnlyFilesystem
+                        | io::ErrorKind::ExecutableFileBusy
+                        | io::ErrorKind::BrokenPipe
+                        | io::ErrorKind::WriteZero
+                ) {
+                    return Err(err.into());
+                }
                 let name = if file == "-" {
                     "standard input".into()
                 } else {

@@ -1250,7 +1250,7 @@ fn test_header_quotes_name_with_control_char() {
 
 #[test]
 #[cfg(target_os = "linux")]
-fn test_no_skip_after_error() {
+fn test_no_skip_after_read_error() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.write("f", "hello");
@@ -1259,4 +1259,24 @@ fn test_no_skip_after_error() {
         .fails()
         .stderr_contains("error reading '/proc/self/mem'")
         .stdout_contains("==> f <==\nhello");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_stops_processing() {
+    use std::fs::File;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("a", "hello");
+    at.write("b", "world");
+
+    let dev_full =
+        File::create("/dev/full").expect("Failed to open /dev/full - test must run on Linux");
+
+    ts.ucmd()
+        .args(&["a", "b"])
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_contains("No space left on device");
 }
