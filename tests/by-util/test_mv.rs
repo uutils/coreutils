@@ -3777,6 +3777,7 @@ fn test_mv_exchange_missing_target() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_inter_device_unable_to_remove_target() {
     // https://github.com/uutils/coreutils/issues/14877
     // Moving onto a file in /proc crosses a device and the kernel refuses to
@@ -3796,6 +3797,7 @@ fn test_mv_inter_device_unable_to_remove_target() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_into_dir_inter_device_unable_to_remove_target() {
     // Same as above, but with a target directory: the message must not get a
     // "cannot move" prefix.
