@@ -333,10 +333,13 @@ impl SplitWriter<'_> {
                 let flushed = writer.flush();
                 if flushed.is_err() {
                     // Flush first; only format the split name for the error context.
-                    let file_name = self.options.split_name.get(self.counter - 1)?;
-                    flushed
-                        .map_err_context(|| file_name)
-                        .map_err(CsplitError::from)?;
+                    // If the name cannot be formatted, keep the flush error as is.
+                    match self.options.split_name.get(self.counter - 1) {
+                        Ok(file_name) => flushed
+                            .map_err_context(|| file_name)
+                            .map_err(CsplitError::from)?,
+                        Err(_) => flushed.map_err(CsplitError::from)?,
+                    }
                 }
             }
             if self.options.elide_empty_files && self.size == 0 {
