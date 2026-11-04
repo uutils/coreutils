@@ -8,6 +8,7 @@
 use crate::errors::NumfmtError;
 use crate::format::{
     WriteError, escape_line, write_formatted_with_delimiter, write_formatted_with_whitespace,
+    write_unconverted_with_whitespace,
 };
 use crate::options::{
     DEBUG, DELIMITER, FIELD, FIELD_DEFAULT, FORMAT, FROM, FROM_DEFAULT, FROM_UNIT,
@@ -37,14 +38,6 @@ mod diagnostics;
 mod numeric;
 mod units;
 
-// Returns `true` if the input is in scientific notation
-fn is_scientific(input: &[u8]) -> bool {
-    input
-        .iter()
-        .position(|b| b"Ee".contains(b))
-        .is_some_and(|pos| input.get(pos + 1).is_some_and(u8::is_ascii_digit))
-}
-
 /// Format a single line and write it, handling `--invalid` error modes.
 ///
 /// Returns `true` if the line contained invalid input (only possible in
@@ -71,17 +64,9 @@ fn format_and_write(
         write_formatted_with_delimiter(dest, line, options, eol)
     } else {
         match std::str::from_utf8(line) {
-            Ok(s) => {
-                if is_scientific(s.as_bytes()) {
-                    Err(translate!(
-                        "numfmt-error-invalid-suffix",
-                        "input" => String::from_utf8_lossy(line).quote()
-                    )
-                    .into())
-                } else {
-                    write_formatted_with_whitespace(dest, s, options, eol)
-                }
-            }
+            // Scientific notation is rejected per field when the number is
+            // parsed, so a token in a field that is not converted is left alone.
+            Ok(s) => write_formatted_with_whitespace(dest, s, options, eol),
             Err(_) => Err(translate!(
                 "numfmt-error-invalid-number",
                 "input" => escape_line(line).quote()
@@ -112,10 +97,15 @@ fn format_and_write(
             }
             InvalidModes::Ignore => {}
         }
-        // On error, echo the original line unchanged.
-        writer
-            .write_all(input_line)
-            .map_err_context(|| translate!("numfmt-error-write"))?;
+        // On error, echo the original line, with the blanks between fields
+        // written as usual unless an explicit delimiter is set.
+        match std::str::from_utf8(input_line) {
+            Ok(s) if options.delimiter.is_none() => {
+                write_unconverted_with_whitespace(writer, s, options)
+            }
+            _ => writer.write_all(input_line),
+        }
+        .map_err_context(|| translate!("numfmt-error-write"))?;
         if let Some(eol) = eol {
             writer
                 .write_all(&[eol])
@@ -389,6 +379,13 @@ fn parse_options(args: &ArgMatches) -> std::result::Result<NumfmtOptions, ParseE
         Ok(0)
     }?;
 
+    // --field still conflicts with itself, like in GNU numfmt.
+    if args
+        .get_many::<String>(FIELD)
+        .is_some_and(|fields| fields.len() > 1)
+    {
+        return Err(translate!("numfmt-error-multiple-field-specifications").into());
+    }
     let fields = args.get_one::<String>(FIELD).unwrap().as_str();
     // a lone "-" means "all fields", even as part of a list of fields
     let fields = if fields.split(&[',', ' ']).any(|x| x == "-") {
@@ -579,6 +576,7 @@ pub fn uu_app() -> Command {
         .after_help(translate!("numfmt-after-help"))
         .override_usage(format_usage(&translate!("numfmt-usage")))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(DEBUG)
                 .long(DEBUG)
@@ -605,6 +603,7 @@ pub fn uu_app() -> Command {
                 .long(FIELD)
                 .help(translate!("numfmt-help-field"))
                 .value_name("FIELDS")
+                .action(ArgAction::Append)
                 .allow_hyphen_values(true)
                 .default_value(FIELD_DEFAULT),
         )

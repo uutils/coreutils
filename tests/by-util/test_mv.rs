@@ -425,12 +425,60 @@ fn test_mv_replace_symlink_with_symlink() {
     assert!(!at.symlink_exists("symlink_b"));
 }
 
-#[test]
+#[rstest]
+#[case::into_directory(false)]
+#[case::no_target_directory(true)]
 #[cfg(all(unix, not(target_os = "android")))]
-fn test_mv_replace_symlink_with_directory() {
+fn test_mv_symlink_to_directory_does_not_replace_empty_directory(#[case] no_target_dir: bool) {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.touch("a");
+    at.mkdir("outside");
+    at.mkdir("incoming");
+    at.mkdir_all("spool/queue");
+    at.symlink_dir("outside", "incoming/queue");
+
+    if no_target_dir {
+        ucmd.arg("-T").arg("incoming/queue").arg("spool/queue");
+    } else {
+        ucmd.arg("incoming/queue").arg("spool");
+    }
+    ucmd.fails();
+
+    assert!(at.dir_exists("spool/queue"));
+    assert!(!at.is_symlink("spool/queue"));
+    assert!(at.is_symlink("incoming/queue"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_symlink_to_directory_with_trailing_slash_keeps_empty_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("outside");
+    at.mkdir("incoming");
+    at.mkdir_all("spool/queue");
+    at.symlink_dir("outside", "incoming/queue");
+
+    // rename(2) refuses a symlink named with a trailing slash, which must not
+    // leave the destination directory removed.
+    ucmd.arg("incoming/queue/")
+        .arg("spool")
+        .fails()
+        .stderr_contains("Not a directory");
+
+    assert!(at.dir_exists("spool/queue"));
+}
+
+#[rstest]
+#[case::existing_target(true)]
+#[case::dangling_target(false)]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_replace_symlink_with_directory(#[case] target_exists: bool) {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    if target_exists {
+        at.touch("a");
+    }
     at.mkdir("b");
     at.touch("b/empty_file_b");
 
@@ -439,9 +487,13 @@ fn test_mv_replace_symlink_with_directory() {
     ucmd.arg("-T")
         .arg("b")
         .arg("symlink")
-        .fails()
-        .stderr_contains("cannot overwrite non-directory")
-        .stderr_contains("with directory");
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("mv: cannot overwrite non-directory 'symlink' with directory 'b'\n");
+
+    assert!(at.dir_exists("b"));
+    assert!(at.is_symlink("symlink"));
+    assert_eq!(at.read("b/empty_file_b"), "");
 }
 
 #[test]
@@ -498,6 +550,10 @@ fn test_mv_file_to_broken_symlink_directory() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: mv doesn't recognize a symlink-to-directory as a directory target, so it overwrites the symlink with a plain file instead of moving into the directory it points to"
+)]
 fn test_mv_file_to_symlink_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -551,7 +607,36 @@ fn test_mv_same_file() {
 }
 
 #[test]
+fn test_mv_same_file_no_clobber() {
+    // GNU mv does not report "are the same file" when it would not
+    // replace the target anyway; it exits 0 and leaves the file alone.
+    let file_a = "test_mv_same_file_a";
+    for args in [["-n"], ["--update=none"]] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write(file_a, "a");
+        ucmd.args(&args)
+            .arg(file_a)
+            .arg(file_a)
+            .succeeds()
+            .no_output();
+        assert_eq!(at.read(file_a), "a");
+    }
+
+    // --update=none-fail still fails, like GNU
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch(file_a);
+    ucmd.arg("--update=none-fail")
+        .arg(file_a)
+        .arg(file_a)
+        .fails_with_code(1);
+}
+
+#[test]
 #[cfg(all(unix, not(target_os = "android")))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: rustix::fs::stat doesn't return stable inode identity, so same-file detection via a hard link fails"
+)]
 fn test_mv_same_hardlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_same_file_a";
@@ -582,6 +667,10 @@ fn test_mv_dangling_symlink_to_folder() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: rustix::fs::stat doesn't return stable inode identity, so same-file detection via a symlink fails"
+)]
 fn test_mv_same_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_same_file_a";
@@ -652,6 +741,7 @@ fn test_mv_symlink_into_target() {
     ucmd.arg("dir-link").arg("dir").succeeds();
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[cfg(target_os = "linux")]
 #[test]
 fn test_mv_broken_symlink_to_another_fs() {
@@ -671,6 +761,10 @@ fn test_mv_broken_symlink_to_another_fs() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: rustix::fs::stat doesn't return stable inode identity, so same-file detection via a symlink/hardlink pair fails"
+)]
 fn test_mv_hardlink_to_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
@@ -829,23 +923,36 @@ fn test_mv_same_file_dot_dir() {
         .stderr_only("mv: '.' and '.' are the same file\n");
 }
 
-#[test]
-fn test_mv_simple_backup() {
+#[rstest]
+#[case::short(&["-b"], Some("~"))]
+#[case::long(&["--backup"], Some("~"))]
+#[case::suffix(&["-b", "--suffix=super-suffix-of-the-century"], Some("super-suffix-of-the-century"))]
+#[case::suffix_implies_backup(&["--suffix=super-suffix-of-the-century"], Some("super-suffix-of-the-century"))]
+#[case::suffix_hyphen_value(&["-b", "--suffix=-v"], Some("-v"))]
+#[case::numbered_t(&["--backup=t"], Some(".~1~"))]
+#[case::numbered(&["--backup=numbered"], Some(".~1~"))]
+#[case::existing(&["--backup=existing"], Some("~"))]
+#[case::nil(&["--backup=nil"], Some("~"))]
+#[case::simple(&["--backup=simple"], Some("~"))]
+#[case::never(&["--backup=never"], Some("~"))]
+#[case::none(&["--backup=none"], None)]
+#[case::off(&["--backup=off"], None)]
+fn test_mv_backup_control(#[case] args: &[&str], #[case] backup_suffix: Option<&str>) {
     let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_simple_backup_file_a";
-    let file_b = "test_mv_simple_backup_file_b";
+    // the extension makes sure the suffix is appended, not substituted
+    let source = "source.txt";
+    let dest = "dest.txt";
 
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("-b")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
+    at.write(source, "new");
+    at.write(dest, "old");
+    ucmd.args(args).arg(source).arg(dest).succeeds().no_output();
 
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}~")));
+    assert!(!at.file_exists(source));
+    assert_eq!(at.read(dest), "new");
+    match backup_suffix {
+        Some(suffix) => assert_eq!(at.read(format!("{dest}{suffix}")), "old"),
+        None => assert!(!at.file_exists(format!("{dest}~"))),
+    }
 }
 
 #[test]
@@ -873,102 +980,6 @@ fn test_mv_simple_backup_for_directory() {
 }
 
 #[test]
-fn test_mv_simple_backup_with_file_extension() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_simple_backup_file_a.txt";
-    let file_b = "test_mv_simple_backup_file_b.txt";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("-b")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}~")));
-}
-
-#[test]
-fn test_mv_arg_backup_arg_first() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_simple_backup_file_a";
-    let file_b = "test_mv_simple_backup_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("--backup").arg(file_a).arg(file_b).succeeds();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}~")));
-}
-
-#[test]
-fn test_mv_custom_backup_suffix() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_custom_backup_suffix_file_a";
-    let file_b = "test_mv_custom_backup_suffix_file_b";
-    let suffix = "super-suffix-of-the-century";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("-b")
-        .arg(format!("--suffix={suffix}"))
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}{suffix}")));
-}
-
-#[test]
-fn test_suffix_without_backup_option() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_custom_backup_suffix_file_a";
-    let file_b = "test_mv_custom_backup_suffix_file_b";
-    let suffix = "super-suffix-of-the-century";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg(format!("--suffix={suffix}"))
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}{suffix}")));
-}
-
-#[test]
-fn test_mv_custom_backup_suffix_hyphen_value() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_custom_backup_suffix_file_a";
-    let file_b = "test_mv_custom_backup_suffix_file_b";
-    let suffix = "-v";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("-b")
-        .arg(format!("--suffix={suffix}"))
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}{suffix}")));
-}
-
-#[test]
 fn test_mv_custom_backup_suffix_via_env() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_custom_backup_suffix_file_a";
@@ -988,84 +999,10 @@ fn test_mv_custom_backup_suffix_via_env() {
     assert!(at.file_exists(format!("{file_b}{suffix}")));
 }
 
-#[test]
-fn test_mv_backup_numbered_with_t() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_backup_numbering_file_a";
-    let file_b = "test_mv_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("--backup=t")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}.~1~")));
-}
-
-#[test]
-fn test_mv_backup_numbered() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_backup_numbering_file_a";
-    let file_b = "test_mv_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("--backup=numbered")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}.~1~")));
-}
-
-#[test]
-fn test_mv_backup_existing() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_backup_numbering_file_a";
-    let file_b = "test_mv_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("--backup=existing")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}~")));
-}
-
-#[test]
-fn test_mv_backup_nil() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_backup_numbering_file_a";
-    let file_b = "test_mv_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("--backup=nil")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}~")));
-}
-
-#[test]
-fn test_mv_numbered_if_existing_backup_existing() {
+#[rstest]
+#[case::existing("--backup=existing")]
+#[case::nil("--backup=nil")]
+fn test_mv_numbered_if_existing_backup(#[case] backup_arg: &str) {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_backup_numbering_file_a";
     let file_b = "test_mv_backup_numbering_file_b";
@@ -1074,7 +1011,7 @@ fn test_mv_numbered_if_existing_backup_existing() {
     at.touch(file_a);
     at.touch(file_b);
     at.touch(file_b_backup);
-    ucmd.arg("--backup=existing")
+    ucmd.arg(backup_arg)
         .arg(file_a)
         .arg(file_b)
         .succeeds()
@@ -1083,103 +1020,6 @@ fn test_mv_numbered_if_existing_backup_existing() {
     assert!(at.file_exists(file_b));
     assert!(at.file_exists(file_b_backup));
     assert!(at.file_exists(format!("{file_b}.~2~")));
-}
-
-#[test]
-fn test_mv_numbered_if_existing_backup_nil() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_backup_numbering_file_a";
-    let file_b = "test_mv_backup_numbering_file_b";
-    let file_b_backup = "test_mv_backup_numbering_file_b.~1~";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    at.touch(file_b_backup);
-    ucmd.arg("--backup=nil")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(file_b_backup));
-    assert!(at.file_exists(format!("{file_b}.~2~")));
-}
-
-#[test]
-fn test_mv_backup_simple() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_backup_numbering_file_a";
-    let file_b = "test_mv_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("--backup=simple")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}~")));
-}
-
-#[test]
-fn test_mv_backup_never() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_backup_numbering_file_a";
-    let file_b = "test_mv_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("--backup=never")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}~")));
-}
-
-#[test]
-fn test_mv_backup_none() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_backup_numbering_file_a";
-    let file_b = "test_mv_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("--backup=none")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(!at.file_exists(format!("{file_b}~")));
-}
-
-#[test]
-fn test_mv_backup_off() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_backup_numbering_file_a";
-    let file_b = "test_mv_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("--backup=off")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(!at.file_exists(format!("{file_b}~")));
 }
 
 #[test]
@@ -1212,13 +1052,13 @@ fn test_mv_update_option() {
     let times_later = FileTimes::new().set_accessed(now).set_modified(later);
     File::options()
         .write(true)
-        .open(at.plus_as_string(file_a))
+        .open(at.plus(file_a))
         .unwrap()
         .set_times(times_now)
         .unwrap();
     File::options()
         .write(true)
-        .open(at.plus_as_string(file_b))
+        .open(at.plus(file_b))
         .unwrap()
         .set_times(times_later)
         .unwrap();
@@ -1690,6 +1530,10 @@ fn test_mv_verbose() {
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))] // mkdir does not support -m on windows. Freebsd doesn't return a permission error either.
 #[cfg(feature = "mkdir")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: mkdir -m444 does not restrict write access under the WASI sandbox, so the subsequent mv succeeds instead of failing with a permission error"
+)]
 fn test_mv_permission_error() {
     let scene = TestScenario::new("mkdir");
     let folder1 = "bar";
@@ -1906,17 +1750,25 @@ fn test_mv_seen_multiple_files_to_directory() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: raw ENOTDIR (\"Not a directory\") surfaces instead of the translated cannot-stat message, because stat() doesn't enforce the trailing-slash-requires-directory rule for non-directory sources"
+)]
 fn test_mv_dir_into_file_where_both_are_files() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch("a");
-    at.touch("b");
+    at.write("a", "source");
+    at.write("b", "target");
     scene
         .ucmd()
         .arg("a/")
         .arg("b")
-        .fails()
-        .stderr_contains("mv: cannot stat 'a/': Not a directory");
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("mv: cannot stat 'a/': Not a directory\n");
+
+    assert_eq!(at.read("a"), "source");
+    assert_eq!(at.read("b"), "target");
 }
 
 #[test]
@@ -1949,13 +1801,13 @@ fn test_acl() {
     let at = &scene.fixtures;
     let path1 = "a";
     let path2 = "b";
-    let file = "a/file";
     let file_target = "b/file";
     at.mkdir(path1);
     at.mkdir(path2);
-    at.touch(file);
+    let filename = "a/file";
+    at.touch(filename);
+    let path = at.plus(filename);
 
-    let path = at.plus_as_string(file);
     // calling the command directly. xattr requires some dev packages to be installed
     // and it adds a complex dependency just for a test
     match Command::new("setfacl")
@@ -1976,7 +1828,7 @@ fn test_acl() {
 
     scene.ucmd().arg(&path).arg(path2).succeeds();
 
-    assert!(compare_xattrs(&file, &file_target));
+    assert!(compare_xattrs(&path, file_target));
 }
 
 #[test]
@@ -2071,6 +1923,7 @@ mod inter_partition_copying {
     // preserved. The mover owns the file here, so the chown is a no-op and the
     // bits are legitimate; only a failed chown justifies stripping them, and
     // that needs a second uid, so it is exercised out of band rather than here.
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     pub(crate) fn test_mv_inter_partition_keeps_setuid_when_ownership_preserved() {
         let scene = TestScenario::new(util_name!());
@@ -2102,6 +1955,7 @@ mod inter_partition_copying {
     }
 
     // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     pub(crate) fn test_mv_unlinks_dest_symlink() {
         let scene = TestScenario::new(util_name!());
@@ -2151,6 +2005,7 @@ mod inter_partition_copying {
 
     // In an inter-partition move if unlinking the destination symlink fails, ensure
     // that it would output the proper error message.
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     pub(crate) fn test_mv_unlinks_dest_symlink_error_message() {
         use uutests::util::TestScenario;
@@ -2182,6 +2037,7 @@ mod inter_partition_copying {
     }
 
     // Test that hardlinks are preserved when moving files across partitions
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     #[cfg(unix)]
     pub(crate) fn test_mv_preserves_hardlinks_across_partitions() {
@@ -2256,6 +2112,7 @@ mod inter_partition_copying {
     }
 
     // Test that hardlinks are preserved even with multiple sets of hardlinked files
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     #[cfg(unix)]
     #[allow(clippy::too_many_lines)]
@@ -2371,6 +2228,7 @@ mod inter_partition_copying {
     }
 
     // Test hardlinks within directories being moved
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     #[cfg(unix)]
     pub(crate) fn test_mv_preserves_hardlinks_in_directories_across_partitions() {
@@ -2471,6 +2329,7 @@ mod inter_partition_copying {
     }
 
     // Test complex scenario with multiple hardlink groups across nested directories
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     #[cfg(unix)]
     #[allow(clippy::too_many_lines)]
@@ -2619,6 +2478,7 @@ mod inter_partition_copying {
         );
     }
 
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     #[cfg(unix)]
     pub(crate) fn test_mv_dir_with_fifo_across_partitions() {
@@ -2652,6 +2512,7 @@ mod inter_partition_copying {
     // follows symlinks) instead of symlink_metadata() made mv "preserve" the
     // hardlink by linking the regular files to the copied *symlink*, leaving
     // self-referential symlinks and destroying the content.
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     #[cfg(unix)]
     pub(crate) fn test_mv_symlink_to_hardlinked_sibling_across_partitions() {
@@ -2851,6 +2712,7 @@ fn test_special_file_different_filesystem() {
 /// Test cross-device move with permission denied error
 /// Test partial failure handling where
 /// a cross-device move fails due to permission errors when removing the target file
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_mv_cross_device_permission_denied() {
@@ -2899,6 +2761,7 @@ fn test_mv_cross_device_permission_denied() {
 /// the symlink. The deterministic stand-in here pre-plants the symlink:
 /// `safe_copy::create_dest_restrictive` must refuse it with `ELOOP` rather
 /// than truncate `victim`.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_mv_cross_device_refuses_planted_symlink_dest() {
@@ -2995,10 +2858,7 @@ fn test_mv_selinux_context() {
         let mut cmd = scene.ucmd();
         cmd.arg(arg);
 
-        let result = cmd
-            .arg(at.plus_as_string(src))
-            .arg(at.plus_as_string(dest))
-            .run();
+        let result = cmd.arg(at.plus(src)).arg(at.plus(dest)).run();
 
         // Skip test if SELinux is not enabled
         if result
@@ -3025,8 +2885,8 @@ fn test_mv_selinux_context() {
         }
 
         // Clean up files
-        let _ = std::fs::remove_file(at.plus_as_string(dest));
-        let _ = std::fs::remove_file(at.plus_as_string(src));
+        let _ = std::fs::remove_file(at.plus(dest));
+        let _ = std::fs::remove_file(at.plus(src));
     }
 }
 
@@ -3053,6 +2913,7 @@ fn test_mv_error_usage_display_too_few() {
         .stderr_contains("For more information, try '--help'.");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_mv_verbose_directory_recursive() {
@@ -3108,6 +2969,7 @@ fn test_mv_verbose_directory_recursive() {
     assert!(stdout.contains("'mv-dir/d/e/f/file2' -> "));
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[cfg(unix)]
 #[test]
 fn test_mv_prompt_unwriteable_file_when_using_tty() {
@@ -3191,7 +3053,7 @@ fn test_mv_xattr_enotsup_silent() {
     {
         scene
             .ucmd()
-            .arg(at.plus_as_string("src"))
+            .arg(at.plus("src"))
             .arg("/dev/shm/mv_test")
             .succeeds()
             .no_stderr();
@@ -3235,7 +3097,7 @@ fn test_mv_cross_device_dir_xattr_preserved() {
 
     scene
         .ucmd()
-        .arg(at.plus_as_string("src_dir"))
+        .arg(at.plus("src_dir"))
         .arg(dst_path.to_str().unwrap())
         .succeeds()
         .no_stderr();
@@ -3261,6 +3123,7 @@ fn test_mv_cross_device_dir_xattr_preserved() {
 /// copied in a cross-device move. Each refused one is reported, but the move
 /// still succeeds. tmpfs takes large values while ext4 caps a value at one
 /// block, so the large attributes fail there and the small ones must survive.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_mv_cross_device_xattr_failure_keeps_the_rest() {
@@ -3272,7 +3135,7 @@ fn test_mv_cross_device_xattr_failure_keeps_the_rest() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let too_big = vec![b'x'; 8000];
+    let too_big = vec![b'x'; 128 * 1024];
     at.touch("probe");
     let probe = FxHashMap::from_iter([(OsString::from("user.probe"), too_big.clone())]);
     if apply_xattrs(at.plus("probe"), probe).is_ok() {
@@ -3327,6 +3190,7 @@ fn test_mv_cross_device_xattr_failure_keeps_the_rest() {
 
 /// Cross-device mv of a symlink onto an existing file must replace the
 /// destination atomically, matching GNU.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_mv_cross_device_symlink_onto_existing() {
@@ -3346,7 +3210,7 @@ fn test_mv_cross_device_symlink_onto_existing() {
 
     scene
         .ucmd()
-        .arg(at.plus_as_string("src_link"))
+        .arg(at.plus("src_link"))
         .arg(dst_path.to_str().unwrap())
         .succeeds()
         .no_stderr();
@@ -3367,6 +3231,7 @@ fn test_mv_cross_device_symlink_onto_existing() {
 
 /// Cross-device mv of a symlink onto an existing directory (`-T`) must
 /// fail without destroying the directory or its contents.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_mv_cross_device_symlink_onto_existing_dir() {
@@ -3388,7 +3253,7 @@ fn test_mv_cross_device_symlink_onto_existing_dir() {
     scene
         .ucmd()
         .arg("-T")
-        .arg(at.plus_as_string("src_link"))
+        .arg(at.plus("src_link"))
         .arg(dst_dir.to_str().unwrap())
         .fails();
 
@@ -3408,6 +3273,7 @@ fn test_mv_cross_device_symlink_onto_existing_dir() {
 
 /// Test that symlinks inside directories are preserved during cross-device moves
 /// (not expanded into full copies of their targets)
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_mv_cross_device_symlink_preserved() {
@@ -3455,6 +3321,7 @@ fn test_mv_cross_device_symlink_preserved() {
 }
 
 /// Test that broken/dangling symlinks are preserved during cross-device moves
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_mv_cross_device_broken_symlink_preserved() {
@@ -3500,6 +3367,7 @@ fn test_mv_cross_device_broken_symlink_preserved() {
 }
 
 /// Test that symlinks to regular files are preserved during cross-device moves
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_mv_cross_device_file_symlink_preserved() {
@@ -3560,7 +3428,8 @@ fn find_other_group(current: u32) -> Option<u32> {
 
 /// Test that group ownership is preserved during cross-device file moves.
 /// Uses chgrp to a supplementary group (no root needed).
-/// See https://github.com/uutils/coreutils/issues/9714
+/// See <https://github.com/uutils/coreutils/issues/9714>
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_mv_cross_device_preserves_ownership() {
@@ -3622,7 +3491,8 @@ fn test_mv_cross_device_preserves_ownership() {
 
 /// Test that group ownership is preserved for files inside directories during cross-device moves.
 /// Uses chgrp to a supplementary group (no root needed).
-/// See https://github.com/uutils/coreutils/issues/9714
+/// See <https://github.com/uutils/coreutils/issues/9714>
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_mv_cross_device_preserves_ownership_recursive() {
@@ -3752,6 +3622,7 @@ fn test_mv_backup_numbered_allows_source_named_like_backup() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[cfg(not(wasi_runner))]
 fn test_mv_exchange_file_and_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("leaf", "payload");
@@ -3772,6 +3643,7 @@ fn test_mv_exchange_file_and_dir() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[cfg(not(wasi_runner))]
 fn test_mv_exchange_verbose() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("first", "1");
@@ -3790,6 +3662,7 @@ fn test_mv_exchange_verbose() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[cfg(not(wasi_runner))]
 fn test_mv_exchange_wrong_operand_count() {
     let scene = TestScenario::new(util_name!());
     scene.fixtures.write("only", "x");
@@ -3820,6 +3693,7 @@ fn test_mv_exchange_wrong_operand_count() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[cfg(not(wasi_runner))]
 fn test_mv_exchange_multiple_operands_into_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("a", "src-a");
@@ -3851,6 +3725,7 @@ fn test_mv_exchange_multiple_operands_into_directory() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[cfg(not(wasi_runner))]
 fn test_mv_exchange_same_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("only", "data");
@@ -3865,7 +3740,7 @@ fn test_mv_exchange_same_file() {
     assert_eq!(at.read("only"), "data");
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[cfg(any(not(any(target_os = "linux", target_os = "android")), wasi_runner))]
 #[test]
 fn test_mv_exchange_not_supported() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3885,6 +3760,7 @@ fn test_mv_exchange_not_supported() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[cfg(not(wasi_runner))]
 fn test_mv_exchange_missing_target() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("present", "data");

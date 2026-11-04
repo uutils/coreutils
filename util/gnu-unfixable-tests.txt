@@ -23,7 +23,8 @@
 
 # Both grep a line number out of GNU's C source ("^excise" in src/remove.c,
 # "^tail_forever_inotify" in src/tail.c) and break there, so the breakpoint can
-# only resolve for a binary compiled from those files.
+# only resolve for a binary compiled from those files. rm/r-root is covered
+# natively by test_no_preserve_root_literal_root in tests/by-util/test_rm.rs.
 rm/r-root.log
 tail/inotify-race.log
 tail/inotify-race2.log
@@ -44,5 +45,3 @@ cp/nfs-removal-race.log
 df/skip-duplicates.log
 # parses the C code to look for getopt usage
 misc/getopt_vs_usage.sh
-# overrides readdir; std uses readdir64
-rm/rm-readdir-fail.log

@@ -169,6 +169,25 @@ fn test_kill_signal_reports_signal_exit_code() {
         .no_output();
 }
 
+/// When the child dumps core, timeout re-raises its signal without dumping
+/// core itself.
+// Linux only: on macOS the child would write a real core file into /cores.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_child_core_dump_not_repeated() {
+    use std::os::unix::process::ExitStatusExt;
+    let ts = TestScenario::new(util_name!());
+    let script = r#"ulimit -c unlimited 2>/dev/null; exec "$0" timeout 5 sh -c 'kill -SEGV $$'"#;
+    let status = std::process::Command::new("sh")
+        .args(["-c", script])
+        .arg(&ts.bin_path)
+        .current_dir(ts.fixtures.as_string())
+        .status()
+        .unwrap();
+    assert_eq!(status.signal(), Some(libc::SIGSEGV));
+    assert!(!status.core_dumped());
+}
+
 #[test]
 fn test_preserve_status_even_when_send_signal() {
     let (ts, bin) = scenario_with_bin();
@@ -281,16 +300,16 @@ fn test_hex_timeout_ending_with_d() {
         .no_output();
 }
 
-#[test]
+#[rstest]
 #[cfg_attr(
     all(target_vendor = "apple", target_arch = "x86_64"),
     ignore = "wontfix: intermittent failure in obsolete macOS x86_64 (macOS bug)."
 )]
 #[cfg(unix)]
-fn test_terminate_child_on_receiving_terminate() {
+fn test_terminate_child_on_receiving_terminate(#[values("0", "10")] duration: &str) {
     let mut timeout_cmd = new_ucmd!()
         .args(&[
-            "10",
+            duration,
             "sh",
             "-c",
             "trap 'echo child received TERM' TERM; sleep 5",
@@ -378,12 +397,12 @@ fn test_with_background_child() {
         .no_stdout();
 }
 
-#[test]
+#[rstest]
 #[cfg(unix)]
-fn test_forward_sigint_to_child() {
+fn test_forward_sigint_to_child(#[values("0", "10")] duration: &str) {
     let mut cmd = new_ucmd!()
         .args(&[
-            "10",
+            duration,
             "sh",
             "-c",
             "trap 'echo got_int; exit 42' INT; sleep 5",
@@ -398,6 +417,46 @@ fn test_forward_sigint_to_child() {
         .is_not_alive()
         .with_current_output()
         .stdout_contains("got_int");
+}
+
+#[rstest]
+#[cfg(unix)]
+fn test_zero_kill_after_does_not_escalate_on_sigint(#[values("0", "10")] duration: &str) {
+    use nix::sys::signal::{Signal, kill};
+    use nix::unistd::Pid;
+    use std::time::Instant;
+
+    let ts = TestScenario::new(util_name!());
+    let mut cmd = ts
+        .ucmd()
+        .args(&[
+            "--foreground",
+            "--preserve-status",
+            "--kill-after=0",
+            duration,
+            "sh",
+            "-c",
+            "trap ': > interrupted' INT; : > ready; while [ ! -f finish ]; do sleep .01; done; exit 42",
+        ])
+        .timeout(Duration::from_secs(5))
+        .run_no_wait();
+
+    // Wait for the trap to be installed, then for the first INT to reach it.
+    for marker in ["ready", "interrupted"] {
+        let start = Instant::now();
+        while !ts.fixtures.file_exists(marker) && start.elapsed() < Duration::from_secs(5) {
+            cmd.delay(10);
+        }
+        if !ts.fixtures.file_exists(marker) {
+            ts.fixtures.touch("finish");
+            cmd.wait().unwrap();
+            panic!("child did not create {marker}");
+        }
+        kill(Pid::from_raw(cmd.id() as i32), Signal::SIGINT).unwrap();
+    }
+    cmd.delay(100);
+    ts.fixtures.touch("finish");
+    cmd.wait().unwrap().code_is(42).no_output();
 }
 
 #[test]
@@ -451,7 +510,7 @@ fn test_windows_kills_process_tree() {
     );
 }
 
-/// `-s INT` is delivered as a CTRL_BREAK to the child's group (or termination
+/// `-s INT` is delivered as a `CTRL_BREAK` to the child's group (or termination
 /// without a console); either way the child dies and timeout reports 124.
 #[test]
 #[cfg(windows)]

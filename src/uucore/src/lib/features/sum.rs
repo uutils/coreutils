@@ -27,7 +27,7 @@ use crate::error::{UResult, USimpleError};
 pub enum DigestOutput {
     /// Varying-size output
     Vec(Vec<u8>),
-    /// Legacy output for Crc and Crc32B modes
+    /// Legacy output for `Crc` and `Crc32B` modes
     Crc(u32),
     /// Legacy output for Sysv and BSD modes
     U16(u16),
@@ -726,9 +726,7 @@ mod tests {
     fn test_crlf_across_blocks() {
         use std::io::Write;
 
-        use super::Digest;
-        use super::DigestWriter;
-        use super::Md5;
+        use super::{Digest, DigestWriter, Md5};
 
         // Writing "\r" in one call to `write()`, and then "\n" in another.
         let mut digest = Box::new(Md5::default()) as Box<dyn Digest>;

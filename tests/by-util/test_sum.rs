@@ -98,9 +98,9 @@ fn test_invalid_metadata() {
         .stderr_is("sum: b: No such file or directory\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_sum_non_utf8_paths() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -122,7 +122,7 @@ fn test_filename_ends_with_slash() {
 }
 
 #[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "openbsd")))]
-#[cfg_attr(wasi_runner, ignore)]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_filename_proc_self_mem() {
     // https://github.com/uutils/coreutils/issues/12949
@@ -134,4 +134,34 @@ fn test_filename_proc_self_mem() {
     let io = "sum: /proc/self/mem: I/O error\n";
 
     assert!(stderr == input_output || stderr == io);
+}
+
+#[test]
+fn test_repeated_flags_are_accepted() {
+    new_ucmd!()
+        .args(&["-r", "-r"])
+        .pipe_in("hello world\n")
+        .succeeds()
+        .stdout_only("03762     1\n");
+    new_ucmd!()
+        .args(&["-s", "-s"])
+        .pipe_in("hello world\n")
+        .succeeds()
+        .stdout_only("1126 1\n");
+}
+
+#[test]
+fn test_last_of_r_s_wins() {
+    // https://github.com/uutils/coreutils/issues/15986
+    // GNU uses whichever of -r (BSD) and -s (System V) comes last.
+    new_ucmd!()
+        .args(&["-s", "-r"])
+        .pipe_in("hello world\n")
+        .succeeds()
+        .stdout_only("03762     1\n");
+    new_ucmd!()
+        .args(&["-r", "-s"])
+        .pipe_in("hello world\n")
+        .succeeds()
+        .stdout_only("1126 1\n");
 }

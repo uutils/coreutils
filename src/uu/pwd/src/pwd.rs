@@ -11,6 +11,8 @@ use std::path::PathBuf;
 use uucore::format_usage;
 
 use uucore::display::println_verbatim;
+#[cfg(unix)]
+use uucore::error::USimpleError;
 use uucore::error::{FromIo, UResult};
 use uucore::show_error;
 
@@ -127,7 +129,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         physical_path()
     }
-    .map_err_context(|| translate!("pwd-error-failed-to-get-current-directory"))?;
+    .or_else(|error| match error.kind() {
+        #[cfg(unix)]
+        io::ErrorKind::NotFound => Err(USimpleError::new(
+            1,
+            translate!("pwd-error-cannot-find-directory-entry"),
+        )),
+        _ => Err(error).map_err_context(|| translate!("pwd-error-failed-to-get-current-directory")),
+    })?;
 
     // \\?\ is a prefix Windows gives to paths under certain circumstances,
     // including when canonicalizing them.

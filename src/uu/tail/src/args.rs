@@ -17,6 +17,7 @@ use uucore::parser::parse_signed_num::{SignPrefix, number_offset, parse_signed_n
 use uucore::parser::parse_size::ParseSizeError;
 use uucore::parser::parse_time;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+use uucore::posix::{MODERN, TRADITIONAL, posix_version};
 use uucore::translate;
 use uucore::{format_usage, show_warning};
 
@@ -389,6 +390,18 @@ impl Settings {
 }
 
 pub fn parse_obsolete(arg: &OsString, input: Option<&OsString>) -> UResult<Option<Settings>> {
+    let posix = posix_version();
+    // A bare `-c` is only obsolete syntax under POSIX 1992; otherwise `-c`
+    // needs a value.
+    if arg == "-c" && posix.is_none_or(|v| v >= TRADITIONAL) {
+        return Ok(None);
+    }
+    // POSIX 2001 has no `+NUM` form, so such an argument is a file name.
+    if arg.as_encoded_bytes().first() == Some(&b'+')
+        && posix.is_some_and(|v| (TRADITIONAL..MODERN).contains(&v))
+    {
+        return Ok(None);
+    }
     match parse::parse_obsolete(arg) {
         Some(Ok(args)) => Ok(Some(Settings::from_obsolete_args(&args, input))),
         None => Ok(None),
@@ -491,6 +504,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::BYTES)
                 .short('c')
                 .long(options::BYTES)
+                .value_name("[+]NUM")
                 .allow_hyphen_values(true)
                 .overrides_with_all([options::BYTES, options::LINES])
                 .help(translate!("tail-help-bytes")),
@@ -510,6 +524,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::LINES)
                 .short('n')
                 .long(options::LINES)
+                .value_name("[+]NUM")
                 .allow_hyphen_values(true)
                 .overrides_with_all([options::BYTES, options::LINES])
                 .help(translate!("tail-help-lines")),

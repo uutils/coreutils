@@ -107,7 +107,8 @@ pub fn uu_app() -> Command {
         .version(uucore::crate_version!())
         .about(translate!("chgrp-about"))
         .override_usage(format_usage(&translate!("chgrp-usage")))
-        .infer_long_args(true);
+        .infer_long_args(true)
+        .args_override_self(true);
     uucore::clap_localization::configure_localized_command(cmd)
         .disable_help_flag(true)
         .arg(

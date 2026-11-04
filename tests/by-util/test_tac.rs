@@ -57,6 +57,21 @@ fn test_stdin_non_newline_separator_before() {
 }
 
 #[test]
+fn test_separator_starting_with_hyphen() {
+    for args in [
+        &["-s", "-1"][..],
+        &["--separator", "-1"],
+        &["--separator=-1"],
+    ] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("a-1b-1")
+            .succeeds()
+            .stdout_is("b-1a-1");
+    }
+}
+
+#[test]
 fn test_single_default() {
     new_ucmd!()
         .arg("prime_per_line.txt")
@@ -102,6 +117,23 @@ fn test_invalid_input() {
     let dir_err = "failed to open 'a' for reading: Access is denied";
 
     scene.ucmd().arg("a").fails().stderr_contains(dir_err);
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_numeric_looking_file_names_are_kept_verbatim() {
+    // File names such as "007" or "1e3" must not be reformatted as numbers
+    // in error messages.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("007");
+    at.mkdir("1e3");
+    ucmd.args(&["007", "1e3", "2.50"])
+        .fails_with_code(1)
+        .stderr_is(
+            "tac: 007: read error: Is a directory\n\
+             tac: 1e3: read error: Is a directory\n\
+             tac: failed to open '2.50' for reading: No such file or directory\n",
+        );
 }
 
 #[test]
@@ -553,4 +585,18 @@ fn test_tac_stdin_redirected_file_truncated_during_read_does_not_crash() {
         "tac was killed by signal {:?} (SIGBUS regression, see #9748)",
         result.signal()
     );
+}
+
+#[test]
+fn test_repeated_option_last_one_wins() {
+    new_ucmd!()
+        .args(&["-b", "-b"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_only("\n\nc\nba");
+    new_ucmd!()
+        .args(&["-s", ",", "-s", ";"])
+        .pipe_in("a,b;c;")
+        .succeeds()
+        .stdout_only("c;a,b;");
 }

@@ -8,7 +8,7 @@
 use std::io::{Write, stdout};
 use uucore::{
     display::Quotable,
-    entries::{Locate, Passwd, get_groups_gnu, gid2grp},
+    entries::{Passwd, get_groups_gnu, gid2grp},
     error::{UError, UResult},
     format_usage, show,
 };
@@ -61,7 +61,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     for user in users {
-        match Passwd::locate(user.as_str()) {
+        match Passwd::locate_name(user.as_str()) {
             Ok(p) => {
                 let groups: Vec<String> =
                     p.belongs_to().into_iter().map(infallible_gid2grp).collect();

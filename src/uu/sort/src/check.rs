@@ -37,7 +37,7 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
     let file = open(path)?;
     let (recycled_sender, recycled_receiver) = sync_channel(2);
     let (loaded_sender, loaded_receiver) = sync_channel(2);
-    thread::spawn({
+    let reader_join_handle = thread::spawn({
         let settings = settings.clone();
         move || reader(file, &recycled_receiver, &loaded_sender, &settings)
     });
@@ -111,7 +111,10 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
     drop(recycled_sender);
     while loaded_receiver.recv().is_ok() {}
 
-    result
+    // A read error ends the input early, so without this the part read so far
+    // would be checked and reported as sorted.
+    let reader_result = reader_join_handle.join().unwrap();
+    result.and(reader_result)
 }
 
 /// The function running on the reader thread.

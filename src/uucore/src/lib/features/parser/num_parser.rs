@@ -7,15 +7,14 @@
 
 //! Utilities for parsing numbers in various formats
 
-use bigdecimal::{
-    BigDecimal,
-    num_bigint::{BigInt, BigUint, Sign},
-};
-use num_traits::Signed;
-use num_traits::ToPrimitive;
-use num_traits::Zero;
+use bigdecimal::BigDecimal;
+use bigdecimal::num_bigint::{BigInt, BigUint, Sign};
+use num_traits::{Signed, ToPrimitive, Zero};
 
 use crate::extendedbigdecimal::ExtendedBigDecimal;
+
+// 2^-30 seconds < 1 ns.
+const SUBNANOSECOND_BINARY_EXPONENT: i32 = -30;
 
 /// Base for number parsing
 #[derive(Clone, Copy, PartialEq)]
@@ -276,7 +275,7 @@ impl ExtendedParser for f64 {
 }
 
 impl ExtendedParser for ExtendedBigDecimal {
-    /// Parse a number as an ExtendedBigDecimal
+    /// Parse a number as an [`ExtendedBigDecimal`]
     fn extended_parse(input: &str) -> Result<Self, ExtendedParserError<Self>> {
         parse(input, ParseTarget::Decimal, &[])
     }
@@ -545,9 +544,20 @@ pub(crate) fn parse(
     let (mul, rest) = parse_suffix_multiplier(rest, allowed_suffixes);
 
     let digits = digits.unwrap() * mul;
+    let exponent = exponent.unwrap_or_default();
 
-    let ebd_result =
-        construct_extended_big_decimal(digits, negative, base, scale, exponent.unwrap_or_default());
+    // Bound a hex duration before constructing its denominator, accounting for
+    // the suffix multiplier and binary exponent.
+    let ebd_result = if target == ParseTarget::Duration
+        && base == Base::Hexadecimal
+        && !digits.is_zero()
+        && BigInt::from(digits.bits()) + &exponent - BigInt::from(scale) * 4
+            <= BigInt::from(SUBNANOSECOND_BINARY_EXPONENT)
+    {
+        Err(make_error(false, negative))
+    } else {
+        construct_extended_big_decimal(digits, negative, base, scale, exponent)
+    };
 
     // Return what has been parsed so far. If there are extra characters, mark the
     // parsing as a partial match.

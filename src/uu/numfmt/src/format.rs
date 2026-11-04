@@ -101,7 +101,7 @@ fn find_valid_number_with_suffix(s: &str, unit: Unit) -> Option<&str> {
     }
 }
 
-/// Given a string like "5 K Field2" with unit_separator=" ", returns the length
+/// Given a string like "5 K Field2" with `unit_separator=" "`, returns the length
 /// of the valid prefix including the separator and suffix (e.g. "5 K" → 4).
 fn valid_end_with_unit_separator(
     s: &str,
@@ -654,10 +654,7 @@ fn try_format_exact_int_without_suffix_scaling(
     let scaled = integer / to_unit;
 
     if is_too_large_to_format(scaled, precision) {
-        let value_sci = format_gnu_scientific(scaled as f64);
-        return Some(Err(format!(
-            "value/precision too large to be printed: '{value_sci}/{precision}' (consider using --to)"
-        )));
+        return Some(Err(too_large_to_print(scaled as f64, precision)));
     }
 
     Some(Ok(if precision == 0 {
@@ -671,20 +668,40 @@ fn try_format_exact_int_without_suffix_scaling(
     }))
 }
 
-fn format_gnu_scientific(v: f64) -> String {
-    // 6 significant figures with trimmed trailing zeros and signed exponent
+/// GNU names the precision only when there is one.
+fn too_large_to_print(value: f64, precision: usize) -> String {
+    let value_sci = format_gnu_general(value);
+    if precision == 0 {
+        format!("value too large to be printed: '{value_sci}' (consider using --to)")
+    } else {
+        format!(
+            "value/precision too large to be printed: '{value_sci}/{precision}' (consider using --to)"
+        )
+    }
+}
+
+fn format_gnu_general(v: f64) -> String {
+    // like C's %g: 6 significant figures, trailing zeros trimmed, and an
+    // exponent of at least two digits only outside 1e-4..1e6
     let s = format!("{v:.5e}");
     let Some(e_pos) = s.find('e') else {
         return s;
     };
     let (mantissa, rest) = s.split_at(e_pos);
-    let exp = &rest[1..];
-    let mantissa = mantissa.trim_end_matches('0').trim_end_matches('.');
-    if exp.starts_with('-') {
-        format!("{mantissa}e{exp}")
-    } else {
-        format!("{mantissa}e+{exp}")
+    let exp: i32 = rest[1..].parse().unwrap_or(0);
+    if (-4..6).contains(&exp) {
+        let fixed = format!("{v:.*}", (5 - exp) as usize);
+        if !fixed.contains('.') {
+            return fixed;
+        }
+        return fixed
+            .trim_end_matches('0')
+            .trim_end_matches('.')
+            .to_string();
     }
+    let mantissa = mantissa.trim_end_matches('0').trim_end_matches('.');
+    let sign = if exp < 0 { '-' } else { '+' };
+    format!("{mantissa}e{sign}{:02}", exp.abs())
 }
 
 /// Format `value` with `precision` decimals, exactly as `{:.precision$}` would.
@@ -725,6 +742,13 @@ fn transform_to(
 
     let s = s.to_f64();
     let i2 = s / (opts.to_unit as f64);
+    // a value read with a suffix, like 1Z, is a float and skipped the check above
+    if opts.to == Unit::None
+        && i2.is_finite()
+        && i2.abs().max(1.0) * 10_f64.powi(precision.min(19) as i32) >= 1e19
+    {
+        return Err(too_large_to_print(i2, precision));
+    }
     let (i2, s) = consider_suffix(i2, opts.to, round_method, precision, is_precision_specified)?;
     let dec_sep = locale_decimal_separator();
     let localize = |s: String| -> String {
@@ -735,10 +759,12 @@ fn transform_to(
         }
     };
     Ok(match s {
-        None if opts.to == Unit::None && precision <= u16::MAX.into() => localize(format_float(
-            round_with_precision(i2, round_method, precision),
-            precision,
-        )),
+        None if opts.to == Unit::None && precision <= u16::MAX.into() => {
+            let rounded = round_with_precision(i2, round_method, precision);
+            // rounding a small negative number leaves -0.0, which would print as "-0"
+            let rounded = if rounded == 0.0 { 0.0 } else { rounded };
+            localize(format_float(rounded, precision))
+        }
         None if is_precision_specified && precision <= u16::MAX.into() => {
             let i2 = round_with_precision(i2, round_method, 0);
             localize(format_float(i2, precision))
@@ -969,6 +995,16 @@ pub fn write_formatted_with_delimiter<W: std::io::Write + ?Sized>(
     Ok(())
 }
 
+/// Writes the space that stands for the first of the `blanks` between two
+/// fields, and returns the blanks that follow it.
+fn write_separator<'a, W: std::io::Write + ?Sized>(
+    writer: &mut W,
+    blanks: &'a str,
+) -> std::io::Result<&'a str> {
+    writer.write_all(b" ")?;
+    Ok(&blanks[blanks.chars().next().map_or(0, char::len_utf8)..])
+}
+
 pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
     writer: &mut W,
     s: &str,
@@ -986,8 +1022,7 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
 
             // add delimiter before second and subsequent fields
             let prefix = if n > 1 {
-                writer.write_all(b" ")?;
-                &prefix[prefix.chars().next().map_or(0, char::len_utf8)..]
+                write_separator(writer, prefix)?
             } else {
                 prefix
             };
@@ -1001,10 +1036,9 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
             let formatted = format_string(field, options, implicit_padding)?;
             writer.write_all(formatted.as_bytes())?;
         } else {
-            // the -z option converts an initial \n into a space
-            let prefix = if options.zero_terminated && prefix.starts_with('\n') {
-                writer.write_all(b" ")?;
-                &prefix[1..]
+            // the first blank between fields is written as a space
+            let prefix = if n > 1 {
+                write_separator(writer, prefix)?
             } else {
                 prefix
             };
@@ -1016,6 +1050,29 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
 
     if let Some(eol) = eol {
         writer.write_all(&[eol])?;
+    }
+
+    Ok(())
+}
+
+/// Writes a line that could not be converted, with the blanks between its
+/// fields written as `write_formatted_with_whitespace` writes them.
+pub fn write_unconverted_with_whitespace<W: std::io::Write + ?Sized>(
+    writer: &mut W,
+    s: &str,
+    options: &NumfmtOptions,
+) -> std::io::Result<()> {
+    for (n, (prefix, field)) in (1..).zip(WhitespaceSplitter {
+        s: Some(s),
+        options,
+    }) {
+        let prefix = if n > 1 {
+            write_separator(writer, prefix)?
+        } else {
+            prefix
+        };
+        writer.write_all(prefix.as_bytes())?;
+        writer.write_all(field.as_bytes())?;
     }
 
     Ok(())

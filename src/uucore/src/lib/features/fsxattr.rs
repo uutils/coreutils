@@ -155,7 +155,7 @@ pub fn copy_acls<P: AsRef<Path>>(source: P, dest: P) {
 ///
 /// # Returns
 ///
-/// A result containing a HashMap of attributes names and values, or an error.
+/// A result containing a `HashMap` of attributes names and values, or an error.
 pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<FxHashMap<OsString, Vec<u8>>> {
     let mut attrs = FxHashMap::default();
     for attr_name in xattr::list(&source)? {
@@ -195,7 +195,7 @@ pub fn retrieve_xattrs_fd(source: &std::fs::File) -> std::io::Result<FxHashMap<O
 /// # Arguments
 ///
 /// * `dest` - A reference to the path of the file or directory.
-/// * `xattrs` - A HashMap containing attribute names and their corresponding values.
+/// * `xattrs` - A `HashMap` containing attribute names and their corresponding values.
 ///
 /// # Returns
 ///
@@ -247,7 +247,10 @@ pub fn apply_xattrs_fd_ignore_unsupported(
     }
 }
 
-/// Checks if a file has an Access Control List (ACL) based on its extended attributes.
+/// Checks if a file has an Access Control List (ACL).
+///
+/// On macOS this asks the ACL API; elsewhere it looks at the file's extended
+/// attributes.
 ///
 /// # Arguments
 ///
@@ -256,19 +259,71 @@ pub fn apply_xattrs_fd_ignore_unsupported(
 ///
 /// # Returns
 ///
-/// `true` if the file has extended attributes (indicating an ACL), `false` otherwise.
+/// `true` if the file has an extended ACL (on macOS) or any extended attributes
+/// (elsewhere), `false` otherwise.
 pub fn has_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
+    // On macOS most files carry some xattr (e.g. com.apple.provenance) and the
+    // ACL is not one of them, so ask the ACL API instead.
+    #[cfg(target_os = "macos")]
+    return macos_acl::has_extended_acl(file.as_ref(), dereference);
+
     // don't use exacl here, it is doing more getxattr call then needed
+    #[cfg(not(target_os = "macos"))]
     let attrs = if dereference {
         xattr::list_deref(file)
     } else {
         xattr::list(file)
     };
 
+    #[cfg(not(target_os = "macos"))]
     attrs.is_ok_and(|acl| {
         // if we have extra attributes, we have an acl
         acl.count() > 0
     })
+}
+
+#[cfg(target_os = "macos")]
+mod macos_acl {
+    use std::ffi::{CString, c_char, c_int, c_void};
+    use std::os::unix::ffi::OsStrExt;
+    use std::path::Path;
+
+    // <sys/acl.h>
+    const ACL_TYPE_EXTENDED: c_int = 0x0000_0100;
+    const ACL_FIRST_ENTRY: c_int = 0;
+
+    unsafe extern "C" {
+        fn acl_get_file(path: *const c_char, acl_type: c_int) -> *mut c_void;
+        fn acl_get_link_np(path: *const c_char, acl_type: c_int) -> *mut c_void;
+        fn acl_get_entry(acl: *mut c_void, entry_id: c_int, entry: *mut *mut c_void) -> c_int;
+        fn acl_free(obj: *mut c_void) -> c_int;
+    }
+
+    /// Whether `path` has an extended ACL with at least one entry.
+    pub(super) fn has_extended_acl(path: &Path, dereference: bool) -> bool {
+        let Ok(c_path) = CString::new(path.as_os_str().as_bytes()) else {
+            return false;
+        };
+        // SAFETY: `c_path` is a valid NUL-terminated string that outlives the
+        // call. A NULL result means there is no ACL (or it can't be read).
+        let acl = unsafe {
+            if dereference {
+                acl_get_file(c_path.as_ptr(), ACL_TYPE_EXTENDED)
+            } else {
+                acl_get_link_np(c_path.as_ptr(), ACL_TYPE_EXTENDED)
+            }
+        };
+        if acl.is_null() {
+            return false;
+        }
+        let mut entry: *mut c_void = std::ptr::null_mut();
+        // SAFETY: `acl` is a valid ACL returned above; `entry` is a valid
+        // out-pointer. The ACL is freed exactly once below.
+        let has_entry = unsafe { acl_get_entry(acl, ACL_FIRST_ENTRY, &raw mut entry) } == 0;
+        // SAFETY: `acl` came from acl_get_file/acl_get_link_np and isn't used after this.
+        unsafe { acl_free(acl) };
+        has_entry
+    }
 }
 
 /// Checks if a file has an Access Control List (ACL) named "security.capability" based on its extended attributes.
@@ -307,7 +362,7 @@ pub fn has_security_cap_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool 
 ///
 /// # Returns
 ///
-/// `u32`  the perm bits of a file having extended attributes of type 'system.posix_acl_default' with permissions
+/// `u32`  the perm bits of a file having extended attributes of type `system.posix_acl_default` with permissions
 /// otherwise returns a 0 if perm bits are 0 or the file has no extended attributes
 pub fn get_acl_perm_bits_from_xattr<P: AsRef<Path>>(source: P) -> u32 {
     // TODO: Modify this to work on non linux unix systems.
@@ -475,6 +530,24 @@ mod tests {
         assert_eq!(0o700, perm_bits);
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_file_has_acl_macos() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("test_file.txt");
+        File::create(&file_path).unwrap();
+        assert!(!has_acl(&file_path, true));
+
+        let status = std::process::Command::new("chmod")
+            .args(["+a", "everyone allow read"])
+            .arg(&file_path)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        assert!(has_acl(&file_path, true));
+        assert!(has_acl(&file_path, false));
+    }
+
     #[test]
     fn test_file_has_acl() {
         let temp_dir = tempdir().unwrap();
@@ -489,7 +562,8 @@ mod tests {
         let test_value = b"test value";
         xattr::set(&file_path, test_attr, test_value).unwrap();
 
-        assert!(has_acl(&file_path, true));
+        // On macOS an ACL isn't an xattr, so an xattr alone is not an ACL.
+        assert_eq!(has_acl(&file_path, true), cfg!(not(target_os = "macos")));
         assert!(!has_security_cap_acl(&file_path, true));
 
         // FreeBSD/NetBSD's xattr library does not support the "security" namespace

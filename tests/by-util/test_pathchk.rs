@@ -33,20 +33,15 @@ fn test_default_mode() {
     new_ucmd!().args(&["dir#/$file"]).succeeds().no_stdout();
 
     // fail on empty path
-    // WASI's symlink_metadata("") returns Ok instead of ENOENT, so pathchk
-    // accepts the empty operand there.
-    #[cfg(not(wasi_runner))]
-    {
-        new_ucmd!()
-            .args(&[""])
-            .fails()
-            .stderr_only("pathchk: '': No such file or directory\n");
+    new_ucmd!()
+        .args(&[""])
+        .fails()
+        .stderr_only("pathchk: '': No such file or directory\n");
 
-        new_ucmd!().args(&["", ""]).fails().stderr_only(
-            "pathchk: '': No such file or directory\n\
-            pathchk: '': No such file or directory\n",
-        );
-    }
+    new_ucmd!().args(&["", ""]).fails().stderr_only(
+        "pathchk: '': No such file or directory\n\
+        pathchk: '': No such file or directory\n",
+    );
 
     // fail on long path
     new_ucmd!()
@@ -196,9 +191,9 @@ fn test_empty_path_portability_message() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_pathchk_non_utf8_paths() {
     let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
     new_ucmd!().arg(&filename).succeeds();

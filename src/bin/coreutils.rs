@@ -9,6 +9,7 @@ use itertools::Itertools as _;
 use std::cmp;
 use std::ffi::OsString;
 use std::io::{self, Write};
+use std::process::ExitCode;
 use uucore::{Args, error::strip_errno};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -49,15 +50,15 @@ Currently defined functions:
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn main() {
+fn main() -> ExitCode {
     let utils = util_map();
     let mut args = uucore::args_os();
 
     let binary = validation::binary_path(&mut args);
-    let binary_as_util = validation::name(&binary).unwrap_or_else(|| {
+    let Some(binary_as_util) = validation::name(&binary) else {
         usage(&utils, "<unknown binary name>");
-        exit(0);
-    });
+        return ExitCode::SUCCESS;
+    };
 
     // binary name ends with util name?
     let is_coreutils = binary_as_util.ends_with("utils");
@@ -73,13 +74,13 @@ fn main() {
         uucore::set_utility_is_second_arg();
         args.next()
     } else {
-        validation::not_found(&OsString::from(binary_as_util));
+        return validation::not_found(&OsString::from(binary_as_util));
     };
 
     // 0th argument equals util name?
     if let Some(util_os) = util_name {
         let Some(util) = util_os.to_str() else {
-            validation::not_found(&util_os)
+            return validation::not_found(&util_os);
         };
 
         match util {
@@ -87,7 +88,7 @@ fn main() {
                 // we should fail with additional args https://github.com/uutils/coreutils/issues/11383#issuecomment-4082564058
                 if args.next().is_some() {
                     let _ = writeln!(io::stderr(), "coreutils: invalid argument");
-                    exit(1);
+                    return ExitCode::FAILURE;
                 }
                 let mut out = io::stdout().lock();
                 for util in utils.keys() {
@@ -95,19 +96,19 @@ fn main() {
                         && e.kind() != io::ErrorKind::BrokenPipe
                     {
                         let _ = writeln!(io::stderr(), "coreutils: {}", strip_errno(&e));
-                        exit(1);
+                        return ExitCode::FAILURE;
                     }
                 }
-                exit(0);
+                return ExitCode::SUCCESS;
             }
             "--version" | "-V" => {
                 if let Err(e) = writeln!(io::stdout(), "coreutils {VERSION} (multi-call binary)")
                     && e.kind() != io::ErrorKind::BrokenPipe
                 {
                     let _ = writeln!(io::stderr(), "coreutils: {}", strip_errno(&e));
-                    exit(1);
+                    return ExitCode::FAILURE;
                 }
-                exit(0);
+                return ExitCode::SUCCESS;
             }
             // Not a special command: fallthrough to calling a util
             _ => {}
@@ -120,17 +121,19 @@ fn main() {
             // Could be something like:
             // #[cfg(not(feature = "only_english"))]
             validation::setup_localization_or_exit(util);
-            exit(uumain(vec![util_os].into_iter().chain(args)));
+            let code = uumain(vec![util_os].into_iter().chain(args));
+            // ExitCode only holds a u8; larger codes (Windows) go through exit.
+            return u8::try_from(code).map_or_else(|_| exit(code), ExitCode::from);
         }
         // GNU coreutils --help string shows help for coreutils
-        if util == "--help" || util == "-h" {
+        if util == "-h" || (util.starts_with("--h") && "--help".starts_with(util)) {
             usage(&utils, binary_as_util);
-            exit(0);
+            return ExitCode::SUCCESS;
         } else if util.starts_with('-') {
             // Argument looks like an option but wasn't recognized
-            validation::unrecognized_option(binary_as_util, &util_os);
+            return validation::unrecognized_option(binary_as_util, &util_os);
         }
-        validation::not_found(&util_os);
+        return validation::not_found(&util_os);
     }
     // GNU just fails, but busybox tests needs usage
     // todo: patch the test suite instead
@@ -139,5 +142,5 @@ fn main() {
     } else {
         let _ = writeln!(io::stderr(), "coreutils: missing argument");
     }
-    exit(1);
+    ExitCode::FAILURE
 }

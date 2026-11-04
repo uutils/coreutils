@@ -170,6 +170,15 @@ impl EscapedChar {
             _ => self,
         }
     }
+
+    /// Returns true if character is escaping.
+    #[inline]
+    pub fn is_escaping(&self) -> bool {
+        matches!(
+            self.state,
+            EscapeState::Backslash(_) | EscapeState::Octal(_) | EscapeState::ForceQuote(_)
+        )
+    }
 }
 
 impl Iterator for EscapedChar {
