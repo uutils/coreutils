@@ -1589,10 +1589,11 @@ fn is_empty_dir(path: &Path) -> bool {
 /// Check if file is writable, returning the mode for potential reuse.
 #[cfg(unix)]
 fn is_writable(path: &Path) -> (bool, Option<u32>) {
-    if let Ok(metadata) = path.metadata() {
+    if let Ok(metadata) = path.symlink_metadata() {
         let mode = metadata.permissions().mode();
-        // Check if user write bit is set
-        ((mode & 0o200) != 0, Some(mode))
+        let is_symlink = metadata.is_symlink();
+        // Check if user write bit is set or target is symlink
+        ((mode & 0o200) != 0 || is_symlink, Some(mode))
     } else {
         (false, None) // If we can't get metadata, prompt user to be safe
     }
