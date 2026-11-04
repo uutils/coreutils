@@ -5,7 +5,7 @@
 
 // spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar ispeed ospeed NCCS nonhex gstty notachar cbreak evenp oddp CSIZE
 
-#![cfg(unix)]
+#![cfg(all(unix, not(target_os = "redox")))]
 
 use uutests::util::{expected_result, pty_path};
 use uutests::{at_and_ts, new_ucmd, unwrap_or_return};

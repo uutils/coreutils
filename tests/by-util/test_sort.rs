@@ -1427,9 +1427,9 @@ fn test_spill_write_error_does_not_panic() {
 
 // A read error must be reported with context and without the raw io::Error suffix.
 // It used to print `sort: Input/output error (os error 5)`.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore)]
 fn test_read_error_message() {
     // Reading /proc/self/mem from offset 0 fails with EIO.
     let result = new_ucmd!().arg("/proc/self/mem").fails_with_code(2);
@@ -2177,34 +2177,26 @@ fn test_separator_attached_equals_multi_char() {
         .stderr_contains("separator must be exactly one character long: '=a'");
 }
 
-#[test]
-fn test_error_on_incompatible_separators() {
-    let cases: [&[&str]; 3] = [
-        &["-t@", "-t!"],
-        &["-t", "@", "-t", "!"],
-        &["--field-separator=@", "-t", "!"],
-    ];
-    for args in cases {
-        new_ucmd!()
-            .args(args)
-            .fails_with_code(2)
-            .stderr_only("sort: incompatible tabs\n");
-    }
+#[rstest]
+#[case::attached(&["-t@", "-t!"])]
+#[case::separate(&["-t", "@", "-t", "!"])]
+#[case::long_and_short(&["--field-separator=@", "-t", "!"])]
+fn test_error_on_incompatible_separators(#[case] args: &[&str]) {
+    new_ucmd!()
+        .args(args)
+        .fails_with_code(2)
+        .stderr_only("sort: incompatible tabs\n");
 }
 
-#[test]
-fn test_same_separator_twice_ok() {
-    let cases: [&[&str]; 2] = [
-        &["-t:", "-t:", "-k2"],
-        &["--field-separator=:", "-t", ":", "-k2"],
-    ];
-    for args in cases {
-        new_ucmd!()
-            .args(args)
-            .pipe_in("a:2\nb:1\n")
-            .succeeds()
-            .stdout_only("b:1\na:2\n");
-    }
+#[rstest]
+#[case::short_twice(&["-t:", "-t:", "-k2"])]
+#[case::long_and_short(&["--field-separator=:", "-t", ":", "-k2"])]
+fn test_same_separator_twice_ok(#[case] args: &[&str]) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in("a:2\nb:1\n")
+        .succeeds()
+        .stdout_only("b:1\na:2\n");
 }
 
 #[test]
@@ -2508,6 +2500,24 @@ fn test_same_output_flag_twice_ok() {
         .pipe_in("")
         .succeeds()
         .no_stderr();
+}
+
+#[test]
+fn test_error_on_multiple_compress_programs() {
+    new_ucmd!()
+        .args(&["--compress-program", "pwd", "--compress-program", "python3"])
+        .fails_with_code(2)
+        .stderr_only("sort: multiple compress programs specified\n");
+}
+
+#[test]
+fn test_same_compress_program_twice_ok() {
+    // The input is far below the buffer size, so the program is never spawned.
+    new_ucmd!()
+        .args(&["--compress-program", "gzip", "--compress-program", "gzip"])
+        .pipe_in("b\na\n")
+        .succeeds()
+        .stdout_only("a\nb\n");
 }
 
 #[test]
@@ -4232,4 +4242,14 @@ fn test_numeric_looking_file_names_are_kept_verbatim(
     at.mkdir("007");
     at.touch("empty");
     ucmd.args(args).fails_with_code(2).stderr_is(expected);
+}
+
+#[test]
+fn test_debug_incompatible_with_output() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-o", "out", "--debug"])
+        .pipe_in("b\na\n")
+        .fails_with_code(2)
+        .stderr_only("sort: options '-o --debug' are incompatible\n");
+    assert!(!at.file_exists("out"));
 }

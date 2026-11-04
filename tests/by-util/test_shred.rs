@@ -217,19 +217,25 @@ fn test_shred_fail_no_perm() {
     let dir = "dir";
 
     let file = "test_shred_remove_a";
+    let other = "test_shred_remove_b";
 
     let binding = Path::new("dir").join(file);
     let path = binding.to_str().unwrap();
     at.mkdir(dir);
     at.touch(path);
+    at.touch(other);
     scene.ccmd("chmod").arg("a-w").arg(dir).succeeds();
 
     scene
         .ucmd()
         .arg("-uv")
         .arg(path)
+        .arg(other)
         .fails()
-        .stderr_contains("Couldn't rename to");
+        .stderr_contains(format!("{path}: failed to remove: Permission denied\n"));
+
+    assert!(at.file_exists(path));
+    assert!(!at.file_exists(other));
 }
 
 #[test]
@@ -355,9 +361,9 @@ fn test_shred_rename_exhaustion() {
     assert!(!at.file_exists("test"));
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_shred_non_utf8_paths() {
     use std::os::unix::ffi::OsStrExt;
     let ts = TestScenario::new(util_name!());
@@ -502,13 +508,11 @@ fn test_shred_inaccessible_file_reports_real_error() {
     at.touch("locked/file");
     set_permissions(at.plus_as_string("locked"), Permissions::from_mode(0o000)).unwrap();
 
-    let result = scene.ucmd().arg("locked/file").fails();
-    result.stderr_contains("Permission denied");
-    assert!(
-        !result.stderr_str().contains("No such file"),
-        "shred misreported an inaccessible file as missing: {}",
-        result.stderr_str()
-    );
+    scene
+        .ucmd()
+        .arg("locked/file")
+        .fails_with_code(1)
+        .stderr_only("shred: locked/file: failed to open for writing: Permission denied\n");
 
     // Restore search permission so the fixture directory can be cleaned up.
     set_permissions(at.plus_as_string("locked"), Permissions::from_mode(0o755)).unwrap();
@@ -576,19 +580,19 @@ shred: invalid file size: '4vv'
     }
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_couldnt_rename() {
     new_ucmd!()
         .args(&["-u", "/proc/self/mem"])
         .fails_with_code(1)
-        .stderr_is("shred: /proc/self/mem: Couldn't rename to '/proc/self/000': No such file or directory\n");
+        .stderr_is("shred: /proc/self/mem: failed to remove: Operation not permitted\n");
 }
 
 #[rstest::rstest]
-#[case(&["1e3"], "shred: 1e3: No such file or directory\n")]
-#[case(&["007"], "shred: 007: Not a file\n")]
+#[case(&["1e3"], "shred: 1e3: failed to open for writing: No such file or directory\n")]
+#[case(&["007"], "shred: 007: failed to open for writing: Is a directory\n")]
 #[cfg(not(windows))]
 fn test_numeric_looking_file_names_are_kept_verbatim(
     #[case] args: &[&str],
@@ -691,4 +695,44 @@ fn test_shred_dash_rejects_stdout_pipe() {
         .fails_with_code(1)
         .stderr_contains("shred: -:")
         .stderr_does_not_contain("/dev/fd/1");
+}
+
+#[test]
+fn test_shred_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    ucmd.arg("d")
+        .fails_with_code(1)
+        .stderr_only("shred: d: failed to open for writing: Is a directory\n");
+}
+
+#[test]
+fn test_shred_missing_file() {
+    new_ucmd!()
+        .arg("missing")
+        .fails_with_code(1)
+        .stderr_only("shred: missing: failed to open for writing: No such file or directory\n");
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO or socket file types")]
+fn test_shred_fifo() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("p");
+    ucmd.arg("p")
+        .fails_with_code(1)
+        .stderr_only("shred: p: invalid file type\n");
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO or socket file types")]
+fn test_shred_socket() {
+    // GNU reaches the open and reports its failure; so does shred here.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let _listener = std::os::unix::net::UnixListener::bind(at.plus("s")).unwrap();
+    ucmd.arg("s")
+        .fails_with_code(1)
+        .stderr_contains("shred: s: failed to open for writing: ");
 }

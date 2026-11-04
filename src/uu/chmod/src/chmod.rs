@@ -177,9 +177,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap_or_default();
     let cmode = if fmode.is_some() {
         // "--reference" and MODE are mutually exclusive
-        // if "--reference" was used MODE needs to be interpreted as another FILE
+        // if "--reference" was used MODE needs to be interpreted as another FILE,
+        // it is the first FILE, keep the command-line order
         // it wasn't possible to implement this behavior directly with clap
-        files.push(OsString::from(cmode));
+        files.insert(0, OsString::from(cmode));
         None
     } else {
         Some(cmode)
@@ -422,6 +423,27 @@ impl Chmoder {
         }
     }
 
+    /// Report when the umask kept bits a bare mode like -w asked to drop
+    fn report_umask_conflict(&self, file: &Path, new_mode: u32, naively_expected_new_mode: u32) {
+        // A bare mode such as `-w` is umask-relative, so the umask can keep permissions that
+        // the user asked to drop. GNU reports that as an error, but only when the mode was
+        // written in the option-like form (`chmod -w f`), where it doubles as a hint that the
+        // argument was consumed as a mode. After `--` the operand is unambiguous and GNU stays
+        // silent, so the diagnostic is suppressed here too.
+        if self.fmode.is_none()
+            && self.option_like_mode
+            && (new_mode & !naively_expected_new_mode) != 0
+        {
+            // Shown even under `-f`, as GNU does: it is about the mode as
+            // typed, not about this file.
+            show!(ChmodError::NewPermissions(
+                file.into(),
+                display_permissions_unix(new_mode, false),
+                display_permissions_unix(naively_expected_new_mode, false),
+            ));
+        }
+    }
+
     /// Report a failure met on one file.
     ///
     /// The remaining operands, and the rest of a tree under `-R`, are still
@@ -440,6 +462,12 @@ impl Chmoder {
     /// subtree was left alone.
     fn report_unreadable_dir(&self, path: &Path, err: std::io::Error) {
         self.report_failure(ChmodError::CannotReadDirectory(path.into(), err).into());
+        self.report_not_accessed(path);
+    }
+
+    /// With --verbose, GNU follows a failure to stat or read FILE with
+    /// "'FILE' could not be accessed" on stdout, even with --quiet.
+    fn report_not_accessed(&self, path: &Path) {
         if self.verbose {
             println!(
                 "{}",
@@ -487,16 +515,10 @@ impl Chmoder {
                             show!(ChmodError::DanglingSymlink(filename.into()));
                             set_exit_code(1);
                         }
-
-                        if self.verbose {
-                            println!(
-                                "{}",
-                                translate!("chmod-verbose-failed-dangling", "file" => filename.quote())
-                            );
-                        }
                     } else if !self.quiet {
                         show!(ChmodError::NoSuchFile(filename.into()));
                     }
+                    self.report_not_accessed(file);
                     // GNU exits with exit code 1 even if -q or --quiet are passed
                     // So we set the exit code, because it hasn't been set yet if `self.quiet` is true.
                     set_exit_code(1);
@@ -506,6 +528,7 @@ impl Chmoder {
                     if !self.quiet {
                         show!(ChmodError::PermissionDenied(filename.into()));
                     }
+                    self.report_not_accessed(file);
                     set_exit_code(1);
                     continue;
                 }
@@ -810,7 +833,8 @@ impl Chmoder {
         symlink_behavior: SymlinkBehavior,
     ) -> UResult<()> {
         // Calculate the new mode using the helper method
-        let (new_mode, _) = self.calculate_new_mode(current_mode, file_path.is_dir())?;
+        let (new_mode, naively_expected_new_mode) =
+            self.calculate_new_mode(current_mode, file_path.is_dir())?;
 
         // Use safe traversal to change the mode
         if let Err(e) = dir_fd.chmod_at(entry_name, new_mode, symlink_behavior) {
@@ -833,6 +857,8 @@ impl Chmoder {
         // Report the change using the helper method
         self.report_permission_change(file_path, current_mode, new_mode);
 
+        self.report_umask_conflict(file_path, new_mode, naively_expected_new_mode);
+
         Ok(())
     }
 
@@ -854,10 +880,13 @@ impl Chmoder {
                         Self::print_neither_changed(file.into())?;
                     }
                     Ok(()) // Skip dangling symlinks
-                } else if err.kind() == std::io::ErrorKind::PermissionDenied {
-                    Err(ChmodError::PermissionDenied(file.into()).into())
                 } else {
-                    Err(ChmodError::CannotStat(file.into(), err).into())
+                    self.report_not_accessed(file);
+                    if err.kind() == std::io::ErrorKind::PermissionDenied {
+                        Err(ChmodError::PermissionDenied(file.into()).into())
+                    } else {
+                        Err(ChmodError::CannotStat(file.into(), err).into())
+                    }
                 };
             }
         };
@@ -880,23 +909,7 @@ impl Chmoder {
 
         self.change_file(fperm, self.fmode.unwrap_or(new_mode), file)?;
 
-        // A bare mode such as `-w` is umask-relative, so the umask can keep permissions that
-        // the user asked to drop. GNU reports that as an error, but only when the mode was
-        // written in the option-like form (`chmod -w f`), where it doubles as a hint that the
-        // argument was consumed as a mode. After `--` the operand is unambiguous and GNU stays
-        // silent, so the diagnostic is suppressed here too.
-        if self.fmode.is_none()
-            && self.option_like_mode
-            && (new_mode & !naively_expected_new_mode) != 0
-        {
-            // Shown even under `-f`, as GNU does: it is about the mode as
-            // typed, not about this file.
-            show!(ChmodError::NewPermissions(
-                file.into(),
-                display_permissions_unix(new_mode, false),
-                display_permissions_unix(naively_expected_new_mode, false),
-            ));
-        }
+        self.report_umask_conflict(file, new_mode, naively_expected_new_mode);
 
         Ok(())
     }

@@ -20,13 +20,12 @@ use std::path::{Path, PathBuf, StripPrefixError};
 
 use indicatif::ProgressBar;
 use uucore::display::Quotable;
-use uucore::error::{UIoError, set_exit_code};
+use uucore::error::set_exit_code;
 use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, canonicalize, path_ends_with_terminator,
 };
 use uucore::show;
 use uucore::translate;
-use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -117,13 +116,14 @@ struct Context<'a> {
     root: &'a Path,
 }
 
-// True if the path ends with a dot component (e.g. ".", "./", "dir/.").
-fn ends_with_curdir(path: &Path) -> bool {
+// True if the path ends with a "." or ".." component (e.g. ".", "dir/.", "..", "dir/../").
+fn ends_with_dot_component(path: &Path) -> bool {
     let mut bytes = path.as_os_str().as_encoded_bytes();
     while let [rest @ .., b'/' | b'\\'] = bytes {
         bytes = rest;
     }
-    bytes == b"." || bytes.ends_with(b"/.") || bytes.ends_with(b"\\.")
+    let last = bytes.rsplit(|&b| b == b'/' || b == b'\\').next();
+    matches!(last, Some(b"." | b".."))
 }
 
 impl<'a> Context<'a> {
@@ -134,7 +134,7 @@ impl<'a> Context<'a> {
             env::current_dir()?
         };
         let root_path = current_dir.join(root);
-        let root_parent = if target.exists() && !ends_with_curdir(root) {
+        let root_parent = if target.exists() && !ends_with_dot_component(root) {
             root_path.parent().map(ToOwned::to_owned)
         } else {
             Some(root_path)
@@ -323,14 +323,7 @@ fn copy_direntry(
             // cause us to continue walking the directory?
             match err {
                 CpError::IoErrContext(e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
-                    show!(uio_error!(
-                        e,
-                        "{}",
-                        translate!(
-                            "cp-error-cannot-open-for-reading",
-                            "source" => entry.source_relative.quote()
-                        ),
-                    ));
+                    show!(CpError::CannotOpenForReading(entry.source_relative.clone()));
                 }
                 e => return Err(e),
             }

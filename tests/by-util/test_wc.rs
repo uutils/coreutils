@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars ioerrdir
+// spell-checker:ignore (linux) NOFILE
 
 use rstest::rstest;
 #[cfg(unix)]
@@ -42,6 +43,20 @@ fn test_count_bytes_large_stdin() {
             .succeeds()
             .stdout_is_bytes(expected.as_bytes());
     }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
+fn test_count_bytes_page_aligned_without_splice() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input", &"x".repeat(64 * 1024));
+
+    // Leave room for stdin, stdout, stderr and the input file, but not /dev/null.
+    ucmd.args(&["-c", "input"])
+        .limit(rlimit::Resource::NOFILE, 4, 4)
+        .succeeds()
+        .stdout_only("65536 input\n");
 }
 
 #[test]
@@ -283,9 +298,9 @@ fn test_read_from_nonexistent_file() {
         .stderr_only("wc: bogusfile: No such file or directory\n");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_files_from_pseudo_filesystem() {
     use pretty_assertions::assert_ne;
     let result = new_ucmd!().arg("-c").arg("/proc/cpuinfo").succeeds();
@@ -570,8 +585,8 @@ fn test_files0_progressive_stream() {
 }
 
 #[cfg(target_os = "linux")]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_files0_stops_after_stdout_write_error() {
     use std::fs::OpenOptions;
 
@@ -674,8 +689,8 @@ fn test_invalid_byte_sequence_word_count() {
 }
 
 #[cfg(unix)]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_simd_respects_glibc_tunables() {
     use std::fmt::Write as _;
 

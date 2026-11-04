@@ -215,6 +215,13 @@ If you edit a piece of code, make sure to update any comments that need to
 change as a result. The only thing worse than having no comments is having
 outdated comments!
 
+### Tests use `#[rstest]`
+
+Tests use [`rstest`](https://crates.io/crates/rstest) with `#[case(...)]` for
+parameterized test cases. Prefer `#[rstest]` over writing multiple near-identical
+`#[test]` functions when a test has multiple cases. Plain `#[test]` is fine for
+single-case tests; there is no need to convert existing tests.
+
 ## AI policy
 
 AI-assisted contributions are allowed, but the same standards apply as for

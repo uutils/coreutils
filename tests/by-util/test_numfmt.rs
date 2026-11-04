@@ -66,7 +66,6 @@ fn test_invalid_arg() {
 // numfmt: --format width accounting diverges from GNU for multi-byte --suffix
 #[case::multibyte_suffix_issue11937(&["--suffix=€", "--format=%10.2f", "692"], "   692.00€\n")]
 #[case::float_precision_greater_than_16bits(&["--to=iec", "--format=%.65536f", "1"], "1\n")]
-#[case::float_precision_greater_than_16bits_without_scaling(&["--format=%.65536f", "1.5"], "2\n")]
 #[case::float_precision_greater_than_16bits_with_suffix(&["--to=si", "--format=%.65536f", "1000000"], "1M\n")]
 // https://github.com/uutils/coreutils/issues/13272
 // argument following `--header` must not be interpreted as the option's value
@@ -1069,8 +1068,8 @@ fn test_zero_terminated_initial_newline() {
 }
 
 #[cfg(unix)]
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_non_utf8_delimiter() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1408,8 +1407,8 @@ fn test_format_value_below_large_threshold_ok() {
         .stdout_is("999999999999999999.0\n");
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
 fn test_locale_fr_output() {
     // Output uses the locale separator
     new_ucmd!()
@@ -1419,8 +1418,8 @@ fn test_locale_fr_output() {
         .stdout_is("1,5K\n");
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
 fn test_locale_fr_input_comma() {
     // fr_FR should take '1,5' as a number
     new_ucmd!()
@@ -1430,8 +1429,8 @@ fn test_locale_fr_input_comma() {
         .stdout_is("1,500\n");
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
 fn test_locale_fr_rejects_period() {
     // '.' isn't valid in fr_FR, should bail
     new_ucmd!()
@@ -1488,12 +1487,50 @@ fn test_si_format_precision_no_cap() {
 }
 
 #[test]
+fn test_value_too_large_without_precision() {
+    new_ucmd!()
+        .arg("10000000000000000000")
+        .fails_with_code(2)
+        .stderr_only("numfmt: value too large to be printed: '1e+19' (consider using --to)\n");
+    new_ucmd!()
+        .args(&["--format=%.20f", "1"])
+        .fails_with_code(2)
+        .stderr_only(
+            "numfmt: value/precision too large to be printed: '1/20' (consider using --to)\n",
+        );
+    new_ucmd!()
+        .args(&["--format=%.65536f", "1.5"])
+        .fails_with_code(2)
+        .stderr_only(
+            "numfmt: value/precision too large to be printed: '1.5/65536' (consider using --to)\n",
+        );
+}
+
+#[test]
+fn test_value_with_suffix_too_large_to_print() {
+    new_ucmd!()
+        .args(&["--from=si", "1Z"])
+        .fails_with_code(2)
+        .stderr_only("numfmt: value too large to be printed: '1e+21' (consider using --to)\n");
+    new_ucmd!()
+        .args(&["--from=si", "--format=%.1f", "1Z"])
+        .fails_with_code(2)
+        .stderr_only(
+            "numfmt: value/precision too large to be printed: '1e+21/1' (consider using --to)\n",
+        );
+    new_ucmd!()
+        .args(&["--from=si", "9E"])
+        .succeeds()
+        .stdout_only("9000000000000000000\n");
+}
+
+#[test]
 fn test_format_precision_too_large_on_zero() {
     new_ucmd!()
         .args(&["--format=%.40f", "0"])
         .fails_with_code(2)
         .stderr_only(
-            "numfmt: value/precision too large to be printed: '0e+0/40' (consider using --to)\n",
+            "numfmt: value/precision too large to be printed: '0/40' (consider using --to)\n",
         );
     new_ucmd!()
         .args(&["--format=%.18f", "0"])
@@ -2087,4 +2124,24 @@ fn test_write_error_is_reported_and_fatal() {
             .fails_with_code(1)
             .stderr_is("numfmt: write error: No space left on device\n");
     }
+}
+
+#[test]
+fn test_repeated_option_last_one_wins() {
+    new_ucmd!()
+        .args(&["--to=si", "--to=si", "1000"])
+        .succeeds()
+        .stdout_only("1.0k\n");
+    new_ucmd!()
+        .args(&["--to=si", "--to=iec", "2000"])
+        .succeeds()
+        .stdout_only("2.0K\n");
+}
+
+#[test]
+fn test_repeated_field_is_an_error() {
+    new_ucmd!()
+        .args(&["--field=1", "--field=1", "1000"])
+        .fails_with_code(1)
+        .stderr_only("numfmt: multiple field specifications\n");
 }

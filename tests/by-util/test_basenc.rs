@@ -147,9 +147,9 @@ fn test_base32hex_truncated_block_keeps_prefix() {
 }
 
 // This test fails if the Base16 output buffer is not explicitly flushed.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_base16_write_error_is_reported() {
     new_ucmd!()
         .arg("--base16")
@@ -182,6 +182,26 @@ fn test_base58_large_file_no_chunking() {
             .ends_with("ZNRRacEnhrY83ZEYkpwWVZNFK5DFRasr\nw693NsNGtiQ9fYAj")
     );
     // spell-checker:enable
+}
+
+#[test]
+fn test_base58_decode_large_input_round_trip() {
+    // Decoding must not cut the input into 1024-digit chunks either.
+    // spell-checker:disable
+    let input = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(50);
+    // spell-checker:enable
+    let encoded = new_ucmd!()
+        .arg("--base58")
+        .pipe_in(input.clone())
+        .succeeds()
+        .stdout_move_str();
+    assert!(encoded.len() > 1024);
+
+    new_ucmd!()
+        .args(&["--base58", "-d"])
+        .pipe_in(encoded)
+        .succeeds()
+        .stdout_is(input);
 }
 
 #[test]
@@ -248,9 +268,9 @@ fn test_file() {
         .stdout_is("Zm9v\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_file_with_non_utf8_name() {
     use std::os::unix::ffi::OsStringExt;
     let (at, mut ucmd) = at_and_ucmd!();

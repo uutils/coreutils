@@ -2,7 +2,7 @@ name: GnuTests
 
 # spell-checker:ignore (abbrev/names) CodeCov gnulib GnuTests
 # spell-checker:ignore (jargon) submodules devel
-# spell-checker:ignore (libs/utils) chksum dpkg getenforce gperf lcov libexpect limactl pyinotify setenforce shopt valgrind libattr libcap taiki-e zstd cpio
+# spell-checker:ignore (libs/utils) chksum gperf lcov libexpect limactl pyinotify shopt valgrind libattr libcap taiki-e zstd cpio
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
 # spell-checker:ignore userns nodocs
@@ -22,7 +22,7 @@ permissions:
 
 # End the current execution if there is a new changeset in the PR.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
@@ -194,7 +194,7 @@ jobs:
 
   selinux:
     name: Run GNU tests (SELinux)
-    runs-on: ubuntu-latest # using VM's glibc
+    runs-on: ubuntu-24.04 # TODO: use ubuntu-latest, https://github.com/uutils/coreutils/issues/15955 # ubuntu-latest # using VM's glibc
     steps:
     #### Get the code
     - name: Checkout code (uutils)

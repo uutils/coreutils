@@ -7,11 +7,22 @@
 
 use rstest::rstest;
 use uucore::display::Quotable;
-use uutests::new_ucmd;
+use uutests::{at_and_ucmd, new_ucmd};
 
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[test]
+fn test_bare_dash_reads_stdin_in_file_list() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("file", "file\n");
+
+    ucmd.args(&["-", "file"])
+        .pipe_in("stdin\n")
+        .succeeds()
+        .stdout_is("stdin\nfile\n");
 }
 
 #[test]
@@ -242,10 +253,7 @@ fn test_tabs_with_too_large_size() {
 }
 
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI runner target is not suitable for this address-space-limit regression test"
-)]
+#[uutests::wasi_ignore(AddressSpaceLimitUnsuitable)]
 #[test]
 fn test_large_tab_stop_without_tabs_does_not_allocate() {
     use rlimit::Resource;
@@ -414,9 +422,9 @@ fn test_nonexisting_file() {
         .stdout_contains_line("// !note: file contains significant whitespace");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_read_error() {
     new_ucmd!()
         .arg("/proc/self/mem")
@@ -424,9 +432,9 @@ fn test_read_error() {
         .stderr_contains("expand: /proc/self/mem: Input/output error");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_expand_non_utf8_paths() {
     use std::os::unix::ffi::OsStringExt;
     use uutests::at_and_ucmd;

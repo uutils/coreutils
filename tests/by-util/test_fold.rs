@@ -18,9 +18,9 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_non_utf8_filename() {
     use std::os::unix::ffi::OsStringExt;
 
@@ -32,9 +32,9 @@ fn test_non_utf8_filename() {
     ucmd.arg(&filename).succeeds().stdout_only("foo");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_non_utf8_filename_of_nonexisting_file() {
     use std::os::unix::ffi::OsStringExt;
 
@@ -251,6 +251,18 @@ fn test_zero_width_spaces_in_column_mode() {
         .pipe_in(input.clone())
         .succeeds()
         .stdout_is(&input);
+}
+
+#[test]
+fn test_zero_width_after_newline_in_column_mode() {
+    let input = "abc\n\u{200B}From x\n\u{200D}\u{0301}\nb\n";
+    for args in [&[][..], &["-s"]] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is(input);
+    }
 }
 
 #[test]
@@ -597,10 +609,7 @@ fn test_bytewise_carriage_return_is_not_word_boundary() {
 }
 
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: killing the wasmtime process discards the unflushed output buffer, so the streamed bytes never reach stdout"
-)]
+#[uutests::wasi_ignore(KillDiscardsUnflushedOutput)]
 #[test]
 fn test_bytewise_read_from_pseudo_device() {
     let mut child = new_ucmd!().arg("-b").arg("/dev/zero").run_no_wait();

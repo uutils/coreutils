@@ -814,6 +814,21 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     return Ok(());
                 }
 
+                // Check before the destination is removed below, which would
+                // remove the source if both are the same file.
+                let source_meta = metadata(source)?;
+                if let Ok(to_stat) =
+                    parent_fd.stat_at(filename.as_os_str(), SymlinkBehavior::Follow)
+                {
+                    // st_dev and st_ino types vary by platform (i32/u32 on macOS, u64 on Linux)
+                    #[allow(clippy::unnecessary_cast)]
+                    if source_meta.dev() == to_stat.st_dev as u64
+                        && source_meta.ino() == to_stat.st_ino as u64
+                    {
+                        return Err(InstallError::SameFile(source.clone(), target.clone()).into());
+                    }
+                }
+
                 let backup_path = perform_backup(source, &target, b)?;
 
                 if let Err(e) = parent_fd.unlink_at(filename.as_os_str(), false)
@@ -978,7 +993,8 @@ fn perform_backup(from: &Path, to: &Path, b: &Behavior) -> UResult<Option<PathBu
         );
     }
 
-    if to.exists() {
+    // A dangling symlink is still a destination entry to back up.
+    if to.symlink_metadata().is_ok() {
         if b.verbose {
             writeln!(
                 stdout(),
@@ -1009,19 +1025,6 @@ fn perform_backup(from: &Path, to: &Path, b: &Behavior) -> UResult<Option<PathBu
 /// - `copy_file` uses path-based `OpenOptions::new().create_new().open()`
 #[cfg(not(target_os = "redox"))]
 fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsStr) -> UResult<()> {
-    let from_meta = metadata(from)?;
-
-    // Check if source and destination are the same file
-    if let Ok(to_stat) = to_parent_fd.stat_at(to_filename, SymlinkBehavior::Follow) {
-        // st_dev and st_ino types vary by platform (i32/u32 on macOS, u64 on Linux)
-        #[allow(clippy::unnecessary_cast)]
-        if from_meta.dev() == to_stat.st_dev as u64 && from_meta.ino() == to_stat.st_ino as u64 {
-            return Err(
-                InstallError::SameFile(from.to_path_buf(), PathBuf::from(to_filename)).into(),
-            );
-        }
-    }
-
     let mut src = File::open(from)?;
     let mut dst = to_parent_fd.open_file_at(to_filename)?;
     copy_fast(&mut src, &mut dst)?;
@@ -1272,15 +1275,10 @@ fn should_set_selinux_context(b: &Behavior) -> bool {
     b.privileged && (b.context.is_some() || b.default_context)
 }
 
-/// Check if a file needs to be copied due to ownership differences when no explicit group is specified.
-/// Returns true if the destination file's ownership would differ from what it should be after installation.
-fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
+/// Check if a file needs to be copied due to a group difference when no explicit group is specified.
+/// Returns true if the destination file's group would differ from what it should be after installation.
+fn needs_copy_for_group(to: &Path, to_meta: &fs::Metadata) -> bool {
     use std::os::unix::fs::MetadataExt;
-
-    // Check if the destination file's owner differs from the effective user ID
-    if to_meta.uid() != geteuid().as_raw() {
-        return true;
-    }
 
     // For group, we need to determine what the group would be after installation
     // If no group is specified, the behavior depends on the directory:
@@ -1376,16 +1374,16 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
 
         // TODO: if -P (#1809) and from/to contexts mismatch, return true.
 
-        // Check if the owner ID is specified and differs from the destination file's owner.
-        match b.owner_id {
-            Some(uid) if uid != to_meta.uid() => return true,
-            _ => {}
+        // Check if the destination file's owner differs from the specified owner ID,
+        // or from the effective user ID when no owner is specified.
+        if to_meta.uid() != b.owner_id.unwrap_or_else(|| geteuid().as_raw()) {
+            return true;
         }
 
         // Check if the group ID is specified and differs from the destination file's group.
         match b.group_id {
             Some(gid) if gid != to_meta.gid() => return true,
-            None if needs_copy_for_ownership(to, &to_meta) => return true,
+            None if needs_copy_for_group(to, &to_meta) => return true,
             _ => {}
         }
     }

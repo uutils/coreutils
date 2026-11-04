@@ -11,13 +11,10 @@ use crate::translate;
 #[cfg(all(unix, not(target_os = "haiku")))]
 pub use libc::{major, makedev, minor};
 use std::collections::VecDeque;
-use std::env;
 use std::ffi::{OsStr, OsString};
-use std::fs;
 use std::fs::read_dir;
 use std::hash::Hash;
-use std::io::Stdin;
-use std::io::{Error, ErrorKind, Result as IOResult};
+use std::io::{Error, ErrorKind, Result as IOResult, Stdin};
 #[cfg(any(unix, target_os = "wasi"))]
 use std::os::fd::AsFd;
 #[cfg(unix)]
@@ -29,6 +26,7 @@ use std::os::windows::io::AsRawHandle;
 use std::path::{Component, MAIN_SEPARATOR, Path, PathBuf};
 #[cfg(unix)]
 use std::sync::OnceLock;
+use std::{env, fs};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::MAX_PATH;
 #[cfg(windows)]
@@ -921,9 +919,10 @@ pub fn is_stdin_directory(stdin: &Stdin) -> bool {
 
 pub mod sane_blksize {
 
+    use std::fs::metadata;
     #[cfg(unix)]
     use std::os::unix::fs::MetadataExt;
-    use std::{fs::metadata, path::Path};
+    use std::path::Path;
 
     pub const DEFAULT: u64 = 512;
     pub const MAX: u64 = (u32::MAX / 8 + 1) as u64;

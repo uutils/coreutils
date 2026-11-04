@@ -21,8 +21,7 @@ use clap::{ArgMatches, Command, Error};
 use std::error::Error as StdError;
 use std::ffi::OsString;
 
-use std::io::Write as _;
-use std::io::stderr;
+use std::io::{Write as _, stderr};
 
 /// Color enum for consistent styling
 #[derive(Debug, Clone, Copy)]

@@ -20,6 +20,9 @@ use uutests::new_ucmd;
 #[case::sub_q_string_non_printable(&["non-printable: %q", "\"$test\""], "non-printable: '\"$test\"'")]
 #[case::sub_q_string_special_non_printable(&["non-printable: %q", "test~"], "non-printable: test~")]
 #[case::sub_q_string_empty(&["%q", ""], "''")]
+#[case::sub_q_string_lone_open_brace(&["%q", "{"], "'{'")]
+#[case::sub_q_string_lone_close_brace(&["%q", "}"], "'}'")]
+#[case::sub_q_string_brace_group(&["%q", "{a,b}"], "{a,b}")]
 #[case::sub_char(&["the letter %c", "A"], "the letter A")]
 #[case::sub_char_from_string(&["%c%c%c", "five", "%", "oval"], "f%o")]
 #[case::sub_num_int(&["twenty is %i", "20"], "twenty is 20")]
@@ -663,6 +666,34 @@ fn invalid_precision_tests() {
     }
 }
 
+#[test]
+fn invalid_star_precision_string() {
+    for precision in ["2147483648", &i64::MAX.to_string()] {
+        new_ucmd!()
+            .args(&["%.*s|\n", precision, "x"])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_is(format!("printf: invalid precision: '{precision}'\n"));
+    }
+
+    // The failure ends printf, so the rest of the format is not run.
+    new_ucmd!()
+        .args(&["%.*s %s\n", "2147483648", "a", "b"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("printf: invalid precision: '2147483648'\n");
+
+    // The cap is i32::MAX itself, and only a `*` precision is capped.
+    new_ucmd!()
+        .args(&["%.*s|\n", "2147483647", "x"])
+        .succeeds()
+        .stdout_only("x|\n");
+    new_ucmd!()
+        .args(&["%.4294967296s|\n", "x"])
+        .succeeds()
+        .stdout_only("x|\n");
+}
+
 // The following padding-tests test for the cases in which flags in ['0', ' '] are given.
 // For integer, only try to pad when no precision is given, while
 // for float, always try to pad
@@ -898,9 +929,9 @@ fn mb_input() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn mb_invalid_unicode() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -987,9 +1018,9 @@ fn positional_format_specifiers() {
         .stdout_only("Octal: 115, Int: 42, Float: 3.141590, String: hello, Hex: ff, Scientific: 1.000000e-05, Char: A, Unsigned: 100, Integer: 123");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn non_utf_8_input() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1102,6 +1133,15 @@ fn test_q_string_control_chars_with_quotes() {
         .args(&["%q", input])
         .succeeds()
         .stdout_only("''$'\\001'\\'''$'\\001'");
+}
+
+#[test]
+fn test_q_string_c1_control_char_with_quote() {
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["%q", "it's\u{9b}here"])
+        .succeeds()
+        .stdout_only("'it'\\''s'$'\\302\\233''here'");
 }
 
 // Output with no trailing newline stays in the buffer until the process exits,

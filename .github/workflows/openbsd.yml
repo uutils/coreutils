@@ -3,6 +3,7 @@ name: OpenBSD
 # spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc sccache nextest copyback logind
 
 env:
+  FEATURES: "feat_Tier1,feat_require_unix"
   # * style job configuration
   STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
 
@@ -17,7 +18,7 @@ permissions:
 
 # End the current execution if there is a new changeset in the PR.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
@@ -99,7 +100,7 @@ jobs:
           ## cargo clippy lint testing
           if [ -z "\${FAULT}" ]; then
             echo "::group::cargo clippy"
-            CLIPPY_ARGS="--features feat_os_unix --fault-type \${FAULT_TYPE}"
+            CLIPPY_ARGS="--features ${{ env.FEATURES }} --fault-type \${FAULT_TYPE}"
             if [ -n "\${FAIL_ON_FAULT}" ]; then CLIPPY_ARGS="\${CLIPPY_ARGS} --fail-on-fault"; fi
             python3 util/run-clippy.py \${CLIPPY_ARGS} || FAULT=true
             echo "::endgroup::"
@@ -198,7 +199,7 @@ jobs:
           # Use cargo test since nextest might not support OpenBSD
           if (test -z "\$FAULT"); then
             echo "::group::cargo test (workspace)"
-            cargo test --features feat_os_unix || FAULT=1
+            cargo test --features ${{ env.FEATURES }} || FAULT=1
             echo "::endgroup::"
           fi
           if (test -z "\$FAULT"); then

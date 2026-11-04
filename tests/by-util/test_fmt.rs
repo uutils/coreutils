@@ -7,7 +7,7 @@
 
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
-use uutests::new_ucmd;
+use uutests::{at_and_ucmd, new_ucmd};
 
 #[test]
 fn test_invalid_arg() {
@@ -250,6 +250,43 @@ fn test_fmt_non_existent_file() {
     new_ucmd!()
         .args(&["non-existing"])
         .fails_with_code(1)
+        .stderr_is("fmt: cannot open 'non-existing' for reading: No such file or directory\n");
+}
+
+// Windows refuses to open a directory as a file, so the error differs there.
+#[cfg(not(windows))]
+#[test]
+fn test_fmt_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    ucmd.arg("dir")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("fmt: error reading 'dir': Is a directory\n");
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_fmt_continues_after_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.write("a.txt", "one\ntwo\n");
+    ucmd.args(&["dir", "non-existing", "a.txt"])
+        .fails_with_code(1)
+        .stdout_is("one two\n")
+        .stderr_is(
+            "fmt: error reading 'dir': Is a directory\n\
+             fmt: cannot open 'non-existing' for reading: No such file or directory\n",
+        );
+}
+
+#[test]
+fn test_fmt_continues_after_missing_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a.txt", "one\ntwo\n");
+    ucmd.args(&["non-existing", "a.txt"])
+        .fails_with_code(1)
+        .stdout_is("one two\n")
         .stderr_is("fmt: cannot open 'non-existing' for reading: No such file or directory\n");
 }
 
@@ -523,9 +560,9 @@ fn test_fmt_knuth_plass_line_breaking() {
         .stdout_is(expected);
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_fmt_non_utf8_paths() {
     use uutests::at_and_ucmd;
 

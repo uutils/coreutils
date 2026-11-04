@@ -575,6 +575,13 @@ fn assert_not_same_file(
             || source.ends_with("/.")
             || source.is_file())
     {
+        // GNU mv skips the same-file check when it would not replace the
+        // target anyway (-n, --update=none), so this is a silent no-op.
+        if (opts.overwrite == OverwriteMode::NoClobber || opts.update == UpdateMode::None)
+            && source.file_name().is_some()
+        {
+            return Ok(());
+        }
         return Err(MvError::SameFile(source.quote().to_string(), target_display()).into());
     } else if (same_file || canonicalized_target.starts_with(canonicalized_source))
         // don't error if we're moving a symlink of a directory into itself
@@ -874,7 +881,15 @@ fn rename(
         .is_ok_and(|metadata| metadata.is_dir())
     {
         // normalize behavior between *nix and windows
-        if from.is_dir() {
+        // A symlink to a directory is not a directory: like any other
+        // non-directory, it must not replace the empty directory. Drop
+        // trailing slashes first, as they make lstat follow the symlink.
+        if from
+            .components()
+            .as_path()
+            .symlink_metadata()
+            .is_ok_and(|metadata| metadata.is_dir())
+        {
             if is_empty_dir(to) {
                 fs::remove_dir(to)?;
             } else {

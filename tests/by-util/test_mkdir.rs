@@ -248,9 +248,9 @@ fn test_mkdir_dup_file() {
     scene.ucmd().arg("-p").arg(test_file).fails();
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(not(windows))]
-#[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
 fn test_symbolic_mode() {
     let (at, mut ucmd) = at_and_ucmd!();
     let test_dir = "test_dir";
@@ -260,9 +260,9 @@ fn test_symbolic_mode() {
     assert_eq!(perms, 0o40777);
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(not(windows))]
-#[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
 fn test_symbolic_alteration() {
     let (at, mut ucmd) = at_and_ucmd!();
     let test_dir = "test_dir";
@@ -278,9 +278,9 @@ fn test_symbolic_alteration() {
     assert_eq!(perms, 0o40577);
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(not(windows))]
-#[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
 fn test_multi_symbolic() {
     let (at, mut ucmd) = at_and_ucmd!();
     let test_dir = "test_dir";
@@ -436,9 +436,9 @@ fn test_mkdir_p_respects_umask_without_acl() {
     assert_eq!(perms & 0o777, 0o755);
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
 fn test_mkdir_explicit_mode_zero() {
     use std::os::unix::fs::PermissionsExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -565,7 +565,7 @@ fn test_selinux() {
         new_ucmd!()
             .arg(arg)
             .arg("-v")
-            .arg(at.plus_as_string(dest))
+            .arg(at.plus(dest))
             .succeeds()
             .stdout_contains("created directory");
 
@@ -586,7 +586,7 @@ fn test_selinux_invalid() {
     let dest = "test_dir_a";
     new_ucmd!()
         .arg("--context=testtest")
-        .arg(at.plus_as_string(dest))
+        .arg(at.plus(dest))
         .fails()
         .no_stdout()
         .stderr_contains("failed to set default file creation context to 'testtest':");
