@@ -7173,6 +7173,46 @@ fn test_acl_display() {
         .stdout_matches(&re_without_acl);
 }
 
+// A non-ACL xattr alone must not mark a file `+`.
+#[cfg(all(unix, not(target_vendor = "apple")))]
+#[test]
+fn test_user_xattr_is_not_acl() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("with_xattr");
+
+    match Command::new("setfattr")
+        .args([
+            "-n",
+            "user.test",
+            "-v",
+            "1",
+            &at.plus_as_string("with_xattr"),
+        ])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: setfattr failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfattr failed with {e}");
+            return;
+        }
+    }
+
+    let re_no_acl = Regex::new(r"(?m)^-[rwx-]{9}[ .]? +\d+ .*with_xattr$").unwrap();
+    scene
+        .ucmd()
+        .args(&["-l", "with_xattr"])
+        .succeeds()
+        .stdout_matches(&re_no_acl);
+}
+
 // On macOS the ACL is not an xattr, and most files carry xattrs anyway, so
 // `+` comes from the ACL API (#15273).
 #[cfg(target_os = "macos")]
