@@ -1092,3 +1092,87 @@ fn test_error_message_preserves_non_utf8_filename() {
         }
     }
 }
+
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+fn test_stat_non_utf8_filename() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // Create a file with a non-UTF-8 byte (0xff) in its name
+    let name = OsStr::from_bytes(b"tool\xff");
+    at.touch(name);
+
+    // Test --printf '%n\n' - should output raw bytes including 0xff
+    let result = ts
+        .ucmd()
+        .env("LC_ALL", "C")
+        .args(&["--printf", "%n\n"])
+        .arg(name)
+        .succeeds();
+    let stdout = result.stdout();
+    assert_eq!(stdout, b"tool\xff\n", "stdout={stdout:?}");
+    assert!(!stdout.windows(3).any(|w| w == b"\xef\xbf\xbd"));
+
+    // Test -c %N - should escape the original byte as \377
+    let result = ts
+        .ucmd()
+        .env("LC_ALL", "C")
+        .args(&["-c", "%N"])
+        .arg(name)
+        .succeeds();
+    let stdout_str = result.stdout_str();
+    assert!(
+        stdout_str.contains("\\377"),
+        "Expected \\377 in output, got: {stdout_str}"
+    );
+    assert!(
+        !stdout_str.contains("\\357\\277\\275"),
+        "Output should not contain escaped U+FFFD bytes, got: {stdout_str}"
+    );
+
+    // Test default format (File: line) - should show quoted name with escaped \377
+    let result = ts.ucmd().env("LC_ALL", "C").arg(name).succeeds();
+    let stdout_str = result.stdout_str();
+    assert!(
+        stdout_str.contains("\\377"),
+        "Expected \\377 in default output, got: {stdout_str}"
+    );
+    assert!(
+        !stdout_str.contains("\\357\\277\\275"),
+        "Default output should not contain escaped U+FFFD bytes, got: {stdout_str}"
+    );
+
+    // Test terse format (-t) - first field uses %Qn (quoted), so expect escaped \377
+    let result = ts
+        .ucmd()
+        .env("LC_ALL", "C")
+        .args(&["-t"])
+        .arg(name)
+        .succeeds();
+    let stdout_str = result.stdout_str();
+    assert!(
+        stdout_str.contains("\\377"),
+        "Expected \\377 in terse output, got: {stdout_str}"
+    );
+    assert!(
+        !stdout_str.contains("\\357\\277\\275"),
+        "Terse output should not contain escaped U+FFFD bytes, got: {stdout_str}"
+    );
+
+    // Test -f -c %n - filesystem mode should output raw bytes including 0xff
+    #[cfg(target_os = "linux")]
+    {
+        let result = ts
+            .ucmd()
+            .env("LC_ALL", "C")
+            .args(&["-f", "-c", "%n"])
+            .arg(name)
+            .succeeds();
+        let stdout = result.stdout();
+        assert_eq!(stdout, b"tool\xff\n", "stdout={stdout:?}");
+    }
+}
