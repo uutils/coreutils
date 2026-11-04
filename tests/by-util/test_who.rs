@@ -5,6 +5,17 @@
 
 // spell-checker:ignore (flags) runlevel mesg
 
+#![cfg(all(
+    unix,
+    not(any(
+        target_os = "aix",
+        target_os = "android",
+        target_os = "fuchsia",
+        target_os = "openbsd",
+        target_os = "redox"
+    ))
+))]
+
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
 use uutests::util::{TestScenario, expected_result, gnu_cmd_result};

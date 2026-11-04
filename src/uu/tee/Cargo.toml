@@ -35,6 +35,10 @@ rustix = { workspace = true, features = ["stdio"] }
 rustix = { workspace = true, features = ["pipe"] }
 uucore = { workspace = true, features = ["pipes"] }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true
 

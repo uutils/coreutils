@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (ToDO) getpriority setpriority nstr PRIO
 
+#![cfg(any(unix, windows))]
+
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::io::{ErrorKind, Write, stdout};

@@ -30,6 +30,10 @@ uucore = { workspace = true, features = ["buf-copy", "fs", "signals"] }
 [target.'cfg(not(target_os = "wasi"))'.dependencies]
 memmap2 = { workspace = true }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true
 

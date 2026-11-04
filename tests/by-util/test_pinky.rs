@@ -3,6 +3,16 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+#![cfg(all(
+    unix,
+    not(any(
+        target_os = "aix",
+        target_os = "android",
+        target_os = "fuchsia",
+        target_os = "redox"
+    ))
+))]
+
 #[cfg(not(target_os = "openbsd"))]
 use uucore::entries::{Locate, Passwd};
 use uutests::new_ucmd;

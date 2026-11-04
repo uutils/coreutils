@@ -6,6 +6,8 @@
 // spell-checker:ignore (words) helloworld nodir n'source nconfined testdir ETXTBSY Cryptfs
 // spell-checker:ignore tvos watchos visionos
 
+#![cfg(all(unix, not(target_os = "redox")))]
+
 use rstest::rstest;
 use rustix::process::{getegid, geteuid};
 use std::env::current_exe;

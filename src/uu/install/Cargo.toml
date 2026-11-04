@@ -34,8 +34,10 @@ rustix = { workspace = true, features = ["fs"] }
 selinux = { workspace = true, optional = true }
 
 [features]
+default = ["signals"]
 diagnostics = ["uucore/diagnostics"]
 selinux = ["dep:selinux", "uucore/selinux"]
+signals = ["uucore/signals"]
 
 [lints]
 workspace = true

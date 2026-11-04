@@ -5,6 +5,8 @@
 
 // spell-checker:ignore nconfined
 
+#![cfg(all(unix, not(target_os = "haiku")))]
+
 use std::os::unix::fs::PermissionsExt;
 
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]

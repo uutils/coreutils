@@ -5,6 +5,8 @@
 
 // spell-checker:ignore nconfined
 
+#![cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))]
+
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
 use uutests::new_ucmd;

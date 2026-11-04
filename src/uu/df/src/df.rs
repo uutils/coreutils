@@ -5,6 +5,8 @@
 
 // spell-checker:ignore itotal iused iavail ipcent pcent tmpfs squashfs lofs sysfs chroots
 
+#![cfg(any(windows, all(unix, not(target_os = "fuchsia"))))]
+
 mod blocks;
 mod columns;
 mod filesystem;

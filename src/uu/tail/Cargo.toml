@@ -48,7 +48,9 @@ windows-sys = { workspace = true, features = [
 rstest = { workspace = true }
 
 [features]
+default = ["signals"]
 diagnostics = ["uucore/diagnostics"]
+signals = ["uucore/signals"]
 
 [lints]
 workspace = true

@@ -37,5 +37,9 @@ harness = false
 divan = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true

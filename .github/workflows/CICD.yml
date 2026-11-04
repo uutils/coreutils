@@ -975,7 +975,7 @@ jobs:
         lima ls
         lima bash -c "cd work && cargo test --features 'feat_selinux' --no-default-features"
     - name: Lint with SELinux
-      run: lima bash -c "cd work && cargo clippy --all-targets --features 'feat_selinux' --no-default-features -- -D warnings"
+      run: lima bash -c "cd work && cargo clippy --workspace --all-targets --features 'feat_selinux' --no-default-features -- -D warnings"
 
   test_safe_traversal:
     name: Safe Traversal Security Check
@@ -990,7 +990,7 @@ jobs:
     - name: Install strace and libselinux headers (needed to build chcon)
       run: sudo apt-get update && sudo apt-get install -y strace libselinux1-dev
     - name: Build utilities with safe traversal
-      run: cargo build --profile=release-small -p uu_rm -p uu_chmod -p uu_chown -p uu_chgrp -p uu_mv -p uu_du -p uu_split -p uu_chcon
+      run: cargo build --profile=release-small -p uu_rm -p uu_chmod -p uu_chown -p uu_chgrp -p uu_mv -p uu_du -p uu_split -p uu_chcon --features uu_chcon/selinux
     - name: Run safe traversal verification
       run: ./util/check-safe-traversal.sh
 

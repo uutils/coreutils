@@ -23,6 +23,10 @@ rustix = { workspace = true, features = ["fs"] }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["backup-control", "fs"] }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true
 

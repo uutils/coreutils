@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (ToDO) tempdir dyld dylib optgrps libstdbuf
 
+#![cfg(any(unix, windows))]
+
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 #[cfg(all(unix, not(feature = "feat_external_libstdbuf")))]

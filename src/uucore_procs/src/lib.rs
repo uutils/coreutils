@@ -33,7 +33,7 @@ pub fn main(args: TokenStream, stream: TokenStream) -> TokenStream {
         // Initialize SIGPIPE state capture at process startup (Unix only).
         // This must be at module level to set up the .init_array static that runs
         // before main() to capture whether SIGPIPE was ignored by the parent process.
-        #[cfg(all(#signals, unix, not(target_os = "fuchsia")))]
+        #[cfg(all(#signals, feature = "signals", unix, not(target_os = "fuchsia")))]
         uucore::init_startup_state_capture!();
 
         pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -43,14 +43,14 @@ pub fn main(args: TokenStream, stream: TokenStream) -> TokenStream {
             // The Rust runtime ignores SIGPIPE, but we need to respect the parent's
             // signal disposition for proper pipeline behavior (GNU compatibility).
             // needed even for true --version
-            #[cfg(all(unix, not(target_os = "fuchsia")))]
+            #[cfg(all(feature = "signals", unix, not(target_os = "fuchsia")))]
             if !uucore::signals::sigpipe_was_ignored() {
                 let _ = uucore::signals::enable_pipe_errors();
             }
 
             // disable rust signal handlers (otherwise processes don't dump core after e.g. one SIGSEGV)
-            #[cfg(all(#signals, unix))]
-            uucore::disable_rust_signal_handlers().expect("Disabling rust signal handlers failed");
+            #[cfg(all(#signals, feature = "signals", unix))]
+            uucore::signals::disable_rust_signal_handlers().expect("Disabling rust signal handlers failed");
             let result = uumain(args);
             match result {
                 Ok(()) => uucore::error::get_exit_code(),

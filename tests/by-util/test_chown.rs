@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist groupname notexisting passgrp
 
+#![cfg(unix)]
+
 #[cfg(all(unix, not(target_os = "openbsd")))]
 use std::os::unix::fs::MetadataExt;
 use uutests::util::{CmdResult, TestScenario, is_ci, run_ucmd_as_root};

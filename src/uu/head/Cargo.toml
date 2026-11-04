@@ -30,7 +30,9 @@ uucore = { workspace = true, features = [
 ] }
 
 [features]
+default = ["signals"]
 diagnostics = ["uucore/diagnostics"]
+signals = ["uucore/signals"]
 
 [lints]
 workspace = true

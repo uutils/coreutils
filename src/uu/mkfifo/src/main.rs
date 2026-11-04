@@ -3,4 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+#![cfg_attr(
+    not(all(unix, not(any(target_os = "fuchsia", target_os = "redox")))),
+    no_main
+)]
+#![cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))]
+
 uucore::bin!(uu_mkfifo);

@@ -23,6 +23,10 @@ libc = { workspace = true }
 rustix = { workspace = true, features = ["thread"] }
 uucore = { workspace = true, features = ["fs"] }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true
 

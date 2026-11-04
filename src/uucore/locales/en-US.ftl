@@ -44,6 +44,9 @@ action-creating = creating
 action-reading = reading
 action-writing = writing
 
+# fsext error messages
+fsext-error-mount-info-retrieval-failed = mount info retrieval failed
+
 # SELinux error messages
 selinux-error-not-enabled = SELinux is not enabled on this system
 selinux-error-file-open-failure = failed to open the file: { $error }

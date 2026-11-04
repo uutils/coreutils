@@ -30,6 +30,8 @@ uucore = { workspace = true, features = [] }
 utmp-classic = { workspace = true }
 
 [features]
+default = ["signals"]
+signals = ["uucore/signals"]
 systemd_logind = ["uucore/systemd_logind"]
 
 [lints]

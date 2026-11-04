@@ -3,6 +3,16 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+#![cfg(all(
+    unix,
+    not(any(
+        target_os = "aix",
+        target_os = "android",
+        target_os = "fuchsia",
+        target_os = "redox"
+    ))
+))]
+
 use clap::{Arg, ArgAction, Command};
 use uucore::format_usage;
 use uucore::translate;

@@ -309,6 +309,10 @@ jobs:
         pacman -Syu --noconfirm
     - name: Install build dependencies
       shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
+      run: |
+        pacman -Syu --noconfirm || true
+    - name: Install build dependencies
+      shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
       # test Cygwin & MinGW(UCRT) instead of pre-installed Rust.
       run: |
         pacman -Su --noconfirm --needed \

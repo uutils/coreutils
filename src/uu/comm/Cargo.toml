@@ -21,6 +21,10 @@ clap = { workspace = true }
 fluent = { workspace = true }
 uucore = { workspace = true, features = ["fs", "i18n-collator"] }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true
 

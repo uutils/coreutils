@@ -13,6 +13,7 @@
 //  http://www.opensource.apple.com/source/shell_cmds/shell_cmds-118/id/id.c
 //
 
+#![cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))]
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
 

@@ -21,7 +21,9 @@ fluent = { workspace = true }
 uucore = { workspace = true, features = ["fs", "parser-size"] }
 
 [features]
+default = ["signals"]
 diagnostics = ["uucore/diagnostics"]
+signals = ["uucore/signals"]
 
 [lints]
 workspace = true
