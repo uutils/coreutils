@@ -1390,6 +1390,25 @@ fn test_od_strings_option() {
         .succeeds()
         .stdout_is("0000000 hello\n0000006 world\n");
 
+    // Test -S0 with empty strings and consecutive NUL bytes (issue #16134)
+    new_ucmd!()
+        .args(&["--strings=0", "-Ad"])
+        .pipe_in(b"abc\x00\x00def\x00")
+        .succeeds()
+        .stdout_is("0000000 abc\n0000004 \n0000005 def\n");
+
+    new_ucmd!()
+        .args(&["-S0", "-Ad"])
+        .pipe_in(b"\x00\x00")
+        .succeeds()
+        .stdout_is("0000000 \n0000001 \n");
+
+    new_ucmd!()
+        .args(&["--strings=0", "-Ad", "-j4"])
+        .pipe_in(b"abc\x00\x00def\x00")
+        .succeeds()
+        .stdout_is("0000004 \n0000005 def\n");
+
     // Test -S0 with single character strings
     new_ucmd!()
         .arg("-S0")
@@ -1708,4 +1727,24 @@ fn test_width_invalid_numbers() {
             .fails_with_code(1)
             .stderr_only(format!("od: {message}\n"));
     }
+}
+
+#[test]
+fn test_od_zero_byte_type_size() {
+    for spec in ["x0", "d0", "o00", "u0", "f0"] {
+        // od can exit before reading its input, so writing it may fail with
+        // a broken pipe.
+        new_ucmd!()
+            .arg(format!("-t{spec}"))
+            .pipe_in("abcd")
+            .ignore_stdin_write_error()
+            .fails_with_code(1)
+            .stderr_contains("invalid")
+            .no_stdout();
+    }
+    new_ucmd!()
+        .arg("-tx4")
+        .pipe_in("abcd")
+        .succeeds()
+        .stdout_is("0000000 64636261\n0000004\n");
 }

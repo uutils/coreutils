@@ -1547,23 +1547,52 @@ fn test_seekable_stdout_without_of_is_not_truncated() {
     assert!(out[1024..].iter().all(|&b| b == b'x'));
 }
 
+/// An `oflag=` on a seekable stdout must keep the flags it was opened with,
+/// so output redirected with `>>` is still appended, with or without
+/// `conv=notrunc`.
+#[rstest]
+#[cfg(target_os = "linux")]
+fn test_oflag_keeps_append_mode_of_stdout(
+    #[values("oflag=dsync", "oflag=sync", "oflag=nonblock")] oflag: &str,
+    #[values(&[][..], &["conv=notrunc"][..])] conv: &[&str],
+) {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("out", "old\n");
+    let stdout = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().append(true),
+        at.plus("out").as_path(),
+    )
+    .unwrap();
+
+    ts.ucmd()
+        .args(&[oflag, "status=none"])
+        .args(conv)
+        .pipe_in("new\n")
+        .set_stdout(Stdio::from(stdout))
+        .succeeds();
+
+    assert_eq!(at.read("out"), "old\nnew\n");
+}
+
 /// A failed truncate of the output names the file and the size, the copy
 /// still runs and prints its statistics, and the exit status is 1.
 #[test]
 #[cfg(target_os = "linux")]
 fn test_failed_truncate_is_reported_and_copy_goes_on() {
-    use rustix::fs::{MemfdFlags, SealFlags, fcntl_add_seals, ftruncate, memfd_create};
+    use rustix::fs::{MemfdFlags, SealFlags, fcntl_add_seals, memfd_create};
 
-    // A memfd sealed against shrinking: `ftruncate` to a smaller size fails
+    // A memfd sealed against shrinking: truncating it to a smaller size fails
     // with EPERM, while writes inside the existing size still work.
     let fd = memfd_create("out", MemfdFlags::ALLOW_SEALING).unwrap();
-    ftruncate(&fd, 2048).unwrap();
-    fcntl_add_seals(&fd, SealFlags::SHRINK).unwrap();
+    let memfd = File::from(fd);
+    memfd.set_len(2048).unwrap();
+    fcntl_add_seals(&memfd, SealFlags::SHRINK).unwrap();
 
     new_ucmd!()
         .args(&["bs=512", "count=1", "seek=1", "of=/dev/stdout"])
         .pipe_in(vec![b'a'; 512])
-        .set_stdout(Stdio::from(File::from(fd)))
+        .set_stdout(Stdio::from(memfd))
         .fails_with_code(1)
         .stderr_contains(
             "dd: failed to truncate to 512 bytes in output file '/dev/stdout': Operation not permitted\n",
@@ -1736,13 +1765,14 @@ fn test_reading_partial_blocks_from_fifo() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkfifo("fifo");
-    let fifoname = at.plus_as_string("fifo");
+    let fifoname = at.plus("fifo");
+    let fifo_disp = fifoname.display();
 
     // Start a `dd` process that reads from the fifo (so it will wait
     // until the writer process starts).
     let mut reader_command = Command::new(get_tests_binary());
     let child = reader_command
-        .args(["dd", "ibs=3", "obs=3", &format!("if={fifoname}")])
+        .args(["dd", "ibs=3", "obs=3", &format!("if={fifo_disp}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
@@ -1757,7 +1787,7 @@ fn test_reading_partial_blocks_from_fifo() {
     let _ = writer_command
         .args([
             "-c",
-            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifoname}"),
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifo_disp}"),
         ])
         .spawn()
         .unwrap()
@@ -1776,7 +1806,8 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkfifo("fifo");
-    let fifoname = at.plus_as_string("fifo");
+    let fifoname = at.plus("fifo");
+    let fifo_disp = fifoname.display();
 
     // Start a `dd` process that reads from the fifo (so it will wait
     // until the writer process starts).
@@ -1784,7 +1815,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     // `bs=N` takes precedence over `ibs=N` and `obs=N`.
     let mut reader_command = Command::new(get_tests_binary());
     let child = reader_command
-        .args(["dd", "bs=3", "ibs=1", "obs=1", &format!("if={fifoname}")])
+        .args(["dd", "bs=3", "ibs=1", "obs=1", &format!("if={fifo_disp}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
@@ -1799,7 +1830,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     let _ = writer_command
         .args([
             "-c",
-            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifoname}"),
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifo_disp}"),
         ])
         .spawn()
         .unwrap()
@@ -1825,13 +1856,14 @@ fn test_reading_partial_blocks_from_fifo_gathered_into_larger_obs() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkfifo("fifo");
-    let fifoname = at.plus_as_string("fifo");
+    let fifoname = at.plus("fifo");
+    let fifo_disp = fifoname.display();
 
     // Start a `dd` process that reads from the fifo (so it will wait
     // until the writer process starts).
     let mut reader_command = Command::new(get_tests_binary());
     let child = reader_command
-        .args(["dd", "ibs=3", "obs=6", &format!("if={fifoname}")])
+        .args(["dd", "ibs=3", "obs=6", &format!("if={fifo_disp}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
@@ -1846,7 +1878,7 @@ fn test_reading_partial_blocks_from_fifo_gathered_into_larger_obs() {
     let _ = writer_command
         .args([
             "-c",
-            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifoname}"),
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifo_disp}"),
         ])
         .spawn()
         .unwrap()
@@ -1934,11 +1966,10 @@ fn test_large_bs_does_not_fault_in_copy_buffer() {
 fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    at.make_file("input");
-    let filename = at.plus_as_string("input");
+    let file = at.make_file("input");
     new_ucmd!()
         .args(&["iflag=directory", "count=0"])
-        .set_stdin(Stdio::from(File::open(filename).unwrap()))
+        .set_stdin(Stdio::from(file))
         .fails()
         .stderr_only("dd: setting flags for 'standard input': Not a directory\n");
 }
@@ -2013,10 +2044,10 @@ fn test_stdin_stdout_not_rewound_even_when_connected_to_seekable_file() {
         .set_stderr(stderr)
         .succeeds();
 
-    let err_file_content = std::fs::read_to_string(at.plus_as_string("err")).unwrap();
+    let err_file_content = at.read("err");
     println!("stderr:\n{err_file_content}");
 
-    let out_file_content = std::fs::read_to_string(at.plus_as_string("out")).unwrap();
+    let out_file_content = at.read("out");
     println!("stdout:\n{out_file_content}");
     assert_eq!(out_file_content, "bde");
 }

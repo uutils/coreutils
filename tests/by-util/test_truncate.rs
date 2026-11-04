@@ -513,7 +513,7 @@ fn test_truncate_non_utf8_paths() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     let file_name = std::ffi::OsStr::from_bytes(b"test_\xFF\xFE.txt");
-    at.write(&file_name.to_string_lossy(), "test content");
+    at.write(file_name, "test content");
 
     // Test that truncate can handle non-UTF-8 filenames
     ts.ucmd().arg("-s").arg("10").arg(file_name).succeeds();

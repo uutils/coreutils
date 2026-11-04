@@ -148,12 +148,15 @@ enum PrintSetting {
     Size,
 }
 
+type CFlags = [u32; 4];
+type CCFlags = [u8; nix::libc::NCCS];
+
 enum ArgOptions<'a> {
     Flags(AllFlags<'a>),
     Mapping((S, u8)),
     Special(SpecialSetting),
     Print(PrintSetting),
-    SavedState(Vec<u32>),
+    SavedState((CFlags, CCFlags)),
 }
 
 impl<'a> From<AllFlags<'a>> for ArgOptions<'a> {
@@ -249,80 +252,42 @@ fn stty(opts: &Options) -> UResult<()> {
         let mut args_iter = args.iter();
         while let Some(&arg) = args_iter.next() {
             match arg {
-                "ispeed" => match args_iter.next() {
-                    Some(speed) => {
-                        if let Some(baud_flag) = string_to_baud(speed, flags::BaudType::Input) {
-                            valid_args.push(ArgOptions::Flags(baud_flag));
-                        } else {
-                            return invalid_speed(arg, speed);
-                        }
-                    }
-                    None => {
-                        return missing_arg(arg);
-                    }
-                },
-                "ospeed" => match args_iter.next() {
-                    Some(speed) => {
-                        if let Some(baud_flag) = string_to_baud(speed, flags::BaudType::Output) {
-                            valid_args.push(ArgOptions::Flags(baud_flag));
-                        } else {
-                            return invalid_speed(arg, speed);
-                        }
-                    }
-                    None => {
-                        return missing_arg(arg);
-                    }
-                },
-                "line" => match args_iter.next() {
-                    Some(line) => match parse_u8_or_err(line) {
-                        Ok(n) => valid_args.push(ArgOptions::Special(SpecialSetting::Line(n))),
-                        Err(e) => return Err(USimpleError::new(1, e)),
-                    },
-                    None => {
-                        return missing_arg(arg);
-                    }
-                },
-                "min" => match args_iter.next() {
-                    Some(min) => match parse_u8_or_err(min) {
-                        Ok(n) => {
-                            valid_args.push(ArgOptions::Mapping((S::VMIN, n)));
-                        }
-                        Err(e) => return Err(USimpleError::new(1, e)),
-                    },
-                    None => {
-                        return missing_arg(arg);
-                    }
-                },
-                "time" => match args_iter.next() {
-                    Some(time) => match parse_u8_or_err(time) {
-                        Ok(n) => valid_args.push(ArgOptions::Mapping((S::VTIME, n))),
-                        Err(e) => return Err(USimpleError::new(1, e)),
-                    },
-                    None => {
-                        return missing_arg(arg);
-                    }
-                },
+                "ispeed" => {
+                    let speed = args_iter.next().ok_or_else(|| missing_arg(arg))?;
+                    let baud_flag = string_to_baud(speed, flags::BaudType::Input)
+                        .ok_or_else(|| invalid_speed(arg, speed))?;
+                    valid_args.push(ArgOptions::Flags(baud_flag));
+                }
+                "ospeed" => {
+                    let speed = args_iter.next().ok_or_else(|| missing_arg(arg))?;
+                    let baud_flag = string_to_baud(speed, flags::BaudType::Output)
+                        .ok_or_else(|| invalid_speed(arg, speed))?;
+                    valid_args.push(ArgOptions::Flags(baud_flag));
+                }
+                "line" => {
+                    let line = args_iter.next().ok_or_else(|| missing_arg(arg))?;
+                    let n = parse_u8_or_err(line).map_err(|e| USimpleError::new(1, e))?;
+                    valid_args.push(ArgOptions::Special(SpecialSetting::Line(n)));
+                }
+                "min" => {
+                    let min = args_iter.next().ok_or_else(|| missing_arg(arg))?;
+                    let n = parse_u8_or_err(min).map_err(|e| USimpleError::new(1, e))?;
+                    valid_args.push(ArgOptions::Mapping((S::VMIN, n)));
+                }
+                "time" => {
+                    let time = args_iter.next().ok_or_else(|| missing_arg(arg))?;
+                    let n = parse_u8_or_err(time).map_err(|e| USimpleError::new(1, e))?;
+                    valid_args.push(ArgOptions::Mapping((S::VTIME, n)));
+                }
                 "rows" => {
-                    if let Some(rows) = args_iter.next() {
-                        if let Some(n) = parse_rows_cols(rows) {
-                            valid_args.push(ArgOptions::Special(SpecialSetting::Rows(n)));
-                        } else {
-                            return invalid_integer_arg(rows);
-                        }
-                    } else {
-                        return missing_arg(arg);
-                    }
+                    let rows = args_iter.next().ok_or_else(|| missing_arg(arg))?;
+                    let n = parse_rows_cols(rows).ok_or_else(|| invalid_integer_arg(rows))?;
+                    valid_args.push(ArgOptions::Special(SpecialSetting::Rows(n)));
                 }
                 "columns" | "cols" => {
-                    if let Some(cols) = args_iter.next() {
-                        if let Some(n) = parse_rows_cols(cols) {
-                            valid_args.push(ArgOptions::Special(SpecialSetting::Cols(n)));
-                        } else {
-                            return invalid_integer_arg(cols);
-                        }
-                    } else {
-                        return missing_arg(arg);
-                    }
+                    let cols = args_iter.next().ok_or_else(|| missing_arg(arg))?;
+                    let n = parse_rows_cols(cols).ok_or_else(|| invalid_integer_arg(cols))?;
+                    valid_args.push(ArgOptions::Special(SpecialSetting::Cols(n)));
                 }
                 "drain" => {
                     set_arg = SetArg::TCSADRAIN;
@@ -340,28 +305,25 @@ fn stty(opts: &Options) -> UResult<()> {
                     }
                     // control char
                     else if let Some(char_index) = cc_to_index(arg) {
-                        if let Some(mapping) = args_iter.next() {
-                            let cc_mapping = string_to_control_char(mapping).map_err(|e| {
-                                let message = match e {
-                                    ControlCharMappingError::IntOutOfRange(val) => {
-                                        translate!(
-                                            "stty-error-invalid-integer-argument-value-too-large",
-                                            "value" => format!("'{val}'")
-                                        )
-                                    }
-                                    ControlCharMappingError::MultipleChars(val) => {
-                                        translate!(
-                                            "stty-error-invalid-integer-argument",
-                                            "value" => format!("'{val}'")
-                                        )
-                                    }
-                                };
-                                UUsageError::new(1, message)
-                            })?;
-                            valid_args.push(ArgOptions::Mapping((char_index, cc_mapping)));
-                        } else {
-                            return missing_arg(arg);
-                        }
+                        let mapping = args_iter.next().ok_or_else(|| missing_arg(arg))?;
+                        let cc_mapping = string_to_control_char(mapping).map_err(|e| {
+                            let message = match e {
+                                ControlCharMappingError::IntOutOfRange(val) => {
+                                    translate!(
+                                        "stty-error-invalid-integer-argument-value-too-large",
+                                        "value" => format!("'{val}'")
+                                    )
+                                }
+                                ControlCharMappingError::MultipleChars(val) => {
+                                    translate!(
+                                        "stty-error-invalid-integer-argument",
+                                        "value" => format!("'{val}'")
+                                    )
+                                }
+                            };
+                            UUsageError::new(1, message)
+                        })?;
+                        valid_args.push(ArgOptions::Mapping((char_index, cc_mapping)));
                     // baud rate
                     } else if let Some(baud_flag) = string_to_baud(arg, flags::BaudType::Both) {
                         valid_args.push(ArgOptions::Flags(baud_flag));
@@ -377,14 +339,13 @@ fn stty(opts: &Options) -> UResult<()> {
                             AllFlags::OutputFlags((flag, remove)) => check_flag_group(flag, remove),
                         };
                         if remove_group {
-                            return invalid_arg(arg);
+                            return Err(invalid_arg(arg));
                         }
                         valid_args.push(flag.into());
                     // combination setting
-                    } else if let Some(combo) = string_to_combo(arg) {
-                        valid_args.append(&mut combo_to_flags(combo));
                     } else {
-                        return invalid_arg(arg);
+                        let combo = string_to_combo(arg).ok_or_else(|| invalid_arg(arg))?;
+                        valid_args.append(&mut combo_to_flags(combo));
                     }
                 }
             }
@@ -418,45 +379,45 @@ fn stty(opts: &Options) -> UResult<()> {
 }
 
 // The GNU implementation adds the --help message when the args are incorrectly formatted
-fn missing_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err(UUsageError::new(
+fn missing_arg(arg: &str) -> Box<dyn UError> {
+    UUsageError::new(
         1,
         translate!(
             "stty-error-missing-argument",
             "arg" => *arg
         ),
-    ))
+    )
 }
 
-fn invalid_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err(UUsageError::new(
+fn invalid_arg(arg: &str) -> Box<dyn UError> {
+    UUsageError::new(
         1,
         translate!(
             "stty-error-invalid-argument",
             "arg" => *arg
         ),
-    ))
+    )
 }
 
-fn invalid_integer_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err(UUsageError::new(
+fn invalid_integer_arg(arg: &str) -> Box<dyn UError> {
+    UUsageError::new(
         1,
         translate!(
             "stty-error-invalid-integer-argument",
             "value" => format!("'{arg}'")
         ),
-    ))
+    )
 }
 
-fn invalid_speed<T>(arg: &str, speed: &str) -> Result<T, Box<dyn UError>> {
-    Err(UUsageError::new(
+fn invalid_speed(arg: &str, speed: &str) -> Box<dyn UError> {
+    UUsageError::new(
         1,
         translate!(
             "stty-error-invalid-speed",
             "arg" => arg,
             "speed" => speed,
         ),
-    ))
+    )
 }
 
 /// GNU uses different error messages if values overflow or underflow a u8,
@@ -491,32 +452,25 @@ fn parse_rows_cols(arg: &str) -> Option<u16> {
 /// - All parts must be non-empty valid hex values
 /// - Control characters must fit in u8 (0-255)
 /// - Returns `None` if format is invalid
-fn parse_saved_state(arg: &str) -> Option<Vec<u32>> {
-    let parts: Vec<&str> = arg.split(':').collect();
-    let expected_parts = 4 + nix::libc::NCCS;
+fn parse_saved_state(arg: &str) -> Option<(CFlags, CCFlags)> {
+    let mut parts = arg.split(':');
+    let mut c_flags = CFlags::default();
+    for c_flag in &mut c_flags {
+        let part = parts.next()?;
+        *c_flag = u32::from_str_radix(part, 16).ok()?;
+    }
 
+    let mut cc_flags = CCFlags::default();
+    for cc_flag in &mut cc_flags {
+        let part = parts.next()?;
+        *cc_flag = u8::from_str_radix(part, 16).ok()?;
+    }
     // GNU requires exactly the right number of parts for this platform
-    if parts.len() != expected_parts {
+    if parts.next().is_some() {
         return None;
     }
 
-    // Validate all parts are non-empty valid hex
-    let mut values = Vec::with_capacity(expected_parts);
-    for (i, part) in parts.iter().enumerate() {
-        if part.is_empty() {
-            return None; // GNU rejects empty hex values
-        }
-        let val = u32::from_str_radix(part, 16).ok()?;
-
-        // Control characters (indices 4+) must fit in u8
-        if i >= 4 && val > 255 {
-            return None;
-        }
-
-        values.push(val);
-    }
-
-    Some(values)
+    Some((c_flags, cc_flags))
 }
 
 fn check_flag_group<T>(flag: &Flag<T>, remove: bool) -> bool {
@@ -906,30 +860,23 @@ fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
 
 /// Apply a saved terminal state to the current termios.
 ///
-/// The state array contains:
-/// - `state[0]`: input flags
-/// - `state[1]`: output flags
-/// - `state[2]`: control flags
-/// - `state[3]`: local flags
-/// - `state[4..]`: control characters (optional)
+/// The state is a pair of 2 arrays:
+/// - (input flags ,output flags, control flags, local flags)
+/// - control characters
 ///
 /// If state has fewer than 4 elements, no changes are applied. This is a defensive
 /// check that should never trigger since `parse_saved_state` rejects such states.
-fn apply_saved_state(termios: &mut Termios, state: &[u32]) {
-    // Require at least 4 elements for the flags (defensive check)
-    let [s0, s1, s2, s3, rest @ ..] = state else {
-        return; // No-op for invalid state (already validated by parser)
-    };
-
+fn apply_saved_state(termios: &mut Termios, state: &(CFlags, CCFlags)) {
+    let (c_flags, cc_flags) = state;
     // Apply the four flag groups, done (as _) for MacOS size compatibility
-    termios.input_flags = InputFlags::from_bits_truncate(*s0 as _);
-    termios.output_flags = OutputFlags::from_bits_truncate(*s1 as _);
-    termios.control_flags = ControlFlags::from_bits_truncate(*s2 as _);
-    termios.local_flags = LocalFlags::from_bits_truncate(*s3 as _);
+    termios.input_flags = InputFlags::from_bits_truncate(c_flags[0] as _);
+    termios.output_flags = OutputFlags::from_bits_truncate(c_flags[1] as _);
+    termios.control_flags = ControlFlags::from_bits_truncate(c_flags[2] as _);
+    termios.local_flags = LocalFlags::from_bits_truncate(c_flags[3] as _);
 
-    // Apply control characters if present (stored as u32 but used as u8)
-    for (c, &cc_val) in termios.control_chars.iter_mut().zip(rest) {
-        *c = cc_val as u8;
+    // Apply control characters if present
+    for (c, &cc_val) in termios.control_chars.iter_mut().zip(cc_flags) {
+        *c = cc_val;
     }
 }
 
@@ -986,10 +933,8 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
     };
 
     if let Some(val) = ascii_num {
-        if val > 255 {
-            return Err(ControlCharMappingError::IntOutOfRange(s.to_string()));
-        }
-        return Ok(val as u8);
+        return u8::try_from(val)
+            .map_err(|_| ControlCharMappingError::IntOutOfRange(s.to_string()));
     }
     // try to parse ^<char> or just <char>
     let mut chars = s.chars();
