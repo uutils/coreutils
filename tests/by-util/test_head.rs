@@ -1257,5 +1257,6 @@ fn test_no_skip_after_error() {
     ts.ucmd()
         .args(&["/proc/self/mem", "f"])
         .fails()
-        .stdout_contains("hello");
+        .stderr_contains("error reading '/proc/self/mem'")
+        .stdout_contains("==> f <==\nhello");
 }
