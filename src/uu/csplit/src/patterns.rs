@@ -109,28 +109,14 @@ fn extract_patterns(args: &[&str]) -> Result<Vec<Pattern>, CsplitError> {
     // An empty regex between the delimiters is allowed and matches every line.
     let to_match_reg =
         Regex::new(r"^(/(?P<UPTO>.*)/|%(?P<SKIPTO>.*)%)(?P<OFFSET>[\+-]?[0-9]+)?$").unwrap();
-    let execute_ntimes_reg = Regex::new(r"^\{(?:(?P<TIMES>[0-9]+)|\*)\}$").unwrap();
     let mut iter = args.iter().copied().peekable();
 
     while let Some(arg) = iter.next() {
         // get the number of times a pattern is repeated, which is at least once plus whatever is
         // in the quantifier.
-        let execute_ntimes = match iter.peek() {
+        let execute_ntimes = match iter.next_if(|next| next.starts_with('{')) {
+            Some(repeat) => parse_repeat(repeat)?,
             None => ExecutePattern::Times(1),
-            Some(&next_item) => {
-                match execute_ntimes_reg.captures(next_item) {
-                    None => ExecutePattern::Times(1),
-                    Some(r) => {
-                        // skip the next item
-                        iter.next();
-                        if let Some(times) = r.name("TIMES") {
-                            ExecutePattern::Times(times.as_str().parse::<usize>().unwrap() + 1)
-                        } else {
-                            ExecutePattern::Always
-                        }
-                    }
-                }
-            }
         };
 
         // get the pattern definition
@@ -162,6 +148,26 @@ fn extract_patterns(args: &[&str]) -> Result<Vec<Pattern>, CsplitError> {
         }
     }
     Ok(patterns)
+}
+
+/// Parses the `{N}` or `{*}` operand that follows a pattern.
+fn parse_repeat(arg: &str) -> Result<ExecutePattern, CsplitError> {
+    let body = arg
+        .strip_prefix('{')
+        .and_then(|rest| rest.strip_suffix('}'))
+        .ok_or_else(|| CsplitError::RepeatMissingBrace(arg.to_owned()))?;
+    if body == "*" {
+        return Ok(ExecutePattern::Always);
+    }
+
+    // Leading blanks, an optional `+`, then the digits: ` +12` in `{ +12}`.
+    let count_reg = Regex::new(r"^[ \t\n\x0B\x0C\r]*\+?(?P<N>[0-9]+)$").unwrap();
+    let count = count_reg
+        .captures(body)
+        .ok_or_else(|| CsplitError::RepeatNotInteger(arg.to_owned()))?;
+    Ok(ExecutePattern::Times(
+        count["N"].parse::<usize>().unwrap() + 1,
+    ))
 }
 
 /// The error for a `/REGEXP/` or `%REGEXP%` operand whose regex did not
