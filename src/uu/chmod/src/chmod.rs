@@ -460,7 +460,15 @@ impl Chmoder {
     /// changed before the attempt, so with `-v` GNU also says that the
     /// subtree was left alone.
     fn report_unreadable_dir(&self, path: &Path, err: std::io::Error) {
-        self.report_failure(ChmodError::CannotReadDirectory(path.into(), err).into());
+        self.report_inaccessible(
+            path,
+            ChmodError::CannotReadDirectory(path.into(), err).into(),
+        );
+    }
+
+    /// Report `error`, plus the "could not be accessed" line under `-v`.
+    fn report_inaccessible(&self, path: &Path, error: Box<dyn UError>) {
+        self.report_failure(error);
         if self.verbose {
             println!(
                 "{}",
@@ -718,21 +726,15 @@ impl Chmoder {
             let meta = match dir_fd.metadata_at(&entry_name, should_follow_symlink.into()) {
                 Ok(meta) => meta,
                 Err(err) => {
-                    let dangling =
-                        err.kind() == std::io::ErrorKind::NotFound && entry_path.is_symlink();
-                    let error = match err.kind() {
-                        _ if dangling => ChmodError::DanglingSymlink(entry_path.clone()).into(),
-                        std::io::ErrorKind::PermissionDenied => {
-                            ChmodError::PermissionDenied(entry_path.clone()).into()
-                        }
-                        _ => err.into(),
-                    };
-                    self.report_failure(error);
-                    if dangling && self.verbose {
-                        println!(
-                            "{}",
-                            translate!("chmod-verbose-could-not-be-accessed", "file" => entry_path.quote())
+                    if err.kind() == std::io::ErrorKind::NotFound && entry_path.is_symlink() {
+                        self.report_inaccessible(
+                            &entry_path,
+                            ChmodError::DanglingSymlink(entry_path.clone()).into(),
                         );
+                    } else if err.kind() == std::io::ErrorKind::PermissionDenied {
+                        self.report_failure(ChmodError::PermissionDenied(entry_path).into());
+                    } else {
+                        self.report_failure(err.into());
                     }
                     continue;
                 }
