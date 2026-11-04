@@ -356,14 +356,14 @@ impl SplitWriter<'_> {
     ///
     /// # Errors
     ///
-    /// Returns an [`io::Error`] if there was a problem removing a split.
-    fn delete_all_splits(&self) -> io::Result<()> {
+    /// Returns an error if there was a problem removing a split.
+    fn delete_all_splits(&self) -> Result<(), CsplitError> {
         let mut ret = Ok(());
         for ith in 0..self.counter {
             match self.options.split_name.get(ith) {
                 Ok(file_name) => {
                     if let Err(err) = remove_file(file_name) {
-                        ret = Err(err);
+                        ret = Err(err.into());
                     }
                 }
                 Err(err) => ret = Err(err),

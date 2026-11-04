@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::io::{self, ErrorKind};
+use std::io;
 use std::ops::Range;
 use uucore::display::Quotable;
 use uucore::error::{UError, strip_errno};
@@ -29,11 +29,8 @@ pub struct PatternProblem {
 /// Errors thrown by the csplit command
 #[derive(Debug, thiserror::Error)]
 pub enum CsplitError {
-    // No `#[from]` here: the `From<io::Error>` impl below is custom so that an
-    // out-of-memory error (raised when a huge suffix-format field width cannot
-    // be allocated) is mapped to `MemoryExhausted` rather than a raw IoError.
     #[error("{}", strip_errno(_0))]
-    IoError(io::Error),
+    IoError(#[from] io::Error),
     #[error("{}", translate!("csplit-error-memory-exhausted"))]
     MemoryExhausted,
     #[error("{}", translate!("csplit-error-line-out-of-range", "pattern" => _0.quote()))]
@@ -60,16 +57,6 @@ pub enum CsplitError {
     NotRegularFile(String),
     #[error("{}", _0)]
     UError(Box<dyn UError>),
-}
-
-impl From<io::Error> for CsplitError {
-    fn from(error: io::Error) -> Self {
-        if error.kind() == ErrorKind::OutOfMemory {
-            Self::MemoryExhausted
-        } else {
-            Self::IoError(error)
-        }
-    }
 }
 
 impl From<Box<dyn UError>> for CsplitError {

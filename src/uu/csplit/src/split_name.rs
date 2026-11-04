@@ -65,9 +65,20 @@ impl SplitName {
     }
 
     /// Returns the filename of the i-th split.
-    pub fn get(&self, n: usize) -> io::Result<String> {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CsplitError::MemoryExhausted`] if the suffix format requests a
+    /// field width too large to allocate.
+    pub fn get(&self, n: usize) -> Result<String, CsplitError> {
         let mut v = self.prefix.clone();
-        self.format.fmt(&mut v, n as u64)?;
+        self.format.fmt(&mut v, n as u64).map_err(|err| {
+            if err.kind() == io::ErrorKind::OutOfMemory {
+                CsplitError::MemoryExhausted
+            } else {
+                CsplitError::IoError(err)
+            }
+        })?;
         Ok(String::from_utf8_lossy(&v).to_string())
     }
 }
@@ -245,8 +256,10 @@ mod tests {
     fn formatting_width_too_large_returns_error() {
         let split_name =
             SplitName::new(None, Some(String::from("%9999999999999999999d")), None).unwrap();
-        let err = split_name.get(0).unwrap_err();
-        assert_eq!(err.kind(), io::ErrorKind::OutOfMemory);
+        assert!(matches!(
+            split_name.get(0),
+            Err(CsplitError::MemoryExhausted)
+        ));
     }
 
     #[test]
