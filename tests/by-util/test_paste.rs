@@ -609,3 +609,50 @@ fn test_crlf_delimiter_not_eaten_by_an_empty_line() {
         .succeeds()
         .stdout_is(expected);
 }
+
+#[test]
+fn test_missing_file_error_includes_filename() {
+    new_ucmd!()
+        .arg("missing.txt")
+        .fails_with_code(1)
+        .stderr_is("paste: missing.txt: No such file or directory\n");
+}
+
+#[test]
+fn test_directory_error_includes_filename() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a.txt", "a\n");
+    at.mkdir("d");
+
+    let result = ucmd.args(&["a.txt", "d"]).fails_with_code(1);
+    result.stderr_contains("paste: d:");
+    if !cfg!(windows) {
+        result.stdout_is("a\t\n");
+    }
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_all_directory_errors_are_reported() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d1");
+    at.mkdir("d2");
+
+    let result = ucmd.args(&["d1", "d2"]).fails_with_code(1);
+    result.stderr_contains("paste: d1:");
+    result.stderr_contains("paste: d2:");
+    result.no_stdout();
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_all_directory_errors_are_reported_in_serial_mode() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d1");
+    at.mkdir("d2");
+
+    let result = ucmd.args(&["-s", "d1", "d2"]).fails_with_code(1);
+    result.stderr_contains("paste: d1:");
+    result.stderr_contains("paste: d2:");
+    result.stdout_is("\n\n");
+}

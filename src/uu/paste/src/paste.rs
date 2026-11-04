@@ -12,10 +12,12 @@ use std::iter::Cycle;
 use std::path::Path;
 use std::rc::Rc;
 use std::slice::Iter;
-use uucore::error::{UResult, USimpleError};
+use uucore::display::Quotable;
+use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::i18n::charmap::mb_char_len;
 use uucore::line_ending::LineEnding;
+use uucore::show;
 use uucore::translate;
 
 mod options {
@@ -107,8 +109,9 @@ fn paste(
             )
         } else {
             let path = Path::new(&filename);
-            let file = File::open(path)?;
-            InputSource::File(BufReader::new(file))
+            let name = filename.as_os_str().maybe_quote().to_string();
+            let file = File::open(path).map_err_context(|| name.clone())?;
+            InputSource::File(BufReader::new(file), name)
         };
 
         input_source_vec.push(input_source);
@@ -141,9 +144,18 @@ fn paste(
         for input_source in &mut input_source_vec {
             output.clear();
 
-            while let read @ 1.. = input_source.read_until(line_ending_byte, &mut output)? {
-                remove_trailing_line_ending_byte(line_ending_byte, read, &mut output);
-                delimiter_state.write_delimiter(&mut output);
+            loop {
+                match input_source.read_until(line_ending_byte, &mut output) {
+                    Ok(0) => break,
+                    Ok(read) => {
+                        remove_trailing_line_ending_byte(line_ending_byte, read, &mut output);
+                        delimiter_state.write_delimiter(&mut output);
+                    }
+                    Err(error) => {
+                        show!(error);
+                        break;
+                    }
+                }
             }
 
             delimiter_state.remove_trailing_delimiter(&mut output);
@@ -168,13 +180,18 @@ fn paste(
                 if eof[i] {
                     eof_count += 1;
                 } else {
-                    match input_source.read_until(line_ending_byte, &mut output)? {
-                        0 => {
+                    match input_source.read_until(line_ending_byte, &mut output) {
+                        Ok(0) => {
                             eof[i] = true;
                             eof_count += 1;
                         }
-                        read => {
+                        Ok(read) => {
                             remove_trailing_line_ending_byte(line_ending_byte, read, &mut output);
+                        }
+                        Err(error) => {
+                            show!(error);
+                            eof[i] = true;
+                            eof_count += 1;
                         }
                     }
                 }
@@ -376,14 +393,14 @@ impl<'a> DelimiterState<'a> {
 }
 
 enum InputSource {
-    File(BufReader<File>),
+    File(BufReader<File>, String),
     StandardInput(Rc<RefCell<Stdin>>),
 }
 
 impl InputSource {
     fn read(&mut self, buf: &mut [u8]) -> UResult<usize> {
         let us = match self {
-            Self::File(bu) => bu.read(buf)?,
+            Self::File(reader, name) => reader.read(buf).map_err_context(|| name.clone())?,
             Self::StandardInput(rc) => rc
                 .try_borrow()
                 .map_err(|bo| {
@@ -398,7 +415,9 @@ impl InputSource {
 
     fn read_until(&mut self, byte: u8, buf: &mut Vec<u8>) -> UResult<usize> {
         let us = match self {
-            Self::File(bu) => bu.read_until(byte, buf)?,
+            Self::File(reader, name) => reader
+                .read_until(byte, buf)
+                .map_err_context(|| name.clone())?,
             Self::StandardInput(rc) => rc
                 .try_borrow()
                 .map_err(|bo| {
