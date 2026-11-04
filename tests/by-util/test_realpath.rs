@@ -156,6 +156,7 @@ fn test_realpath_physical_mode() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: absolute symlink targets")]
 fn test_realpath_logical_mode() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -793,6 +794,7 @@ fn test_realpath_missing_mode_regular_file_followed_by_parent_dir() {
 }
 
 #[test]
+
 fn test_realpath_logical_followed_by_parent_dir() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
