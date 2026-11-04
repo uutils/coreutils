@@ -2959,31 +2959,25 @@ mod quoting {
         let (at, mut ucmd) = at_and_ucmd!();
         at.touch("line\u{2028}sep");
 
-        let out = ucmd
-            .arg("--quoting-style=escape")
+        ucmd.arg("--quoting-style=escape")
             .arg("-1")
             .succeeds()
-            .stdout_move_str();
-        assert_eq!(out, "line\\342\\200\\250sep\n");
+            .stdout_is("line\\342\\200\\250sep\n");
 
         let (at, mut ucmd) = at_and_ucmd!();
         at.touch("line\u{2029}sep");
-        let out = ucmd
-            .arg("--quoting-style=c")
+        ucmd.arg("--quoting-style=c")
             .arg("-1")
             .succeeds()
-            .stdout_move_str();
-        assert_eq!(out, "\"line\\342\\200\\251sep\"\n");
+            .stdout_is("\"line\\342\\200\\251sep\"\n");
 
         let (at, mut ucmd) = at_and_ucmd!();
         at.touch("line\u{2028}sep");
-        let out = ucmd
-            .env("LC_ALL", "C")
+        ucmd.env("LC_ALL", "C")
             .arg("-q")
             .arg("-1")
             .succeeds()
-            .stdout_move_str();
-        assert_eq!(out, "line???sep\n");
+            .stdout_is("line???sep\n");
     }
 
     // Regression test for GNU tests/ls/quoting-utf8.sh: in a UTF-8 locale the
