@@ -2343,6 +2343,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(incompatible_options_error(opts));
     }
 
+    if matches.contains_id(options::OUTPUT) && settings.debug {
+        return Err(incompatible_options_error("o --debug"));
+    }
+
     settings.ignore_leading_blanks = matches.get_flag(options::IGNORE_LEADING_BLANKS);
 
     settings.reverse = matches.get_flag(options::REVERSE);

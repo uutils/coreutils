@@ -18,9 +18,9 @@ fn test_version() {
         .stdout_is(format!("base64 {}\n", uucore::crate_version!()));
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_base64_non_utf8_paths() {
     use std::os::unix::ffi::OsStringExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -288,9 +288,9 @@ cyBvdmVyIHRoZSBsYXp5IGRvZy4=
         );
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_read_error() {
     new_ucmd!()
         .arg("/proc/self/mem")

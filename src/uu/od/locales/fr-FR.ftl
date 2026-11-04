@@ -46,6 +46,7 @@ od-error-invalid-endian = Argument invalide --endian={$endian}
 od-error-invalid-inputs = Entrées invalides : {$msg}
 od-error-too-large = la valeur est trop grande
 od-error-radix-invalid = base d'adresse de sortie invalide '{$radix}' ; elle doit être un caractère parmi [doxn]
+od-error-no-type-with-strings = aucun type ne peut être spécifié lors de l'affichage des chaînes
 od-error-radix-empty = Radix ne peut pas être vide, et doit être l'un de [o, d, x, n]
 od-error-invalid-width = largeur invalide {$width} ; utilisation de {$min} à la place
 od-error-missing-format-spec = spécification de format manquante après '--format' / '-t'

@@ -859,9 +859,9 @@ fn test_date_for_empty_file() {
     ucmd.arg("--file").arg(file).succeeds().no_output();
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_date_for_file_with_non_utf8_path() {
     use std::os::unix::ffi::OsStrExt;
 
@@ -962,6 +962,7 @@ fn test_date_for_file_mtime() {
         .stdout_only("1234\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 fn test_date_reference_attached_value_containing_iso_flag() {
     use std::time::{Duration, UNIX_EPOCH};
@@ -978,9 +979,9 @@ fn test_date_reference_attached_value_containing_iso_flag() {
         .stdout_only("1234\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_date_reference_is_non_utf8_path() {
     use std::os::unix::ffi::OsStrExt;
     use std::time::{Duration, UNIX_EPOCH};
@@ -2417,9 +2418,9 @@ fn test_date_french_full_sentence() {
 
 /// `%x`, `%X`, `%r` and `%c` use the locale's `D_FMT`, `T_FMT`, `T_FMT_AMPM` and `D_T_FMT`.
 /// The Linux values are GNU date's, the macOS ones follow its locale data.
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
 #[cfg(any(target_vendor = "apple", all(target_os = "linux", target_env = "gnu")))]
-#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
 fn test_date_format_locale_date_and_time() {
     #[cfg(target_os = "linux")]
     let cases = [
@@ -3362,9 +3363,9 @@ fn test_date_embedded_timezone_conversion() {
 }
 
 // Tests for invalid UTF-8 in date string
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_date_invalid_utf8_byte_rejected() {
     use std::os::unix::ffi::OsStrExt;
 
@@ -3983,9 +3984,9 @@ fn test_nanoseconds_width_prefix_ignored_issue12001() {
     assert_eq!(result.stdout().len(), 4);
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore)]
 fn test_write_error() {
     use std::fs::OpenOptions;
 
@@ -4010,9 +4011,9 @@ fn test_date_allow_spaces_after_month() {
         .succeeds();
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_format_with_non_utf8_bytes() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
@@ -4029,9 +4030,9 @@ fn test_format_with_non_utf8_bytes() {
         .stdout_only_bytes(b"\xc5[2031]\xa7%\xe4\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_format_percent_before_non_utf8_byte() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
@@ -4047,9 +4048,9 @@ fn test_format_percent_before_non_utf8_byte() {
         .stdout_only_bytes(b"w%\xd0z\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_format_with_gb18030_bytes() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
@@ -4066,9 +4067,9 @@ fn test_format_with_gb18030_bytes() {
         .stdout_only_bytes(b"2031\xc4\xea7\xd4\xc223\xc8\xd5\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_non_utf8_operands_are_octal_escaped() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
