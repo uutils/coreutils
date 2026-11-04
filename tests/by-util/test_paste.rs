@@ -641,7 +641,7 @@ fn test_all_directory_errors_are_reported() {
     let result = ucmd.args(&["d1", "d2"]).fails_with_code(1);
     result.stderr_contains("paste: d1:");
     result.stderr_contains("paste: d2:");
-    result.stdout_is("");
+    result.no_stdout();
 }
 
 #[test]
