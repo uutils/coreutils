@@ -49,16 +49,19 @@ impl Incomplete {
         }
     }
 
-    fn take_buffer(&mut self) -> &[u8] {
+    pub(super) fn take_buffer(&mut self) -> &[u8] {
         let len = self.buffer_len as usize;
         self.buffer_len = 0;
         &self.buffer[..len]
     }
 
+    /// Complete a potentially valid UTF-8 prefix saved from a previous chunk.
+    /// The caller must drain the buffer with `take_buffer` when the result is `Some`.
+    ///
     /// `(consumed_from_input, None)`: not enough input
     /// `(consumed_from_input, Some(Err(())))`: error bytes in buffer
     /// `(consumed_from_input, Some(Ok(())))`: UTF-8 string in buffer
-    fn try_complete_offsets(&mut self, input: &[u8]) -> (usize, Option<Result<(), ()>>) {
+    pub(super) fn try_complete_offsets(&mut self, input: &[u8]) -> (usize, Option<Result<(), ()>>) {
         let initial_buffer_len = self.buffer_len as usize;
         let copied_from_input;
         {
