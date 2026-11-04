@@ -77,6 +77,7 @@ impl Stats {
 // 2. Number only nonempty lines
 // 3. Don't number any lines at all
 // 4. Number all lines that match a basic regular expression.
+#[derive(Debug)]
 enum NumberingStyle {
     All,
     NonEmpty,
@@ -439,12 +440,6 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
 
         let _ = line.pop_if(|byte| *byte == b'\n');
 
-        if line.is_empty() {
-            stats.consecutive_empty_lines += 1;
-        } else {
-            stats.consecutive_empty_lines = 0;
-        }
-
         if let Some(section) = SectionDelimiter::parse(&line, &settings.section_delimiter) {
             stats.section = section;
             if settings.renumber {
@@ -457,6 +452,15 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                 SectionDelimiter::Body => &settings.body_numbering,
                 SectionDelimiter::Footer => &settings.footer_numbering,
             };
+
+            if let NumberingStyle::All = current_numbering_style {
+                if line.is_empty() {
+                    stats.consecutive_empty_lines += 1;
+                } else {
+                    stats.consecutive_empty_lines = 0;
+                }
+            }
+
             let is_line_numbered = match current_numbering_style {
                 // consider $join_blank_lines consecutive empty lines to be one logical line
                 // for numbering, and only number the last one
