@@ -9,6 +9,7 @@
 
 use std::borrow::Cow;
 use std::error::Error;
+use std::fs::File;
 use std::marker::PhantomData;
 use std::path::Path;
 
@@ -385,8 +386,15 @@ pub fn get_selinux_security_context(
         return Err(SeLinuxError::SELinuxNotEnabled);
     }
 
-    // Get the security context of the file
-    let context = match SecurityContext::of_path(path, follow_symbolic_links, false) {
+    context_to_string(SecurityContext::of_path(path, follow_symbolic_links, false))
+}
+
+/// Converts the result of reading a file's security context into a `String`,
+/// returning an empty string when the file has no context.
+fn context_to_string(
+    context: selinux::errors::Result<Option<SecurityContext<'_>>>,
+) -> Result<String, SeLinuxError> {
+    let context = match context {
         Ok(Some(ctx)) => ctx,
         Ok(None) => return Ok(String::new()), // No context found, return empty string
         Err(e) => {
@@ -470,8 +478,12 @@ pub fn contexts_differ(from_path: &Path, to_path: &Path) -> bool {
 ///
 /// # Arguments
 ///
-/// * `from_path` - Source filesystem path from which to copy the SELinux context.
+/// * `from` - Open source file from which to copy the SELinux context.
 /// * `to_path` - Destination filesystem path to which the context should be applied.
+///
+/// The context is read from the open file rather than by path, so it is guaranteed
+/// to belong to the file that was opened, even if the source path has been renamed
+/// or replaced since.
 ///
 /// # Returns
 ///
@@ -481,23 +493,26 @@ pub fn contexts_differ(from_path: &Path, to_path: &Path) -> bool {
 /// # Examples
 ///
 /// ```
+/// use std::fs::File;
 /// use std::path::Path;
 /// use uucore::selinux::preserve_security_context;
 ///
 /// // Preserve the SELinux context from source to destination
-/// match preserve_security_context(Path::new("/path/to/source"), Path::new("/path/to/destination")) {
-///     Ok(_) => println!("Context preserved successfully (or SELinux is not enabled)"),
-///     Err(err) => eprintln!("Failed to preserve context: {err}"),
+/// if let Ok(source) = File::open("/path/to/source") {
+///     match preserve_security_context(&source, Path::new("/path/to/destination")) {
+///         Ok(_) => println!("Context preserved successfully (or SELinux is not enabled)"),
+///         Err(err) => eprintln!("Failed to preserve context: {err}"),
+///     }
 /// }
 /// ```
-pub fn preserve_security_context(from_path: &Path, to_path: &Path) -> Result<(), SeLinuxError> {
+pub fn preserve_security_context(from: &File, to_path: &Path) -> Result<(), SeLinuxError> {
     // If SELinux is not enabled, return success without doing anything
     if !is_selinux_enabled() {
         return Err(SeLinuxError::SELinuxNotEnabled);
     }
 
-    // Get context from the source path
-    let context = get_selinux_security_context(from_path, false)?;
+    // Get context from the open source file
+    let context = context_to_string(SecurityContext::of_file(from, false))?;
 
     // If no context was found, just return success (nothing to preserve)
     if context.is_empty() {
@@ -761,7 +776,7 @@ mod tests {
 
         // Create a normal file
         let file_path = dir_path.join("file");
-        std::fs::File::create(&file_path).expect("Failed to create file");
+        File::create(&file_path).expect("Failed to create file");
 
         // Create a symlink to the file
         let symlink_path = dir_path.join("symlink");
@@ -872,9 +887,10 @@ mod tests {
         std::fs::write(source_path, b"source content").expect("Failed to write to source tempfile");
         std::fs::write(dest_path, b"destination content")
             .expect("Failed to write to destination tempfile");
+        let source = File::open(source_path).expect("Failed to open source tempfile");
 
         if !is_selinux_enabled() {
-            let result = preserve_security_context(source_path, dest_path);
+            let result = preserve_security_context(&source, dest_path);
             assert!(
                 result.is_err(),
                 "preserve_security_context should fail when SELinux is not enabled"
@@ -886,7 +902,7 @@ mod tests {
         let result = set_selinux_security_context(source_path, Some(&source_context));
 
         if result.is_ok() {
-            let preserve_result = preserve_security_context(source_path, dest_path);
+            let preserve_result = preserve_security_context(&source, dest_path);
             assert!(
                 preserve_result.is_ok(),
                 "Failed to preserve context: {:?}",
@@ -902,18 +918,12 @@ mod tests {
                 "Note: Couldn't set SELinux context on source file to test preservation. This is expected if the test doesn't have sufficient permissions."
             );
 
-            let preserve_result = preserve_security_context(source_path, dest_path);
+            let preserve_result = preserve_security_context(&source, dest_path);
             assert!(preserve_result.is_err());
         }
 
         let nonexistent_path = Path::new("/nonexistent/file/path");
-        let result = preserve_security_context(nonexistent_path, dest_path);
-        assert!(
-            result.is_err(),
-            "preserve_security_context should fail when source file doesn't exist"
-        );
-
-        let result = preserve_security_context(source_path, nonexistent_path);
+        let result = preserve_security_context(&source, nonexistent_path);
         assert!(
             result.is_err(),
             "preserve_security_context should fail when destination file doesn't exist"
@@ -931,7 +941,8 @@ mod tests {
             return;
         }
 
-        let result = preserve_security_context(source_path, dest_path);
+        let source = File::open(source_path).expect("Failed to open source tempfile");
+        let result = preserve_security_context(&source, dest_path);
 
         if let Err(err) = result {
             match err {
@@ -943,5 +954,44 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_preserve_security_context_uses_opened_file() {
+        if !is_selinux_enabled() {
+            return;
+        }
+
+        let directory = tempfile::tempdir().expect("Failed to create tempdir");
+        let source_path = directory.path().join("source");
+        let decoy_path = directory.path().join("decoy");
+        let dest_path = directory.path().join("dest");
+        for path in [&source_path, &decoy_path, &dest_path] {
+            std::fs::write(path, b"content").expect("Failed to write test file");
+        }
+
+        let source_context = String::from("system_u:object_r:tmp_t:s0");
+        let decoy_context = String::from("system_u:object_r:user_tmp_t:s0");
+        if set_selinux_security_context(&source_path, Some(&source_context)).is_err()
+            || set_selinux_security_context(&decoy_path, Some(&decoy_context)).is_err()
+        {
+            println!("Note: Couldn't set SELinux contexts on the test files, skipping.");
+            return;
+        }
+        let expected = get_selinux_security_context(&source_path, false)
+            .expect("Failed to read source context");
+        let decoy =
+            get_selinux_security_context(&decoy_path, false).expect("Failed to read decoy context");
+        assert_ne!(expected, decoy, "Test files need different contexts");
+
+        // Replace the source path after opening it, as someone renaming entries
+        // on the source path could. The opened file's context must still be used.
+        let source = File::open(&source_path).expect("Failed to open source");
+        std::fs::rename(&decoy_path, &source_path).expect("Failed to replace source");
+
+        preserve_security_context(&source, &dest_path).expect("Failed to preserve context");
+        let actual =
+            get_selinux_security_context(&dest_path, false).expect("Failed to read dest context");
+        assert_eq!(actual, expected);
     }
 }

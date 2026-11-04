@@ -2522,6 +2522,56 @@ fn test_selinux_default_context() {
     assert!(at.file_exists(dest));
 }
 
+#[rstest]
+#[case::regular_file(&[], "source", "dest")]
+#[case::create_leading(&["-D"], "source", "sub/dir/dest")]
+#[case::symlink_source(&[], "link", "dest")]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+fn test_install_preserve_context(
+    #[case] extra_args: &[&str],
+    #[case] source: &str,
+    #[case] dest: &str,
+) {
+    use uucore::selinux::{get_selinux_security_context, set_selinux_security_context};
+
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("Test skipped: SELinux is not enabled");
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("source");
+    at.symlink_file("source", "link");
+    at.touch("default");
+
+    let context = String::from("unconfined_u:object_r:user_home_t:s0");
+    if set_selinux_security_context(&at.plus("source"), Some(&context)).is_err() {
+        println!("Test skipped: could not set the SELinux context of the source");
+        return;
+    }
+    let expected = get_selinux_security_context(&at.plus("source"), false)
+        .expect("Failed to read the source context");
+    let default = get_selinux_security_context(&at.plus("default"), false)
+        .expect("Failed to read the default context");
+    // Otherwise the test could pass without anything being preserved.
+    if expected == default {
+        println!("Test skipped: the source context is the default one");
+        return;
+    }
+
+    ucmd.args(extra_args)
+        .arg("-P")
+        .arg(source)
+        .arg(dest)
+        .succeeds()
+        .no_stderr();
+
+    // For a symlink, the context comes from the file whose content was copied.
+    let actual = get_selinux_security_context(&at.plus(dest), false)
+        .expect("Failed to read the destination context");
+    assert_eq!(actual, expected);
+}
+
 #[test]
 #[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
 fn test_install_compare_with_mode_bits() {

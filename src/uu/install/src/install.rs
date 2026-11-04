@@ -840,9 +840,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     );
                 }
 
-                copy_file_safe(source, parent_fd, filename.as_os_str())?;
+                let src = copy_file_safe(source, parent_fd, filename.as_os_str())?;
 
-                finalize_installed_file(source, &target, b, backup_path)
+                finalize_installed_file(source, &src, &target, b, backup_path)
             } else {
                 copy(source, &target, b)
             }
@@ -1024,12 +1024,16 @@ fn perform_backup(from: &Path, to: &Path, b: &Behavior) -> UResult<Option<PathBu
 /// - `copy_file_safe` uses fd-based `DirFd::open_file_at()` (openat syscall)
 /// - `copy_file` uses path-based `OpenOptions::new().create_new().open()`
 #[cfg(not(target_os = "redox"))]
-fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsStr) -> UResult<()> {
+fn copy_file_safe(
+    from: &Path,
+    to_parent_fd: &DirFd,
+    to_filename: &std::ffi::OsStr,
+) -> UResult<File> {
     let mut src = File::open(from)?;
     let mut dst = to_parent_fd.open_file_at(to_filename)?;
     copy_fast(&mut src, &mut dst)?;
 
-    Ok(())
+    Ok(src)
 }
 
 /// Copy a file from one path to another. Handles the certain cases of special
@@ -1042,9 +1046,10 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
 ///
 /// # Returns
 ///
-/// Returns an empty Result or an error in case of failure.
+/// Returns the open source file, so that its attributes can be read later
+/// without looking up `from` again, or an error in case of failure.
 ///
-fn copy_file(from: &Path, to: &Path) -> UResult<()> {
+fn copy_file(from: &Path, to: &Path) -> UResult<File> {
     use std::os::unix::fs::OpenOptionsExt;
     // Pipe-backed descriptors can be opened even when canonicalize fails.
     if let Ok(to_abs) = to.canonicalize()
@@ -1083,14 +1088,14 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     if rustix::fs::ioctl_ficlone(&dest, &handle).is_ok() {
-        return Ok(());
+        return Ok(handle);
     }
 
     copy_fast(&mut handle, &mut dest).map_err(|err| {
         InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err.to_string())
     })?;
 
-    Ok(())
+    Ok(handle)
 }
 
 /// Strip a file using an external program.
@@ -1166,15 +1171,15 @@ fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
 ///
 /// # Parameters
 ///
-/// * `from` - The source file path.
+/// * `from` - The open source file.
 /// * `to` - The destination file path.
 ///
 /// # Returns
 ///
 /// Returns an empty Result or an error in case of failure.
 ///
-fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
-    let meta = metadata(from).map_err(InstallError::MetadataFailed)?;
+fn preserve_timestamps(from: &File, to: &Path) -> UResult<()> {
+    let meta = from.metadata().map_err(InstallError::MetadataFailed)?;
     let modified_time = meta.modified()?;
     let accessed_time = meta.accessed()?;
 
@@ -1192,6 +1197,7 @@ fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
 /// Apply post-copy operations: strip, ownership, permissions, timestamps, SELinux, and verbose output.
 fn finalize_installed_file(
     from: &Path,
+    src: &File,
     to: &Path,
     b: &Behavior,
     backup_path: Option<PathBuf>,
@@ -1203,13 +1209,13 @@ fn finalize_installed_file(
     set_ownership_and_permissions(to, b)?;
 
     if b.preserve_timestamps {
-        preserve_timestamps(from, to)?;
+        preserve_timestamps(src, to)?;
     }
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     if b.privileged {
         if b.preserve_context {
-            uucore::selinux::preserve_security_context(from, to)
+            uucore::selinux::preserve_security_context(src, to)
                 .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
         } else if b.default_context {
             set_selinux_default_context(to)
@@ -1256,9 +1262,9 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     // Declare the path here as we may need it for the verbose output below.
     let backup_path = perform_backup(from, to, b)?;
 
-    copy_file(from, to)?;
+    let src = copy_file(from, to)?;
 
-    finalize_installed_file(from, to, b, backup_path)
+    finalize_installed_file(from, &src, to, b, backup_path)
 }
 
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
