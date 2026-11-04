@@ -116,6 +116,9 @@ pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> XattrCopy
     ))
 }
 
+/// The xattrs Linux stores POSIX ACLs in.
+const POSIX_ACL_XATTRS: [&str; 2] = ["system.posix_acl_access", "system.posix_acl_default"];
+
 /// Copies only the POSIX ACL xattrs (`system.posix_acl_access` and
 /// `system.posix_acl_default`) from `source` to `dest`.
 ///
@@ -130,7 +133,7 @@ pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> XattrCopy
 /// failures here when `mode` is the only thing being preserved.
 #[cfg(unix)]
 pub fn copy_acls<P: AsRef<Path>>(source: P, dest: P) {
-    for name in ["system.posix_acl_access", "system.posix_acl_default"] {
+    for name in POSIX_ACL_XATTRS {
         if let Ok(Some(value)) = xattr::get(&source, name) {
             // Best-effort: silently skip if dest doesn't support ACL xattrs.
             let _ = xattr::set(&dest, name, &value);
@@ -269,10 +272,7 @@ pub fn has_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
     #[cfg(not(target_os = "macos"))]
     attrs.is_ok_and(|mut names| {
         // Only ACL attributes count; other xattrs such as security.selinux don't.
-        names.any(|name| {
-            name == OsStr::new("system.posix_acl_access")
-                || name == OsStr::new("system.posix_acl_default")
-        })
+        names.any(|name| POSIX_ACL_XATTRS.iter().any(|acl| name == *acl))
     })
 }
 
