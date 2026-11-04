@@ -533,6 +533,7 @@ fn make_linux_iflags(iflags: &IFlags) -> Option<core::ffi::c_int> {
 }
 
 impl Input<'_> {
+    #[inline(always)]
     fn read_block(&mut self, buf: &mut [u8]) -> io::Result<ReadOutcome> {
         let mut base_idx = 0;
         let target_len = buf.len();
