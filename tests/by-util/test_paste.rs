@@ -630,3 +630,29 @@ fn test_directory_error_includes_filename() {
         result.stdout_is("a\t\n");
     }
 }
+
+#[test]
+#[cfg(not(windows))]
+fn test_all_directory_errors_are_reported() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d1");
+    at.mkdir("d2");
+
+    let result = ucmd.args(&["d1", "d2"]).fails_with_code(1);
+    result.stderr_contains("paste: d1:");
+    result.stderr_contains("paste: d2:");
+    result.stdout_is("");
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_all_directory_errors_are_reported_in_serial_mode() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d1");
+    at.mkdir("d2");
+
+    let result = ucmd.args(&["-s", "d1", "d2"]).fails_with_code(1);
+    result.stderr_contains("paste: d1:");
+    result.stderr_contains("paste: d2:");
+    result.stdout_is("\n\n");
+}

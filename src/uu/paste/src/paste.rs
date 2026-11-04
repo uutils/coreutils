@@ -13,10 +13,11 @@ use std::path::Path;
 use std::rc::Rc;
 use std::slice::Iter;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::i18n::charmap::mb_char_len;
 use uucore::line_ending::LineEnding;
+use uucore::show;
 use uucore::translate;
 
 mod options {
@@ -108,9 +109,9 @@ fn paste(
             )
         } else {
             let path = Path::new(&filename);
-            let file = File::open(path)
-                .map_err_context(|| filename.as_os_str().maybe_quote().to_string())?;
-            InputSource::File(BufReader::new(file), filename)
+            let name = filename.as_os_str().maybe_quote().to_string();
+            let file = File::open(path).map_err_context(|| name.clone())?;
+            InputSource::File(BufReader::new(file), name)
         };
 
         input_source_vec.push(input_source);
@@ -138,7 +139,6 @@ fn paste(
     let mut delimiter_state = DelimiterState::new(&unescaped_and_encoded_delimiters);
 
     let mut output = Vec::new();
-    let mut read_error: Option<Box<dyn UError>> = None;
 
     if serial {
         for input_source in &mut input_source_vec {
@@ -152,7 +152,7 @@ fn paste(
                         delimiter_state.write_delimiter(&mut output);
                     }
                     Err(error) => {
-                        read_error.get_or_insert(error);
+                        show!(error);
                         break;
                     }
                 }
@@ -189,7 +189,7 @@ fn paste(
                             remove_trailing_line_ending_byte(line_ending_byte, read, &mut output);
                         }
                         Err(error) => {
-                            read_error.get_or_insert(error);
+                            show!(error);
                             eof[i] = true;
                             eof_count += 1;
                         }
@@ -215,10 +215,6 @@ fn paste(
             // https://pubs.opengroup.org/onlinepubs/9799919799/utilities/paste.html
             delimiter_state.reset_to_first_delimiter();
         }
-    }
-
-    if let Some(error) = read_error {
-        return Err(error);
     }
 
     Ok(())
@@ -397,16 +393,14 @@ impl<'a> DelimiterState<'a> {
 }
 
 enum InputSource {
-    File(BufReader<File>, OsString),
+    File(BufReader<File>, String),
     StandardInput(Rc<RefCell<Stdin>>),
 }
 
 impl InputSource {
     fn read(&mut self, buf: &mut [u8]) -> UResult<usize> {
         let us = match self {
-            Self::File(reader, name) => reader
-                .read(buf)
-                .map_err_context(|| name.as_os_str().maybe_quote().to_string())?,
+            Self::File(reader, name) => reader.read(buf).map_err_context(|| name.clone())?,
             Self::StandardInput(rc) => rc
                 .try_borrow()
                 .map_err(|bo| {
@@ -423,7 +417,7 @@ impl InputSource {
         let us = match self {
             Self::File(reader, name) => reader
                 .read_until(byte, buf)
-                .map_err_context(|| name.as_os_str().maybe_quote().to_string())?,
+                .map_err_context(|| name.clone())?,
             Self::StandardInput(rc) => rc
                 .try_borrow()
                 .map_err(|bo| {
