@@ -1110,7 +1110,6 @@ fn test_o_separate_fields_leave_two_files() {
         .stderr_contains("No such file or directory");
 }
 
-#[cfg(target_os = "linux")]
 #[uutests::wasi_ignore(NoLocaleData)]
 #[test]
 fn test_one_byte_separator_inside_multibyte_char() {
