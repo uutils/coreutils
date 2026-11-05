@@ -575,6 +575,24 @@ fn test_non_printing_chars() {
 }
 
 #[test]
+fn test_dictionary_order_overrides_non_printing() {
+    // -i has no effect with -d, so the tab is kept as a blank
+    for args in [
+        &["-d", "-i"][..],
+        &["-i", "-d"],
+        &["-di"],
+        &["-id"],
+        &["-di", "-k1"],
+    ] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("\tK\n7\n")
+            .succeeds()
+            .stdout_only("\tK\n7\n");
+    }
+}
+
+#[test]
 fn test_exponents_positive_general() {
     new_ucmd!()
         .pipe_in("1\n2e3\n1e-5")
@@ -1427,9 +1445,9 @@ fn test_spill_write_error_does_not_panic() {
 
 // A read error must be reported with context and without the raw io::Error suffix.
 // It used to print `sort: Input/output error (os error 5)`.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore)]
 fn test_read_error_message() {
     // Reading /proc/self/mem from offset 0 fails with EIO.
     let result = new_ucmd!().arg("/proc/self/mem").fails_with_code(2);
@@ -4242,4 +4260,14 @@ fn test_numeric_looking_file_names_are_kept_verbatim(
     at.mkdir("007");
     at.touch("empty");
     ucmd.args(args).fails_with_code(2).stderr_is(expected);
+}
+
+#[test]
+fn test_debug_incompatible_with_output() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-o", "out", "--debug"])
+        .pipe_in("b\na\n")
+        .fails_with_code(2)
+        .stderr_only("sort: options '-o --debug' are incompatible\n");
+    assert!(!at.file_exists("out"));
 }

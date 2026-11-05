@@ -158,18 +158,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(str_mode) => {
             use_umask = false;
             let mode =
-                uucore::mode::parse_chmod(MODE_RW_UGO, str_mode, true, uucore::mode::get_umask())
+                uucore::mode::parse_chmod(MODE_RW_UGO, str_mode, false, uucore::mode::get_umask())
                     .map_err(|err| {
-                    let message =
-                        translate!("mknod-error-invalid-mode", "error" => err.to_string());
-                    if let Some(args) = &diag_args
-                        && err.render_mode_value(args, str_mode, 0, &message)
-                    {
-                        // The diagnostic is already on stderr; exit quietly.
-                        return ExitCode::new(1);
-                    }
-                    USimpleError::new(1, message)
-                })?;
+                        let message =
+                            translate!("mknod-error-invalid-mode", "error" => err.to_string());
+                        if let Some(args) = &diag_args
+                            && err.render_mode_value(args, str_mode, 0, &message)
+                        {
+                            // The diagnostic is already on stderr; exit quietly.
+                            return ExitCode::new(1);
+                        }
+                        USimpleError::new(1, message)
+                    })?;
             if mode > 0o777 {
                 return Err(USimpleError::new(
                     1,

@@ -15,7 +15,6 @@ use rustc_hash::FxHashMap;
 use std::collections::VecDeque;
 use std::collections::hash_map::Entry;
 use std::ffi::OsString;
-use std::fmt;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
@@ -58,17 +57,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         process_input(io::stdin().lock(), &mut g)?;
     } else {
         let mut options: OpenOptions;
-        // some platforms cannot catch this as read error. Needs additional cost by stat
+        // Windows and WASI do not report a directory as a read error.
+        #[cfg(any(windows, target_os = "wasi"))]
+        if std::path::Path::new(input).is_dir() {
+            return Err(Error::Read(ReadError::IsDir(input.to_string_lossy().to_string())).into());
+        }
         #[cfg(windows)]
         {
             use std::os::windows::fs::OpenOptionsExt;
             use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_SEQUENTIAL_SCAN;
-            let input = std::path::Path::new(input);
-            if input.is_dir() {
-                return Err(
-                    Error::Read(ReadError::IsDir(input.to_string_lossy().to_string())).into(),
-                );
-            }
             // advise the OS we will access the data sequentially if possible (windows)
             options = File::options()
                 .custom_flags(FILE_FLAG_SEQUENTIAL_SCAN)
@@ -138,16 +135,9 @@ pub fn uu_app() -> Command {
 //
 // Diagnostics go through Display, so invalid UTF-8 bytes are represented
 // lossily here.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("{}", String::from_utf8_lossy(.0))]
 struct LoopNode<'a>(&'a [u8]);
-
-impl fmt::Display for LoopNode<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", String::from_utf8_lossy(self.0))
-    }
-}
-
-impl std::error::Error for LoopNode<'_> {}
 
 impl UError for Error {}
 impl UError for LoopNode<'_> {}

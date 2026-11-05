@@ -929,9 +929,9 @@ fn mb_input() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn mb_invalid_unicode() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1018,9 +1018,9 @@ fn positional_format_specifiers() {
         .stdout_only("Octal: 115, Int: 42, Float: 3.141590, String: hello, Hex: ff, Scientific: 1.000000e-05, Char: A, Unsigned: 100, Integer: 123");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn non_utf_8_input() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1133,6 +1133,15 @@ fn test_q_string_control_chars_with_quotes() {
         .args(&["%q", input])
         .succeeds()
         .stdout_only("''$'\\001'\\'''$'\\001'");
+}
+
+#[test]
+fn test_q_string_c1_control_char_with_quote() {
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["%q", "it's\u{9b}here"])
+        .succeeds()
+        .stdout_only("'it'\\''s'$'\\302\\233''here'");
 }
 
 // Output with no trailing newline stays in the buffer until the process exits,

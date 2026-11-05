@@ -5,6 +5,7 @@
 
 // spell-checker:ignore crème brûlée
 
+use rstest::rstest;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
@@ -1091,4 +1092,23 @@ fn test_error_message_preserves_non_utf8_filename() {
                 .stderr_contains(quoted);
         }
     }
+}
+
+// --format prints a trailing newline, --printf prints nothing. -c is the
+// short form of --format and follows the same rule: the last one wins.
+#[rstest]
+#[case::printf_then_format(&["--printf=X", "--format=Y"], "Y\n")]
+#[case::format_then_printf(&["--format=Y", "--printf=X"], "X")]
+#[case::short_format_then_printf(&["-c", "Y", "--printf=X"], "X")]
+#[case::printf_then_short_format(&["--printf=X", "-c", "Y"], "Y\n")]
+fn test_last_of_format_printf_wins(#[case] args: &[&str], #[case] expected: &str) {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("a.txt", "");
+
+    scene
+        .ucmd()
+        .args(args)
+        .arg("a.txt")
+        .succeeds()
+        .stdout_is(expected);
 }

@@ -8,7 +8,6 @@
 //! Set of functions to parse modes
 
 use std::ffi::OsString;
-use std::fmt::{self, Display};
 use std::ops::Range;
 
 #[cfg(windows)]
@@ -22,7 +21,8 @@ use crate::translate;
 /// `span` is a byte range inside the mode string that was handed to the parser,
 /// so that a caller can point a caret at the one clause — often the one
 /// character — that broke it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{message}")]
 pub struct ModeError {
     pub message: String,
     pub span: Range<usize>,
@@ -194,14 +194,6 @@ impl ModeError {
         clause_start + self.span.start..clause_start + self.span.end
     }
 }
-
-impl Display for ModeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.message)
-    }
-}
-
-impl std::error::Error for ModeError {}
 
 pub fn parse_numeric(fperm: u32, mode: &str, considering_dir: bool) -> Result<u32, ModeError> {
     let original = mode;
