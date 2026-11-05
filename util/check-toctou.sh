@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# spell-checker:ignore mknod mknodat fchmod fchmodat mkfifoat strace newfstatat statx lstat CREAT FDCWD headtest
+# spell-checker:ignore mknod mknodat fchmod fchmodat mkfifoat strace newfstatat statx lstat CREAT FDCWD headtest utimensat UTIME
 #
 # TOCTOU (time-of-check / time-of-use) verification.
 #
@@ -71,6 +71,16 @@ if touch_cmd=$(util_cmd touch); then
         fail_immediately "touch opened the target with O_TRUNC - vulnerable to truncating a symlink target (#10019)"
     fi
     echo "✓ touch creates with O_CREAT and without O_TRUNC"
+
+    # -a/-m must not read the other time by path and write it back (#15794).
+    for flag in -a -m; do
+        strace -f -e trace=utimensat -o strace_touch_omit.log $touch_cmd $flag test_touch_new 2>/dev/null || true
+        if ! grep -q 'UTIME_OMIT' strace_touch_omit.log; then
+            cat strace_touch_omit.log
+            fail_immediately "touch $flag wrote back the other time instead of UTIME_OMIT (#15794)"
+        fi
+    done
+    echo "✓ touch -a/-m leave the other time to UTIME_OMIT"
     rm -f test_touch_new
 fi
 
