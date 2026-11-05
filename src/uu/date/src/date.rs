@@ -1090,6 +1090,10 @@ fn format_extended_default(
             expand_locale_formats(&surrogate, fmt, config, false, 0, Some(output.year as i64))?;
         let fmt = expand_extended_composites(fmt.as_ref(), output.year, plus_extended_year);
         let fmt = substitute_extended_year(&fmt, output.year, iso_year);
+        // Resolve E/O before `%s` is expanded: `%Es` and `%Os` must take the
+        // real epoch seconds, not the surrogate date's.
+        let eo = resolve_eo_modifiers(&fmt, &surrogate, Some(output.year as i64), false)?;
+        let fmt = eo.as_deref().unwrap_or(fmt.as_str()).to_string();
         let fmt = substitute_epoch_seconds_value(&fmt, date.unix_seconds());
         format_date_with_locale_aware_months(
             &surrogate,
@@ -1355,12 +1359,6 @@ fn resolve_eo_modifiers<'a>(
     #[cfg(feature = "i18n-datetime")] skip_localization: bool,
     #[cfg(not(feature = "i18n-datetime"))] _skip_localization: bool,
 ) -> Result<Option<Cow<'a, str>>, String> {
-    // `date`/`real_year` are only consulted on the ICU path (when the
-    // `i18n-datetime` feature is enabled). Silence the unused warnings that
-    // otherwise fire when that feature is compiled out.
-    #[cfg(not(feature = "i18n-datetime"))]
-    let _ = (date, real_year);
-
     if !format_string
         .as_bytes()
         .iter()
@@ -1399,10 +1397,16 @@ fn resolve_eo_modifiers<'a>(
             while bytes.get(j).is_some_and(u8::is_ascii_digit) {
                 j += 1;
             }
-            if matches!(bytes.get(j), Some(b'E' | b'O')) {
+            if matches!(bytes.get(j), Some(b'E' | b'O'))
+                && bytes.get(j + 1).is_some_and(u8::is_ascii_alphabetic)
+            {
                 // An invalid E/O pair is rendered literally. GNU pads the
                 // whole literal sequence to the requested width like a
                 // string (space default), so check for a leading width.
+                // The byte after the modifier is ASCII, so `j + 2` is in
+                // range and on a character boundary; a dangling `%E`, a
+                // non-letter or a multi-byte character after the modifier
+                // falls through to the plain literal path instead.
                 let literal = &format_string[i..j + 2];
                 let width: Option<usize> = if j > flags_end {
                     // Overflowing widths are clamped to MAX and rejected by
@@ -1458,23 +1462,29 @@ fn resolve_eo_modifiers<'a>(
         #[cfg(not(feature = "i18n-datetime"))]
         let _ = modifier;
         // Push the base conversion (`%[flags][width]spec`) for jiff.
-        // GNU drops the `-`/`_` pad flags on `%O` numeric fallbacks --
-        // `%_Om` renders exactly like `%m`. Width and case flags remain.
+        // On an `%O` fallback a `-` flag drops the whole field spec, so
+        // `%-10Om` renders as `%m`; a `_` flag without a width is dropped as
+        // well, because it would only pad to the natural width (which would
+        // strip the leading zero). Otherwise flags and width are kept, so
+        // `%_10Om` still pads to ten columns.
         let push_base = |out: &mut String| {
             out.push('%');
-            if modifier == 'O' && !parsed.spec.starts_with(':') {
-                out.push_str(
-                    &parsed
-                        .flags
-                        .chars()
-                        .filter(|c| !matches!(c, '-' | '_'))
-                        .collect::<String>(),
-                );
-            } else {
+            let last_pad = parsed
+                .flags
+                .chars()
+                .rfind(|c| matches!(c, '-' | '_' | '0' | '+'));
+            let drop_field = modifier == 'O'
+                && !parsed.spec.starts_with(':')
+                && match last_pad {
+                    Some('-') => true,
+                    Some('_') if parsed.width.is_none() => true,
+                    _ => false,
+                };
+            if !drop_field {
                 out.push_str(parsed.flags);
-            }
-            if let Some(w) = parsed.width {
-                out.push_str(&w.to_string());
+                if let Some(w) = parsed.width {
+                    out.push_str(&w.to_string());
+                }
             }
             out.push_str(parsed.spec);
         };
@@ -1507,7 +1517,29 @@ fn resolve_eo_modifiers<'a>(
             push_base(&mut eo_resolved);
         }
         #[cfg(not(feature = "i18n-datetime"))]
-        push_base(&mut eo_resolved);
+        {
+            // Without ICU there is no locale calendar, so an `E` year falls
+            // back to the Gregorian year while keeping GNU's formatting: the
+            // year is not zero-padded and an explicit width pads with spaces.
+            let spec = parsed.spec.chars().last().unwrap_or(modifier);
+            if modifier == 'E' && matches!(spec, 'Y' | 'y' | 'C') {
+                let year = real_year.unwrap_or_else(|| i64::from(date.year()));
+                let raw = match spec {
+                    'Y' => year.to_string(),
+                    'y' => format!("{:02}", year.rem_euclid(100)),
+                    _ => (year / 100).to_string(),
+                };
+                let padded = if parsed.flags.is_empty() && parsed.width.is_none() {
+                    raw
+                } else {
+                    format_modifiers::apply_composite_modifiers(&raw, &parsed)
+                        .map_err(|e| e.to_string())?
+                };
+                eo_resolved.push_str(&padded.replace('%', "%%"));
+            } else {
+                push_base(&mut eo_resolved);
+            }
+        }
         i += parsed.len;
     }
 
@@ -1527,7 +1559,7 @@ fn format_date_with_locale_aware_months(
     #[cfg(feature = "i18n-datetime")]
     let eo_scan = resolve_eo_modifiers(format_string, date, real_year, skip_localization)?;
     #[cfg(not(feature = "i18n-datetime"))]
-    let eo_scan = resolve_eo_modifiers(format_string, date, real_year, _skip_localization)?;
+    let eo_scan = resolve_eo_modifiers(format_string, date, real_year, false)?;
     let scan_input: &str = eo_scan.as_deref().unwrap_or(format_string);
 
     // Apply locale-aware name substitution (month/day names) before modifier

@@ -3774,41 +3774,84 @@ fn test_date_eo_e_year_width_uses_string_padding() {
 
 #[test]
 fn test_date_eo_literal_width_pads_like_string() {
-    // An invalid E/O pair with a width is still rendered literally, but
-    // GNU pads the literal text to the requested width like a string
-    // (space default). `%10OY` -> five spaces + `%10OY`.
-    new_ucmd!()
-        .env("TZ", "UTC0")
-        .env("LC_ALL", "C")
-        .args(&["-d", "2024-06-15", "+%10OY"])
-        .succeeds()
-        .stdout_is("     %10OY\n");
+    // An invalid E/O pair with a width is still rendered literally, and the
+    // width pads it like a string (space default); `-` suppresses that
+    // padding while the literal keeps its own text.
+    for (format, expected) in [
+        ("%10OY", "     %10OY\n"),
+        ("%10EB", "     %10EB\n"),
+        ("%-10EB", "%-10EB\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .env("LC_ALL", "C")
+            .args(&["-d", "2024-06-01 12:34:56", &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
 }
 
 #[test]
-fn test_date_eo_o_fallback_keeps_flag_padding() {
-    // In the C locale `%O` falls back to the plain conversion and the pad
-    // flag is dropped entirely: `%_Om` and `%-Om` both render as `%m`
-    // (`06`). uutils previously kept the flag (` 6` / `6`).
-    new_ucmd!()
-        .env("TZ", "UTC0")
-        .env("LC_ALL", "C")
-        .args(&["-d", "2024-06-15", "+%_Om"])
-        .succeeds()
-        .stdout_is("06\n");
-    new_ucmd!()
-        .env("TZ", "UTC0")
-        .env("LC_ALL", "C")
-        .args(&["-d", "2024-06-15", "+%-Om"])
-        .succeeds()
-        .stdout_is("06\n");
-    // A width still applies: `%010Od` is zero-padded to width 10.
-    new_ucmd!()
-        .env("TZ", "UTC0")
-        .env("LC_ALL", "C")
-        .args(&["-d", "2024-06-15", "+%010Od"])
-        .succeeds()
-        .stdout_is("0000000015\n");
+fn test_date_eo_incomplete_pair_stays_literal() {
+    // A dangling `E`/`O`, or one followed by a non-letter, is not a
+    // conversion: it stays literal instead of crashing or eating the
+    // following character.
+    for (format, expected) in [
+        ("%E", "%E\n"),
+        ("%O", "%O\n"),
+        ("%Eé", "%Eé\n"),
+        ("%O😀", "%O😀\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .env("LC_ALL", "C")
+            .args(&["-d", "2024-06-01", &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+fn test_date_eo_extended_year_epoch_seconds() {
+    // `%s`, `%Es` and `%Os` all report the real epoch seconds of an
+    // out-of-range date, not the epoch of the surrogate year used to
+    // format it.
+    for (date, expected) in [
+        ("10000-06-01 12:34:56", "253415478896\n"),
+        ("12000-06-01 12:34:56", "316529382896\n"),
+    ] {
+        for format in ["%s", "%Es", "%Os"] {
+            new_ucmd!()
+                .env("TZ", "UTC0")
+                .env("LC_ALL", "C")
+                .args(&["-d", date, &format!("+{format}")])
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
+}
+
+#[test]
+fn test_date_eo_o_fallback_field_spec() {
+    // In the C locale `%O` falls back to the plain conversion. The whole
+    // field spec is dropped when `-` wins, and a width-less `_` is dropped
+    // too; otherwise the flags and width apply as usual.
+    for (format, expected) in [
+        ("%_Om", "06\n"),
+        ("%-Om", "06\n"),
+        ("%-10Om", "06\n"),
+        ("%-10OR", "12:34\n"),
+        ("%0-10OR", "12:34\n"),
+        ("%-10Ol", "12\n"),
+        ("%010Od", "0000000001\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .env("LC_ALL", "C")
+            .args(&["-d", "2024-06-01 12:34:56", &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
 }
 
 #[test]
