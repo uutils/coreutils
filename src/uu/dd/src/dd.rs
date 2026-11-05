@@ -1347,8 +1347,6 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     }
 
     wstat += conv_wstat;
-    // What the failed write got through before the error.
-    wstat += o.take_failed_wstat();
     // The input may end in the middle of a `conv=block` record.
     if copy_error.is_none()
         && let Some(c) = &mut converter
@@ -1356,6 +1354,8 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     {
         copy_error = Some(e);
     }
+    // What the failed write got through before the error.
+    wstat += o.take_failed_wstat();
 
     rstat.records_truncated = conv_rstat.records_truncated;
     if let Some(e) = copy_error {
