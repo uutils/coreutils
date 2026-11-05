@@ -53,6 +53,11 @@ impl<'a> BufferedOutput<'a> {
         Ok(wstat)
     }
 
+    /// Return what the inner block writer wrote before it failed.
+    pub(crate) fn take_failed_wstat(&mut self) -> WriteStat {
+        self.inner.take_failed_wstat()
+    }
+
     /// Synchronize the inner block writer.
     pub(crate) fn sync(&mut self) -> std::io::Result<()> {
         self.inner.sync()
@@ -126,10 +131,7 @@ mod tests {
             obs: 3,
             ..Default::default()
         };
-        let inner = Output {
-            dst: Dest::Sink,
-            settings: &settings,
-        };
+        let inner = Output::new(Dest::Sink, &settings);
         let mut output = BufferedOutput::new(inner).unwrap();
         let wstat = output.write_blocks(&[]).unwrap();
         assert_eq!(wstat.writes_complete, 0);
@@ -144,10 +146,7 @@ mod tests {
             obs: 3,
             ..Default::default()
         };
-        let inner = Output {
-            dst: Dest::Sink,
-            settings: &settings,
-        };
+        let inner = Output::new(Dest::Sink, &settings);
         let mut output = BufferedOutput::new(inner).unwrap();
         let wstat = output.write_blocks(b"ab").unwrap();
         assert_eq!(wstat.writes_complete, 0);
@@ -162,10 +161,7 @@ mod tests {
             obs: 6,
             ..Default::default()
         };
-        let inner = Output {
-            dst: Dest::Sink,
-            settings: &settings,
-        };
+        let inner = Output::new(Dest::Sink, &settings);
         let mut output = BufferedOutput::new(inner).unwrap();
         // Two writes that together still do not fill one block must both
         // be buffered; the second call must not flush the pending partial
@@ -184,10 +180,7 @@ mod tests {
             obs: 3,
             ..Default::default()
         };
-        let inner = Output {
-            dst: Dest::Sink,
-            settings: &settings,
-        };
+        let inner = Output::new(Dest::Sink, &settings);
         let mut output = BufferedOutput::new(inner).unwrap();
         let wstat = output.write_blocks(b"abcd").unwrap();
         assert_eq!(wstat.writes_complete, 1);
@@ -202,10 +195,7 @@ mod tests {
             obs: 3,
             ..Default::default()
         };
-        let inner = Output {
-            dst: Dest::Sink,
-            settings: &settings,
-        };
+        let inner = Output::new(Dest::Sink, &settings);
         let mut output = BufferedOutput {
             inner,
             buf: b"ab".to_vec(),
@@ -223,10 +213,7 @@ mod tests {
             obs: 10,
             ..Default::default()
         };
-        let inner = Output {
-            dst: Dest::Sink,
-            settings: &settings,
-        };
+        let inner = Output::new(Dest::Sink, &settings);
         let mut output = BufferedOutput {
             inner,
             buf: b"abc".to_vec(),

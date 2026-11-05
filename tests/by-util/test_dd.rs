@@ -2430,6 +2430,36 @@ fn test_stats_are_reported_when_a_write_fails() {
     assert_eq!(at.metadata("capped.bin").len(), CAP);
 }
 
+// A short write is retried, so the error that cuts it short is reported even
+// when it is the last write of the copy, instead of the rest of the block
+// being dropped silently.
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+fn test_short_last_write_fails() {
+    use rlimit::Resource;
+
+    const CAP: u64 = 768 * 1024;
+
+    for args in [
+        &["bs=512K", "count=2"][..],
+        &["ibs=512K", "obs=512K", "count=2"],
+        &["ibs=512K", "obs=2M", "count=2"],
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let result = ucmd
+            .args(&["if=/dev/zero", "of=capped.bin"])
+            .args(args)
+            .limit(Resource::FSIZE, CAP, CAP)
+            .ignore_sigxfsz()
+            .fails();
+        if args[0] == "bs=512K" {
+            result.stderr_contains("1+1 records out");
+            result.stderr_contains("786432 bytes");
+        }
+        assert_eq!(at.metadata("capped.bin").len(), CAP);
+    }
+}
+
 // `conv=block` writes a huge record in several pieces: those written before
 // the error still count.
 #[test]
