@@ -25,8 +25,8 @@ jobs:
       matrix:
         job:
           - { target: wasm32-wasip1, rust-flags: "--cfg wasi_runner" }
-          - { target: wasm32-wasip2, rust-flags: "--cfg wasi_runner --cfg wasip2_runner"  }
-    steps:
+          - { target: wasm32-wasip2, rust-flags: "--cfg wasi_runner --cfg wasip2_runner" }
+    steps: &wasi_steps
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
@@ -93,3 +93,15 @@ jobs:
           test_sum:: test_tail:: test_tee:: \
           test_test:: test_touch:: test_tr:: test_true:: test_truncate:: test_tsort:: test_uname:: \
           test_uniq:: test_unexpand:: test_unlink:: test_vdir:: test_wc:: test_yes::
+
+  # WASI tests on non-Linux hosts. These catch host-specific wasmtime differences
+  test_wasi_other_host:
+    name: Tests Non-Linux Host
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: macos-latest, target: wasm32-wasip1, rust-flags: "--cfg wasi_runner" }
+    steps: *wasi_steps
