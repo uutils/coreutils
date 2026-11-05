@@ -1100,11 +1100,8 @@ fn test_check_error_incorrect_format() {
 }
 
 #[cfg(unix)]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: host paths (/dev/null) not visible"
-)]
 fn test_dev_null() {
     let scene = TestScenario::new(util_name!());
 
@@ -1731,12 +1728,9 @@ fn test_check_untagged_flag_without_file_name() {
         .stderr_contains("WARNING: 2 lines are improperly formatted");
 }
 
+#[uutests::wasi_ignore(EmptyPathResolvesToDirectory)]
 #[test]
 #[cfg(all(not(windows), feature = "b2sum"))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: empty filename resolves to the preopened directory (EISDIR) instead of ENOENT, see #15357"
-)]
 fn test_check_untagged_without_file_name() {
     let scene = TestScenario::new(util_name!());
     let digest = "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce";
@@ -2264,11 +2258,8 @@ mod check_encoding {
     // This test should pass on linux. Windows and macos will fail to
     // create a file which name contains '\xff'.
     #[cfg(target_os = "linux")]
+    #[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
     #[test]
-    #[cfg_attr(
-        wasi_runner,
-        ignore = "WASI: preopened directories reject non-UTF-8 filenames"
-    )]
     fn test_check_non_utf8_filename() {
         use super::*;
         use std::{ffi::OsString, os::unix::ffi::OsStringExt};
@@ -2313,11 +2304,8 @@ mod check_encoding {
     }
 
     #[cfg(target_os = "linux")]
+    #[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
     #[test]
-    #[cfg_attr(
-        wasi_runner,
-        ignore = "WASI: preopened directories reject non-UTF-8 filenames"
-    )]
     fn test_quoting_in_stderr() {
         use super::*;
         use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
@@ -2833,12 +2821,9 @@ mod cksum_check_mode {
             .stderr_contains("sha2-bad-length.sum: no properly formatted checksum lines found");
     }
 
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     #[cfg_attr(not(unix), ignore = "/dev/null is only available on UNIX")]
-    #[cfg_attr(
-        wasi_runner,
-        ignore = "WASI sandbox: host paths (/dev/null) not visible"
-    )]
     fn test_untagged_base64_matching_tag() {
         let (at, mut ucmd) = at_and_ucmd!();
 
@@ -3372,12 +3357,9 @@ mod format_mix {
 mod debug_flag {
     use super::*;
 
+    #[uutests::wasi_ignore(HostSystemStateDiffers)]
     #[test]
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    #[cfg_attr(
-        wasi_runner,
-        ignore = "WASI: wasm32 guest has no x86 hardware path, so host-CPU debug output differs"
-    )]
     fn test_debug_flag() {
         // Test with default CRC algorithm - should output CPU feature detection
         new_ucmd!()
@@ -3433,12 +3415,9 @@ mod debug_flag {
             });
     }
 
+    #[uutests::wasi_ignore(HostSystemStateDiffers)]
     #[test]
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    #[cfg_attr(
-        wasi_runner,
-        ignore = "WASI: wasm32 guest has no x86 hardware path, so host-CPU debug output differs"
-    )]
     fn test_debug_with_algorithms() {
         // Test with SHA256 - CPU detection should be same regardless of algorithm
         new_ucmd!()
@@ -3488,11 +3467,8 @@ mod debug_flag {
     }
 
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[uutests::wasi_ignore(HostSystemStateDiffers)]
     #[test]
-    #[cfg_attr(
-        wasi_runner,
-        ignore = "WASI: wasm32 guest has no x86 hardware path, so host-CPU debug output differs"
-    )]
     fn test_debug_with_glibc_tunables() {
         if is_x86_feature_detected!("avx2") {
             for (tunables, expected) in [
@@ -3520,12 +3496,9 @@ mod debug_flag {
         }
     }
 
+    #[uutests::wasi_ignore(HostSystemStateDiffers)]
     #[test]
     #[cfg(target_arch = "aarch64")]
-    #[cfg_attr(
-        wasi_runner,
-        ignore = "WASI: wasm32 guest has no aarch64 hardware path, so host-CPU debug output differs"
-    )]
     fn test_debug_flag_aarch64() {
         // The vmull path needs PMULL. ASIMD alone is not enough.
         let expected = if std::arch::is_aarch64_feature_detected!("pmull") {

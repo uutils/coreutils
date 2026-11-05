@@ -134,12 +134,9 @@ fn test_cp_symlink_relative_source_in_cwd() {
 // The destination's parent is compared with the current directory by name
 // and then by device/inode, so a path that merely resolves to
 // the current directory is accepted.
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: '..' leaves the mapped guest root"
-)]
 fn test_cp_symlink_relative_source_dest_resolving_to_cwd() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("b.txt");
@@ -151,12 +148,9 @@ fn test_cp_symlink_relative_source_dest_resolving_to_cwd() {
     assert!(at.is_symlink("b2"));
 }
 
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
-)]
 fn test_cp_symlink_relative_source_dest_in_symlink_to_cwd() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("b.txt");
@@ -167,12 +161,9 @@ fn test_cp_symlink_relative_source_dest_in_symlink_to_cwd() {
     assert!(at.is_symlink("b2"));
 }
 
+#[uutests::wasi_ignore(AbsoluteHostTmpdirOutsideGuestRoot)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: absolute host tmpdir path is outside the mapped guest root, so cp cannot stat it"
-)]
 fn test_cp_symlink_absolute_source_into_subdir() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("sub");
@@ -203,12 +194,9 @@ fn test_cp_symlink_relative_source_outside_cwd_existing_dest() {
     }
 }
 
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
-)]
 fn test_cp_symlink_relative_source_outside_cwd_existing_symlink_dest() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("b.txt");
@@ -255,12 +243,9 @@ fn test_cp_symlink_recursive_relative_dir_into_existing_dir() {
     assert!(!at.is_symlink("out/dir/a.txt"));
 }
 
+#[uutests::wasi_ignore(AbsoluteHostTmpdirOutsideGuestRoot)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: absolute host tmpdir path is outside the mapped guest root, so cp cannot stat it"
-)]
 fn test_cp_symlink_recursive_absolute_dir_into_subdir() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
