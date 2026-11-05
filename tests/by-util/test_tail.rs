@@ -187,6 +187,27 @@ fn test_stdin_redirect_offset2() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_stdin_redirect_advances_shared_offset() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("small", "a\nb\nc\n");
+    // Larger than a block, so tail seeks from the end instead of reading it all.
+    at.write("big", &"x\n".repeat(100_000));
+
+    for name in ["small", "big"] {
+        let mut fh = File::open(at.plus(name)).unwrap();
+        ts.ucmd()
+            .args(&["-n", "1"])
+            .set_stdin(fh.try_clone().unwrap())
+            .succeeds();
+        let len = at.metadata(name).len();
+        assert_eq!(fh.stream_position().unwrap(), len, "{name}");
+    }
+}
+
+#[test]
 fn test_nc_0_wo_follow() {
     // verify that -[nc]0 without -f, exit without reading
 

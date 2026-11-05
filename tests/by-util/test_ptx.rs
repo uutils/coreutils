@@ -6,6 +6,7 @@
 // spell-checker:ignore roff
 // spell-checker:ignore funnnnnnnnnnnnnnnnn
 
+use rstest::rstest;
 use uutests::new_ucmd;
 
 #[test]
@@ -298,12 +299,18 @@ fn test_sentence_regexp_newlines_are_spaces() {
         .stdout_contains("Start of sentence");
 }
 
-#[test]
-fn test_sentence_regexp_invalid_syntax_failure() {
+#[rstest]
+#[case::sentence("-S", "ab[c")]
+#[case::word("-W", "(wrong")]
+fn test_invalid_regexp(#[case] option: &str, #[case] pattern: &str) {
     new_ucmd!()
-        .args(&["-S", "^["])
-        .fails()
-        .stderr_contains("Invalid regexp");
+        .args(&[option, pattern])
+        .pipe_in("ab\n")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is(format!(
+            "ptx: Invalid regular expression (for regexp '{pattern}')\n"
+        ));
 }
 
 #[test]
@@ -450,11 +457,6 @@ fn test_default_width_72() {
 #[test]
 fn test_invalid_regex_word_trailing_backslash() {
     new_ucmd!().args(&["-W", "bar\\"]).succeeds().no_stderr();
-}
-
-#[test]
-fn test_invalid_regex_word_unclosed_group() {
-    new_ucmd!().args(&["-W", "(wrong"]).succeeds().no_stderr();
 }
 
 #[test]
