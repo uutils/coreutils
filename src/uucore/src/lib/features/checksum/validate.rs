@@ -277,9 +277,7 @@ impl LineFormat {
         //   r"\MD5 (a\\ b) = abc123",
         //   BLAKE2b(44)= a45a4c4883cce4b50d844fab460414cc2080ca83690e74d850a9253e757384366382625b218c8585daee80f34dc9eb2f2fde5fb959db81cd48837f9216e7b0fa
         // Other whitespace before the algorithm name makes a tagged line malformed.
-        let trimmed = line.trim_blanks_start();
-        let algo_start = usize::from(trimmed.starts_with(b"\\"));
-        let rest = &trimmed[algo_start..];
+        let (rest, escaped) = Self::strip_escape_marker(line);
 
         // find the next parenthesis  using byte search (not next whitespace) because openssl's
         // tagged format does not put a space before (filename)
@@ -348,6 +346,7 @@ impl LineFormat {
             algo_bit_len: algo_bits,
             checksum: checksum_utf8,
             filename: filename.to_vec(),
+            escaped,
             format: Self::AlgoBased,
         })
     }
@@ -359,7 +358,8 @@ impl LineFormat {
     ///
     /// [untagged output format]: https://www.gnu.org/software/coreutils/manual/html_node/cksum-output-modes.html#cksum-output-modes-1
     fn parse_untagged(line: &[u8]) -> Option<LineInfo> {
-        let line = line.trim_blanks_start();
+        // A leading backslash means the file name is escaped.
+        let (line, escaped) = Self::strip_escape_marker(line);
         let blank_idx = line.iter().position(|&b| b == b' ' || b == b'\t')?;
         let checksum = &line[..blank_idx];
 
@@ -378,6 +378,7 @@ impl LineFormat {
             algo_bit_len: None,
             checksum: checksum_utf8,
             filename: filename.to_vec(),
+            escaped,
             format: Self::Untagged,
         })
     }
@@ -393,7 +394,7 @@ impl LineFormat {
     ///
     /// [untagged output format]: https://www.gnu.org/software/coreutils/manual/html_node/cksum-output-modes.html#cksum-output-modes-1
     fn parse_single_blank(line: &[u8]) -> Option<LineInfo> {
-        let line = line.trim_blanks_start();
+        let (line, escaped) = Self::strip_escape_marker(line);
         let blank_idx = line.iter().position(|&b| b == b' ' || b == b'\t')?;
         let checksum = &line[..blank_idx];
         if !checksum.iter().all(|&b| b.is_ascii_hexdigit()) || checksum.is_empty() {
@@ -410,8 +411,19 @@ impl LineFormat {
             algo_bit_len: None,
             checksum: checksum_utf8,
             filename: filename.to_vec(),
+            escaped,
             format: Self::SingleSpace,
         })
+    }
+
+    /// Skip leading blanks and the optional backslash that marks an escaped
+    /// file name, telling whether it was there.
+    fn strip_escape_marker(line: &[u8]) -> (&[u8], bool) {
+        let line = line.trim_blanks_start();
+        match line.strip_prefix(b"\\") {
+            Some(rest) => (rest, true),
+            None => (line, false),
+        }
     }
 
     /// Ensure that the given checksum is syntactically valid (that it is either
@@ -492,6 +504,8 @@ struct LineInfo {
     algo_bit_len: Option<usize>,
     checksum: String,
     filename: Vec<u8>,
+    /// The line started with a backslash: the file name must be unescaped.
+    escaped: bool,
     format: LineFormat,
 }
 
@@ -721,11 +735,17 @@ fn identify_algo_name_and_length(
 /// the expected one.
 fn compute_and_check_digest_from_file(
     filename: &[u8],
+    escaped: bool,
     expected_checksum: &[u8],
     algo: SizedAlgoKind,
     opts: ChecksumValidateOptions,
 ) -> Result<(), LineCheckError> {
-    let (filename_to_check_unescaped, _prefix) = unescape_filename(filename);
+    // Only names on lines starting with a backslash are escaped.
+    let filename_to_check_unescaped = if escaped {
+        unescape_filename(filename).0
+    } else {
+        filename.to_vec()
+    };
     let real_filename_to_check = os_str_from_bytes(&filename_to_check_unescaped)?;
 
     // Open the input file
@@ -804,7 +824,13 @@ fn process_algo_based_line(
     let algo = SizedAlgoKind::from_unsized(algo_kind, algo_len)
         .map_err(|_| LineCheckError::ImproperlyFormatted)?;
 
-    compute_and_check_digest_from_file(filename_to_check, &expected_checksum, algo, opts)
+    compute_and_check_digest_from_file(
+        filename_to_check,
+        line_info.escaped,
+        &expected_checksum,
+        algo,
+        opts,
+    )
 }
 
 /// Check a digest checksum with non-algo based pre-treatment.
@@ -843,7 +869,13 @@ fn process_non_algo_based_line(
 
     let algo = SizedAlgoKind::from_unsized(cli_algo_kind, algo_len)?;
 
-    compute_and_check_digest_from_file(&line_info.filename, &expected_checksum, algo, opts)
+    compute_and_check_digest_from_file(
+        &line_info.filename,
+        line_info.escaped,
+        &expected_checksum,
+        algo,
+        opts,
+    )
 }
 
 /// Parses a checksum line, detect the algorithm to use, read the file and produce

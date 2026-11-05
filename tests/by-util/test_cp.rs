@@ -134,12 +134,9 @@ fn test_cp_symlink_relative_source_in_cwd() {
 // The destination's parent is compared with the current directory by name
 // and then by device/inode, so a path that merely resolves to
 // the current directory is accepted.
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: '..' leaves the mapped guest root"
-)]
 fn test_cp_symlink_relative_source_dest_resolving_to_cwd() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("b.txt");
@@ -151,12 +148,9 @@ fn test_cp_symlink_relative_source_dest_resolving_to_cwd() {
     assert!(at.is_symlink("b2"));
 }
 
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
-)]
 fn test_cp_symlink_relative_source_dest_in_symlink_to_cwd() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("b.txt");
@@ -167,12 +161,9 @@ fn test_cp_symlink_relative_source_dest_in_symlink_to_cwd() {
     assert!(at.is_symlink("b2"));
 }
 
+#[uutests::wasi_ignore(AbsoluteHostTmpdirOutsideGuestRoot)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: absolute host tmpdir path is outside the mapped guest root, so cp cannot stat it"
-)]
 fn test_cp_symlink_absolute_source_into_subdir() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("sub");
@@ -203,12 +194,9 @@ fn test_cp_symlink_relative_source_outside_cwd_existing_dest() {
     }
 }
 
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
-)]
 fn test_cp_symlink_relative_source_outside_cwd_existing_symlink_dest() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("b.txt");
@@ -255,12 +243,9 @@ fn test_cp_symlink_recursive_relative_dir_into_existing_dir() {
     assert!(!at.is_symlink("out/dir/a.txt"));
 }
 
+#[uutests::wasi_ignore(AbsoluteHostTmpdirOutsideGuestRoot)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: absolute host tmpdir path is outside the mapped guest root, so cp cannot stat it"
-)]
 fn test_cp_symlink_recursive_absolute_dir_into_subdir() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
@@ -9419,6 +9404,61 @@ fn test_cp_p_preserves_posix_acls() {
         String::from_utf8_lossy(&src_acl.stdout),
         String::from_utf8_lossy(&dst_acl.stdout),
         "cp -p must preserve POSIX ACLs (GNU tests/cp/acl regression)",
+    );
+}
+
+// `cp -r` without -p only copies the mode bits of the directories it
+// creates, like GNU; it must not copy their access or default ACLs.
+// `cp -rp` preserves them, as ACLs are part of the mode.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: ACL/xattr syscalls are not implemented")]
+fn test_cp_r_copies_dir_posix_acls_only_with_p() {
+    use std::process::Command;
+
+    if Command::new("setfacl").arg("--version").output().is_err() {
+        return;
+    }
+    if Command::new("getfacl").arg("--version").output().is_err() {
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("src");
+
+    let setfacl = Command::new("setfacl")
+        .arg("-m")
+        .arg("user:bin:rwx,default:user:bin:rwx")
+        .arg(at.plus("src"))
+        .status();
+    let Ok(status) = setfacl else { return };
+    if !status.success() {
+        // Filesystem doesn't support ACLs; skip.
+        return;
+    }
+
+    let getfacl = |dir: &str| {
+        let output = Command::new("getfacl")
+            .arg("--omit-header")
+            .arg(at.plus(dir))
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&output.stdout).into_owned()
+    };
+
+    scene.ucmd().arg("-r").arg("src").arg("dst").succeeds();
+    let dst_acl = getfacl("dst");
+    assert!(
+        !dst_acl.contains("user:bin:"),
+        "cp -r must not copy POSIX ACLs:\n{dst_acl}",
+    );
+
+    scene.ucmd().arg("-rp").arg("src").arg("dst_p").succeeds();
+    assert_eq!(
+        getfacl("src"),
+        getfacl("dst_p"),
+        "cp -rp must preserve the access and default POSIX ACLs of a directory",
     );
 }
 

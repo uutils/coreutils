@@ -922,12 +922,8 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
     // try to parse integer (hex, octal, or decimal)
     let ascii_num = if let Some(hex) = s.strip_prefix("0x") {
         u32::from_str_radix(hex, 16).ok()
-    } else if let Some(octal) = s.strip_prefix("0") {
-        if octal.is_empty() {
-            Some(0)
-        } else {
-            u32::from_str_radix(octal, 8).ok()
-        }
+    } else if s.starts_with('0') {
+        u32::from_str_radix(s, 8).ok()
     } else {
         s.parse::<u32>().ok()
     };
