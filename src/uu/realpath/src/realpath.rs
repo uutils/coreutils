@@ -5,13 +5,10 @@
 
 // spell-checker:ignore (ToDO) retcode
 
-use clap::{
-    Arg, ArgAction, ArgMatches, Command,
-    builder::{TypedValueParser, ValueParserFactory},
-};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::{
-    ffi::{OsStr, OsString},
-    io::{Write, stdout},
+    ffi::OsString,
+    io::{self, Write, stdout},
     path::{Path, PathBuf},
 };
 use uucore::translate;
@@ -36,39 +33,6 @@ const OPT_RELATIVE_TO: &str = "relative-to";
 const OPT_RELATIVE_BASE: &str = "relative-base";
 
 const ARG_FILES: &str = "files";
-
-/// Custom parser that validates `OsString` is not empty
-#[derive(Clone, Debug)]
-struct NonEmptyOsStringParser;
-
-impl TypedValueParser for NonEmptyOsStringParser {
-    type Value = OsString;
-
-    fn parse_ref(
-        &self,
-        _cmd: &Command,
-        _arg: Option<&Arg>,
-        value: &OsStr,
-    ) -> Result<Self::Value, clap::Error> {
-        if value.is_empty() {
-            let mut err = clap::Error::new(clap::error::ErrorKind::ValueValidation);
-            err.insert(
-                clap::error::ContextKind::Custom,
-                clap::error::ContextValue::String(translate!("realpath-invalid-empty-operand")),
-            );
-            return Err(err);
-        }
-        Ok(value.to_os_string())
-    }
-}
-
-impl ValueParserFactory for NonEmptyOsStringParser {
-    type Parser = Self;
-
-    fn value_parser() -> Self::Parser {
-        Self
-    }
-}
 
 #[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -200,21 +164,21 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_RELATIVE_TO)
                 .long(OPT_RELATIVE_TO)
                 .value_name("DIR")
-                .value_parser(NonEmptyOsStringParser)
+                .value_parser(clap::value_parser!(OsString))
                 .help(translate!("realpath-help-relative-to")),
         )
         .arg(
             Arg::new(OPT_RELATIVE_BASE)
                 .long(OPT_RELATIVE_BASE)
                 .value_name("DIR")
-                .value_parser(NonEmptyOsStringParser)
+                .value_parser(clap::value_parser!(OsString))
                 .help(translate!("realpath-help-relative-base")),
         )
         .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .required(true)
-                .value_parser(NonEmptyOsStringParser)
+                .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }
@@ -268,12 +232,24 @@ fn canonicalize_relative(
     r: &Path,
     can_mode: MissingHandling,
     resolve: ResolveMode,
-) -> std::io::Result<PathBuf> {
+) -> io::Result<PathBuf> {
+    if r.as_os_str().is_empty() {
+        return Err(empty_name_error());
+    }
     let abs = canonicalize(r, can_mode, resolve)?;
     if can_mode == MissingHandling::Existing && !abs.is_dir() {
         abs.read_dir()?; // raise not a directory error
     }
     Ok(abs)
+}
+
+/// Like GNU, treat an empty name as a file that does not exist, so it is
+/// reported with the usual "No such file or directory" and the remaining
+/// operands are still processed.
+fn empty_name_error() -> io::Error {
+    std::fs::symlink_metadata("")
+        .err()
+        .unwrap_or_else(|| io::ErrorKind::NotFound.into())
 }
 
 /// Resolve a path to an absolute form and print it.
@@ -296,7 +272,10 @@ fn resolve_path(
     can_mode: MissingHandling,
     relative_to: Option<&Path>,
     relative_base: Option<&Path>,
-) -> std::io::Result<()> {
+) -> io::Result<()> {
+    if p.as_os_str().is_empty() {
+        return Err(empty_name_error());
+    }
     let abs = canonicalize(p, can_mode, resolve)?;
     if can_mode == MissingHandling::Normal {
         let path_bytes = p.as_os_str().as_encoded_bytes();
