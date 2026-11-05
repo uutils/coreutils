@@ -619,12 +619,9 @@ fn test_missing_file_is_named_in_error() {
         .stderr_only("paste: missing.txt: No such file or directory\n");
 }
 
+#[uutests::wasi_ignore(ErrnoMessageMismatch)]
 #[test]
 #[cfg(not(windows))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: reading a directory fails with EBADF, not EISDIR"
-)]
 fn test_read_error_names_the_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("sub");

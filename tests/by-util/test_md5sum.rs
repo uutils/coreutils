@@ -803,12 +803,9 @@ fn test_check_md5_comment_leading_space() {
         .stderr_contains("WARNING: 1 line is improperly formatted");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: /proc/self/mem is not available in the sandbox"
-)]
 fn test_read_error_does_not_stop_other_files() {
     // https://github.com/uutils/coreutils/issues/13128
     // Reading /proc/self/mem from offset 0 fails with EIO.
