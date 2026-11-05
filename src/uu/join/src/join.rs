@@ -770,6 +770,9 @@ fn parse_separator(value_os: &OsString) -> UResult<SepSetting> {
     let mut chars = value.chars();
     let c = chars.next().expect("valid string with at least one byte");
     match chars.next() {
+        // An ASCII separator takes the byte path on every platform, so it gets
+        // the same multi-byte aware splitting as on unix.
+        None if c.is_ascii() => Ok(SepSetting::Byte(c as u8)),
         None => Ok(SepSetting::Char(value.into())),
         Some('0') if c == '\\' => Ok(SepSetting::Byte(0)),
         _ => Err(USimpleError::new(
