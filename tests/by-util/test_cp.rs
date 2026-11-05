@@ -4724,17 +4724,24 @@ fn test_cp_force_relative_symbolic_link_loop_in_subdir() {
     assert!(at.file_exists("d/loop"));
 }
 
-#[test]
+#[rstest]
+#[case::no_dereference(&["-P", "-n"])]
+#[case::archive(&["-a", "-n"])]
+#[case::hard_link(&["-l", "-n"])]
+#[case::symbolic_link(&["-s", "-n"])]
+#[case::remove_destination(&["--remove-destination", "-n"])]
 #[cfg(not(windows))]
-fn test_cp_no_clobber_symbolic_link_loop() {
+fn test_cp_no_clobber_symbolic_link_loop_without_dereferencing(#[case] args: &[&str]) {
     let (at, mut ucmd) = at_and_ucmd!();
-    at.mkdir("d");
-    at.relative_symlink_file("loop", "d/loop");
-    at.touch("f");
-    ucmd.args(&["-n", "f", "d/loop"])
-        .fails()
-        .stderr_contains("cannot stat 'd/loop'");
-    assert!(at.is_symlink("d/loop"));
+    at.relative_symlink_file("loop", "loop");
+    at.write("file", "contents");
+    at.relative_symlink_file("file", "source");
+    ucmd.args(args)
+        .args(&["source", "loop"])
+        .succeeds()
+        .no_output();
+    assert!(at.is_symlink("loop"));
+    assert_eq!(at.read("source"), "contents");
 }
 
 /// Test that copying a directory to itself is disallowed.
