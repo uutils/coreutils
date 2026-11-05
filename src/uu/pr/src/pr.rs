@@ -1728,7 +1728,20 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<Vec<u8>> {
         .concat()
     };
 
-    vec![Vec::new(), Vec::new(), header_line, Vec::new(), Vec::new()]
+    // GNU print_header pads the left margin onto the first blank separator
+    // line and onto the header text line; the other blank lines stay empty.
+    // Body lines get the same margin in write_columns; trailers stay bare.
+    let margin = vec![b' '; options.offset_spaces];
+    let mut indented_header = margin.clone();
+    indented_header.extend_from_slice(&header_line);
+
+    vec![
+        margin,
+        Vec::new(),
+        indented_header,
+        Vec::new(),
+        Vec::new(),
+    ]
 }
 
 /// Returns five empty lines as trailer content if displaying trailer

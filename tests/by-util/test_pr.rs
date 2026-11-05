@@ -450,6 +450,20 @@ fn test_with_offset_space_option() {
 }
 
 #[test]
+fn test_indent_applies_to_header_line() {
+    // GNU print_header puts the -o margin on the first blank separator line and
+    // on the header text line. Body lines already had the margin; trailers stay
+    // bare.
+    new_ucmd!()
+        .args(&["-h", "HDR", "-D", "DATE", "-l", "12", "-o", "2"])
+        .pipe_in("x\n")
+        .succeeds()
+        .stdout_is(
+            "  \n\n  DATE                             HDR                              Page 1\n\n\n  x\n\n\n\n\n\n\n",
+        );
+}
+
+#[test]
 fn test_offset_too_large() {
     let arg = "2147483648";
     new_ucmd!()
