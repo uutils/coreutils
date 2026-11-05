@@ -3291,9 +3291,12 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
     let ctx = output.write_failed_context();
     let mut writer = output.into_write()?;
     for line in iter {
-        line.write(&mut writer, settings).map_err_context(&ctx)?;
+        line.write(&mut writer, settings)
+            .map_err(|error| error.map_err_context(&ctx).with_exit_code(2))?;
     }
-    writer.flush().map_err_context(ctx)?;
+    writer
+        .flush()
+        .map_err(|error| error.map_err_context(ctx).with_exit_code(2))?;
     Ok(())
 }
 
