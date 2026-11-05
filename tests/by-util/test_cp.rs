@@ -3914,6 +3914,25 @@ fn test_cp_interactive_update_older_backup_asks_before_backup() {
     assert!(!at.file_exists("dest~"));
 }
 
+#[rstest]
+#[case::existing_dest(&[])]
+#[case::remove_destination(&["--remove-destination"])]
+fn test_cp_attributes_only_interactive_update_backup_declined(#[case] extra_args: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("dest", "old");
+    at.write("file", "new");
+    let past = filetime::FileTime::from_unix_time(0, 0);
+    filetime::set_file_times(at.plus("dest"), past, past).unwrap();
+    ucmd.args(&["--attributes-only", "-i", "-b", "-u"])
+        .args(extra_args)
+        .args(&["file", "dest"])
+        .pipe_in("n\n")
+        .fails()
+        .stderr_contains("overwrite 'dest'?");
+    assert_eq!(at.read("dest"), "old");
+    assert!(!at.file_exists("dest~"));
+}
+
 #[test]
 fn test_cp_interactive_update_older_backup_asks_once() {
     let (at, mut ucmd) = at_and_ucmd!();

@@ -2686,8 +2686,9 @@ fn handle_copy_mode(
                             return Ok(PerformedAction::Skipped);
                         }
 
-                        // With a backup, `handle_existing_dest` already asked.
-                        if options.backup == BackupMode::None {
+                        // With a backup, `handle_existing_dest` already asked,
+                        // except when --attributes-only bypassed that handling.
+                        if options.backup == BackupMode::None || options.attributes_only {
                             options.overwrite.verify(dest, options.debug)?;
                         }
 
