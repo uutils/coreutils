@@ -637,6 +637,23 @@ fn test_round_without_suffix() {
             .stdout_only(format!("{}\n", exp[3]));
     }
 
+    // Below 10 the value is first rounded to one decimal, ties to even, and
+    // then with the method, as GNU does: 9.95 gives 10 even when rounding
+    // down.
+    for (method, exp) in [
+        ("from-zero", "2\n2\n10\n"),
+        ("towards-zero", "1\n2\n10\n"),
+        ("up", "2\n2\n10\n"),
+        ("down", "1\n2\n10\n"),
+        ("nearest", "2\n2\n10\n"),
+    ] {
+        new_ucmd!()
+            .args(&["--to=si", &format!("--round={method}")])
+            .args(&["--", "1.45", "2.5", "9.95"])
+            .succeeds()
+            .stdout_only(exp);
+    }
+
     // With a `--format` precision, the value is rounded to an integer first.
     for (method, exp) in [
         ("from-zero", "13.0\n-13.0\n1.0k\n2.0\n"),
