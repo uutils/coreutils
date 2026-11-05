@@ -1155,7 +1155,6 @@ fn test_o_separate_fields_only_before_a_file() {
         .stdout_only("1 a\n2 b\n3 c\n5 e\n8 h\n");
 }
 
-#[cfg(target_os = "linux")]
 #[uutests::wasi_ignore(NoLocaleData)]
 #[test]
 fn test_one_byte_separator_inside_multibyte_char() {
