@@ -4510,7 +4510,17 @@ dependencies = [
  "rustix",
  "tempfile",
  "uucore",
+ "uutests_procs",
  "xattr",
+]
+
+[[package]]
+name = "uutests_procs"
+version = "0.13.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
 ]
 
 [[package]]

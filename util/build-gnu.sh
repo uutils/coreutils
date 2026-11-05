@@ -211,6 +211,9 @@ sed -i 's/^print_ver_.*/require_selinux_/' tests/chcon/chcon-fail.sh
 # We use coreutils yes
 sed -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
 
+# Do not skip
+sed -i "s|skip_|true|g" tests/install/stdin.sh
+
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 sed -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
 
@@ -272,11 +275,6 @@ sed -i -e "s|framework_failure_ 'no inotify_add_watch';|fail=1;|" tests/tail/ino
 # pr-tests.pl: Override the comparison function to suppress diff output
 # This prevents the test from overwhelming logs while still reporting failures
 sed -i '/^my $fail = run_tests/i no warnings "redefine"; *Coreutils::_compare_files = sub { my ($p, $t, $io, $a, $e) = @_; my $d = File::Compare::compare($a, $e); warn "$p: test $t: mismatch\\n" if $d; return $d; };' tests/pr/pr-tests.pl
-
-# We don't have the same error message and no need to be that specific
-sed -i -e "s|invalid suffix in --pages argument|invalid --pages argument|" \
-    -e "s|--pages argument '\$too_big' too large|invalid --pages argument '\$too_big'|"  \
-    -e "s|invalid page range|invalid --pages argument|" tests/misc/xstrtol.pl
 
 # When decoding an invalid base32/64 string, gnu writes everything it was able to decode until
 # it hit the decode error, while we don't write anything if the input is invalid.

@@ -1035,8 +1035,7 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
 fn get_sane_control_char(cc_index: S) -> u8 {
     SANE_CONTROL_CHARS
         .iter()
-        .copied()
-        .find_map(|(i, v)| (i == cc_index).then_some(v))
+        .find_map(|&(i, v)| (i == cc_index).then_some(v))
         .unwrap_or(u8::from(cc_index == S::VMIN))
 }
 
