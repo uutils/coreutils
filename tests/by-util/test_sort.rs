@@ -2506,7 +2506,7 @@ fn test_failed_write_is_reported() {
     new_ucmd!()
         .pipe_in("hello")
         .set_stdout(std::fs::File::create("/dev/full").unwrap())
-        .fails()
+        .fails_with_code(2)
         .stderr_is("sort: write failed: 'standard output': No space left on device\n");
 }
 

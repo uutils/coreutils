@@ -392,20 +392,43 @@ impl UError for UUsageError {
 pub struct UIoError {
     context: Option<String>,
     inner: std::io::Error,
+    code: i32,
 }
 
 impl UIoError {
-    /// Create a new `UIoError` with a given exit code and message.
+    /// Create a new `UIoError` with an error kind, context and exit code 1.
     #[allow(clippy::new_ret_no_self)]
     pub fn new<S: Into<String>>(kind: std::io::ErrorKind, context: S) -> Box<dyn UError> {
         Box::new(Self {
             context: Some(context.into()),
             inner: kind.into(),
+            code: 1,
         })
+    }
+
+    /// Set the exit code, preserving the I/O error and its context.
+    ///
+    /// By default, an I/O error has exit code 1.
+    ///
+    /// ```
+    /// use uucore::error::{UIoError, UResult};
+    ///
+    /// let error = UIoError::from(std::io::Error::other("read failed")).with_exit_code(2);
+    /// let result: UResult<()> = Err(error.into());
+    /// assert_eq!(result.unwrap_err().code(), 2);
+    /// ```
+    #[must_use]
+    pub fn with_exit_code(mut self, code: i32) -> Self {
+        self.code = code;
+        self
     }
 }
 
-impl UError for UIoError {}
+impl UError for UIoError {
+    fn code(&self) -> i32 {
+        self.code
+    }
+}
 
 impl Error for UIoError {}
 
@@ -521,6 +544,7 @@ impl FromIo<Box<UIoError>> for std::io::Error {
         Box::new(UIoError {
             context: Some(context()),
             inner: self,
+            code: 1,
         })
     }
 }
@@ -536,6 +560,7 @@ impl FromIo<Box<UIoError>> for std::io::ErrorKind {
         Box::new(UIoError {
             context: Some(context()),
             inner: std::io::Error::new(self, ""),
+            code: 1,
         })
     }
 }
@@ -545,6 +570,7 @@ impl From<std::io::Error> for UIoError {
         Self {
             context: None,
             inner: f,
+            code: 1,
         }
     }
 }
@@ -577,6 +603,7 @@ impl<T> FromIo<UResult<T>> for Result<T, nix::Error> {
             Box::new(UIoError {
                 context: Some(context()),
                 inner: std::io::Error::from_raw_os_error(e as i32),
+                code: 1,
             }) as Box<dyn UError>
         })
     }
@@ -588,6 +615,7 @@ impl<T> FromIo<UResult<T>> for nix::Error {
         Err(Box::new(UIoError {
             context: Some(context()),
             inner: std::io::Error::from_raw_os_error(self as i32),
+            code: 1,
         }) as Box<dyn UError>)
     }
 }
@@ -598,6 +626,7 @@ impl From<nix::Error> for UIoError {
         Self {
             context: None,
             inner: std::io::Error::from_raw_os_error(f as i32),
+            code: 1,
         }
     }
 }
@@ -795,7 +824,31 @@ impl Display for ClapErrorWrapper {
 
 #[cfg(test)]
 mod tests {
-    use super::{USimpleError, UUsageError, quiet_if_reported};
+    use super::{FromIo, UError, UIoError, USimpleError, UUsageError, quiet_if_reported};
+    use std::io::{self, ErrorKind};
+
+    #[test]
+    fn test_uio_error_default_exit_code() {
+        let error = UIoError::from(io::Error::other("read failed"));
+        assert_eq!(error.code(), 1);
+        assert!(!error.usage());
+    }
+
+    #[test]
+    fn test_uio_error_exit_code_preserves_payload_and_context() {
+        let error = io::Error::new(ErrorKind::NotFound, std::fmt::Error)
+            .map_err_context(|| "input".to_string())
+            .with_exit_code(2);
+        assert_eq!(error.code(), 2);
+        assert_eq!(error.inner.kind(), ErrorKind::NotFound);
+        assert!(error.inner.get_ref().unwrap().is::<std::fmt::Error>());
+        assert_eq!(error.to_string(), format!("input: {}", std::fmt::Error));
+
+        let error: Box<dyn UError> = error.with_exit_code(125).into();
+        assert_eq!(error.code(), 125);
+        assert_eq!(error.to_string(), format!("input: {}", std::fmt::Error));
+        assert!(!error.usage());
+    }
 
     /// A quieted error keeps its code but says nothing: the report already did.
     #[test]
