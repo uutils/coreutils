@@ -262,40 +262,59 @@ fn test_preserve_root_all_same_device() {
 #[cfg(target_os = "linux")]
 #[test]
 fn test_preserve_root_all_skips_mount_reached_through_symlink() {
-    // A symbolic link stored on a mounted file system that points at the mount
-    // root must still be seen as a mount point when the operand ends in a slash.
-    // Mounting needs root privileges, so the test stops early without them.
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.mkdir("mnt");
-    let mount_point = at.plus_as_string("mnt");
-    let mounted = std::process::Command::new("mount")
-        .args(["-t", "tmpfs", "tmpfs", &mount_point])
+    use std::process::Command;
+
+    let ts = TestScenario::new(util_name!());
+
+    // Unprivileged user namespaces are disabled in some kernels and sandboxes.
+    let can_unshare = Command::new("unshare")
+        .args(["--user", "--map-root-user", "--mount", "true"])
         .status()
         .is_ok_and(|status| status.success());
-    if !mounted {
+    if !can_unshare {
+        println!("TEST SKIPPED: no unprivileged mount namespace available");
         return;
     }
 
-    at.touch("mnt/file");
-    at.mkdir("mnt/scratch");
-    at.symlink_dir(&mount_point, "mnt/scratch/link");
+    // A symbolic link stored on a mounted file system that points at the mount
+    // root must still be seen as a mount point when the operand ends in a slash.
+    // The tmpfs lives in a throwaway user + mount namespace, so nothing stays
+    // mounted on the host. Exit 99 means the mount could not be set up.
+    let mount_point = ts.fixtures.plus_as_string("mnt");
+    let script = format!(
+        "mkdir -p {mp}
+         mount -t tmpfs tmpfs {mp} || {{ echo MOUNT_SETUP_FAILED >&2; exit 99; }}
+         touch {mp}/file
+         mkdir {mp}/scratch
+         ln -s {mp} {mp}/scratch/link
+         {bin} rm --preserve-root=all -rf {mp}/scratch/link/
+         status=$?
+         [ -e {mp}/file ] || echo FILE_REMOVED >&2
+         exit $status",
+        mp = shell_quote(&mount_point),
+        bin = shell_quote(&ts.bin_path.to_string_lossy())
+    );
+    let output = Command::new("unshare")
+        .args(["--user", "--map-root-user", "--mount", "sh", "-c", &script])
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("LANGUAGE", "C")
+        .output()
+        .expect("failed to spawn unshare");
 
-    let result = ucmd
-        .arg("--preserve-root=all")
-        .arg("-rf")
-        .arg("mnt/scratch/link/")
-        .run();
-    let still_there = at.file_exists("mnt/file");
-
-    // Unmount before asserting, so a failure does not leave the mount behind.
-    let _ = std::process::Command::new("umount")
-        .arg(&mount_point)
-        .status();
-
-    result
-        .failure()
-        .stderr_contains("since it's on a different device");
-    assert!(still_there);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if output.status.code() == Some(99) || stderr.contains("MOUNT_SETUP_FAILED") {
+        println!("TEST SKIPPED: could not mount a tmpfs in the namespace: {stderr}");
+        return;
+    }
+    assert!(
+        stderr.contains("since it's on a different device"),
+        "--preserve-root=all did not skip the mount: {stderr}"
+    );
+    assert!(
+        !stderr.contains("FILE_REMOVED"),
+        "rm emptied the mounted file system: {stderr}"
+    );
 }
 
 #[test]
