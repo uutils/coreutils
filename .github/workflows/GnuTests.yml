@@ -2,7 +2,7 @@ name: GnuTests
 
 # spell-checker:ignore (abbrev/names) CodeCov gnulib GnuTests
 # spell-checker:ignore (jargon) submodules devel
-# spell-checker:ignore (libs/utils) chksum dpkg getenforce gperf lcov libexpect limactl pyinotify setenforce shopt valgrind libattr libcap taiki-e zstd cpio
+# spell-checker:ignore (libs/utils) chksum gperf lcov libexpect limactl pyinotify shopt valgrind libattr libcap taiki-e zstd cpio
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
 # spell-checker:ignore userns nodocs
@@ -88,6 +88,7 @@ jobs:
         sudo locale-gen --keep-existing am_ET.UTF-8 # Ethiopia
         sudo locale-gen --keep-existing th_TH.UTF-8 # Thailand
         sudo locale-gen --keep-existing zh_CN.GB18030 # China
+        sudo localedef --no-archive --no-warnings=ascii -f SHIFT_JIS -i ja_JP ja_JP.SHIFT_JIS
 
         sudo update-locale
         echo "After:"

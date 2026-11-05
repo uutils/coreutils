@@ -993,6 +993,16 @@ fn perform_backup(from: &Path, to: &Path, b: &Behavior) -> UResult<Option<PathBu
         );
     }
 
+    // Never move a directory aside to put a file in its place. Like GNU,
+    // refuse it, but still back up a symlink to a directory.
+    if b.backup_mode != BackupMode::None && fs::symlink_metadata(to).is_ok_and(|m| m.is_dir()) {
+        return Err(InstallError::CreateRegularFileFailed(
+            to.to_path_buf(),
+            rustix::io::Errno::ISDIR.into(),
+        )
+        .into());
+    }
+
     // A dangling symlink is still a destination entry to back up.
     if to.symlink_metadata().is_ok() {
         if b.verbose {
@@ -1275,15 +1285,10 @@ fn should_set_selinux_context(b: &Behavior) -> bool {
     b.privileged && (b.context.is_some() || b.default_context)
 }
 
-/// Check if a file needs to be copied due to ownership differences when no explicit group is specified.
-/// Returns true if the destination file's ownership would differ from what it should be after installation.
-fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
+/// Check if a file needs to be copied due to a group difference when no explicit group is specified.
+/// Returns true if the destination file's group would differ from what it should be after installation.
+fn needs_copy_for_group(to: &Path, to_meta: &fs::Metadata) -> bool {
     use std::os::unix::fs::MetadataExt;
-
-    // Check if the destination file's owner differs from the effective user ID
-    if to_meta.uid() != geteuid().as_raw() {
-        return true;
-    }
 
     // For group, we need to determine what the group would be after installation
     // If no group is specified, the behavior depends on the directory:
@@ -1379,16 +1384,16 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
 
         // TODO: if -P (#1809) and from/to contexts mismatch, return true.
 
-        // Check if the owner ID is specified and differs from the destination file's owner.
-        match b.owner_id {
-            Some(uid) if uid != to_meta.uid() => return true,
-            _ => {}
+        // Check if the destination file's owner differs from the specified owner ID,
+        // or from the effective user ID when no owner is specified.
+        if to_meta.uid() != b.owner_id.unwrap_or_else(|| geteuid().as_raw()) {
+            return true;
         }
 
         // Check if the group ID is specified and differs from the destination file's group.
         match b.group_id {
             Some(gid) if gid != to_meta.gid() => return true,
-            None if needs_copy_for_ownership(to, &to_meta) => return true,
+            None if needs_copy_for_group(to, &to_meta) => return true,
             _ => {}
         }
     }

@@ -425,11 +425,8 @@ fn test_date_utc_with_d_flag() {
     }
 }
 
+#[uutests::wasi_ignore(NoTzdb)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: timezone/locale database not visible"
-)]
 fn test_date_utc_vs_local() {
     let cases = [
         ("-d", "2024-01-01 12:00", "+%H:%M %Z", "12:00 EST\n"),
@@ -711,12 +708,9 @@ fn test_date_error_echoes_input_verbatim() {
         .stderr_contains("the argument '1e9' lacks a leading '+'");
 }
 
+#[uutests::wasi_ignore(HostSystemStateDiffers)]
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: setting the system clock is not supported at all, not just permission-gated"
-)]
 fn test_date_set_permissions_error() {
     if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
         let result = new_ucmd!()
@@ -731,12 +725,9 @@ fn test_date_set_permissions_error() {
     }
 }
 
+#[uutests::wasi_ignore(HostSystemStateDiffers)]
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: setting the system clock is not supported at all, not just permission-gated"
-)]
 fn test_date_set_hyphen_prefixed_values() {
     // test -s flag accepts hyphen-prefixed values like "-3 days"
     if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
@@ -859,9 +850,9 @@ fn test_date_for_empty_file() {
     ucmd.arg("--file").arg(file).succeeds().no_output();
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_date_for_file_with_non_utf8_path() {
     use std::os::unix::ffi::OsStrExt;
 
@@ -962,6 +953,7 @@ fn test_date_for_file_mtime() {
         .stdout_only("1234\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 fn test_date_reference_attached_value_containing_iso_flag() {
     use std::time::{Duration, UNIX_EPOCH};
@@ -978,9 +970,9 @@ fn test_date_reference_attached_value_containing_iso_flag() {
         .stdout_only("1234\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_date_reference_is_non_utf8_path() {
     use std::os::unix::ffi::OsStrExt;
     use std::time::{Duration, UNIX_EPOCH};
@@ -1331,11 +1323,8 @@ fn test_date_from_stdin() {
 const JAN2: &str = "2024-01-02 12:00:00 +0000";
 const JUL2: &str = "2024-07-02 12:00:00 +0000";
 
+#[uutests::wasi_ignore(NoTzdb)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: timezone/locale database not visible"
-)]
 fn test_date_tz() {
     fn test_tz(tz: &str, date: &str, output: &str) {
         println!("Test with TZ={tz}, date=\"{date}\".");
@@ -1381,11 +1370,8 @@ fn test_date_tz_with_utc_flag() {
         .stdout_only("UTC\n");
 }
 
+#[uutests::wasi_ignore(NoTzdb)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: timezone/locale database not visible"
-)]
 fn test_date_tz_various_formats() {
     fn test_tz(tz: &str, date: &str, output: &str) {
         println!("Test with TZ={tz}, date=\"{date}\".");
@@ -1413,11 +1399,8 @@ fn test_date_tz_various_formats() {
     );
 }
 
+#[uutests::wasi_ignore(NoTzdb)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: timezone/locale database not visible"
-)]
 fn test_date_tz_with_relative_time() {
     // Anchor the relative expression to a fixed instant so this test does not
     // depend on the current date or a future timezone transition.
@@ -1430,11 +1413,8 @@ fn test_date_tz_with_relative_time() {
         .stdout_only("2024-01-02 03:00:00 PST\n");
 }
 
+#[uutests::wasi_ignore(NoTzdb)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: timezone/locale database not visible"
-)]
 fn test_date_utc_time() {
     // Test that -u flag shows correct UTC time
     // We get 2 UTC times just in case we're really unlucky and this runs around
@@ -1925,11 +1905,8 @@ fn test_date_whitespace_between_items() {
         .stdout_is("Fri Jan 23 01:00:00 UTC 2026\n");
 }
 
+#[uutests::wasi_ignore(NoTzdb)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: timezone/locale database not visible"
-)]
 fn test_date_relative_m9() {
     // Military timezone "m9" should be parsed as noon + 9 hours = 21:00 UTC
     // When displayed in TZ=UTC+9 (which is UTC-9), this shows as 12:00 local time
@@ -2234,12 +2211,9 @@ fn test_date_locale_en_us_vs_c_difference() {
     }
 }
 
+#[uutests::wasi_ignore(NoTzdb)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: timezone/locale database not visible"
-)]
 fn test_date_locale_hu_hungarian() {
     // Regression test for uutils/coreutils#11240: the GNU modifier fast-path
     // ("%-e") used to run before ICU localization, so "%b"/"%A" came out in
@@ -2417,9 +2391,9 @@ fn test_date_french_full_sentence() {
 
 /// `%x`, `%X`, `%r` and `%c` use the locale's `D_FMT`, `T_FMT`, `T_FMT_AMPM` and `D_T_FMT`.
 /// The Linux values are GNU date's, the macOS ones follow its locale data.
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
 #[cfg(any(target_vendor = "apple", all(target_os = "linux", target_env = "gnu")))]
-#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
 fn test_date_format_locale_date_and_time() {
     #[cfg(target_os = "linux")]
     let cases = [
@@ -2456,12 +2430,9 @@ fn test_date_format_locale_date_and_time() {
     }
 }
 
+#[uutests::wasi_ignore(NoTzdb)]
 #[test]
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: timezone/locale database not visible"
-)]
 fn test_date_format_locale_c() {
     if !is_locale_available("fr_FR.UTF-8") {
         return;
@@ -2505,12 +2476,9 @@ fn test_date_format_locale_date_and_time_no_pad_large_width() {
 
 /// `%p` and `%P` use the locale's AM/PM markers, also inside `%r`. The Linux
 /// values are GNU date's, the macOS ones follow its locale data.
+#[uutests::wasi_ignore(NoTzdb)]
 #[rstest]
 #[cfg(any(target_vendor = "apple", all(target_os = "linux", target_env = "gnu")))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: timezone/locale database not visible"
-)]
 #[cfg_attr(
     target_os = "linux",
     case::spanish("es_ES.UTF-8", "%p", "p.\u{202f}m."),
@@ -2654,11 +2622,8 @@ fn test_date_input_hhmm_ampm() {
     }
 }
 
+#[uutests::wasi_ignore(NoTzdb)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: timezone/locale database not visible"
-)]
 fn test_date_input_trailing_tz_abbrev_rezones() {
     // `TZ=UTC+1 date -d '2024-01-01 EST'` should display the instant in UTC+1
     // (GNU: 04:00:00 -01:00), not leave it in EST (the pre-fix uutils
@@ -2874,12 +2839,9 @@ fn test_date_parenthesis_vs_other_special_chars() {
     }
 }
 
+#[uutests::wasi_ignore(NoTzdb)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: timezone/locale database not visible"
-)]
 fn test_date_iranian_locale_solar_hijri_calendar() {
     // Test Iranian locale uses Solar Hijri calendar
     // Verify the Solar Hijri calendar is used in the Iranian locale
@@ -2945,12 +2907,9 @@ fn test_date_iranian_locale_solar_hijri_calendar() {
     assert!(rfc_output.starts_with(&current_year.to_string()));
 }
 
+#[uutests::wasi_ignore(NoTzdb)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: timezone/locale database not visible"
-)]
 fn test_date_ethiopian_locale_calendar() {
     // Test Ethiopian locale uses Ethiopian calendar
     // Verify the Ethiopian calendar is used in the Ethiopian locale
@@ -3096,12 +3055,9 @@ fn check_date(locale: &str, date: &str, fmt: &str, expected: &str) {
     assert_eq!(actual, expected, "LC_ALL={locale} date -d '{date}' '{fmt}'");
 }
 
+#[uutests::wasi_ignore(NoTzdb)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: timezone/locale database not visible"
-)]
 fn test_locale_calendar_conversions() {
     // Persian (Solar Hijri) - Nowruz is March 20/21
     for (d, e) in [
@@ -3151,12 +3107,9 @@ fn test_locale_calendar_conversions() {
     }
 }
 
+#[uutests::wasi_ignore(NoTzdb)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: timezone/locale database not visible"
-)]
 fn test_locale_month_names() {
     // %B full month names: Jan, Jun, Dec for each locale
     for (loc, jan, jun, dec) in [
@@ -3181,12 +3134,9 @@ fn test_locale_month_names() {
     }
 }
 
+#[uutests::wasi_ignore(NoTzdb)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: timezone/locale database not visible"
-)]
 fn test_locale_abbreviated_month_names() {
     // %b abbreviated month names: Feb, Jun, Dec for each locale
     // This test ensures we don't get double periods in locales like Hungarian
@@ -3208,12 +3158,9 @@ fn test_locale_abbreviated_month_names() {
     }
 }
 
+#[uutests::wasi_ignore(NoTzdb)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: timezone/locale database not visible"
-)]
 fn test_locale_day_names() {
     // %A full day names: Mon (26th), Sun (25th), Sat (24th) Jan 2026
     for (loc, mon, sun, sat) in [
@@ -3244,12 +3191,9 @@ fn test_date_locale_default_format_timezone_position() {
         .stdout_is("Sat Oct 11 13:00:00 CEST 2025\n");
 }
 
+#[uutests::wasi_ignore(NoTzdb)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: timezone/locale database not visible"
-)]
 fn test_locale_names_for_several_dates_in_one_run() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("dates", "2026-01-26\n2026-06-14\n2026-12-12\n");
@@ -3344,11 +3288,8 @@ fn test_date_month_subtraction_keeps_day() {
 }
 
 // Tests for embedded timezone parsing
+#[uutests::wasi_ignore(NoTzdb)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: timezone/locale database not visible"
-)]
 fn test_date_embedded_timezone_conversion() {
     // Date should be interpreted in embedded TZ, then displayed in environment TZ
     new_ucmd!()
@@ -3362,9 +3303,9 @@ fn test_date_embedded_timezone_conversion() {
 }
 
 // Tests for invalid UTF-8 in date string
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_date_invalid_utf8_byte_rejected() {
     use std::os::unix::ffi::OsStrExt;
 
@@ -3983,9 +3924,9 @@ fn test_nanoseconds_width_prefix_ignored_issue12001() {
     assert_eq!(result.stdout().len(), 4);
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore)]
 fn test_write_error() {
     use std::fs::OpenOptions;
 
@@ -4010,9 +3951,9 @@ fn test_date_allow_spaces_after_month() {
         .succeeds();
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_format_with_non_utf8_bytes() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
@@ -4029,9 +3970,9 @@ fn test_format_with_non_utf8_bytes() {
         .stdout_only_bytes(b"\xc5[2031]\xa7%\xe4\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_format_percent_before_non_utf8_byte() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
@@ -4047,9 +3988,9 @@ fn test_format_percent_before_non_utf8_byte() {
         .stdout_only_bytes(b"w%\xd0z\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_format_with_gb18030_bytes() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
@@ -4066,9 +4007,9 @@ fn test_format_with_gb18030_bytes() {
         .stdout_only_bytes(b"2031\xc4\xea7\xd4\xc223\xc8\xd5\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_non_utf8_operands_are_octal_escaped() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;

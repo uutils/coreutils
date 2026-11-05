@@ -3022,6 +3022,25 @@ mod quoting {
             .stdout_contains("\"hello world\"");
     }
 
+    // Regression test for #15810: an apostrophe next to a C1 control character
+    // must not switch the shell-escape styles to double quotes.
+    #[test]
+    fn test_ls_quoting_c1_control_with_single_quote() {
+        if !is_locale_available("en_US.UTF-8") {
+            return;
+        }
+
+        for style in ["shell-escape", "shell-escape-always"] {
+            let (at, mut ucmd) = at_and_ucmd!();
+            at.touch("it's\u{9b}here");
+
+            ucmd.env("LC_ALL", "en_US.UTF-8")
+                .arg(format!("--quoting-style={style}"))
+                .succeeds()
+                .stdout_only("'it'\\''s'$'\\302\\233''here'\n");
+        }
+    }
+
     #[test]
     fn test_ls_quoting_space() {
         check_quoting_dirname(

@@ -32,6 +32,7 @@ uucore = { workspace = true, features = [
   "signals",
   "utmpx",
 ] }
+uutests_procs = { workspace = true }
 
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
 rlimit = { workspace = true }

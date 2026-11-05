@@ -30,4 +30,4 @@ ptx-error-not-implemented = { $feature } not implemented yet
 ptx-error-write-failed = write failed
 ptx-error-extra-operand = extra operand { $operand }
 ptx-error-empty-regexp = A regular expression cannot match a length zero string
-ptx-error-invalid-regexp = Invalid regexp: { $error }
+ptx-error-invalid-regexp = Invalid regular expression (for regexp { $pattern })

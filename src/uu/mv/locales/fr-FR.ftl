@@ -69,3 +69,9 @@ mv-prompt-overwrite = écraser {$target} ?
 # Messages de progression
 mv-progress-moving = déplacement
 mv-error-dest-appeared = la destination { $path } a été remplacée pendant le déplacement ; refus de la suivre
+
+# Erreurs de préservation des liens physiques
+mv-error-hardlink-io = erreur d'E/S lors de l'opération sur le lien physique : { $error }
+mv-error-hardlink-scan = échec de l'analyse des fichiers pour les liens physiques : { $error }
+mv-error-hardlink-preserve = échec de la préservation du lien physique : { $source } -> { $target }
+mv-error-hardlink-metadata = erreur d'accès aux métadonnées de { $path } : { $error }

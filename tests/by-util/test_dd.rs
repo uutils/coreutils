@@ -1334,6 +1334,25 @@ fn test_invalid_flag_arg_gnu_compatibility() {
 }
 
 #[test]
+fn test_numeric_looking_values_are_kept_verbatim_in_errors() {
+    // Values such as "007" or "1e3" must not be reformatted as numbers.
+    for (arg, msg) in [
+        ("007", "unrecognized operand '007'"),
+        ("iflag=007", "invalid input flag: '007'"),
+        ("oflag=1e3", "invalid output flag: '1e3'"),
+        ("conv=007", "invalid conversion: '007'"),
+        ("status=007", "invalid status level: '007'"),
+        ("count=1.50", "invalid number: '1.50'"),
+        ("bs=1e3", "invalid number: '1e3'"),
+    ] {
+        new_ucmd!()
+            .arg(arg)
+            .fails_with_code(1)
+            .stderr_contains(format!("dd: {msg}\n"));
+    }
+}
+
+#[test]
 fn test_invalid_file_arg_gnu_compatibility() {
     new_ucmd!()
         .args(&["if="])
@@ -1545,6 +1564,34 @@ fn test_seekable_stdout_without_of_is_not_truncated() {
     assert!(out[..512].iter().all(|&b| b == b'x'));
     assert!(out[512..1024].iter().all(|&b| b == b'a'));
     assert!(out[1024..].iter().all(|&b| b == b'x'));
+}
+
+/// An `oflag=` on a seekable stdout must keep the flags it was opened with,
+/// so output redirected with `>>` is still appended, with or without
+/// `conv=notrunc`.
+#[rstest]
+#[cfg(target_os = "linux")]
+fn test_oflag_keeps_append_mode_of_stdout(
+    #[values("oflag=dsync", "oflag=sync", "oflag=nonblock")] oflag: &str,
+    #[values(&[][..], &["conv=notrunc"][..])] conv: &[&str],
+) {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("out", "old\n");
+    let stdout = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().append(true),
+        at.plus("out").as_path(),
+    )
+    .unwrap();
+
+    ts.ucmd()
+        .args(&[oflag, "status=none"])
+        .args(conv)
+        .pipe_in("new\n")
+        .set_stdout(Stdio::from(stdout))
+        .succeeds();
+
+    assert_eq!(at.read("out"), "old\nnew\n");
 }
 
 /// A failed truncate of the output names the file and the size, the copy

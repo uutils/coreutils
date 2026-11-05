@@ -592,10 +592,6 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
 
         let next_idx = iter.peek().map_or(line_bytes.len(), |(idx, _)| *idx);
 
-        if *ctx.col_count >= ctx.width {
-            emit_output(ctx)?;
-        }
-
         if ch == '\r' {
             push_bytes(ctx, &line_bytes[byte_idx..next_idx])?;
             *ctx.col_count = 0;
@@ -606,6 +602,10 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
             push_bytes(ctx, &line_bytes[byte_idx..next_idx])?;
             *ctx.col_count = ctx.col_count.saturating_sub(1);
             continue;
+        }
+
+        if *ctx.col_count >= ctx.width {
+            emit_output(ctx)?;
         }
 
         if ch == '\t' {
@@ -659,7 +659,7 @@ fn process_non_utf8_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) ->
             continue;
         }
 
-        if *ctx.col_count >= ctx.width {
+        if !matches!(byte, CR | 0x08) && *ctx.col_count >= ctx.width {
             emit_output(ctx)?;
         }
 

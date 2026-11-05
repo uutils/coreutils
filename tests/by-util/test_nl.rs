@@ -7,9 +7,9 @@
 
 use uutests::{at_and_ucmd, new_ucmd, util::TestScenario, util_name};
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_non_utf8_paths() {
     use std::os::unix::ffi::OsStringExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -257,9 +257,9 @@ fn test_number_separator() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_number_separator_non_utf8() {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
@@ -708,9 +708,9 @@ fn test_section_delimiter() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_section_delimiter_non_utf8() {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
@@ -775,9 +775,9 @@ fn test_one_char_section_delimiter() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_one_byte_section_delimiter() {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
@@ -1064,5 +1064,27 @@ fn test_other_numeric_options_still_reject_values_above_the_limit() {
             .args(&[arg, "18446744073709551616"])
             .fails_with_code(1)
             .stderr_contains("invalid value '18446744073709551616'");
+    }
+}
+
+#[test]
+fn test_negative_starting_line_as_a_separate_argument() {
+    for arg in ["-v", "--starting-line-number"] {
+        new_ucmd!()
+            .args(&[arg, "-1"])
+            .pipe_in("a\nb\n")
+            .succeeds()
+            .stdout_is("    -1\ta\n     0\tb\n");
+    }
+}
+
+#[test]
+fn test_negative_line_increment_as_a_separate_argument() {
+    for arg in ["-i", "--line-increment"] {
+        new_ucmd!()
+            .args(&[arg, "-1"])
+            .pipe_in("a\nb\nc\n")
+            .succeeds()
+            .stdout_is("     1\ta\n     0\tb\n    -1\tc\n");
     }
 }

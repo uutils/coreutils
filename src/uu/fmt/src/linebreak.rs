@@ -357,8 +357,7 @@ fn find_kp_breakpoints<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
 
         if next_active_breaks.is_empty() {
             // every potential linebreak is too long! choose the linebreak with the least demerits, ld_idx
-            let new_break =
-                restart_active_breaks(args, &linebreaks[ld_idx], ld_idx, w, slen, minlength);
+            let new_break = restart_active_breaks(args, &linebreaks[ld_idx], ld_idx, w);
             next_active_breaks.push(linebreaks.len());
             linebreaks.push(new_break);
         }
@@ -460,23 +459,14 @@ fn restart_active_breaks<'a>(
     active: &LineBreak<'a>,
     act_idx: usize,
     w: &'a WordInfo<'a>,
-    slen: usize,
-    min: usize,
 ) -> LineBreak<'a> {
     let (break_before, line_length) = if active.fresh {
         // never break before a word if that word would be the first on a line
         (false, args.indent_len)
     } else {
-        // choose the lesser evil: breaking too early, or breaking too late
-        let wlen = w.word_nchars + args.compute_width(w, active.length, active.fresh);
-        let underlen = min as isize - active.length as isize;
-        let overlen = (wlen + slen + active.length) as isize - args.opts.width as isize;
-        if overlen > underlen {
-            // break early, put this word on the next line
-            (true, args.indent_len + w.word_nchars)
-        } else {
-            (false, args.indent_len)
-        }
+        // the word does not fit, and WIDTH is a hard maximum (like GNU fmt),
+        // so break early and put this word on the next line
+        (true, args.indent_len + w.word_nchars)
     };
 
     // restart the linebreak. This will be our only active path.

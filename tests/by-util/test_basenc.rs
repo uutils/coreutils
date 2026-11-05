@@ -147,9 +147,9 @@ fn test_base32hex_truncated_block_keeps_prefix() {
 }
 
 // This test fails if the Base16 output buffer is not explicitly flushed.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_base16_write_error_is_reported() {
     new_ucmd!()
         .arg("--base16")
@@ -268,9 +268,9 @@ fn test_file() {
         .stdout_is("Zm9v\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_file_with_non_utf8_name() {
     use std::os::unix::ffi::OsStringExt;
     let (at, mut ucmd) = at_and_ucmd!();
