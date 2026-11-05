@@ -84,11 +84,6 @@ installing anything.
 - Rust (`cargo`, `rustc`)
 - GNU Make (optional)
 
-### Rust Version
-
-uutils follows Rust's release channels and is tested against stable, beta and
-nightly.
-
 ## Building
 
 There are currently two methods to build the uutils binaries: either Cargo or
