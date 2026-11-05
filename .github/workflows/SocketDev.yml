@@ -1,3 +1,5 @@
+name: SocketDev
+
 on: pull_request
 
 permissions:
