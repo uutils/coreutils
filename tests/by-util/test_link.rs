@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -71,4 +72,22 @@ fn test_link_three_arguments() {
     ucmd.args(&arguments[..])
         .fails()
         .stderr_contains("2 values required");
+}
+
+#[test]
+fn test_link_no_arguments() {
+    new_ucmd!().fails();
+}
+
+#[cfg(not(target_os = "android"))]
+#[test]
+fn test_link_dest_exists() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_link_dest_exists_src";
+    let dest = "test_link_dest_exists_dst";
+
+    at.touch(file);
+    at.touch(dest);
+
+    ucmd.args(&[file, dest]).fails().stderr_contains("exists");
 }

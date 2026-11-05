@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore wipesync
+// spell-checker:ignore wipesync couldnt
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -75,6 +75,20 @@ fn test_shred_remove_unlink() {
 }
 
 #[test]
+fn test_shred_remove_unlink_relative_path() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir_all("dir1/dir2");
+    at.write("dir1/dir2/file1", "test data");
+
+    ucmd.arg("--remove=unlink")
+        .arg("dir1/dir2/file1")
+        .succeeds();
+
+    assert!(!at.file_exists("dir1/dir2/file1"));
+}
+
+#[test]
 fn test_shred_remove_wipe() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -119,6 +133,7 @@ fn test_shred_u() {
     assert!(at.file_exists(file_b));
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 fn test_shred_force() {
     let scene = TestScenario::new(util_name!());
@@ -199,19 +214,25 @@ fn test_shred_fail_no_perm() {
     let dir = "dir";
 
     let file = "test_shred_remove_a";
+    let other = "test_shred_remove_b";
 
     let binding = Path::new("dir").join(file);
     let path = binding.to_str().unwrap();
     at.mkdir(dir);
     at.touch(path);
+    at.touch(other);
     scene.ccmd("chmod").arg("a-w").arg(dir).succeeds();
 
     scene
         .ucmd()
         .arg("-uv")
         .arg(path)
+        .arg(other)
         .fails()
-        .stderr_contains("Couldn't rename to");
+        .stderr_contains(format!("{path}: failed to remove: Permission denied\n"));
+
+    assert!(at.file_exists(path));
+    assert!(!at.file_exists(other));
 }
 
 #[test]
@@ -250,6 +271,7 @@ fn test_all_patterns_present() {
     }
 }
 
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
 fn test_random_source_regular_file() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -276,6 +298,18 @@ fn test_random_source_regular_file() {
 
     // Should rewrite the file exactly three times
     assert_eq!(at.read_bytes(file), many_bytes[(4096 * 2)..(4096 * 3)]);
+}
+
+#[test]
+fn test_random_source_open_error_includes_cause() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("target");
+
+    ucmd.arg("--random-source=missing")
+        .arg("target")
+        .fails()
+        .stderr_only("shred: missing: No such file or directory\n");
 }
 
 #[test]
@@ -321,6 +355,7 @@ fn test_shred_rename_exhaustion() {
     assert!(!at.file_exists("test"));
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_shred_non_utf8_paths() {
@@ -335,8 +370,9 @@ fn test_shred_non_utf8_paths() {
     ts.ucmd().arg(file_name).succeeds();
 }
 
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
-fn test_gnu_shred_passes_20() {
+fn test_shred_twenty_passes_with_known_random_source() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     let us_data = vec![0x55; 102_400]; // 100K of 'U' bytes
@@ -345,8 +381,7 @@ fn test_gnu_shred_passes_20() {
     let file = "f";
     at.write(file, "1"); // Single byte file
 
-    // Test 20 passes with deterministic random source
-    // This should produce the exact same sequence as GNU shred
+    // Run with a deterministic random source so the pass sequence is reproducible
     let result = ucmd
         .arg("-v")
         .arg("-u")
@@ -356,7 +391,6 @@ fn test_gnu_shred_passes_20() {
         .arg(file)
         .succeeds();
 
-    // Verify the exact pass sequence matches GNU's behavior
     let expected_passes = [
         "pass 1/20 (random)",
         "pass 2/20 (ffffff)",
@@ -393,8 +427,9 @@ fn test_gnu_shred_passes_20() {
     assert!(!at.file_exists(file));
 }
 
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
-fn test_gnu_shred_passes_different_counts() {
+fn test_shred_nineteen_passes_first_and_last_are_random() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     let us_data = vec![0x55; 102_400];
@@ -419,4 +454,264 @@ fn test_gnu_shred_passes_different_counts() {
     // First and last should be random
     result.stderr_contains("pass 1/19 (random)");
     result.stderr_contains("pass 19/19 (random)");
+}
+
+#[test]
+fn test_shred_trailing_slash_on_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    scene
+        .ucmd()
+        .arg("a/")
+        .fails()
+        .stderr_contains("Not a directory");
+}
+
+#[test]
+fn test_shred_trailing_slash_on_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("d");
+    scene
+        .ucmd()
+        .arg("d/")
+        .fails()
+        .stderr_contains("Is a directory");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_shred_inaccessible_file_reports_real_error() {
+    // A file whose parent directory lacks search permission must not be
+    // misreported as "No such file or directory": `Path::exists()` and
+    // `Path::is_file()` collapse the permission error into `false`.
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::PermissionsExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("locked");
+    at.touch("locked/file");
+    set_permissions(at.plus_as_string("locked"), Permissions::from_mode(0o000)).unwrap();
+
+    scene
+        .ucmd()
+        .arg("locked/file")
+        .fails_with_code(1)
+        .stderr_only("shred: locked/file: failed to open for writing: Permission denied\n");
+
+    // Restore search permission so the fixture directory can be cleaned up.
+    set_permissions(at.plus_as_string("locked"), Permissions::from_mode(0o755)).unwrap();
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("wipe_me");
+
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["-s", "4vv", "wipe_me"])
+            .fails_with_code(1);
+
+        // The number parsed; only the unit did not.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+shred: invalid file size: '4vv'
+   ╭─[ shred:1:11 ]
+   │
+ 1 │ shred -s 4vv wipe_me
+   │           ─┬
+   │            ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+
+        // The file must be left alone when the size does not parse.
+        assert!(at.file_exists("wipe_me"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_a_size_with_no_number() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("wipe_me");
+
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["--size=vv", "wipe_me"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // Nothing usable was read, so the whole value is underlined.
+        assert!(stderr.contains("shred:1:14"), "{stderr}");
+        assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("wipe_me");
+
+        ucmd.args(&["-s", "4vv", "wipe_me"])
+            .fails_with_code(1)
+            .stderr_is("shred: invalid file size: '4vv'\n");
+    }
+}
+
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_couldnt_rename() {
+    new_ucmd!()
+        .args(&["-u", "/proc/self/mem"])
+        .fails_with_code(1)
+        .stderr_is("shred: /proc/self/mem: failed to remove: Operation not permitted\n");
+}
+
+#[rstest::rstest]
+#[case(&["1e3"], "shred: 1e3: failed to open for writing: No such file or directory\n")]
+#[case(&["007"], "shred: 007: failed to open for writing: Is a directory\n")]
+#[cfg(not(windows))]
+fn test_numeric_looking_file_names_are_kept_verbatim(
+    #[case] args: &[&str],
+    #[case] expected: &str,
+) {
+    // File names such as "007" or "1e3" must not be reformatted as numbers
+    // in error messages.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("007");
+    ucmd.args(args).fails_with_code(1).stderr_is(expected);
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_numeric_looking_file_name_verbose_remove() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("2.50");
+    ucmd.args(&["-v", "-u", "-n", "0", "2.50"])
+        .succeeds()
+        .stderr_contains("shred: 2.50: removing\n")
+        .stderr_contains("shred: 2.50: removed\n");
+    assert!(!at.file_exists("2.50"));
+}
+
+// On Unix, '-' names the file attached to standard output, not a file
+// literally named '-'. Open without truncating so the test checks shredding.
+#[uutests::wasi_ignore(StdioHandlesOpaque)]
+#[test]
+#[cfg(unix)]
+fn test_shred_dash_wipes_stdout_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "secret.txt";
+    let original = b"secret data";
+    at.write_bytes(file, original);
+
+    let stdout = std::fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus(file))
+        .unwrap();
+
+    ucmd.args(&["-vn1", "-x", "-"])
+        .set_stdout(stdout)
+        .succeeds()
+        .stderr_only("shred: -: pass 1/1 (random)...\n");
+
+    assert!(at.file_exists(file));
+
+    let contents = at.read_bytes(file);
+    assert_eq!(contents.len(), original.len());
+    assert_ne!(contents.as_slice(), &original[..]);
+}
+
+#[uutests::wasi_ignore(StdioHandlesOpaque)]
+#[test]
+#[cfg(unix)]
+fn test_shred_dash_remove_truncates_but_does_not_unlink_stdout() {
+    for remove_arg in [
+        "-u",
+        "--remove=unlink",
+        "--remove=wipe",
+        "--remove=wipesync",
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let file = "secret.txt";
+        at.write(file, "secret data");
+
+        let stdout = std::fs::OpenOptions::new()
+            .write(true)
+            .open(at.plus(file))
+            .unwrap();
+
+        ucmd.args(&["-n1", remove_arg, "-"])
+            .set_stdout(stdout)
+            .succeeds();
+
+        assert!(at.file_exists(file), "{remove_arg} must not unlink stdout");
+        assert!(
+            at.read_bytes(file).is_empty(),
+            "{remove_arg} must truncate stdout"
+        );
+    }
+}
+
+#[uutests::wasi_ignore(StdioHandlesOpaque)]
+#[test]
+#[cfg(unix)]
+fn test_shred_dash_rejects_stdout_pipe() {
+    new_ucmd!()
+        .arg("-")
+        .set_stdout(std::process::Stdio::piped())
+        .fails_with_code(1)
+        .stderr_contains("shred: -:")
+        .stderr_does_not_contain("/dev/fd/1");
+}
+
+#[test]
+fn test_shred_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    ucmd.arg("d")
+        .fails_with_code(1)
+        .stderr_only("shred: d: failed to open for writing: Is a directory\n");
+}
+
+#[test]
+fn test_shred_missing_file() {
+    new_ucmd!()
+        .arg("missing")
+        .fails_with_code(1)
+        .stderr_only("shred: missing: failed to open for writing: No such file or directory\n");
+}
+
+#[uutests::wasi_ignore(NoFifo)]
+#[test]
+#[cfg(unix)]
+fn test_shred_fifo() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("p");
+    ucmd.arg("p")
+        .fails_with_code(1)
+        .stderr_only("shred: p: invalid file type\n");
+}
+
+#[uutests::wasi_ignore(NoUnixDomainSockets)]
+#[test]
+#[cfg(unix)]
+fn test_shred_socket() {
+    // GNU reaches the open and reports its failure; so does shred here.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let _listener = std::os::unix::net::UnixListener::bind(at.plus("s")).unwrap();
+    ucmd.arg("s")
+        .fails_with_code(1)
+        .stderr_contains("shred: s: failed to open for writing: ");
 }

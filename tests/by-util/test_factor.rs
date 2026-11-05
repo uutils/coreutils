@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (methods) hexdigest funcs nprimes
+// spell-checker:ignore (methods) hexdigest funcs nprimes cmdline cofactor
+
 #![allow(
     clippy::similar_names,
     clippy::cast_possible_truncation,
@@ -15,8 +16,11 @@ use uutests::new_ucmd;
 use std::fmt::Write;
 use std::time::{Duration, SystemTime};
 
-use rand::distr::{Distribution, Uniform};
-use rand::{Rng, SeedableRng, rngs::SmallRng};
+use rand::{
+    RngExt as _, SeedableRng,
+    distr::{Distribution, Uniform},
+    rngs::SmallRng,
+};
 
 const NUM_PRIMES: usize = 10000;
 const NUM_TESTS: usize = 100;
@@ -29,7 +33,7 @@ fn test_invalid_arg() {
 #[test]
 fn test_invalid_negative_arg_shows_tip() {
     // Test that factor shows a tip when given an invalid negative argument
-    // This replicates the GNU test issue where "-1" was interpreted as an invalid option
+    // Test that "-1" is not misinterpreted as an invalid option
     new_ucmd!()
         .arg("-1")
         .fails()
@@ -54,6 +58,33 @@ fn test_repeated_exponents() {
         .no_stderr();
 }
 
+#[test]
+fn test_argument_whitespace() {
+    new_ucmd!()
+        .args(&["  30", "  +7"])
+        .succeeds()
+        .stdout_only("30: 2 3 5\n7: 7\n");
+    new_ucmd!()
+        .args(&["30 ", "  x"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is(
+            "factor: '30 ' is not a valid positive integer\n\
+             factor: '  x' is not a valid positive integer\n",
+        );
+    new_ucmd!().arg("\t30").fails_with_code(1).no_stdout();
+}
+
+#[test]
+fn test_trim_null_chars() {
+    new_ucmd!()
+        .pipe_in("42\0")
+        .succeeds()
+        .stdout_only("42: 2 3 7\n")
+        .no_stderr();
+}
+
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(feature = "sort")]
 #[cfg(not(target_os = "android"))]
@@ -147,7 +178,7 @@ fn test_first_1000_integers_with_exponents() {
         .pipe_in(input_string.as_bytes())
         .succeeds();
 
-    // Using factor from GNU Coreutils 9.2
+    // Known factorizations for verification
     // `seq 0 1000 | factor -h | sha1sum` => "45f5f758a9319870770bd1fec2de23d54331944d"
     let mut hasher = Sha1::new();
     hasher.update(result.stdout());
@@ -1602,6 +1633,16 @@ fn fails_on_directory() {
 }
 
 #[test]
+fn test_large_number() {
+    // fixed with num-prime 0.5.0
+    // https://github.com/uutils/num-prime/issues/23
+    new_ucmd!()
+        .arg("4611686018427387896")
+        .succeeds()
+        .stdout_is("4611686018427387896: 2 2 2 179951 3203431780337\n");
+}
+
+#[test]
 fn succeeds_with_numbers_larger_than_u64() {
     new_ucmd!()
         .arg("158909489063877810457")
@@ -1649,4 +1690,76 @@ fn succeeds_with_numbers_larger_than_u256() {
             "115792089237316195423570985008687907853\
                 269984665640564039457584007913129639936: 2^256\n",
         );
+}
+
+// A 301-bit product of ten primes just above 2^30. This used to come back as
+// "Factorization incomplete. Remainders exist." because the Pollard's rho
+// budget underneath was shared by the whole factorization rather than by each
+// cofactor, so everything past the fourth split was given up on.
+#[test]
+fn factors_many_primes_of_similar_size_completely() {
+    const N: &str = "2037036890754971402431340509217469262474509779036256996849055359081480084266333562576864437";
+    new_ucmd!().arg(N).succeeds().stdout_is(format!(
+        "{N}: 1073741827 1073741831 1073741833 1073741839 1073741843 \
+         1073741857 1073741891 1073741909 1073741939 1073741953\n"
+    ));
+}
+
+// A prime power is the one shape Pollard's rho cannot split on its own: it
+// needs about sqrt(p) iterations on p^k. This is 34359738421^7.
+#[test]
+fn factors_a_wide_prime_power() {
+    const N: &str = "56539106683390492137844827055225747632151249167945695848217966183182073341";
+    new_ucmd!()
+        .arg("-h")
+        .arg(N)
+        .succeeds()
+        .stdout_is(format!("{N}: 34359738421^7\n"));
+}
+
+#[test]
+fn handles_non_unicode_data() {
+    let input = b"\0 \xFF\0\xFF\xAA\0\xAA\x44 a&#2\n6 9\x003\xC024\t2\t\t4\x000+4\xFF \xF7\xC1";
+    let expected_out = "6: 2 3\n9: 3 3\n2: 2\n4: 2 2\n";
+    let expected_err = r"factor: '' is not a valid positive integer
+factor: '\377' is not a valid positive integer
+factor: 'a&#2' is not a valid positive integer
+factor: '\367\301' is not a valid positive integer
+";
+    new_ucmd!()
+        .pipe_in(input)
+        .fails_with_code(1)
+        .stdout_is(expected_out)
+        .stderr_is(expected_err);
+}
+
+// GNU's `tests/factor/factor.pl` `cont` test passes `factor a 4` and expects
+// `factor: 'a' is not a valid positive integer` while still factoring 4.
+#[test]
+fn invalid_cmdline_arg_continues() {
+    new_ucmd!()
+        .args(&["a", "4"])
+        .fails_with_code(1)
+        .stdout_is("4: 2 2\n")
+        .stderr_is("factor: 'a' is not a valid positive integer\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_stdin_clean_error_message() {
+    use std::fs;
+    use uutests::util::TestScenario;
+    use uutests::util_name;
+
+    let scene = TestScenario::new(util_name!());
+    let dir = scene.fixtures.plus("directory");
+    fs::create_dir_all(&dir).unwrap();
+
+    let dir_as_file = fs::File::open(&dir).unwrap();
+
+    scene
+        .ucmd()
+        .set_stdin(dir_as_file)
+        .fails()
+        .stderr_is("factor: error reading input: Is a directory\n");
 }

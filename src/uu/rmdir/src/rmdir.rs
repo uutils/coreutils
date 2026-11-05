@@ -9,13 +9,13 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::{read_dir, remove_dir};
-use std::io;
+use std::io::{self, Write};
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{UResult, set_exit_code, strip_errno};
+use uucore::error::{FromIo, UResult, set_exit_code, strip_errno};
 use uucore::translate;
 
-use uucore::{format_usage, show_error, util_name};
+use uucore::{format_usage, show_error};
 
 static OPT_IGNORE_FAIL_NON_EMPTY: &str = "ignore-fail-on-non-empty";
 static OPT_PARENTS: &str = "parents";
@@ -32,13 +32,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         parents: matches.get_flag(OPT_PARENTS),
         verbose: matches.get_flag(OPT_VERBOSE),
     };
+    let mut verbose_result = Ok(());
 
     for path in matches
         .get_many::<OsString>(ARG_DIRS)
         .unwrap_or_default()
         .map(Path::new)
     {
-        if let Err(error) = remove(path, opts) {
+        if let Err(error) = remove(path, opts, &mut verbose_result) {
             let Error { error, path } = error;
 
             if opts.ignore && dir_not_empty(&error, path) {
@@ -88,7 +89,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    Ok(())
+    verbose_result.map_err_context(|| translate!("common-write-error"))
 }
 
 struct Error<'a> {
@@ -96,25 +97,35 @@ struct Error<'a> {
     path: &'a Path,
 }
 
-fn remove(mut path: &Path, opts: Opts) -> Result<(), Error<'_>> {
-    remove_single(path, opts)?;
+fn remove<'a>(
+    mut path: &'a Path,
+    opts: Opts,
+    verbose_result: &mut io::Result<()>,
+) -> Result<(), Error<'a>> {
+    remove_single(path, opts, verbose_result)?;
     if opts.parents {
         while let Some(new) = path.parent() {
             path = new;
             if path.as_os_str().is_empty() {
                 break;
             }
-            remove_single(path, opts)?;
+            remove_single(path, opts, verbose_result)?;
         }
     }
     Ok(())
 }
 
-fn remove_single(path: &Path, opts: Opts) -> Result<(), Error<'_>> {
-    if opts.verbose {
-        println!(
+fn remove_single<'a>(
+    path: &'a Path,
+    opts: Opts,
+    verbose_result: &mut io::Result<()>,
+) -> Result<(), Error<'a>> {
+    // Defer reporting a write error until all directory removals have been attempted.
+    if opts.verbose && verbose_result.is_ok() {
+        *verbose_result = writeln!(
+            io::stdout(),
             "{}",
-            translate!("rmdir-verbose-removing-directory", "util_name" => util_name(), "path" => path.quote())
+            translate!("rmdir-verbose-removing-directory", "util_name" => "rmdir", "path" => path.quote())
         );
     }
     remove_dir(path).map_err(|error| Error { error, path })
@@ -152,22 +163,14 @@ const PERHAPS_EMPTY_CODES: &[i32] = &[
 ];
 
 fn dir_not_empty(error: &io::Error, path: &Path) -> bool {
-    if let Some(code) = error.raw_os_error() {
-        if NOT_EMPTY_CODES.contains(&code) {
-            return true;
-        }
+    error.raw_os_error().is_some_and(|code| {
+        NOT_EMPTY_CODES.contains(&code)
         // If --ignore-fail-on-non-empty is used then we want to ignore all errors
         // for non-empty directories, even if the error was e.g. because there's
         // no permission. So we do an additional check.
-        if PERHAPS_EMPTY_CODES.contains(&code) {
-            if let Ok(mut iterator) = read_dir(path) {
-                if iterator.next().is_some() {
-                    return true;
-                }
-            }
-        }
-    }
-    false
+            || PERHAPS_EMPTY_CODES.contains(&code)
+                && read_dir(path).is_ok_and(|mut iter| iter.next().is_some())
+    })
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -178,9 +181,9 @@ struct Opts {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(util_name())
+    Command::new("rmdir")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(util_name()))
+        .help_template(uucore::localized_help_template("rmdir"))
         .about(translate!("rmdir-about"))
         .override_usage(format_usage(&translate!("rmdir-usage")))
         .infer_long_args(true)

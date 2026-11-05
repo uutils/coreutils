@@ -4,10 +4,20 @@
 // file that was distributed with this source code.
 
 #[cfg(unix)]
-pub use self::unix::is_unsafe_overwrite;
+pub use self::unix::is_safe_overwrite;
 
 #[cfg(windows)]
-pub use self::windows::is_unsafe_overwrite;
+pub use self::windows::is_safe_overwrite;
+
+// WASI: when stdout is inherited from a host file descriptor, wasmtime
+// reports its fstat as all-zero (st_dev == st_ino == 0), so the dev/inode
+// comparison against any input file descriptor can never match. There is
+// no reliable way to detect unsafe overwrite here; assume safe rather than
+// risk a spurious error.
+#[cfg(target_os = "wasi")]
+pub fn is_safe_overwrite<I, O>(_input: &I, _output: &O) -> bool {
+    true
+}
 
 #[cfg(unix)]
 mod unix;

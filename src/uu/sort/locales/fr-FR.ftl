@@ -12,8 +12,10 @@ sort-after-help = Le format de clé est CHAMP[.CAR][OPTIONS][,CHAMP[.CAR]][OPTIO
 
 # Messages d'erreur
 sort-open-failed = échec d'ouverture : {$path} : {$error}
+sort-truncate-failed = échec de troncature : {$path} : {$error}
 sort-parse-key-error = échec d'analyse de la clé {$key} : {$msg}
 sort-cannot-read = impossible de lire : {$path} : {$error}
+sort-read-failed = échec de lecture : {$error}
 sort-open-tmp-file-failed = échec d'ouverture du fichier temporaire : {$error}
 sort-compress-prog-execution-failed = impossible d'exécuter le programme de compression '{$prog}' : {$error}
 sort-compress-prog-terminated-abnormally = {$prog} s'est terminé anormalement
@@ -22,6 +24,8 @@ sort-file-operands-combined = opérande supplémentaire {$file}
     les opérandes de fichier ne peuvent pas être combinées avec --files0-from
     Essayez '{$help} --help' pour plus d'informations.
 sort-multiple-output-files = plusieurs fichiers de sortie spécifiés
+sort-multiple-compress-programs = plusieurs programmes de compression spécifiés
+sort-incompatible-tabs = tabulations incompatibles
 sort-minus-in-stdin = lors de la lecture des noms de fichiers depuis l'entrée standard, aucun nom de fichier '-' n'est autorisé
 sort-no-input-from = aucune entrée depuis {$file}
 sort-invalid-zero-length-filename = {$file}:{$line_num} : nom de fichier de longueur zéro invalide
@@ -31,7 +35,6 @@ sort-failed-parse-field-index = échec d'analyse de l'index de champ {$field} {$
 sort-field-index-cannot-be-zero = l'index de champ ne peut pas être 0
 sort-failed-parse-char-index = échec d'analyse de l'index de caractère {$char} : {$error}
 sort-invalid-option = option invalide : '{$option}'
-sort-invalid-char-index-zero-start = index de caractère 0 invalide pour la position de début d'un champ
 sort-invalid-field-spec = {$msg} : spécification de champ invalide {$spec}
 sort-invalid-count-at-start-of = nombre invalide au début de {$string}
 sort-invalid-number-at-field-start = nombre invalide au début du champ
@@ -41,6 +44,9 @@ sort-invalid-number-after-comma = nombre invalide après ','
 sort-field-number-is-zero = le numéro de champ est zéro
 sort-character-offset-is-zero = le décalage de caractère est zéro
 sort-stray-character-field-spec = caractère parasite dans la spécification de champ
+sort-diag-label-missing-count = un nombre est attendu ici
+sort-diag-label-zero-count = la numérotation commence à 1
+sort-diag-help-key-syntax = une clé s'écrit CHAMP[.CAR][OPTS][,CHAMP[.CAR][OPTS]], comme -k2.3,4nr
 sort-invalid-batch-size-arg = argument --batch-size invalide '{$arg}'
 sort-minimum-batch-size-two = l'argument --batch-size minimum est '2'
 sort-batch-size-too-large = argument --batch-size {$arg} trop grand
@@ -53,6 +59,7 @@ sort-failed-fetch-rlimit = Échec de récupération de rlimit
 sort-invalid-suffix-in-option-arg = suffixe invalide dans l'argument --{$option} {$arg}
 sort-invalid-option-arg = argument --{$option} invalide {$arg}
 sort-option-arg-too-large = argument --{$option} {$arg} trop grand
+sort-parallel-must-be-nonzero = le nombre pour parallel doit être non nul
 sort-error-disorder = {$file}:{$line_number}: désordre : {$line}
 sort-error-buffer-size-too-big = La taille du tampon {$size} ne rentre pas dans l'espace d'adressage
 sort-error-no-match-for-key = ^ aucune correspondance pour la clé

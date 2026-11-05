@@ -51,7 +51,7 @@ Run `cargo build --release` before benchmarking after you make a change!
 
 ```toml
 [dependencies]
-rand = "0.8.3"
+rand = "0.10.0"
 ```
 
 ## main.rs
@@ -60,12 +60,12 @@ rand = "0.8.3"
 use rand::prelude::*;
 fn main() {
     let suffixes = ['k', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y', 'R', 'Q'];
-    let mut rng = thread_rng();
+    let mut rng = rand::rng();
     for _ in 0..100000 {
         println!(
             "{}{}",
-            rng.gen_range(0..1000000),
-            suffixes.choose(&mut rng).unwrap()
+            rng.random_range(0..1000000),
+            suffixes[rng.random_range(..suffixes.len())],
         )
     }
 }
@@ -92,6 +92,27 @@ Example: Run `hyperfine './target/release/coreutils sort shuffled_wordlist.txt -
 - Splitting `shuffled_wordlist.txt` can be achieved by running `split shuffled_wordlist.txt shuffled_wordlist_slice_ --additional-suffix=.txt`
 - Sort each part by running `for f in shuffled_wordlist_slice_*; do sort $f -o $f; done`
 - Benchmark merging by running `hyperfine "target/release/coreutils sort -m shuffled_wordlist_slice_*"`
+
+The merge comparator compares lines lazily, so the locale matters a lot here: in a
+UTF-8 locale (locale-aware collation) merging must avoid computing a full collation sort
+key for every line, since a k-way merge only performs O(n log k) comparisons (and none at
+all when merging a single already-sorted file). Make sure to benchmark both the C locale
+and a UTF-8 locale, and the single-file case in particular:
+
+```
+# Single already-sorted file (worst case for eager sort-key computation)
+LC_ALL=en_US.UTF-8 hyperfine --warmup 3 \
+  'target/release/coreutils sort -m /usr/share/dict/words' \
+  'sort -m /usr/share/dict/words'
+
+# Several pre-sorted slices
+LC_ALL=en_US.UTF-8 hyperfine --warmup 3 \
+  'target/release/coreutils sort -m shuffled_wordlist_slice_*' \
+  'sort -m shuffled_wordlist_slice_*'
+```
+
+The same scenarios are covered by the `merge_single_file_utf8_locale` and
+`merge_pre_sorted_files_utf8_locale` cases in `benches/sort_locale_utf8_bench.rs`.
 
 ## Check
 

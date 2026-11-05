@@ -3,7 +3,6 @@ name = "uu_b2sum"
 description = "b2sum ~ (uutils) Print or check the BLAKE2b checksums"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/b2sum"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -12,14 +11,14 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/b2sum.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }
+fluent = { workspace = true }
 uu_checksum_common = { workspace = true }
 uucore = { workspace = true, features = [
   "checksum",
@@ -27,10 +26,12 @@ uucore = { workspace = true, features = [
   "sum",
   "hardware",
 ] }
-fluent = { workspace = true }
 
 [dev-dependencies]
 uucore = { workspace = true, features = ["benchmark"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "b2sum"

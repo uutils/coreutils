@@ -7,6 +7,8 @@ common-tip = tip
 common-usage = Usage
 common-help = help
 common-version = version
+common-read-error = read error
+common-write-error = write error
 
 # Common clap error messages
 clap-error-unexpected-argument = { $error_word }: unexpected argument '{ $arg }' found
@@ -28,8 +30,11 @@ help-flag-version = Print version information
 error-io = I/O error
 error-permission-denied = Permission denied
 error-file-not-found = No such file or directory
+error-no-such-process = No such process
 error-invalid-argument = Invalid argument
-error-is-a-directory = { $file }: Is a directory
+error-is-a-directory-text = Is a directory
+error-is-a-directory = { $file }: { error-is-a-directory-text }
+error-too-many-symlink-levels = Too many levels of symbolic links
 
 # Common actions
 action-copying = copying
@@ -45,6 +50,7 @@ selinux-error-file-open-failure = failed to open the file: { $error }
 selinux-error-context-retrieval-failure = failed to retrieve the security context: { $error }
 selinux-error-context-set-failure = failed to set default file creation context to '{ $context }': { $error }
 selinux-error-context-conversion-failure = failed to set default file creation context to '{ $context }': { $error }
+selinux-error-operation-not-supported = operation not supported
 
 # SMACK error messages
 smack-error-not-enabled = SMACK is not enabled on this system
@@ -65,7 +71,6 @@ safe-traversal-directory = <directory>
 # checksum-related messages
 checksum-no-properly-formatted = { $checksum_file }: no properly formatted checksum lines found
 checksum-no-file-verified = { $checksum_file }: no file was verified
-checksum-error-failed-to-read-input = failed to read input
 checksum-bad-format = { $count ->
     [1] { $count } line is improperly formatted
    *[other] { $count } lines are improperly formatted
@@ -78,4 +83,32 @@ checksum-failed-open-file = { $count ->
     [1] { $count } listed file could not be read
    *[other] { $count } listed files could not be read
 }
-checksum-error-algo-bad-format = { $file }: { $line }: improperly formatted { $algo } checksum line
+
+# uudoc tldr examples messages
+uudoc-tldr-attribution = The examples are provided by the [tldr-pages project](https://tldr.sh) under the [CC BY 4.0 License](https://github.com/tldr-pages/tldr/blob/main/LICENSE.md).
+uudoc-tldr-disclaimer = Please note that, as uutils is a work in progress, some examples might fail.
+
+# Symbolic mode parsing messages
+mode-error-unexpected-end = unexpected end of mode
+mode-error-invalid-operator = invalid operator (expected +, -, or =, but found { $operator })
+
+# Diagnostic labels: what the caret points at in a mode
+mode-diag-label-missing-operator = this clause says who, but not what to change
+mode-diag-label-invalid-number = not an octal mode
+mode-diag-help-syntax = a mode is either octal, as in 644, or clauses such as u+rwx,go-w
+
+# Shared recursive chown/chgrp/chmod diagnostics (uucore::perms)
+perms-cannot-access = cannot access { $file }: { $error }
+perms-cannot-access-replaced = cannot access { $file }: replaced while it was being processed
+
+# Encoding/decoding error messages (base32, base64, basenc)
+encoding-error-invalid-input = invalid input
+encoding-error-invalid-input-z85-length = invalid input (length must be multiple of 4 characters)
+
+# Backup control messages (uucore::backup_control)
+backup-error-invalid-argument = invalid argument { $arg } for '{ $origin }'
+backup-error-ambiguous-argument = ambiguous argument { $arg } for '{ $origin }'
+backup-valid-arguments = Valid arguments are:
+
+# OsStr conversion errors
+error-non-utf8-os-str = invalid UTF-8 input { $input } encountered when converting to bytes on a platform that doesn't expose byte arguments

@@ -5,10 +5,20 @@
 
 // spell-checker:ignore unpadded, QUJD
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
+#[test]
+fn test_version() {
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(format!("base64 {}\n", uucore::crate_version!()));
+}
+
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_base64_non_utf8_paths() {
@@ -145,7 +155,7 @@ fn test_garbage() {
         .arg("-d")
         .pipe_in(input)
         .fails()
-        .stderr_only("base64: error: invalid input\n");
+        .stderr_only("base64: invalid input\n");
 }
 
 #[test]
@@ -210,6 +220,18 @@ fn test_wrap_bad_arg() {
 }
 
 #[test]
+fn test_wrap_negative_arg() {
+    // GNU treats the token after -w as the wrap size even if it starts with '-'.
+    for arg in ["-5", "-d"] {
+        new_ucmd!()
+            .arg("-w")
+            .arg(arg)
+            .fails()
+            .stderr_only(format!("base64: invalid wrap size: '{arg}'\n"));
+    }
+}
+
+#[test]
 fn test_base64_extra_operand() {
     // Expect a failure when multiple files are specified.
     new_ucmd!()
@@ -234,7 +256,7 @@ fn test_no_repeated_trailing_newline() {
         .pipe_in("The quick brown fox jumps over the lazy dog.")
         .succeeds()
         .stdout_only(
-            // cSpell:disable
+            // spell-checker:disable
             "\
 VGhlIHF1aW
 NrIGJyb3du
@@ -243,7 +265,7 @@ IGZveCBqdW
 IHRoZSBsYX
 p5IGRvZy4=
 ",
-            // cSpell:enable
+            // spell-checker:enable
         );
 }
 
@@ -256,16 +278,17 @@ fn test_wrap_default() {
         .pipe_in(PIPE_IN)
         .succeeds()
         .stdout_only(
-            // cSpell:disable
+            // spell-checker:disable
             "\
 VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJy
 b3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJyb3duIGZveCBqdW1w
 cyBvdmVyIHRoZSBsYXp5IGRvZy4=
 ",
-            // cSpell:enable
+            // spell-checker:enable
         );
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
 fn test_read_error() {
@@ -273,4 +296,15 @@ fn test_read_error() {
         .arg("/proc/self/mem")
         .fails()
         .stderr_is("base64: read error: Input/output error\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_base64_file_with_trailing_slash() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "b");
+
+    ucmd.arg("a/")
+        .fails()
+        .stderr_only("base64: a/: Not a directory\n");
 }

@@ -3,13 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore abcdefghijklmnopqrstuvwxyz Anone fdbb littl bfloat
+// spell-checker:ignore abcdefghijklmnopqrstuvwxyz Anone fdbb littl bfloat doxn
 
 #[cfg(unix)]
 use std::io::Read;
 #[cfg(target_os = "linux")]
 use std::path::Path;
 
+#[cfg(all(unix, not(target_vendor = "apple")))]
+use rstest::rstest;
 use unindent::unindent;
 use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, new_ucmd, util_name};
@@ -45,6 +47,65 @@ fn run_skip_across_inputs(files: &[(&str, &str)], skip: u64, expected: &str) {
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
+#[rstest]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+#[case::bytes(&["-An", "-tx1"], None, " 61 62 63 64 65 66 00\n")]
+#[case::strings(&["-An", "-S3"], None, "abcdef\n")]
+#[case::traditional(&["--traditional", "-An", "-tx1"], Some("4"), " 65 66 00\n")]
+fn test_non_utf8_filename(
+    #[case] flags: &[&str],
+    #[case] offset: Option<&str>,
+    #[case] expected: &str,
+) {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let name = OsStr::from_bytes(b"input-\xff");
+    std::fs::write(scene.fixtures.plus(name), b"abcdef\0").unwrap();
+    let mut cmd = scene.ucmd();
+    cmd.args(flags).arg(name);
+    if let Some(offset) = offset {
+        cmd.arg(offset);
+    }
+    cmd.succeeds().stdout_only(expected);
+}
+
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
+#[rstest]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+#[case::missing(false, "No such file or directory")]
+#[case::directory(true, "Is a directory")]
+fn test_non_utf8_filename_errors(
+    #[case] directory: bool,
+    #[case] error: &str,
+    #[values(false, true)] invalid_first: bool,
+) {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("valid", "ab");
+    let invalid = OsStr::from_bytes(b"invalid-\xff");
+    if directory {
+        std::fs::create_dir(scene.fixtures.plus(invalid)).unwrap();
+    }
+    let valid = OsStr::new("valid");
+    let files = if invalid_first {
+        [invalid, valid]
+    } else {
+        [valid, invalid]
+    };
+    scene
+        .ucmd()
+        .args(&["-An", "-tx1"])
+        .args(&files)
+        .fails_with_code(1)
+        .stdout_is(" 61 62\n")
+        .stderr_is(format!("od: $'invalid-\\xFF': {error}\n"));
 }
 
 // Test that od can read one file and dump with default format
@@ -224,6 +285,52 @@ fn test_bfloat16_compact() {
 }
 
 #[test]
+fn test_tf_default_is_double() {
+    let input: [u8; 8] = [0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x40];
+    let default_output = new_ucmd!()
+        .arg("--endian=little")
+        .arg("-An")
+        .arg("-tf")
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_str()
+        .to_string();
+
+    let explicit_double_output = new_ucmd!()
+        .arg("--endian=little")
+        .arg("-An")
+        .arg("-tfD")
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_str()
+        .to_string();
+
+    let explicit_float_output = new_ucmd!()
+        .arg("--endian=little")
+        .arg("-An")
+        .arg("-tfF")
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_str()
+        .to_string();
+
+    assert_eq!(default_output, explicit_double_output);
+    assert_ne!(default_output, explicit_float_output);
+}
+
+#[test]
+fn test_tf_explicit_float_still_uses_4_bytes() {
+    let input: [u8; 8] = [0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x40];
+    new_ucmd!()
+        .arg("--endian=little")
+        .arg("-An")
+        .arg("-tfF")
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_only("               1               2\n");
+}
+
+#[test]
 fn test_f16() {
     let input: [u8; 14] = [
         0x00, 0x3c, // 0x3C00 1.0
@@ -317,7 +424,7 @@ fn test_f32() {
     ]; // 0x807f0000 -1.1663108E-38
     let expected_output = unindent(
         "
-            0000000      -1.2345679        12345678  -9.8765427e+37              -0
+            0000000      -1.2345679        12345678   -9.876543e+37              -0
             0000020             NaN           1e-40  -1.1663108e-38
             0000034
             ",
@@ -346,7 +453,7 @@ fn test_f64() {
         "
             0000000        12345678912345678                        0
             0000020 -2.2250738585072014e-308                   5e-324
-            0000040      -2.0000000000000000
+            0000040                       -2
             0000050
             ",
     );
@@ -396,6 +503,23 @@ fn test_width() {
 }
 
 #[test]
+fn test_large_width_ascii_dump() {
+    // A line is padded up to the full width before the ascii dump, so the
+    // output for a single byte is 4 * WIDTH + 21 characters wide. Checks that
+    // such a line comes out intact; the memory behavior at widths that cannot
+    // be buffered at all is covered by the GNU test suite (od/big-w.sh).
+    const WIDTH: usize = 4_000_000;
+
+    let mut cmd = new_ucmd!();
+    let result = cmd
+        .args(&[format!("-w{WIDTH}"), "-tcz".into()])
+        .run_piped_stdin(&b"x"[..]);
+    let stdout = result.success().stdout_str();
+    assert_eq!(stdout.len(), 4 * WIDTH + 21);
+    assert!(stdout.ends_with("  >x<\n0000001\n"));
+}
+
+#[test]
 fn test_invalid_width() {
     let input: [u8; 4] = [0x00, 0x00, 0x00, 0x00];
     let expected_output = unindent(
@@ -413,6 +537,49 @@ fn test_invalid_width() {
         .success()
         .stderr_is_bytes("od: warning: invalid width 5; using 2 instead\n".as_bytes())
         .stdout_is(expected_output);
+}
+
+#[test]
+fn test_invalid_radix_error() {
+    new_ucmd!()
+        .arg("-Aqq")
+        .fails_with_code(1)
+        .stderr_is("od: invalid output address radix 'q'; it must be one character from [doxn]\n");
+}
+
+#[test]
+fn test_invalid_type_string_errors() {
+    for (spec, expected) in [
+        ("q", "od: invalid character 'q' in type string 'q'\n"),
+        ("a1", "od: invalid character '1' in type string 'a1'\n"),
+        (
+            "d3",
+            "od: invalid type string 'd3';\nthis system doesn't provide a 3-byte integral type\n",
+        ),
+        (
+            "u256",
+            "od: invalid type string 'u256';\nthis system doesn't provide a 256-byte integral type\n",
+        ),
+        (
+            "f3",
+            "od: invalid type string 'f3';\nthis system doesn't provide a 3-byte floating point type\n",
+        ),
+        (
+            "d2147483647",
+            "od: invalid type string 'd2147483647';\nthis system doesn't provide a 2147483647-byte integral type\n",
+        ),
+        ("d2147483648", "od: invalid type string 'd2147483648'\n"),
+        ("f2147483648", "od: invalid type string 'f2147483648'\n"),
+        (
+            "d99999999999999999999",
+            "od: invalid type string 'd99999999999999999999'\n",
+        ),
+    ] {
+        new_ucmd!()
+            .arg(format!("-t{spec}"))
+            .fails_with_code(1)
+            .stderr_is(expected);
+    }
 }
 
 #[test]
@@ -495,6 +662,20 @@ fn test_very_wide_hex_byte_output() {
 }
 
 #[test]
+fn test_very_wide_hex_byte_ascii_dump() {
+    const WIDTH: usize = 100_000;
+    let expected = format!(" 41{}  >A<\n", " ".repeat(WIDTH * 3 - 3));
+
+    new_ucmd!()
+        .arg("-An")
+        .arg(format!("-w{WIDTH}"))
+        .arg("-tx1z")
+        .pipe_in("A")
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
 fn test_suppress_duplicates() {
     let input: [u8; 41] = [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -520,6 +701,7 @@ fn test_suppress_duplicates() {
         .arg("-w4")
         .arg("-O")
         .arg("-x")
+        .arg("--endian=little")
         .run_piped_stdin(&input[..])
         .success()
         .stdout_only(expected_output);
@@ -531,8 +713,8 @@ fn test_big_endian() {
 
     let expected_output = unindent(
         "
-        0000000             -2.0000000000000000
-                     -2.0000000               0
+        0000000                              -2
+                             -2               0
                        c0000000        00000000
                    c000    0000    0000    0000
         0000010
@@ -591,7 +773,7 @@ fn test_alignment_Fx() {
 
     let expected_output = unindent(
         "
-        0000000      -2.0000000000000000
+        0000000                       -2
                   0000  0000  0000  c000
         0000010
         ",
@@ -643,7 +825,7 @@ fn test_hex_offset() {
                    00000000 00000000 00000000 00000000
             000010 00000000 00000000 00000000 00000000
                    00000000 00000000 00000000 00000000
-            00001F
+            00001f
             ",
     );
 
@@ -718,31 +900,47 @@ fn test_invalid_traditional_offsets_are_filenames() {
 
 #[test]
 fn test_traditional_offset_overflow_diagnosed() {
+    // The ERANGE message differs across platforms (e.g. "Result too large"
+    // on glibc vs "Result not representable" on wasi-libc), so when testing
+    // via a WASM runner we just check that stderr mentions the input value.
+    let wasm = std::env::var("UUTESTS_WASM_RUNNER").is_ok();
     let erange = erange_message();
     let long_octal = "7".repeat(255);
     let long_decimal = format!("{}.", "9".repeat(254));
     let long_hex = format!("0x{}", "f".repeat(253));
 
-    new_ucmd!()
+    let cmd = new_ucmd!()
         .arg("-")
         .arg(&long_octal)
         .pipe_in(Vec::<u8>::new())
-        .fails_with_code(1)
-        .stderr_only(format!("od: {long_octal}: {erange}\n"));
+        .fails_with_code(1);
+    if wasm {
+        cmd.stderr_contains(format!("od: {long_octal}:"));
+    } else {
+        cmd.stderr_only(format!("od: {long_octal}: {erange}\n"));
+    }
 
-    new_ucmd!()
+    let cmd = new_ucmd!()
         .arg("-")
         .arg(&long_decimal)
         .pipe_in(Vec::<u8>::new())
-        .fails_with_code(1)
-        .stderr_only(format!("od: {long_decimal}: {erange}\n"));
+        .fails_with_code(1);
+    if wasm {
+        cmd.stderr_contains(format!("od: {long_decimal}:"));
+    } else {
+        cmd.stderr_only(format!("od: {long_decimal}: {erange}\n"));
+    }
 
-    new_ucmd!()
+    let cmd = new_ucmd!()
         .arg("-")
         .arg(&long_hex)
         .pipe_in(Vec::<u8>::new())
-        .fails_with_code(1)
-        .stderr_only(format!("od: {long_hex}: {erange}\n"));
+        .fails_with_code(1);
+    if wasm {
+        cmd.stderr_contains(format!("od: {long_hex}:"));
+    } else {
+        cmd.stderr_only(format!("od: {long_hex}: {erange}\n"));
+    }
 }
 
 #[test]
@@ -834,6 +1032,7 @@ fn test_skip_bytes_prints_after_consuming_multiple_inputs() {
 }
 
 #[cfg(target_os = "linux")]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_skip_bytes_proc_file_without_seeking() {
     let proc_path = Path::new("/proc/version");
@@ -871,6 +1070,73 @@ fn test_skip_bytes_error() {
         .failure();
 }
 
+// The skip is measured over all the inputs joined together, and the message
+// says so, matching GNU od.
+#[test]
+fn test_skip_bytes_past_end_message() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "abc");
+    at.write("b", "de");
+    ucmd.arg("-j6")
+        .arg("a")
+        .arg("b")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_only("od: cannot skip past end of combined input\n");
+}
+
+// -S/--strings reports a skip past the end of the input like the other
+// output modes, matching GNU od.
+#[test]
+fn test_strings_skip_bytes_past_end() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello");
+    ucmd.args(&["-j", "50", "-S", "1", "f"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_only("od: cannot skip past end of combined input\n");
+
+    new_ucmd!()
+        .args(&["-j", "5", "-S", "1"])
+        .pipe_in("")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_only("od: cannot skip past end of combined input\n");
+}
+
+// A skip that lands inside the input still prints the strings after it.
+#[test]
+fn test_strings_skip_bytes_within_input() {
+    new_ucmd!()
+        .args(&["-j", "4", "-S", "3", "-An"])
+        .pipe_in("xxx\0abcd\0")
+        .succeeds()
+        .stdout_only("abcd\n");
+}
+
+// A seekable special file such as /dev/null can be skipped past its (empty)
+// end without error, matching GNU od.
+#[cfg(unix)]
+#[uutests::wasi_ignore(DevNullNotSeekable)]
+#[test]
+fn test_skip_bytes_past_end_of_seekable_device() {
+    new_ucmd!()
+        .arg("-j1")
+        .arg("/dev/null")
+        .succeeds()
+        .stdout_only("0000001\n");
+}
+
+// Skipping past the end of a regular file is an error and must not print a
+// trailing offset line, matching GNU od.
+#[test]
+fn test_skip_bytes_past_end_no_offset() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello");
+    ucmd.arg("-j10").arg("f").fails().no_stdout();
+}
+
+#[uutests::wasi_ignore(StdinPositionNotPreserved)]
 #[test]
 fn test_read_bytes() {
     let scene = TestScenario::new(util_name!());
@@ -1105,15 +1371,9 @@ fn test_od_invalid_bytes() {
     const INVALID_SUFFIX: &str = "1fb4t";
     const BIG_SIZE: &str = "1Y";
 
-    // NOTE:
-    // GNU's od (8.32) with option '--width' does not accept 'Y' as valid suffix.
-    // According to the man page it should be valid in the same way it is valid for
-    // '--read-bytes' and '--skip-bytes'.
-
     let options = [
         "--read-bytes",
         "--skip-bytes",
-        "--width",
         // "--strings", // TODO: consider testing here once '--strings' is implemented
     ];
     for option in &options {
@@ -1151,6 +1411,7 @@ fn test_od_options_after_filename() {
         .arg("-An")
         .arg("-t")
         .arg("x2")
+        .arg("--endian=little")
         .succeeds()
         .stdout_only(" 1c68 fdbb\n");
 }
@@ -1166,6 +1427,25 @@ fn test_od_strings_option() {
         .succeeds()
         .stdout_is("0000000 hello\n0000006 world\n");
 
+    // Test -S0 with empty strings and consecutive NUL bytes (issue #16134)
+    new_ucmd!()
+        .args(&["--strings=0", "-Ad"])
+        .pipe_in(b"abc\x00\x00def\x00")
+        .succeeds()
+        .stdout_is("0000000 abc\n0000004 \n0000005 def\n");
+
+    new_ucmd!()
+        .args(&["-S0", "-Ad"])
+        .pipe_in(b"\x00\x00")
+        .succeeds()
+        .stdout_is("0000000 \n0000001 \n");
+
+    new_ucmd!()
+        .args(&["--strings=0", "-Ad", "-j4"])
+        .pipe_in(b"abc\x00\x00def\x00")
+        .succeeds()
+        .stdout_is("0000004 \n0000005 def\n");
+
     // Test -S0 with single character strings
     new_ucmd!()
         .arg("-S0")
@@ -1179,6 +1459,14 @@ fn test_od_strings_option() {
         .pipe_in(b"\x01hello\x00world\x00ab\x00")
         .succeeds()
         .stdout_is("0000001 hello\n0000007 world\n");
+
+    // Hexadecimal offsets use 6 digits, as in the normal dump
+    new_ucmd!()
+        .arg("-Ax")
+        .arg("-S3")
+        .pipe_in(b"\x01hello\x00world\x00ab\x00")
+        .succeeds()
+        .stdout_is("000001 hello\n000007 world\n");
 
     // Test with -S10 to show only strings with minimum length
     new_ucmd!()
@@ -1275,4 +1563,242 @@ fn test_write_error_dev_full() {
         .fails()
         .code_is(1)
         .stderr_contains("No space left on device");
+}
+
+#[test]
+fn test_hex_lowercase() {
+    let input = [0u8; 10];
+    // Test verifies that the output hex byte offset is in lowercase
+    new_ucmd!()
+        .arg("-Ax")
+        .run_piped_stdin(input)
+        .success()
+        .no_stderr()
+        .stdout_only(unindent(
+            r"
+                000000 000000 000000 000000 000000 000000
+                00000a
+            ",
+        ));
+}
+
+#[uutests::wasi_ignore(ErrnoMessageMismatch)]
+#[test]
+#[cfg(not(windows))]
+fn test_is_a_directory() {
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    fixtures.mkdir("a");
+
+    scene
+        .ucmd()
+        .args(&["a"])
+        .fails_with_code(1)
+        .stderr_is("od: a: Is a directory\n");
+}
+
+// Regression: offset must be 4, not 3, and -N must be respected
+#[test]
+fn test_od_strings_with_n_flag() {
+    let input = b"foo\0bar\0";
+
+    new_ucmd!()
+        .args(&["--strings", "-N7"])
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_only("0000000 foo\n0000004 bar\n");
+
+    new_ucmd!()
+        .args(&["--strings", "-N8"])
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_only("0000000 foo\n0000004 bar\n");
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit_of_read_bytes() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-N", "3zz", "/dev/null"])
+            .fails_with_code(1);
+
+        // The number parsed; only the unit did not. The headline keeps the
+        // option spelled the way it was typed.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+od: invalid suffix in -N argument '3zz'
+   ╭─[ od:1:8 ]
+   │
+ 1 │ od -N 3zz /dev/null
+   │        ─┬
+   │         ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_inside_a_width_value() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--width=4qq", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("od:1:13"), "{stderr}");
+        assert!(stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_a_hexadecimal_offset_that_does_not_parse() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-j", "0x1zz", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // Nothing usable was read, so the whole value is underlined.
+        assert!(stderr.contains("od:1:7"), "{stderr}");
+        assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-N", "3zz", "/dev/null"])
+            .fails_with_code(1)
+            .stderr_is("od: invalid suffix in -N argument '3zz'\n");
+    }
+}
+
+#[test]
+fn test_hyphen_leading_byte_count_is_reported_as_invalid() {
+    // GNU hands the argument after the option to that option even when it
+    // starts with a hyphen, so it is reported as an invalid argument rather
+    // than as an unknown option.
+    for opt in ["-N", "-j"] {
+        new_ucmd!()
+            .args(&[opt, "-1"])
+            .pipe_in("")
+            .fails()
+            .stderr_contains(format!("invalid {opt} argument '-1'"));
+    }
+}
+
+#[test]
+fn test_octal_alias() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("test", "abcdefghijklmnopqrstuvwxyz\n");
+
+    for arg in ["-o", "-B"] {
+        scene
+            .ucmd()
+            .arg(arg)
+            .arg("test")
+            .succeeds()
+            .stdout_only(unindent(ALPHA_OUT));
+    }
+}
+
+#[test]
+fn test_width_rejects_size_suffixes() {
+    // Unlike -N and -j, -w takes a plain number: no multiplier and no radix prefix.
+    for value in ["1K", "1k", "2b", "1KB", "1M", "1Y", "0x8", "4B"] {
+        for (arg, option) in [
+            (format!("-w{value}"), "-w"),
+            (format!("--width={value}"), "--width"),
+        ] {
+            new_ucmd!().arg(arg).fails_with_code(1).stderr_only(format!(
+                "od: invalid suffix in {option} argument '{value}'\n"
+            ));
+        }
+    }
+}
+
+#[test]
+fn test_width_is_decimal_even_with_leading_zero() {
+    for (value, expected) in [
+        (
+            "010",
+            " 61 62 63 64 65 66 67 68 69 6a\n 6b 6c 6d 6e 6f 70 71 72 73 74\n",
+        ),
+        (
+            "08",
+            " 61 62 63 64 65 66 67 68\n 69 6a 6b 6c 6d 6e 6f 70\n 71 72 73 74\n",
+        ),
+    ] {
+        new_ucmd!()
+            .args(&["-An", "-tx1", &format!("-w{value}")])
+            .pipe_in("abcdefghijklmnopqrst")
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn test_width_invalid_numbers() {
+    for (value, message) in [
+        ("abc", "invalid --width argument 'abc'"),
+        ("0", "invalid --width argument '0'"),
+        ("00", "invalid --width argument '00'"),
+        ("-4", "invalid --width argument '-4'"),
+        ("1fb4t", "invalid suffix in --width argument '1fb4t'"),
+        (
+            "99999999999999999999",
+            "--width argument '99999999999999999999' too large",
+        ),
+    ] {
+        new_ucmd!()
+            .arg(format!("--width={value}"))
+            .fails_with_code(1)
+            .stderr_only(format!("od: {message}\n"));
+    }
+}
+
+#[test]
+fn test_od_zero_byte_type_size() {
+    for spec in ["x0", "d0", "o00", "u0", "f0"] {
+        // od can exit before reading its input, so writing it may fail with
+        // a broken pipe.
+        new_ucmd!()
+            .arg(format!("-t{spec}"))
+            .pipe_in("abcd")
+            .ignore_stdin_write_error()
+            .fails_with_code(1)
+            .stderr_contains(format!("invalid type string '{spec}';"))
+            .stderr_contains("this system doesn't provide a 0-byte")
+            .no_stdout();
+    }
+    new_ucmd!()
+        .arg("-tx4")
+        .pipe_in("abcd")
+        .succeeds()
+        .stdout_is("0000000 64636261\n0000004\n");
+}
+
+#[test]
+fn test_strings_with_type_option_is_error() {
+    for args in [
+        &["--strings=1", "-t", "x1", "a.txt"][..],
+        &["--strings=1", "--format=x1", "a.txt"][..],
+        &["-S1", "-x", "a.txt"][..],
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("a.txt", "a\n");
+        ucmd.args(args)
+            .fails()
+            .code_is(1)
+            .stderr_contains("no type may be specified when dumping strings");
+    }
 }

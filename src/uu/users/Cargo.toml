@@ -5,7 +5,6 @@ name = "uu_users"
 description = "users ~ (uutils) display names of currently logged-in users"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/users"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -14,23 +13,29 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
-[features]
-feat_systemd_logind = ["uucore/feat_systemd_logind"]
-
 [lib]
 path = "src/users.rs"
+test = false
+doctest = false
 
-[dependencies]
-clap = { workspace = true }
+[target.'cfg(any(target_vendor = "apple", target_os = "cygwin", target_os = "freebsd", target_os = "linux", target_os = "netbsd"))'.dependencies]
 uucore = { workspace = true, features = ["utmpx"] }
+
+[target.'cfg(any(target_vendor = "apple", target_os = "cygwin", target_os = "freebsd", target_os = "linux", target_os = "netbsd", target_os = "openbsd"))'.dependencies]
+clap = { workspace = true }
 fluent = { workspace = true }
+uucore = { workspace = true, features = [] }
 
 [target.'cfg(target_os = "openbsd")'.dependencies]
 utmp-classic = { workspace = true }
 
+[features]
+systemd_logind = ["uucore/systemd_logind"]
+
+[lints]
+workspace = true
+
 [[bin]]
 name = "users"
 path = "src/main.rs"
+required-features = ["uucore/default"]

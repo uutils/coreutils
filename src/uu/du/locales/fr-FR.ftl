@@ -10,10 +10,11 @@ du-after-help = Les valeurs affichées sont en unités de la première TAILLE di
   de 1000). Les unités peuvent être décimales, hexadécimales, octales, binaires.
 
   MOTIF permet des exclusions avancées. Par exemple, les syntaxes suivantes
-  sont supportées :
-  ? correspondra à un seul caractère
-  { "*" } correspondra à zéro ou plusieurs caractères
-  {"{"}a,b{"}"} correspondra à a ou b
+  sont prises en charge :
+
+    - ? correspondra à un seul caractère
+    - { "*" } correspondra à zéro ou plusieurs caractères
+    - {"{"}a,b{"}"} correspondra à a ou b
 
 # Messages d'aide
 du-help-print-help = Afficher les informations d'aide.
@@ -54,7 +55,7 @@ du-error-invalid-time-style = argument invalide { $style } pour 'style de temps'
     - 'iso'
     - +FORMAT (e.g., +%H:%M) pour un format de type 'date'
   Essayez '{ $help }' pour plus d'informations.
-du-error-invalid-time-arg = les arguments 'birth' et 'creation' pour --time ne sont pas supportés sur cette plateforme.
+du-error-invalid-time-arg = les arguments 'birth' et 'creation' pour --time ne sont pas pris en charge sur cette plateforme.
 du-error-invalid-glob = Syntaxe d'exclusion invalide : { $error }
 du-error-cannot-read-directory = impossible de lire le répertoire { $path }
 du-error-cannot-access = impossible d'accéder à { $path }
@@ -63,7 +64,6 @@ du-error-cannot-open-for-reading = impossible d'ouvrir { $file } en lecture : Au
 du-error-invalid-zero-length-file-name = { $file }:{ $line } : nom de fichier de longueur zéro invalide
 du-error-extra-operand-with-files0-from = opérande supplémentaire { $file }
   les opérandes de fichier ne peuvent pas être combinées avec --files0-from
-du-error-invalid-block-size-argument = argument --{ $option } invalide { $value }
 du-error-cannot-access-no-such-file = impossible d'accéder à { $path } : Aucun fichier ou répertoire de ce type
 du-error-printing-thread-panicked = Le thread d'affichage a paniqué.
 du-error-invalid-suffix = suffixe invalide dans l'argument --{ $option } { $value }

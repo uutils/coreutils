@@ -2,24 +2,29 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
+#[cfg(unix)]
 use uutests::new_ucmd;
 
 #[test]
+#[cfg(unix)]
 fn test_no_args() {
     new_ucmd!()
         .fails()
         .no_stdout()
-        .stderr_contains("pathchk: missing operand");
+        .stderr_contains("the following required arguments were not provided"); // clap provided message
 }
 
 #[test]
+#[cfg(unix)]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
+#[cfg(unix)]
 fn test_default_mode() {
     // accept some reasonable default
     new_ucmd!().args(&["dir/file"]).succeeds().no_stdout();
@@ -55,6 +60,7 @@ fn test_default_mode() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_posix_mode() {
     // accept some reasonable default
     new_ucmd!().args(&["-p", "dir/file"]).succeeds().no_stdout();
@@ -79,6 +85,7 @@ fn test_posix_mode() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_posix_special() {
     // accept some reasonable default
     new_ucmd!().args(&["-P", "dir/file"]).succeeds().no_stdout();
@@ -118,6 +125,7 @@ fn test_posix_special() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_posix_all() {
     // accept some reasonable default
     new_ucmd!()
@@ -164,12 +172,40 @@ fn test_posix_all() {
         .no_stdout();
 
     // fail on empty path
-    new_ucmd!().args(&["-p", "-P", ""]).fails().no_stdout();
+    new_ucmd!()
+        .args(&["-p", "-P", ""])
+        .fails()
+        .stderr_only("pathchk: empty file name\n");
 }
 
+#[test]
+#[cfg(unix)]
+fn test_empty_path_portability_message() {
+    // In every portability mode (-p, -P, --portability) GNU reports an empty
+    // file name with the program-name prefix and before any filesystem check.
+    for flag in ["-p", "-P", "--portability"] {
+        new_ucmd!()
+            .args(&[flag, ""])
+            .fails()
+            .stderr_only("pathchk: empty file name\n");
+    }
+}
+
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_pathchk_non_utf8_paths() {
     let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
     new_ucmd!().arg(&filename).succeeds();
+}
+
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_not_a_directory_clean() {
+    // https://github.com/uutils/coreutils/issues/13888
+    new_ucmd!()
+        .arg("/dev/full/")
+        .fails()
+        .stderr_is("pathchk: /dev/full/: Not a directory\n");
 }

@@ -38,11 +38,10 @@ pub fn parse_obsolete(src: &OsString) -> Option<Result<ObsoleteArgs, ParseError>
     let sign = if let Some(r) = rest.strip_prefix('-') {
         rest = r;
         '-'
-    } else if let Some(r) = rest.strip_prefix('+') {
+    } else {
+        let r = rest.strip_prefix('+')?;
         rest = r;
         '+'
-    } else {
-        return None;
     };
 
     let end_num = rest

@@ -3,7 +3,6 @@ name = "uu_sync"
 description = "sync ~ (uutils) synchronize cache writes to storage"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/sync"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -12,30 +11,32 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
+[package.metadata.cargo-udeps.ignore]
+normal = ["uucore_procs"]
 
 [lib]
 path = "src/sync.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["wide"] }
 fluent = { workspace = true }
+uucore = { workspace = true, features = ["wide"] }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true }
+rustix = { workspace = true, features = ["fs"] }
 
-[target.'cfg(target_os = "windows")'.dependencies]
+[target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
   "Win32_Storage_FileSystem",
   "Win32_System_WindowsProgramming",
   "Win32_Foundation",
 ] }
 
+[lints]
+workspace = true
+
 [[bin]]
 name = "sync"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

@@ -14,7 +14,7 @@ tee-help-output-error-exit = exit on write errors to any output
 tee-help-output-error-exit-nopipe = exit on write errors to any output that are not pipe errors (equivalent to exit on non-unix platforms)
 
 # Error messages
-tee-error-stdin = stdin: { $error }
+tee-error-stdin = read error: { $error }
 
 # Other messages
 tee-standard-output = 'standard output'

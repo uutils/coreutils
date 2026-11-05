@@ -13,14 +13,7 @@
 
 use crate::Flag;
 
-#[cfg(not(any(
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "ios",
-    target_os = "macos",
-    target_os = "netbsd",
-    target_os = "openbsd"
-)))]
+#[cfg(not(bsd))]
 use nix::sys::termios::BaudRate;
 use nix::sys::termios::{
     ControlFlags as C, InputFlags as I, LocalFlags as L, OutputFlags as O,
@@ -38,23 +31,9 @@ pub enum BaudType {
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum AllFlags<'a> {
-    #[cfg(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
+    #[cfg(bsd)]
     Baud(u32, BaudType),
-    #[cfg(not(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    )))]
+    #[cfg(not(bsd))]
     Baud(BaudRate, BaudType),
     ControlFlags((&'a Flag<C>, bool)),
     InputFlags((&'a Flag<I>, bool)),
@@ -78,6 +57,7 @@ pub const CONTROL_FLAGS: &[Flag<C>] = &[
     Flag::new("cstopb", C::CSTOPB),
     Flag::new("cread", C::CREAD).sane(),
     Flag::new("clocal", C::CLOCAL),
+    #[cfg(not(target_os = "redox"))]
     Flag::new("crtscts", C::CRTSCTS),
 ];
 
@@ -96,9 +76,11 @@ pub const INPUT_FLAGS: &[Flag<I>] = &[
     Flag::new("ixon", I::IXON),
     // not supported by nix
     // Flag::new("iuclc", I::IUCLC),
+    #[cfg(not(target_os = "redox"))]
     Flag::new("ixany", I::IXANY),
+    #[cfg(not(any(target_os = "haiku", target_os = "redox")))]
     Flag::new("imaxbel", I::IMAXBEL).sane(),
-    #[cfg(any(target_os = "android", target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_vendor = "apple", target_os = "android", target_os = "linux"))]
     Flag::new("iutf8", I::IUTF8),
 ];
 
@@ -116,139 +98,122 @@ pub const OUTPUT_FLAGS: &[Flag<O>] = &[
     Flag::new("onocr", O::ONOCR),
     Flag::new("onlret", O::ONLRET),
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "macos"
+        target_os = "linux"
     ))]
     Flag::new("ofdel", O::OFDEL),
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "macos"
+        target_os = "linux"
     ))]
     Flag::new_grouped("nl0", O::NL0, O::NLDLY).sane(),
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "macos"
+        target_os = "linux"
     ))]
     Flag::new_grouped("nl1", O::NL1, O::NLDLY),
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "macos"
+        target_os = "linux"
     ))]
     Flag::new_grouped("cr0", O::CR0, O::CRDLY).sane(),
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "macos"
+        target_os = "linux"
     ))]
     Flag::new_grouped("cr1", O::CR1, O::CRDLY),
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "macos"
+        target_os = "linux"
     ))]
     Flag::new_grouped("cr2", O::CR2, O::CRDLY),
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "macos"
+        target_os = "linux"
     ))]
     Flag::new_grouped("cr3", O::CR3, O::CRDLY),
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "macos"
+        target_os = "linux"
     ))]
     Flag::new_grouped("tab0", O::TAB0, O::TABDLY).sane(),
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "macos"
+        target_os = "linux"
     ))]
     Flag::new_grouped("tab1", O::TAB1, O::TABDLY),
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "macos"
+        target_os = "linux"
     ))]
     Flag::new_grouped("tab2", O::TAB2, O::TABDLY),
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "macos"
+        target_os = "linux"
     ))]
     Flag::new_grouped("tab3", O::TAB3, O::TABDLY),
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "macos"
+        target_os = "linux"
     ))]
     Flag::new_grouped("bs0", O::BS0, O::BSDLY).sane(),
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "macos"
+        target_os = "linux"
     ))]
     Flag::new_grouped("bs1", O::BS1, O::BSDLY),
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "macos"
+        target_os = "linux"
     ))]
     Flag::new_grouped("vt0", O::VT0, O::VTDLY).sane(),
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "macos"
+        target_os = "linux"
     ))]
     Flag::new_grouped("vt1", O::VT1, O::VTDLY),
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "macos"
+        target_os = "linux"
     ))]
     Flag::new_grouped("ff0", O::FF0, O::FFDLY).sane(),
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "macos"
+        target_os = "linux"
     ))]
     Flag::new_grouped("ff1", O::FF1, O::FFDLY),
 ];
@@ -266,28 +231,26 @@ pub const LOCAL_FLAGS: &[Flag<L>] = &[
     // Not supported by nix
     // Flag::new("xcase", L::XCASE),
     Flag::new("tostop", L::TOSTOP),
-    #[cfg(not(target_os = "cygwin"))]
+    #[cfg(not(any(target_os = "cygwin", target_os = "redox")))]
     Flag::new("echoprt", L::ECHOPRT),
-    #[cfg(not(target_os = "cygwin"))]
+    #[cfg(not(any(target_os = "cygwin", target_os = "redox")))]
     Flag::new("prterase", L::ECHOPRT).hidden(),
+    #[cfg(not(target_os = "redox"))]
     Flag::new("echoctl", L::ECHOCTL).sane(),
+    #[cfg(not(target_os = "redox"))]
     Flag::new("ctlecho", L::ECHOCTL).sane().hidden(),
+    #[cfg(not(target_os = "redox"))]
     Flag::new("echoke", L::ECHOKE).sane(),
+    #[cfg(not(target_os = "redox"))]
     Flag::new("crtkill", L::ECHOKE).sane().hidden(),
+    #[cfg(not(target_os = "redox"))]
     Flag::new("flusho", L::FLUSHO),
-    #[cfg(not(target_os = "cygwin"))]
+    #[cfg(not(any(target_os = "cygwin", target_os = "haiku", target_os = "redox")))]
     Flag::new("extproc", L::EXTPROC),
 ];
 
-// BSD's use u32 as baud rate, to using the enum is unnecessary.
-#[cfg(not(any(
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "ios",
-    target_os = "macos",
-    target_os = "netbsd",
-    target_os = "openbsd"
-)))]
+// BSD's use u32 as baud rate, so using the enum is unnecessary.
+#[cfg(not(bsd))]
 pub const BAUD_RATES: &[(&str, BaudRate)] = &[
     ("0", BaudRate::B0),
     ("50", BaudRate::B50),
@@ -301,17 +264,34 @@ pub const BAUD_RATES: &[(&str, BaudRate)] = &[
     ("1200", BaudRate::B1200),
     ("1800", BaudRate::B1800),
     ("2400", BaudRate::B2400),
+    ("4800", BaudRate::B4800),
     ("9600", BaudRate::B9600),
     ("19200", BaudRate::B19200),
     ("38400", BaudRate::B38400),
     ("57600", BaudRate::B57600),
     ("115200", BaudRate::B115200),
     ("230400", BaudRate::B230400),
+    // TODO: https://github.com/nix-rust/nix/pull/2815
+    #[cfg(not(any(
+        target_os = "cygwin",
+        target_os = "fuchsia",
+        target_os = "haiku",
+        target_os = "hurd",
+        target_os = "redox"
+    )))]
+    ("460800", BaudRate::B460800),
     #[cfg(any(target_os = "android", target_os = "linux"))]
     ("500000", BaudRate::B500000),
     #[cfg(any(target_os = "android", target_os = "linux"))]
     ("576000", BaudRate::B576000),
-    #[cfg(any(target_os = "android", target_os = "linux"))]
+    // TODO: https://github.com/nix-rust/nix/pull/2815
+    #[cfg(not(any(
+        target_os = "cygwin",
+        target_os = "fuchsia",
+        target_os = "haiku",
+        target_os = "hurd",
+        target_os = "redox"
+    )))]
     ("921600", BaudRate::B921600),
     #[cfg(any(target_os = "android", target_os = "linux"))]
     ("1000000", BaudRate::B1000000),
@@ -371,12 +351,16 @@ pub const CONTROL_CHARS: &[(&str, S)] = &[
     // Sends a suspend signal (SIGTSTP).
     ("susp", S::VSUSP),
     // Reprints the current line.
+    #[cfg(not(target_os = "haiku"))]
     ("rprnt", S::VREPRINT),
     // Deletes the last word typed.
+    #[cfg(not(target_os = "haiku"))]
     ("werase", S::VWERASE),
     // Enters literal mode (next character is taken literally).
+    #[cfg(not(target_os = "haiku"))]
     ("lnext", S::VLNEXT),
     // Discards the current line.
+    #[cfg(not(target_os = "haiku"))]
     ("discard", S::VDISCARD),
 ];
 
@@ -398,4 +382,5 @@ pub const COMBINATION_SETTINGS: &[(&str, bool)] = &[
     ("pass8", true),
     ("raw", true),
     ("sane", false),
+    ("tabs", true),
 ];

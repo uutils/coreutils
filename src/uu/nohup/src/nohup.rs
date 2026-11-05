@@ -5,20 +5,26 @@
 
 // spell-checker:ignore (ToDO) SIGHUP cproc vprocmgr homeout
 
+#![cfg(any(unix, windows))]
+
 use clap::{Arg, ArgAction, Command};
-use libc::{SIG_IGN, SIGHUP, dup2, signal};
 use std::env;
-use std::fs::{File, OpenOptions};
-use std::io::{Error, ErrorKind, IsTerminal};
-use std::os::unix::prelude::*;
-use std::os::unix::process::CommandExt;
-use std::path::{Path, PathBuf};
+use std::ffi::OsString;
+use std::fs::File;
+use std::io::{Error, ErrorKind};
 use std::process;
-use thiserror::Error;
+use std::sync::LazyLock;
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult, set_exit_code};
+use uucore::error::{UError, UResult, set_exit_code, strip_errno};
 use uucore::translate;
 use uucore::{format_usage, show_error};
+
+#[cfg(unix)]
+#[path = "platform/unix.rs"]
+mod platform;
+#[cfg(windows)]
+#[path = "platform/windows.rs"]
+mod platform;
 
 static NOHUP_OUT: &str = "nohup.out";
 // exit codes that match the GNU implementation
@@ -31,14 +37,8 @@ mod options {
     pub const CMD: &str = "cmd";
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum NohupError {
-    #[error("{}", translate!("nohup-error-cannot-detach"))]
-    CannotDetach,
-
-    #[error("{}", translate!("nohup-error-cannot-replace", "name" => (*_0), "err" => _1))]
-    CannotReplace(&'static str, #[source] Error),
-
     #[error("{}", translate!("nohup-error-open-failed", "path" => NOHUP_OUT.quote(), "err" => _1))]
     OpenFailed(i32, #[source] Error),
 
@@ -50,40 +50,44 @@ impl UError for NohupError {
     fn code(&self) -> i32 {
         match self {
             Self::OpenFailed(code, _) | Self::OpenFailed2(code, _, _, _) => *code,
-            _ => 2,
         }
     }
 }
 
-fn failure_code() -> i32 {
-    if env::var("POSIXLY_CORRECT").is_ok() {
+static FAILURE_CODE: LazyLock<i32> = LazyLock::new(|| {
+    if env::var_os("POSIXLY_CORRECT").is_some() {
         POSIX_NOHUP_FAILURE
     } else {
         EXIT_CANCELED
     }
-}
+});
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result_with_exit_code(
         uu_app(),
         args,
-        failure_code(),
+        *FAILURE_CODE,
     )?;
 
-    replace_fds()?;
+    platform::prepare()?;
 
-    unsafe { signal(SIGHUP, SIG_IGN) };
-
-    if unsafe { !_vprocmgr_detach_from_console(0).is_null() } {
-        return Err(NohupError::CannotDetach.into());
-    }
-
-    let mut cmd_iter = matches.get_many::<String>(options::CMD).unwrap();
+    #[allow(clippy::unwrap_used, reason = "set as required by clap")]
+    let mut cmd_iter = matches.get_many::<OsString>(options::CMD).unwrap();
+    #[allow(clippy::unwrap_used, reason = "set as required by clap")]
     let cmd = cmd_iter.next().unwrap();
-    let args: Vec<&String> = cmd_iter.collect();
+    let args: Vec<&OsString> = cmd_iter.collect();
+    let mut command = process::Command::new(cmd);
+    command.args(args);
 
-    let err = process::Command::new(cmd).args(args).exec();
+    let Some(err) = platform::run(&mut command)? else {
+        return Ok(());
+    };
+
+    show_error!(
+        "{}",
+        translate!("nohup-error-failed-to-run-command", "command" => cmd.quote(), "error" => strip_errno(&err))
+    );
 
     match err.kind() {
         ErrorKind::NotFound => set_exit_code(EXIT_ENOENT),
@@ -93,9 +97,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("nohup")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("nohup"))
         .about(translate!("nohup-about"))
         .after_help(translate!("nohup-after-help"))
         .override_usage(format_usage(&translate!("nohup-usage")))
@@ -104,92 +108,40 @@ pub fn uu_app() -> Command {
                 .hide(true)
                 .required(true)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::CommandName),
+                .value_hint(clap::ValueHint::CommandName)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .trailing_var_arg(true)
         .infer_long_args(true)
 }
 
-fn replace_fds() -> UResult<()> {
-    if std::io::stdin().is_terminal() {
-        let new_stdin = File::open(Path::new("/dev/null"))
-            .map_err(|e| NohupError::CannotReplace("STDIN", e))?;
-        if unsafe { dup2(new_stdin.as_raw_fd(), 0) } != 0 {
-            return Err(NohupError::CannotReplace("STDIN", Error::last_os_error()).into());
-        }
-    }
-
-    if std::io::stdout().is_terminal() {
-        let new_stdout = find_stdout()?;
-        let fd = new_stdout.as_raw_fd();
-
-        if unsafe { dup2(fd, 1) } != 1 {
-            return Err(NohupError::CannotReplace("STDOUT", Error::last_os_error()).into());
-        }
-    }
-
-    if std::io::stderr().is_terminal() && unsafe { dup2(1, 2) } != 2 {
-        return Err(NohupError::CannotReplace("STDERR", Error::last_os_error()).into());
-    }
-    Ok(())
-}
-
+/// Open the file the detached command's stdout is appended to: `nohup.out` in
+/// the current directory, falling back to `$HOME/nohup.out`.
 fn find_stdout() -> UResult<File> {
-    let internal_failure_code = failure_code();
+    try_open_nohup_file(NOHUP_OUT).or_else(|e1| {
+        let Ok(home) = env::var("HOME") else {
+            return Err(NohupError::OpenFailed(*FAILURE_CODE, e1).into());
+        };
 
-    match OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(Path::new(NOHUP_OUT))
-    {
-        Ok(t) => {
-            show_error!(
-                "{}",
-                translate!("nohup-ignoring-input-appending-output", "path" => NOHUP_OUT.quote())
-            );
-            Ok(t)
-        }
-        Err(e1) => {
-            let Ok(home) = env::var("HOME") else {
-                return Err(NohupError::OpenFailed(internal_failure_code, e1).into());
-            };
-            let mut homeout = PathBuf::from(home);
-            homeout.push(NOHUP_OUT);
-            let homeout_str = homeout.to_str().unwrap();
-            match OpenOptions::new().create(true).append(true).open(&homeout) {
-                Ok(t) => {
-                    show_error!(
-                        "{}",
-                        translate!("nohup-ignoring-input-appending-output", "path" => homeout_str.quote())
-                    );
-                    Ok(t)
-                }
-                Err(e2) => Err(NohupError::OpenFailed2(
-                    internal_failure_code,
-                    e1,
-                    homeout_str.to_string(),
-                    e2,
-                )
-                .into()),
-            }
-        }
-    }
+        let home_out = std::path::PathBuf::from(home).join(NOHUP_OUT);
+        let home_out = home_out.to_str().unwrap();
+
+        try_open_nohup_file(home_out).map_err(|e2| {
+            NohupError::OpenFailed2(*FAILURE_CODE, e1, home_out.to_string(), e2).into()
+        })
+    })
 }
 
-#[cfg(target_vendor = "apple")]
-unsafe extern "C" {
-    fn _vprocmgr_detach_from_console(flags: u32) -> *const libc::c_int;
-}
+fn try_open_nohup_file(path: &str) -> std::io::Result<File> {
+    let mut opt = std::fs::OpenOptions::new();
+    opt.create(true).append(true);
+    platform::set_output_file_mode(&mut opt);
+    let file = opt.open(path)?;
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "freebsd",
-    target_os = "openbsd",
-    target_os = "cygwin"
-))]
-/// # Safety
-/// This function is unsafe because it dereferences a raw pointer.
-unsafe fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int {
-    std::ptr::null()
+    show_error!(
+        "{}",
+        translate!("nohup-ignoring-input-appending-output", "path" => path.quote())
+    );
+
+    Ok(file)
 }

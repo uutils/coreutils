@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore backupopt
+
 //! Implement GNU-style backup functionality.
 //!
 //! This module implements the backup functionality as described in the [GNU
@@ -60,7 +63,7 @@
 //!             "command", "--backup=t", "--suffix=bak~"
 //!         ]);
 //!
-//!     let backup_mode = match backup_control::determine_backup_mode(&matches) {
+//!     let backup_mode = match backup_control::determine_backup_mode(std::env::var("VERSION_CONTROL").ok(), &matches) {
 //!         Err(e) => {
 //!             show!(e);
 //!             return;
@@ -79,19 +82,15 @@
 //! }
 //! ```
 
-// spell-checker:ignore backupopt
-
-use crate::{
-    display::Quotable,
-    error::{UError, UResult},
-};
+use crate::display::Quotable;
+use crate::error::{UError, UResult};
+use crate::fs::FileInformation;
+use crate::translate;
 use clap::ArgMatches;
-use std::{
-    env,
-    error::Error,
-    fmt::{Debug, Display},
-    path::{Path, PathBuf},
-};
+use std::ffi::{OsStr, OsString};
+use std::fmt::Debug;
+use std::path::{Path, PathBuf};
+use std::{env, fs};
 
 pub static BACKUP_CONTROL_VALUES: &[&str] = &[
     "simple", "never", "numbered", "t", "existing", "nil", "none", "off",
@@ -107,8 +106,8 @@ the VERSION_CONTROL environment variable.  Here are the values:
   existing, nil   numbered if numbered backups exist, simple otherwise
   simple, never   always make simple backups";
 
-static VALID_ARGS_HELP: &str = "Valid arguments are:
-  - 'none', 'off'
+/// The values `--backup` accepts; they are option values, so they are not translated.
+static VALID_ARGS_LIST: &str = "  - 'none', 'off'
   - 'simple', 'never'
   - 'existing', 'nil'
   - 'numbered', 't'";
@@ -136,60 +135,31 @@ pub enum BackupMode {
 ///
 /// Errors are currently raised by [`determine_backup_mode`] only. All errors
 /// are implemented as [`UError`] for uniform handling across utilities.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum BackupError {
     /// An invalid argument (e.g. 'foo') was given as backup type. First
     /// parameter is the argument, second is the arguments origin (CLI or
     /// ENV-var)
+    #[error(
+        "{}\n{}\n{VALID_ARGS_LIST}",
+        translate!("backup-error-invalid-argument", "arg" => .0.quote(), "origin" => .1),
+        translate!("backup-valid-arguments")
+    )]
     InvalidArgument(String, String),
     /// An ambiguous argument (e.g. 'n') was given as backup type. First
     /// parameter is the argument, second is the arguments origin (CLI or
     /// ENV-var)
+    #[error(
+        "{}\n{}\n{VALID_ARGS_LIST}",
+        translate!("backup-error-ambiguous-argument", "arg" => .0.quote(), "origin" => .1),
+        translate!("backup-valid-arguments")
+    )]
     AmbiguousArgument(String, String),
-    /// Currently unused
-    BackupImpossible(),
-    // BackupFailed(PathBuf, PathBuf, std::io::Error),
 }
 
 impl UError for BackupError {
-    fn code(&self) -> i32 {
-        match self {
-            Self::BackupImpossible() => 2,
-            _ => 1,
-        }
-    }
-
     fn usage(&self) -> bool {
-        // Suggested by clippy.
-        matches!(
-            self,
-            Self::InvalidArgument(_, _) | Self::AmbiguousArgument(_, _)
-        )
-    }
-}
-
-impl Error for BackupError {}
-
-impl Display for BackupError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InvalidArgument(arg, origin) => write!(
-                f,
-                "invalid argument {} for '{origin}'\n{VALID_ARGS_HELP}",
-                arg.quote(),
-            ),
-            Self::AmbiguousArgument(arg, origin) => write!(
-                f,
-                "ambiguous argument {} for '{origin}'\n{VALID_ARGS_HELP}",
-                arg.quote(),
-            ),
-            Self::BackupImpossible() => write!(f, "cannot create backup"),
-            // Placeholder for later
-            // Self::BackupFailed(from, to, e) => Display::fmt(
-            //     &uio_error!(e, "failed to backup {} to {}", from.quote(), to.quote()),
-            //     f
-            // ),
-        }
+        true
     }
 }
 
@@ -242,17 +212,22 @@ pub mod arguments {
 /// In order of precedence, this function obtains the backup suffix
 ///
 /// 1. From the '-S' or '--suffix' CLI argument, if present
-/// 2. From the "SIMPLE_BACKUP_SUFFIX" environment variable, if present
-/// 3. By using the default '~' if none of the others apply
+/// 2. From the `SIMPLE_BACKUP_SUFFIX` environment variable, if present
+/// 3. By using the default '~' if none of the others apply, or if they are empty or contain slashes
 ///
 /// This function directly takes [`ArgMatches`] as argument and looks for
 /// the '-S' and '--suffix' arguments itself.
 pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
     let supplied_suffix = matches.get_one::<String>(arguments::OPT_SUFFIX);
-    if let Some(suffix) = supplied_suffix {
+    let suffix = if let Some(suffix) = supplied_suffix {
         String::from(suffix)
     } else {
         env::var("SIMPLE_BACKUP_SUFFIX").unwrap_or_else(|_| DEFAULT_BACKUP_SUFFIX.to_owned())
+    };
+    if suffix.is_empty() || suffix.contains('/') {
+        DEFAULT_BACKUP_SUFFIX.to_owned()
+    } else {
+        suffix
     }
 }
 
@@ -302,7 +277,7 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 ///             "command", "-b", "--backup=t"
 ///         ]);
 ///
-///     let backup_mode = backup_control::determine_backup_mode(&matches).unwrap();
+///     let backup_mode = backup_control::determine_backup_mode(std::env::var("VERSION_CONTROL").ok(), &matches).unwrap();
 ///     assert_eq!(backup_mode, BackupMode::Numbered)
 /// }
 /// ```
@@ -325,7 +300,7 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 ///             "command", "-b", "--backup=n"
 ///         ]);
 ///
-///     let backup_mode = backup_control::determine_backup_mode(&matches);
+///     let backup_mode = backup_control::determine_backup_mode(std::env::var("VERSION_CONTROL").ok(), &matches);
 ///
 ///     assert!(backup_mode.is_err());
 ///     let err = backup_mode.unwrap_err();
@@ -334,27 +309,33 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 ///     show!(err);
 /// }
 /// ```
-pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
+pub fn determine_backup_mode(env_ctl: Option<String>, matches: &ArgMatches) -> UResult<BackupMode> {
     if matches.contains_id(arguments::OPT_BACKUP) {
         // Use method to determine the type of backups to make. When this option
         // is used but method is not specified, then the value of the
         // VERSION_CONTROL environment variable is used. And if VERSION_CONTROL
         // is not set, the default backup type is 'existing'.
-        if let Some(method) = matches.get_one::<String>(arguments::OPT_BACKUP) {
+        // An empty value (`--backup=`) behaves like a bare `--backup`: the value
+        // of `VERSION_CONTROL` decides, falling back to 'existing'.
+        if let Some(method) = matches
+            .get_one::<String>(arguments::OPT_BACKUP)
+            .filter(|method| !method.is_empty())
+        {
             // Second argument is for the error string that is returned.
             match_method(method, "backup type")
-        } else if let Ok(method) = env::var("VERSION_CONTROL") {
+        } else if let Some(method) = env_ctl {
             // Second argument is for the error string that is returned.
             match_method(&method, "$VERSION_CONTROL")
         } else {
-            // Default if no argument is provided to '--backup'
+            // Default if no argument is provided to '--backup', or it is given
+            // without a value
             Ok(BackupMode::Existing)
         }
     } else if matches.get_flag(arguments::OPT_BACKUP_NO_ARG) {
         // the short form of this option, -b does not accept any argument.
         // if VERSION_CONTROL is not set then using -b is equivalent to
         // using --backup=existing.
-        if let Ok(method) = env::var("VERSION_CONTROL") {
+        if let Some(method) = env_ctl {
             match_method(&method, "$VERSION_CONTROL")
         } else {
             Ok(BackupMode::Existing)
@@ -362,7 +343,7 @@ pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
     } else if matches.contains_id(arguments::OPT_SUFFIX) {
         // Suffix option is enough to determine mode even if --backup is not set.
         // If VERSION_CONTROL is not set, the default backup type is 'existing'.
-        if let Ok(method) = env::var("VERSION_CONTROL") {
+        if let Some(method) = env_ctl {
             match_method(&method, "$VERSION_CONTROL")
         } else {
             Ok(BackupMode::Existing)
@@ -413,75 +394,131 @@ fn match_method(method: &str, origin: &str) -> UResult<BackupMode> {
     }
 }
 
-pub fn get_backup_path(
+pub fn get_backup_path<S: AsRef<OsStr>>(
     backup_mode: BackupMode,
     backup_path: &Path,
-    suffix: &str,
+    suffix: S,
 ) -> Option<PathBuf> {
     match backup_mode {
         BackupMode::None => None,
-        BackupMode::Simple => Some(simple_backup_path(backup_path, suffix)),
+        BackupMode::Simple => Some(simple_backup_path(backup_path, suffix.as_ref())),
         BackupMode::Numbered => Some(numbered_backup_path(backup_path)),
-        BackupMode::Existing => Some(existing_backup_path(backup_path, suffix)),
+        BackupMode::Existing => Some(existing_backup_path(backup_path, suffix.as_ref())),
     }
 }
 
-fn simple_backup_path(path: &Path, suffix: &str) -> PathBuf {
+fn simple_backup_path<S: AsRef<OsStr>>(path: &Path, suffix: S) -> PathBuf {
     let mut file_name = path.file_name().unwrap_or_default().to_os_string();
-    file_name.push(suffix);
+    file_name.push(suffix.as_ref());
     path.with_file_name(file_name)
 }
 
 fn numbered_backup_path(path: &Path) -> PathBuf {
-    let file_name = path.file_name().unwrap_or_default();
-    for i in 1_u64.. {
-        let mut numbered_file_name = file_name.to_os_string();
-        numbered_file_name.push(format!(".~{i}~"));
-        let path = path.with_file_name(numbered_file_name);
-        if !path.exists() {
-            return path;
+    let mut i: u64 = 1;
+    loop {
+        let new_path = simple_backup_path(path, OsString::from(format!(".~{i}~")));
+        // Use `symlink_metadata` rather than `exists()` so that a dangling
+        // symlink still counts as an existing backup (avoiding a silent
+        // overwrite), and so we do not report a live symlink as missing when
+        // the target cannot be stat'd.
+        if fs::symlink_metadata(&new_path).is_err() {
+            return new_path;
         }
-    }
-    panic!("cannot create backup")
-}
-
-fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
-    let file_name = path.file_name().unwrap_or_default();
-    let mut numbered_file_name = file_name.to_os_string();
-    numbered_file_name.push(".~1~");
-    let test_path = path.with_file_name(numbered_file_name);
-    if test_path.exists() {
-        numbered_backup_path(path)
-    } else {
-        simple_backup_path(path, suffix)
+        i += 1;
     }
 }
 
-/// Returns true if the source file is likely to be the simple backup file for the target file.
+fn existing_backup_path<S: AsRef<OsStr>>(path: &Path, suffix: S) -> PathBuf {
+    let test_path = simple_backup_path(path, OsString::from(".~1~"));
+    if fs::symlink_metadata(&test_path).is_ok() {
+        return numbered_backup_path(path);
+    }
+    simple_backup_path(path, suffix.as_ref())
+}
+
+/// Returns true if backing up `target` would destroy `source`.
+///
+/// Backing up renames `target` onto its backup name. When `source` *is* that
+/// backup, the rename clobbers it and the operation has nothing left to read,
+/// leaving both files empty. GNU refuses instead (`source_is_dst_backup` in
+/// `copy.c`), and `cp`, `mv` and `install` all need the same answer.
+///
+/// The mode is part of the question, not the caller's business: numbered
+/// backups never reuse an existing name, and [`BackupMode::None`] performs no
+/// rename at all, so neither can destroy anything. Both return false here so no
+/// caller has to remember the rule - getting that gate wrong per-utility is
+/// exactly how `mv` came to miss `--backup=existing`.
 ///
 /// # Arguments
 ///
 /// * `source` - A Path reference that holds the source (backup) file path.
 /// * `target` - A Path reference that holds the target file path.
 /// * `suffix` - Str that holds the backup suffix.
+/// * `mode` - The backup mode in effect.
+/// * `dereference` - Whether the source is resolved through symlinks, matching
+///   how the calling utility opens it (`false` for `mv`, `true` for `cp`/`install`).
 ///
 /// # Examples
 ///
 /// ```
+/// use std::fs;
 /// use std::path::Path;
-/// use uucore::backup_control::source_is_target_backup;
-/// let source = Path::new("data.txt~");
-/// let target = Path::new("data.txt");
-/// let suffix = String::from("~");
+/// use uucore::backup_control::{BackupMode, backup_would_destroy_source};
 ///
-/// assert_eq!(source_is_target_backup(&source, &target, &suffix), true);
+/// let dir = tempfile::tempdir().unwrap();
+/// let target = dir.path().join("data.txt");
+/// let source = dir.path().join("data.txt~");
+/// fs::write(&target, "").unwrap();
+/// fs::write(&source, "").unwrap();
+///
+/// // `./data.txt~` and `data.txt~` name the same file, so both are caught.
+/// assert!(backup_would_destroy_source(
+///     &source, &target, "~", BackupMode::Simple, false
+/// ));
+///
+/// // A numbered backup picks a fresh name, so the source is safe.
+/// assert!(!backup_would_destroy_source(
+///     &source, &target, "~", BackupMode::Numbered, false
+/// ));
 /// ```
 ///
-pub fn source_is_target_backup(source: &Path, target: &Path, suffix: &str) -> bool {
-    let source_filename = source.as_os_str();
+pub fn backup_would_destroy_source(
+    source: &Path,
+    target: &Path,
+    suffix: &str,
+    mode: BackupMode,
+    dereference: bool,
+) -> bool {
+    if matches!(mode, BackupMode::None | BackupMode::Numbered) {
+        return false;
+    }
+    // GNU gates on the file names first: only a source whose final component is
+    // the target's final component plus the suffix can be clobbered by the
+    // backup rename. This keeps unrelated files that merely happen to share an
+    // inode (a hard link, say) from being refused.
+    let (Some(source_base), Some(target_base)) = (source.file_name(), target.file_name()) else {
+        return false;
+    };
+    let mut expected_base = target_base.to_owned();
+    expected_base.push(suffix);
+    if source_base != expected_base {
+        return false;
+    }
+
+    // Then compare the files themselves rather than how they were spelled, so
+    // `a~`, `./a~` and an absolute path are all recognized. If the backup does
+    // not exist yet there is nothing to destroy.
     let mut target_backup_filename = target.as_os_str().to_owned();
     target_backup_filename.push(suffix);
-    source_filename == target_backup_filename
+    let target_backup = PathBuf::from(target_backup_filename);
+
+    match (
+        FileInformation::from_path(source, dereference),
+        FileInformation::from_path(&target_backup, true),
+    ) {
+        (Ok(source_info), Ok(backup_info)) => source_info == backup_info,
+        _ => false,
+    }
 }
 
 //
@@ -490,20 +527,17 @@ pub fn source_is_target_backup(source: &Path, target: &Path, suffix: &str) -> bo
 #[cfg(test)]
 mod tests {
     use super::*;
-    // Required to instantiate mutex in shared context
     use clap::Command;
-    use std::sync::{LazyLock, Mutex};
 
-    // The mutex is required here as by default all tests are run as separate
-    // threads under the same parent process. As environment variables are
-    // specific to processes (and thus shared among threads), data races *will*
-    // occur if no precautions are taken. Thus we have all tests that rely on
-    // environment variables lock this empty mutex to ensure they don't access
-    // it concurrently.
-    static TEST_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
-
-    // Environment variable for "VERSION_CONTROL"
-    static ENV_VERSION_CONTROL: &str = "VERSION_CONTROL";
+    /// The error messages go through `translate!`, which needs the English
+    /// strings loaded to give back more than the message key.
+    fn load_english_messages() {
+        // SAFETY: test-only; like the uptime tests, it always sets the same value.
+        unsafe {
+            env::set_var("LANG", "en_US.UTF-8");
+        }
+        let _ = crate::locale::setup_localization("mv");
+    }
 
     fn make_app() -> Command {
         Command::new("command")
@@ -515,55 +549,57 @@ mod tests {
     // Defaults to --backup=existing
     #[test]
     fn test_backup_mode_short_only() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
         let matches = make_app().get_matches_from(vec!["command", "-b"]);
-
-        let result = determine_backup_mode(&matches).unwrap();
-
+        let result = determine_backup_mode(None, &matches).unwrap();
         assert_eq!(result, BackupMode::Existing);
     }
 
     // --backup takes precedence over -b
     #[test]
     fn test_backup_mode_long_preferred_over_short() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
         let matches = make_app().get_matches_from(vec!["command", "-b", "--backup=none"]);
-
-        let result = determine_backup_mode(&matches).unwrap();
-
+        let result = determine_backup_mode(None, &matches).unwrap();
         assert_eq!(result, BackupMode::None);
     }
 
     // --backup can be passed without an argument
     #[test]
     fn test_backup_mode_long_without_args_no_env() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
-
-        let result = determine_backup_mode(&matches).unwrap();
-
+        let result = determine_backup_mode(None, &matches).unwrap();
         assert_eq!(result, BackupMode::Existing);
+    }
+
+    // --backup= (empty value) behaves like a bare --backup
+    #[test]
+    fn test_backup_mode_long_with_empty_arg() {
+        let matches = make_app().get_matches_from(vec!["command", "--backup="]);
+        let result = determine_backup_mode(None, &matches).unwrap();
+        assert_eq!(result, BackupMode::Existing);
+    }
+
+    // --backup= (empty value) still consults VERSION_CONTROL
+    #[test]
+    fn test_backup_mode_long_with_empty_arg_and_env() {
+        let matches = make_app().get_matches_from(vec!["command", "--backup="]);
+        let result = determine_backup_mode(Some("numbered".into()), &matches).unwrap();
+        assert_eq!(result, BackupMode::Numbered);
     }
 
     // --backup can be passed with an argument only
     #[test]
     fn test_backup_mode_long_with_args() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
         let matches = make_app().get_matches_from(vec!["command", "--backup=simple"]);
-
-        let result = determine_backup_mode(&matches).unwrap();
-
+        let result = determine_backup_mode(None, &matches).unwrap();
         assert_eq!(result, BackupMode::Simple);
     }
 
     // --backup errors on invalid argument
     #[test]
     fn test_backup_mode_long_with_args_invalid() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
+        load_english_messages();
         let matches = make_app().get_matches_from(vec!["command", "--backup=foobar"]);
-
-        let result = determine_backup_mode(&matches);
-
+        let result = determine_backup_mode(None, &matches);
         assert!(result.is_err());
         let text = format!("{}", result.unwrap_err());
         assert!(text.contains("invalid argument 'foobar' for 'backup type'"));
@@ -572,11 +608,9 @@ mod tests {
     // --backup errors on ambiguous argument
     #[test]
     fn test_backup_mode_long_with_args_ambiguous() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
+        load_english_messages();
         let matches = make_app().get_matches_from(vec!["command", "--backup=n"]);
-
-        let result = determine_backup_mode(&matches);
-
+        let result = determine_backup_mode(None, &matches);
         assert!(result.is_err());
         let text = format!("{}", result.unwrap_err());
         assert!(text.contains("ambiguous argument 'n' for 'backup type'"));
@@ -585,114 +619,86 @@ mod tests {
     // --backup accepts shortened arguments (si for simple)
     #[test]
     fn test_backup_mode_long_with_arg_shortened() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
         let matches = make_app().get_matches_from(vec!["command", "--backup=si"]);
-
-        let result = determine_backup_mode(&matches).unwrap();
-
+        let result = determine_backup_mode(None, &matches).unwrap();
         assert_eq!(result, BackupMode::Simple);
     }
 
     // -b doesn't ignores the "VERSION_CONTROL" environment variable
     #[test]
     fn test_backup_mode_short_does_not_ignore_env() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
-        unsafe { env::set_var(ENV_VERSION_CONTROL, "numbered") };
         let matches = make_app().get_matches_from(vec!["command", "-b"]);
-
-        let result = determine_backup_mode(&matches).unwrap();
-
+        let result = determine_backup_mode(Some("numbered".into()), &matches).unwrap();
         assert_eq!(result, BackupMode::Numbered);
-        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
     }
 
     // --backup can be passed without an argument, but reads env var if existent
     #[test]
     fn test_backup_mode_long_without_args_with_env() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
-        unsafe { env::set_var(ENV_VERSION_CONTROL, "none") };
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
-
-        let result = determine_backup_mode(&matches).unwrap();
-
+        let result = determine_backup_mode(Some("none".into()), &matches).unwrap();
         assert_eq!(result, BackupMode::None);
-        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
     }
 
     // --backup errors on invalid VERSION_CONTROL env var
     #[test]
     fn test_backup_mode_long_with_env_var_invalid() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
-        unsafe { env::set_var(ENV_VERSION_CONTROL, "foobar") };
+        load_english_messages();
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
-
-        let result = determine_backup_mode(&matches);
-
+        let result = determine_backup_mode(Some("foobar".into()), &matches);
         assert!(result.is_err());
         let text = format!("{}", result.unwrap_err());
         assert!(text.contains("invalid argument 'foobar' for '$VERSION_CONTROL'"));
-        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
     }
 
     // --backup errors on ambiguous VERSION_CONTROL env var
     #[test]
     fn test_backup_mode_long_with_env_var_ambiguous() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
-        unsafe { env::set_var(ENV_VERSION_CONTROL, "n") };
+        load_english_messages();
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
-
-        let result = determine_backup_mode(&matches);
-
+        let result = determine_backup_mode(Some("n".into()), &matches);
         assert!(result.is_err());
         let text = format!("{}", result.unwrap_err());
         assert!(text.contains("ambiguous argument 'n' for '$VERSION_CONTROL'"));
-        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
     }
 
     // --backup accepts shortened env vars (si for simple)
     #[test]
     fn test_backup_mode_long_with_env_var_shortened() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
-        unsafe { env::set_var(ENV_VERSION_CONTROL, "si") };
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
-
-        let result = determine_backup_mode(&matches).unwrap();
-
+        let result = determine_backup_mode(Some("si".into()), &matches).unwrap();
         assert_eq!(result, BackupMode::Simple);
-        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
     }
 
     // Using --suffix without --backup defaults to --backup=existing
     #[test]
     fn test_backup_mode_suffix_without_backup_option() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
         let matches = make_app().get_matches_from(vec!["command", "--suffix", ".bak"]);
-
-        let result = determine_backup_mode(&matches).unwrap();
-
+        let result = determine_backup_mode(None, &matches).unwrap();
         assert_eq!(result, BackupMode::Existing);
     }
 
     // Using --suffix without --backup uses env var if existing
     #[test]
     fn test_backup_mode_suffix_without_backup_option_with_env_var() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
-        unsafe { env::set_var(ENV_VERSION_CONTROL, "numbered") };
         let matches = make_app().get_matches_from(vec!["command", "--suffix", ".bak"]);
-
-        let result = determine_backup_mode(&matches).unwrap();
-
+        let result = determine_backup_mode(Some("numbered".into()), &matches).unwrap();
         assert_eq!(result, BackupMode::Numbered);
-        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
     }
 
     #[test]
     fn test_suffix_takes_hyphen_value() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
         let matches = make_app().get_matches_from(vec!["command", "-b", "--suffix", "-v"]);
-
         let result = determine_backup_suffix(&matches);
         assert_eq!(result, "-v");
+    }
+
+    #[test]
+    fn test_suffix_rejects_path_traversal() {
+        let matches =
+            make_app().get_matches_from(vec!["command", "-b", "--suffix", "_/../../dest"]);
+        let result = determine_backup_suffix(&matches);
+        assert_eq!(result, DEFAULT_BACKUP_SUFFIX);
     }
 
     #[test]
@@ -730,29 +736,135 @@ mod tests {
     }
 
     #[test]
-    fn test_source_is_target_backup() {
-        let source = Path::new("data.txt.bak");
-        let target = Path::new("data.txt");
-        let suffix = String::from(".bak");
+    fn test_backup_would_destroy_source() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("data.txt");
+        let source = dir.path().join("data.txt.bak");
+        fs::write(&target, "").unwrap();
+        fs::write(&source, "").unwrap();
 
-        assert!(source_is_target_backup(source, target, &suffix));
+        assert!(backup_would_destroy_source(
+            &source,
+            &target,
+            ".bak",
+            BackupMode::Simple,
+            false
+        ));
     }
 
     #[test]
     fn test_source_is_not_target_backup() {
-        let source = Path::new("data.txt");
-        let target = Path::new("backup.txt");
-        let suffix = String::from(".bak");
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("backup.txt");
+        let source = dir.path().join("data.txt");
+        fs::write(&target, "").unwrap();
+        fs::write(&source, "").unwrap();
 
-        assert!(!source_is_target_backup(source, target, &suffix));
+        assert!(!backup_would_destroy_source(
+            &source,
+            &target,
+            ".bak",
+            BackupMode::Simple,
+            false
+        ));
     }
 
     #[test]
-    fn test_source_is_target_backup_with_tilde_suffix() {
-        let source = Path::new("example~");
-        let target = Path::new("example");
-        let suffix = String::from("~");
+    fn test_backup_would_destroy_source_with_tilde_suffix() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("example");
+        let source = dir.path().join("example~");
+        fs::write(&target, "").unwrap();
+        fs::write(&source, "").unwrap();
 
-        assert!(source_is_target_backup(source, target, &suffix));
+        assert!(backup_would_destroy_source(
+            &source,
+            &target,
+            "~",
+            BackupMode::Simple,
+            false
+        ));
+    }
+
+    /// The guard must see through how the operands were spelled.
+    #[test]
+    fn test_backup_would_destroy_source_ignores_spelling() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a"), "").unwrap();
+        fs::write(dir.path().join("a~"), "").unwrap();
+
+        for target in ["a", "./a"] {
+            let source = dir.path().join("a~");
+            let target = dir.path().join(target);
+            assert!(
+                backup_would_destroy_source(&source, &target, "~", BackupMode::Simple, false),
+                "guard failed open for target spelled {}",
+                target.display()
+            );
+        }
+    }
+
+    /// A backup that does not exist yet cannot destroy anything.
+    #[test]
+    fn test_backup_would_destroy_source_absent_backup() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("a");
+        let source = dir.path().join("a~");
+        fs::write(&target, "").unwrap();
+
+        assert!(!backup_would_destroy_source(
+            &source,
+            &target,
+            "~",
+            BackupMode::Simple,
+            false
+        ));
+    }
+
+    /// Sharing the backup's inode under a different name is safe: the rename
+    /// only drops one link, so the data survives.
+    #[cfg(unix)]
+    #[test]
+    fn test_backup_would_destroy_source_mode_gate() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("data.txt");
+        let source = dir.path().join("data.txt~");
+        fs::write(&target, "").unwrap();
+        fs::write(&source, "").unwrap();
+
+        // Modes that rename onto an existing name would destroy the source.
+        for mode in [BackupMode::Simple, BackupMode::Existing] {
+            assert!(
+                backup_would_destroy_source(&source, &target, "~", mode, false),
+                "{mode:?} should be guarded"
+            );
+        }
+
+        // Numbered picks a fresh name; None renames nothing at all.
+        for mode in [BackupMode::Numbered, BackupMode::None] {
+            assert!(
+                !backup_would_destroy_source(&source, &target, "~", mode, false),
+                "{mode:?} cannot destroy the source"
+            );
+        }
+    }
+
+    #[test]
+    fn test_backup_would_destroy_source_hard_link_under_other_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("a");
+        let backup = dir.path().join("a~");
+        let source = dir.path().join("b");
+        fs::write(&target, "").unwrap();
+        fs::write(&backup, "").unwrap();
+        fs::hard_link(&backup, &source).unwrap();
+
+        assert!(!backup_would_destroy_source(
+            &source,
+            &target,
+            "~",
+            BackupMode::Simple,
+            false
+        ));
     }
 }

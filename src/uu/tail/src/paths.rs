@@ -3,16 +3,18 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore tailable seekable stdlib (stdlib)
+// spell-checker:ignore tailable stdlib (stdlib)
 
 use crate::text;
 use std::ffi::OsStr;
 use std::fs::{File, Metadata};
-use std::io::{Seek, SeekFrom};
+use std::io::{self, Seek, SeekFrom, Write, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
+#[cfg(not(target_os = "wasi"))]
 use uucore::error::UResult;
+use uucore::quoting_style::locale_aware_shell_escape;
 use uucore::translate;
 
 #[derive(Debug, Clone)]
@@ -83,11 +85,11 @@ impl Input {
                 // on dev/fd/0 (or /dev/stdin) will fail (NotFound),
                 // so we treat stdin as a pipe here
                 // https://github.com/rust-lang/rust/issues/95239
-                #[cfg(target_os = "macos")]
+                #[cfg(target_vendor = "apple")]
                 {
                     None
                 }
-                #[cfg(not(target_os = "macos"))]
+                #[cfg(not(target_vendor = "apple"))]
                 {
                     PathBuf::from(text::FD0).canonicalize().ok()
                 }
@@ -126,18 +128,23 @@ impl HeaderPrinter {
         }
     }
 
-    pub fn print_input(&mut self, input: &Input) {
-        self.print(input.display_name.as_str());
+    pub fn print_input(&mut self, input: &Input) -> io::Result<()> {
+        self.print(input.display_name.as_str())
     }
 
-    pub fn print(&mut self, string: &str) {
+    pub fn print(&mut self, string: &str) -> io::Result<()> {
         if self.verbose {
-            println!(
-                "{}==> {string} <==",
+            writeln!(
+                stdout().lock(),
+                "{}==> {} <==",
                 if self.first_header { "" } else { "\n" },
-            );
+                // GNU quotes the name shown in the header when it needs it.
+                locale_aware_shell_escape(string),
+            )?;
             self.first_header = false;
         }
+
+        Ok(())
     }
 }
 pub trait FileExtTail {
@@ -157,7 +164,9 @@ impl FileExtTail for File {
 
 pub trait MetadataExtTail {
     fn is_tailable(&self) -> bool;
+    #[cfg(not(target_os = "wasi"))]
     fn got_truncated(&self, other: &Metadata) -> UResult<bool>;
+    #[cfg(not(target_os = "wasi"))]
     fn file_id_eq(&self, other: &Metadata) -> bool;
 }
 
@@ -175,10 +184,12 @@ impl MetadataExtTail for Metadata {
     }
 
     /// Return true if the file was modified and is now shorter
+    #[cfg(not(target_os = "wasi"))]
     fn got_truncated(&self, other: &Metadata) -> UResult<bool> {
         Ok(other.len() < self.len() && other.modified()? != self.modified()?)
     }
 
+    #[cfg(not(target_os = "wasi"))]
     fn file_id_eq(&self, #[cfg(unix)] other: &Metadata, #[cfg(not(unix))] _: &Metadata) -> bool {
         #[cfg(unix)]
         {
@@ -200,12 +211,14 @@ impl MetadataExtTail for Metadata {
     }
 }
 
+#[cfg(not(target_os = "wasi"))]
 pub trait PathExtTail {
     fn is_stdin(&self) -> bool;
-    fn is_orphan(&self) -> bool;
+    fn has_active_parent(&self) -> bool;
     fn is_tailable(&self) -> bool;
 }
 
+#[cfg(not(target_os = "wasi"))]
 impl PathExtTail for Path {
     fn is_stdin(&self) -> bool {
         self.eq(Self::new(text::DASH))
@@ -213,12 +226,12 @@ impl PathExtTail for Path {
             || self.eq(Self::new(&translate!("tail-stdin-header")))
     }
 
-    /// Return true if `path` does not have an existing parent directory
-    fn is_orphan(&self) -> bool {
-        !matches!(self.parent(), Some(parent) if parent.is_dir())
+    /// Return true if `path` has an existing parent directory
+    fn has_active_parent(&self) -> bool {
+        self.parent().is_some_and(Self::is_dir)
     }
 
-    /// Return true if `path` is is a file type that can be tailed
+    /// Return true if `path` is a file type that can be tailed
     fn is_tailable(&self) -> bool {
         path_is_tailable(self)
     }
@@ -229,13 +242,13 @@ pub fn path_is_tailable(path: &Path) -> bool {
 }
 
 #[inline]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 pub fn stdin_is_bad_fd() -> bool {
     uucore::signals::stdin_was_closed()
 }
 
 #[inline]
-#[cfg(not(unix))]
+#[cfg(not(all(unix, not(target_os = "fuchsia"))))]
 pub fn stdin_is_bad_fd() -> bool {
     false
 }

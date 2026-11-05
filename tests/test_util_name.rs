@@ -16,14 +16,106 @@ pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
 // Set the environment variable for any tests
 
 // Use the ctor attribute to run this function before any tests
-#[ctor::ctor]
+#[ctor::ctor(unsafe)]
 fn init() {
-    // No need for unsafe here
     unsafe {
         env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
     }
     // Print for debugging
     eprintln!("Setting UUTESTS_BINARY_PATH={TESTS_BINARY}");
+}
+
+#[test]
+#[cfg(all(
+    feature = "env",
+    any(target_os = "linux", target_os = "android"),
+    not(target_env = "musl")
+))]
+fn binary_name_protection() {
+    let ts = TestScenario::new("env");
+    let bin = ts.bin_path.clone();
+    ts.ucmd()
+        .arg("-a")
+        .arg("hijacked")
+        .arg(&bin)
+        .arg("--version")
+        .succeeds()
+        .stdout_contains("coreutils");
+}
+
+// missing /proc/self/fd on Android?
+#[test]
+#[cfg(all(feature = "true", target_os = "linux", target_env = "gnu"))]
+fn binary_name_execfn_fallback() {
+    use std::os::{fd::AsRawFd, unix::process::CommandExt};
+    use std::process::Command;
+    let ts = TestScenario::new("true");
+    let fd = rustix::fs::memfd_create("a", rustix::fs::MemfdFlags::empty()).unwrap();
+    let mut file = std::fs::File::from(fd);
+    let mut source = std::fs::File::open(&ts.bin_path).unwrap();
+    std::io::copy(&mut source, &mut file).unwrap();
+    let raw_fd = file.as_raw_fd();
+
+    // memfd has AT_EXECFN as below. Fallback to argv[0]
+    let res1 = Command::new(format!("/proc/self/fd/{raw_fd}"))
+        .arg0("true")
+        .output()
+        .unwrap()
+        .status
+        .success();
+    // fexecve uses /dev/fd which is symlink to /proc/self/fd/N
+    let res2 = Command::new(format!("/dev/fd/{raw_fd}"))
+        .arg0("true")
+        .output()
+        .unwrap()
+        .status
+        .success();
+    assert!(res1 && res2);
+}
+
+#[rstest::rstest]
+fn test_coreutils_help_ignore_args(#[values("--h", "--he", "--hel", "--help", "-h")] flag: &str) {
+    let scenario = TestScenario::new("help_ignoring_args");
+    let output = std::process::Command::new(&scenario.bin_path)
+        .arg(flag)
+        .arg("---")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stderr.is_empty());
+    assert!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("(multi-call binary)")
+    );
+}
+
+#[rstest::rstest]
+fn test_coreutils_help_near_misses(#[values("--", "--hell", "--helps", "--helpless")] flag: &str) {
+    let scenario = TestScenario::new("invalid_help");
+    let output = std::process::Command::new(&scenario.bin_path)
+        .arg(flag)
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains(&format!("unrecognized option '{flag}'"))
+    );
+}
+
+#[test]
+#[cfg(feature = "echo")]
+fn test_coreutils_help_argument_is_forwarded() {
+    TestScenario::new("echo")
+        .ucmd()
+        .arg("--hel")
+        .succeeds()
+        .stdout_only("--hel\n");
 }
 
 #[test]
@@ -204,7 +296,7 @@ fn util_version() {
         assert_eq!(output.status.code(), Some(0));
         assert_eq!(output.stderr, b"");
         let output_str = String::from_utf8(output.stdout).unwrap();
-        let ver = env::var("CARGO_PKG_VERSION").unwrap();
+        let ver = env!("CARGO_PKG_VERSION");
         assert_eq!(format!("coreutils {ver} (multi-call binary)\n"), output_str);
     }
 }

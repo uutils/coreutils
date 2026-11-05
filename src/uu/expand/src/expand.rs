@@ -8,16 +8,14 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
-use thiserror::Error;
-use unicode_width::UnicodeWidthChar;
+use uucore::char_width::char_width_at;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
-use uucore::translate;
-use uucore::{format_usage, show};
+use uucore::error::{FromIo, UError, UResult, set_exit_code};
+use uucore::{format_usage, show, translate};
 
 pub mod options {
     pub static TABS: &str = "tabs";
@@ -25,8 +23,6 @@ pub mod options {
     pub static NO_UTF8: &str = "no-utf8";
     pub static FILES: &str = "FILES";
 }
-
-static LONG_HELP: &str = "";
 
 static DEFAULT_TABSTOP: usize = 8;
 
@@ -39,26 +35,13 @@ enum RemainingMode {
     Plus,
 }
 
-/// Decide whether the character is either a space or a comma.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// assert!(is_space_or_comma(' '))
-/// assert!(is_space_or_comma(','))
-/// assert!(!is_space_or_comma('a'))
-/// ```
-fn is_space_or_comma(c: char) -> bool {
-    c == ' ' || c == ','
-}
-
 /// Decide whether the character is either a digit or a comma.
 fn is_digit_or_comma(c: char) -> bool {
     c.is_ascii_digit() || c == ','
 }
 
 /// Errors that can occur when parsing a `--tabs` argument.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum ParseError {
     #[error("{}", translate!("expand-error-invalid-character", "char" => .0.quote()))]
     InvalidCharacter(String),
@@ -79,16 +62,16 @@ impl UError for ParseError {}
 /// Parse a list of tabstops from a `--tabs` argument.
 ///
 /// This function returns both the vector of numbers appearing in the
-/// comma- or space-separated list, and also an optional mode, specified
+/// space-, tab-, or comma-separated list, and also an optional mode, specified
 /// by either a "/" or a "+" character appearing before the final number
 /// in the list. This mode defines the strategy to use for computing the
 /// number of spaces to use for columns beyond the end of the tab stop
 /// list specified here.
 fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
-    // Leading commas and spaces are ignored.
-    let s = s.trim_start_matches(is_space_or_comma);
+    // Leading spaces, tabs, and commas are ignored.
+    let s = s.trim_start_matches([' ', '\t', ',']);
 
-    // If there were only commas and spaces in the string, just use the
+    // If there were only spaces, tabs, and commas in the string, just use the
     // default tabstops.
     if s.is_empty() {
         return Ok((RemainingMode::None, vec![DEFAULT_TABSTOP]));
@@ -97,7 +80,7 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
     let mut nums = vec![];
     let mut remaining_mode = RemainingMode::None;
     let mut is_specifier_already_used = false;
-    for word in s.split(is_space_or_comma) {
+    for word in s.split([' ', '\t', ',']) {
         let bytes = word.as_bytes();
         for i in 0..bytes.len() {
             match bytes[i] {
@@ -107,19 +90,17 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
                     // Parse a number from the byte sequence.
                     let s = from_utf8(&bytes[i..]).unwrap();
                     match s.parse::<usize>() {
+                        // Tab size must be positive.
+                        Ok(0) => return Err(ParseError::TabSizeCannotBeZero),
+                        // Tab stops must be ascending. A number after `/` or `+` is a
+                        // tab size for the remaining columns, not a tab stop.
+                        Ok(num)
+                            if remaining_mode == RemainingMode::None
+                                && nums.last().is_some_and(|last| *last >= num) =>
+                        {
+                            return Err(ParseError::TabSizesMustBeAscending);
+                        }
                         Ok(num) => {
-                            // Tab size must be positive.
-                            if num == 0 {
-                                return Err(ParseError::TabSizeCannotBeZero);
-                            }
-
-                            // Tab sizes must be ascending.
-                            if let Some(last_stop) = nums.last() {
-                                if *last_stop >= num {
-                                    return Err(ParseError::TabSizesMustBeAscending);
-                                }
-                            }
-
                             if is_specifier_already_used {
                                 let specifier = if remaining_mode == RemainingMode::Slash {
                                     "/".to_string()
@@ -172,7 +153,6 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
 struct Options {
     files: Vec<OsString>,
     tabstops: Vec<usize>,
-    tspaces: String,
     iflag: bool,
     utf8: bool,
 
@@ -184,35 +164,22 @@ struct Options {
 impl Options {
     fn new(matches: &ArgMatches) -> Result<Self, ParseError> {
         let (remaining_mode, tabstops) = match matches.get_many::<String>(options::TABS) {
-            Some(s) => tabstops_parse(&s.map(|s| s.as_str()).collect::<Vec<_>>().join(","))?,
+            Some(s) => tabstops_parse(&s.map(String::as_str).collect::<Vec<_>>().join(","))?,
             None => (RemainingMode::None, vec![DEFAULT_TABSTOP]),
         };
 
         let iflag = matches.get_flag(options::INITIAL);
         let utf8 = !matches.get_flag(options::NO_UTF8);
-
-        // avoid allocations when dumping out long sequences of spaces
-        // by precomputing the longest string of spaces we will ever need
-        let nspaces = tabstops
-            .iter()
-            .scan(0, |pr, &it| {
-                let ret = Some(it - *pr);
-                *pr = it;
-                ret
-            })
-            .max()
-            .unwrap(); // length of tabstops is guaranteed >= 1
-        let tspaces = " ".repeat(nspaces);
-
-        let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILES) {
-            Some(s) => s.cloned().collect(),
-            None => vec![OsString::from("-")],
-        };
+        #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")]
+        let files = matches
+            .get_many::<OsString>(options::FILES)
+            .unwrap()
+            .cloned()
+            .collect();
 
         Ok(Self {
             files,
             tabstops,
-            tspaces,
             iflag,
             utf8,
             remaining_mode,
@@ -226,14 +193,16 @@ fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
     let mut processed_args = Vec::with_capacity(args.len());
 
     for arg in args {
-        if let Some(arg) = arg.to_str() {
-            if arg.starts_with('-') && arg[1..].chars().all(is_digit_or_comma) {
-                arg[1..]
-                    .split(',')
-                    .filter(|s| !s.is_empty())
-                    .for_each(|s| processed_args.push(OsString::from(format!("--tabs={s}"))));
-                continue;
-            }
+        if let Some(shortcut) = arg
+            .to_str()
+            .and_then(|arg| arg.strip_prefix('-'))
+            .filter(|shortcut| !shortcut.is_empty() && shortcut.chars().all(is_digit_or_comma))
+        {
+            shortcut
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .for_each(|s| processed_args.push(OsString::from(format!("--tabs={s}"))));
+            continue;
         }
         processed_args.push(arg);
     }
@@ -251,10 +220,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     uucore::clap_localization::configure_localized_command(
-        Command::new(uucore::util_name())
+        Command::new("expand")
             .version(uucore::crate_version!())
             .about(translate!("expand-about"))
-            .after_help(LONG_HELP)
             .override_usage(format_usage(&translate!("expand-usage"))),
     )
     .infer_long_args(true)
@@ -286,25 +254,28 @@ pub fn uu_app() -> Command {
             .action(ArgAction::Append)
             .hide(true)
             .value_hint(clap::ValueHint::FilePath)
+            .default_value("-")
             .value_parser(clap::value_parser!(OsString)),
     )
 }
 
-fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
-    let file_buf;
+fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read>>> {
     if path == "-" {
-        Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
-    } else {
-        let path_ref = Path::new(path);
-        if path_ref.is_dir() {
-            return Err(USimpleError::new(
-                1,
-                translate!("expand-error-is-directory", "file" => path.maybe_quote()),
-            ));
-        }
-        file_buf = File::open(path_ref).map_err_context(|| path.maybe_quote().to_string())?;
-        Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
+        return Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>));
     }
+    let path_ref = Path::new(path);
+    // some platforms cannot catch this as read error. accept additional overhead.
+    #[cfg(any(target_os = "wasi", windows))]
+    if path_ref.is_dir() {
+        return Err(uucore::error::USimpleError::new(
+            1,
+            translate!("expand-error-is-directory", "file" => path.maybe_quote()),
+        ));
+    }
+    let file = File::open(path_ref).map_err_context(|| path.maybe_quote().to_string())?;
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+    let _ = rustix::fs::fadvise(&file, 0, None, rustix::fs::Advice::Sequential);
+    Ok(BufReader::new(Box::new(file) as Box<dyn Read>))
 }
 
 /// Compute the number of spaces to the next tabstop.
@@ -328,8 +299,7 @@ fn next_tabstop(tabstops: &[usize], col: usize, remaining_mode: &RemainingMode) 
                 let last_fixed_tabstop = tabstops[num_tabstops - 2];
                 let characters_since_last_tabstop = col - last_fixed_tabstop;
 
-                let steps_required = 1 + characters_since_last_tabstop / step_size;
-                steps_required * step_size - characters_since_last_tabstop
+                step_size - characters_since_last_tabstop % step_size
             }
         }
         RemainingMode::Slash => {
@@ -366,53 +336,34 @@ enum CharType {
 fn classify_char(buf: &[u8], byte: usize, utf8: bool) -> (CharType, usize, usize) {
     use self::CharType::{Backspace, Other, Tab};
 
-    if utf8 {
-        let nbytes = char::from(buf[byte]).len_utf8();
-
-        if byte + nbytes > buf.len() {
-            // don't overrun buffer because of invalid UTF-8
-            return (Other, 1, 1);
-        }
-
-        if let Ok(t) = from_utf8(&buf[byte..byte + nbytes]) {
-            match t.chars().next() {
-                Some('\t') => (Tab, 0, 1),
-                Some('\x08') => (Backspace, 0, 1),
-                Some(c) => (Other, UnicodeWidthChar::width(c).unwrap_or(0), nbytes),
-                None => {
-                    // no valid char at start of t, so take 1 byte
-                    (Other, 1, 1)
-                }
-            }
-        } else {
-            (Other, 1, 1) // implicit assumption: non-UTF-8 char is 1 col wide
-        }
-    } else {
-        (
-            match buf.get(byte) {
-                // always take exactly 1 byte in strict ASCII mode
-                Some(0x09) => Tab,
-                Some(0x08) => Backspace,
-                _ => Other,
-            },
-            0,
-            1,
-        )
+    let b = buf[byte];
+    if b.is_ascii() {
+        return match b {
+            b'\t' => (Tab, 0, 1),
+            b'\x08' => (Backspace, 0, 1),
+            _ => (Other, 1, 1),
+        };
     }
+
+    if utf8 {
+        let (width, nbytes) = char_width_at(buf, byte);
+        return (Other, width, nbytes);
+    }
+    (Other, 1, 1) // implicit assumption: non-UTF-8 char is 1 col wide
 }
 
 /// Write spaces for a tab expansion.
 #[inline]
-fn write_tab_spaces(
-    output: &mut BufWriter<std::io::Stdout>,
-    nts: usize,
-    tspaces: &str,
-) -> std::io::Result<()> {
-    if nts <= tspaces.len() {
-        output.write_all(&tspaces.as_bytes()[..nts])
-    } else {
-        output.write_all(" ".repeat(nts).as_bytes())
+fn write_spaces(output: &mut impl Write, mut n: usize) -> std::io::Result<()> {
+    const SPACES: [u8; 256] = [b' '; 256];
+
+    while n > 0 {
+        let chunk = n.min(SPACES.len());
+        output.write_all(&SPACES[..chunk])?;
+        n -= chunk;
     }
+
+    Ok(())
 }
 
 fn expand_buf(
@@ -425,8 +376,12 @@ fn expand_buf(
     use self::CharType::{Backspace, Other, Tab};
 
     // Fast path: if there are no tabs, backspaces, and (in UTF-8 mode or no carriage returns),
-    // we can write the buffer directly without character-by-character processing
-    if !buf.contains(&b'\t') && !buf.contains(&b'\x08') && (options.utf8 || !buf.contains(&b'\r')) {
+    // we can write the buffer directly without character-by-character processing.
+    // Single pass with early exit instead of up to 3 separate .contains() scans.
+    let needs_processing = buf
+        .iter()
+        .any(|&b| b == b'\t' || b == b'\x08' || (!options.utf8 && b == b'\r'));
+    if !needs_processing {
         output.write_all(buf)?;
         if let Some(n) = buf.iter().rposition(|&b| b == b'\n') {
             *col = buf.len() - n - 1;
@@ -449,7 +404,7 @@ fn expand_buf(
 
                 // now dump out either spaces if we're expanding, or a literal tab if we're not
                 if init || !options.iflag {
-                    write_tab_spaces(output, nts, &options.tspaces)?;
+                    write_spaces(output, nts)?;
                 } else {
                     output.write_all(&buf[byte..byte + nbytes])?;
                 }
@@ -494,16 +449,17 @@ fn expand_file(
     output: &mut BufWriter<std::io::Stdout>,
     options: &Options,
 ) -> UResult<()> {
-    let mut buf = [0u8; 4096];
     let mut input = open(file)?;
     let ts = options.tabstops.as_ref();
     let mut col = 0;
     loop {
-        match input.read(&mut buf) {
-            Ok(0) => break,
-            Ok(n) => {
-                expand_buf(&buf[..n], output, ts, options, &mut col)
+        match input.fill_buf() {
+            Ok([]) => break,
+            Ok(buf) => {
+                expand_buf(buf, output, ts, options, &mut col)
                     .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+                let len = buf.len();
+                input.consume(len);
             }
             Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
         }
@@ -546,6 +502,14 @@ mod tests {
         assert_eq!(next_tabstop(&[1, 5], 0, &RemainingMode::Plus), 1);
         assert_eq!(next_tabstop(&[1, 5], 3, &RemainingMode::Plus), 3);
         assert_eq!(next_tabstop(&[1, 5], 6, &RemainingMode::Plus), 5);
+    }
+
+    #[test]
+    fn test_next_tabstop_remaining_mode_plus_does_not_overflow() {
+        assert_eq!(
+            next_tabstop(&[1, usize::MAX - 2], usize::MAX, &RemainingMode::Plus),
+            usize::MAX - 3
+        );
     }
 
     #[test]

@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore bsdutils toybox
+
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use uutests::at_and_ucmd;
@@ -167,6 +168,19 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_delimiter_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading delimiter value passed as its own argument (not
+    // attached with `-d-x`/`=`) must not be mistaken for a new,
+    // unrecognized flag.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f1", "a\nb\n");
+    at.write("f2", "1\n2\n");
+    ucmd.args(&["-d", "-x", "f1", "f2"])
+        .succeeds()
+        .stdout_is("a-1\nb-2\n");
+}
+
+#[test]
 fn test_combine_pairs_of_lines() {
     for s in ["-s", "--serial"] {
         for d in ["-d", "--delimiters"] {
@@ -276,6 +290,25 @@ FIRST!SECOND@THIRD#FOURTH!ABCDEFG
     }
 }
 
+// With `-s`, each input file is written as its own output line, so the
+// delimiter list must restart from its first element for every file instead
+// of carrying the cycle over from the previous one.
+#[test]
+fn test_serial_delimiter_list_resets_per_file() {
+    for option_style in ["-d", "--delimiters"] {
+        for serial in ["-s", "--serial"] {
+            let (at, mut ucmd) = at_and_ucmd!();
+            at.write("f1", "a\nb\n");
+            at.write("f2", "c\nd\ne\n");
+            at.write("f3", "f\ng\n");
+
+            ucmd.args(&[option_style, ":|", serial, "f1", "f2", "f3"])
+                .succeeds()
+                .stdout_only("a:b\nc:d|e\nf:g\n");
+        }
+    }
+}
+
 #[test]
 #[cfg(unix)]
 fn test_non_utf8_input() {
@@ -359,13 +392,13 @@ fn test_backslash_zero_delimiter() {
 }
 
 #[test]
-fn test_gnu_escape_sequences() {
+fn test_paste_delimiter_escape_sequences() {
     let cases: &[(&str, u8)] = &[(r"\b", 0x08), (r"\f", 0x0C), (r"\r", 0x0D), (r"\v", 0x0B)];
     for &(esc, byte) in cases {
-        let expected = [b'1', byte, b'2', byte, b'3', b'\n'];
+        let expected = [b'a', byte, b'b', byte, b'c', b'\n'];
         new_ucmd!()
             .args(&["-s", "-d", esc])
-            .pipe_in("1\n2\n3\n")
+            .pipe_in("a\nb\nc\n")
             .succeeds()
             .stdout_only_bytes(expected);
     }
@@ -373,10 +406,13 @@ fn test_gnu_escape_sequences() {
 
 // As of 2024-10-09, only bsdutils (https://github.com/dcantrell/bsdutils, derived from FreeBSD) and toybox handle
 // multibyte delimiter characters in the way a user would likely expect. BusyBox and GNU Core Utilities do not.
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
 fn test_multi_byte_delimiter() {
     for option_style in ["-d", "--delimiters"] {
         new_ucmd!()
+            // A multibyte delimiter is stepped per character in a UTF-8 locale.
+            .env("LC_ALL", "C.UTF-8")
             .args(&[option_style, "!ß@", "-s"])
             .pipe_in(
                 "\
@@ -397,6 +433,7 @@ fn test_multi_byte_delimiter() {
     }
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
 fn test_data() {
     for example in EXAMPLE_DATA {
@@ -408,13 +445,16 @@ fn test_data() {
             ins.push(file);
         }
         println!("{}", example.name);
-        ucmd.args(example.args)
+        // Some examples use multibyte delimiters, which need a UTF-8 locale.
+        ucmd.env("LC_ALL", "C.UTF-8")
+            .args(example.args)
             .args(&ins)
             .succeeds()
             .stdout_is(example.out);
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_non_utf8_delimiter() {
@@ -430,6 +470,7 @@ fn test_non_utf8_delimiter() {
         .stdout_only_bytes(b"1\xA2\xE3a\n2\xA2\xE3b\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_paste_non_utf8_paths() {
@@ -445,4 +486,146 @@ fn test_paste_non_utf8_paths() {
         .arg(&filename2)
         .succeeds()
         .stdout_is("line1\tcol1\nline2\tcol2\n");
+}
+
+#[cfg(target_os = "linux")]
+fn make_broken_pipe() -> std::io::PipeWriter {
+    let (read, write) = std::io::pipe().expect("Failed to create pipe");
+    // Drop the read end so writes fail with EPIPE.
+    drop(read);
+    // Return the write end of the pipe
+    write
+}
+
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_dev_zero_write_error_dev_full() {
+    use std::fs::File;
+
+    let dev_full =
+        File::create("/dev/full").expect("Failed to open /dev/full - test must run on Linux");
+
+    new_ucmd!()
+        .arg("/dev/zero")
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device");
+}
+
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_dev_zero_closed_pipe() {
+    new_ucmd!()
+        .arg("/dev/zero")
+        .set_stdout(make_broken_pipe())
+        .run()
+        .fails_silently();
+}
+
+#[test]
+fn test_repeated_delimiter_takes_the_last() {
+    // GNU lets a later -d override an earlier one rather than erroring.
+    new_ucmd!()
+        .args(&["-d", ",", "-d", ":", "-s", "-"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is("a:b\n");
+}
+
+#[test]
+fn test_crlf_input_in_serial_mode() {
+    let expected = if cfg!(windows) {
+        "1,2,3\n"
+    } else {
+        "1\r,2\r,3\r\n"
+    };
+
+    new_ucmd!()
+        .args(&["-s", "-d", ","])
+        .pipe_in(b"1\r\n2\r\n3\r\n")
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_crlf_input_in_parallel_mode() {
+    let expected = if cfg!(windows) {
+        "1\t3\n2\t4\n"
+    } else {
+        "1\r\t3\r\n2\r\t4\r\n"
+    };
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write_bytes("a", b"1\r\n2\r\n");
+    at.write_bytes("b", b"3\r\n4\r\n");
+
+    ucmd.arg("a").arg("b").succeeds().stdout_is(expected);
+}
+
+#[test]
+fn test_crlf_kept_when_input_is_zero_terminated() {
+    new_ucmd!()
+        .args(&["-s", "-z", "-d", ","])
+        .pipe_in(b"1\r\n2\r\0")
+        .succeeds()
+        .stdout_is("1\r\n2\r\0");
+}
+
+#[test]
+fn test_crlf_input_of_a_single_file_is_copied() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write_bytes("a", b"1\r\n2\r\n");
+
+    ucmd.arg("a").succeeds().stdout_is("1\r\n2\r\n");
+}
+
+#[test]
+fn test_crlf_kept_when_last_line_ends_with_cr_and_no_newline() {
+    let expected = if cfg!(windows) {
+        "1,2\r\n"
+    } else {
+        "1\r,2\r\n"
+    };
+
+    new_ucmd!()
+        .args(&["-s", "-d", ","])
+        .pipe_in(b"1\r\n2\r")
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_crlf_delimiter_not_eaten_by_an_empty_line() {
+    let expected = if cfg!(windows) { "1\r\n" } else { "1\r\r\n" };
+
+    new_ucmd!()
+        .args(&["-s", "-d", "\\r"])
+        .pipe_in(b"1\r\n\n")
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_missing_file_is_named_in_error() {
+    new_ucmd!()
+        .arg("missing.txt")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_only("paste: missing.txt: No such file or directory\n");
+}
+
+#[uutests::wasi_ignore(ErrnoMessageMismatch)]
+#[test]
+#[cfg(not(windows))]
+fn test_read_error_names_the_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("sub");
+    ucmd.arg("sub")
+        .fails_with_code(1)
+        .stderr_only("paste: sub: Is a directory\n");
 }

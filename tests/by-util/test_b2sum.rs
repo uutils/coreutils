@@ -3,110 +3,16 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore testf, ntestf
+
 use rstest::rstest;
 
-use uutests::new_ucmd;
 use uutests::util::TestScenario;
-use uutests::util_name;
-// spell-checker:ignore checkfile, testf, ntestf
-macro_rules! get_hash(
-    ($str:expr) => (
-        $str.split(' ').collect::<Vec<&str>>()[0]
-    );
-);
+use uutests::{new_ucmd, util_name};
 
-macro_rules! test_digest_with_len {
-    ($id:ident, $size:expr) => {
-        mod $id {
-            use uutests::util::*;
-            use uutests::util_name;
-            static LENGTH_ARG: &'static str = concat!("--length=", stringify!($size));
-            static EXPECTED_FILE: &'static str = concat!(stringify!($id), ".expected");
-            static CHECK_FILE: &'static str = concat!(stringify!($id), ".checkfile");
-            static INPUT_FILE: &'static str = "input.txt";
+use crate::common_checksum_tests::test_digest;
 
-            #[test]
-            fn test_single_file() {
-                let ts = TestScenario::new(util_name!());
-                assert_eq!(
-                    ts.fixtures.read(EXPECTED_FILE),
-                    get_hash!(
-                        ts.ucmd()
-                            .arg(LENGTH_ARG)
-                            .arg(INPUT_FILE)
-                            .succeeds()
-                            .no_stderr()
-                            .stdout_str()
-                    )
-                );
-            }
-
-            #[test]
-            fn test_stdin() {
-                let ts = TestScenario::new(util_name!());
-                assert_eq!(
-                    ts.fixtures.read(EXPECTED_FILE),
-                    get_hash!(
-                        ts.ucmd()
-                            .arg(LENGTH_ARG)
-                            .pipe_in_fixture(INPUT_FILE)
-                            .succeeds()
-                            .no_stderr()
-                            .stdout_str()
-                    )
-                );
-            }
-
-            #[test]
-            fn test_check() {
-                let ts = TestScenario::new(util_name!());
-                println!("File content='{}'", ts.fixtures.read(INPUT_FILE));
-                println!("Check file='{}'", ts.fixtures.read(CHECK_FILE));
-
-                ts.ucmd()
-                    .args(&[LENGTH_ARG, "--check", CHECK_FILE])
-                    .succeeds()
-                    .no_stderr()
-                    .stdout_is("input.txt: OK\n");
-            }
-
-            #[test]
-            fn test_zero() {
-                let ts = TestScenario::new(util_name!());
-                assert_eq!(
-                    ts.fixtures.read(EXPECTED_FILE),
-                    get_hash!(
-                        ts.ucmd()
-                            .arg(LENGTH_ARG)
-                            .arg("--zero")
-                            .arg(INPUT_FILE)
-                            .succeeds()
-                            .no_stderr()
-                            .stdout_str()
-                    )
-                );
-            }
-
-            #[test]
-            fn test_missing_file() {
-                let ts = TestScenario::new(util_name!());
-                let at = &ts.fixtures;
-
-                at.write("a", "file1\n");
-                at.write("c", "file3\n");
-
-                ts.ucmd()
-                    .args(&[LENGTH_ARG, "a", "b", "c"])
-                    .fails()
-                    .stdout_contains("a\n")
-                    .stdout_contains("c\n")
-                    .stderr_contains("b: No such file or directory");
-            }
-        }
-    };
-}
-
-test_digest_with_len! {b2sum, 512}
+test_digest! {b2sum, 512}
 
 #[test]
 fn test_check_b2sum_length_option_0() {
@@ -120,7 +26,7 @@ fn test_check_b2sum_length_option_0() {
         .ccmd("b2sum")
         .arg("--length=0")
         .arg("-c")
-        .arg(at.subdir.join("testf.b2sum"))
+        .arg("testf.b2sum")
         .succeeds()
         .stdout_only("testf: OK\n");
 }
@@ -153,9 +59,22 @@ fn test_check_b2sum_length_option_8() {
         .ccmd("b2sum")
         .arg("--length=8")
         .arg("-c")
-        .arg(at.subdir.join("testf.b2sum"))
+        .arg("testf.b2sum")
         .succeeds()
         .stdout_only("testf: OK\n");
+}
+
+#[test]
+fn test_check_status_reports_unusable_checksum_input() {
+    // --status silences per-file results, but a checksum list with no usable
+    // line is an input error and must still be reported.
+    new_ucmd!()
+        .arg("-c")
+        .arg("--status")
+        .pipe_in("not-a-checksum-line\n")
+        .fails()
+        .no_stdout()
+        .stderr_contains("'standard input': no properly formatted checksum lines found");
 }
 
 #[test]
@@ -168,7 +87,7 @@ fn test_invalid_b2sum_length_option_not_multiple_of_8() {
     scene
         .ccmd("b2sum")
         .arg("--length=9")
-        .arg(at.subdir.join("testf"))
+        .arg("testf")
         .fails_with_code(1)
         .stderr_contains("b2sum: invalid length: '9'")
         .stderr_contains("b2sum: length is not a multiple of 8");
@@ -188,7 +107,7 @@ fn test_invalid_b2sum_length_option_too_large(#[case] len: &str) {
         .ccmd("b2sum")
         .arg("--length")
         .arg(len)
-        .arg(at.subdir.join("testf"))
+        .arg("testf")
         .fails_with_code(1)
         .no_stdout()
         .stderr_contains(format!("b2sum: invalid length: '{len}'"))
@@ -271,7 +190,7 @@ fn test_check_b2sum_strict_check() {
     scene
         .ccmd("b2sum")
         .arg("-c")
-        .arg(at.subdir.join("ck"))
+        .arg("ck")
         .succeeds()
         .stdout_only(&output);
 
@@ -279,7 +198,7 @@ fn test_check_b2sum_strict_check() {
         .ccmd("b2sum")
         .arg("--strict")
         .arg("-c")
-        .arg(at.subdir.join("ck"))
+        .arg("ck")
         .succeeds()
         .stdout_only(&output);
 }

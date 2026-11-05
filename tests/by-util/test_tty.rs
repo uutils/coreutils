@@ -2,12 +2,14 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+#[cfg(unix)]
 use std::fs::File;
 
 use uutests::new_ucmd;
 
 #[test]
-#[cfg(not(windows))]
+#[cfg(unix)]
 fn test_dev_null() {
     new_ucmd!()
         .set_stdin(File::open("/dev/null").unwrap())
@@ -16,16 +18,17 @@ fn test_dev_null() {
 }
 
 #[test]
-#[cfg(not(windows))]
+#[cfg(unix)]
 fn test_dev_null_silent() {
     new_ucmd!()
         .args(&["-s"])
         .set_stdin(File::open("/dev/null").unwrap())
         .fails_with_code(1)
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
+#[cfg(unix)]
 fn test_close_stdin() {
     let mut child = new_ucmd!().run_no_wait();
     child.close_stdin();
@@ -33,6 +36,7 @@ fn test_close_stdin() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_close_stdin_silent() {
     let mut child = new_ucmd!().arg("-s").run_no_wait();
     child.close_stdin();
@@ -40,6 +44,7 @@ fn test_close_stdin_silent() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_close_stdin_silent_long() {
     let mut child = new_ucmd!().arg("--silent").run_no_wait();
     child.close_stdin();
@@ -47,6 +52,7 @@ fn test_close_stdin_silent_long() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_close_stdin_silent_alias() {
     let mut child = new_ucmd!().arg("--quiet").run_no_wait();
     child.close_stdin();
@@ -86,4 +92,26 @@ fn test_stdout_fail() {
     drop(proc.stdout.take());
     let status = proc.wait().unwrap();
     assert_eq!(status.code(), Some(3));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_version_pipe_no_stderr() {
+    let mut child = new_ucmd!().arg("--version").run_no_wait();
+    child.close_stdout();
+    child.wait().unwrap().no_stderr();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error() {
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+
+    new_ucmd!()
+        .set_stdout(dev_full)
+        .fails()
+        .stderr_is("tty: No space left on device\n");
 }

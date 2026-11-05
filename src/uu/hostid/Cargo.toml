@@ -3,7 +3,6 @@ name = "uu_hostid"
 description = "hostid ~ (uutils) display the numeric identifier of the current host"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/hostid"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -12,17 +11,24 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/hostid.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }
-libc = { workspace = true }
-uucore = { workspace = true }
 fluent = { workspace = true }
+uucore = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+hostname = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["system"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "hostid"

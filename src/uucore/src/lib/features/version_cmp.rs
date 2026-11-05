@@ -18,8 +18,7 @@ fn version_non_digit_cmp(a: &[u8], b: &[u8]) -> Ordering {
             (Some(c1), Some(c2)) if c1 == c2 => {}
             (None, None) => return Ordering::Equal,
             (_, Some(b'~')) => return Ordering::Greater,
-            (Some(b'~'), _) => return Ordering::Less,
-            (None, Some(_)) => return Ordering::Less,
+            (Some(b'~'), _) | (None, Some(_)) => return Ordering::Less,
             (Some(_), None) => return Ordering::Greater,
             (Some(c1), Some(c2)) if c1.is_ascii_alphabetic() && !c2.is_ascii_alphabetic() => {
                 return Ordering::Less;
@@ -115,8 +114,8 @@ pub fn version_cmp(mut a: &[u8], mut b: &[u8]) -> Ordering {
     // 2. Compare leading numerical part
     // 3. Repeat
     while !a.is_empty() || !b.is_empty() {
-        let a_numerical_start = a.iter().position(|c| c.is_ascii_digit()).unwrap_or(a.len());
-        let b_numerical_start = b.iter().position(|c| c.is_ascii_digit()).unwrap_or(b.len());
+        let a_numerical_start = a.iter().position(u8::is_ascii_digit).unwrap_or(a.len());
+        let b_numerical_start = b.iter().position(u8::is_ascii_digit).unwrap_or(b.len());
 
         let a_str = &a[..a_numerical_start];
         let b_str = &b[..b_numerical_start];

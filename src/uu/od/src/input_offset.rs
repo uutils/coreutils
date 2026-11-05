@@ -2,6 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+use std::fmt;
 use std::io::{self, Write};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -48,32 +50,39 @@ impl InputOffset {
 
     /// returns a string with the current byte offset
     pub fn format_byte_offset(&self) -> String {
-        match (self.radix, self.label) {
-            (Radix::Decimal, None) => format!("{:07}", self.byte_pos),
-            (Radix::Decimal, Some(l)) => format!("{:07} ({l:07})", self.byte_pos),
-            (Radix::Hexadecimal, None) => format!("{:06X}", self.byte_pos),
-            (Radix::Hexadecimal, Some(l)) => format!("{:06X} ({l:06X})", self.byte_pos),
-            (Radix::Octal, None) => format!("{:07o}", self.byte_pos),
-            (Radix::Octal, Some(l)) => format!("{:07o} ({l:07o})", self.byte_pos),
-            (Radix::NoPrefix, None) => String::new(),
-            (Radix::NoPrefix, Some(l)) => format!("({l:07o})"),
-        }
+        self.to_string()
     }
 
     /// Prints the byte offset followed by a newline, or nothing at all if
     /// both `Radix::NoPrefix` was set and no label (--traditional) is used.
-    pub fn print_final_offset<W: Write>(&self, out: &mut W) -> io::Result<()> {
+    pub fn write_final_offset(&self, writer: &mut impl Write) -> io::Result<()> {
         if self.radix != Radix::NoPrefix || self.label.is_some() {
-            writeln!(out, "{}", self.format_byte_offset())?;
+            writeln!(writer, "{}", self.format_byte_offset())?;
         }
         Ok(())
+    }
+}
+
+/// Writes the current byte offset, as [`InputOffset::format_byte_offset`] returns it.
+impl fmt::Display for InputOffset {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match (self.radix, self.label) {
+            (Radix::Decimal, None) => write!(f, "{:07}", self.byte_pos),
+            (Radix::Decimal, Some(l)) => write!(f, "{:07} ({l:07})", self.byte_pos),
+            (Radix::Hexadecimal, None) => write!(f, "{:06x}", self.byte_pos),
+            (Radix::Hexadecimal, Some(l)) => write!(f, "{:06x} ({l:06x})", self.byte_pos),
+            (Radix::Octal, None) => write!(f, "{:07o}", self.byte_pos),
+            (Radix::Octal, Some(l)) => write!(f, "{:07o} ({l:07o})", self.byte_pos),
+            (Radix::NoPrefix, None) => Ok(()),
+            (Radix::NoPrefix, Some(l)) => write!(f, "({l:07o})"),
+        }
     }
 }
 
 #[test]
 fn test_input_offset() {
     let mut sut = InputOffset::new(Radix::Hexadecimal, 10, None);
-    assert_eq!("00000A", &sut.format_byte_offset());
+    assert_eq!("00000a", &sut.format_byte_offset());
     sut.increase_position(10);
     assert_eq!("000014", &sut.format_byte_offset());
 
@@ -98,16 +107,16 @@ fn test_input_offset() {
 #[test]
 fn test_input_offset_with_label() {
     let mut sut = InputOffset::new(Radix::Hexadecimal, 10, Some(20));
-    assert_eq!("00000A (000014)", &sut.format_byte_offset());
+    assert_eq!("00000a (000014)", &sut.format_byte_offset());
     sut.increase_position(10);
-    assert_eq!("000014 (00001E)", &sut.format_byte_offset());
+    assert_eq!("000014 (00001e)", &sut.format_byte_offset());
 
     // note normally the radix will not change after initialization
     sut.set_radix(Radix::Decimal);
     assert_eq!("0000020 (0000030)", &sut.format_byte_offset());
 
     sut.set_radix(Radix::Hexadecimal);
-    assert_eq!("000014 (00001E)", &sut.format_byte_offset());
+    assert_eq!("000014 (00001e)", &sut.format_byte_offset());
 
     sut.set_radix(Radix::Octal);
     assert_eq!("0000024 (0000036)", &sut.format_byte_offset());

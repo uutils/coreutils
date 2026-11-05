@@ -1,4 +1,5 @@
 whoami-about = Print the current username.
+whoami-usage = whoami
 
 # Error messages
 whoami-error-failed-to-print = failed to print username

@@ -3,6 +3,7 @@ numfmt-usage = numfmt [OPTION]... [NUMBER]...
 numfmt-after-help = UNIT options:
 
   - none: no auto-scaling is done; suffixes will trigger an error
+
   - auto: accept optional single/two letter suffix:
 
       1K = 1000, 1Ki = 1024, 1M = 1000000, 1Mi = 1048576,
@@ -42,6 +43,7 @@ numfmt-help-field = replace the numbers in these input fields; see FIELDS below
 numfmt-help-format = use printf style floating-point FORMAT; see FORMAT below for details
 numfmt-help-from = auto-scale input numbers to UNITs; see UNIT below
 numfmt-help-from-unit = specify the input unit size
+numfmt-help-grouping = use locale-defined grouping of digits, for example 1,000,000 (which means it has no effect in the C/POSIX locale)
 numfmt-help-to = auto-scale output numbers to UNITs; see UNIT below
 numfmt-help-to-unit = the output unit size
 numfmt-help-padding = pad the output to N characters; positive N will right-align; negative N will left-align; padding is ignored if the output is wider than N; the default is to automatically pad if a whitespace is found
@@ -57,25 +59,48 @@ numfmt-error-unsupported-unit = Unsupported unit is specified
 numfmt-error-invalid-unit-size = invalid unit size: { $size }
 numfmt-error-invalid-padding = invalid padding value { $value }
 numfmt-error-invalid-header = invalid header value { $value }
+numfmt-error-grouping-cannot-be-combined-with-format = --grouping cannot be combined with --format
 numfmt-error-grouping-cannot-be-combined-with-to = grouping cannot be combined with --to
 numfmt-error-delimiter-must-be-single-character = the delimiter must be a single character
 numfmt-error-invalid-number-empty = invalid number: ''
 numfmt-error-invalid-specific-suffix = invalid suffix in input { $input }: { $suffix }
 numfmt-error-invalid-suffix = invalid suffix in input: { $input }
+numfmt-error-write = write error
 numfmt-error-invalid-number = invalid number: { $input }
 numfmt-error-missing-i-suffix = missing 'i' suffix in input: '{ $number }{ $suffix }' (e.g Ki/Mi/Gi)
 numfmt-error-rejecting-suffix = rejecting suffix in input: '{ $number }{ $suffix }' (consider using --from)
 numfmt-error-suffix-unsupported-for-unit = This suffix is unsupported for specified unit
-numfmt-error-unit-auto-not-supported-with-to = Unit 'auto' isn't supported with --to options
+numfmt-error-invalid-unit-argument = invalid argument '{$arg}' for '{$opt}'
 numfmt-error-number-too-big = Number is too big and unsupported
-numfmt-error-format-no-percent = format '{ $format }' has no % directive
-numfmt-error-format-ends-in-percent = format '{ $format }' ends in %
-numfmt-error-invalid-format-directive = invalid format '{ $format }', directive must be %[0]['][-][N][.][N]f
-numfmt-error-invalid-format-width-overflow = invalid format '{ $format }' (width overflow)
-numfmt-error-invalid-precision = invalid precision in format '{ $format }'
-numfmt-error-format-too-many-percent = format '{ $format }' has too many % directives
+numfmt-error-format-no-percent = format { $format } has no % directive
+numfmt-error-format-ends-in-percent = format { $format } ends in %
+numfmt-error-invalid-format-directive = invalid format { $format }, directive must be %[0]['][-][N][.][N]f
+numfmt-error-invalid-format-width-overflow = invalid format { $format } (width overflow)
+numfmt-error-invalid-precision = invalid precision in format { $format }
+numfmt-error-format-too-many-percent = format { $format } has too many % directives
 numfmt-error-unknown-invalid-mode = Unknown invalid mode: { $mode }
+numfmt-error-multiple-field-specifications = multiple field specifications
 
 # Debug messages
 numfmt-debug-no-conversion = no conversion option specified
+numfmt-debug-grouping-no-effect = grouping has no effect in this locale
+numfmt-debug-failed-to-convert = failed to convert some of the input numbers
 numfmt-debug-header-ignored = --header ignored with command-line input
+
+# Diagnostic labels and help lines: what the caret points at, and the advice under it
+numfmt-diag-label-number-overflow = this number is too large
+numfmt-diag-label-stray-percent = a literal % must be written %%
+numfmt-diag-label-bad-conversion = f is the only conversion numfmt has; %d, %e, %g and the other C conversions are not accepted
+numfmt-diag-help-format-syntax = a format is [PREFIX]%[0]['][-][WIDTH][.PRECISION]f[SUFFIX], as in "%'-10.2f"
+numfmt-diag-label-auto-from-only = auto guesses the unit of the input, so only --from takes it
+numfmt-diag-help-unit = --from and --to take none, si, iec or iec-i, and --from also takes auto
+numfmt-diag-label-zero-unit-size = a unit size must be at least 1
+numfmt-diag-help-unit-size = a unit size is a number, a K, M, G, T, P or E multiplier, or both, as in 512, K or 2Ki
+numfmt-diag-label-zero-padding = a padding is a width in characters, so 0 asks for nothing
+numfmt-diag-help-padding = --padding takes a non-zero whole number; a negative one left-aligns, as in --padding=-10
+numfmt-diag-label-zero-header = leave --header out to convert every line
+numfmt-diag-help-header = --header takes the number of leading lines to pass through unchanged, at least 1
+numfmt-diag-help-input-no-from = without --from a number must be plain; --from=auto reads a K, M or Gi suffix
+numfmt-diag-help-input-suffixes = the suffixes are K, M, G, T, P, E, Z, Y, R and Q, with an optional i under --from=auto or iec-i
+numfmt-diag-label-zero-field = fields are numbered from 1
+numfmt-diag-help-field-syntax = --field takes N, N-M, N- or -M, separated by commas, as in --field=1,3-5

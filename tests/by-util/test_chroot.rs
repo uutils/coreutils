@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (words) araba newroot userspec chdir pwd's isroot
 
 use uutests::at_and_ucmd;
@@ -37,23 +38,42 @@ fn test_enter_chroot_fails() {
 
     at.mkdir("jail");
 
-    let result = ucmd.arg("jail").fails_with_code(125);
-    assert!(
-        result
-            .stderr_str()
-            .starts_with("chroot: cannot chroot to 'jail': Operation not permitted (os error 1)")
-    );
+    ucmd.arg("jail")
+        .fails_with_code(125)
+        .stderr_only("chroot: cannot chroot to 'jail': Operation not permitted\n");
 }
 
 #[test]
-fn test_no_such_directory() {
+#[cfg(target_env = "gnu")] // todo: override by proper error message on other platforms
+fn test_too_long_name() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    let long_name = "a".repeat(256);
+
+    ucmd.arg(&long_name)
+        .fails_with_code(125)
+        .stderr_only(format!(
+            "chroot: cannot chroot to '{long_name}': File name too long\n",
+        ));
+}
+
+#[test]
+#[cfg(target_env = "gnu")] // todo: override by proper error message on other platforms
+fn test_no_such() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("missing")
+        .fails_with_code(125)
+        .stderr_only("chroot: cannot chroot to 'missing': No such file or directory\n");
+}
+
+#[test]
+#[cfg(target_env = "gnu")] // todo: override by proper error message on other platforms
+fn test_not_a_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
-
-    at.touch(at.plus_as_string("a"));
-
+    at.touch(at.plus("a"));
     ucmd.arg("a")
         .fails_with_code(125)
-        .stderr_is("chroot: cannot change root directory to 'a': no such directory\n");
+        .stderr_only("chroot: cannot chroot to 'a': Not a directory\n");
 }
 
 #[test]
@@ -290,6 +310,15 @@ fn test_chroot_skip_chdir_not_root() {
 }
 
 #[test]
+fn test_chroot_skip_chdir_nonexistent() {
+    new_ucmd!()
+        .arg("--skip-chdir")
+        .arg("/nonexistent/sub")
+        .fails_with_code(125)
+        .stderr_contains("chroot: option --skip-chdir only permitted if NEWROOT is old '/'");
+}
+
+#[test]
 fn test_chroot_skip_chdir() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -325,5 +354,45 @@ fn test_chroot_extra_arg() {
         );
     } else {
         print!("Test skipped; requires root user");
+    }
+}
+
+#[test]
+fn test_chroot_userspec_does_not_set_gid_with_uid() {
+    use uucore::entries::{usr2gid, usr2uid};
+
+    let ts = TestScenario::new(util_name!());
+    if let Ok(uid) = usr2uid("sync") {
+        if let Ok(gid) = usr2gid("sync") {
+            if gid == uid {
+                println!("Test skipped; requires sync user to have uid != gid");
+                return;
+            }
+            // Ubuntu has a sync user whose gid is 65534 per default
+            if let Ok(result) = run_ucmd_as_root(&ts, &["--userspec=sync", "/", "id", "-g"]) {
+                result.success().no_stderr().stdout_is(format!("{gid}\n"));
+            } else {
+                println!("Test skipped; requires root user");
+            }
+        } else {
+            println!("Test skipped; requires 'sync' user");
+        }
+    } else {
+        println!("Test skipped; requires 'sync' user");
+    }
+}
+
+#[test]
+fn test_chroot_userspec_unknown_uid() {
+    let ts = TestScenario::new(util_name!());
+    if let Ok(result) =
+        run_ucmd_as_root(&ts, &["--userspec=99999", "--groups=root", "/", "id", "-g"])
+    {
+        result
+            .failure()
+            .code_is(125)
+            .stderr_is("chroot: no group specified for unknown uid: 99999\n");
+    } else {
+        println!("Test skipped; requires root user");
     }
 }

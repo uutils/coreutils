@@ -29,7 +29,7 @@ use uucore::translate;
 ///
 /// To spot small inconsistencies it's useful to run:
 ///
-///   diff -y <(my_shuf ...) <(shuf -i0-{MAX} -r --random-source={INPUT}) | head -n 50
+///   `diff -y <(my_shuf ...) <(shuf -i0-{MAX} -r --random-source={INPUT}) | head -n 50`
 pub struct RandomSourceAdapter<R> {
     reader: R,
     state: u64,

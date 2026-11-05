@@ -2,9 +2,9 @@
 # `build-gnu.bash` ~ builds GNU coreutils (from supplied sources)
 #
 
-# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
+# spell-checker:ignore (paths) abmon deref discrim eacces getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
 # spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) greadlink gsed multihardlink texinfo CARGOFLAGS
-# spell-checker:ignore openat TOCTOU CFLAGS tmpfs gnproc
+# spell-checker:ignore openat TOCTOU CFLAGS tmpfs gnproc autoreconf
 
 set -e
 
@@ -90,15 +90,16 @@ cd -
 export CARGOFLAGS # tell to make
 if [ "${SELINUX_ENABLED}" = 1 ];then
     # Build few utils for SELinux for faster build. MULTICALL=y fails...
-    make UTILS="cat chcon chmod cp cut dd echo env groups id install ln ls mkdir mkfifo mknod mktemp mv printf rm rmdir runcon seq stat test touch tr true uname wc whoami"
+    make UTILS="cat chcon chmod cp cut dd echo env groups id install ln ls mkdir mkfifo mknod mktemp mv printf realpath rm rmdir runcon seq stat test touch tr true uname wc whoami"
 else
     # Use MULTICALL=y for faster build
     make MULTICALL=y SKIP_UTILS=more
     for binary in $("${UU_BUILD_DIR}"/coreutils --list)
-        do [ -e "${UU_BUILD_DIR}/${binary}" ] || ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
+        do ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
     done
+    ln -vf "${UU_BUILD_DIR}"/deps/libstdbuf.* -t "${UU_BUILD_DIR}"
 fi
-[ -e "${UU_BUILD_DIR}/ginstall" ] || ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use ginstall
+ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use ginstall
 ##
 
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
@@ -113,11 +114,15 @@ done
 # This ensures the correct path is used even if the repository was moved or rebuilt in a different location
 sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" tests/local.mk
 
+# Use GNU nproc for *BSD and macOS
+NPROC="$(command -v nproc||command -v gnproc)"
+
 if test -f gnu-built; then
     echo "GNU build already found. Skip"
     echo "'rm -f $(pwd)/{gnu-built,src/getlimits}' to force the build"
     echo "Note: the customization of the tests will still happen"
 else
+    autoreconf
     # Disable useless checks
     sed -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
     # Stop manpage generation for cleaner log
@@ -131,16 +136,15 @@ else
     # Use a better diff
     sed -i 's|diff -c|diff -u|g' tests/Coreutils.pm
 
-    # Skip make if possible
-    # Use GNU nproc for *BSD and macOS
-    NPROC="$(command -v nproc||command -v gnproc)"
-    test "${SELINUX_ENABLED}" = 1 && touch src/getlimits # SELinux tests does not use it
-    test -f src/getlimits || make -j "$("${NPROC}")"
-    cp -f src/getlimits "${UU_BUILD_DIR}"
+    # Skip make if possible. The SELinux job does not build the GNU tree at all;
+    # the block after this "if" builds the one program its tests need.
+    if [ "${SELINUX_ENABLED}" != 1 ]; then
+        test -x src/getlimits || make -j "$("${NPROC}")"
+    fi
 
     # Handle generated factor tests
     t_first=00
-    t_max=37
+    t_max=40
     seq=$(
         i=${t_first}
         while test "${i}" -le "${t_max}"; do
@@ -149,15 +153,48 @@ else
         done
        )
     for i in ${seq}; do
-        echo "strip t${i}.sh from Makefile"
-        sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile
+        echo "strip t${i}.sh from Makefile and tests/local.mk"
+        sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile tests/local.mk
     done
-
     # Remove tests checking for --version & --help
     # Not really interesting for us and logs are too big
     sed -i '/tests\/help\/help-version.sh/ D' Makefile
     touch gnu-built
 fi
+
+# Keep Makefile.in newer than the local.mk files we just modified,
+# and Makefile newer than Makefile.in, so make won't re-run
+# automake or config.status and undo our edits.
+touch Makefile.in Makefile
+
+# The GNU shell and Perl tests call getlimits_, so getlimits has to be a real
+# program on PATH, also when reusing an existing GNU build directory. An earlier
+# version of this script left an empty, non-executable stub behind under
+# SELINUX_ENABLED, hence the test for an executable rather than for a file.
+# Build only that program, plus the generated sources that the "all" target
+# would otherwise pull in, so the SELinux job still skips the rest of the tree.
+# This has to come after the touch above: stripping the factor tests leaves
+# tests/local.mk with a trailing backslash that automake rejects, so a make that
+# still sees it as newer than Makefile.in dies in the remake rule.
+if ! test -x src/getlimits; then
+    rm -f src/getlimits
+    printf 'built-sources: $(BUILT_SOURCES)\n' |
+        make -f Makefile -f - -j "$("${NPROC}")" built-sources || true
+    make -j "$("${NPROC}")" src/getlimits || true
+fi
+if test -x src/getlimits; then
+    # Remove the destination first: cp keeps the permissions of an existing
+    # file, so a leftover stub there would stay non-executable.
+    rm -f "${UU_BUILD_DIR}/getlimits"
+    cp -f src/getlimits "${UU_BUILD_DIR}"
+else
+    echo "WARNING: could not build getlimits; tests calling getlimits_ will fail" >&2
+fi
+
+# Patch the Makefile PATH to point to uutils build dir instead of GNU src/
+sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
+# Prevent make check from rebuilding the GNU binaries over the uutils ones
+sed -i 's/^check-am: all-am/check-am:/' Makefile
 
 grep -rl 'path_prepend_' tests/* | xargs -r "${SED}" -i 's| path_prepend_ ./src||'
 # path_prepend_ sets $abs_path_dir_: set it manually instead.
@@ -173,21 +210,26 @@ sed -i 's/^print_ver_.*/require_selinux_/' tests/chcon/chcon-fail.sh
 
 # We use coreutils yes
 sed -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
-# Different message
-sed -i "s|coreutils: unknown program 'blah'|blah: function/utility not found|" tests/misc/coreutils.sh
+
+# Do not skip
+sed -i "s|skip_|true|g" tests/install/stdin.sh
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 sed -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
 
 # our messages are better
-sed -i "s|cannot stat 'symlink': Permission denied|not writing through dangling symlink 'symlink'|" tests/cp/fail-perm.sh
-sed -i "s|cp: target directory 'symlink': Permission denied|cp: 'symlink' is not a directory|" tests/cp/fail-perm.sh
+sed -i "s|cp: cannot stat 'symlink': .*|cp: not writing through dangling symlink 'symlink'|" tests/cp/fail-perm.sh
+sed -i "s|cp: target directory 'symlink': .*|cp: 'symlink' is not a directory|" tests/cp/fail-perm.sh
 
 # Our message is a bit better
 sed -i "s|cannot create regular file 'no-such/': Not a directory|'no-such/' is not a directory|" tests/mv/trailing-slash.sh
 
 # Our message is better
 sed -i "s|warning: unrecognized escape|warning: incomplete hex escape|" tests/stat/stat-printf.pl
+
+# Our message is better:
+# clap provides allowed range for --parallel for given invalid value
+sed -i '/^# Invalid --parallel arguments\./,+4d' tests/sort/sort.pl
 
 # Remove dup of /usr/bin/ and /usr/local/bin/ when executed several times
 grep -rlE '/usr/bin/\s?/usr/bin' init.cfg tests/* | xargs -r "${SED}" -Ei 's|/usr/bin/\s?/usr/bin/|/usr/bin/|g'
@@ -198,10 +240,15 @@ grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r "${SED}
 # we should not regress our project just to match what GNU is going.
 # So, do some changes on the fly
 
+# GNU uses read/write and the test depends on the fact that write:retval=1 loses byte due to read.
+# However, splice:retval=1 does not consume bytes in pipe. So verifying splice path needs different setup.
+# Fire read/write code path by disabling splice
+sed -i 's/-e trace=write /-e trace=write,splice -e fault=splice /' tests/tee/short-write.sh
+
 sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
 # 'rel' doesn't exist. Our implementation is giving a better message.
-sed -i -e "s|rm: cannot remove 'rel': Permission denied|rm: cannot remove 'rel': No such file or directory|g" tests/rm/inaccessible.sh
+sed -i -e "s|rm: cannot remove 'rel': \$EACCES|rm: cannot remove 'rel': No such file or directory|g" tests/rm/inaccessible.sh
 
 # Our implementation shows "Directory not empty" for directories that can't be accessed due to lack of execute permissions
 # This is actually more accurate than "Permission denied" since the real issue is that we can't empty the directory
@@ -229,18 +276,10 @@ sed -i -e "s|framework_failure_ 'no inotify_add_watch';|fail=1;|" tests/tail/ino
 # This prevents the test from overwhelming logs while still reporting failures
 sed -i '/^my $fail = run_tests/i no warnings "redefine"; *Coreutils::_compare_files = sub { my ($p, $t, $io, $a, $e) = @_; my $d = File::Compare::compare($a, $e); warn "$p: test $t: mismatch\\n" if $d; return $d; };' tests/pr/pr-tests.pl
 
-# We don't have the same error message and no need to be that specific
-sed -i -e "s|invalid suffix in --pages argument|invalid --pages argument|" \
-    -e "s|--pages argument '\$too_big' too large|invalid --pages argument '\$too_big'|"  \
-    -e "s|invalid page range|invalid --pages argument|" tests/misc/xstrtol.pl
-
 # When decoding an invalid base32/64 string, gnu writes everything it was able to decode until
 # it hit the decode error, while we don't write anything if the input is invalid.
 sed -i "s/\(baddecode.*OUT=>\"\).*\"/\1\"/g" tests/basenc/base64.pl
 sed -i "s/\(\(b2[ml]_[69]\|z85_8\|z85_35\).*OUT=>\)[^}]*\(.*\)/\1\"\"\3/g" tests/basenc/basenc.pl
-
-# add "error: " to the expected error message
-sed -i "s/\$prog: invalid input/\$prog: error: invalid input/g" tests/basenc/basenc.pl
 
 # basenc: swap out error message for unexpected arg
 sed -i "s/  {ERR=>\"\$prog: foobar\\\\n\" \. \$try_help }/  {ERR=>\"error: unexpected argument '--foobar' found\n\n  tip: to pass '--foobar' as a value, use '-- --foobar'\n\nUsage: basenc [OPTION]... [FILE]\n\nFor more information, try '--help'.\n\"}]/" tests/basenc/basenc.pl
@@ -277,9 +316,6 @@ sed -i -Ez "s/\n([^\n#]*pad-3\.2[^\n]*)\n([^\n]*)\n([^\n]*)/\n# uutils\/numfmt s
 sed -i -e "s/\$prog: multiple field specifications/error: the argument '--field <FIELDS>' cannot be used multiple times\n\nUsage: numfmt [OPTION]... [NUMBER]...\n\nFor more information, try '--help'./g" tests/numfmt/numfmt.pl
 sed -i -e "s/Try 'mv --help' for more information/For more information, try '--help'/g" -e "s/mv: missing file operand/error: the following required arguments were not provided:\n  <files>...\n\nUsage: mv [OPTION]... [-T] SOURCE DEST\n       mv [OPTION]... SOURCE... DIRECTORY\n       mv [OPTION]... -t DIRECTORY SOURCE...\n/g" -e "s/mv: missing destination file operand after 'no-file'/error: The argument '<files>...' requires at least 2 values, but only 1 was provided\n\nUsage: mv [OPTION]... [-T] SOURCE DEST\n       mv [OPTION]... SOURCE... DIRECTORY\n       mv [OPTION]... -t DIRECTORY SOURCE...\n/g" tests/mv/diag.sh
 
-# our error message is better
-sed -i -e "s|mv: cannot overwrite 'a/t': Directory not empty|mv: cannot move 'b/t' to 'a/t': Directory not empty|" tests/mv/dir2dir.sh
-
 # GNU doesn't support width > INT_MAX
 # disable these test cases
 sed -i -E "s|^([^#]*2_31.*)$|#\1|g" tests/printf/printf-cov.pl
@@ -298,9 +334,6 @@ sed -i -e "s|-: No such file or directory|cannot access '-': No such file or dir
 sed -i '1s/^/exit 0  # Skip test - uutils du uses safe traversal that prevents this race condition\n/' tests/du/move-dir-while-traversing.sh
 
 awk 'BEGIN {count=0} /compare exp out2/ && count < 6 {sub(/compare exp out2/, "grep -q \"cannot be used with\" out2"); count++} 1' tests/df/df-output.sh > tests/df/df-output.sh.tmp && mv tests/df/df-output.sh.tmp tests/df/df-output.sh
-
-# with ls --dired, in case of error, we have a slightly different error position
-sed -i -e "s|44 45|48 49|" tests/ls/stat-failed.sh
 
 # small difference in the error message
 sed -i -e "s/ls: invalid argument 'XX' for 'time style'/ls: invalid --time-style argument 'XX'/" \

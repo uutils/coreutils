@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// cSpell:ignore ilog wc wc's
+// spell-checker:ignore ilog wc wc's
 
 mod count_fast;
 mod countable;
@@ -19,13 +19,13 @@ use std::{
     io::{self, Write, stderr},
     iter,
     path::{Path, PathBuf},
+    sync::LazyLock,
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
-use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
-use uucore::{display::Quotable, translate};
+use uucore::{display::Quotable, quoting_style::locale_aware_shell_escape, translate};
 
 use uucore::{
     error::{FromIo, UError, UResult},
@@ -270,7 +270,7 @@ impl<'a> Input<'a> {
     /// Converts input into the form that appears in errors.
     fn path_display(&self) -> String {
         match self {
-            Self::Path(path) => escape_name_wrapper(path.as_os_str()),
+            Self::Path(path) => locale_aware_shell_escape(path.as_os_str()),
             Self::Stdin(_) => translate!("wc-standard-input"),
         }
     }
@@ -297,17 +297,15 @@ impl<'a> Input<'a> {
 
 #[cfg(unix)]
 fn is_stdin_small_file() -> bool {
-    use std::os::unix::io::{AsRawFd, FromRawFd};
-    // Safety: we'll rely on Rust to give us a valid RawFd for stdin with which we can attempt to
-    // open a File, but only for the sake of fetching .metadata().  ManuallyDrop will ensure we
-    // don't do anything else to the FD if anything unexpected happens.
-    let f = std::mem::ManuallyDrop::new(unsafe { File::from_raw_fd(io::stdin().as_raw_fd()) });
-    matches!(f.metadata(), Ok(meta) if meta.is_file() && meta.len() <= (10 << 20))
+    matches!(
+        rustix::fs::fstat(io::stdin()),
+        Ok(meta) if meta.st_mode as libc::mode_t & libc::S_IFMT == libc::S_IFREG && meta.st_size <= (10 << 20)
+    )
 }
 
-#[cfg(not(unix))]
 /// Windows presents a piped stdin as a "normal file" with a length equal to however many bytes
 /// have been buffered at the time it's checked. To be safe, we must never assume it's a file.
+#[cfg(not(unix))]
 fn is_stdin_small_file() -> bool {
     false
 }
@@ -344,7 +342,7 @@ impl TotalWhen {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum WcError {
     #[error("{}", translate!("wc-error-files-disabled", "extra" => extra.quote()))]
     FilesDisabled { extra: Cow<'static, OsStr> },
@@ -362,7 +360,7 @@ impl WcError {
             Some((input, idx)) => {
                 let path = match input {
                     Input::Stdin(_) => STDIN_REPR.into(),
-                    Input::Path(path) => escape_name_wrapper(path.as_os_str()).into(),
+                    Input::Path(path) => locale_aware_shell_escape(path.as_os_str()).into(),
                 };
                 Self::ZeroLengthFileNameCtx { path, idx }
             }
@@ -392,7 +390,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("wc")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("wc-about"))
@@ -579,11 +577,11 @@ fn process_chunk<
     text: &str,
     current_len: &mut usize,
     in_word: &mut bool,
-    posixly_correct: bool,
+    is_posixly_correct: bool,
 ) {
     for ch in text.chars() {
         if SHOW_WORDS {
-            let is_space = if posixly_correct {
+            let is_space = if is_posixly_correct {
                 matches!(ch, '\t'..='\r' | ' ')
             } else {
                 ch.is_whitespace()
@@ -655,7 +653,7 @@ fn word_count_from_reader_specialized<
     let mut reader = BufReadDecoder::new(reader.buffered());
     let mut in_word = false;
     let mut current_len = 0;
-    let posixly_correct = env::var_os("POSIXLY_CORRECT").is_some();
+    let is_posixly_correct = *IS_POSIXLY_CORRECT;
     while let Some(chunk) = reader.next_strict() {
         match chunk {
             Ok(text) => {
@@ -664,7 +662,7 @@ fn word_count_from_reader_specialized<
                     text,
                     &mut current_len,
                     &mut in_word,
-                    posixly_correct,
+                    is_posixly_correct,
                 );
             }
             Err(e) => {
@@ -780,7 +778,7 @@ fn files0_iter_file<'a>(path: &Path) -> UResult<impl Iterator<Item = InputIterIt
             translate!("wc-error-cannot-open-for-reading",
                 "path" => quoting_style::locale_aware_escape_name(
                     path.as_os_str(),
-                    QuotingStyle::SHELL_ESCAPE_QUOTE,
+                    QuotingStyle::SHELL_ESCAPE_ALWAYS,
                 )
                 .into_string()
                 .expect("All escaped names with the escaping option return valid strings.")
@@ -815,7 +813,7 @@ fn files0_iter<'a>(
                     }
                 }
                 Err(e) => Err(e.map_err_context(
-                    || translate!("wc-error-read-error", "path" => escape_name_wrapper(&err_path)),
+                    || translate!("wc-error-read-error", "path" => locale_aware_shell_escape(&err_path)),
                 ) as Box<dyn UError>),
             }),
     );
@@ -829,28 +827,24 @@ fn files0_iter<'a>(
     })
 }
 
-fn escape_name_wrapper(name: &OsStr) -> String {
-    quoting_style::locale_aware_escape_name(name, QuotingStyle::SHELL_ESCAPE)
-        .into_string()
-        .expect("All escaped names with the escaping option return valid strings.")
-}
-
 fn hardware_feature_label(feature: HardwareFeature) -> &'static str {
     match feature {
         HardwareFeature::Avx512 => "AVX512F",
         HardwareFeature::Avx2 => "AVX2",
-        HardwareFeature::PclMul => "PCLMUL",
-        HardwareFeature::Vmull => "VMULL",
+        HardwareFeature::Pclmulqdq => "PCLMUL",
+        HardwareFeature::Pmull => "VMULL",
         HardwareFeature::Sse2 => "SSE2",
         HardwareFeature::Asimd => "ASIMD",
     }
 }
 
 fn is_simd_runtime_feature(feature: HardwareFeature) -> bool {
-    matches!(
-        feature,
-        HardwareFeature::Avx2 | HardwareFeature::Sse2 | HardwareFeature::Asimd
-    )
+    match feature {
+        HardwareFeature::Avx2 | HardwareFeature::Sse2 => true,
+        // bytecount v0.6.9 compiles its NEON path only on little-endian targets.
+        HardwareFeature::Asimd => cfg!(target_endian = "little"),
+        _ => false,
+    }
 }
 
 fn is_simd_debug_feature(feature: HardwareFeature) -> bool {
@@ -988,6 +982,7 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
             if let Err(err) = print_stats(settings, &word_count, maybe_title_str, number_width) {
                 let title = maybe_title_str.unwrap_or(OsStr::new("<stdin>"));
                 show!(err.map_err_context(|| translate!("wc-error-failed-to-print-result", "title" => title.to_string_lossy())));
+                return Ok(());
             }
         }
         // Print deferred error after stats to match GNU wc output order
@@ -1038,3 +1033,6 @@ fn print_stats(
     }
     writeln!(stdout)
 }
+
+static IS_POSIXLY_CORRECT: LazyLock<bool> =
+    LazyLock::new(|| env::var_os("POSIXLY_CORRECT").is_some());

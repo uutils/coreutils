@@ -1,8 +1,8 @@
-# See https://pre-commit.com for more information
-# See https://pre-commit.com/hooks.html for more hooks
+# See https://prek.j178.dev for more information
+exclude: ^tests/fixtures/
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: check-added-large-files
       - id: check-executables-have-shebangs
@@ -21,11 +21,27 @@ repos:
       - id: trailing-whitespace
 
   - repo: https://github.com/mozilla-l10n/moz-fluent-linter
-    rev: v0.4.8
+    rev: v0.4.9
     hooks:
       - id: fluent_linter
         files: \.ftl$
         args: [--config, .github/fluent_linter_config.yml, src/uu/]
+
+  - repo: https://github.com/streetsidesoftware/cspell-cli
+    rev: v10.4.0
+    hooks:
+      - id: cspell
+        # Pinned so the check does not depend on the node version a contributor
+        # happens to have installed; cspell v10 requires node >= 22.18.
+        language_version: '22.18.0'
+        args:
+          - --config
+          - .vscode/cSpell.json
+          - --no-must-find-files
+          - --no-progress
+          - --no-summary
+          - --gitignore
+          - --files # must stay last: pre-commit appends the filenames here
 
   - repo: local
     hooks:
@@ -43,9 +59,13 @@ repos:
         pass_filenames: false
         types: [file, rust]
         language: system
-      - id: cspell
-        name: Code spell checker (cspell)
-        description: Run cspell to check for spelling errors (if available).
-        entry: bash -c 'if command -v cspell >/dev/null 2>&1; then cspell --no-must-find-files -- "$@"; else echo "cspell not found, skipping spell check"; exit 0; fi' --
-        pass_filenames: true
+      - id: cargo-lock-check
+        name: Cargo.lock sync check
+        description: Ensure Cargo.lock and fuzz/Cargo.lock are up-to-date.
+        entry: bash -c 'for dir in . fuzz; do ( cd "$dir" && cargo fetch --quiet ); done'
+        pass_filenames: false
+        files: 'Cargo\.(toml|lock)$'
         language: system
+
+ci:
+  skip: [cspell, rust-linting, rust-clippy, cargo-lock-check]

@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+#![cfg(any(unix, windows, target_os = "wasi"))]
+
 use divan::{Bencher, black_box};
 use tempfile::TempDir;
 use uu_rm::uumain;
@@ -55,7 +57,7 @@ fn rm_multiple_files(bencher: Bencher) {
             (temp_dir, paths)
         })
         .bench_values(|(temp_dir, paths)| {
-            let args: Vec<&str> = paths.iter().map(|s| s.as_str()).collect();
+            let args: Vec<&str> = paths.iter().map(String::as_str).collect();
             black_box(run_util_function(uumain, &args));
             drop(temp_dir);
         });
@@ -100,7 +102,7 @@ fn rm_force_files(bencher: Bencher) {
         })
         .bench_values(|(temp_dir, paths)| {
             let mut args = vec!["-f"];
-            let path_refs: Vec<&str> = paths.iter().map(|s| s.as_str()).collect();
+            let path_refs: Vec<&str> = paths.iter().map(String::as_str).collect();
             args.extend(path_refs);
             black_box(run_util_function(uumain, &args));
             drop(temp_dir);

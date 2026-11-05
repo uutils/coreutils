@@ -16,5 +16,5 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    base_common::base_app(translate!("base64-about"), translate!("base64-usage"))
+    base_common::base_app(translate!("base64-about"), translate!("base64-usage")).name("base64")
 }

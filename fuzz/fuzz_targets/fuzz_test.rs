@@ -2,13 +2,14 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore STRINGSTRING INTEGERINTEGER FILEFILE
 
 #![no_main]
 use libfuzzer_sys::fuzz_target;
 use uu_test::uumain;
 
-use rand::Rng;
+use rand::RngExt;
 use rand::prelude::IndexedRandom;
 use std::ffi::OsString;
 
@@ -35,7 +36,7 @@ struct TestArg {
     arg_type: ArgType,
 }
 
-fn generate_random_path(rng: &mut dyn rand::RngCore) -> &'static str {
+fn generate_random_path(rng: &mut dyn rand::Rng) -> &'static str {
     match rng.random_range(0..=3) {
         0 => "/dev/null",
         1 => "/dev/random",
@@ -143,7 +144,7 @@ fn generate_test_arg() -> String {
                 let random_str = generate_random_string(rng.random_range(1..=10));
                 let random_str2 = generate_random_string(rng.random_range(1..=10));
 
-                arg.push_str(&format!("{random_str} {} {random_str2}", test_arg.arg,));
+                arg.push_str(&format!("{random_str} {} {random_str2}", test_arg.arg));
             } else if test_arg.arg_type == ArgType::STRING {
                 let random_str = generate_random_string(rng.random_range(1..=10));
                 arg.push_str(&format!("{} {random_str}", test_arg.arg));

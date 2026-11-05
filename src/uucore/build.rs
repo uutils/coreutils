@@ -3,12 +3,28 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore tvos watchos visionos
+
+use cfg_aliases::cfg_aliases;
 use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+    cfg_aliases! {
+        // Directory open flags that grant search but not read access.
+        // tests/by-util/test_install.rs repeats the union of these targets.
+        has_o_path: { any(target_os = "linux", target_os = "android") },
+        has_o_search: { any(
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "illumos",
+            target_os = "solaris",
+            target_vendor = "apple"
+        ) },
+    }
+
     let out_dir = env::var("OUT_DIR")?;
 
     let mut embedded_file = File::create(Path::new(&out_dir).join("embedded_locales.rs"))?;
@@ -22,6 +38,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     writeln!(embedded_file)?;
 
     // Generate optimized lookup function instead of HashMap
+    writeln!(embedded_file, "#[allow(clippy::match_same_arms)]")?; // needed for dir and vdir aliases for ls
     writeln!(
         embedded_file,
         "pub fn get_embedded_locale(key: &str) -> Option<&'static str> {{"
@@ -31,7 +48,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Try to detect if we're building for a specific utility by checking build configuration
     // This attempts to identify individual utility builds vs multicall binary builds
     let target_utility = detect_target_utility();
-    let locales_to_embed = get_locales_to_embed();
+    let locales_to_embed = get_locales_to_embed(env::var("LANG").ok());
 
     match target_utility {
         Some(util_name) => {
@@ -84,18 +101,20 @@ fn detect_target_utility() -> Option<String> {
     println!("cargo:rerun-if-env-changed=UUCORE_TARGET_UTIL");
 
     // First check if an explicit environment variable was set
-    if let Ok(target_util) = env::var("UUCORE_TARGET_UTIL") {
-        if !target_util.is_empty() {
-            return Some(target_util);
-        }
+    if let Some(target_util) = env::var("UUCORE_TARGET_UTIL")
+        .ok()
+        .filter(|t| !t.is_empty())
+    {
+        return Some(target_util);
     }
 
     // Auto-detect utility name from CARGO_PKG_NAME if it's a uu_* package
-    if let Ok(pkg_name) = env::var("CARGO_PKG_NAME") {
-        if let Some(util_name) = pkg_name.strip_prefix("uu_") {
-            println!("cargo:warning=Auto-detected utility name: {util_name}");
-            return Some(util_name.to_string());
-        }
+    if let Some(util_name) = env::var("CARGO_PKG_NAME")
+        .ok()
+        .and_then(|pkg| pkg.strip_prefix("uu_").map(String::from))
+    {
+        println!("cargo:warning=Auto-detected utility name: {util_name}");
+        return Some(util_name);
     }
 
     // Check for a build configuration file in the target directory
@@ -158,7 +177,28 @@ fn embed_single_utility_locale(
         project_root.join(format!("src/uucore/locales/{locale}.ftl"))
     })?;
 
+    embed_error_locales(embedded_file, project_root, locales_to_embed)?;
+
     Ok(())
+}
+
+/// Embed the strings only an error path asks for.
+///
+/// They are embedded like any other component but parsed only when something
+/// actually looks one up, so the common bundle every utility builds at startup
+/// stays small.
+///
+/// # Errors
+///
+/// Returns an error if writing to the `embedded_file` fails.
+fn embed_error_locales(
+    embedded_file: &mut File,
+    project_root: &Path,
+    locales_to_embed: &(String, Option<String>),
+) -> Result<(), Box<dyn std::error::Error>> {
+    embed_component_locales(embedded_file, locales_to_embed, "uucore-errors", |locale| {
+        project_root.join(format!("src/uucore/locales/errors/{locale}.ftl"))
+    })
 }
 
 /// Embed locale files for all utilities (multicall binary).
@@ -186,10 +226,10 @@ fn embed_all_utility_locales(
     let mut util_dirs = Vec::new();
     for entry in fs::read_dir(&src_uu_dir)? {
         let entry = entry?;
-        if entry.file_type()?.is_dir() {
-            if let Some(dir_name) = entry.file_name().to_str() {
-                util_dirs.push(dir_name.to_string());
-            }
+        if entry.file_type()?.is_dir()
+            && let Some(dir_name) = entry.file_name().to_str()
+        {
+            util_dirs.push(dir_name.to_string());
         }
     }
     util_dirs.sort();
@@ -207,6 +247,8 @@ fn embed_all_utility_locales(
     embed_component_locales(embedded_file, locales_to_embed, "uucore", |locale| {
         project_root.join(format!("src/uucore/locales/{locale}.ftl"))
     })?;
+
+    embed_error_locales(embedded_file, project_root, locales_to_embed)?;
 
     embedded_file.flush()?;
     Ok(())
@@ -234,9 +276,22 @@ fn embed_static_utility_locales(
         return Ok(()); // nothing to scan
     };
 
+    // Which utilities we embed here depends on the crates unpacked next to us
+    // in the registry, i.e. on what the consumer depends on. Cargo only knows
+    // about the files we declare, so without watching the consumer's lock file
+    // a utility added after the first build would keep printing raw message
+    // ids until uucore is rebuilt by hand.
+    if let Some(lock_file) = consumer_lock_file(env::var_os("OUT_DIR").as_deref()) {
+        println!("cargo:rerun-if-changed={}", lock_file.display());
+    }
+
     // First, try to embed uucore locales - critical for common translations like "Usage:"
     embed_component_locales(embedded_file, locales_to_embed, "uucore", |locale| {
         Path::new(&manifest_dir).join(format!("locales/{locale}.ftl"))
+    })?;
+
+    embed_component_locales(embedded_file, locales_to_embed, "uucore-errors", |locale| {
+        Path::new(&manifest_dir).join(format!("locales/errors/{locale}.ftl"))
     })?;
 
     // Collect and sort for deterministic builds
@@ -247,22 +302,31 @@ fn embed_static_utility_locales(
 
     for entry in entries {
         let file_name = entry.file_name();
-        if let Some(dir_name) = file_name.to_str() {
+        if let Some(dir_name) = file_name.to_str() &&
             // Match uu_<util>-<version>
-            if let Some((util_part, _)) = dir_name.split_once('-') {
-                if let Some(util_name) = util_part.strip_prefix("uu_") {
-                    embed_component_locales(
-                        embedded_file,
-                        locales_to_embed,
-                        util_name,
-                        |locale| entry.path().join(format!("locales/{locale}.ftl")),
-                    )?;
-                }
-            }
+            let Some((util_part, _)) = dir_name.split_once('-') &&
+                let Some(util_name) = util_part.strip_prefix("uu_")
+        {
+            embed_component_locales(embedded_file, locales_to_embed, util_name, |locale| {
+                entry.path().join(format!("locales/{locale}.ftl"))
+            })?;
         }
     }
 
     Ok(())
+}
+
+/// Find the `Cargo.lock` of the project we are being built for, by walking up
+/// from `OUT_DIR` (`<target>/<profile>/build/uucore-<hash>/out`) until a lock
+/// file shows up next to a target directory.
+///
+/// Returns `None` when there is none to watch, e.g. for a build with a target
+/// directory outside of the project.
+fn consumer_lock_file(out_dir: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
+    Path::new(out_dir?)
+        .ancestors()
+        .map(|dir| dir.join("Cargo.lock"))
+        .find(|lock| lock.is_file())
 }
 
 /// Determines which locales to embed into the binary.
@@ -273,15 +337,13 @@ fn embed_static_utility_locales(
 ///
 /// It always includes "en-US" to ensure that a fallback is available if the
 /// system locale's translation file is missing or if `LANG` is not set.
-fn get_locales_to_embed() -> (String, Option<String>) {
-    let system_locale = env::var("LANG").ok().and_then(|lang| {
-        let locale = lang.split('.').next()?.replace('_', "-");
-        if locale != "en-US" && !locale.is_empty() {
-            Some(locale)
-        } else {
-            None
-        }
-    });
+fn get_locales_to_embed(env: Option<String>) -> (String, Option<String>) {
+    let system_locale = env
+        .as_deref()
+        .and_then(|s| s.split('.').next())
+        .map(|s| s.replace('_', "-"))
+        .filter(|s| !s.is_empty() && s != "en-US");
+
     ("en-US".to_string(), system_locale)
 }
 
@@ -326,11 +388,12 @@ fn embed_locale_file(
             embedded_file,
             "        // Locale for {component} ({locale})"
         )?;
-        // Determine if we need a hash. If content contains ", we need r#""#
-        let delimiter = if content.contains('"') { "#" } else { "" };
+        // Never a raw string: `r#"..."#` ends at `"#`, so content holding that
+        // pair closes the literal and the rest is compiled as Rust. `{:?}`
+        // escapes every quote and has no terminator the content can reach.
         writeln!(
             embedded_file,
-            "        \"{locale_key}\" => Some(r{delimiter}\"{content}\"{delimiter}),"
+            "        {locale_key:?} => Some({content:?}),"
         )?;
 
         // Tell Cargo to rerun if this file changes
@@ -347,6 +410,43 @@ fn embed_locale_file(
 ///
 /// Returns an error if `for_each_locale` fails, which typically happens if
 /// reading a locale file or writing to the `embedded_file` fails.
+/// Check if we are cross-compiling for WASI (build.rs runs on the host,
+/// so `#[cfg(target_os = "wasi")]` does not work here).
+fn is_wasi_target() -> bool {
+    env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os == "wasi")
+}
+
+/// For WASI/WASM builds, embed ALL available .ftl files in a locale
+/// directory so the playground can switch languages at runtime.
+fn embed_all_locales_for_component<F>(
+    embedded_file: &mut File,
+    component_name: &str,
+    path_builder: &F,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    F: Fn(&str) -> PathBuf,
+{
+    let en_path = path_builder("en-US");
+    if let Some(locale_dir) = en_path.parent().filter(|l| l.exists()) {
+        for entry in std::fs::read_dir(locale_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e == "ftl")
+                && let Some(locale) = path.file_stem().and_then(|s| s.to_str())
+            {
+                embed_locale_file(
+                    embedded_file,
+                    &path,
+                    &format!("{component_name}/{locale}.ftl"),
+                    locale,
+                    component_name,
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn embed_component_locales<F>(
     embedded_file: &mut File,
     locales: &(String, Option<String>),
@@ -356,6 +456,10 @@ fn embed_component_locales<F>(
 where
     F: Fn(&str) -> PathBuf,
 {
+    if is_wasi_target() {
+        return embed_all_locales_for_component(embedded_file, component_name, &path_builder);
+    }
+
     for_each_locale(locales, |locale| {
         let locale_path = path_builder(locale);
         embed_locale_file(
@@ -373,124 +477,76 @@ mod tests {
     use super::*;
 
     #[test]
+    fn consumer_lock_file_found_above_target_dir() {
+        let tmp = std::env::temp_dir().join(format!("uucore-build-{}", std::process::id()));
+        let out_dir = tmp.join("target/debug/build/uucore-1234/out");
+        std::fs::create_dir_all(&out_dir).unwrap();
+        assert_eq!(consumer_lock_file(Some(out_dir.as_os_str())), None);
+
+        let lock = tmp.join("Cargo.lock");
+        std::fs::write(&lock, "").unwrap();
+        assert_eq!(consumer_lock_file(Some(out_dir.as_os_str())), Some(lock));
+
+        assert_eq!(consumer_lock_file(None), None);
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
     fn get_locales_to_embed_no_lang() {
-        unsafe {
-            env::remove_var("LANG");
-        }
-        let (en_locale, system_locale) = get_locales_to_embed();
+        let (en_locale, system_locale) = get_locales_to_embed(None);
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, None);
 
-        unsafe {
-            env::set_var("LANG", "");
-        }
-        let (en_locale, system_locale) = get_locales_to_embed();
+        let (en_locale, system_locale) = get_locales_to_embed(Some(String::new().into()));
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, None);
-        unsafe {
-            env::remove_var("LANG");
-        }
 
-        unsafe {
-            env::set_var("LANG", "en_US.UTF-8");
-        }
-        let (en_locale, system_locale) = get_locales_to_embed();
+        let (en_locale, system_locale) = get_locales_to_embed(Some("en_US.UTF-8".to_string()));
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, None);
-        unsafe {
-            env::remove_var("LANG");
-        }
     }
 
     #[test]
     fn get_locales_to_embed_with_lang() {
-        unsafe {
-            env::set_var("LANG", "fr_FR.UTF-8");
-        }
-        let (en_locale, system_locale) = get_locales_to_embed();
+        let (en_locale, system_locale) = get_locales_to_embed(Some("fr_FR.UTF-8".to_string()));
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, Some("fr-FR".to_string()));
-        unsafe {
-            env::remove_var("LANG");
-        }
 
-        unsafe {
-            env::set_var("LANG", "zh_CN.UTF-8");
-        }
-        let (en_locale, system_locale) = get_locales_to_embed();
+        let (en_locale, system_locale) = get_locales_to_embed(Some("zh_CN.UTF-8".to_string()));
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, Some("zh-CN".to_string()));
-        unsafe {
-            env::remove_var("LANG");
-        }
 
-        unsafe {
-            env::set_var("LANG", "de");
-        }
-        let (en_locale, system_locale) = get_locales_to_embed();
+        let (en_locale, system_locale) = get_locales_to_embed(Some("de".to_string()));
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, Some("de".to_string()));
-        unsafe {
-            env::remove_var("LANG");
-        }
     }
 
     #[test]
     fn get_locales_to_embed_invalid_lang() {
         // invalid locale format
-        unsafe {
-            env::set_var("LANG", "invalid");
-        }
-        let (en_locale, system_locale) = get_locales_to_embed();
+        let (en_locale, system_locale) = get_locales_to_embed(Some("invalid".to_string()));
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, Some("invalid".to_string()));
-        unsafe {
-            env::remove_var("LANG");
-        }
 
         // numeric values
-        unsafe {
-            env::set_var("LANG", "123");
-        }
-        let (en_locale, system_locale) = get_locales_to_embed();
+        let (en_locale, system_locale) = get_locales_to_embed(Some("123".to_string()));
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, Some("123".to_string()));
-        unsafe {
-            env::remove_var("LANG");
-        }
 
         // special characters
-        unsafe {
-            env::set_var("LANG", "@@@@");
-        }
-        let (en_locale, system_locale) = get_locales_to_embed();
+        let (en_locale, system_locale) = get_locales_to_embed(Some("@@@@".to_string()));
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, Some("@@@@".to_string()));
-        unsafe {
-            env::remove_var("LANG");
-        }
 
         // malformed locale (no country code but with encoding)
-        unsafe {
-            env::set_var("LANG", "en.UTF-8");
-        }
-        let (en_locale, system_locale) = get_locales_to_embed();
+        let (en_locale, system_locale) = get_locales_to_embed(Some("en.UTF-8".to_string()));
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, Some("en".to_string()));
-        unsafe {
-            env::remove_var("LANG");
-        }
 
         // valid format but unusual locale
-        unsafe {
-            env::set_var("LANG", "XX_YY.UTF-8");
-        }
-        let (en_locale, system_locale) = get_locales_to_embed();
+        let (en_locale, system_locale) = get_locales_to_embed(Some("XX_YY.UTF-8".to_string()));
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, Some("XX-YY".to_string()));
-        unsafe {
-            env::remove_var("LANG");
-        }
     }
 
     #[test]

@@ -2,13 +2,75 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (ToDO) hdsf ghead gtail ACDBK hexdigit
 
 //! Parser for sizes in SI or IEC units (multiples of 1000 or 1024 bytes).
 
-use std::error::Error;
-use std::fmt;
+/// Where the size itself starts inside `src`, past the leading whitespace and
+/// one optional prefix character.
+///
+/// A [`ParseSizeError`] reports offsets into the size the parser saw, never
+/// into the argument as typed. The parsers taking a SIZE trim it and then take
+/// at most one character of their own before the size proper — a sign for
+/// `head` and `tail`, a mode character for `truncate` — so a caret over the
+/// argument has to count both back in. Only *one* such character is taken, so
+/// a second one belongs to the size as far as the parser is concerned and is
+/// left in.
+///
+/// # Arguments
+///
+/// * `src` - The argument as typed.
+/// * `is_prefix` - Whether a character is the prefix the caller's parser
+///   strips.
+pub fn size_offset(src: &str, is_prefix: impl Fn(char) -> bool) -> usize {
+    let trimmed = src.trim_start();
+    (src.len() - trimmed.len())
+        + trimmed
+            .chars()
+            .next()
+            .filter(|&c| is_prefix(c))
+            .map_or(0, char::len_utf8)
+}
+
+/// The first eleven powers of 1000: `1, 10^3, 10^6, ..., 10^30`.
+///
+/// Index `n` is the SI base for the `n`-th suffix (0 → no suffix, 1 → K/kB,
+/// 2 → M/MB, ...).
+pub const SI_BASES: [u128; 11] = [
+    1,
+    1_000,
+    1_000_000,
+    1_000_000_000,
+    1_000_000_000_000,
+    1_000_000_000_000_000,
+    1_000_000_000_000_000_000,
+    1_000_000_000_000_000_000_000,
+    1_000_000_000_000_000_000_000_000,
+    1_000_000_000_000_000_000_000_000_000,
+    1_000_000_000_000_000_000_000_000_000_000,
+];
+
+/// The first eleven powers of 1024: `1, 1024, 1024^2, ..., 1024^10`.
+///
+/// Index `n` is the IEC base for the `n`-th suffix (0 → no suffix, 1 → Ki,
+/// 2 → Mi, ...).
+pub const IEC_BASES: [u128; 11] = [
+    1,
+    1_024,
+    1_048_576,
+    1_073_741_824,
+    1_099_511_627_776,
+    1_125_899_906_842_624,
+    1_152_921_504_606_846_976,
+    1_180_591_620_717_411_303_424,
+    1_208_925_819_614_629_174_706_176,
+    1_237_940_039_285_380_274_899_124_224,
+    1_267_650_600_228_229_401_496_703_205_376,
+];
+
 use std::num::{IntErrorKind, ParseIntError};
+use std::ops::Range;
 
 use crate::display::Quotable;
 #[cfg(target_os = "linux")]
@@ -109,26 +171,59 @@ enum NumberSystem {
     Binary,
 }
 
+/// The leading part of `size` that spells out its number.
+///
+/// The rest is the unit, so this is also where a caret goes when the unit is
+/// the part at fault.
+///
+/// # Arguments
+///
+/// * `size` - The SIZE operand as typed.
+/// * `number_system` - How its digits are to be read.
+fn numeric_prefix(size: &str, number_system: NumberSystem) -> &str {
+    let len = match number_system {
+        NumberSystem::Hexadecimal | NumberSystem::Binary => {
+            let is_digit = |c: char| match number_system {
+                NumberSystem::Hexadecimal => c.is_ascii_hexdigit(),
+                _ => c.is_digit(2),
+            };
+            // The `0x` or `0b` that named the system, and the digits after it.
+            2 + size
+                .chars()
+                .skip(2)
+                .take_while(|&c| is_digit(c))
+                .map(char::len_utf8)
+                .sum::<usize>()
+        }
+        _ => size
+            .chars()
+            .take_while(char::is_ascii_digit)
+            .map(char::len_utf8)
+            .sum(),
+    };
+    &size[..len.min(size.len())]
+}
+
 impl<'parser> Parser<'parser> {
-    /// Change allow_list of the parser - whitelist for the suffix
+    /// Change `allow_list` of the parser - whitelist for the suffix
     pub fn with_allow_list(&mut self, allow_list: &'parser [&str]) -> &mut Self {
         self.allow_list = Some(allow_list);
         self
     }
 
-    /// Change default_unit of the parser - when no suffix is provided
+    /// Change `default_unit` of the parser - when no suffix is provided
     pub fn with_default_unit(&mut self, default_unit: &'parser str) -> &mut Self {
         self.default_unit = Some(default_unit);
         self
     }
 
-    /// Change b_byte_count of the parser - to treat "b" as a "byte count" instead of "block"
+    /// Change `b_byte_count` of the parser - to treat "b" as a "byte count" instead of "block"
     pub fn with_b_byte_count(&mut self, value: bool) -> &mut Self {
         self.b_byte_count = value;
         self
     }
 
-    /// Change no_empty_numeric of the parser - to allow empty numeric strings
+    /// Change `no_empty_numeric` of the parser - to allow empty numeric strings
     pub fn with_allow_empty_numeric(&mut self, value: bool) -> &mut Self {
         self.no_empty_numeric = value;
         self
@@ -219,7 +314,9 @@ impl<'parser> Parser<'parser> {
         if unit == "%" {
             let number: u128 = Self::parse_number(&numeric_string, 10, size)?;
             return match total_physical_memory() {
-                Ok(total) => Ok((number / 100) * total),
+                Ok(total) => (number / 100)
+                    .checked_mul(total)
+                    .ok_or_else(|| ParseSizeError::size_too_big(size)),
                 Err(_) => Err(ParseSizeError::PhysicalMem(size.to_string())),
             };
         }
@@ -244,16 +341,16 @@ impl<'parser> Parser<'parser> {
             "YiB" | "yiB" | "Y" | "y" => (1024, 8),
             "RiB" | "riB" | "R" | "r" => (1024, 9),
             "QiB" | "qiB" | "Q" | "q" => (1024, 10),
-            "KB" | "kB" => (1000, 1),
-            "MB" | "mB" => (1000, 2),
-            "GB" | "gB" => (1000, 3),
-            "TB" | "tB" => (1000, 4),
-            "PB" | "pB" => (1000, 5),
-            "EB" | "eB" => (1000, 6),
-            "ZB" | "zB" => (1000, 7),
-            "YB" | "yB" => (1000, 8),
-            "RB" | "rB" => (1000, 9),
-            "QB" | "qB" => (1000, 10),
+            "KB" | "kB" | "KD" | "kD" => (1000, 1),
+            "MB" | "mB" | "MD" | "mD" => (1000, 2),
+            "GB" | "gB" | "GD" | "gD" => (1000, 3),
+            "TB" | "tB" | "TD" | "tD" => (1000, 4),
+            "PB" | "pB" | "PD" | "pD" => (1000, 5),
+            "EB" | "eB" | "ED" | "eD" => (1000, 6),
+            "ZB" | "zB" | "ZD" | "zD" => (1000, 7),
+            "YB" | "yB" | "YD" | "yD" => (1000, 8),
+            "RB" | "rB" | "RD" | "rD" => (1000, 9),
+            "QB" | "qB" | "QD" | "qD" => (1000, 10),
             _ if numeric_string.is_empty() => return Err(ParseSizeError::parse_failure(size)),
             _ => return Err(ParseSizeError::invalid_suffix(size)),
         };
@@ -342,10 +439,11 @@ impl<'parser> Parser<'parser> {
 
         // Binary prefix: "0b" followed by at least one binary digit (0 or 1)
         // Note: "0b" alone is treated as decimal 0 with suffix "b"
-        if let Some(prefix) = size.strip_prefix("0b") {
-            if !prefix.is_empty() {
-                return NumberSystem::Binary;
-            }
+        if size
+            .strip_prefix("0b")
+            .is_some_and(|prefix| !prefix.is_empty())
+        {
+            return NumberSystem::Binary;
         }
 
         let num_digits: usize = size
@@ -371,6 +469,16 @@ impl<'parser> Parser<'parser> {
             _ => ParseSizeError::ParseFailure(original_size.to_string()),
         })
     }
+}
+
+pub fn allow_list_with_all_suffixes(units: &str) -> Vec<String> {
+    let mut allow_list = Vec::with_capacity(4 * units.len());
+    for unit in units.chars() {
+        for suffix in &["", "iB", "B", "D"] {
+            allow_list.push(format!("{unit}{suffix}"));
+        }
+    }
+    allow_list
 }
 
 /// Parse a size string into a number of bytes
@@ -423,43 +531,24 @@ pub fn parse_size_u128_max(size: &str) -> Result<u128, ParseSizeError> {
     Parser::default().parse_u128_max(size)
 }
 
-/// Error type for parse_size
-#[derive(Debug, PartialEq, Eq)]
+/// Error type for [`parse_size`]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ParseSizeError {
     /// Suffix
+    #[error("{0}")]
     InvalidSuffix(String),
 
     /// Syntax
+    #[error("{0}")]
     ParseFailure(String),
 
     /// Overflow
+    #[error("{0}")]
     SizeTooBig(String),
 
     /// Could not determine total physical memory size.
+    #[error("{0}")]
     PhysicalMem(String),
-}
-
-impl Error for ParseSizeError {
-    fn description(&self) -> &str {
-        match *self {
-            Self::InvalidSuffix(ref s) => s,
-            Self::ParseFailure(ref s) => s,
-            Self::SizeTooBig(ref s) => s,
-            Self::PhysicalMem(ref s) => s,
-        }
-    }
-}
-
-impl fmt::Display for ParseSizeError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        let s = match self {
-            Self::InvalidSuffix(s)
-            | Self::ParseFailure(s)
-            | Self::SizeTooBig(s)
-            | Self::PhysicalMem(s) => s,
-        };
-        write!(f, "{s}")
-    }
 }
 
 // FIXME: It's more idiomatic to move the formatting into the Display impl,
@@ -503,6 +592,104 @@ impl ParseSizeError {
         //                   --strings
         // etc.
         Self::ParseFailure(format!("{}", s.quote()))
+    }
+
+    /// Where in `size` this error belongs.
+    ///
+    /// The parser splits a SIZE into the number it starts with and the unit
+    /// that follows, and every failure is about one or the other. The split
+    /// is worked out the same way here, so the caret covers exactly the part
+    /// the parser rejected.
+    ///
+    /// # Arguments
+    ///
+    /// * `size` - The SIZE operand as typed, the one this error is about.
+    pub fn span(&self, size: &str) -> Range<usize> {
+        let number = numeric_prefix(size, Parser::determine_number_system(size)).len();
+        match self {
+            // The number is fine; it is the unit that is not.
+            Self::InvalidSuffix(_) => number..size.len(),
+            // The number is what does not fit.
+            Self::SizeTooBig(_) => 0..number,
+            // Nothing usable was read: the operand as a whole is at fault.
+            Self::ParseFailure(_) | Self::PhysicalMem(_) => 0..size.len(),
+        }
+    }
+
+    /// Render this error against `snapshot`, with a caret under the part of the
+    /// SIZE that is at fault.
+    ///
+    /// Every utility taking a SIZE takes the same syntax, so the label and the
+    /// advice are written once here rather than in each of them.
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - The whole argument list, program name included — as
+    ///   [`crate::diagnostics::capture`] returns it.
+    /// * `option` - The option's value as typed, and the option it was given
+    ///   to. The value may carry something in front of the size — `truncate`
+    ///   takes a mode character, as in `+2K`, `head` and `tail` a sign — which
+    ///   the caret has to count but the parser never saw.
+    /// * `size_at` - Where the size itself starts inside the value, zero when
+    ///   the whole of it is the size.
+    /// * `message` - The headline, already localized. It differs between
+    ///   utilities, so it is passed in rather than built here.
+    ///
+    /// # Returns
+    ///
+    /// `false` when no argument carries the value as that option's value, in
+    /// which case the caller should fall back to the plain one-line message.
+    pub fn render_size_value(
+        &self,
+        args: &[std::ffi::OsString],
+        option: &crate::diagnostics::OptionValue,
+        size_at: usize,
+        message: &str,
+    ) -> bool {
+        let Some(size) = option.value.get(size_at..) else {
+            return false;
+        };
+        // Labelled only where a label would add to the message, per the
+        // convention in `crate::diagnostics`.
+        let label = match self {
+            Self::InvalidSuffix(_) => Some(crate::translate!("size-diag-label-invalid-suffix")),
+            Self::SizeTooBig(_) => Some(crate::translate!("size-diag-label-too-big")),
+            Self::ParseFailure(_) | Self::PhysicalMem(_) => None,
+        };
+        let span = self.span(size);
+        crate::diagnostics::Snapshot::with_program(args).render_option(
+            option,
+            size_at + span.start..size_at + span.end,
+            message,
+            label.as_deref(),
+            Some(&crate::translate!("size-diag-help-syntax")),
+        )
+    }
+
+    /// The error to raise for a SIZE that does not parse.
+    ///
+    /// Draws the caret when the arguments as typed were kept, and quiets
+    /// `error` when it did: the report has already said everything the
+    /// one-line message would, and the exit code is all that is left to
+    /// carry.
+    ///
+    /// # Arguments
+    ///
+    /// * `diag_args` - The arguments as typed, or `None` when they were not
+    ///   kept — as [`crate::diagnostics::capture`] returns them.
+    /// * `option`, `size_at`, `message` - As for [`Self::render_size_value`].
+    /// * `error` - The error to raise if nothing was drawn.
+    pub fn size_value_error(
+        &self,
+        diag_args: Option<&[std::ffi::OsString]>,
+        option: &crate::diagnostics::OptionValue,
+        size_at: usize,
+        message: &str,
+        error: impl Into<Box<dyn crate::error::UError>>,
+    ) -> Box<dyn crate::error::UError> {
+        crate::diagnostics::error_after_report(diag_args, error, |args, _| {
+            self.render_size_value(args, option, size_at, message)
+        })
     }
 
     fn size_too_big(s: &str) -> Self {
@@ -814,5 +1001,21 @@ mod tests {
         assert!(parse_size_u64("-1%").is_err());
         assert!(parse_size_u64("1.0%").is_err());
         assert!(parse_size_u64("0x1%").is_err());
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn parse_percent_overflow() {
+        // A percentage can fit in a u128 while its product with the total
+        // physical memory does not. `u128::MAX` overflows for any machine
+        // reporting more than 100 bytes of memory.
+        let size = format!("{}%", u128::MAX);
+
+        assert!(variant_eq(
+            &parse_size_u128(&size).unwrap_err(),
+            &ParseSizeError::SizeTooBig(String::new())
+        ));
+        assert_eq!(Ok(u128::MAX), parse_size_u128_max(&size));
+        assert_eq!(Ok(u64::MAX), parse_size_u64_max(&size));
     }
 }

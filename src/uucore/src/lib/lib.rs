@@ -2,15 +2,32 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//! library ~ (core/bundler file)
-// #![deny(missing_docs)] //TODO: enable this
-//
+
 // spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind
+
+//! library ~ (core/bundler file)
+
+// #![deny(missing_docs)] //TODO: enable this
+#![cfg_attr(
+    any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "illumos",
+        all(target_os = "linux", target_env = "ohos"),
+        target_os = "openbsd",
+        target_os = "solaris",
+        all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))
+    ),
+    allow(
+        clippy::missing_const_for_thread_local,
+        reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
+    )
+)]
 
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
 pub extern crate libc;
-#[cfg(all(feature = "windows-sys", target_os = "windows"))]
+#[cfg(all(feature = "windows-sys", windows))]
 pub extern crate windows_sys;
 
 //## internal modules
@@ -22,16 +39,9 @@ mod mods; // core cross-platform modules
 pub use uucore_procs::*;
 
 // * cross-platform modules
-pub use crate::mods::clap_localization;
-pub use crate::mods::display;
-pub use crate::mods::error;
-#[cfg(feature = "fs")]
+#[cfg(all(feature = "fs", any(unix, windows, target_os = "wasi")))]
 pub use crate::mods::io;
-pub use crate::mods::line_ending;
-pub use crate::mods::locale;
-pub use crate::mods::os;
-pub use crate::mods::panic;
-pub use crate::mods::posix;
+pub use crate::mods::{clap_localization, display, error, line_ending, locale, os, panic, posix};
 
 // * feature-gated modules
 #[cfg(feature = "backup-control")]
@@ -52,7 +62,7 @@ pub use crate::features::extendedbigdecimal;
 pub use crate::features::fast_inc;
 #[cfg(feature = "format")]
 pub use crate::features::format;
-#[cfg(feature = "fs")]
+#[cfg(all(feature = "fs", any(unix, windows, target_os = "wasi")))]
 pub use crate::features::fs;
 #[cfg(feature = "hardware")]
 pub use crate::features::hardware;
@@ -60,6 +70,8 @@ pub use crate::features::hardware;
 pub use crate::features::i18n;
 #[cfg(feature = "lines")]
 pub use crate::features::lines;
+#[cfg(feature = "numeric-str-cmp")]
+pub use crate::features::numeric_str_cmp;
 #[cfg(any(
     feature = "parser",
     feature = "parser-num",
@@ -75,7 +87,7 @@ pub use crate::features::ranges;
 pub use crate::features::ringbuffer;
 #[cfg(feature = "sum")]
 pub use crate::features::sum;
-#[cfg(feature = "feat_systemd_logind")]
+#[cfg(all(feature = "systemd_logind", target_os = "linux"))]
 pub use crate::features::systemd_logind;
 #[cfg(feature = "time")]
 pub use crate::features::time;
@@ -85,6 +97,7 @@ pub use crate::features::update_control;
 pub use crate::features::uptime;
 #[cfg(feature = "version-cmp")]
 pub use crate::features::version_cmp;
+pub use crate::features::{char_width, diagnostics};
 
 // * (platform-specific) feature-gated modules
 // ** non-windows (i.e. Unix + Fuchsia)
@@ -95,21 +108,43 @@ pub use crate::features::mode;
 pub use crate::features::entries;
 #[cfg(all(unix, feature = "perms"))]
 pub use crate::features::perms;
-#[cfg(all(unix, any(feature = "pipes", feature = "buf-copy")))]
+#[cfg(all(feature = "pipes", any(target_os = "linux", target_os = "android")))]
 pub use crate::features::pipes;
-#[cfg(all(unix, feature = "process"))]
+#[cfg(all(any(unix, windows), feature = "process"))]
 pub use crate::features::process;
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(all(unix, feature = "safe-copy"))]
+pub use crate::features::safe_copy;
+#[cfg(all(feature = "safe-traversal", unix, not(target_os = "redox")))]
 pub use crate::features::safe_traversal;
-#[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
+#[cfg(all(
+    feature = "signals",
+    any(
+        windows,
+        target_vendor = "apple",
+        target_os = "aix",
+        target_os = "android",
+        target_os = "cygwin",
+        target_os = "freebsd",
+        target_os = "haiku",
+        target_os = "hurd",
+        target_os = "illumos",
+        target_os = "linux",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "redox",
+        target_os = "solaris"
+    )
+))]
 pub use crate::features::signals;
 #[cfg(all(
-    unix,
-    not(target_os = "android"),
-    not(target_os = "fuchsia"),
-    not(target_os = "openbsd"),
-    not(target_os = "redox"),
-    feature = "utmpx"
+    feature = "utmpx",
+    any(
+        target_vendor = "apple",
+        target_os = "cygwin",
+        target_os = "freebsd",
+        target_os = "linux",
+        target_os = "netbsd"
+    )
 ))]
 pub use crate::features::utmpx;
 // ** windows-only
@@ -119,13 +154,23 @@ pub use crate::features::wide;
 #[cfg(feature = "fsext")]
 pub use crate::features::fsext;
 
-#[cfg(all(unix, feature = "fsxattr"))]
+#[cfg(all(
+    feature = "fsxattr",
+    any(
+        target_os = "freebsd",
+        target_os = "hurd",
+        target_os = "linux",
+        target_os = "android",
+        target_os = "macos",
+        target_os = "netbsd"
+    )
+))]
 pub use crate::features::fsxattr;
 
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 pub use crate::features::selinux;
 
-#[cfg(all(target_os = "linux", feature = "smack"))]
+#[cfg(all(feature = "smack", target_os = "linux"))]
 pub use crate::features::smack;
 
 //## core functions
@@ -139,12 +184,14 @@ use nix::sys::signal::{
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader};
-use std::iter;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
-use std::str;
+#[cfg(all(target_os = "wasi", target_env = "p1"))]
+use std::os::wasi::ffi::{OsStrExt, OsStringExt};
 use std::str::Utf8Chunk;
-use std::sync::{LazyLock, atomic::Ordering};
+use std::sync::LazyLock;
+use std::sync::atomic::Ordering;
+use std::{iter, str};
 
 /// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
 /// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
@@ -171,21 +218,15 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
     match util_name {
         // uu_test aliases - '[' is an alias for test
         "[" => "test",
-        "dir" => "ls",  // dir is an alias for ls
-        "vdir" => "ls", // vdir is an alias for ls
-
+        "dir" | "vdir" => "ls", // aliases for ls
         // Default case - return the util name as is
         _ => util_name,
     }
 }
 
-/// Execute utility code for `util`.
-///
-/// This macro expands to a main function that invokes the `uumain` function in `util`
-/// Exits with code returned by `uumain`.
 #[macro_export]
-macro_rules! bin {
-    ($util:ident) => {
+macro_rules! bin_inner {
+    ($util:ident, $post:expr) => {
         pub fn main() {
             use std::io::Write;
             use uucore::locale;
@@ -209,13 +250,28 @@ macro_rules! bin {
 
             // execute utility code
             let code = $util::uumain(uucore::args_os());
+            $post
+
+            std::process::exit(code);
+        }
+    };
+}
+/// Execute utility code for `util`.
+///
+/// This macro expands to a main function that invokes the `uumain` function in `util`
+/// Exits with code returned by `uumain`.
+#[macro_export]
+macro_rules! bin {
+    ($util:ident, no_flush) => {
+        ::uucore::bin_inner! {$util, {}}
+    };
+    ($util:ident) => {
+        ::uucore::bin_inner! {$util, {
             // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
             if let Err(e) = std::io::stdout().flush() {
                 eprintln!("Error flushing stdout: {e}");
             }
-
-            std::process::exit(code);
-        }
+        }}
     };
 }
 
@@ -391,14 +447,14 @@ pub trait Args: Iterator<Item = OsString> + Sized {
 impl<T: Iterator<Item = OsString> + Sized> Args for T {}
 
 /// Returns an iterator over the command line arguments as `OsString`s.
-/// args_os() can be expensive to call
+/// [`args_os()`] can be expensive to call
 pub fn args_os() -> impl Iterator<Item = OsString> {
     ARGV.iter().cloned()
 }
 
 /// Returns an iterator over the command line arguments as `OsString`s, filtering out empty arguments.
 /// This is useful for handling cases where extra whitespace or empty arguments are present.
-/// args_os_filtered() can be expensive to call
+/// [`args_os_filtered()`] can be expensive to call
 pub fn args_os_filtered() -> impl Iterator<Item = OsString> {
     ARGV.iter().filter(|arg| !arg.is_empty()).cloned()
 }
@@ -406,46 +462,36 @@ pub fn args_os_filtered() -> impl Iterator<Item = OsString> {
 /// Read a line from stdin and check whether the first character is `'y'` or `'Y'`
 pub fn read_yes() -> bool {
     let mut s = String::new();
-    match std::io::stdin().read_line(&mut s) {
-        Ok(_) => matches!(s.chars().next(), Some('y' | 'Y')),
-        _ => false,
-    }
+    std::io::stdin().read_line(&mut s).is_ok() && matches!(s.chars().next(), Some('y' | 'Y'))
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("{}", translate!(
+    "error-non-utf8-os-str",
+    "input" => os_display::Quotable::quote(.input_lossy_string.as_str())
+))]
 pub struct NonUtf8OsStrError {
     input_lossy_string: String,
 }
 
-impl std::fmt::Display for NonUtf8OsStrError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use os_display::Quotable;
-        let quoted = self.input_lossy_string.quote();
-        f.write_fmt(format_args!(
-            "invalid UTF-8 input {quoted} encountered when converting to bytes on a platform that doesn't expose byte arguments",
-        ))
-    }
-}
-
-impl std::error::Error for NonUtf8OsStrError {}
 impl error::UError for NonUtf8OsStrError {}
 
 /// Converts an `OsStr` to a UTF-8 `&[u8]`.
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the string can't be coerced to UTF-8.
-#[cfg_attr(unix, expect(clippy::unnecessary_wraps))]
+#[cfg_attr(any(unix, target_os = "wasi"), expect(clippy::unnecessary_wraps))]
 pub fn os_str_as_bytes(os_string: &OsStr) -> Result<&[u8], NonUtf8OsStrError> {
-    #[cfg(unix)]
-    return Ok(os_string.as_bytes());
+    #[cfg(any(unix, target_os = "wasi"))]
+    return Ok(os_string.as_encoded_bytes());
 
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, target_os = "wasi")))]
     os_string
         .to_str()
         .ok_or_else(|| NonUtf8OsStrError {
             input_lossy_string: os_string.to_string_lossy().into_owned(),
         })
-        .map(|s| s.as_bytes())
+        .map(str::as_bytes)
 }
 
 /// Performs a potentially lossy conversion from `OsStr` to UTF-8 bytes.
@@ -453,42 +499,47 @@ pub fn os_str_as_bytes(os_string: &OsStr) -> Result<&[u8], NonUtf8OsStrError> {
 /// This is always lossless on unix platforms,
 /// and wraps [`OsStr::to_string_lossy`] on non-unix platforms.
 pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<'_, [u8]> {
-    #[cfg(unix)]
-    return Cow::from(os_string.as_bytes());
+    #[cfg(any(unix, target_os = "wasi"))]
+    return Cow::from(os_string.as_encoded_bytes());
 
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, target_os = "wasi")))]
     match os_string.to_string_lossy() {
         Cow::Borrowed(slice) => Cow::from(slice.as_bytes()),
         Cow::Owned(owned) => Cow::from(owned.into_bytes()),
     }
 }
 
-/// Converts a `&[u8]` to an `&OsStr`,
-/// or parses it as UTF-8 into an [`OsString`] on non-unix platforms.
+/// Converts a `&[u8]` to an `&OsStr`.
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
-#[cfg_attr(unix, expect(clippy::unnecessary_wraps))]
-pub fn os_str_from_bytes(bytes: &[u8]) -> error::UResult<Cow<'_, OsStr>> {
-    #[cfg(unix)]
-    return Ok(Cow::Borrowed(OsStr::from_bytes(bytes)));
+#[cfg_attr(
+    any(unix, all(target_os = "wasi", target_env = "p1")),
+    expect(clippy::unnecessary_wraps)
+)]
+pub fn os_str_from_bytes(bytes: &[u8]) -> error::UResult<&OsStr> {
+    #[cfg(any(unix, all(target_os = "wasi", target_env = "p1")))]
+    return Ok(OsStr::from_bytes(bytes));
 
-    #[cfg(not(unix))]
-    Ok(Cow::Owned(OsString::from(str::from_utf8(bytes).map_err(
-        |_| error::UUsageError::new(1, "Unable to transform bytes into OsStr"),
-    )?)))
+    #[cfg(not(any(unix, all(target_os = "wasi", target_env = "p1"))))]
+    Ok(OsStr::new(str::from_utf8(bytes).map_err(|_| {
+        error::UUsageError::new(1, "Unable to transform bytes into OsStr")
+    })?))
 }
 
 /// Converts a `Vec<u8>` into an `OsString`, parsing as UTF-8 on non-unix platforms.
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
-#[cfg_attr(unix, expect(clippy::unnecessary_wraps))]
+#[cfg_attr(
+    any(unix, all(target_os = "wasi", target_env = "p1")),
+    expect(clippy::unnecessary_wraps)
+)]
 pub fn os_string_from_vec(vec: Vec<u8>) -> error::UResult<OsString> {
-    #[cfg(unix)]
+    #[cfg(any(unix, all(target_os = "wasi", target_env = "p1")))]
     return Ok(OsString::from_vec(vec));
 
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, all(target_os = "wasi", target_env = "p1"))))]
     Ok(OsString::from(String::from_utf8(vec).map_err(|_| {
         error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
     })?))
@@ -498,11 +549,14 @@ pub fn os_string_from_vec(vec: Vec<u8>) -> error::UResult<OsString> {
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
-#[cfg_attr(unix, expect(clippy::unnecessary_wraps))]
+#[cfg_attr(
+    any(unix, all(target_os = "wasi", target_env = "p1")),
+    expect(clippy::unnecessary_wraps)
+)]
 pub fn os_string_to_vec(s: OsString) -> error::UResult<Vec<u8>> {
-    #[cfg(unix)]
+    #[cfg(any(unix, all(target_os = "wasi", target_env = "p1")))]
     let v = s.into_vec();
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, all(target_os = "wasi", target_env = "p1"))))]
     let v = s
         .into_string()
         .map_err(|_| {
@@ -515,15 +569,15 @@ pub fn os_string_to_vec(s: OsString) -> error::UResult<Vec<u8>> {
 
 /// Equivalent to `std::BufRead::lines` which outputs each line as a `Vec<u8>`,
 /// which avoids panicking on non UTF-8 input.
-pub fn read_byte_lines<R: std::io::Read>(
+fn read_byte_lines<R: std::io::Read>(
     mut buf_reader: BufReader<R>,
-) -> impl Iterator<Item = std::io::Result<Vec<u8>>> {
+) -> impl Iterator<Item = error::UResult<Vec<u8>>> {
     iter::from_fn(move || {
         let mut buf = Vec::with_capacity(256);
 
         match buf_reader.read_until(b'\n', &mut buf) {
             Ok(0) => None,
-            Err(e) => Some(Err(e)),
+            Err(e) => Some(Err(e.into())),
             Ok(_) => {
                 // Trim (\r)\n
                 if buf.ends_with(b"\n") {
@@ -539,14 +593,14 @@ pub fn read_byte_lines<R: std::io::Read>(
     })
 }
 
-/// Equivalent to `std::BufRead::lines` which outputs each line as an `OsString`
-/// This won't panic on non UTF-8 characters on Unix,
-/// but it still will on Windows.
+/// Equivalent to `std::BufRead::lines` which outputs each line as an `OsString`.
+///
+/// On platforms where `OsString` cannot contain arbitrary bytes,
+/// non-UTF8 inputs are reported as an error.
 pub fn read_os_string_lines<R: std::io::Read>(
     buf_reader: BufReader<R>,
-) -> impl Iterator<Item = std::io::Result<OsString>> {
-    read_byte_lines(buf_reader)
-        .map(|byte_line_res| byte_line_res.map(|bl| os_string_from_vec(bl).expect("UTF-8 error")))
+) -> impl Iterator<Item = error::UResult<OsString>> {
+    read_byte_lines(buf_reader).map(|byte_line_res| byte_line_res.and_then(os_string_from_vec))
 }
 
 /// Prompt the user with a formatted string and returns `true` if they reply `'y'` or `'Y'`
@@ -583,7 +637,7 @@ macro_rules! prompt_yes(
 
 /// Represent either a character or a byte.
 /// Used to iterate on partially valid UTF-8 data
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CharByte {
     Char(char),
     Byte(u8),
@@ -679,7 +733,7 @@ mod tests {
         ]
     }
 
-    #[cfg(any(unix, target_os = "redox"))]
+    #[cfg(unix)]
     fn test_invalid_utf8_args_lossy(os_str: &OsStr) {
         // assert our string is invalid utf8
         assert!(os_str.to_os_string().into_string().is_err());
@@ -698,7 +752,7 @@ mod tests {
         );
     }
 
-    #[cfg(any(unix, target_os = "redox"))]
+    #[cfg(unix)]
     fn test_invalid_utf8_args_ignore(os_str: &OsStr) {
         // assert our string is invalid utf8
         assert!(os_str.to_os_string().into_string().is_err());
@@ -723,7 +777,7 @@ mod tests {
         let _ = test_vec.into_iter().collect_lossy();
     }
 
-    #[cfg(any(unix, target_os = "redox"))]
+    #[cfg(unix)]
     #[test]
     fn invalid_utf8_args_unix() {
         use std::os::unix::ffi::OsStrExt;
@@ -732,6 +786,17 @@ mod tests {
         let os_str = OsStr::from_bytes(&source[..]);
         test_invalid_utf8_args_lossy(os_str);
         test_invalid_utf8_args_ignore(os_str);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn invalid_utf8_line_returns_invalid_data() {
+        let input = BufReader::new(&b"valid\ninvalid \xff\n"[..]);
+        let mut lines = read_os_string_lines(input);
+
+        assert_eq!(lines.next().unwrap().unwrap(), OsStr::new("valid"));
+        assert!(lines.next().unwrap().is_err());
+        assert!(lines.next().is_none());
     }
 
     #[test]

@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore nusr
+
 use uutests::new_ucmd;
 use uutests::path_concat;
 use uutests::util::{TestScenario, get_root_path};
@@ -14,6 +16,7 @@ use std::path::{MAIN_SEPARATOR, Path};
 
 static GIBBERISH: &str = "supercalifragilisticexpialidocious";
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_realpath_current_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -21,6 +24,7 @@ fn test_realpath_current_directory() {
     ucmd.arg(".").succeeds().stdout_is(expect);
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_realpath_long_redirection_to_current_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -38,6 +42,7 @@ fn test_realpath_long_redirection_to_root() {
     new_ucmd!().arg(dir).succeeds().stdout_is(expect);
 }
 
+#[uutests::wasi_ignore(AbsoluteSymlinkTargetsUnfollowable)]
 #[test]
 fn test_realpath_file_and_links() {
     let scene = TestScenario::new(util_name!());
@@ -50,6 +55,7 @@ fn test_realpath_file_and_links() {
     scene.ucmd().arg("bar").succeeds().stdout_contains("foo\n");
 }
 
+#[uutests::wasi_ignore(AbsoluteSymlinkTargetsUnfollowable)]
 #[test]
 fn test_realpath_file_and_links_zero() {
     let scene = TestScenario::new(util_name!());
@@ -127,6 +133,7 @@ fn test_realpath_file_and_links_strip_zero() {
     }
 }
 
+#[uutests::wasi_ignore(AbsoluteSymlinkTargetsUnfollowable)]
 #[test]
 fn test_realpath_physical_mode() {
     let scene = TestScenario::new(util_name!());
@@ -160,15 +167,23 @@ fn test_realpath_logical_mode() {
         .stdout_contains("dir1\n");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_realpath_dangling() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("nonexistent-file", "link");
-    ucmd.arg("link")
-        .succeeds()
-        .stdout_contains(at.plus_as_string("nonexistent-file\n"));
+    let output = ucmd.arg("link").succeeds().stdout_move_str();
+    let printed = Path::new(output.trim_end_matches('\n'));
+    assert_eq!(printed.file_name().unwrap(), "nonexistent-file");
+    // Canonicalize the printed parent dir before comparing, since on Windows
+    // CI the temp dir may be reported using its short (8.3) alias, which is
+    // not guaranteed to match the long-form path from `root_dir_resolved()`.
+    let printed_dir = printed.parent().unwrap().canonicalize().unwrap();
+    let expect_dir = Path::new(&at.root_dir_resolved()).canonicalize().unwrap();
+    assert_eq!(printed_dir, expect_dir);
 }
 
+#[uutests::wasi_ignore(AbsoluteSymlinkTargetsUnfollowable)]
 #[test]
 fn test_realpath_loop() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -180,6 +195,43 @@ fn test_realpath_loop() {
         .stderr_contains("Too many levels of symbolic links");
 }
 
+#[test]
+fn test_realpath_growing_loop() {
+    // `foo -> foo/bar` never repeats the same remaining path, so it must be
+    // stopped by the limit on followed symlinks rather than loop forever.
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.relative_symlink_file("foo/bar", "foo");
+    for args in [&[][..], &["-e"], &["-m"], &["-L"], &["-P"]] {
+        scene
+            .ucmd()
+            .args(args)
+            .arg("foo")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("Too many levels of symbolic links");
+    }
+}
+
+#[test]
+fn test_realpath_symlink_follow_limit() {
+    // Like the kernel, give up after following 40 symlinks.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("target");
+    at.relative_symlink_file("target", "link1");
+    for i in 2..=41 {
+        at.relative_symlink_file(format!("link{}", i - 1), format!("link{i}"));
+    }
+    let expect = path_concat!(at.root_dir_resolved(), "target") + "\n";
+    scene.ucmd().arg("link40").succeeds().stdout_only(expect);
+    scene
+        .ucmd()
+        .arg("link41")
+        .fails_with_code(1)
+        .stderr_contains("Too many levels of symbolic links");
+}
+
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_realpath_default_allows_final_non_existent() {
     let p = Path::new("").join(GIBBERISH);
@@ -194,6 +246,7 @@ fn test_realpath_default_forbids_non_final_non_existent() {
     new_ucmd!().arg(p.to_str().unwrap()).fails();
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_realpath_existing() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -209,6 +262,15 @@ fn test_realpath_existing_error() {
 }
 
 #[test]
+fn test_realpath_existing_error_quiet() {
+    new_ucmd!()
+        .args(&["-q", "-e", GIBBERISH])
+        .fails_with_code(1)
+        .no_output();
+}
+
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
 fn test_realpath_missing() {
     let p = Path::new("").join(GIBBERISH).join(GIBBERISH);
     let (at, mut ucmd) = at_and_ucmd!();
@@ -219,6 +281,7 @@ fn test_realpath_missing() {
         .stdout_only(expect);
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_realpath_when_symlink_is_absolute_and_enoent() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -250,6 +313,7 @@ fn test_realpath_when_symlink_is_absolute_and_enoent() {
         .stderr_is("realpath: dir1/foo2: No such file or directory\n");
 }
 
+#[uutests::wasi_ignore(AbsoluteSymlinkTargetsUnfollowable)]
 #[test]
 fn test_realpath_when_symlink_part_is_missing() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -458,6 +522,44 @@ fn test_realpath_trailing_slash() {
         .args(&["-m", "link_no_dir/"])
         .succeeds()
         .stdout_contains(format!("{MAIN_SEPARATOR}no_dir\n"));
+
+    scene
+        .ucmd()
+        .arg("nonexistent/.")
+        .fails()
+        .stderr_contains("No such file or directory\n");
+
+    scene
+        .ucmd()
+        .arg("nonexistent/./")
+        .fails()
+        .stderr_contains("No such file or directory\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_realpath_trailing_slash_unreadable_directory() {
+    // A trailing slash only asserts that the operand is a directory, which is
+    // a stat-level check needing search permission on the parent, not read
+    // permission on the directory itself.
+    // https://github.com/uutils/coreutils/issues/13151
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.set_mode("dir", 0o100);
+
+    scene
+        .ucmd()
+        .arg("dir/")
+        .succeeds()
+        .stdout_contains(format!("{MAIN_SEPARATOR}dir\n"));
+    scene
+        .ucmd()
+        .args(&["-e", "dir/"])
+        .succeeds()
+        .stdout_contains(format!("{MAIN_SEPARATOR}dir\n"));
+
+    at.set_mode("dir", 0o700);
 }
 
 #[test]
@@ -465,6 +567,7 @@ fn test_realpath_empty() {
     new_ucmd!().fails_with_code(1);
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_realpath_non_utf8_paths() {

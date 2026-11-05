@@ -6,12 +6,13 @@
 // spell-checker:ignore (ToDO) errno
 
 use clap::{Arg, ArgAction, Command};
+use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, UUsageError};
+use uucore::error::{FromIo, UResult};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::libc::EINVAL;
 use uucore::line_ending::LineEnding;
@@ -29,14 +30,13 @@ const OPT_ZERO: &str = "zero";
 
 const ARG_FILES: &str = "files";
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let mut no_trailing_delimiter = matches.get_flag(OPT_NO_NEWLINE);
     let use_zero = matches.get_flag(OPT_ZERO);
-    let silent = matches.get_flag(OPT_SILENT) || matches.get_flag(OPT_QUIET);
-    let verbose = matches.get_flag(OPT_VERBOSE);
+    let verbose = matches.get_flag(OPT_VERBOSE) || env::var("POSIXLY_CORRECT").is_ok();
 
     // GNU readlink -f/-e/-m follows symlinks first and then applies `..` (physical resolution).
     // ResolveMode::Logical collapses `..` before following links, which yields the opposite order,
@@ -58,19 +58,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         MissingHandling::Normal
     };
 
+    #[expect(clippy::unwrap_used, reason = "set as required by clap")]
     let files: Vec<PathBuf> = matches
         .get_many::<OsString>(ARG_FILES)
-        .map(|v| v.map(PathBuf::from).collect())
-        .unwrap_or_default();
+        .unwrap()
+        .map(PathBuf::from)
+        .collect();
 
-    if files.is_empty() {
-        return Err(UUsageError::new(
-            1,
-            translate!("readlink-error-missing-operand"),
-        ));
-    }
-
-    if no_trailing_delimiter && files.len() > 1 && !silent {
+    if no_trailing_delimiter && files.len() > 1 {
         show_error!("{}", translate!("readlink-error-ignoring-no-newline"));
         no_trailing_delimiter = false;
     }
@@ -81,6 +76,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(LineEnding::from_zero_flag(use_zero))
     };
 
+    // An operand that cannot be resolved does not stop the ones after it; the
+    // failure only decides the exit status once every operand has been tried.
+    let mut failed = false;
     for p in &files {
         let path_result = if res_mode == ResolveMode::None {
             fs::read_link(p)
@@ -93,28 +91,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 show(&path, line_ending).map_err_context(String::new)?;
             }
             Err(err) => {
-                if silent && !verbose {
-                    return Err(1.into());
+                failed = true;
+                if verbose {
+                    let message = if err.raw_os_error() == Some(EINVAL) {
+                        translate!("readlink-error-invalid-argument", "path" => p.maybe_quote())
+                    } else {
+                        err.map_err_context(|| p.maybe_quote().to_string())
+                            .to_string()
+                    };
+                    show_error!("{message}");
                 }
-
-                let message = if err.raw_os_error() == Some(EINVAL) {
-                    translate!("readlink-error-invalid-argument", "path" => p.maybe_quote())
-                } else {
-                    err.map_err_context(|| p.maybe_quote().to_string())
-                        .to_string()
-                };
-                show_error!("{message}");
-                return Err(1.into());
             }
         }
     }
-    Ok(())
+    if failed { Err(1.into()) } else { Ok(()) }
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("readlink")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("readlink"))
         .about(translate!("readlink-about"))
         .override_usage(format_usage(&translate!("readlink-usage")))
         .infer_long_args(true)
@@ -151,6 +147,7 @@ pub fn uu_app() -> Command {
                 .short('q')
                 .long(OPT_QUIET)
                 .help(translate!("readlink-help-quiet"))
+                .overrides_with_all([OPT_QUIET, OPT_SILENT, OPT_VERBOSE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -158,6 +155,7 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(OPT_SILENT)
                 .help(translate!("readlink-help-silent"))
+                .overrides_with_all([OPT_QUIET, OPT_SILENT, OPT_VERBOSE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -165,6 +163,7 @@ pub fn uu_app() -> Command {
                 .short('v')
                 .long(OPT_VERBOSE)
                 .help(translate!("readlink-help-verbose"))
+                .overrides_with_all([OPT_QUIET, OPT_SILENT, OPT_VERBOSE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -178,6 +177,7 @@ pub fn uu_app() -> Command {
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .value_parser(clap::value_parser!(OsString))
+                .required(true)
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }

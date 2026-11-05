@@ -1,4 +1,10 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
 #![no_main]
+
 use libfuzzer_sys::fuzz_target;
 
 use std::ffi::OsString;
@@ -17,16 +23,17 @@ fuzz_target!(|data: &[u8]| {
     // These would hang the fuzzer waiting for input
     for i in 0..fuzz_args.len() {
         if let Some(arg) = fuzz_args.get(i) {
-            let arg_str = arg.to_string_lossy();
+            let arg_bytes = arg.as_encoded_bytes();
             // Skip if -f- or --file=- or combined options like -Rf- (reads dates from stdin)
-            if (arg_str.starts_with('-') && !arg_str.starts_with("--") && arg_str.ends_with("f-"))
-                || (arg_str == "-f"
+            if (arg_bytes.first() == Some(&b'-')
+                && !arg_bytes.starts_with(b"--")
+                && arg_bytes.ends_with(b"f-"))
+                || (arg_bytes == b"-f"
                     && fuzz_args
                         .get(i + 1)
-                        .map(|a| a.to_string_lossy() == "-")
+                        .map(|a| a.as_encoded_bytes() == b"-")
                         .unwrap_or(false))
-                || arg_str == "-f-"
-                || arg_str == "--file=-"
+                || matches!(arg_bytes, b"-f-" | b"--file=-")
             {
                 return;
             }

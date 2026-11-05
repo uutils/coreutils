@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # spell-checker:ignore debuginfo
-import subprocess
-from itertools import product
-import shutil
 import os
+import shutil
+import subprocess
 from collections import defaultdict
+from itertools import product
 from pprint import pprint
 
 # Set to false if you've only changed the analysis and do not want to recompile

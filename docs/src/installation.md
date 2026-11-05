@@ -15,10 +15,8 @@ You can also [build uutils from source](build.md).
 [![crates.io package](https://repology.org/badge/version-for-repo/crates_io/uutils-coreutils.svg)](https://crates.io/crates/coreutils)
 
 ```shell
-# Linux
+# Unix like
 cargo install coreutils --features unix --locked
-# MacOs
-cargo install coreutils --features macos --locked
 # Windows
 cargo install coreutils --features windows --locked
 ```
@@ -114,7 +112,7 @@ export PATH=/usr/libexec/uutils-coreutils:$PATH
 
 ### Ubuntu
 
-[![Ubuntu package](https://repology.org/badge/version-for-repo/ubuntu_25_04/uutils-coreutils.svg)](https://packages.ubuntu.com/source/plucky/rust-coreutils)
+[![Ubuntu package](https://repology.org/badge/version-for-repo/ubuntu_26_04/uutils-coreutils.svg)](https://packages.ubuntu.com/source/rust-coreutils)
 
 ```shell
 apt install rust-coreutils
@@ -124,9 +122,15 @@ export PATH=/usr/lib/cargo/bin/coreutils:$PATH
 
 ### AUR
 
-[AUR package](https://aur.archlinux.org/packages/uutils-coreutils-git)
+[Build main branch from source](https://aur.archlinux.org/packages/uutils-coreutils-git)
+or
+[Binaries from main branch](https://aur.archlinux.org/packages/uutils-coreutils-git-bin)
 
-Rust rewrite of the GNU coreutils (main branch).
+```shell
+git clone https://aur.archlinux.org/uutils-coreutils-git --depth=1
+cd uutils-coreutils-git
+makepkg -si
+```
 
 ## MacOS
 

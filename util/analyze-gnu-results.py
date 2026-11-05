@@ -100,8 +100,8 @@ def analyze_test_results(json_data):
     error_count = 0  # Not in JSON data but included for compatibility
 
     # Analyze each utility's tests
-    for utility, tests in json_data.items():
-        for test_name, result in tests.items():
+    for tests in json_data.values():
+        for result in tests.values():
             total_tests += 1
 
             match result:

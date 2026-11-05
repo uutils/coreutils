@@ -1,10 +1,9 @@
 name: GnuTests
 
-# spell-checker:ignore (abbrev/names) CodeCov gnulib GnuTests Swatinem
+# spell-checker:ignore (abbrev/names) CodeCov gnulib GnuTests
 # spell-checker:ignore (jargon) submodules devel
-# spell-checker:ignore (libs/utils) chksum dpkg getenforce getlimits gperf lcov libexpect limactl pyinotify setenforce shopt valgrind libattr libcap taiki-e zstd cpio
+# spell-checker:ignore (libs/utils) chksum gperf lcov libexpect limactl pyinotify shopt valgrind libattr libcap taiki-e zstd cpio
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
-# spell-checker:ignore (people) Dawid Dziurla * dawidd dtolnay
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
 # spell-checker:ignore userns nodocs
 
@@ -15,17 +14,22 @@ on:
   push:
     branches:
       - '*'
+      ## the reference branch carries no code, only published test results
+      - '!gnu-reference'
 
 permissions:
   contents: read
 
 # End the current execution if there is a new changeset in the PR.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+  ## Machine-maintained branch holding the latest GNU test results of the
+  ## default branch; every PR run is compared against what it carries.
+  REFERENCE_BRANCH: 'gnu-reference'
   TEST_FULL_SUMMARY_FILE: 'gnu-full-result.json'
   TEST_ROOT_FULL_SUMMARY_FILE: 'gnu-root-full-result.json'
   TEST_STTY_FULL_SUMMARY_FILE: 'gnu-stty-full-result.json'
@@ -36,11 +40,11 @@ env:
 jobs:
   native:
     name: Run GNU tests (native)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04 # some strace? test needs newer glibc
     steps:
-    #### Get the code, setup cache
+    #### Get the code
     - name: Checkout code (uutils)
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7.0.1
       with:
         path: 'uutils'
         persist-credentials: false
@@ -49,15 +53,6 @@ jobs:
         workspaces: "./uutils -> target"
     - name: Checkout code (GNU coreutils)
       run: (mkdir -p gnu && cd gnu && bash ../uutils/util/fetch-gnu.sh)
-    - name: Restore files for faster configure and skipping make
-      uses: actions/cache@v5
-      id: cache-config-gnu
-      with:
-        path: |
-          gnu/config.cache
-          gnu/src/getlimits
-        key: ${{ runner.os }}-gnu-config-${{ hashFiles('gnu/NEWS') }}-${{ hashFiles('uutils/util/build-gnu.sh') }} # use build-gnu.sh for extremely safe caching
-
     #### Build environment setup
     - name: Install dependencies
       shell: bash
@@ -66,8 +61,12 @@ jobs:
         sudo apt-get update
         ## Check that build-gnu.sh works on the non SELinux system by installing libselinux only on lima
         sudo apt-get install -y gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
-        curl http://launchpadlibrarian.net/831710181/automake_1.18.1-3_all.deb > automake-1.18.deb
-        sudo dpkg -i --force-depends automake-1.18.deb
+    - name: Use GNU as the system coreutils
+      shell: bash
+      run: |
+        if dpkg -s coreutils-from-uutils >/dev/null 2>&1; then
+          sudo apt-get install -y --allow-remove-essential coreutils-from-gnu coreutils-from-uutils-
+        fi
     - name: Add various locales
       shell: bash
       run: |
@@ -89,6 +88,7 @@ jobs:
         sudo locale-gen --keep-existing am_ET.UTF-8 # Ethiopia
         sudo locale-gen --keep-existing th_TH.UTF-8 # Thailand
         sudo locale-gen --keep-existing zh_CN.GB18030 # China
+        sudo localedef --no-archive --no-warnings=ascii -f SHIFT_JIS -i ja_JP ja_JP.SHIFT_JIS
 
         sudo update-locale
         echo "After:"
@@ -101,15 +101,6 @@ jobs:
         ## Build binaries
         cd 'uutils'
         env PROFILE=release-small bash util/build-gnu.sh
-
-    - name: Save files for faster configure and skipping make
-      uses: actions/cache/save@v5
-      if: always() && steps.cache-config-gnu.outputs.cache-hit != 'true'
-      with:
-        path: |
-          gnu/config.cache
-          gnu/src/getlimits
-        key: ${{ runner.os }}-gnu-config-${{ hashFiles('gnu/NEWS') }}-${{ hashFiles('uutils/util/build-gnu.sh') }}
 
     ### Run tests as user
     - name: Run GNU tests
@@ -127,21 +118,6 @@ jobs:
       run : |
         path_UUTILS='uutils'
         python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_FULL_SUMMARY_FILE }}
-
-    ### Run tests as root
-    - name: Run GNU root tests
-      shell: bash
-      run: |
-        ## Run GNU root tests
-        path_GNU='gnu'
-        path_UUTILS='uutils'
-        bash "uutils/util/run-gnu-test.sh" run-root
-
-    - name: Extract testing info from individual logs (run as root) into JSON
-      shell: bash
-      run : |
-        path_UUTILS='uutils'
-        python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }}
 
     ### This shell has been changed from "bash" to this command
     ### "script" will start a pty and the -q command removes the "script" initiation log
@@ -164,19 +140,42 @@ jobs:
         path_UUTILS='uutils'
         python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_STTY_FULL_SUMMARY_FILE }}
 
+    ### Run tests as root
+    - name: Run GNU root tests
+      shell: bash
+      run: |
+        ## Root tests drop to nobody via `chroot --user`. /home/runner is
+        ## 0750, so that user cannot reach our build dir and PATH lookup silently
+        ## falls back to the runner's own /usr/bin coreutils. Allow traversal.
+        dir="${GITHUB_WORKSPACE}"
+        while [ "${dir}" != / ]; do sudo chmod o+x "${dir}"; dir=$(dirname "${dir}"); done
+        ## Fail here if that user still cannot run our build, instead of letting the
+        ## tests pass or fail on whatever coreutils the runner image ships.
+        sudo -u nobody "${GITHUB_WORKSPACE}/uutils/target/release-small/id" -u
+        ## Run GNU root tests
+        path_GNU='gnu'
+        path_UUTILS='uutils'
+        bash "uutils/util/run-gnu-test.sh" run-root
+
+    - name: Extract testing info from individual logs (run as root) into JSON
+      shell: bash
+      run : |
+        path_UUTILS='uutils'
+        python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }}
+
     ### Upload artifacts
     - name: Upload full json results
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: gnu-full-result
         path: ${{ env.TEST_FULL_SUMMARY_FILE }}
     - name: Upload root json results
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: gnu-root-full-result
         path: ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }}
     - name: Upload stty json results
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: gnu-stty-full-result
         path: ${{ env.TEST_STTY_FULL_SUMMARY_FILE }}
@@ -187,7 +186,7 @@ jobs:
         # Compress logs before upload (fails otherwise)
         gzip gnu/tests/*/*.log
     - name: Upload test logs
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: test-logs
         path: |
@@ -196,11 +195,11 @@ jobs:
 
   selinux:
     name: Run GNU tests (SELinux)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04 # TODO: use ubuntu-latest, https://github.com/uutils/coreutils/issues/15955 # ubuntu-latest # using VM's glibc
     steps:
-    #### Get the code, setup cache
+    #### Get the code
     - name: Checkout code (uutils)
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7.0.1
       with:
         path: 'uutils'
         persist-credentials: false
@@ -212,7 +211,7 @@ jobs:
       uses: lima-vm/lima-actions/setup@v1
       id: lima-actions-setup
     - name: Cache ~/.cache/lima
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: ~/.cache/lima
         key: lima-${{ steps.lima-actions-setup.outputs.version }}
@@ -226,8 +225,7 @@ jobs:
 
     - name: Install dependencies in VM
       run: |
-        lima sudo dnf -y install --nodocs autoconf bison gperf gcc gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel automake patch quilt
-        lima rustup-init -y --profile=minimal --default-toolchain stable
+        lima sudo dnf -y install --nodocs autoconf bison cargo clippy gperf gcc gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rust clang-devel automake patch quilt
     - name: Copy the sources to VM
       run: |
         rsync -a -e ssh . lima-default:~/work/
@@ -284,12 +282,12 @@ jobs:
         # Copy the test directory now
         rsync -v -a -e ssh lima-default:~/work/gnu/tests/ ./gnu/tests-selinux/
     - name: Upload SELinux json results
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: selinux-gnu-full-result
         path: ${{ env.TEST_SELINUX_FULL_SUMMARY_FILE }}
     - name: Upload SELinux root json results
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: selinux-root-gnu-full-result
         path: ${{ env.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }}
@@ -299,7 +297,7 @@ jobs:
         # Compress logs before upload (fails otherwise)
         gzip gnu/tests-selinux/*/*.log
     - name: Upload SELinux test logs
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: selinux-test-logs
         path: |
@@ -308,10 +306,10 @@ jobs:
 
   qemu:
     name: Run GNU tests (SMACK/ROOTFS)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest # using Arch glibc
     steps:
     - name: Checkout code (uutils)
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7.0.1
       with:
         path: 'uutils'
         persist-credentials: false
@@ -332,14 +330,14 @@ jobs:
       run: |
         python3 uutils/util/gnu-json-result.py gnu/tests-qemu > ${{ env.TEST_QEMU_FULL_SUMMARY_FILE }}
     - name: Upload SMACK/ROOTFS json results
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: qemu-gnu-full-result
         path: ${{ env.TEST_QEMU_FULL_SUMMARY_FILE }}
     - name: Compress SMACK/ROOTFS test logs
       run: gzip gnu/tests-qemu/*/*.log 2>/dev/null || true
     - name: Upload SMACK/ROOTFS test logs
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: qemu-test-logs
         path: |
@@ -349,11 +347,10 @@ jobs:
   aggregate:
     needs: [native, selinux, qemu]
     permissions:
-      actions: read  # for dawidd6/action-download-artifact to query and download artifacts
-      contents: read  # for actions/checkout to fetch code
-      pull-requests: read  # for dawidd6/action-download-artifact to query commit hash
+      actions: read  # to download this run's own result artifacts
+      contents: read  # for actions/checkout to fetch code, and to read the reference branch
     name: Aggregate GNU test results
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
     - name: Initialize workflow variables
       id: vars
@@ -367,53 +364,119 @@ jobs:
 
         outputs TEST_SUMMARY_FILE AGGREGATED_SUMMARY_FILE
     - name: Checkout code (uutils)
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7.0.1
       with:
         path: 'uutils'
         persist-credentials: false
-    - name: Retrieve reference artifacts
-      uses: dawidd6/action-download-artifact@v14
-      # ref: <https://github.com/dawidd6/action-download-artifact>
-      continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
-      with:
-        workflow: GnuTests.yml
-        branch: "${{ env.DEFAULT_BRANCH }}"
-        # workflow_conclusion: success ## (default); * but, if commit with failed GnuTests is merged into the default branch, future commits will all show regression errors in GnuTests CI until o/w fixed
-        workflow_conclusion: completed ## continually recalibrates to last commit of default branch with a successful GnuTests (ie, "self-heals" from GnuTest regressions, but needs more supervision for/of regressions)
-        path: "reference"
+    - name: Fetch reference results (default branch)
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        ## Fetch the reference results published by the last GnuTests run on the
+        ## default branch.
+        ## They live on a dedicated, machine-maintained branch rather than in a
+        ## workflow artifact: an artifact is addressable only by run id, so
+        ## finding one meant listing workflow runs, and the server-side 'branch'
+        ## filter of that listing is served by a search index that is only
+        ## eventually consistent (observed returning nothing newer than a month
+        ## old while the unfiltered listing was current).  A run resolved from a
+        ## stale listing made every test fixed on the default branch since then
+        ## look like a fix contributed by the PR, and every test broken since
+        ## then like a regression introduced by it.  A branch has no such index,
+        ## and no 90-day expiry either.
+        ## A missing reference is not fatal: the branch does not exist until the
+        ## first run on the default branch has published to it.
+        mkdir -p reference/aggregated-result reference/test-summary
+        ## Resolve the branch tip once and read every file at that commit.  The
+        ## branch is force-pushed by 'publish-reference', so reading each file
+        ## by branch name could straddle a publish and pair one file with
+        ## another reference's, comparing against a baseline that never existed.
+        ## Only a 404 means "no reference yet"; any other failure must not be
+        ## mistaken for one, or a transient API error would silently skip both
+        ## comparisons and let a regression through unnoticed.
+        REFERENCE_SHA=''
+        ref_err="${RUNNER_TEMP:-/tmp}/reference-ref.err"
+        for attempt in 1 2 3; do
+          if REFERENCE_SHA=$(gh api "repos/${{ github.repository }}/git/refs/heads/${REFERENCE_BRANCH}" \
+                               --jq '.object.sha' 2>"${ref_err}"); then
+            break
+          fi
+          REFERENCE_SHA=''
+          if grep -q 'HTTP 404' "${ref_err}"; then
+            ## The branch does not exist until the first run on the default
+            ## branch has published to it.
+            break
+          fi
+          if [[ "${attempt}" -eq 3 ]]; then
+            cat "${ref_err}" >&2
+            echo "::error ::Could not resolve the '${REFERENCE_BRANCH}' branch; refusing to report an API failure as a missing baseline."
+            exit 1
+          fi
+          sleep $(( attempt * 5 ))
+        done
+        fetch() {
+          gh api "repos/${{ github.repository }}/contents/${1}?ref=${REFERENCE_SHA}" \
+             -H 'Accept: application/vnd.github.raw' > "${2}" 2>/dev/null \
+            && [[ -s "${2}" ]]
+        }
+        if [[ -n "${REFERENCE_SHA}" ]] \
+           && fetch aggregated-result.json reference/aggregated-result/aggregated-result.json \
+           && fetch gnu-result.json reference/test-summary/gnu-result.json; then
+          ## 'meta.json' says which commit the reference was built from; it is
+          ## informational, so tolerate it being absent or unparsable.
+          meta=$(gh api "repos/${{ github.repository }}/contents/meta.json?ref=${REFERENCE_SHA}" \
+                   -H 'Accept: application/vnd.github.raw' 2>/dev/null || true)
+          published_sha=$(jq -r '.sha // empty' <<< "${meta}" 2>/dev/null || true)
+          published_at=$(jq -r '.published_at // empty' <<< "${meta}" 2>/dev/null || true)
+          echo "Reference: ${{ env.DEFAULT_BRANCH }}@${published_sha:-<unknown>} (published ${published_at:-<unknown>}, ${REFERENCE_BRANCH}@${REFERENCE_SHA})"
+          published_epoch=''
+          if [[ -n "${published_at}" ]]; then
+            published_epoch=$(date -u -d "${published_at}" +%s 2>/dev/null || true)
+          fi
+          if [[ -n "${published_epoch}" ]]; then
+            age_days=$(( ( $(date -u +%s) - published_epoch ) / 86400 ))
+            if [[ "${age_days}" -gt 2 ]]; then
+              echo "::warning ::The reference results are ${age_days} days old (${published_at}); the comparison below may report unrelated fixes and regressions."
+            fi
+          fi
+        else
+          rm -f reference/aggregated-result/aggregated-result.json reference/test-summary/gnu-result.json
+          echo "::warning ::No reference results found on the '${REFERENCE_BRANCH}' branch; the comparisons below will be skipped."
+        fi
     - name: Download full json results
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@v8
       with:
         name: gnu-full-result
         path: results
         merge-multiple: true
     - name: Download root json results
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@v8
       with:
         name: gnu-root-full-result
         path: results
         merge-multiple: true
     - name: Download stty json results
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@v8
       with:
         name: gnu-stty-full-result
         path: results
         merge-multiple: true
 
     - name: Download selinux json results
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@v8
       with:
         name: selinux-gnu-full-result
         path: results
         merge-multiple: true
     - name: Download selinux root json results
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@v8
       with:
         name: selinux-root-gnu-full-result
         path: results
         merge-multiple: true
     - name: Download SMACK/ROOTFS json results
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@v8
       with:
         name: qemu-gnu-full-result
         path: results
@@ -462,17 +525,17 @@ jobs:
         HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
         outputs HASH
     - name: Upload SHA1/ID of 'test-summary'
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: "${{ steps.summary.outputs.HASH }}"
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Upload test results summary
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: test-summary
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Upload aggregated json results
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: aggregated-result
         path: ${{ steps.vars.outputs.AGGREGATED_SUMMARY_FILE }}
@@ -524,7 +587,7 @@ jobs:
         fi
     - name: Upload comparison log (for GnuComment workflow)
       if: success() || failure() # run regardless of prior step success/failure
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: comment
         path: reference/comment/
@@ -541,3 +604,104 @@ jobs:
         else
           echo "::warning ::Skipping test summary comparison; no prior reference summary is available."
         fi
+
+  publish-reference:
+    ## Publish this run's results as the reference that every later PR run is
+    ## compared against.  Only runs on a push to the default branch, so a fork
+    ## PR can never reach it.
+    needs: aggregate
+    if: >
+      always()
+      && github.event_name == 'push'
+      && github.ref_name == github.event.repository.default_branch
+      && needs.aggregate.result != 'cancelled'
+      && needs.aggregate.result != 'skipped'
+    permissions:
+      actions: read  # to download this run's own result artifacts
+      contents: write  # to push to the reference branch
+    name: Publish reference GNU test results
+    runs-on: ubuntu-latest
+    ## Only one run may publish at a time.  The step below reads the currently
+    ## published run id and then force-pushes; two overlapping runs could
+    ## interleave those, letting an older one overwrite a newer reference.
+    concurrency:
+      group: publish-gnu-reference
+      cancel-in-progress: false
+    steps:
+    - name: Download aggregated json results
+      continue-on-error: true ## 'aggregate' may have failed before uploading
+      uses: actions/download-artifact@v8
+      with:
+        name: aggregated-result
+        path: publish
+    - name: Download test results summary
+      continue-on-error: true ## 'aggregate' may have failed before uploading
+      uses: actions/download-artifact@v8
+      with:
+        name: test-summary
+        path: publish
+    - name: Publish to the reference branch
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        ## Publish to the reference branch
+        ## The branch is a single-commit orphan history, force-pushed on every
+        ## run, so it never accumulates history.  Runs on the default branch can
+        ## finish out of order, so refuse to overwrite a reference published by a
+        ## *newer* run (run ids are monotonic).
+        if [[ ! -s publish/aggregated-result.json || ! -s publish/gnu-result.json ]]; then
+          echo "::warning ::This run produced no results to publish; leaving the '${REFERENCE_BRANCH}' branch untouched."
+          exit 0
+        fi
+        ## Fail closed: only a 404 means nothing has been published yet.  A
+        ## suppressed error read as run id 0 would let this run force-push over
+        ## a reference a newer run had already placed.
+        published_run=0
+        meta_err="${RUNNER_TEMP:-/tmp}/published-meta.err"
+        for attempt in 1 2 3; do
+          if published_meta=$(gh api "repos/${{ github.repository }}/contents/meta.json?ref=${REFERENCE_BRANCH}" \
+                                -H 'Accept: application/vnd.github.raw' 2>"${meta_err}"); then
+            published_run=$(jq -r '.run_id // 0' <<< "${published_meta}" 2>/dev/null || echo 0)
+            break
+          fi
+          if grep -q 'HTTP 404' "${meta_err}"; then
+            break
+          fi
+          if [[ "${attempt}" -eq 3 ]]; then
+            cat "${meta_err}" >&2
+            echo "::error ::Could not read the published reference; refusing to force-push over a possibly newer one."
+            exit 1
+          fi
+          sleep $(( attempt * 5 ))
+        done
+        if [[ "${published_run}" =~ ^[0-9]+$ ]] && (( published_run > GITHUB_RUN_ID )); then
+          echo "::notice ::Run ${published_run} already published a newer reference; nothing to do."
+          exit 0
+        fi
+        jq -n --arg sha "${GITHUB_SHA}" \
+              --arg run_id "${GITHUB_RUN_ID}" \
+              --arg branch "${GITHUB_REF_NAME}" \
+              --arg published_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              '{sha: $sha, run_id: $run_id, branch: $branch, published_at: $published_at}' \
+          > publish/meta.json
+        printf '%s\n' \
+          '# GNU test reference results' \
+          '' \
+          'Machine-maintained branch: the GNU test results of the latest run of' \
+          'the `GnuTests` workflow on the default branch.  Every pull request run' \
+          'is compared against the files here, so that it reports only the test' \
+          'changes the pull request is itself responsible for.' \
+          '' \
+          'Do not commit here by hand; the branch is force-pushed on every run.' \
+          > publish/README.md
+        cd publish
+        git init -q -b "${REFERENCE_BRANCH}"
+        git config user.name 'github-actions[bot]'
+        git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+        git add -A
+        git commit -q -m "GNU test results for ${GITHUB_SHA}"
+        git push -q --force \
+          "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+          "HEAD:refs/heads/${REFERENCE_BRANCH}"
+        echo "::notice ::Published reference results for ${GITHUB_SHA}."

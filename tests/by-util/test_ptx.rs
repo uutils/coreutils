@@ -2,13 +2,18 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore roff
 // spell-checker:ignore funnnnnnnnnnnnnnnnn
+
+use rstest::rstest;
 use uutests::new_ucmd;
 
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+    new_ucmd!().arg("-g").arg("0").fails_with_code(1); // clap provided message
+    new_ucmd!().arg("-w").arg("0").fails_with_code(1); // clap provided message
 }
 #[test]
 fn test_reference_format_for_stdin() {
@@ -294,12 +299,31 @@ fn test_sentence_regexp_newlines_are_spaces() {
         .stdout_contains("Start of sentence");
 }
 
+#[rstest]
+#[case::sentence("-S", "ab[c")]
+#[case::word("-W", "(wrong")]
+fn test_invalid_regexp(#[case] option: &str, #[case] pattern: &str) {
+    new_ucmd!()
+        .args(&[option, pattern])
+        .pipe_in("ab\n")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is(format!(
+            "ptx: Invalid regular expression (for regexp '{pattern}')\n"
+        ));
+}
+
 #[test]
 fn test_gnu_mode_dumb_format() {
     // Test GNU mode (dumb format) - the default mode without -G flag
     new_ucmd!().pipe_in("a b").succeeds().stdout_only(
         "                                       a b\n                                   a   b\n",
     );
+
+    new_ucmd!()
+        .pipe_in("2a")
+        .succeeds()
+        .stdout_only(format!("{}2   a\n", " ".repeat(35)));
 }
 
 #[test]
@@ -331,12 +355,60 @@ fn test_unicode_padding_alignment() {
 }
 
 #[test]
+fn test_gnu_compat_numeric_token_with_emoji_produces_no_index() {
+    // GNU ptx produces no output for this input in default mode.
+    new_ucmd!()
+        .pipe_in("012345678901234567890123456789🛠\n")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
 fn test_unicode_truncation_alignment() {
     new_ucmd!()
         .args(&["-w", "10"])
         .pipe_in("föö bar")
         .succeeds()
         .stdout_only("     /   bar\n        föö/\n");
+}
+
+#[test]
+fn test_unicode_in_after_chunk_does_not_panic() {
+    // Regression test for a panic in get_output_chunks() when the computed
+    // max_after_size used byte lengths but the output was assembled as chars.
+    // The emoji is multibyte in UTF-8 and previously could trigger:
+    // `assertion failed: max_after_size >= after.len()`.
+    new_ucmd!()
+        .pipe_in("We've got +11 more G of 1.70. 🛠\n")
+        .succeeds()
+        .stdout_contains("We've got +11");
+}
+
+#[test]
+fn test_unicode_in_before_chunk_does_not_panic() {
+    // Regression test for issue #10893: a panic in get_output_chunks() when the
+    // computed max_before_size used char counts but the assert compared against
+    // before.len() (byte length). A multibyte char in the before chunk could
+    // trigger: `assertion failed: max_before_size >= before.len()`.
+    new_ucmd!()
+        .args(&["-w", "10"])
+        .pipe_in("éé word\n")
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
+fn test_unicode_tail_chunk_sizing() {
+    // The tail chunk budget (max_tail_size) subtracts the size of the before
+    // chunk. It must use the before chunk's char count, not its byte length,
+    // otherwise a multibyte before chunk shrinks the tail too much and drops a
+    // word that fits. Here "cc" wraps into the tail before "aé bé KEY"; with the
+    // byte-based budget it was dropped.
+    new_ucmd!()
+        .args(&["-w", "20"])
+        .pipe_in("aé bé KEY cc dd ee ff gg\n")
+        .succeeds()
+        .stdout_contains("cc/ aé");
 }
 
 #[test]
@@ -357,11 +429,96 @@ fn test_narrow_width_with_long_reference_no_panic() {
 }
 
 #[test]
+fn test_typeset_mode_default_width_100() {
+    new_ucmd!()
+        .args(&["-t"])
+        .pipe_in("bar\n")
+        .succeeds()
+        .stdout_only(format!("{}bar\n", " ".repeat(53)));
+}
+
+#[test]
+fn test_typeset_mode_w_overrides_t() {
+    new_ucmd!()
+        .args(&["-t", "-w", "10"])
+        .pipe_in("bar\n")
+        .succeeds()
+        .stdout_only(format!("{}bar\n", " ".repeat(8)));
+}
+
+#[test]
+fn test_default_width_72() {
+    new_ucmd!()
+        .pipe_in("bar\n")
+        .succeeds()
+        .stdout_only(format!("{}bar\n", " ".repeat(39)));
+}
+
+#[test]
 fn test_invalid_regex_word_trailing_backslash() {
     new_ucmd!().args(&["-W", "bar\\"]).succeeds().no_stderr();
 }
 
 #[test]
-fn test_invalid_regex_word_unclosed_group() {
-    new_ucmd!().args(&["-W", "(wrong"]).succeeds().no_stderr();
+fn test_missing_file_error_contains_filename() {
+    new_ucmd!()
+        .arg("zxc")
+        .fails()
+        .stderr_is("ptx: 'zxc': No such file or directory\n");
+}
+
+#[test]
+fn test_sentence_regex_trailing_backslash() {
+    // GNU treats a trailing lone backslash as a literal one instead of erroring.
+    new_ucmd!()
+        .args(&["-S", "paris\\"])
+        .pipe_in("")
+        .succeeds()
+        .no_output();
+    new_ucmd!()
+        .args(&["-S", "london\\\\\\"])
+        .pipe_in("")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+fn test_invalid_utf8_input_is_not_an_error() {
+    new_ucmd!()
+        .pipe_in(b"ab\xFFcd\n".to_vec())
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
+fn test_nullable_word_regexp_no_empty_matches() {
+    let expected = concat!(
+        "                                       aa bb cc\n",
+        "                                  aa   bb cc\n"
+    );
+    new_ucmd!()
+        .args(&["-W", "[ab]{0,}"])
+        .pipe_in("aa bb cc\n")
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
+fn test_repeated_flags_are_accepted() {
+    new_ucmd!()
+        .args(&["-G", "-A", "-A"])
+        .pipe_in("hello world\n")
+        .succeeds()
+        .stdout_only(concat!(
+            ".xx \"\" \"\" \"hello world\" \"\" \":1\"\n",
+            ".xx \"\" \"hello\" \"world\" \"\" \":1\"\n"
+        ));
+    new_ucmd!()
+        .args(&["-f", "-f"])
+        .pipe_in("hello world\n")
+        .succeeds()
+        .stdout_only(concat!(
+            "                                       hello world\n",
+            "                               hello   world\n"
+        ));
 }

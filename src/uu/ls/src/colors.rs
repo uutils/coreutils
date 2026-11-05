@@ -2,10 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use super::PathData;
 use lscolors::{Indicator, LsColors, Style};
+use rustc_hash::FxHashMap;
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
 use std::fs::{self, Metadata};
@@ -44,10 +45,13 @@ pub(crate) struct StyleManager<'a> {
     /// `true` if the initial reset is applied
     pub(crate) initial_reset_is_done: bool,
     pub(crate) colors: &'a LsColors,
-    /// raw indicator codes as specified in LS_COLORS (if available)
-    indicator_codes: HashMap<Indicator, String>,
+    /// raw indicator codes as specified in `LS_COLORS` (if available)
+    indicator_codes: FxHashMap<Indicator, String>,
     /// whether ln=target is active
     ln_color_from_target: bool,
+    /// Length of the escape sequence the last `apply_*` call prepended to the
+    /// name. Used by `--dired` to skip it.
+    last_style_prefix_len: usize,
 }
 
 impl<'a> StyleManager<'a> {
@@ -59,6 +63,7 @@ impl<'a> StyleManager<'a> {
             colors,
             indicator_codes,
             ln_color_from_target,
+            last_style_prefix_len: 0,
         }
     }
 
@@ -73,10 +78,10 @@ impl<'a> StyleManager<'a> {
         let mut force_suffix_reset: bool = false;
         let mut applied_raw_code = false;
 
-        if self.is_reset() {
-            if let Some(norm_sty) = self.get_normal_style().copied() {
-                style_code.push_str(&self.get_style_code(&norm_sty));
-            }
+        if self.is_reset()
+            && let Some(norm_sty) = self.get_normal_style().copied()
+        {
+            style_code.push_str(&self.get_style_code(&norm_sty));
         }
 
         if let Some(path) = path {
@@ -110,6 +115,7 @@ impl<'a> StyleManager<'a> {
         // till the end of line
         let clear_to_eol = if wrap { ANSI_CLEAR_EOL } else { "" };
 
+        self.last_style_prefix_len = style_code.len();
         let mut ret: OsString = style_code.into();
         ret.push(name);
         ret.push(self.reset(force_suffix_reset));
@@ -205,10 +211,9 @@ impl<'a> StyleManager<'a> {
         self.current_style = Some(*new_style);
         let mut nu_a_style = new_style.to_nu_ansi_term_style();
         nu_a_style.prefix_with_reset = false;
-        let mut ret = nu_a_style.paint("").to_string();
-        // remove the suffix reset
-        ret.truncate(ret.len() - 4);
-        ret
+        // `prefix()` yields the escape sequence on its own, and an empty string
+        // for a style without any attribute, so there is no trailing reset to strip
+        nu_a_style.prefix().to_string()
     }
 
     pub(crate) fn is_current_style(&self, new_style: &Style) -> bool {
@@ -227,6 +232,11 @@ impl<'a> StyleManager<'a> {
             return self.get_style_code(&sty);
         }
         String::new()
+    }
+
+    /// See [`StyleManager::last_style_prefix_len`].
+    pub(crate) fn last_style_prefix_len(&self) -> usize {
+        self.last_style_prefix_len
     }
 
     pub(crate) fn apply_style_based_on_metadata(
@@ -263,7 +273,9 @@ impl<'a> StyleManager<'a> {
                 return self.apply_empty_style(name, wrap);
             }
 
-            let mut ret: OsString = self.build_raw_style_code(&raw).into();
+            let style_code = self.build_raw_style_code(&raw);
+            self.last_style_prefix_len = style_code.len();
+            let mut ret: OsString = style_code.into();
             ret.push(name);
             ret.push(self.reset(true));
             if wrap {
@@ -302,6 +314,7 @@ impl<'a> StyleManager<'a> {
         style_code.push_str(self.reset(!self.initial_reset_is_done));
         style_code.push_str(EMPTY_STYLE);
 
+        self.last_style_prefix_len = style_code.len();
         let mut ret: OsString = style_code.into();
         ret.push(name);
         ret.push(self.reset(true));
@@ -324,10 +337,10 @@ impl<'a> StyleManager<'a> {
             return None;
         }
         let mut target = path.path().read_link().ok()?;
-        if target.is_relative() {
-            if let Some(parent) = path.path().parent() {
-                target = parent.join(target);
-            }
+        if target.is_relative()
+            && let Some(parent) = path.path().parent()
+        {
+            target = parent.join(target);
         }
 
         match fs::metadata(&target) {
@@ -388,7 +401,7 @@ impl<'a> StyleManager<'a> {
 
         if target_missing {
             let orphan_raw = self.indicator_codes.get(&Indicator::OrphanedSymbolicLink);
-            let orphan_raw_is_empty = orphan_raw.is_some_and(|value| value.is_empty());
+            let orphan_raw_is_empty = orphan_raw.is_some_and(String::is_empty);
             if orphan_enabled && (!orphan_raw_is_empty || self.ln_color_from_target) {
                 return Some(Indicator::OrphanedSymbolicLink);
             }
@@ -404,23 +417,21 @@ impl<'a> StyleManager<'a> {
 
     #[cfg(unix)]
     fn indicator_for_file(&self, path: &PathData) -> Option<Indicator> {
-        if self.needs_file_metadata() {
-            if let Some(metadata) = path.metadata() {
-                let mode = metadata.mode();
-                if self.has_indicator_style(Indicator::Setuid) && mode & mode::SETUID != 0 {
-                    return Some(Indicator::Setuid);
-                }
-                if self.has_indicator_style(Indicator::Setgid) && mode & mode::SETGID != 0 {
-                    return Some(Indicator::Setgid);
-                }
-                if self.has_indicator_style(Indicator::ExecutableFile)
-                    && mode & mode::EXECUTABLE != 0
-                {
-                    return Some(Indicator::ExecutableFile);
-                }
-                if self.has_indicator_style(Indicator::MultipleHardLinks) && metadata.nlink() > 1 {
-                    return Some(Indicator::MultipleHardLinks);
-                }
+        if self.needs_file_metadata()
+            && let Some(metadata) = path.metadata()
+        {
+            let mode = metadata.mode();
+            if self.has_indicator_style(Indicator::Setuid) && mode & mode::SETUID != 0 {
+                return Some(Indicator::Setuid);
+            }
+            if self.has_indicator_style(Indicator::Setgid) && mode & mode::SETGID != 0 {
+                return Some(Indicator::Setgid);
+            }
+            if self.has_indicator_style(Indicator::ExecutableFile) && mode & mode::EXECUTABLE != 0 {
+                return Some(Indicator::ExecutableFile);
+            }
+            if self.has_indicator_style(Indicator::MultipleHardLinks) && metadata.nlink() > 1 {
+                return Some(Indicator::MultipleHardLinks);
             }
         }
 
@@ -442,22 +453,22 @@ impl<'a> StyleManager<'a> {
 
     #[cfg(unix)]
     fn indicator_for_directory(&self, path: &PathData) -> Option<Indicator> {
-        if self.needs_dir_metadata() {
-            if let Some(metadata) = path.metadata() {
-                let mode = metadata.mode();
-                if self.has_indicator_style(Indicator::StickyAndOtherWritable)
-                    && mode & mode::STICKY_OTHER_WRITABLE == mode::STICKY_OTHER_WRITABLE
-                {
-                    return Some(Indicator::StickyAndOtherWritable);
-                }
-                if self.has_indicator_style(Indicator::OtherWritable)
-                    && mode & mode::OTHER_WRITABLE != 0
-                {
-                    return Some(Indicator::OtherWritable);
-                }
-                if self.has_indicator_style(Indicator::Sticky) && mode & mode::STICKY != 0 {
-                    return Some(Indicator::Sticky);
-                }
+        if self.needs_dir_metadata()
+            && let Some(metadata) = path.metadata()
+        {
+            let mode = metadata.mode();
+            if self.has_indicator_style(Indicator::StickyAndOtherWritable)
+                && mode & mode::STICKY_OTHER_WRITABLE == mode::STICKY_OTHER_WRITABLE
+            {
+                return Some(Indicator::StickyAndOtherWritable);
+            }
+            if self.has_indicator_style(Indicator::OtherWritable)
+                && mode & mode::OTHER_WRITABLE != 0
+            {
+                return Some(Indicator::OtherWritable);
+            }
+            if self.has_indicator_style(Indicator::Sticky) && mode & mode::STICKY != 0 {
+                return Some(Indicator::Sticky);
             }
         }
 
@@ -524,13 +535,18 @@ pub(crate) fn color_name(
     wrap: bool,
 ) -> OsString {
     // Check if the file has capabilities
-    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "hurd",
+        target_os = "linux",
+        target_os = "netbsd"
+    ))]
     {
         // Skip checking capabilities if LS_COLORS=ca=:
         let has_capabilities = style_manager
             .colors
             .has_explicit_style_for(Indicator::Capabilities)
-            && uucore::fsxattr::has_security_cap_acl(path.p_buf.as_path());
+            && uucore::fsxattr::has_security_cap_acl(&path.p_buf, path.must_dereference);
 
         // If the file has capabilities, use a specific style for `ca` (capabilities)
         if has_capabilities {
@@ -541,10 +557,11 @@ pub(crate) fn color_name(
         }
     }
 
-    if target_symlink.is_none() && path.file_type().is_some_and(|ft| ft.is_symlink()) {
-        if let Some(colored) = style_manager.color_symlink_name(path, name.clone(), wrap) {
-            return colored;
-        }
+    if target_symlink.is_none()
+        && path.file_type().is_some_and(fs::FileType::is_symlink)
+        && let Some(colored) = style_manager.color_symlink_name(path, name.clone(), wrap)
+    {
+        return colored;
     }
 
     if let Some(target) = target_symlink {
@@ -588,42 +605,47 @@ pub(crate) fn validate_ls_colors_env() -> Result<(), LsColorsParseError> {
 
 // GNU-like parser: ensure LS_COLORS has valid labels and well-formed escapes.
 fn validate_ls_colors(ls_colors: &str) -> Result<(), LsColorsParseError> {
+    const VALID_PREFIXES: &[&[u8; 2]] = &[
+        b"lc", b"rc", b"ec", b"rs", b"no", b"fi", b"di", b"ln", b"pi", b"so", b"bd", b"cd", b"mi",
+        b"or", b"ex", b"do", b"su", b"sg", b"st", b"ow", b"tw", b"ca", b"mh", b"cl",
+    ];
+
     let bytes = ls_colors.as_bytes();
     let mut idx = 0;
 
-    while idx < bytes.len() {
-        match bytes[idx] {
+    while let Some(&byte) = bytes.get(idx) {
+        match byte {
             b':' => {
                 idx += 1;
             }
             b'*' => {
                 idx += 1;
                 idx = parse_funky_string(bytes, idx, true)?;
-                if idx >= bytes.len() || bytes[idx] != b'=' {
+                if bytes.get(idx) != Some(&b'=') {
                     return Err(LsColorsParseError::InvalidSyntax);
                 }
                 idx += 1;
                 idx = parse_funky_string(bytes, idx, false)?;
-                if idx < bytes.len() && bytes[idx] == b':' {
+                if bytes.get(idx) == Some(&b':') {
                     idx += 1;
                 }
             }
             _ => {
-                if idx + 1 >= bytes.len() {
+                let Some(&byte_next) = bytes.get(idx + 1) else {
                     return Err(LsColorsParseError::InvalidSyntax);
-                }
-                let label = [bytes[idx], bytes[idx + 1]];
+                };
+                let label = &[byte, byte_next];
                 idx += 2;
-                if idx >= bytes.len() || bytes[idx] != b'=' {
+                if bytes.get(idx) != Some(&b'=') {
                     return Err(LsColorsParseError::InvalidSyntax);
                 }
-                if !is_valid_ls_colors_prefix(label) {
-                    let prefix = String::from_utf8_lossy(&label).into_owned();
+                if !VALID_PREFIXES.contains(&label) {
+                    let prefix = String::from_utf8_lossy(label).into_owned();
                     return Err(LsColorsParseError::UnrecognizedPrefix(prefix));
                 }
                 idx += 1;
                 idx = parse_funky_string(bytes, idx, false)?;
-                if idx < bytes.len() && bytes[idx] == b':' {
+                if bytes.get(idx) == Some(&b':') {
                     idx += 1;
                 }
             }
@@ -649,7 +671,7 @@ fn parse_funky_string(
 
     let mut state = State::Ground;
     loop {
-        let byte = if idx < bytes.len() { bytes[idx] } else { 0 };
+        let byte = bytes.get(idx).unwrap_or(&0);
         match state {
             State::Ground => match byte {
                 b':' | 0 => return Ok(idx),
@@ -672,10 +694,6 @@ fn parse_funky_string(
                 }
                 b'x' | b'X' => {
                     state = State::Hex(0);
-                    idx += 1;
-                }
-                b'a' | b'b' | b'e' | b'f' | b'n' | b'r' | b't' | b'v' | b'?' | b'_' => {
-                    state = State::Ground;
                     idx += 1;
                 }
                 _ => {
@@ -716,38 +734,8 @@ fn parse_funky_string(
     }
 }
 
-fn is_valid_ls_colors_prefix(label: [u8; 2]) -> bool {
-    matches!(
-        label,
-        [b'l', b'c']
-            | [b'r', b'c']
-            | [b'e', b'c']
-            | [b'r', b's']
-            | [b'n', b'o']
-            | [b'f', b'i']
-            | [b'd', b'i']
-            | [b'l', b'n']
-            | [b'p', b'i']
-            | [b's', b'o']
-            | [b'b', b'd']
-            | [b'c', b'd']
-            | [b'm', b'i']
-            | [b'o', b'r']
-            | [b'e', b'x']
-            | [b'd', b'o']
-            | [b's', b'u']
-            | [b's', b'g']
-            | [b's', b't']
-            | [b'o', b'w']
-            | [b't', b'w']
-            | [b'c', b'a']
-            | [b'm', b'h']
-            | [b'c', b'l']
-    )
-}
-
-fn parse_indicator_codes() -> (HashMap<Indicator, String>, bool) {
-    let mut indicator_codes = HashMap::new();
+fn parse_indicator_codes() -> (FxHashMap<Indicator, String>, bool) {
+    let mut indicator_codes = FxHashMap::default();
     let mut ln_color_from_target = false;
 
     // LS_COLORS validity is checked before enabling color output, so parse
@@ -786,7 +774,9 @@ fn parse_indicator_codes() -> (HashMap<Indicator, String>, bool) {
 }
 
 fn canonicalize_indicator_value(value: &str) -> Cow<'_, str> {
-    if value.len() == 1 && value.chars().all(|c| c.is_ascii_digit()) {
+    if let [first] = value.as_bytes()
+        && first.is_ascii_digit()
+    {
         let mut canonical = String::with_capacity(2);
         canonical.push('0');
         canonical.push_str(value);
@@ -813,7 +803,7 @@ mod tests {
 
     fn style_manager(
         colors: &LsColors,
-        indicator_codes: HashMap<Indicator, String>,
+        indicator_codes: FxHashMap<Indicator, String>,
     ) -> StyleManager<'_> {
         StyleManager {
             current_style: None,
@@ -821,27 +811,28 @@ mod tests {
             colors,
             indicator_codes,
             ln_color_from_target: false,
+            last_style_prefix_len: 0,
         }
     }
 
     #[test]
     fn has_indicator_style_ignores_fallback_styles() {
         let colors = LsColors::from_string("ex=00:fi=32");
-        let manager = style_manager(&colors, HashMap::new());
+        let manager = style_manager(&colors, FxHashMap::default());
         assert!(!manager.has_indicator_style(Indicator::ExecutableFile));
     }
 
     #[test]
     fn has_indicator_style_detects_explicit_styles() {
         let colors = LsColors::from_string("ex=01;32");
-        let manager = style_manager(&colors, HashMap::new());
+        let manager = style_manager(&colors, FxHashMap::default());
         assert!(manager.has_indicator_style(Indicator::ExecutableFile));
     }
 
     #[test]
     fn has_indicator_style_detects_raw_codes() {
         let colors = LsColors::empty();
-        let mut indicator_codes = HashMap::new();
+        let mut indicator_codes = FxHashMap::default();
         indicator_codes.insert(Indicator::Directory, "01;34".to_string());
         let manager = style_manager(&colors, indicator_codes);
         assert!(manager.has_indicator_style(Indicator::Directory));

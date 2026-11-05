@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore mangen tldr
+// spell-checker:ignore mangen tldr mandoc uppercasing uppercased manpages DESTDIR
 
 use std::{
     collections::HashMap,
@@ -16,15 +16,82 @@ use std::{
 use clap::{Arg, Command};
 use clap_complete::Shell;
 use clap_mangen::Man;
-use fluent_syntax::ast::{Entry, Message, Pattern};
-use fluent_syntax::parser;
+use fluent_syntax::{
+    ast::{
+        Entry, Expression, InlineExpression, Message, Pattern,
+        PatternElement::{Placeable, TextElement},
+    },
+    parser,
+};
+use jiff::{Timestamp, Zoned, tz::TimeZone};
+use regex::Regex;
 use textwrap::{fill, indent, termwidth};
 use zip::ZipArchive;
 
 use coreutils::validation;
 use uucore::Args;
+use uucore::locale::get_message;
 
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Post-process a generated manpage to fix mandoc lint issues
+///
+/// This function:
+/// - Fixes the TH header by uppercasing command names and adding a proper date
+/// - Removes trailing whitespace from all lines
+/// - Fixes redundant .br paragraph macros that cause mandoc warnings
+/// - Removes .br before empty lines to avoid "br before sp" warnings
+/// - Removes .br after empty lines to avoid "br after sp" warnings
+/// - Fixes escape sequences (e.g., \\\\0 to \\0) to avoid "undefined escape" warnings
+fn post_process_manpage(manpage: String, date: &str) -> String {
+    // Only match TH headers that have at least a command name on the same line
+    // Use [ \t] instead of \s to avoid matching newlines
+    // Use a date format that satisfies mandoc (YYYY-MM-DD)
+
+    let th_regex = Regex::new(r"(?m)^\.TH[ \t]+([^ \t\n]+)(?:[ \t]+[^\n]*)?$").unwrap();
+    let mut result = th_regex
+        .replace_all(&manpage, |caps: &regex::Captures| {
+            // Add date to satisfy mandoc - date must be quoted
+            format!(".TH {} 1 \"{date}\"", caps[1].to_uppercase())
+        })
+        .to_string();
+
+    // Process lines: remove trailing whitespace and fix .br issues in a single pass
+    let lines: Vec<&str> = result.lines().map(str::trim_end).collect();
+    let mut fixed_lines: Vec<&str> = Vec::with_capacity(lines.len());
+
+    for (i, &line) in lines.iter().enumerate() {
+        if line == ".br" {
+            let preceded_by_empty_line = lines.get(i - 1).is_some_and(|l| l.is_empty());
+            let line_next = lines.get(i + 1);
+            let followed_by_empty_line = line_next.is_some_and(|l| l.is_empty());
+            let followed_by_br = line_next == Some(&".br");
+
+            if preceded_by_empty_line || followed_by_empty_line || followed_by_br {
+                // skip this ".br"
+                continue;
+            }
+        }
+
+        fixed_lines.push(line);
+    }
+
+    result = fixed_lines.join("\n");
+
+    // Fix escape sequence issues
+    // \\\\0 appears when trying to represent literal \0 string
+    // In man pages, use \e for literal backslash
+    result = result.replace("\\\\\\\\0", "\\e0");
+    result = result.replace("\\\\0", "\\e0");
+
+    if !result.ends_with('\n') {
+        result.push('\n');
+    }
+
+    result
+}
 
 /// Print usage information for uudoc
 fn usage<T: Args>(utils: &UtilityMap<T>) {
@@ -86,17 +153,37 @@ fn gen_manpage<T: Args>(
         let mut cmd = util_map.get(utility).unwrap().1();
         cmd.set_bin_name(utility.clone());
         let mut cmd = cmd.display_name(utility);
-        if let Some(zip) = tldr {
-            if let Ok(examples) = write_zip_examples(zip, utility, false) {
-                cmd = cmd.after_help(examples);
-            }
+        if let Some(zip) = tldr
+            && let Ok(examples) = write_zip_examples(zip, utility, false)
+        {
+            cmd = cmd.after_help(examples);
         }
         cmd
     };
 
-    let man = Man::new(command);
-    man.render(&mut io::stdout())
-        .expect("Man page generation failed");
+    // Generate the manpage to a buffer first so we can post-process it
+    let mut buffer = Vec::new();
+    let man = Man::new(command.version(VERSION));
+    man.render(&mut buffer).expect("Man page generation failed");
+
+    // Convert to string for processing
+    let manpage = String::from_utf8(buffer).expect("Invalid UTF-8 in manpage");
+
+    // Use `SOURCE_DATE_EPOCH` for reproducible builds if set and valid; otherwise use the current time.
+    let now = std::env::var("SOURCE_DATE_EPOCH")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .and_then(|s| Timestamp::new(s, 0).ok())
+        .map_or_else(Zoned::now, |t| t.to_zoned(TimeZone::UTC));
+
+    // Post-process the manpage to fix mandoc lint issues
+    let date = now.strftime("%Y-%m-%d").to_string();
+    let processed_manpage = post_process_manpage(manpage, &date);
+
+    // Write the processed manpage to stdout
+    io::stdout()
+        .write_all(processed_manpage.as_bytes())
+        .unwrap();
     io::stdout().flush().unwrap();
     process::exit(0);
 }
@@ -173,6 +260,8 @@ fn main() -> io::Result<()> {
         }
     }
     let utils = util_map::<Box<dyn Iterator<Item = OsString>>>();
+    // Initialize localization for uucore common strings (used by tldr example attribution)
+    let _ = uucore::locale::setup_localization("uudoc");
     match std::fs::create_dir("docs/src/utils/") {
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(()),
         x => x,
@@ -192,8 +281,10 @@ fn main() -> io::Result<()> {
         * [Contributing](CONTRIBUTING.md)\n\
         \t* [Development](DEVELOPMENT.md)\n\
         \t* [Code of Conduct](CODE_OF_CONDUCT.md)\n\
+        \t* [Localization](l10n.md)\n\
         * [GNU test coverage](test_coverage.md)\n\
         * [Extensions](extensions.md)\n\
+        \t* [Error diagnostics](extensions-errors.md)\n\
         \n\
         # Reference\n\
         * [Multi-call binary](multicall.md)\n",
@@ -202,16 +293,20 @@ fn main() -> io::Result<()> {
     println!("Gathering utils per platform");
     let utils_per_platform = {
         let mut map = HashMap::new();
-        for platform in ["unix", "macos", "windows", "unix_android"] {
+        for (platform, features) in [
+            ("unix", "feat_os_unix"),
+            ("windows", "feat_os_windows"),
+            ("unix_android", "feat_os_unix_android"),
+        ] {
             let platform_utils: Vec<String> = String::from_utf8(
                 process::Command::new("./util/show-utils.sh")
-                    .arg(format!("--features=feat_os_{platform}"))
+                    .arg(format!("--features={features}"))
                     .output()?
                     .stdout,
             )
             .unwrap()
             .trim()
-            .split(' ')
+            .split_ascii_whitespace()
             .map(ToString::to_string)
             .collect();
             map.insert(platform, platform_utils);
@@ -226,7 +321,7 @@ fn main() -> io::Result<()> {
         )
         .unwrap()
         .trim()
-        .split(' ')
+        .split_ascii_whitespace()
         .map(ToString::to_string)
         .collect();
         map.insert("linux", platform_utils);
@@ -266,7 +361,7 @@ fn main() -> io::Result<()> {
                 "| {:<16} | {:<5} | {:<5} | {:<7} | {:<7} | {:<7} |",
                 format!("**{name}**"),
                 check_supported(name, "linux"),
-                check_supported(name, "macos"),
+                check_supported(name, "unix"),
                 check_supported(name, "windows"),
                 check_supported(name, "unix"),
                 check_supported(name, "unix_android"),
@@ -367,28 +462,23 @@ impl MDWriter<'_, '_> {
                 value: Some(Pattern { elements }),
                 ..
             }) = entry
+                && id.name == key
             {
-                if id.name == key {
-                    // Simple text extraction - just concatenate text elements
-                    let mut result = String::new();
-                    use fluent_syntax::ast::{
-                        Expression, InlineExpression,
-                        PatternElement::{Placeable, TextElement},
-                    };
-                    for element in elements {
-                        if let TextElement { ref value } = element {
-                            result.push_str(value);
-                        }
-                        if let Placeable {
-                            expression:
-                                Expression::Inline(InlineExpression::StringLiteral { ref value }),
-                        } = element
-                        {
-                            result.push_str(value);
-                        }
+                // Simple text extraction - just concatenate text elements
+                let mut result = String::new();
+                for element in elements {
+                    if let TextElement { ref value } = element {
+                        result.push_str(value);
                     }
-                    return Some(result);
+                    if let Placeable {
+                        expression:
+                            Expression::Inline(InlineExpression::StringLiteral { ref value }),
+                    } = element
+                    {
+                        result.push_str(value);
+                    }
                 }
+                return Some(result);
             }
         }
         None
@@ -411,7 +501,8 @@ impl MDWriter<'_, '_> {
             ("linux", "linux"),
             // freebsd is disabled for now because mdbook does not use font-awesome 5 yet.
             // ("unix", "freebsd"),
-            ("macos", "apple"),
+            // macOS uses the same feature set as generic Unix.
+            ("unix", "apple"),
             ("windows", "windows"),
         ] {
             if self.name.contains("sum")
@@ -419,7 +510,7 @@ impl MDWriter<'_, '_> {
                     .iter()
                     .any(|u| u == self.name)
             {
-                writeln!(self.w, "<i class=\"fa fa-brands fa-{icon}\"></i>")?;
+                writeln!(self.w, "<i class=\"fa-brands fa-{icon}\"></i>")?;
             }
         }
         writeln!(self.w, "</div>")?;
@@ -429,14 +520,8 @@ impl MDWriter<'_, '_> {
 
     /// # Errors
     /// Returns an error if the writer fails.
-    /// # Panics
-    /// Panics if the version is not found.
     fn version(&mut self) -> io::Result<()> {
-        writeln!(
-            self.w,
-            "<div class=\"version\">v{}</div>",
-            self.command.render_version().split_once(' ').unwrap().1
-        )
+        writeln!(self.w, "<div class=\"version\">v{VERSION}</div>")
     }
 
     /// # Errors
@@ -477,10 +562,10 @@ impl MDWriter<'_, '_> {
     /// # Errors
     /// Returns an error if the writer fails.
     fn examples(&mut self) -> io::Result<()> {
-        if let Some(zip) = self.tldr_zip {
-            if let Ok(examples) = write_zip_examples(zip, self.name, true) {
-                writeln!(self.w, "{examples}")?;
-            }
+        if let Some(zip) = self.tldr_zip
+            && let Ok(examples) = write_zip_examples(zip, self.name, true)
+        {
+            writeln!(self.w, "{examples}")?;
         }
         Ok(())
     }
@@ -577,16 +662,22 @@ fn write_zip_examples(
     name: &str,
     output_markdown: bool,
 ) -> io::Result<String> {
-    let content = if let Some(f) = get_zip_content(archive, &format!("pages/common/{name}.md")) {
-        f
-    } else if let Some(f) = get_zip_content(archive, &format!("pages/linux/{name}.md")) {
-        f
+    // Linux pages for these utilities can describe other implementations or shell builtins.
+    let platforms = if matches!(name, "hostname" | "kill" | "more" | "uptime") {
+        ["common", "linux"]
     } else {
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("Could not find tldr examples for {name}"),
-        ));
+        // Prefer GNU-specific examples over generic POSIX examples.
+        ["linux", "common"]
     };
+    let content = platforms
+        .into_iter()
+        .find_map(|platform| get_zip_content(archive, &format!("pages/{platform}/{name}.md")))
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Could not find tldr examples for {name}"),
+            )
+        })?;
 
     match format_examples(content, output_markdown) {
         Err(e) => Err(io::Error::other(format!(
@@ -596,7 +687,7 @@ fn write_zip_examples(
     }
 }
 
-/// Format examples using std::fmt::Write
+/// Format examples using [`std::fmt::Write`]
 fn format_examples(content: String, output_markdown: bool) -> Result<String, std::fmt::Error> {
     use std::fmt::Write;
     let mut s = String::new();
@@ -620,14 +711,200 @@ fn format_examples(content: String, output_markdown: bool) -> Result<String, std
         }
     }
     writeln!(s)?;
-    writeln!(
-        s,
-        "> The examples are provided by the [tldr-pages project](https://tldr.sh) under the [CC BY 4.0 License](https://github.com/tldr-pages/tldr/blob/main/LICENSE.md)."
-    )?;
+    writeln!(s, "> {}", get_message("uudoc-tldr-attribution"))?;
     writeln!(s, ">")?;
-    writeln!(
-        s,
-        "> Please note that, as uutils is a work in progress, some examples might fail."
-    )?;
+    writeln!(s, "> {}", get_message("uudoc-tldr-disclaimer"))?;
     Ok(s)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[rstest::rstest]
+    #[case("head", &["common", "linux"], "linux")]
+    #[case("head", &["linux"], "linux")]
+    #[case("head", &["common"], "common")]
+    #[case("hostname", &["common", "linux"], "common")]
+    #[case("kill", &["common", "linux"], "common")]
+    #[case("more", &["common", "linux"], "common")]
+    #[case("uptime", &["common", "linux"], "common")]
+    #[case("uptime", &["linux"], "linux")]
+    #[case("uptime", &["common"], "common")]
+    fn test_tldr_page_selection(
+        #[case] name: &str,
+        #[case] platforms: &[&str],
+        #[case] expected: &str,
+        #[values(false, true)] markdown: bool,
+    ) {
+        let mut zip = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
+        for platform in platforms {
+            zip.start_file(
+                format!("pages/{platform}/{name}.md"),
+                zip::write::SimpleFileOptions::default(),
+            )
+            .unwrap();
+            writeln!(zip, "- {platform} example:\n\n`{name} file`").unwrap();
+        }
+        let mut archive = ZipArchive::new(zip.finish().unwrap()).unwrap();
+        let output = write_zip_examples(&mut archive, name, markdown).unwrap();
+        assert!(output.contains(&format!("{expected} example:")), "{output}");
+        let other = if expected == "linux" {
+            "common"
+        } else {
+            "linux"
+        };
+        assert!(!output.contains(&format!("{other} example:")), "{output}");
+    }
+
+    #[test]
+    fn test_post_process_manpage_fixes_th_header() {
+        // Test that command names are uppercased and date is removed
+        let input =
+            ".TH cat 1 \"cat (uutils coreutils) 0.7.0\"\n.SH NAME\ncat - concatenate files\n";
+        let expected = ".TH CAT 1 \"2024-01-01\"\n.SH NAME\ncat - concatenate files\n";
+
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_post_process_manpage_removes_trailing_whitespace() {
+        // Test that trailing whitespace is removed from lines
+        let input = ".TH TEST 1  \nSome text with trailing spaces   \n.SH SECTION  \n";
+        let expected = ".TH TEST 1 \"2024-01-01\"\nSome text with trailing spaces\n.SH SECTION\n";
+
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_post_process_manpage_fixes_double_br() {
+        // Test that redundant .br macros are removed
+        let input = ".TH TEST 1\n.br\n.br\nSome text\n";
+        let expected = ".TH TEST 1 \"2024-01-01\"\n.br\nSome text\n";
+
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_post_process_manpage_fixes_br_with_empty_line() {
+        // Test that .br with empty line patterns are fixed
+        // Both .br macros should be removed (first because followed by empty, second because preceded by empty)
+        let input = ".TH TEST 1\n.br\n\n.br\nSome text\n";
+        let expected = ".TH TEST 1 \"2024-01-01\"\n\nSome text\n";
+
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_post_process_manpage_preserves_single_br() {
+        // Test that single .br macros are preserved
+        let input = ".TH TEST 1\nLine 1\n.br\nLine 2\n";
+        let expected = ".TH TEST 1 \"2024-01-01\"\nLine 1\n.br\nLine 2\n";
+
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_post_process_manpage_handles_mixed_case_command() {
+        // Test that mixed case command names are uppercased
+        let input = ".TH CaT 1 \"some version info\"\nContent\n";
+        let expected = ".TH CAT 1 \"2024-01-01\"\nContent\n";
+
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_post_process_manpage_handles_no_th_header() {
+        // Test that manpages without TH headers are handled gracefully
+        let input = ".SH NAME\ntest - a test utility\n";
+        let expected = ".SH NAME\ntest - a test utility\n";
+
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_post_process_manpage_complex_br_pattern() {
+        // Test complex .br patterns with multiple occurrences
+        let input =
+            ".TH TEST 1\nSection 1\n.br\n\n.br\nMiddle\n.br\n.br\nSection 2\n.br\n\n.br\nEnd\n";
+        // .br followed/preceded by empty lines should be removed, consecutive .br should have one removed
+        let expected = ".TH TEST 1 \"2024-01-01\"\nSection 1\n\nMiddle\n.br\nSection 2\n\nEnd\n";
+
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_post_process_manpage_malformed_th_header() {
+        // Test that malformed TH headers don't cause panics and are handled gracefully
+        let input1 = ".TH\nContent\n"; // Missing command name
+        let expected1 = ".TH\nContent\n";
+        let result1 = post_process_manpage(input1.to_string(), "2024-01-01");
+        assert_eq!(result1, expected1);
+
+        // TH header with special characters
+        let input2 = ".TH test-cmd 1 \"version 1.0\"\nContent\n";
+        let expected2 = ".TH TEST-CMD 1 \"2024-01-01\"\nContent\n";
+        let result2 = post_process_manpage(input2.to_string(), "2024-01-01");
+        assert_eq!(result2, expected2);
+
+        // TH header at end of file without newline
+        let input3 = "Content\n.TH test 1";
+        let expected3 = "Content\n.TH TEST 1 \"2024-01-01\"\n";
+        let result3 = post_process_manpage(input3.to_string(), "2024-01-01");
+        assert_eq!(result3, expected3);
+
+        // Multiple TH headers (only first should be processed due to ^anchor)
+        let input4 = ".TH first 1\nMiddle\n.TH second 1\n";
+        let expected4 = ".TH FIRST 1 \"2024-01-01\"\nMiddle\n.TH SECOND 1 \"2024-01-01\"\n";
+        let result4 = post_process_manpage(input4.to_string(), "2024-01-01");
+        assert_eq!(result4, expected4);
+    }
+
+    #[test]
+    fn test_post_process_manpage_removes_br_before_empty_line() {
+        // Test that .br is removed when followed by empty line (which becomes .sp)
+        let input = ".TH TEST 1\nSome text\n.br\n\nMore text\n";
+        let expected = ".TH TEST 1 \"2024-01-01\"\nSome text\n\nMore text\n";
+
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_post_process_manpage_complex_br_before_empty() {
+        // Test multiple .br before empty line patterns
+        let input = ".TH TEST 1\nSection 1\n.br\n\nSection 2\n.br\n\nSection 3\n";
+        let expected = ".TH TEST 1 \"2024-01-01\"\nSection 1\n\nSection 2\n\nSection 3\n";
+
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_post_process_manpage_removes_br_after_empty_line() {
+        // Test that .br is removed when preceded by empty line (which becomes .sp)
+        let input = ".TH TEST 1\nSome text\n\n.br\nMore text\n";
+        let expected = ".TH TEST 1 \"2024-01-01\"\nSome text\n\nMore text\n";
+
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_post_process_manpage_fixes_escape_sequences() {
+        // Test that \\\\0 and \\0 are fixed to \e0 (literal backslash-zero)
+        let input = ".TH TEST 1\nText with \\\\\\\\0 and \\\\0 escape\n";
+        let expected = ".TH TEST 1 \"2024-01-01\"\nText with \\e0 and \\e0 escape\n";
+
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
+        assert_eq!(result, expected);
+    }
 }

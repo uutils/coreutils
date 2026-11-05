@@ -7,7 +7,7 @@
 use libfuzzer_sys::fuzz_target;
 use uu_dirname::uumain;
 
-use rand::Rng;
+use rand::RngExt;
 use rand::prelude::IndexedRandom;
 use std::ffi::OsString;
 

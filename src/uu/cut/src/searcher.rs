@@ -31,14 +31,11 @@ impl<M: Matcher> Iterator for Searcher<'_, '_, M> {
     type Item = (usize, usize);
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.matcher.next_match(&self.haystack[self.position..]) {
-            Some((first, last)) => {
-                let result = (first + self.position, last + self.position);
-                self.position += last;
-                Some(result)
-            }
-            None => None,
-        }
+        let (first, last) = self.matcher.next_match(&self.haystack[self.position..])?;
+        let result = (first + self.position, last + self.position);
+        self.position += last;
+
+        Some(result)
     }
 }
 

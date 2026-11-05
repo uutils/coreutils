@@ -8,14 +8,15 @@
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::num::IntErrorKind;
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser};
-use rand::rngs::ThreadRng;
 use rand::{
-    Rng,
+    RngExt as _, SeedableRng,
+    rngs::{SmallRng, SysRng},
     seq::{IndexedRandom, SliceRandom},
 };
 
@@ -78,8 +79,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 .cloned()
                 .collect(),
         )
-    } else if let Some(range) = matches.get_one(options::INPUT_RANGE).cloned() {
-        Mode::InputRange(range)
+    } else if let Some(range) = matches.get_one::<String>(options::INPUT_RANGE) {
+        Mode::InputRange(parse_range(range)?)
     } else {
         let mut operands = matches
             .get_many::<OsString>(options::FILE_OR_ARGS)
@@ -123,26 +124,28 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
     };
 
-    let mut output = BufWriter::with_capacity(
-        BUF_SIZE,
-        match options.output {
-            None => Box::new(stdout()) as Box<dyn OsWrite>,
-            Some(ref s) => {
-                let file = File::create(s).map_err_context(
-                    || translate!("shuf-error-failed-to-open-for-writing", "file" => s.quote()),
-                )?;
-                Box::new(file) as Box<dyn OsWrite>
-            }
-        },
-    );
-
     if options.head_count == 0 {
-        // In this case we do want to touch the output file but we can quit immediately.
+        // GNU still truncates the -o file in this case, but quits immediately
+        // without reading the input or the random source.
+        if let Some(ref s) = options.output {
+            File::create(s).map_err_context(
+                || translate!("shuf-error-failed-to-open-for-writing", "file" => s.quote()),
+            )?;
+        }
         return Ok(());
     }
 
+    // Open the random source and read the input *before* creating the output
+    // file. Truncating the -o file only once the data is in hand means a failure
+    // here (missing input, unreadable random source) leaves an existing output
+    // file untouched, matching GNU and avoiding silent data loss.
     let mut rng = match options.random_source {
-        RandomSource::None => WrappedRng::Default(rand::rng()),
+        RandomSource::None => {
+            // GNU returns error on the legacy kernel getrandom is missing. But fallback is allowed
+            let r = SmallRng::try_from_rng(&mut SysRng)
+                .unwrap_or_else(|_| SmallRng::seed_from_u64(&raw const options as u64));
+            WrappedRng::Default(r)
+        }
         RandomSource::Seed(ref seed) => WrappedRng::Seed(SeededRng::new(seed)),
         RandomSource::File(ref r) => {
             let file = File::open(r).map_err_context(
@@ -153,6 +156,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
+    let fdata = match mode {
+        Mode::Default(ref filename) => Some(read_input_file(filename)?),
+        _ => None,
+    };
+
+    let mut output = open_output(options.output.as_deref())?;
+
     match mode {
         Mode::Echo(args) => {
             let mut evec: Vec<&OsStr> = args.iter().map(AsRef::as_ref).collect();
@@ -161,8 +171,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Mode::InputRange(mut range) => {
             shuf_exec(&mut range, &options, &mut rng, &mut output)?;
         }
-        Mode::Default(filename) => {
-            let fdata = read_input_file(&filename)?;
+        Mode::Default(_) => {
+            let fdata = fdata.unwrap_or_default();
             let mut items = split_seps(&fdata, options.sep);
             shuf_exec(&mut items, &options, &mut rng, &mut output)?;
         }
@@ -172,10 +182,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("shuf")
         .about(translate!("shuf-about"))
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("shuf"))
         .override_usage(format_usage(&translate!("shuf-usage")))
         .infer_long_args(true)
         .arg(
@@ -193,7 +203,6 @@ pub fn uu_app() -> Command {
                 .long(options::INPUT_RANGE)
                 .value_name("LO-HI")
                 .help(translate!("shuf-help-input-range"))
-                .value_parser(parse_range)
                 .conflicts_with(options::FILE_OR_ARGS),
         )
         .arg(
@@ -255,6 +264,19 @@ pub fn uu_app() -> Command {
         )
 }
 
+fn open_output(output: Option<&Path>) -> UResult<BufWriter<Box<dyn OsWrite>>> {
+    let writer: Box<dyn OsWrite> = match output {
+        None => Box::new(stdout()),
+        Some(s) => {
+            let file = File::create(s).map_err_context(
+                || translate!("shuf-error-failed-to-open-for-writing", "file" => s.quote()),
+            )?;
+            Box::new(file)
+        }
+    };
+    Ok(BufWriter::with_capacity(BUF_SIZE, writer))
+}
+
 fn read_input_file(filename: &Path) -> UResult<Vec<u8>> {
     if filename.as_os_str() == "-" {
         let mut data = Vec::new();
@@ -272,10 +294,11 @@ fn split_seps(data: &[u8], sep: u8) -> Vec<&[u8]> {
     // If data is empty (and does not even contain a single 'sep'
     // to indicate the presence of an empty element), then behave
     // as if the input contained no elements at all.
-    let mut elements: Vec<&[u8]> = data.split(|&b| b == sep).collect();
-    if elements.last().is_some_and(|e| e.is_empty()) {
-        elements.pop();
-    }
+    const PREDICTED_LINE_LENGTH: usize = 64;
+    let predicted_capacity = data.len() / PREDICTED_LINE_LENGTH;
+    let mut elements = Vec::with_capacity(predicted_capacity);
+    elements.extend(data.split(|&b| b == sep));
+    let _ = elements.pop_if(|e| e.is_empty());
     elements
 }
 
@@ -357,7 +380,7 @@ impl Shufable for RangeInclusive<u64> {
         amount: u64,
     ) -> UResult<impl Iterator<Item = UResult<Self::Item>>> {
         let amount = usize::try_from(amount).unwrap_or(usize::MAX);
-        Ok(NonrepeatingIterator::new(self.clone(), rng).take(amount))
+        Ok(NonrepeatingIterator::new(self.clone(), rng, Some(amount))?.take(amount))
     }
 }
 
@@ -427,22 +450,35 @@ fn shuf_exec(
     Ok(())
 }
 
-fn parse_range(input_range: &str) -> Result<RangeInclusive<u64>, String> {
-    if let Some((from, to)) = input_range.split_once('-') {
-        let begin = from.parse::<u64>().map_err(|e| e.to_string())?;
-        let end = to.parse::<u64>().map_err(|e| e.to_string())?;
-        if begin <= end || begin == end + 1 {
-            Ok(begin..=end)
-        } else {
-            Err(translate!("shuf-error-start-exceeds-end"))
+/// Parse the `LO-HI` of `-i`.
+///
+/// Whatever is wrong with it, GNU reports the range as a whole rather than
+/// the part that failed, and adds a detail only when a bound does not fit in
+/// a `u64`.
+fn parse_range(input_range: &str) -> UResult<RangeInclusive<u64>> {
+    let error = |key: &str| USimpleError::new(1, translate!(key, "range" => input_range.quote()));
+
+    let Some((from, to)) = input_range.split_once('-') else {
+        return Err(error("shuf-error-invalid-input-range"));
+    };
+    let parse = |bound: &str| match bound.parse::<u64>() {
+        Ok(n) => Ok(n),
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
+            Err(error("shuf-error-invalid-input-range-too-large"))
         }
+        Err(_) => Err(error("shuf-error-invalid-input-range")),
+    };
+    let begin = parse(from)?;
+    let end = parse(to)?;
+    if begin <= end || begin == end + 1 {
+        Ok(begin..=end)
     } else {
-        Err(translate!("shuf-error-missing-dash"))
+        Err(error("shuf-error-invalid-input-range"))
     }
 }
 
 enum WrappedRng {
-    Default(ThreadRng),
+    Default(SmallRng),
     Seed(SeededRng),
     File(RandomSourceAdapter<BufReader<File>>),
 }

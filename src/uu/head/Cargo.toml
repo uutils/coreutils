@@ -3,7 +3,6 @@ name = "uu_head"
 description = "head ~ (uutils) display the first lines of input"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/head"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -12,23 +11,29 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/head.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }
+fluent = { workspace = true }
 memchr = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "parser-size",
+  "pipes",
   "ringbuffer",
   "lines",
   "fs",
+  "quoting-style",
 ] }
-fluent = { workspace = true }
+
+[features]
+diagnostics = ["uucore/diagnostics"]
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "head"

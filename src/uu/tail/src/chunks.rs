@@ -3,12 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore (ToDO) filehandle BUFSIZ
+
 //! Iterating over a file by chunks, either starting at the end of the file with [`ReverseChunks`]
 //! or at the end of piped stdin with [`LinesChunk`] or [`BytesChunk`].
 //!
 //! Use [`ReverseChunks::new`] to create a new iterator over chunks of bytes from the file.
-
-// spell-checker:ignore (ToDO) filehandle BUFSIZ
 
 use std::collections::VecDeque;
 use std::fs::File;
@@ -28,7 +28,7 @@ pub const BUFFER_SIZE: usize = 8192;
 
 /// An iterator over a file in non-overlapping chunks from the end of the file.
 ///
-/// Each chunk is a [`Vec`]<[`u8`]> of size [`BLOCK_SIZE`] (except
+/// Each chunk is a [`Vec<u8>`] of size [`BLOCK_SIZE`] (except
 /// possibly the last chunk, which might be smaller). Each call to
 /// [`ReverseChunks::next`] will seek backwards through the given file.
 pub struct ReverseChunks<'a> {
@@ -79,9 +79,10 @@ impl Iterator for ReverseChunks<'_> {
 
         // The chunk size is `BLOCK_SIZE` for all but the last chunk
         // (that is, the chunk closest to the beginning of the file),
-        // which contains the remainder of the bytes.
+        // which contains the remaining bytes. That is a full block when
+        // the size is an exact multiple of `BLOCK_SIZE`.
         let block_size = if self.block_idx == self.max_blocks_to_read - 1 {
-            self.size % BLOCK_SIZE
+            self.size - (self.max_blocks_to_read as u64 - 1) * BLOCK_SIZE
         } else {
             BLOCK_SIZE
         };
@@ -98,9 +99,7 @@ impl Iterator for ReverseChunks<'_> {
             .file
             .seek(SeekFrom::Current(-(block_size as i64)))
             .unwrap();
-        self.file
-            .read_exact(&mut buf[0..(block_size as usize)])
-            .unwrap();
+        self.file.read_exact(&mut buf).unwrap();
         let pos2 = self
             .file
             .seek(SeekFrom::Current(-(block_size as i64)))
@@ -109,7 +108,7 @@ impl Iterator for ReverseChunks<'_> {
 
         self.block_idx += 1;
 
-        Some(buf[0..(block_size as usize)].to_vec())
+        Some(buf)
     }
 }
 
@@ -313,12 +312,10 @@ impl BytesChunkBuffer {
             }
         }
 
-        // quit early if there are no chunks for example in case the pipe was empty
-        if self.chunks.is_empty() {
+        let Some(chunk) = self.chunks.pop_front() else {
+            // quit if there are no chunks for example in case the pipe was empty
             return Ok(());
-        }
-
-        let chunk = self.chunks.pop_front().unwrap();
+        };
 
         // calculate the offset in the first chunk and put the calculated chunk as first element in
         // the self.chunks collection. The calculated offset must be in the range 0 to BUFFER_SIZE
@@ -330,7 +327,7 @@ impl BytesChunkBuffer {
         Ok(())
     }
 
-    pub fn print(&self, writer: &mut impl Write) -> UResult<()> {
+    pub fn write(&self, writer: &mut impl Write) -> UResult<()> {
         for chunk in &self.chunks {
             writer.write_all(chunk.get_buffer())?;
         }

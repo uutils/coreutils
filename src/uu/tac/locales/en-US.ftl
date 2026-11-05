@@ -6,7 +6,6 @@ tac-help-separator = use STRING as the separator instead of newline
 
 # Error messages
 tac-error-invalid-regex = invalid regular expression: { $error }
-tac-error-invalid-directory-argument = { $argument }: read error: Is a directory
-tac-error-file-not-found = failed to open { $filename } for reading: No such file or directory
-tac-error-read-error = failed to read from { $filename }: { $error }
+tac-error-open-error = failed to open { $filename } for reading: { $error }
+tac-error-read-error = { $filename }: read error: { $error }
 tac-error-write-error = failed to write to stdout: { $error }

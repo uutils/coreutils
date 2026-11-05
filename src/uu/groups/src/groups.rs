@@ -6,10 +6,9 @@
 // spell-checker:ignore (ToDO) passwd
 
 use std::io::{Write, stdout};
-use thiserror::Error;
 use uucore::{
     display::Quotable,
-    entries::{Locate, Passwd, get_groups_gnu, gid2grp},
+    entries::{Passwd, get_groups_gnu, gid2grp},
     error::{UError, UResult},
     format_usage, show,
 };
@@ -21,7 +20,7 @@ mod options {
     pub const USERS: &str = "USERNAME";
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum GroupsError {
     #[error("{message}", message = translate!("groups-error-fetch"))]
     GetGroupsFailed,
@@ -45,7 +44,7 @@ fn infallible_gid2grp(gid: u32) -> String {
     }
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
@@ -55,16 +54,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap_or_default();
 
     if users.is_empty() {
-        let Ok(gids) = get_groups_gnu(None) else {
-            return Err(GroupsError::GetGroupsFailed.into());
-        };
+        let gids = get_groups_gnu(None).map_err(|_| GroupsError::GetGroupsFailed)?;
         let groups: Vec<String> = gids.into_iter().map(infallible_gid2grp).collect();
         writeln!(stdout(), "{}", groups.join(" "))?;
         return Ok(());
     }
 
     for user in users {
-        match Passwd::locate(user.as_str()) {
+        match Passwd::locate_name(user.as_str()) {
             Ok(p) => {
                 let groups: Vec<String> =
                     p.belongs_to().into_iter().map(infallible_gid2grp).collect();
@@ -80,9 +77,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("groups")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("groups"))
         .about(translate!("groups-about"))
         .override_usage(format_usage(&translate!("groups-usage")))
         .infer_long_args(true)

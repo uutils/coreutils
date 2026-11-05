@@ -2,10 +2,13 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (regex) SKIPTO UPTO ; (vars) ntimes
 
-use crate::csplit_error::CsplitError;
-use regex::Regex;
+use std::ops::Range;
+
+use crate::csplit_error::{CsplitError, PatternProblem};
+use regex::{Regex, bytes::Regex as BytesRegex};
 use uucore::show_warning;
 use uucore::translate;
 
@@ -19,11 +22,11 @@ pub enum Pattern {
     /// integer is an offset relative to the matched line of what to include (if positive) or
     /// to exclude (if negative). The number of times the pattern is executed is detailed in
     /// [`ExecutePattern`].
-    UpToMatch(Regex, i32, ExecutePattern),
+    UpToMatch(BytesRegex, i32, ExecutePattern),
     /// Skip the file's content up to, not including, the line matching the regex. The integer
     /// is an offset relative to the matched line of what to include (if positive) or to exclude
     /// (if negative). The number of times the pattern is executed is detailed in [`ExecutePattern`].
-    SkipToMatch(Regex, i32, ExecutePattern),
+    SkipToMatch(BytesRegex, i32, ExecutePattern),
 }
 
 impl std::fmt::Display for Pattern {
@@ -95,18 +98,19 @@ impl Iterator for ExecutePatternIter {
 /// due to, e.g.,:
 /// - an invalid regular expression;
 /// - an invalid number for, e.g., the offset.
-pub fn get_patterns(args: &[String]) -> Result<Vec<Pattern>, CsplitError> {
+pub fn get_patterns(args: &[&str]) -> Result<Vec<Pattern>, CsplitError> {
     let patterns = extract_patterns(args)?;
     validate_line_numbers(&patterns)?;
     Ok(patterns)
 }
 
-fn extract_patterns(args: &[String]) -> Result<Vec<Pattern>, CsplitError> {
+fn extract_patterns(args: &[&str]) -> Result<Vec<Pattern>, CsplitError> {
     let mut patterns = Vec::with_capacity(args.len());
+    // An empty regex between the delimiters is allowed and matches every line.
     let to_match_reg =
-        Regex::new(r"^(/(?P<UPTO>.+)/|%(?P<SKIPTO>.+)%)(?P<OFFSET>[\+-]?[0-9]+)?$").unwrap();
+        Regex::new(r"^(/(?P<UPTO>.*)/|%(?P<SKIPTO>.*)%)(?P<OFFSET>[\+-]?[0-9]+)?$").unwrap();
     let execute_ntimes_reg = Regex::new(r"^\{(?P<TIMES>[0-9]+)|\*\}$").unwrap();
-    let mut iter = args.iter().peekable();
+    let mut iter = args.iter().copied().peekable();
 
     while let Some(arg) = iter.next() {
         // get the number of times a pattern is repeated, which is at least once plus whatever is
@@ -136,21 +140,79 @@ fn extract_patterns(args: &[String]) -> Result<Vec<Pattern>, CsplitError> {
                 Some(m) => m.as_str().parse().unwrap(),
             };
             if let Some(up_to_match) = captures.name("UPTO") {
-                let pattern = Regex::new(up_to_match.as_str())
-                    .map_err(|_| CsplitError::InvalidPattern(arg.to_owned()))?;
+                let pattern = BytesRegex::new(up_to_match.as_str())
+                    .map_err(|e| invalid_regex(arg, up_to_match.range(), &e))?;
                 patterns.push(Pattern::UpToMatch(pattern, offset, execute_ntimes));
             } else if let Some(skip_to_match) = captures.name("SKIPTO") {
-                let pattern = Regex::new(skip_to_match.as_str())
-                    .map_err(|_| CsplitError::InvalidPattern(arg.to_owned()))?;
+                let pattern = BytesRegex::new(skip_to_match.as_str())
+                    .map_err(|e| invalid_regex(arg, skip_to_match.range(), &e))?;
                 patterns.push(Pattern::SkipToMatch(pattern, offset, execute_ntimes));
             }
         } else if let Ok(line_number) = arg.parse::<usize>() {
             patterns.push(Pattern::UpToLine(line_number, execute_ntimes));
         } else {
-            return Err(CsplitError::InvalidPattern(arg.to_owned()));
+            // Nothing about the operand parsed, so the whole of it is at fault.
+            return Err(CsplitError::InvalidPattern(
+                arg.to_owned(),
+                Some(PatternProblem {
+                    span: 0..arg.len(),
+                    label: None,
+                }),
+            ));
         }
     }
     Ok(patterns)
+}
+
+/// The error for a `/REGEXP/` or `%REGEXP%` operand whose regex did not
+/// compile, told where inside `arg` the caret belongs.
+///
+/// # Arguments
+///
+/// * `arg` - The pattern operand as typed.
+/// * `body` - Byte range of the regex inside `arg`, delimiters excluded.
+/// * `error` - What the regex engine returned.
+fn invalid_regex(arg: &str, body: Range<usize>, error: &regex::Error) -> CsplitError {
+    let text = error.to_string();
+    let span = caret_span(&text, &arg[body.clone()])
+        .map_or(body.clone(), |s| body.start + s.start..body.start + s.end);
+    CsplitError::InvalidPattern(
+        arg.to_owned(),
+        Some(PatternProblem {
+            span,
+            label: text
+                .lines()
+                .find_map(|line| line.strip_prefix("error: "))
+                .map(str::to_owned),
+        }),
+    )
+}
+
+/// The range of `regex` that the engine's own caret line marks.
+///
+/// A regex error is rendered as the pattern echoed under a four-space indent
+/// with a row of carets beneath it, which is exactly the span wanted here. It
+/// is read back rather than trusted: the echoed line has to be the regex as
+/// passed, or `None` is returned and the caller falls back to the whole of it.
+///
+/// # Arguments
+///
+/// * `text` - The engine's message.
+/// * `regex` - The regex it was given.
+fn caret_span(text: &str, regex: &str) -> Option<Range<usize>> {
+    const INDENT: &str = "    ";
+    let echoed = format!("{INDENT}{regex}");
+    let mut lines = text.lines();
+    while let Some(line) = lines.next() {
+        if line != echoed {
+            continue;
+        }
+        let carets = lines.next()?;
+        let start = carets.find('^')?;
+        let width = carets[start..].bytes().take_while(|&b| b == b'^').count();
+        return start.checked_sub(INDENT.len()).map(|s| s..s + width);
+    }
+    None
 }
 
 /// Asserts the line numbers are in increasing order, starting at 1.
@@ -185,17 +247,14 @@ mod tests {
 
     #[test]
     fn bad_pattern() {
-        let input = vec!["bad".to_string()];
-        assert!(get_patterns(input.as_slice()).is_err());
+        let input = ["bad"];
+        assert!(get_patterns(&input).is_err());
     }
 
     #[test]
     fn up_to_line_pattern() {
-        let input: Vec<String> = vec!["24", "42", "{*}", "50", "{4}"]
-            .into_iter()
-            .map(|v| v.to_string())
-            .collect();
-        let patterns = get_patterns(input.as_slice()).unwrap();
+        let input = ["24", "42", "{*}", "50", "{4}"];
+        let patterns = get_patterns(&input).unwrap();
         assert_eq!(patterns.len(), 3);
         match patterns.first() {
             Some(Pattern::UpToLine(24, ExecutePattern::Times(1))) => (),
@@ -214,7 +273,7 @@ mod tests {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn up_to_match_pattern() {
-        let input: Vec<String> = vec![
+        let input = [
             "/test1.*end$/",
             "/test2.*end$/",
             "{*}",
@@ -223,11 +282,8 @@ mod tests {
             "/test4.*end$/3",
             "/test5.*end$/+3",
             "/test6.*end$/-3",
-        ]
-        .into_iter()
-        .map(|v| v.to_string())
-        .collect();
-        let patterns = get_patterns(input.as_slice()).unwrap();
+        ];
+        let patterns = get_patterns(&input).unwrap();
         assert_eq!(patterns.len(), 6);
         match patterns.first() {
             Some(Pattern::UpToMatch(reg, 0, ExecutePattern::Times(1))) => {
@@ -276,7 +332,7 @@ mod tests {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn skip_to_match_pattern() {
-        let input: Vec<String> = vec![
+        let input = [
             "%test1.*end$%",
             "%test2.*end$%",
             "{*}",
@@ -285,11 +341,8 @@ mod tests {
             "%test4.*end$%3",
             "%test5.*end$%+3",
             "%test6.*end$%-3",
-        ]
-        .into_iter()
-        .map(|v| v.to_string())
-        .collect();
-        let patterns = get_patterns(input.as_slice()).unwrap();
+        ];
+        let patterns = get_patterns(&input).unwrap();
         assert_eq!(patterns.len(), 6);
         match patterns.first() {
             Some(Pattern::SkipToMatch(reg, 0, ExecutePattern::Times(1))) => {
@@ -346,8 +399,8 @@ mod tests {
 
     #[test]
     fn line_number_smaller_than_previous() {
-        let input: Vec<String> = vec!["10".to_string(), "5".to_string()];
-        match get_patterns(input.as_slice()) {
+        let input = ["10", "5"];
+        match get_patterns(&input) {
             Err(CsplitError::LineNumberSmallerThanPrevious(5, 10)) => (),
             _ => panic!("expected LineNumberSmallerThanPrevious error"),
         }
@@ -355,8 +408,8 @@ mod tests {
 
     #[test]
     fn line_number_smaller_than_previous_separate() {
-        let input: Vec<String> = vec!["10".to_string(), "/20/".to_string(), "5".to_string()];
-        match get_patterns(input.as_slice()) {
+        let input = ["10", "/20/", "5"];
+        match get_patterns(&input) {
             Err(CsplitError::LineNumberSmallerThanPrevious(5, 10)) => (),
             _ => panic!("expected LineNumberSmallerThanPrevious error"),
         }
@@ -364,8 +417,8 @@ mod tests {
 
     #[test]
     fn line_number_zero_separate() {
-        let input: Vec<String> = vec!["10".to_string(), "/20/".to_string(), "0".to_string()];
-        match get_patterns(input.as_slice()) {
+        let input = ["10", "/20/", "0"];
+        match get_patterns(&input) {
             Err(CsplitError::LineNumberIsZero) => (),
             _ => panic!("expected LineNumberIsZero error"),
         }

@@ -2,47 +2,48 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use clap::{Arg, ArgAction, Command};
-use std::{ffi::OsString, io::Write};
-use uucore::error::{UResult, set_exit_code};
+use std::io::{self, Write as _};
+use uucore::error::strip_errno;
+use uucore::{crate_version, show_error, translate};
 
-use uucore::translate;
-
-#[uucore::main]
-// TODO: modify proc macro to allow no-result uumain
-#[expect(clippy::unnecessary_wraps, reason = "proc macro requires UResult")]
-pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // Mirror GNU options, always return `1`. In particular even the 'successful' cases of no-op,
-    // and the interrupted display of help and version should return `1`. Also, we return Ok in all
-    // paths to avoid the allocation of an error object, an operation that could, in theory, fail
-    // and unwind through the standard library allocation handling machinery.
-    set_exit_code(1);
-
-    let args: Vec<OsString> = args.collect();
-    if args.len() != 2 {
-        return Ok(());
+// uucore::main does not support no-result
+pub fn uumain(mut args: impl uucore::Args) -> i32 {
+    #[cold]
+    #[inline(never)]
+    fn cold_error(e: io::Error) -> i32 {
+        if e.kind() != io::ErrorKind::BrokenPipe {
+            show_error!("{}", strip_errno(&e));
+            return 1;
+        }
+        1
     }
 
-    // args[0] is the name of the binary.
-    let error = if args[1] == "--help" {
-        uu_app().print_help()
-    } else if args[1] == "--version" {
-        write!(std::io::stdout(), "{}", uu_app().render_version())
-    } else {
-        Ok(())
+    // skip binary name
+    let (Some(flag), None) = (args.nth(1), args.next()) else {
+        return 1;
     };
 
-    if let Err(print_fail) = error {
-        let _ = writeln!(std::io::stderr(), "{}: {print_fail}", uucore::util_name());
-    }
+    let res = if flag == "--help" {
+        uu_app().print_help()
+    } else if flag == "--version" {
+        // avoid uu_app for smaller binary size
+        writeln!(io::stdout(), "false {}", crate_version!())
+    } else {
+        return 1;
+    };
 
-    Ok(())
+    match res {
+        Ok(()) => 1,
+        Err(e) => cold_error(e),
+    }
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+    Command::new("false")
+        .version(crate_version!())
+        .help_template(uucore::localized_help_template("false"))
         .about(translate!("false-about"))
         // We provide our own help and version options, to ensure maximum compatibility with GNU.
         .disable_help_flag(true)

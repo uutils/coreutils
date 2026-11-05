@@ -2,35 +2,41 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
+
 // spell-checker:ignore fstatat openat dirfd
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
-use glob::Pattern;
-use rustc_hash::FxHashSet as HashSet;
+use glob::{Pattern, PatternError};
+use rustc_hash::FxHashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, DirEntry, File, Metadata};
-use std::io::{BufRead, BufReader, stdout};
+use std::io::{self, BufRead, BufReader, Write, stdout};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
+use std::os::windows::fs::OpenOptionsExt;
+#[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::sync::mpsc;
 use std::thread;
-use thiserror::Error;
+use std::time::SystemTime;
+use uucore::diagnostics::OptionValue;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::fs::SYMLINK_FOLLOW_LIMIT;
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
+use uucore::i18n::decimal::locale_grouping_separator;
+use uucore::i18n::{UEncoding, get_numeric_locale};
 use uucore::line_ending::LineEnding;
 #[cfg(all(unix, not(target_os = "redox")))]
-use uucore::safe_traversal::DirFd;
+use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 use uucore::translate;
 
+use uucore::parser::parse_block_size;
 use uucore::parser::parse_glob;
-use uucore::parser::parse_size::{ParseSizeError, parse_size_non_zero_u64, parse_size_u64};
+use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
 use uucore::{format_usage, show, show_error, show_warning};
@@ -38,8 +44,8 @@ use uucore::{format_usage, show, show_error, show_warning};
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::{
-    FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo, FileStandardInfo,
-    GetFileInformationByHandleEx,
+    FILE_FLAG_BACKUP_SEMANTICS, FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo,
+    FileStandardInfo, GetFileInformationByHandleEx,
 };
 
 mod options {
@@ -81,6 +87,7 @@ struct TraversalOptions {
     count_links: bool,
     verbose: bool,
     excludes: Vec<Pattern>,
+    time: Option<MetadataTimeField>,
 }
 
 struct StatPrinter {
@@ -108,7 +115,7 @@ enum Deref {
 enum SizeFormat {
     HumanDecimal,
     HumanBinary,
-    BlockSize(u64),
+    BlockSize(u64, Option<String>),
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
@@ -124,6 +131,7 @@ struct Stat {
     inodes: u64,
     inode: Option<FileInfo>,
     metadata: Metadata,
+    latest_time: Option<SystemTime>,
 }
 
 impl Stat {
@@ -131,7 +139,7 @@ impl Stat {
         path: &Path,
         dir_entry: Option<&DirEntry>,
         options: &TraversalOptions,
-    ) -> std::io::Result<Self> {
+    ) -> io::Result<Self> {
         // Determine whether to dereference (follow) the symbolic link
         let should_dereference = match &options.dereference {
             Deref::All => true,
@@ -152,6 +160,9 @@ impl Stat {
 
         let file_info = get_file_info(path, &metadata);
         let blocks = get_blocks(path, &metadata);
+        let latest_time = options
+            .time
+            .and_then(|time| metadata_get_time(&metadata, time));
 
         Ok(Self {
             path: path.to_path_buf(),
@@ -160,12 +171,17 @@ impl Stat {
             inodes: 1,
             inode: file_info,
             metadata,
+            latest_time,
         })
     }
 
     /// Create a Stat using safe traversal methods with `DirFd` for the root directory
     #[cfg(all(unix, not(target_os = "redox")))]
-    fn new_from_dirfd(dir_fd: &DirFd, full_path: &Path) -> std::io::Result<Self> {
+    fn new_from_dirfd(
+        dir_fd: &DirFd,
+        full_path: &Path,
+        time: Option<MetadataTimeField>,
+    ) -> io::Result<Self> {
         // Get metadata for the directory itself using fstat
         let safe_metadata = dir_fd.metadata()?;
 
@@ -182,6 +198,7 @@ impl Stat {
         // This is still needed for compatibility but should work since we're dealing with
         // the root path which should be accessible
         let std_metadata = fs::symlink_metadata(full_path)?;
+        let latest_time = time.and_then(|time| metadata_get_time(&std_metadata, time));
 
         Ok(Self {
             path: full_path.to_path_buf(),
@@ -194,6 +211,7 @@ impl Stat {
             inodes: 1,
             inode: file_info_option,
             metadata: std_metadata,
+            latest_time,
         })
     }
 }
@@ -203,14 +221,25 @@ fn get_blocks(_path: &Path, metadata: &Metadata) -> u64 {
     metadata.blocks()
 }
 
+// `File::open()` alone cannot open directories on Windows (`CreateFile`
+// fails with access denied unless `FILE_FLAG_BACKUP_SEMANTICS` is set), so
+// use that flag explicitly to be able to query directories as well as files.
+#[cfg(windows)]
+fn open_for_query(path: &Path) -> io::Result<File> {
+    fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .open(path)
+}
+
 #[cfg(windows)]
 fn get_blocks(path: &Path, _metadata: &Metadata) -> u64 {
     let mut size_on_disk = 0;
 
     // bind file so it stays in scope until end of function
     // if it goes out of scope the handle below becomes invalid
-    let Ok(file) = File::open(path) else {
-        return size_on_disk; // opening directories will fail
+    let Ok(file) = open_for_query(path) else {
+        return size_on_disk;
     };
 
     unsafe {
@@ -248,7 +277,7 @@ fn get_file_info(_path: &Path, metadata: &Metadata) -> Option<FileInfo> {
 fn get_file_info(path: &Path, _metadata: &Metadata) -> Option<FileInfo> {
     let mut result = None;
 
-    let Ok(file) = File::open(path) else {
+    let Ok(file) = open_for_query(path) else {
         return result;
     };
 
@@ -274,26 +303,79 @@ fn get_file_info(path: &Path, _metadata: &Metadata) -> Option<FileInfo> {
     result
 }
 
-fn block_size_from_env() -> Option<u64> {
-    for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
-        if let Ok(env_size) = env::var(env_var) {
-            return parse_size_non_zero_u64(&env_size).ok();
+fn read_block_size(
+    s: Option<&str>,
+    diag_args: Option<&[OsString]>,
+) -> UResult<(u64, Option<String>)> {
+    let vars = ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"];
+    if let Some(s) = s {
+        let parsed = s.strip_prefix('\'').unwrap_or(s);
+        parse_size_u64(parsed)
+            .and_then(|bytes| {
+                // A block size of zero is rejected here rather than by the
+                // caller, so that it goes through the caret path like every
+                // other bad SIZE.
+                if bytes == 0 {
+                    Err(ParseSizeError::ParseFailure(s.to_string()))
+                } else {
+                    Ok((bytes, suffix_from_parsed_block_size(s)))
+                }
+            })
+            .map_err(|e| {
+                let message = format_error_message(&e, s, options::BLOCK_SIZE);
+                e.size_value_error(
+                    diag_args,
+                    &OptionValue::new(s, 'B', options::BLOCK_SIZE),
+                    0,
+                    &message,
+                    USimpleError::new(1, message.clone()),
+                )
+            })
+    } else {
+        for var in vars {
+            if let Ok(value) = env::var(var) {
+                let parsed = value.strip_prefix('\'').unwrap_or(&value);
+                return match parse_size_u64(parsed) {
+                    Ok(bytes) if bytes != 0 => Ok((bytes, suffix_from_parsed_block_size(&value))),
+                    _ => Ok((parse_block_size::default_block_size(), None)),
+                };
+            }
         }
+        Ok((parse_block_size::default_block_size(), None))
     }
-
-    None
 }
 
-fn read_block_size(s: Option<&str>) -> UResult<u64> {
-    if let Some(s) = s {
-        parse_size_u64(s)
-            .map_err(|e| USimpleError::new(1, format_error_message(&e, s, options::BLOCK_SIZE)))
-    } else if let Some(bytes) = block_size_from_env() {
-        Ok(bytes)
-    } else if env::var("POSIXLY_CORRECT").is_ok() {
-        Ok(512)
+fn suffix_from_parsed_block_size(s: &str) -> Option<String> {
+    let grouping = s.starts_with('\'');
+    let s = s.strip_prefix('\'').unwrap_or(s);
+    let mut chars = s.chars();
+    let unit = chars.next()?.to_ascii_uppercase();
+    if !unit.is_ascii_alphabetic() || unit == 'B' {
+        return grouping.then(|| "'".to_string());
+    }
+
+    let suffix = match chars.as_str() {
+        "" | "D" => unit.to_string(),
+        "B" if unit == 'K' => "kB".to_string(),
+        suffix => format!("{unit}{suffix}"),
+    };
+    Some(if grouping {
+        format!("'{suffix}")
     } else {
-        Ok(1024)
+        suffix
+    })
+}
+
+#[cfg(all(unix, not(target_os = "redox")))]
+fn time_from_raw_stat(
+    entry_stat: &uucore::safe_traversal::Metadata,
+    time: MetadataTimeField,
+) -> Option<SystemTime> {
+    match time {
+        MetadataTimeField::Modification => entry_stat.modified(),
+        MetadataTimeField::Access => entry_stat.accessed(),
+        MetadataTimeField::Change => entry_stat.changed(),
+        MetadataTimeField::Birth => None,
     }
 }
 
@@ -304,86 +386,36 @@ fn safe_du(
     path: &Path,
     options: &TraversalOptions,
     depth: usize,
-    seen_inodes: &mut HashSet<FileInfo>,
+    seen_inodes: &mut FxHashSet<FileInfo>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
     parent_fd: Option<&DirFd>,
-    initial_stat: Option<std::io::Result<Stat>>,
+    initial_stat: Option<io::Result<Stat>>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
-    // Get initial stat for this path - use DirFd if available to avoid path length issues
-    let mut my_stat = if let Some(parent_fd) = parent_fd {
-        // We have a parent fd, this is a subdirectory - use openat
-        let dir_name = path.file_name().unwrap_or(path.as_os_str());
-        match parent_fd.metadata_at(dir_name, false) {
-            Ok(safe_metadata) => {
-                // Create Stat from safe metadata
-                let file_info = safe_metadata.file_info();
-                let file_info_option = Some(FileInfo {
-                    file_id: file_info.inode() as u128,
-                    dev_id: file_info.device(),
-                });
-                let blocks = safe_metadata.blocks();
-
-                // For compatibility, still try to get std::fs::Metadata
-                // but fallback to a minimal approach if it fails
-                let std_metadata = fs::symlink_metadata(path).unwrap_or_else(|_| {
-                    // If we can't get std metadata, create a minimal fake one
-                    // This should rarely happen but provides a fallback
-                    fs::symlink_metadata("/").expect("root should be accessible")
-                });
-
-                Stat {
-                    path: path.to_path_buf(),
-                    size: if safe_metadata.is_dir() {
-                        0
-                    } else {
-                        safe_metadata.len()
-                    },
-                    blocks,
-                    inodes: 1,
-                    inode: file_info_option,
-                    metadata: std_metadata,
-                }
+    // The caller provides an already-computed stat for this entry, which lets us
+    // avoid re-stating it here. For subdirectories this saves both a redundant
+    // `fstatat` and an expensive full-path `lstat` per directory (the dominant cost
+    // when traversing deep trees). The root directory may instead carry an error,
+    // in which case we fall back to opening it directly with a DirFd.
+    let initial_stat = initial_stat.unwrap_or_else(|| Stat::new(path, None, options));
+    let mut my_stat = match initial_stat {
+        Ok(mut s) => {
+            // For subdirectories the `metadata` field is a cheap placeholder (the
+            // parent directory's metadata). It is only consulted by `--time`, so we
+            // only pay for a real stat of this entry when time reporting is asked for.
+            if options.time.is_some()
+                && parent_fd.is_some()
+                && let Ok(md) = fs::symlink_metadata(&s.path)
+            {
+                s.metadata = md;
             }
-            Err(e) => {
-                let error = e.map_err_context(
-                    || translate!("du-error-cannot-access", "path" => path.quote()),
-                );
-                if let Err(send_error) = print_tx.send(Err(error)) {
-                    return Err(Box::new(send_error));
-                }
-                return Err(Box::new(mpsc::SendError(Err(USimpleError::new(
-                    0,
-                    "Error already handled",
-                )))));
-            }
+            s
         }
-    } else {
-        // This is the initial directory - try regular Stat::new first, then fallback to DirFd
-        let initial_stat = match initial_stat {
-            Some(s) => s,
-            None => Stat::new(path, None, options),
-        };
-
-        match initial_stat {
-            Ok(s) => s,
-            Err(_e) => {
-                // Try using our new DirFd method for the root directory
-                match DirFd::open(path) {
-                    Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path) {
-                        Ok(s) => s,
-                        Err(e) => {
-                            let error = e.map_err_context(
-                                || translate!("du-error-cannot-access", "path" => path.quote()),
-                            );
-                            if let Err(send_error) = print_tx.send(Err(error)) {
-                                return Err(Box::new(send_error));
-                            }
-                            return Err(Box::new(mpsc::SendError(Err(USimpleError::new(
-                                0,
-                                "Error already handled",
-                            )))));
-                        }
-                    },
+        Err(_e) => {
+            // Only the root path can reach this branch (subdirectories always pass a
+            // valid stat). Try using our DirFd method for the root directory.
+            match DirFd::open(path, SymlinkBehavior::Follow) {
+                Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path, options.time) {
+                    Ok(s) => s,
                     Err(e) => {
                         let error = e.map_err_context(
                             || translate!("du-error-cannot-access", "path" => path.quote()),
@@ -396,6 +428,18 @@ fn safe_du(
                             "Error already handled",
                         )))));
                     }
+                },
+                Err(e) => {
+                    let error = e.map_err_context(
+                        || translate!("du-error-cannot-access", "path" => path.quote()),
+                    );
+                    if let Err(send_error) = print_tx.send(Err(error)) {
+                        return Err(Box::new(send_error));
+                    }
+                    return Err(Box::new(mpsc::SendError(Err(USimpleError::new(
+                        0,
+                        "Error already handled",
+                    )))));
                 }
             }
         }
@@ -406,8 +450,11 @@ fn safe_du(
 
     // Open the directory using DirFd
     let open_result = match parent_fd {
-        Some(parent) => parent.open_subdir(path.file_name().unwrap_or(path.as_os_str())),
-        None => DirFd::open(path),
+        Some(parent) => parent.open_subdir(
+            path.file_name().unwrap_or(path.as_os_str()),
+            SymlinkBehavior::Follow,
+        ),
+        None => DirFd::open(path, SymlinkBehavior::Follow),
     };
 
     let dir_fd = match open_result {
@@ -432,12 +479,15 @@ fn safe_du(
     };
 
     'file_loop: for entry_name in entries {
-        let entry_path = path.join(&entry_name);
+        const S_IFMT: u32 = 0o170_000;
+        const S_IFDIR: u32 = 0o040_000;
+        const S_IFLNK: u32 = 0o120_000;
 
         // First get the lstat (without following symlinks) to check if it's a symlink
-        let lstat = match dir_fd.stat_at(&entry_name, false) {
+        let lstat = match dir_fd.stat_at(&entry_name, SymlinkBehavior::NoFollow) {
             Ok(stat) => stat,
             Err(e) => {
+                let entry_path = path.join(&entry_name);
                 print_tx.send(Err(e.map_err_context(
                     || translate!("du-error-cannot-access", "path" => entry_path.quote()),
                 )))?;
@@ -446,9 +496,6 @@ fn safe_du(
         };
 
         // Check if it's a symlink
-        const S_IFMT: u32 = 0o170_000;
-        const S_IFDIR: u32 = 0o040_000;
-        const S_IFLNK: u32 = 0o120_000;
         #[allow(clippy::unnecessary_cast)]
         let is_symlink = (lstat.st_mode as u32 & S_IFMT) == S_IFLNK;
 
@@ -471,12 +518,17 @@ fn safe_du(
             dev_id: entry_stat.st_dev as u64,
         });
 
+        let safe_metadata = uucore::safe_traversal::Metadata::from_stat(entry_stat);
+        let latest_time = options
+            .time
+            .and_then(|time| time_from_raw_stat(&safe_metadata, time));
+
         // For safe traversal, we need to handle stats differently
         // We can't use std::fs::Metadata since that requires the full path
         let this_stat = if is_dir {
             // For directories, recurse using safe_du
             Stat {
-                path: entry_path.clone(),
+                path: path.join(&entry_name),
                 size: 0,
                 #[allow(clippy::unnecessary_cast)]
                 blocks: entry_stat.st_blocks as u64,
@@ -485,11 +537,12 @@ fn safe_du(
                 // We need a fake metadata - create one from symlink_metadata of parent
                 // This is a workaround since we can't get real metadata without the full path
                 metadata: my_stat.metadata.clone(),
+                latest_time,
             }
         } else {
             // For files
             Stat {
-                path: entry_path.clone(),
+                path: path.join(&entry_name),
                 #[allow(clippy::unnecessary_cast)]
                 size: entry_stat.st_size as u64,
                 #[allow(clippy::unnecessary_cast)]
@@ -497,6 +550,7 @@ fn safe_du(
                 inodes: 1,
                 inode: file_info,
                 metadata: my_stat.metadata.clone(),
+                latest_time,
             }
         };
 
@@ -516,37 +570,44 @@ fn safe_du(
         }
 
         // Handle inodes
-        if let Some(inode) = this_stat.inode {
-            if seen_inodes.contains(&inode) && !options.count_links {
-                continue;
-            }
-            seen_inodes.insert(inode);
+        if let Some(inode) = this_stat.inode
+            && !seen_inodes.insert(inode)
+            && !options.count_links
+        {
+            continue;
         }
 
         // Process directories recursively
         if is_dir {
-            if options.one_file_system {
-                if let (Some(this_inode), Some(my_inode)) = (this_stat.inode, my_stat.inode) {
-                    if this_inode.dev_id != my_inode.dev_id {
-                        continue;
-                    }
-                }
+            if options.one_file_system
+                && let (Some(this_inode), Some(my_inode)) = (this_stat.inode, my_stat.inode)
+                && this_inode.dev_id != my_inode.dev_id
+            {
+                continue;
             }
 
+            // Reuse the stat we already computed for this entry instead of
+            // re-stating it inside the recursive call.
+            let sub_path = this_stat.path.clone();
             let this_stat = safe_du(
-                &entry_path,
+                &sub_path,
                 options,
                 depth + 1,
                 seen_inodes,
                 print_tx,
                 Some(&dir_fd),
-                None,
+                Some(Ok(this_stat)),
             )?;
 
             if !options.separate_dirs {
                 my_stat.size += this_stat.size;
                 my_stat.blocks += this_stat.blocks;
                 my_stat.inodes += this_stat.inodes;
+                my_stat.latest_time = match (my_stat.latest_time, this_stat.latest_time) {
+                    (Some(a), Some(b)) => Some(a.max(b)),
+                    (a, None) => a,
+                    (None, b) => b,
+                }
             }
             print_tx.send(Ok(StatPrintInfo {
                 stat: this_stat,
@@ -556,6 +617,11 @@ fn safe_du(
             my_stat.size += this_stat.size;
             my_stat.blocks += this_stat.blocks;
             my_stat.inodes += 1;
+            my_stat.latest_time = match (my_stat.latest_time, this_stat.latest_time) {
+                (Some(a), Some(b)) => Some(a.max(b)),
+                (a, None) => a,
+                (None, b) => b,
+            };
             if options.all {
                 print_tx.send(Ok(StatPrintInfo {
                     stat: this_stat,
@@ -577,16 +643,14 @@ fn du_regular(
     mut my_stat: Stat,
     options: &TraversalOptions,
     depth: usize,
-    seen_inodes: &mut HashSet<FileInfo>,
+    seen_inodes: &mut FxHashSet<FileInfo>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
-    ancestors: Option<&mut HashSet<FileInfo>>,
+    ancestors: Option<&mut FxHashSet<FileInfo>>,
     symlink_depth: Option<usize>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
-    let mut default_ancestors = HashSet::default();
+    let mut default_ancestors = FxHashSet::default();
     let ancestors = ancestors.unwrap_or(&mut default_ancestors);
     let symlink_depth = symlink_depth.unwrap_or(0);
-    // Maximum symlink depth to prevent infinite loops
-    const MAX_SYMLINK_DEPTH: usize = 40;
 
     // Add current directory to ancestors if it's a directory
     let my_inode = if my_stat.metadata.is_dir() {
@@ -626,9 +690,9 @@ fn du_regular(
                         current_symlink_depth += 1;
 
                         // Check symlink depth limit
-                        if current_symlink_depth > MAX_SYMLINK_DEPTH {
-                            print_tx.send(Err(std::io::Error::new(
-                                std::io::ErrorKind::InvalidData,
+                        if current_symlink_depth > SYMLINK_FOLLOW_LIMIT {
+                            print_tx.send(Err(io::Error::new(
+                                io::ErrorKind::InvalidData,
                                 "Too many levels of symbolic links",
                             ).map_err_context(
                                 || translate!("du-error-cannot-access", "path" => entry_path.quote()),
@@ -643,13 +707,11 @@ fn du_regular(
                             if is_symlink
                                 && options.dereference == Deref::All
                                 && this_stat.metadata.is_dir()
+                                && let Some(inode) = this_stat.inode
+                                && ancestors.contains(&inode)
                             {
-                                if let Some(inode) = this_stat.inode {
-                                    if ancestors.contains(&inode) {
-                                        // This symlink points to an ancestor directory - skip to avoid cycle
-                                        continue 'file_loop;
-                                    }
-                                }
+                                // This symlink points to an ancestor directory - skip to avoid cycle
+                                continue 'file_loop;
                             }
 
                             // We have an exclude list
@@ -672,25 +734,20 @@ fn du_regular(
                                 }
                             }
 
-                            if let Some(inode) = this_stat.inode {
-                                // Check if the inode has been seen before and if we should skip it
-                                if seen_inodes.contains(&inode) && !options.count_links {
-                                    // Skip further processing for this inode
-                                    continue;
-                                }
-                                // Mark this inode as seen
-                                seen_inodes.insert(inode);
+                            if let Some(inode) = this_stat.inode
+                                && !seen_inodes.insert(inode)
+                                && !options.count_links
+                            {
+                                continue;
                             }
 
                             if this_stat.metadata.is_dir() {
-                                if options.one_file_system {
-                                    if let (Some(this_inode), Some(my_inode)) =
+                                if options.one_file_system
+                                    && let (Some(this_inode), Some(my_inode)) =
                                         (this_stat.inode, my_stat.inode)
-                                    {
-                                        if this_inode.dev_id != my_inode.dev_id {
-                                            continue;
-                                        }
-                                    }
+                                    && this_inode.dev_id != my_inode.dev_id
+                                {
+                                    continue;
                                 }
 
                                 let this_stat = du_regular(
@@ -707,6 +764,12 @@ fn du_regular(
                                     my_stat.size += this_stat.size;
                                     my_stat.blocks += this_stat.blocks;
                                     my_stat.inodes += this_stat.inodes;
+                                    my_stat.latest_time =
+                                        match (my_stat.latest_time, this_stat.latest_time) {
+                                            (Some(a), Some(b)) => Some(a.max(b)),
+                                            (a, None) => a,
+                                            (None, b) => b,
+                                        };
                                 }
                                 print_tx.send(Ok(StatPrintInfo {
                                     stat: this_stat,
@@ -716,6 +779,12 @@ fn du_regular(
                                 my_stat.size += this_stat.size;
                                 my_stat.blocks += this_stat.blocks;
                                 my_stat.inodes += 1;
+                                my_stat.latest_time =
+                                    match (my_stat.latest_time, this_stat.latest_time) {
+                                        (Some(a), Some(b)) => Some(a.max(b)),
+                                        (a, None) => a,
+                                        (None, b) => b,
+                                    };
                                 if options.all {
                                     print_tx.send(Ok(StatPrintInfo {
                                         stat: this_stat,
@@ -744,7 +813,7 @@ fn du_regular(
     Ok(my_stat)
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum DuError {
     #[error("{}", translate!("du-error-invalid-max-depth", "depth" => _0.quote()))]
     InvalidMaxDepthArg(String),
@@ -756,28 +825,22 @@ enum DuError {
     InvalidTimeStyleArg(String),
 
     #[error("{}", translate!("du-error-invalid-glob", "error" => _0))]
-    InvalidGlob(String),
+    InvalidGlob(PatternError),
 }
 
 impl UError for DuError {
-    fn code(&self) -> i32 {
-        match self {
-            Self::InvalidMaxDepthArg(_)
-            | Self::SummarizeDepthConflict(_)
-            | Self::InvalidTimeStyleArg(_)
-            | Self::InvalidGlob(_) => 1,
-        }
+    fn usage(&self) -> bool {
+        // GNU points at --help for a bad --max-depth argument.
+        matches!(self, Self::InvalidMaxDepthArg(_))
     }
 }
 
 /// Read a file and return each line in a vector of String
-fn file_as_vec(filename: impl AsRef<Path>) -> Vec<String> {
-    let file = File::open(filename).expect("no such file");
+fn file_as_vec(filename: impl AsRef<Path>) -> UResult<Vec<String>> {
+    let file = File::open(filename)?;
     let buf = BufReader::new(file);
-
-    buf.lines()
-        .map(|l| l.expect("Could not parse line"))
-        .collect()
+    let lines = buf.lines().collect::<Result<Vec<String>, _>>()?;
+    Ok(lines)
 }
 
 /// Given the `--exclude-from` and/or `--exclude` arguments, returns the globset lists
@@ -786,7 +849,10 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     let exclude_from_iterator = matches
         .get_many::<String>(options::EXCLUDE_FROM)
         .unwrap_or_default()
-        .flat_map(file_as_vec);
+        .map(file_as_vec)
+        .collect::<UResult<Vec<Vec<String>>>>()?
+        .into_iter()
+        .flatten();
 
     let excludes_iterator = matches
         .get_many::<String>(options::EXCLUDE)
@@ -798,13 +864,11 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
         if matches.get_flag(options::VERBOSE) {
             println!(
                 "{}",
-                translate!("du-verbose-adding-to-exclude-list", "pattern" => f.clone())
+                translate!("du-verbose-adding-to-exclude-list", "pattern" => f)
             );
         }
-        match parse_glob::from_str(&f) {
-            Ok(glob) => exclude_patterns.push(glob),
-            Err(err) => return Err(DuError::InvalidGlob(err.to_string()).into()),
-        }
+        let glob = parse_glob::from_str(&f).map_err(DuError::InvalidGlob)?;
+        exclude_patterns.push(glob);
     }
     Ok(exclude_patterns)
 }
@@ -812,6 +876,36 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
 struct StatPrintInfo {
     stat: Stat,
     depth: usize,
+}
+
+/// Add the locale grouping requested by a leading apostrophe in SIZE.
+fn format_block_count(blocks: u64, grouping: bool) -> Vec<u8> {
+    if !grouping {
+        return blocks.to_string().into_bytes();
+    }
+
+    let digits = blocks.to_string();
+    let separator = locale_grouping_separator();
+    if separator.is_empty() || digits.len() < 4 {
+        return digits.into_bytes();
+    }
+
+    let separator = if get_numeric_locale().1 == UEncoding::Ascii && separator == "\u{202f}" {
+        &b"\xa0"[..]
+    } else {
+        separator.as_bytes()
+    };
+    let first_group = match digits.len() % 3 {
+        0 => 3,
+        n => n,
+    };
+    let mut grouped = Vec::with_capacity(digits.len() + separator.len());
+    grouped.extend_from_slice(&digits.as_bytes()[..first_group]);
+    for chunk in digits.as_bytes()[first_group..].chunks(3) {
+        grouped.extend_from_slice(separator);
+        grouped.extend_from_slice(chunk);
+    }
+    grouped
 }
 
 impl StatPrinter {
@@ -829,98 +923,106 @@ impl StatPrinter {
 
     fn print_stats(&self, rx: &mpsc::Receiver<UResult<StatPrintInfo>>) -> UResult<()> {
         let mut grand_total = 0;
-        loop {
-            let received = rx.recv();
-
+        while let Ok(received) = rx.recv() {
             match received {
-                Ok(message) => match message {
-                    Ok(stat_info) => {
-                        let size = self.choose_size(&stat_info.stat);
+                Ok(stat_info) => {
+                    let size = self.choose_size(&stat_info.stat);
 
-                        if stat_info.depth == 0 {
-                            grand_total += size;
-                        }
-
-                        if !self
-                            .threshold
-                            .is_some_and(|threshold| threshold.should_exclude(size))
-                            && self
-                                .max_depth
-                                .is_none_or(|max_depth| stat_info.depth <= max_depth)
-                            && (!self.summarize || stat_info.depth == 0)
-                        {
-                            self.print_stat(&stat_info.stat, size)?;
-                        }
+                    if stat_info.depth == 0 {
+                        grand_total += size;
                     }
-                    Err(e) => show!(e),
-                },
-                Err(_) => break,
+
+                    if !self
+                        .threshold
+                        .is_some_and(|threshold| threshold.should_exclude(size))
+                        && self
+                            .max_depth
+                            .is_none_or(|max_depth| stat_info.depth <= max_depth)
+                        && (!self.summarize || stat_info.depth == 0)
+                    {
+                        self.print_stat(&stat_info.stat, size)?;
+                    }
+                }
+                Err(e) => show!(e),
             }
         }
 
         if self.total {
-            print!("{}\t{}", self.convert_size(grand_total), self.total_text);
-            print!("{}", self.line_ending);
+            stdout().write_all(&self.convert_size(grand_total))?;
+            write!(stdout(), "\t{}{}", self.total_text, self.line_ending)?;
         }
 
         Ok(())
     }
 
-    fn convert_size(&self, size: u64) -> String {
-        match self.size_format {
+    fn convert_size(&self, size: u64) -> Vec<u8> {
+        match &self.size_format {
             SizeFormat::HumanDecimal => uucore::format::human::human_readable(
                 size,
                 uucore::format::human::SizeFormat::Decimal,
-            ),
+            )
+            .into_bytes(),
             SizeFormat::HumanBinary => uucore::format::human::human_readable(
                 size,
                 uucore::format::human::SizeFormat::Binary,
-            ),
-            SizeFormat::BlockSize(block_size) => {
+            )
+            .into_bytes(),
+            SizeFormat::BlockSize(block_size, suffix) => {
                 if self.inodes {
                     // we ignore block size (-B) with --inodes
-                    size.to_string()
+                    format_block_count(size, suffix.as_deref().is_some_and(|s| s.starts_with('\'')))
                 } else {
-                    size.div_ceil(block_size).to_string()
+                    let blocks = size.div_ceil(*block_size);
+                    let mut blocks = format_block_count(
+                        blocks,
+                        suffix.as_deref().is_some_and(|s| s.starts_with('\'')),
+                    );
+                    if let Some(suffix) = suffix {
+                        blocks.extend_from_slice(
+                            suffix.strip_prefix('\'').unwrap_or(suffix).as_bytes(),
+                        );
+                    }
+                    blocks
                 }
             }
         }
     }
 
     fn print_stat(&self, stat: &Stat, size: u64) -> UResult<()> {
-        print!("{}\t", self.convert_size(size));
+        stdout().write_all(&self.convert_size(size))?;
+        write!(stdout(), "\t")?;
 
-        if let Some(md_time) = &self.time {
-            if let Some(time) = metadata_get_time(&stat.metadata, *md_time) {
+        if self.time.is_some() {
+            if let Some(time) = stat.latest_time {
                 format_system_time(
                     &mut stdout(),
                     time,
                     &self.time_format,
                     FormatSystemTimeFallback::IntegerError,
                 )?;
-                print!("\t");
+                write!(stdout(), "\t")?;
             } else {
-                print!("???\t");
+                write!(stdout(), "???\t")?;
             }
         }
 
-        print_verbatim(&stat.path).unwrap();
-        print!("{}", self.line_ending);
+        print_verbatim(&stat.path)?;
+        write!(stdout(), "{}", self.line_ending)?;
 
         Ok(())
     }
 }
 
 /// Read file paths from the specified file, separated by null characters
-fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
+fn read_files_from(file_name: &OsStr) -> io::Result<Vec<PathBuf>> {
     let reader: Box<dyn BufRead> = if file_name == "-" {
         // Read from standard input
-        Box::new(BufReader::new(std::io::stdin()))
+        Box::new(BufReader::new(io::stdin()))
     } else {
         // First, check if the file_name is a directory
         let path = PathBuf::from(file_name);
         if path.is_dir() {
-            return Err(std::io::Error::other(
+            return Err(io::Error::other(
                 translate!("du-error-read-error-is-directory", "file" => file_name.maybe_quote()),
             ));
         }
@@ -928,8 +1030,8 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
         // Attempt to open the file and handle the error if it does not exist
         match File::open(file_name) {
             Ok(file) => Box::new(BufReader::new(file)),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return Err(std::io::Error::other(
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                return Err(io::Error::other(
                     translate!("du-error-cannot-open-for-reading", "file" => file_name.quote()),
                 ));
             }
@@ -953,10 +1055,11 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
             show_error!("{}", translate!("du-error-hyphen-file-name-not-allowed"));
             set_exit_code(1);
         } else {
-            let p = PathBuf::from(&*uucore::os_str_from_bytes(&path).unwrap());
-            if !paths.contains(&p) {
-                paths.push(p);
-            }
+            // Do not deduplicate here: GNU du processes every entry and
+            // relies on inode-based deduplication during traversal (which is
+            // disabled by --count-links). Deduplicating by name would, e.g.,
+            // collapse repeated missing files into a single error.
+            paths.push(PathBuf::from(uucore::os_str_from_bytes(&path).unwrap()));
         }
     }
 
@@ -973,29 +1076,27 @@ fn get_size_format_flag_arg_index_if_present(matches: &ArgMatches, arg: &str) ->
     }
 }
 
-fn parse_block_size_arg_or_default_fallback(matches: &ArgMatches) -> UResult<SizeFormat> {
-    let block_size_str = matches.get_one::<String>(options::BLOCK_SIZE);
-    let block_size = read_block_size(block_size_str.map(AsRef::as_ref))?;
-    if block_size == 0 {
-        return Err(std::io::Error::other(translate!("du-error-invalid-block-size-argument", "option" => options::BLOCK_SIZE, "value" => block_size_str.map_or("???BUG", |v| v).quote()))
-        .into());
-    }
-    Ok(SizeFormat::BlockSize(block_size))
-}
-
-fn parse_size_format(matches: &ArgMatches) -> UResult<SizeFormat> {
-    let block_size_value_or_default_fallback = parse_block_size_arg_or_default_fallback(matches)?;
+fn parse_size_format(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<SizeFormat> {
+    // `read_block_size` falls back to the environment and rejects a zero block
+    // size itself, so that the caret can point at the offending value.
+    let (block_size, suffix) = read_block_size(
+        matches
+            .get_one::<String>(options::BLOCK_SIZE)
+            .map(AsRef::as_ref),
+        diag_args,
+    )?;
+    let block_size_value_or_default_fallback = SizeFormat::BlockSize(block_size, suffix);
     let candidates = [
         (
-            SizeFormat::BlockSize(1),
+            SizeFormat::BlockSize(1, None),
             get_size_format_flag_arg_index_if_present(matches, options::BYTES),
         ),
         (
-            SizeFormat::BlockSize(1024),
+            SizeFormat::BlockSize(1024, None),
             get_size_format_flag_arg_index_if_present(matches, options::BLOCK_SIZE_1K),
         ),
         (
-            SizeFormat::BlockSize(1024 * 1024),
+            SizeFormat::BlockSize(1024 * 1024, None),
             get_size_format_flag_arg_index_if_present(matches, options::BLOCK_SIZE_1M),
         ),
         (
@@ -1023,7 +1124,13 @@ fn parse_size_format(matches: &ArgMatches) -> UResult<SizeFormat> {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    // The arguments are kept for the caret in SIZE diagnostics, which echoes
+    // the command line.
+    let (matches, diag_args) = uucore::clap_localization::handle_clap_result_with_diagnostics(
+        uu_app(),
+        args.collect(),
+        1,
+    )?;
 
     let summarize = matches.get_flag(options::SUMMARIZE);
 
@@ -1032,35 +1139,29 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let max_depth = parse_depth(
         matches
             .get_one::<String>(options::MAX_DEPTH)
-            .map(|s| s.as_str()),
+            .map(String::as_str),
         summarize,
     )?;
 
     let files = if let Some(file_from) = matches.get_one::<OsString>(options::FILES0_FROM) {
         if file_from == "-" && matches.get_one::<OsString>(options::FILE).is_some() {
-            return Err(std::io::Error::other(
-                translate!("du-error-extra-operand-with-files0-from",
+            return Err(
+                io::Error::other(translate!("du-error-extra-operand-with-files0-from",
                     "file" => matches
                         .get_one::<OsString>(options::FILE)
                         .unwrap()
                         .quote()
-                ),
-            )
-            .into());
+                ))
+                .into(),
+            );
         }
 
         read_files_from(file_from)?
     } else if let Some(files) = matches.get_many::<OsString>(options::FILE) {
-        let files = files.map(PathBuf::from);
-        if count_links {
-            files.collect()
-        } else {
-            // Deduplicate while preserving order
-            let mut seen = HashSet::default();
-            files
-                .filter(|path| seen.insert(path.clone()))
-                .collect::<Vec<_>>()
-        }
+        // Do not deduplicate by name: GNU du processes every operand and relies
+        // on inode-based deduplication during traversal (disabled by
+        // --count-links), so repeated missing files are reported once each.
+        files.map(PathBuf::from).collect()
     } else {
         vec![PathBuf::from(".")]
     };
@@ -1071,7 +1172,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .map_or(MetadataTimeField::Modification, |s| s.as_str().into())
     });
 
-    let size_format = parse_size_format(&matches)?;
+    let size_format = parse_size_format(&matches, diag_args.as_deref())?;
 
     let traversal_options = TraversalOptions {
         all: matches.get_flag(options::ALL),
@@ -1088,6 +1189,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         count_links,
         verbose: matches.get_flag(options::VERBOSE),
         excludes: build_exclude_patterns(&matches)?,
+        time,
     };
 
     let time_format = if time.is_some() {
@@ -1105,8 +1207,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         threshold: matches
             .get_one::<String>(options::THRESHOLD)
             .map(|s| {
-                Threshold::from_str(s).map_err(|e| {
-                    USimpleError::new(1, format_error_message(&e, s, options::THRESHOLD))
+                parse_threshold(s).map_err(|(e, size_at)| {
+                    let message = format_error_message(&e, s, options::THRESHOLD);
+                    e.size_value_error(
+                        diag_args.as_deref(),
+                        &OptionValue::new(s, 't', options::THRESHOLD),
+                        size_at,
+                        &message,
+                        USimpleError::new(1, message.clone()),
+                    )
                 })
             })
             .transpose()?,
@@ -1131,7 +1240,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let printing_thread = thread::spawn(move || stat_printer.print_stats(&rx));
 
     // Check existence of path provided in argument
-    let mut seen_inodes: HashSet<FileInfo> = HashSet::default();
+    let mut seen_inodes: FxHashSet<FileInfo> = FxHashSet::default();
 
     'loop_file: for path in files {
         // Skip if we don't want to ignore anything
@@ -1159,13 +1268,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         // Pre-populate seen_inodes with the starting directory to detect cycles
         let stat = Stat::new(&path, None, &traversal_options);
-        if let Ok(stat) = stat.as_ref() {
-            if let Some(inode) = stat.inode {
-                if !traversal_options.count_links && seen_inodes.contains(&inode) {
-                    continue 'loop_file;
-                }
-                seen_inodes.insert(inode);
-            }
+        if let Ok(stat) = stat.as_ref()
+            && let Some(inode) = stat.inode
+            && !traversal_options.count_links
+            && !seen_inodes.insert(inode)
+        {
+            continue 'loop_file;
         }
 
         if use_safe_traversal {
@@ -1188,11 +1296,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     }
                     Err(e) => {
                         // Check if this is our "already handled" error
-                        if let mpsc::SendError(Err(simple_error)) = e.as_ref() {
-                            if simple_error.code() == 0 {
-                                // Error already handled, continue to next file
-                                continue 'loop_file;
-                            }
+                        if let mpsc::SendError(Err(simple_error)) = e.as_ref()
+                            && simple_error.code() == 0
+                        {
+                            // Error already handled, continue to next file
+                            continue 'loop_file;
                         }
                         return Err(USimpleError::new(1, e.to_string()));
                     }
@@ -1248,9 +1356,12 @@ fn parse_time_style(s: Option<&String>) -> UResult<String> {
                 // the string starts with +, and ignore "locale".
                 Ok(s) => {
                     let s = s.strip_prefix("posix-").unwrap_or(s.as_str());
-                    let s = match s.chars().next().unwrap() {
-                        '+' => s.split('\n').next().unwrap(),
-                        _ => s,
+                    // `s` can be empty here (e.g. TIME_STYLE=posix-), so test the
+                    // prefix instead of unwrapping the first char.
+                    let s = if s.starts_with('+') {
+                        s.split('\n').next().unwrap()
+                    } else {
+                        s
                     };
                     match s {
                         "locale" => None,
@@ -1266,9 +1377,9 @@ fn parse_time_style(s: Option<&String>) -> UResult<String> {
             "full-iso" => Ok(format::FULL_ISO.to_string()),
             "long-iso" => Ok(format::LONG_ISO.to_string()),
             "iso" => Ok(format::ISO.to_string()),
-            _ => match s.chars().next().unwrap() {
-                '+' => Ok(s[1..].to_string()),
-                _ => Err(DuError::InvalidTimeStyleArg(s).into()),
+            _ => match s.strip_prefix('+') {
+                Some(rest) => Ok(rest.to_string()),
+                None => Err(DuError::InvalidTimeStyleArg(s).into()),
             },
         },
         None => Ok(format::LONG_ISO.to_string()),
@@ -1285,7 +1396,7 @@ fn parse_depth(max_depth_str: Option<&str>, summarize: bool) -> UResult<Option<u
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("du")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("du-about"))
@@ -1304,6 +1415,8 @@ pub fn uu_app() -> Command {
                 .short('a')
                 .long(options::ALL)
                 .help(translate!("du-help-all"))
+                .conflicts_with(options::SUMMARIZE)
+                .overrides_with(options::ALL)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1311,68 +1424,80 @@ pub fn uu_app() -> Command {
                 .short('A')
                 .long(options::APPARENT_SIZE)
                 .help(translate!("du-help-apparent-size"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::APPARENT_SIZE),
         )
         .arg(
             Arg::new(options::BLOCK_SIZE)
                 .short('B')
                 .long(options::BLOCK_SIZE)
                 .value_name("SIZE")
-                .help(translate!("du-help-block-size")),
+                .help(translate!("du-help-block-size"))
+                .overrides_with(options::BLOCK_SIZE),
         )
         .arg(
             Arg::new(options::BYTES)
                 .short('b')
                 .long("bytes")
                 .help(translate!("du-help-bytes"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::BYTES),
         )
         .arg(
             Arg::new(options::TOTAL)
                 .long("total")
                 .short('c')
                 .help(translate!("du-help-total"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::TOTAL),
         )
         .arg(
             Arg::new(options::MAX_DEPTH)
                 .short('d')
                 .long("max-depth")
                 .value_name("N")
-                .help(translate!("du-help-max-depth")),
+                .help(translate!("du-help-max-depth"))
+                // Accept a negative depth so it is rejected by us, not by clap.
+                .allow_hyphen_values(true)
+                .overrides_with(options::MAX_DEPTH),
         )
         .arg(
             Arg::new(options::HUMAN_READABLE)
                 .long("human-readable")
                 .short('h')
                 .help(translate!("du-help-human-readable"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::HUMAN_READABLE),
         )
         .arg(
             Arg::new(options::INODES)
                 .long(options::INODES)
                 .help(translate!("du-help-inodes"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::INODES),
         )
         .arg(
             Arg::new(options::BLOCK_SIZE_1K)
                 .short('k')
                 .help(translate!("du-help-block-size-1k"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::BLOCK_SIZE_1K),
         )
         .arg(
             Arg::new(options::COUNT_LINKS)
                 .short('l')
                 .long("count-links")
                 .help(translate!("du-help-count-links"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::COUNT_LINKS),
         )
         .arg(
             Arg::new(options::DEREFERENCE)
                 .short('L')
                 .long(options::DEREFERENCE)
                 .help(translate!("du-help-dereference"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::DEREFERENCE),
         )
         .arg(
             Arg::new(options::DEREFERENCE_ARGS)
@@ -1380,7 +1505,8 @@ pub fn uu_app() -> Command {
                 .visible_short_alias('H')
                 .long(options::DEREFERENCE_ARGS)
                 .help(translate!("du-help-dereference-args"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::DEREFERENCE_ARGS),
         )
         .arg(
             Arg::new(options::NO_DEREFERENCE)
@@ -1388,47 +1514,54 @@ pub fn uu_app() -> Command {
                 .long(options::NO_DEREFERENCE)
                 .help(translate!("du-help-no-dereference"))
                 .overrides_with(options::DEREFERENCE)
+                .overrides_with(options::NO_DEREFERENCE)
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::BLOCK_SIZE_1M)
                 .short('m')
                 .help(translate!("du-help-block-size-1m"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::BLOCK_SIZE_1M),
         )
         .arg(
             Arg::new(options::NULL)
                 .short('0')
                 .long("null")
                 .help(translate!("du-help-null"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::NULL),
         )
         .arg(
             Arg::new(options::SEPARATE_DIRS)
                 .short('S')
                 .long("separate-dirs")
                 .help(translate!("du-help-separate-dirs"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::SEPARATE_DIRS),
         )
         .arg(
             Arg::new(options::SUMMARIZE)
                 .short('s')
                 .long("summarize")
                 .help(translate!("du-help-summarize"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::SUMMARIZE),
         )
         .arg(
             Arg::new(options::SI)
                 .long(options::SI)
                 .help(translate!("du-help-si"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::SI),
         )
         .arg(
             Arg::new(options::ONE_FILE_SYSTEM)
                 .short('x')
                 .long(options::ONE_FILE_SYSTEM)
                 .help(translate!("du-help-one-file-system"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::ONE_FILE_SYSTEM),
         )
         .arg(
             Arg::new(options::THRESHOLD)
@@ -1437,14 +1570,16 @@ pub fn uu_app() -> Command {
                 .value_name("SIZE")
                 .num_args(1)
                 .allow_hyphen_values(true)
-                .help(translate!("du-help-threshold")),
+                .help(translate!("du-help-threshold"))
+                .overrides_with(options::THRESHOLD),
         )
         .arg(
             Arg::new(options::VERBOSE)
                 .short('v')
                 .long("verbose")
                 .help(translate!("du-help-verbose"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::VERBOSE),
         )
         .arg(
             Arg::new(options::EXCLUDE)
@@ -1482,13 +1617,15 @@ pub fn uu_app() -> Command {
                     PossibleValue::new("ctime").alias("status"),
                     PossibleValue::new("creation").alias("birth"),
                 ]))
-                .help(translate!("du-help-time")),
+                .help(translate!("du-help-time"))
+                .overrides_with(options::TIME),
         )
         .arg(
             Arg::new(options::TIME_STYLE)
                 .long(options::TIME_STYLE)
                 .value_name("STYLE")
-                .help(translate!("du-help-time-style")),
+                .help(translate!("du-help-time-style"))
+                .overrides_with(options::TIME_STYLE),
         )
         .arg(
             Arg::new(options::FILE)
@@ -1505,24 +1642,31 @@ enum Threshold {
     Upper(u64),
 }
 
-impl FromStr for Threshold {
-    type Err = ParseSizeError;
+/// Parse a `--threshold` value, and say where its caret should start.
+///
+/// The parser only ever sees the part after the sign, so on failure the
+/// offset of the size within `s` comes back with the error: the caret has to
+/// count the sign back in. The one exception is the `-0` rejection below,
+/// which is about the sign and the zero together and so starts at 0.
+///
+/// The sign is stripped here rather than with
+/// `uucore::parser::parse_signed_num::number_offset`, which head and tail use
+/// for the same purpose: that one skips leading whitespace as well, and GNU du
+/// rejects a padded `--threshold` such as `'  -1K'`.
+fn parse_threshold(s: &str) -> Result<Threshold, (ParseSizeError, usize)> {
+    let offset = usize::from(s.starts_with(['-', '+']));
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let offset = usize::from(s.starts_with(&['-', '+'][..]));
+    let size = parse_size_u64(&s[offset..]).map_err(|e| (e, offset))?;
 
-        let size = parse_size_u64(&s[offset..])?;
-
-        if s.starts_with('-') {
-            // Threshold of '-0' excludes everything besides 0 sized entries
-            // GNU's du treats '-0' as an invalid argument
-            if size == 0 {
-                return Err(ParseSizeError::ParseFailure(s.to_string()));
-            }
-            Ok(Self::Upper(size))
-        } else {
-            Ok(Self::Lower(size))
+    if s.starts_with('-') {
+        // Threshold of '-0' excludes everything besides 0 sized entries
+        // GNU's du treats '-0' as an invalid argument
+        if size == 0 {
+            return Err((ParseSizeError::ParseFailure(s.to_string()), 0));
         }
+        Ok(Threshold::Upper(size))
+    } else {
+        Ok(Threshold::Lower(size))
     }
 }
 
@@ -1560,7 +1704,10 @@ mod test_du {
     fn test_read_block_size() {
         let test_data = [Some("1024".to_string()), Some("K".to_string()), None];
         for it in &test_data {
-            assert!(matches!(read_block_size(it.as_deref()), Ok(1024)));
+            assert!(matches!(
+                read_block_size(it.as_deref(), None),
+                Ok((1024, _))
+            ));
         }
     }
 }

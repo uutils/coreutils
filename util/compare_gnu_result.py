@@ -13,12 +13,14 @@ from os import environ
 REPO_DEFAULT_BRANCH = environ.get("REPO_DEFAULT_BRANCH", "main")
 ONLY_INTERMITTENT = environ.get("ONLY_INTERMITTENT", "false")
 
-NEW = json.load(open("gnu-result.json"))
-OLD = json.load(open("main-gnu-result.json"))
+with open("gnu-result.json") as f:
+    NEW = json.load(f)
+with open("main-gnu-result.json") as f:
+    OLD = json.load(f)
 
 # Extract the specific results from the dicts
-last = OLD[list(OLD.keys())[0]]
-current = NEW[list(NEW.keys())[0]]
+last = OLD[next(iter(OLD.keys()))]
+current = NEW[next(iter(NEW.keys()))]
 
 
 pass_d = int(current["pass"]) - int(last["pass"])

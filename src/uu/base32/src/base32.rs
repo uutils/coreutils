@@ -16,5 +16,5 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    base_common::base_app(translate!("base32-about"), translate!("base32-usage"))
+    base_common::base_app(translate!("base32-about"), translate!("base32-usage")).name("base32")
 }

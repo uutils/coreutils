@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use std::cell::Cell;
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, WAIT_FAILED, WAIT_OBJECT_0};
 use windows_sys::Win32::System::Threading::{
     OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject,
@@ -12,7 +13,7 @@ use windows_sys::core::BOOL;
 pub type Pid = u32;
 
 pub struct ProcessChecker {
-    dead: bool,
+    dead: Cell<bool>,
     handle: HANDLE,
 }
 
@@ -22,21 +23,20 @@ impl ProcessChecker {
         let FALSE: BOOL = 0;
         let h = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, FALSE, process_id) };
         Self {
-            dead: h.is_null(),
+            dead: Cell::new(h.is_null()),
             handle: h,
         }
     }
 
-    #[allow(clippy::wrong_self_convention)]
-    pub fn is_dead(&mut self) -> bool {
-        if !self.dead {
-            self.dead = unsafe {
+    pub fn is_dead(&self) -> bool {
+        if !self.dead.get() {
+            self.dead.set(unsafe {
                 let status = WaitForSingleObject(self.handle, 0);
                 status == WAIT_OBJECT_0 || status == WAIT_FAILED
-            }
+            });
         }
 
-        self.dead
+        self.dead.get()
     }
 }
 

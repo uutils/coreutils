@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore formatteriteminfo blocksize thisblock
 
 use std::cmp;
@@ -112,7 +113,7 @@ impl OutputInfo {
     ///
     /// This function calculates the required spacing for a single line, given the size
     /// of a block, and the width of a block. The size of a block is the largest type
-    /// and the width is width of the the type which needs the most space to print that
+    /// and the width is the width of the type which needs the most space to print that
     /// number of bytes. So both numbers might refer to different types. All widths
     /// include a space at the front. For example the width of a 8-bit hexadecimal,
     /// is 3 characters, for example " FF".

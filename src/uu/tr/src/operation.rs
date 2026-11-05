@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (strings) anychar combinator Alnum Punct Xdigit alnum punct xdigit cntrl
+// spell-checker:ignore (strings) anychar combinator Alnum Punct Xdigit alnum punct xdigit cntrl alpah
 
 use crate::unicode_table;
 use nom::{
@@ -12,7 +12,7 @@ use nom::{
     bytes::complete::{tag, take, take_till, take_until},
     character::complete::one_of,
     combinator::{map, map_opt, peek, recognize, value},
-    multi::{many_m_n, many0},
+    multi::many_m_n,
     sequence::{delimited, preceded, separated_pair, terminated},
 };
 use std::{
@@ -20,6 +20,7 @@ use std::{
     error::Error,
     fmt::{Debug, Display},
     io::{BufRead, Write},
+    ops::Range,
 };
 use uucore::error::{FromIo, UError, UResult};
 use uucore::translate;
@@ -28,15 +29,20 @@ use uucore::show_warning;
 
 /// Common trait for operations that can process chunks of data
 pub trait ChunkProcessor {
-    fn process_chunk(&self, input: &[u8], output: &mut Vec<u8>);
+    /// Return the bytes to write: `input` itself when it is left unchanged,
+    /// `output` otherwise.
+    fn process_chunk<'a>(&self, input: &'a [u8], output: &'a mut Vec<u8>) -> &'a [u8];
 }
 
 #[derive(Debug, Clone)]
 pub enum BadSequence {
     MissingCharClassName,
+    InvalidCharClass(String),
     MissingEquivalentClassChar,
     MultipleCharRepeatInSet2,
     CharRepeatInSet1,
+    CharRepeatInSet2WhenNotTranslating,
+    EquivalenceClassInSet2WhenTranslating,
     InvalidRepeatCount(String),
     EmptySet2WhenNotTruncatingSet1,
     ClassExceptLowerUpperInSet2,
@@ -47,11 +53,28 @@ pub enum BadSequence {
     MultipleCharInEquivalence(String),
 }
 
+/// A range endpoint, printed the way the shell would show it: as itself for
+/// printable ASCII — backslash-escaped where Rust escapes it, so `\` and the
+/// quotes come back doubled — and as an octal escape otherwise.
+pub(crate) fn range_endpoint_to_string(ut: u32) -> String {
+    match char::from_u32(ut) {
+        Some(ch @ '\x20'..='\x7E') => ch.escape_default().to_string(),
+        _ => format!("\\{ut:03o}"),
+    }
+}
+
 impl Display for BadSequence {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::MissingCharClassName => {
                 write!(f, "{}", translate!("tr-error-missing-char-class-name"))
+            }
+            Self::InvalidCharClass(class) => {
+                write!(
+                    f,
+                    "{}",
+                    translate!("tr-error-invalid-char-class", "class" => format!("'{}'", class))
+                )
             }
             Self::MissingEquivalentClassChar => {
                 write!(
@@ -65,6 +88,20 @@ impl Display for BadSequence {
             }
             Self::CharRepeatInSet1 => {
                 write!(f, "{}", translate!("tr-error-char-repeat-in-set1"))
+            }
+            Self::CharRepeatInSet2WhenNotTranslating => {
+                write!(
+                    f,
+                    "{}",
+                    translate!("tr-error-char-repeat-in-set2-when-not-translating")
+                )
+            }
+            Self::EquivalenceClassInSet2WhenTranslating => {
+                write!(
+                    f,
+                    "{}",
+                    translate!("tr-error-equivalence-class-in-set2-when-translating")
+                )
             }
             Self::InvalidRepeatCount(count) => {
                 write!(
@@ -105,31 +142,62 @@ impl Display for BadSequence {
                 )
             }
             Self::BackwardsRange { end, start } => {
-                fn end_or_start_to_string(ut: u32) -> String {
-                    match char::from_u32(ut) {
-                        Some(ch @ '\x20'..='\x7E') => ch.escape_default().to_string(),
-                        _ => {
-                            format!("\\{ut:03o}")
-                        }
-                    }
-                }
                 write!(
                     f,
                     "{}",
-                    translate!("tr-error-backwards-range", "start" => end_or_start_to_string(*start), "end" => end_or_start_to_string(*end))
+                    translate!("tr-error-backwards-range", "start" => range_endpoint_to_string(*start), "end" => range_endpoint_to_string(*end))
                 )
             }
             Self::MultipleCharInEquivalence(s) => write!(
                 f,
                 "{}",
-                translate!("tr-error-multiple-char-in-equivalence", "chars" => s.clone())
+                translate!("tr-error-multiple-char-in-equivalence", "chars" => s)
             ),
         }
     }
 }
 
 impl Error for BadSequence {}
+
 impl UError for BadSequence {}
+
+/// A [`BadSequence`] together with where it was written.
+///
+/// A set is a small language of its own, so naming the set and the sequence
+/// inside it says far more than the message alone: `[:alpah:]` and `[a-Z]` are
+/// both "in SET1", but only one character of each is actually wrong.
+#[derive(Debug, Clone)]
+pub struct SequenceError {
+    pub error: BadSequence,
+    /// Which set the problem is in, numbered as the operands are: 1 or 2.
+    pub set: u8,
+    /// Byte range inside that set, or `None` when the set as a whole is at
+    /// fault rather than one sequence in it.
+    pub span: Option<Range<usize>>,
+}
+
+impl SequenceError {
+    /// A problem with a set taken as a whole.
+    fn whole_set(error: BadSequence, set: u8) -> Self {
+        Self {
+            error,
+            set,
+            span: None,
+        }
+    }
+}
+
+impl Display for SequenceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // The location is for the caret only; the message reads as it always
+        // has.
+        Display::fmt(&self.error, f)
+    }
+}
+
+impl Error for SequenceError {}
+
+impl UError for SequenceError {}
 
 #[derive(Debug, Clone, Copy)]
 pub enum Class {
@@ -150,6 +218,8 @@ pub enum Class {
 #[derive(Debug, Clone, Copy)]
 pub enum Sequence {
     Char(u8),
+    /// A `[=c=]` equivalence class, which is only the character itself.
+    Equivalence(u8),
     CharRange(u8, u8),
     CharStar(u8),
     CharRepeat(u8, usize),
@@ -159,7 +229,7 @@ pub enum Sequence {
 impl Sequence {
     pub fn flatten(&self) -> Box<dyn Iterator<Item = u8>> {
         match self {
-            Self::Char(c) => Box::new(std::iter::once(*c)),
+            Self::Char(c) | Self::Equivalence(c) => Box::new(std::iter::once(*c)),
             Self::CharRange(l, r) => Box::new(*l..=*r),
             Self::CharStar(c) => Box::new(std::iter::repeat(*c)),
             Self::CharRepeat(c, n) => Box::new(std::iter::repeat_n(*c, *n)),
@@ -177,8 +247,7 @@ impl Sequence {
                         .chain(33..=47)
                         .chain(58..=64)
                         .chain(91..=96)
-                        .chain(123..=126)
-                        .chain(std::iter::once(32)), // space
+                        .chain(123..=126),
                 ),
                 Class::Print => Box::new(
                     (48..=57) // digit
@@ -188,7 +257,8 @@ impl Sequence {
                         .chain(33..=47)
                         .chain(58..=64)
                         .chain(91..=96)
-                        .chain(123..=126),
+                        .chain(123..=126)
+                        .chain(std::iter::once(32)), // space
                 ),
                 Class::Punct => Box::new((33..=47).chain(58..=64).chain(91..=96).chain(123..=126)),
                 Class::Space => Box::new(unicode_table::SPACES.iter().copied()),
@@ -199,6 +269,73 @@ impl Sequence {
         }
     }
 
+    /// How many characters the sequence expands to, without expanding it:
+    /// the count of a `[c*n]` repeat can be far too large to materialize.
+    fn expanded_len(&self) -> usize {
+        match self {
+            Self::Char(_) | Self::Equivalence(_) => 1,
+            Self::CharRange(l, r) => usize::from(*r) - usize::from(*l) + 1,
+            // A star is only sized once it has been turned into a repeat.
+            Self::CharStar(_) => 0,
+            Self::CharRepeat(_, n) => *n,
+            Self::Class(_) => self.flatten().count(),
+        }
+    }
+
+    /// The expanded length of a set. Widened so that repeat counts close to
+    /// `usize::MAX` still add up exactly and positions keep their order.
+    fn expanded_len_of(set: &[Self]) -> u128 {
+        set.iter().map(|s| s.expanded_len() as u128).sum()
+    }
+
+    /// The characters of a set, in order, as runs of a repeated character.
+    ///
+    /// A `[c*n]` repeat is a single run however large `n` is; everything else
+    /// expands to runs of one character. Empty runs are left out, and a star
+    /// must have been turned into a repeat first.
+    fn runs(set: &[Self]) -> impl Iterator<Item = (u8, usize)> + '_ {
+        set.iter()
+            .flat_map(|s| -> Box<dyn Iterator<Item = (u8, usize)>> {
+                match s {
+                    Self::CharRepeat(c, n) => Box::new(std::iter::once((*c, *n))),
+                    Self::CharStar(_) => Box::new(std::iter::empty()),
+                    _ => Box::new(s.flatten().map(|c| (c, 1))),
+                }
+            })
+            .filter(|(_, n)| *n > 0)
+    }
+
+    /// The number of characters in a set of runs, widened like `expanded_len_of`.
+    fn runs_len(runs: &[(u8, usize)]) -> u128 {
+        runs.iter().map(|(_, n)| *n as u128).sum()
+    }
+
+    /// The characters a set of runs is made of, as a sorted list without duplicates.
+    fn unique_chars(runs: &[(u8, usize)]) -> Vec<u8> {
+        let mut uniques: Vec<u8> = runs.iter().map(|(c, _)| *c).collect();
+        uniques.sort_unstable();
+        uniques.dedup();
+        uniques
+    }
+
+    /// The complement of the characters that a set holds, or that its first
+    /// `len` positions hold, one run per character.
+    fn complement_of_prefix(set: &[Self], len: Option<u128>) -> Vec<(u8, usize)> {
+        let mut present = [false; 256];
+        let mut remaining = len;
+        for (c, n) in Self::runs(set) {
+            if remaining == Some(0) {
+                break;
+            }
+            present[usize::from(c)] = true;
+            remaining = remaining.map(|left| left.saturating_sub(n as u128));
+        }
+        (0..=u8::MAX)
+            .filter(|c| !present[usize::from(*c)])
+            .map(|c| (c, 1))
+            .collect()
+    }
+
     // Hide all the nasty sh*t in here
     pub fn solve_set_characters(
         set1_str: &[u8],
@@ -206,17 +343,43 @@ impl Sequence {
         complement_flag: bool,
         truncate_set1_flag: bool,
         translating: bool,
-    ) -> Result<(Vec<u8>, Vec<u8>), BadSequence> {
+    ) -> Result<(Vec<u8>, Vec<u8>), SequenceError> {
         let is_char_star = |s: &&Self| -> bool { matches!(s, Self::CharStar(_)) };
 
-        let set1 = Self::from_str(set1_str)?;
+        let set1 = Self::parse_set(set1_str).map_err(|(error, span)| SequenceError {
+            error,
+            set: 1,
+            span: Some(span),
+        })?;
         if set1.iter().filter(is_char_star).count() != 0 {
-            return Err(BadSequence::CharRepeatInSet1);
+            return Err(SequenceError::whole_set(BadSequence::CharRepeatInSet1, 1));
         }
 
-        let mut set2 = Self::from_str(set2_str)?;
+        let mut set2 = Self::parse_set(set2_str).map_err(|(error, span)| SequenceError {
+            error,
+            set: 2,
+            span: Some(span),
+        })?;
         if set2.iter().filter(is_char_star).count() > 1 {
-            return Err(BadSequence::MultipleCharRepeatInSet2);
+            return Err(SequenceError::whole_set(
+                BadSequence::MultipleCharRepeatInSet2,
+                2,
+            ));
+        }
+
+        // `[=c=]` in set2 is only for the set to squeeze with `-d -s`, and `[c*]`
+        // only fills set2 up to the length of set1 when translating.
+        if translating && set2.iter().any(|s| matches!(s, Self::Equivalence(_))) {
+            return Err(SequenceError::whole_set(
+                BadSequence::EquivalenceClassInSet2WhenTranslating,
+                2,
+            ));
+        }
+        if !translating && set2.iter().any(|s| is_char_star(&s)) {
+            return Err(SequenceError::whole_set(
+                BadSequence::CharRepeatInSet2WhenNotTranslating,
+                2,
+            ));
         }
 
         if translating
@@ -225,25 +388,28 @@ impl Sequence {
                     && !matches!(x, Self::Class(Class::Upper | Class::Lower))
             })
         {
-            return Err(BadSequence::ClassExceptLowerUpperInSet2);
+            return Err(SequenceError::whole_set(
+                BadSequence::ClassExceptLowerUpperInSet2,
+                2,
+            ));
         }
 
-        let mut set1_solved: Vec<u8> = set1.iter().flat_map(Self::flatten).collect();
-        if complement_flag {
-            set1_solved = (0..=u8::MAX).filter(|x| !set1_solved.contains(x)).collect();
-        }
-        let set1_len = set1_solved.len();
+        // Neither set is expanded character by character: a `[c*n]` repeat can
+        // be far too large for that. Both are handled as runs of one character
+        // instead, and only the lengths are ever computed in full.
+        let mut set1_runs: Vec<(u8, usize)> = if complement_flag {
+            Self::complement_of_prefix(&set1, None)
+        } else {
+            Self::runs(&set1).collect()
+        };
+        let set1_len = Self::runs_len(&set1_runs);
 
-        let set2_len = set2
-            .iter()
-            .filter_map(|s| match s {
-                Self::CharStar(_) => None,
-                r => Some(r),
-            })
-            .flat_map(Self::flatten)
-            .count();
+        // A star has no length of its own until it is turned into a repeat,
+        // so this is the length of everything else in set2.
+        let set2_fixed_len = Self::expanded_len_of(&set2);
 
-        let star_compensate_len = set1_len.saturating_sub(set2_len);
+        let star_compensate_len =
+            usize::try_from(set1_len.saturating_sub(set2_fixed_len)).unwrap_or(usize::MAX);
         //Replace CharStar with CharRepeat
         set2 = set2
             .iter()
@@ -255,90 +421,169 @@ impl Sequence {
             .collect();
 
         // For every upper/lower in set2, there must be an upper/lower in set1 at the same position. The position is calculated by expanding everything before the upper/lower in both sets
+        // This only applies when translating. With `-d -s`, set2 is only the set to squeeze.
         for (set2_pos, set2_item) in set2.iter().enumerate() {
-            if matches!(set2_item, Self::Class(_)) {
-                let mut set2_part_solved_len = 0;
-                if set2_pos >= 1 {
-                    set2_part_solved_len =
-                        set2.iter().take(set2_pos).flat_map(Self::flatten).count();
-                }
+            if translating && matches!(set2_item, Self::Class(_)) {
+                let set2_part_solved_len = Self::expanded_len_of(&set2[..set2_pos]);
 
                 let mut class_matches = false;
                 for (set1_pos, set1_item) in set1.iter().enumerate() {
-                    if matches!(set1_item, Self::Class(_)) {
-                        let mut set1_part_solved_len = 0;
-                        if set1_pos >= 1 {
-                            set1_part_solved_len =
-                                set1.iter().take(set1_pos).flat_map(Self::flatten).count();
-                        }
-
-                        if set1_part_solved_len == set2_part_solved_len {
-                            class_matches = true;
-                            break;
-                        }
+                    if matches!(set1_item, Self::Class(_))
+                        && Self::expanded_len_of(&set1[..set1_pos]) == set2_part_solved_len
+                    {
+                        class_matches = true;
+                        break;
                     }
                 }
 
                 if !class_matches {
-                    return Err(BadSequence::ClassInSet2NotMatchedBySet1);
+                    return Err(SequenceError::whole_set(
+                        BadSequence::ClassInSet2NotMatchedBySet1,
+                        2,
+                    ));
                 }
             }
         }
 
-        let set2_solved: Vec<_> = set2.iter().flat_map(Self::flatten).collect();
+        let set2_runs: Vec<(u8, usize)> = Self::runs(&set2).collect();
+        let set2_len = Self::runs_len(&set2_runs);
 
         // Calculate the set of unique characters in set2
-        let mut set2_uniques = set2_solved.clone();
-        set2_uniques.sort_unstable();
-        set2_uniques.dedup();
+        let set2_uniques = Self::unique_chars(&set2_runs);
 
+        let set1_has_class = set1.iter().any(|x| matches!(x, Self::Class(_)));
         // If the complement flag is used in translate mode, only one unique
         // character may appear in set2. Validate this with the set of uniques
         // in set2 that we just generated.
         // Also, set2 must not overgrow set1, otherwise the mapping can't be 1:1.
-        if set1.iter().any(|x| matches!(x, Self::Class(_)))
+        if set1_has_class
             && translating
             && complement_flag
-            && (set2_uniques.len() > 1 || set2_solved.len() > set1_len)
+            && (set2_uniques.len() > 1 || set2_len > set1_len)
         {
-            return Err(BadSequence::ComplementMoreThanOneUniqueInSet2);
+            return Err(SequenceError::whole_set(
+                BadSequence::ComplementMoreThanOneUniqueInSet2,
+                2,
+            ));
         }
 
-        if set2_solved.len() < set1_solved.len()
-            && !truncate_set1_flag
-            && matches!(
+        if set2_len < set1_len {
+            if truncate_set1_flag {
+                if complement_flag && set1_has_class {
+                    // GNU applies -t before complementing a character class.
+                    // That means we must first truncate the expanded, non-complemented
+                    // source set, then complement the truncated prefix to recover the
+                    // final translation domain.
+                    set1_runs = Self::complement_of_prefix(&set1, Some(set2_len));
+                    // After expansion the complemented domain may be larger than set2.
+                    // Re-check the complement validity constraint.
+                    if set2_uniques.len() > 1 || set1_runs.len() as u128 > set2_len {
+                        return Err(SequenceError::whole_set(
+                            BadSequence::ComplementMoreThanOneUniqueInSet2,
+                            2,
+                        ));
+                    }
+                }
+                // Otherwise set1 is cut to the length of set2 while pairing below.
+            } else if matches!(
                 set2.last().copied(),
                 Some(Self::Class(Class::Upper | Class::Lower))
-            )
-        {
-            return Err(BadSequence::Set1LongerSet2EndsInClass);
+            ) {
+                return Err(SequenceError::whole_set(
+                    BadSequence::Set1LongerSet2EndsInClass,
+                    1,
+                ));
+            }
         }
-        //Truncation is done dead last. It has no influence on the other conversion steps
-        if truncate_set1_flag {
-            set1_solved.truncate(set2_solved.len());
+
+        // Line the two sets up position by position, one run at a time. A run
+        // of one character in set1 maps that character to every character it
+        // lines up with in set2, and the last mapping wins, so the pair at the
+        // end of each run boundary is all that is kept: the pairs in between
+        // repeat it. Once set2 runs out, set1 is either cut (-t) or the rest
+        // of it maps to the last character of set2.
+        let fallback = set2_runs.last().map(|(c, _)| *c);
+        let mut set1_solved = Vec::new();
+        let mut set2_solved = Vec::new();
+        let mut set2_runs = set2_runs.into_iter();
+        let mut pending = set2_runs.next();
+        'pairing: for (c1, mut n1) in set1_runs {
+            while n1 > 0 {
+                let Some((c2, n2)) = pending else {
+                    if truncate_set1_flag {
+                        break 'pairing;
+                    }
+                    set1_solved.push(c1);
+                    set2_solved.extend(fallback);
+                    break;
+                };
+                set1_solved.push(c1);
+                set2_solved.push(c2);
+                let step = n1.min(n2);
+                n1 -= step;
+                pending = if n2 > step {
+                    Some((c2, n2 - step))
+                } else {
+                    set2_runs.next()
+                };
+            }
         }
+        // What is left of set2 is still part of it: with -s, the characters
+        // to squeeze come from all of set2.
+        set2_solved.extend(pending.into_iter().chain(set2_runs).map(|(c, _)| c));
+
         Ok((set1_solved, set2_solved))
     }
 }
 
 impl Sequence {
-    pub fn from_str(input: &[u8]) -> Result<Vec<Self>, BadSequence> {
-        many0(alt((
-            Self::parse_char_range,
-            Self::parse_char_star,
-            Self::parse_char_repeat,
-            Self::parse_class,
-            Self::parse_char_equal,
-            // NOTE: This must be the last one
-            map(Self::parse_backslash_or_char_with_warning, |s| {
-                Ok(Self::Char(s))
-            }),
-        )))
-        .parse(input)
-        .map(|(_, r)| r)
-        .unwrap()
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
+    /// Parse a set, reporting which part of it a bad sequence occupies.
+    ///
+    /// The alternatives are tried in the same order as before; the loop only
+    /// replaces `many0` so that how much each sequence consumed is still known
+    /// once it turns out to be wrong. Like `many0`, it consumes the whole set
+    /// even past a bad sequence: parsing the tail emits the warnings — an
+    /// ambiguous octal escape, invalid UTF-8 — that it always has.
+    fn parse_set(input: &[u8]) -> Result<Vec<Self>, (BadSequence, Range<usize>)> {
+        let mut result = Vec::new();
+        let mut first_error = None;
+        let mut rest = input;
+        while !rest.is_empty() {
+            let start = input.len() - rest.len();
+            let parsed = alt((
+                Self::parse_char_star,
+                Self::parse_char_repeat,
+                Self::parse_class,
+                Self::parse_char_equal,
+                Self::parse_char_range,
+                // NOTE: This must be the last one
+                map(Self::parse_backslash_or_char_with_warning, |s| {
+                    Ok(Self::Char(s))
+                }),
+            ))
+            .parse(rest);
+            // The last alternative accepts any single byte, so this only
+            // happens on input the loop has already run out of.
+            let Ok((next, sequence)) = parsed else { break };
+            // `many0` refuses an alternative that matched nothing rather than
+            // loop on it forever; none of the ones above can, but the loop is
+            // no place to find out if one ever does.
+            if next.len() == rest.len() {
+                break;
+            }
+            let end = input.len() - next.len();
+            match sequence {
+                Ok(sequence) => result.push(sequence),
+                Err(error) => {
+                    first_error.get_or_insert((error, start..end));
+                }
+            }
+            rest = next;
+        }
+        match first_error {
+            Some(error) => Err(error),
+            None => Ok(result),
+        }
     }
 
     fn parse_octal(input: &[u8]) -> IResult<&[u8], u8> {
@@ -501,31 +746,31 @@ impl Sequence {
     }
 
     fn parse_class(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
-        delimited(
-            tag("[:"),
-            alt((
-                map(
-                    alt((
-                        value(Self::Class(Class::Alnum), tag("alnum")),
-                        value(Self::Class(Class::Alpha), tag("alpha")),
-                        value(Self::Class(Class::Blank), tag("blank")),
-                        value(Self::Class(Class::Control), tag("cntrl")),
-                        value(Self::Class(Class::Digit), tag("digit")),
-                        value(Self::Class(Class::Graph), tag("graph")),
-                        value(Self::Class(Class::Lower), tag("lower")),
-                        value(Self::Class(Class::Print), tag("print")),
-                        value(Self::Class(Class::Punct), tag("punct")),
-                        value(Self::Class(Class::Space), tag("space")),
-                        value(Self::Class(Class::Upper), tag("upper")),
-                        value(Self::Class(Class::Xdigit), tag("xdigit")),
-                    )),
-                    Ok,
-                ),
-                value(Err(BadSequence::MissingCharClassName), tag("")),
-            )),
-            tag(":]"),
-        )
-        .parse(input)
+        preceded(tag("[:"), terminated(take_until(":]"), tag(":]")))
+            .parse(input)
+            .map(|(l, class_name)| {
+                (
+                    l,
+                    match class_name {
+                        b"" => Err(BadSequence::MissingCharClassName),
+                        b"alnum" => Ok(Self::Class(Class::Alnum)),
+                        b"alpha" => Ok(Self::Class(Class::Alpha)),
+                        b"blank" => Ok(Self::Class(Class::Blank)),
+                        b"cntrl" => Ok(Self::Class(Class::Control)),
+                        b"digit" => Ok(Self::Class(Class::Digit)),
+                        b"graph" => Ok(Self::Class(Class::Graph)),
+                        b"lower" => Ok(Self::Class(Class::Lower)),
+                        b"print" => Ok(Self::Class(Class::Print)),
+                        b"punct" => Ok(Self::Class(Class::Punct)),
+                        b"space" => Ok(Self::Class(Class::Space)),
+                        b"upper" => Ok(Self::Class(Class::Upper)),
+                        b"xdigit" => Ok(Self::Class(Class::Xdigit)),
+                        _ => Err(BadSequence::InvalidCharClass(
+                            String::from_utf8_lossy(class_name).into_owned(),
+                        )),
+                    },
+                )
+            })
     }
 
     fn parse_char_equal(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
@@ -547,7 +792,7 @@ impl Sequence {
                 l,
                 match (a, b) {
                     (Err(()), _) => Err(BadSequence::MissingEquivalentClassChar),
-                    (Ok(c), Ok(())) => Ok(Self::Char(c)),
+                    (Ok(c), Ok(())) => Ok(Self::Equivalence(c)),
                     (Ok(c), Err(v)) => Err(BadSequence::MultipleCharInEquivalence(format!(
                         "{}{}",
                         String::from_utf8_lossy(&[c]),
@@ -600,13 +845,20 @@ fn set_to_bitmap(set: &[u8]) -> [bool; 256] {
 
 #[derive(Debug)]
 pub struct DeleteOperation {
-    pub(crate) delete_table: [bool; 256],
+    pub(crate) keep_table: [bool; 256],
+    /// The byte to delete, when it is the only one.
+    single_delete: Option<u8>,
 }
 
 impl DeleteOperation {
     pub fn new(set: Vec<u8>) -> Self {
+        use crate::simd::find_single_change;
+
+        let keep_table = set_to_bitmap(&set).map(|delete| !delete);
+        let single_delete = find_single_change(&keep_table, |_, &keep| !keep).map(|(b, _)| b);
         Self {
-            delete_table: set_to_bitmap(&set),
+            keep_table,
+            single_delete,
         }
     }
 }
@@ -614,27 +866,20 @@ impl DeleteOperation {
 impl SymbolTranslator for DeleteOperation {
     fn translate(&mut self, current: u8) -> Option<u8> {
         // keep if not present in the delete set
-        (!self.delete_table[current as usize]).then_some(current)
+        self.keep_table[current as usize].then_some(current)
     }
 }
 
 impl ChunkProcessor for DeleteOperation {
-    fn process_chunk(&self, input: &[u8], output: &mut Vec<u8>) {
-        use crate::simd::{find_single_change, process_single_delete};
+    fn process_chunk<'a>(&self, input: &'a [u8], output: &'a mut Vec<u8>) -> &'a [u8] {
+        use crate::simd::{process_delete, process_single_delete};
 
-        // Check if this is single character deletion
-        if let Some((delete_char, _)) =
-            find_single_change(&self.delete_table, |_, &should_delete| should_delete)
-        {
-            process_single_delete(input, output, delete_char);
+        if let Some(delete_char) = self.single_delete {
+            process_single_delete(input, output, delete_char, &self.keep_table)
         } else {
             // Standard deletion
-            output.extend(
-                input
-                    .iter()
-                    .filter(|&&b| !self.delete_table[b as usize])
-                    .copied(),
-            );
+            process_delete(input, output, &self.keep_table);
+            output
         }
     }
 }
@@ -642,6 +887,8 @@ impl ChunkProcessor for DeleteOperation {
 #[derive(Debug)]
 pub struct TranslateOperation {
     pub(crate) translation_table: [u8; 256],
+    /// The byte to replace and its replacement, when it is the only one.
+    single_change: Option<(u8, u8)>,
 }
 
 impl TranslateOperation {
@@ -658,12 +905,24 @@ impl TranslateOperation {
                 translation_table[from as usize] = to;
             }
 
-            Ok(Self { translation_table })
+            Ok(Self::from_table(translation_table))
         } else if set1.is_empty() && set2.is_empty() {
             // Identity mapping for empty sets
-            Ok(Self { translation_table })
+            Ok(Self::from_table(translation_table))
         } else {
+            // Raised against the solved sets rather than what was typed, so
+            // there is nothing to point a caret at.
             Err(BadSequence::EmptySet2WhenNotTruncatingSet1)
+        }
+    }
+
+    fn from_table(translation_table: [u8; 256]) -> Self {
+        use crate::simd::find_single_change;
+
+        let single_change = find_single_change(&translation_table, |i, &val| val != i as u8);
+        Self {
+            translation_table,
+            single_change,
         }
     }
 }
@@ -675,18 +934,16 @@ impl SymbolTranslator for TranslateOperation {
 }
 
 impl ChunkProcessor for TranslateOperation {
-    fn process_chunk(&self, input: &[u8], output: &mut Vec<u8>) {
-        use crate::simd::{find_single_change, process_single_char_replace};
+    fn process_chunk<'a>(&self, input: &'a [u8], output: &'a mut Vec<u8>) -> &'a [u8] {
+        use crate::simd::process_single_char_replace;
 
-        // Check if this is a simple single-character translation
-        if let Some((source, target)) =
-            find_single_change(&self.translation_table, |i, &val| val != i as u8)
-        {
+        if let Some((source, target)) = self.single_change {
             // Use SIMD-optimized single character replacement
-            process_single_char_replace(input, output, source, target);
+            process_single_char_replace(input, output, source, target)
         } else {
             // Standard translation using table lookup
             output.extend(input.iter().map(|&b| self.translation_table[b as usize]));
+            output
         }
     }
 }
@@ -758,12 +1015,12 @@ where
 /// Platform-specific flush operation
 #[inline]
 pub fn flush_output<W: Write>(output: &mut W) -> UResult<()> {
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     return output
         .flush()
         .map_err_context(|| translate!("tr-error-write-error"));
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     match output.flush() {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {

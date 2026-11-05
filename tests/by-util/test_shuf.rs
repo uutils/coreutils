@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) unwritable
+// spell-checker:ignore (ToDO) unwritable GHSA EAGAIN
+
 use std::fmt::Write;
 
 use uutests::at_and_ucmd;
@@ -12,6 +13,32 @@ use uutests::new_ucmd;
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_getrandom_fail() {
+    // getrandom is missing from legacy kernel
+    use std::process::Command;
+
+    let Ok(out) = Command::new("strace")
+        .args([
+            "-o",
+            "/dev/null",
+            "-e",
+            "inject=getrandom:error=EAGAIN",
+            uutests::util::get_tests_binary(),
+            "shuf",
+            "-i",
+            "1234-1235",
+        ])
+        .output()
+    else {
+        return; // missing strace
+    };
+    assert!(out.status.success());
+    assert!(String::from_utf8_lossy(&out.stdout).contains("1234"));
 }
 
 #[test]
@@ -93,15 +120,15 @@ fn test_zero_termination_multi() {
 
 #[test]
 fn test_very_large_range() {
-    let num_samples = 10;
+    let num_samples = 256;
     let result = new_ucmd!()
         .arg("-n")
         .arg(num_samples.to_string())
-        .arg("-i0-1234567890")
+        .arg("-i1-100000000000")
         .succeeds();
     result.no_stderr();
 
-    let result_seq: Vec<isize> = result
+    let result_seq: Vec<u64> = result
         .stdout_str()
         .split('\n')
         .filter(|x| !x.is_empty())
@@ -109,7 +136,7 @@ fn test_very_large_range() {
         .collect();
     assert_eq!(result_seq.len(), num_samples, "Miscounted output length!");
     assert!(
-        result_seq.iter().all(|x| (0..=1_234_567_890).contains(x)),
+        result_seq.iter().all(|x| (0..=100_000_000_000).contains(x)),
         "Output includes element not from range: {}",
         result.stdout_str()
     );
@@ -232,6 +259,31 @@ fn test_range_permute_no_overflow_0_max() {
         .map(|x| x.parse().unwrap())
         .collect();
     assert_eq!(result_seq.len(), 1, "Miscounted output length!");
+}
+
+#[test]
+fn test_range_full_huge_no_head_count_memory_exhausted() {
+    // Repro for #12500: `shuf -i 1-huge` with no --head-count used to abort
+    // (hashbrown "Hash table capacity overflow" panic, or an allocator abort)
+    // because the sparse iterator reserved a map sized to the whole range.
+    // It must now fail cleanly, like GNU.
+    let upper_bound = usize::MAX;
+    new_ucmd!()
+        .arg(format!("-i1-{upper_bound}"))
+        .fails_with_code(1)
+        .stderr_only("shuf: memory exhausted\n");
+}
+
+#[test]
+fn test_range_huge_head_count_memory_exhausted() {
+    // Repro for #12500: a large --head-count is just as unsatisfiable as no
+    // --head-count; both used to abort. Must now fail cleanly.
+    let upper_bound = usize::MAX;
+    new_ucmd!()
+        .arg(format!("-n{upper_bound}"))
+        .arg(format!("-i1-{upper_bound}"))
+        .fails_with_code(1)
+        .stderr_only("shuf: memory exhausted\n");
 }
 
 #[test]
@@ -382,6 +434,7 @@ fn test_echo_separators_in_arguments() {
 }
 
 #[cfg(unix)]
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 fn test_echo_invalid_unicode_in_arguments() {
     use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
@@ -395,8 +448,9 @@ fn test_echo_invalid_unicode_in_arguments() {
     assert!(result.stdout().contains(&b'\xFF'));
 }
 
-#[cfg(any(unix, target_os = "wasi"))]
-#[cfg(not(target_os = "macos"))]
+#[cfg(unix)]
+#[cfg(not(target_vendor = "apple"))]
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 fn test_invalid_unicode_in_filename() {
     use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
@@ -496,6 +550,29 @@ fn test_zero_head_count_file_touch_output_positive_existing() {
         Vec::new(),
         "Output file must exist and be completely empty"
     );
+}
+
+#[test]
+fn test_output_not_truncated_when_input_missing() {
+    // A failure to read the input must leave an existing -o file untouched
+    // instead of truncating it first (data-loss regression, GHSA-5g6r-45q4-3p5r).
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("out", "keep me\n");
+    ucmd.args(&["-o", "out", "does-not-exist"])
+        .fails_with_code(1)
+        .stderr_contains("does-not-exist");
+    assert_eq!(at.read("out"), "keep me\n");
+}
+
+#[test]
+fn test_output_not_truncated_when_random_source_missing() {
+    // Same guarantee when the random source can't be opened.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("out", "keep me\n");
+    at.write("in", "a\nb\nc\n");
+    ucmd.args(&["-o", "out", "--random-source=does-not-exist", "in"])
+        .fails_with_code(1);
+    assert_eq!(at.read("out"), "keep me\n");
 }
 
 #[test]
@@ -690,26 +767,26 @@ fn test_shuf_input_range_and_file_not_allowed() {
         .stderr_contains("cannot be used with");
 }
 
+/// Whatever is wrong with the LO-HI of -i, GNU names the range as a whole
+/// and exits 1, and adds a detail only when a bound overflows.
 #[test]
-fn test_shuf_invalid_input_range_one() {
+fn test_shuf_invalid_input_range_message() {
+    for range in ["0", "a-9", "0-b", "5-1", "abc", "1-", "1-2-3", ""] {
+        new_ucmd!()
+            .args(&["-i", range])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_only(format!("shuf: invalid input range: '{range}'\n"));
+    }
+
     new_ucmd!()
-        .args(&["-i", "0"])
-        .fails()
-        .stderr_contains("invalid value '0' for '--input-range <LO-HI>': missing '-'");
-}
-
-#[test]
-fn test_shuf_invalid_input_range_two() {
-    new_ucmd!().args(&["-i", "a-9"]).fails().stderr_contains(
-        "invalid value 'a-9' for '--input-range <LO-HI>': invalid digit found in string",
-    );
-}
-
-#[test]
-fn test_shuf_invalid_input_range_three() {
-    new_ucmd!().args(&["-i", "0-b"]).fails().stderr_contains(
-        "invalid value '0-b' for '--input-range <LO-HI>': invalid digit found in string",
-    );
+        .args(&["-i", "99999999999999999999999-1"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_only(
+            "shuf: invalid input range: '99999999999999999999999-1': \
+             Value too large to be stored in data type\n",
+        );
 }
 
 #[test]
@@ -817,7 +894,7 @@ fn test_range_empty_minus_one() {
         .arg("-i5-3")
         .fails()
         .no_stdout()
-        .stderr_contains("invalid value '5-3' for '--input-range <LO-HI>': start exceeds end\n");
+        .stderr_contains("shuf: invalid input range: '5-3'\n");
 }
 
 #[test]
@@ -847,10 +924,11 @@ fn test_range_repeat_empty_minus_one() {
         .arg("-ri5-3")
         .fails()
         .no_stdout()
-        .stderr_contains("invalid value '5-3' for '--input-range <LO-HI>': start exceeds end\n");
+        .stderr_contains("shuf: invalid input range: '5-3'\n");
 }
 
 // This test fails if we forget to flush the `BufWriter`.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn write_errors_are_reported() {
@@ -1110,5 +1188,5 @@ fn test_seed_long_range_no_repeat() {
 
 #[test]
 fn test_empty_range_no_repeat() {
-    new_ucmd!().arg("-i4-3").succeeds().no_stderr().no_stdout();
+    new_ucmd!().arg("-i4-3").succeeds().no_output();
 }

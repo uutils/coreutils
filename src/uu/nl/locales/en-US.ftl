@@ -2,17 +2,16 @@ nl-about = Number lines of files
 nl-usage = nl [OPTION]... [FILE]...
 nl-after-help = STYLE is one of:
 
-  - a number all lines
-  - t number only nonempty lines
-  - n number no lines
-  - pBRE number only lines that contain a match for the basic regular
-          expression, BRE
+    - a number all lines
+    - t number only nonempty lines
+    - n number no lines
+    - pBRE number only lines that contain a match for the basic regular expression, BRE
 
   FORMAT is one of:
 
-  - ln left justified, no leading zeros
-  - rn right justified, no leading zeros
-  - rz right justified, leading zeros
+    - ln left justified, no leading zeros
+    - rn right justified, no leading zeros
+    - rz right justified, leading zeros
 
 # Help messages
 nl-help-help = Print help information.
@@ -33,7 +32,6 @@ nl-error-invalid-arguments = Invalid arguments supplied.
 nl-error-could-not-read-line = could not read line
 nl-error-could-not-write = could not write output
 nl-error-line-number-overflow = line number overflow
-nl-error-invalid-line-width = Invalid line number field width: ‘{ $value }’: Numerical result out of range
 nl-error-invalid-regex = invalid regular expression
 nl-error-invalid-numbering-style = invalid numbering style: '{ $style }'
 nl-error-is-directory = { $path }: Is a directory

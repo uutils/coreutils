@@ -8,11 +8,13 @@ use std::env;
 pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
 
 // Use the ctor attribute to run this function before any tests
-#[ctor::ctor]
+#[ctor::ctor(unsafe)]
 fn init() {
-    unsafe {
-        // Necessary for uutests to be able to find the binary
-        env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
+    // Allow overriding the binary path (e.g. to test a WASI binary via wasmtime)
+    if env::var("UUTESTS_BINARY_PATH").is_err() {
+        unsafe {
+            env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
+        }
     }
 }
 
@@ -451,3 +453,15 @@ mod test_whoami;
 #[cfg(feature = "yes")]
 #[path = "by-util/test_yes.rs"]
 mod test_yes;
+
+#[cfg(any(
+    feature = "b2sum",
+    feature = "md5sum",
+    feature = "sha1sum",
+    feature = "sha224sum",
+    feature = "sha256sum",
+    feature = "sha384sum",
+    feature = "sha512sum"
+))]
+#[path = "by-util/common_checksum_tests.rs"]
+pub(crate) mod common_checksum_tests;

@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore badoption
+
+// spell-checker:ignore badoption CTYPE
+
 use clap::{
     Arg, ArgAction, ArgMatches, Command, builder::ValueParser, error::ContextKind, error::Error,
     error::ErrorKind,
@@ -55,20 +57,13 @@ struct Uniq {
     slice_stop: Option<usize>,
     ignore_case: bool,
     zero_terminated: bool,
+    is_c_locale: bool,
 }
 
 #[derive(Default)]
 struct LineMeta {
     key_start: usize,
     key_end: usize,
-}
-
-macro_rules! write_line_terminator {
-    ($writer:expr, $line_terminator:expr) => {
-        $writer
-            .write_all(&[$line_terminator])
-            .map_err_context(|| translate!("uniq-error-write-line-terminator"))
-    };
 }
 
 impl Uniq {
@@ -87,17 +82,24 @@ impl Uniq {
 
         let mut next_buf = Vec::with_capacity(1024);
         let mut next_meta = LineMeta::default();
+        let mut line_out = Vec::with_capacity(1024);
 
-        loop {
-            if !Self::read_line(&mut reader, &mut next_buf, line_terminator)? {
-                break;
+        let read_result = loop {
+            match Self::read_line(&mut reader, &mut next_buf, line_terminator) {
+                Ok(true) => {}
+                result => break result.map(|_| ()),
             }
-
             self.build_meta(&next_buf, &mut next_meta);
 
             if self.keys_are_equal(&current_buf, &current_meta, &next_buf, &next_meta) {
                 if self.all_repeated {
-                    self.write_line(writer, &current_buf, group_count, first_line_printed)?;
+                    self.write_line(
+                        writer,
+                        &mut line_out,
+                        &current_buf,
+                        group_count,
+                        first_line_printed,
+                    )?;
                     first_line_printed = true;
                     std::mem::swap(&mut current_buf, &mut next_buf);
                     std::mem::swap(&mut current_meta, &mut next_meta);
@@ -107,7 +109,13 @@ impl Uniq {
                 if (group_count == 1 && !self.repeats_only)
                     || (group_count > 1 && !self.uniques_only)
                 {
-                    self.write_line(writer, &current_buf, group_count, first_line_printed)?;
+                    self.write_line(
+                        writer,
+                        &mut line_out,
+                        &current_buf,
+                        group_count,
+                        first_line_printed,
+                    )?;
                     first_line_printed = true;
                 }
                 std::mem::swap(&mut current_buf, &mut next_buf);
@@ -115,21 +123,34 @@ impl Uniq {
                 group_count = 1;
             }
             next_buf.clear();
-        }
+        };
 
-        if (group_count == 1 && !self.repeats_only) || (group_count > 1 && !self.uniques_only) {
-            self.write_line(writer, &current_buf, group_count, first_line_printed)?;
+        // Counts and filtering require the group to end; a read error does not end it.
+        let can_write_pending_line =
+            read_result.is_ok() || !(self.show_counts || self.repeats_only || self.uniques_only);
+        let group_matches_filter =
+            (group_count == 1 && !self.repeats_only) || (group_count > 1 && !self.uniques_only);
+        if can_write_pending_line && group_matches_filter {
+            self.write_line(
+                writer,
+                &mut line_out,
+                &current_buf,
+                group_count,
+                first_line_printed,
+            )?;
             first_line_printed = true;
         }
         if (self.delimiters == Delimiters::Append || self.delimiters == Delimiters::Both)
             && first_line_printed
         {
-            write_line_terminator!(writer, line_terminator)?;
+            writer
+                .write_all(&[line_terminator])
+                .map_err_context(|| translate!("uniq-error-write-line-terminator"))?;
         }
         writer
             .flush()
             .map_err_context(|| translate!("uniq-error-write-error"))?;
-        Ok(())
+        read_result
     }
 
     fn get_line_terminator(&self) -> u8 {
@@ -165,15 +186,17 @@ impl Uniq {
 
     fn skip_fields_offset(&self, line: &[u8]) -> usize {
         if let Some(skip_fields) = self.skip_fields {
+            // Fields end at a blank or a newline; \r and \f are ordinary bytes.
+            let is_blank = |byte: u8| matches!(byte, b' ' | b'\t' | b'\n');
             let mut idx = 0;
             for _ in 0..skip_fields {
-                while idx < line.len() && line[idx].is_ascii_whitespace() {
+                while idx < line.len() && is_blank(line[idx]) {
                     idx += 1;
                 }
                 if idx >= line.len() {
                     return line.len();
                 }
-                while idx < line.len() && !line[idx].is_ascii_whitespace() {
+                while idx < line.len() && !is_blank(line[idx]) {
                     idx += 1;
                 }
                 if idx >= line.len() {
@@ -186,6 +209,14 @@ impl Uniq {
         }
     }
 
+    fn is_c_locale() -> bool {
+        ["LC_ALL", "LC_CTYPE", "LANG"]
+            .iter()
+            .find_map(|&key| std::env::var_os(key))
+            .filter(|v| !v.is_empty())
+            .is_none_or(|v| v == "C" || v == "POSIX")
+    }
+
     fn key_end_index(&self, line: &[u8], key_start: usize) -> usize {
         let remainder = &line[key_start..];
         match self.slice_stop {
@@ -194,10 +225,15 @@ impl Uniq {
                 if remainder.is_empty() {
                     return key_start;
                 }
-                if let Ok(valid) = std::str::from_utf8(remainder) {
+                if self.is_c_locale {
+                    // for C or POSIX we count bytes
+                    key_start + remainder.len().min(limit)
+                } else if let Ok(valid) = std::str::from_utf8(remainder) {
+                    // for UTF-8 we count characters
                     let prefix_len = Self::char_prefix_len(valid, limit);
                     key_start + prefix_len
                 } else {
+                    // for invalid UTF-8 we count bytes
                     key_start + remainder.len().min(limit)
                 }
             }
@@ -231,9 +267,7 @@ impl Uniq {
         if bytes_read == 0 {
             return Ok(false);
         }
-        if buffer.last().is_some_and(|last| *last == line_terminator) {
-            buffer.pop();
-        }
+        let _ = buffer.pop_if(|last| *last == line_terminator);
         Ok(true)
     }
 
@@ -253,31 +287,31 @@ impl Uniq {
     fn write_line(
         &self,
         writer: &mut impl Write,
+        line_out: &mut Vec<u8>,
         line: &[u8],
         count: usize,
         first_line_printed: bool,
     ) -> UResult<()> {
         let line_terminator = self.get_line_terminator();
 
-        if self.should_print_delimiter(count, first_line_printed) {
-            write_line_terminator!(writer, line_terminator)?;
-        }
+        line_out.clear();
 
-        let mut count_buf = [0u8; Self::COUNT_PREFIX_BUF_SIZE];
+        if self.should_print_delimiter(count, first_line_printed) {
+            line_out.push(line_terminator);
+        }
 
         if self.show_counts {
-            // Call the associated function (no &self) after the refactor above.
+            let mut count_buf = [0u8; Self::COUNT_PREFIX_BUF_SIZE];
             let prefix = Self::build_count_prefix(count, &mut count_buf);
-            writer
-                .write_all(prefix)
-                .map_err_context(|| translate!("uniq-error-write-error"))?;
+            line_out.extend_from_slice(prefix);
         }
 
-        writer
-            .write_all(line)
-            .map_err_context(|| translate!("uniq-error-write-error"))?;
+        line_out.extend_from_slice(line);
+        line_out.push(line_terminator);
 
-        write_line_terminator!(writer, line_terminator)
+        writer
+            .write_all(line_out)
+            .map_err_context(|| translate!("uniq-error-write-error"))
     }
 
     const COUNT_PREFIX_WIDTH: usize = 7;
@@ -354,6 +388,7 @@ fn handle_obsolete(args: impl uucore::Args) -> (Vec<OsString>, Option<usize>, Op
     let mut skip_chars_old = None;
     let mut preceding_long_opt_req_value = false;
     let mut preceding_short_opt_req_value = false;
+    let mut after_double_dash = false;
 
     let filtered_args = args
         .filter_map(|os_slice| {
@@ -363,6 +398,7 @@ fn handle_obsolete(args: impl uucore::Args) -> (Vec<OsString>, Option<usize>, Op
                 &mut skip_chars_old,
                 &mut preceding_long_opt_req_value,
                 &mut preceding_short_opt_req_value,
+                &mut after_double_dash,
             )
         })
         .collect();
@@ -382,9 +418,19 @@ fn filter_args(
     skip_chars_old: &mut Option<String>,
     preceding_long_opt_req_value: &mut bool,
     preceding_short_opt_req_value: &mut bool,
+    after_double_dash: &mut bool,
 ) -> Option<OsString> {
     let filter: Option<OsString>;
     if let Some(slice) = os_slice.to_str() {
+        if *after_double_dash {
+            // Past `--` everything is an operand, so `uniq -- -1` names a file
+            // rather than skipping a field.
+            return Some(OsString::from(slice));
+        }
+        if slice == "--" {
+            *after_double_dash = true;
+            return Some(OsString::from(slice));
+        }
         if should_extract_obs_skip_fields(
             slice,
             *preceding_long_opt_req_value,
@@ -595,6 +641,8 @@ fn handle_extract_obs_skip_chars(
 /// Unfortunately these overrides are necessary, since several GNU tests
 /// for `uniq` hardcode and require the exact wording of the error message
 /// and it is not compatible with how Clap formats and displays those error messages.
+#[cold]
+#[inline(never)]
 fn map_clap_errors(clap_error: Error) -> Box<dyn UError> {
     let footer = translate!("uniq-error-try-help");
     let override_arg_conflict = translate!("uniq-error-group-mutually-exclusive") + "\n" + &footer;
@@ -641,7 +689,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 return Err(map_clap_errors(clap_error));
             }
             // Use ErrorFormatter directly to handle error
-            let formatter = uucore::clap_localization::ErrorFormatter::new(uucore::util_name());
+            let formatter = uucore::clap_localization::ErrorFormatter::new("uniq");
             formatter.print_error_and_exit_with_callback(&clap_error, 1, || {});
         }
     };
@@ -669,6 +717,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         slice_stop: opt_parsed(options::CHECK_CHARS, &matches)?,
         ignore_case: matches.get_flag(options::IGNORE_CASE),
         zero_terminated: matches.get_flag(options::ZERO_TERMINATED),
+        is_c_locale: Uniq::is_c_locale(),
     };
 
     if uniq.show_counts && uniq.all_repeated {
@@ -685,11 +734,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("uniq")
         .version(uucore::crate_version!())
         .about(translate!("uniq-about"))
         .override_usage(format_usage(&translate!("uniq-usage")))
         .infer_long_args(true)
+        // GNU lets a later -f/-s/-w override an earlier one.
+        .args_override_self(true)
         .after_help(translate!("uniq-after-help"));
     uucore::clap_localization::configure_localized_command(cmd)
         .arg(
@@ -701,7 +752,9 @@ pub fn uu_app() -> Command {
                 .value_name("delimit-method")
                 .num_args(0..=1)
                 .default_missing_value("none")
-                .require_equals(true),
+                .require_equals(true)
+                // Let the final occurrence select the delimiter method.
+                .overrides_with(options::ALL_REPEATED),
         )
         .arg(
             Arg::new(options::GROUP)
@@ -811,10 +864,8 @@ fn get_delimiter(matches: &ArgMatches) -> Delimiters {
 fn open_input_file(in_file_name: Option<&OsStr>) -> UResult<Box<dyn BufRead>> {
     Ok(match in_file_name {
         Some(path) if path != "-" => {
-            let in_file = File::open(path).map_err_context(
-                || translate!("uniq-error-could-not-open", "path" => path.maybe_quote()),
-            )?;
-            Box::new(BufReader::new(in_file))
+            let in_file = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
+            Box::new(BufReader::with_capacity(OUTPUT_BUFFER_CAPACITY, in_file))
         }
         _ => Box::new(stdin().lock()),
     })
@@ -824,9 +875,7 @@ fn open_input_file(in_file_name: Option<&OsStr>) -> UResult<Box<dyn BufRead>> {
 fn open_output_file(out_file_name: Option<&OsStr>) -> UResult<Box<dyn Write>> {
     Ok(match out_file_name {
         Some(path) if path != "-" => {
-            let out_file = File::create(path).map_err_context(
-                || translate!("uniq-error-could-not-open", "path" => path.maybe_quote()),
-            )?;
+            let out_file = File::create(path).map_err_context(|| path.maybe_quote().to_string())?;
             Box::new(BufWriter::with_capacity(OUTPUT_BUFFER_CAPACITY, out_file))
         }
         _ => Box::new(BufWriter::with_capacity(

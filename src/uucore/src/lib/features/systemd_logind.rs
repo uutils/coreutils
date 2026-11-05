@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
+
 // spell-checker:ignore logind libsystemd btime unref RAII testuser GETPW sysconf
 
 //! Systemd-logind support for reading login records
@@ -12,7 +12,7 @@
 //! When the systemd-logind feature is enabled and systemd is available,
 //! this will be used instead of traditional utmp files.
 
-use std::ffi::CStr;
+use core::ffi::CStr;
 use std::mem::MaybeUninit;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -20,8 +20,7 @@ use crate::error::{UResult, USimpleError};
 
 /// FFI bindings for libsystemd login and D-Bus functions
 mod ffi {
-    use std::ffi::c_char;
-    use std::os::raw::{c_int, c_uint};
+    use core::ffi::{c_char, c_int, c_uint};
 
     #[link(name = "systemd")]
     unsafe extern "C" {
@@ -44,13 +43,14 @@ mod ffi {
 /// Safe wrapper functions for libsystemd FFI calls
 mod login {
     use super::ffi;
-    use std::ffi::{CStr, CString};
+    use core::ffi::CStr;
+    use std::ffi::CString;
     use std::ptr;
     use std::time::SystemTime;
 
     /// Get all active sessions
     pub fn get_sessions() -> Result<Vec<String>, Box<dyn std::error::Error>> {
-        let mut sessions_ptr: *mut *mut libc::c_char = ptr::null_mut();
+        let mut sessions_ptr: *mut *mut core::ffi::c_char = ptr::null_mut();
 
         let result = unsafe { ffi::sd_get_sessions(&raw mut sessions_ptr) };
 
@@ -83,13 +83,13 @@ mod login {
     /// Get UID for a session
     pub fn get_session_uid(session_id: &str) -> Result<u32, Box<dyn std::error::Error>> {
         let session_cstring = CString::new(session_id)?;
-        let mut uid: std::os::raw::c_uint = 0;
+        let mut uid: core::ffi::c_uint = 0;
 
         let result = unsafe { ffi::sd_session_get_uid(session_cstring.as_ptr(), &raw mut uid) };
 
         if result < 0 {
             return Err(
-                format!("sd_session_get_uid failed for session '{session_id}': {result}",).into(),
+                format!("sd_session_get_uid failed for session '{session_id}': {result}").into(),
             );
         }
 
@@ -117,13 +117,13 @@ mod login {
     /// Get TTY for a session
     pub fn get_session_tty(session_id: &str) -> Result<Option<String>, Box<dyn std::error::Error>> {
         let session_cstring = CString::new(session_id)?;
-        let mut tty_ptr: *mut libc::c_char = ptr::null_mut();
+        let mut tty_ptr: *mut core::ffi::c_char = ptr::null_mut();
 
         let result = unsafe { ffi::sd_session_get_tty(session_cstring.as_ptr(), &raw mut tty_ptr) };
 
         if result < 0 {
             return Err(
-                format!("sd_session_get_tty failed for session '{session_id}': {result}",).into(),
+                format!("sd_session_get_tty failed for session '{session_id}': {result}").into(),
             );
         }
 
@@ -144,7 +144,7 @@ mod login {
         session_id: &str,
     ) -> Result<Option<String>, Box<dyn std::error::Error>> {
         let session_cstring = CString::new(session_id)?;
-        let mut host_ptr: *mut libc::c_char = ptr::null_mut();
+        let mut host_ptr: *mut core::ffi::c_char = ptr::null_mut();
 
         let result =
             unsafe { ffi::sd_session_get_remote_host(session_cstring.as_ptr(), &raw mut host_ptr) };
@@ -173,7 +173,7 @@ mod login {
         session_id: &str,
     ) -> Result<Option<String>, Box<dyn std::error::Error>> {
         let session_cstring = CString::new(session_id)?;
-        let mut display_ptr: *mut libc::c_char = ptr::null_mut();
+        let mut display_ptr: *mut core::ffi::c_char = ptr::null_mut();
 
         let result =
             unsafe { ffi::sd_session_get_display(session_cstring.as_ptr(), &raw mut display_ptr) };
@@ -202,14 +202,14 @@ mod login {
         session_id: &str,
     ) -> Result<Option<String>, Box<dyn std::error::Error>> {
         let session_cstring = CString::new(session_id)?;
-        let mut type_ptr: *mut libc::c_char = ptr::null_mut();
+        let mut type_ptr: *mut core::ffi::c_char = ptr::null_mut();
 
         let result =
             unsafe { ffi::sd_session_get_type(session_cstring.as_ptr(), &raw mut type_ptr) };
 
         if result < 0 {
             return Err(
-                format!("sd_session_get_type failed for session '{session_id}': {result}",).into(),
+                format!("sd_session_get_type failed for session '{session_id}': {result}").into(),
             );
         }
 
@@ -230,14 +230,14 @@ mod login {
         session_id: &str,
     ) -> Result<Option<String>, Box<dyn std::error::Error>> {
         let session_cstring = CString::new(session_id)?;
-        let mut seat_ptr: *mut libc::c_char = ptr::null_mut();
+        let mut seat_ptr: *mut core::ffi::c_char = ptr::null_mut();
 
         let result =
             unsafe { ffi::sd_session_get_seat(session_cstring.as_ptr(), &raw mut seat_ptr) };
 
         if result < 0 {
             return Err(
-                format!("sd_session_get_seat failed for session '{session_id}': {result}",).into(),
+                format!("sd_session_get_seat failed for session '{session_id}': {result}").into(),
             );
         }
 
@@ -257,12 +257,12 @@ mod login {
     ///
     /// TODO: This replicates GNU coreutils' fallback behavior for compatibility.
     /// GNU coreutils uses the mtime of /var/lib/systemd/random-seed as a heuristic for boot time
-    /// when utmp is unavailable, rather than querying systemd's authoritative KernelTimestamp.
+    /// when utmp is unavailable, rather than querying systemd's authoritative `KernelTimestamp`.
     /// This creates inconsistency: `uptime -s` shows the actual kernel boot time
     /// while `who -b` shows ~1 minute later when systemd services start.
     ///
-    /// Ideally, both should use the same source (KernelTimestamp) for semantic consistency.
-    /// Consider proposing to GNU coreutils to use systemd's KernelTimestamp property instead.
+    /// Ideally, both should use the same source (`KernelTimestamp`) for semantic consistency.
+    /// Consider proposing to GNU coreutils to use systemd's `KernelTimestamp` property instead.
     pub fn get_boot_time() -> Result<SystemTime, Box<dyn std::error::Error>> {
         use std::fs;
 
@@ -302,15 +302,15 @@ impl SystemdLoginRecord {
         !self.user.is_empty() && self.record_type == SystemdRecordType::UserProcess
     }
 
-    /// Get login time as time::OffsetDateTime compatible with utmpx
+    /// Get login time as [`time::OffsetDateTime`] compatible with utmpx
     pub fn login_time_offset(&self) -> time::OffsetDateTime {
         let duration = self
             .login_time
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default();
         let ts_nanos: i128 = (duration.as_nanos()).try_into().unwrap_or(0);
-        let local_offset =
-            time::OffsetDateTime::now_local().map_or_else(|_| time::UtcOffset::UTC, |v| v.offset());
+        let local_offset = time::OffsetDateTime::now_local()
+            .map_or_else(|_| time::UtcOffset::UTC, time::OffsetDateTime::offset);
         time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos)
             .unwrap_or_else(|_| {
                 time::OffsetDateTime::now_local()
@@ -321,7 +321,7 @@ impl SystemdLoginRecord {
 }
 
 /// Read login records from systemd-logind using safe wrapper functions
-/// This matches the approach used by GNU coreutils read_utmp_from_systemd()
+/// This matches the approach used by GNU coreutils `read_utmp_from_systemd()`
 pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
     let mut records = Vec::new();
 
@@ -523,38 +523,38 @@ pub struct SystemdUtmpxCompat {
 }
 
 impl SystemdUtmpxCompat {
-    /// Create new instance from a SystemdLoginRecord
+    /// Create new instance from a [`SystemdLoginRecord`]
     pub fn new(record: SystemdLoginRecord) -> Self {
         Self { record }
     }
 
-    /// A.K.A. ut.ut_type
+    /// A.K.A. `ut.ut_type`
     pub fn record_type(&self) -> i16 {
         self.record.record_type as i16
     }
 
-    /// A.K.A. ut.ut_pid
+    /// A.K.A. `ut.ut_pid`
     pub fn pid(&self) -> i32 {
         self.record.pid as i32
     }
 
-    /// A.K.A. ut.ut_id
+    /// A.K.A. `ut.ut_id`
     pub fn terminal_suffix(&self) -> String {
         // Extract last part of session ID or use session ID
         self.record.session_id.clone()
     }
 
-    /// A.K.A. ut.ut_user
+    /// A.K.A. `ut.ut_user`
     pub fn user(&self) -> String {
         self.record.user.clone()
     }
 
-    /// A.K.A. ut.ut_host
+    /// A.K.A. `ut.ut_host`
     pub fn host(&self) -> String {
         self.record.host.clone()
     }
 
-    /// A.K.A. ut.ut_line
+    /// A.K.A. `ut.ut_line`
     pub fn tty_device(&self) -> String {
         // Return raw device name for device access if available, otherwise formatted seat_or_tty
         if self.record.raw_device.is_empty() {

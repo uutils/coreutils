@@ -14,7 +14,6 @@ use std::{
     io::{Write, stdout},
     path::{Path, PathBuf},
 };
-use uucore::fs::make_path_relative_to;
 use uucore::translate;
 use uucore::{
     display::{Quotable, print_verbatim},
@@ -22,8 +21,8 @@ use uucore::{
     format_usage,
     fs::{MissingHandling, ResolveMode, canonicalize},
     line_ending::LineEnding,
-    show_if_err,
 };
+use uucore::{error::set_exit_code, fs::make_path_relative_to, show};
 
 const OPT_QUIET: &str = "quiet";
 const OPT_STRIP: &str = "strip";
@@ -71,7 +70,7 @@ impl ValueParserFactory for NonEmptyOsStringParser {
     }
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
@@ -115,20 +114,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             relative_to.as_deref(),
             relative_base.as_deref(),
         );
-        if !quiet {
-            show_if_err!(result.map_err_context(|| path.maybe_quote().to_string()));
+        if let Err(e) = result.map_err_context(|| path.maybe_quote().to_string()) {
+            if quiet {
+                set_exit_code(e.code());
+            } else {
+                show!(e);
+            }
         }
     }
     // Although we return `Ok`, it is possible that a call to
-    // `show!()` above has set the exit code for the program to a
-    // non-zero integer.
+    // `show!()` or `set_exit_code` above has set the exit code
+    // for the program to a non-zero integer.
     Ok(())
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("realpath")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("realpath"))
         .about(translate!("realpath-about"))
         .override_usage(format_usage(&translate!("realpath-usage")))
         .infer_long_args(true)
@@ -233,12 +236,10 @@ fn prepare_relative_options(
         .map(PathBuf::from);
     let relative_to = canonicalize_relative_option(relative_to, can_mode, resolve_mode)?;
     let relative_base = canonicalize_relative_option(relative_base, can_mode, resolve_mode)?;
-    if let (Some(base), Some(to)) = (relative_base.as_deref(), relative_to.as_deref()) {
-        if !to.starts_with(base) {
-            return Ok((None, None));
-        }
+    match (relative_base.as_deref(), relative_to.as_deref()) {
+        (Some(b), Some(t)) if !t.starts_with(b) => Ok((None, None)),
+        _ => Ok((relative_to, relative_base)),
     }
-    Ok((relative_to, relative_base))
 }
 
 /// Prepare single `relative-*` option.
@@ -297,6 +298,12 @@ fn resolve_path(
     relative_base: Option<&Path>,
 ) -> std::io::Result<()> {
     let abs = canonicalize(p, can_mode, resolve)?;
+    if can_mode == MissingHandling::Normal {
+        let path_bytes = p.as_os_str().as_encoded_bytes();
+        if path_bytes.ends_with(b"/.") || path_bytes.ends_with(b"/./") {
+            abs.metadata()?; // raise no such file or directory error
+        }
+    }
 
     let abs = process_relative(abs, relative_base, relative_to);
 

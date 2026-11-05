@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::encoding::{
@@ -28,8 +28,8 @@ pub const BASE_CMD_PARSE_ERROR: i32 = 1;
 ///
 /// This default is only used if no "-w"/"--wrap" argument is passed
 pub const WRAP_DEFAULT: usize = 76;
-// Fixed to 8 KiB (equivalent to std::io::DEFAULT_BUF_SIZE on most targets)
-pub const DEFAULT_BUFFER_SIZE: usize = 8 * 1024;
+
+pub const DEFAULT_BUF_SIZE: usize = 32 * 1024;
 
 pub struct Config {
     pub decode: bool,
@@ -61,16 +61,7 @@ impl Config {
                 if name == "-" {
                     None
                 } else {
-                    let path = Path::new(name);
-
-                    if !path.exists() {
-                        return Err(USimpleError::new(
-                            BASE_CMD_PARSE_ERROR,
-                            translate!("base-common-no-such-file", "file" => path.maybe_quote()),
-                        ));
-                    }
-
-                    Some(path.to_owned())
+                    Some(Path::new(name).to_owned())
                 }
             }
             None => None,
@@ -103,7 +94,7 @@ pub fn parse_base_cmd_args(args: impl uucore::Args, command: Command) -> UResult
 }
 
 pub fn base_app(about: String, usage: String) -> Command {
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("")
         .version(uucore::crate_version!())
         .about(about)
         .override_usage(format_usage(&usage))
@@ -132,6 +123,7 @@ pub fn base_app(about: String, usage: String) -> Command {
                 .short('w')
                 .long(options::WRAP)
                 .value_name("COLS")
+                .allow_hyphen_values(true)
                 .help(translate!("base-common-help-wrap", "default" => WRAP_DEFAULT))
                 .overrides_with(options::WRAP),
         )
@@ -151,15 +143,14 @@ pub fn get_input(config: &Config) -> UResult<Box<dyn BufRead>> {
         Some(path_buf) => {
             let file =
                 File::open(path_buf).map_err_context(|| path_buf.maybe_quote().to_string())?;
-            Ok(Box::new(BufReader::with_capacity(
-                DEFAULT_BUFFER_SIZE,
-                file,
-            )))
+            #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+            let _ = rustix::fs::fadvise(&file, 0, None, rustix::fs::Advice::Sequential);
+            Ok(Box::new(BufReader::with_capacity(DEFAULT_BUF_SIZE, file)))
         }
         None => {
             // Stdin is already buffered by the OS; wrap once more to reduce syscalls per read.
             Ok(Box::new(BufReader::with_capacity(
-                DEFAULT_BUFFER_SIZE,
+                DEFAULT_BUF_SIZE,
                 io::stdin(),
             )))
         }
@@ -203,6 +194,22 @@ pub fn handle_input<R: BufRead>(input: &mut R, format: Format, config: Config) -
             supports_fast_decode_and_encode_ref,
             config.ignore_garbage,
         ),
+        // Batch Base16's small encoded chunks to reduce write syscalls.
+        (Format::Base16, false) => {
+            let mut output = BufWriter::with_capacity(DEFAULT_BUF_SIZE, &mut stdout_lock);
+            let result = fast_encode::fast_encode_stream(
+                input,
+                &mut output,
+                supports_fast_decode_and_encode_ref,
+                config.wrap_cols,
+            );
+
+            match (result, output.flush()) {
+                (res, Ok(())) => res,
+                (Ok(_), Err(err)) => Err(err.into()),
+                (Err(original), Err(_)) => Err(original),
+            }
+        }
         (_, false) => fast_encode::fast_encode_stream(
             input,
             &mut stdout_lock,
@@ -457,39 +464,37 @@ pub mod fast_encode {
             .iter()
             .enumerate()
             .step_by(encode_in_chunks_of_size)
-            .map(|(idx, _)| {
+            .filter_map(|(idx, _)| {
                 // The part of `input_buffer` that was actually filled by the call
                 // to `read`
-                &input[idx..min(input_size, idx + encode_in_chunks_of_size)]
-            })
-            .map(|buffer| {
+                let buffer = &input[idx..min(input_size, idx + encode_in_chunks_of_size)];
+
                 if buffer.len() < encode_in_chunks_of_size {
                     leftover_buffer.extend(buffer);
                     assert!(leftover_buffer.len() < encode_in_chunks_of_size);
-                    return None;
+                    None
+                } else {
+                    Some(buffer)
                 }
-                Some(buffer)
             })
-            .for_each(|buffer| {
-                if let Some(read_buffer) = buffer {
-                    // Encode data in chunks, then place it in `encoded_buffer`
-                    assert_eq!(read_buffer.len(), encode_in_chunks_of_size);
-                    encode_in_chunks_to_buffer(
-                        supports_fast_decode_and_encode,
-                        read_buffer,
-                        &mut encoded_buffer,
-                    )
-                    .unwrap();
-                    // Write all data in `encoded_buffer` to `output`
-                    write_to_output(
-                        &mut line_wrapping,
-                        &mut encoded_buffer,
-                        output,
-                        false,
-                        wrap == Some(0),
-                    )
-                    .unwrap();
-                }
+            .for_each(|read_buffer| {
+                // Encode data in chunks, then place it in `encoded_buffer`
+                assert_eq!(read_buffer.len(), encode_in_chunks_of_size);
+                encode_in_chunks_to_buffer(
+                    supports_fast_decode_and_encode,
+                    read_buffer,
+                    &mut encoded_buffer,
+                )
+                .unwrap();
+                // Write all data in `encoded_buffer` to `output`
+                write_to_output(
+                    &mut line_wrapping,
+                    &mut encoded_buffer,
+                    output,
+                    false,
+                    wrap == Some(0),
+                )
+                .unwrap();
             });
 
         // Cleanup
@@ -553,14 +558,11 @@ pub mod fast_encode {
         let mut encoded_buffer = VecDeque::<u8>::new();
         let mut leftover_buffer = Vec::<u8>::with_capacity(encode_in_chunks_of_size);
 
-        loop {
-            let read_buffer = input
-                .fill_buf()
-                .map_err(|err| USimpleError::new(1, super::format_read_error(&err)))?;
-            if read_buffer.is_empty() {
-                break;
-            }
-
+        while let read_buffer = input
+            .fill_buf()
+            .map_err(|e| USimpleError::new(1, super::format_read_error(&e)))?
+            && !read_buffer.is_empty()
+        {
             let mut consumed = 0;
 
             if !leftover_buffer.is_empty() {
@@ -641,6 +643,7 @@ pub mod fast_decode {
     use uucore::{
         encoding::SupportsFastDecodeAndEncode,
         error::{UResult, USimpleError},
+        translate,
     };
 
     // Start of helper functions
@@ -743,9 +746,14 @@ pub mod fast_decode {
             } else if ignore_garbage {
                 continue;
             } else {
-                return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                return Err(USimpleError::new(
+                    1,
+                    translate!("base-common-invalid-input"),
+                ));
             }
 
+            // Encodings without partial decode (base58) are one big number, so
+            // they are decoded in one go after the loop, never in chunks.
             if supports_partial_decode {
                 flush_ready_chunks(
                     &mut buffer,
@@ -755,14 +763,6 @@ pub mod fast_decode {
                     &mut decoded_buffer,
                     output,
                 )?;
-            } else if buffer.len() == decode_in_chunks_of_size {
-                decode_in_chunks_to_buffer(
-                    supports_fast_decode_and_encode,
-                    &buffer,
-                    &mut decoded_buffer,
-                )?;
-                write_to_output(&mut decoded_buffer, output)?;
-                buffer.clear();
             }
         }
 
@@ -792,7 +792,10 @@ pub mod fast_decode {
             write_to_output(&mut decoded_buffer, output)?;
 
             if had_invalid_tail {
-                return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                return Err(USimpleError::new(
+                    1,
+                    translate!("base-common-invalid-input"),
+                ));
             }
         }
 
@@ -820,15 +823,11 @@ pub mod fast_decode {
         let mut buffer = Vec::with_capacity(decode_in_chunks_of_size);
         let mut decoded_buffer = Vec::<u8>::new();
 
-        loop {
-            let read_buffer = input
-                .fill_buf()
-                .map_err(|err| USimpleError::new(1, super::format_read_error(&err)))?;
-            let read_len = read_buffer.len();
-            if read_len == 0 {
-                break;
-            }
-
+        while let read_buffer = input
+            .fill_buf()
+            .map_err(|e| USimpleError::new(1, super::format_read_error(&e)))?
+            && let read_len @ 1.. = read_buffer.len()
+        {
             for &byte in read_buffer {
                 if byte == b'\n' || byte == b'\r' {
                     continue;
@@ -859,7 +858,10 @@ pub mod fast_decode {
                             buffer.drain(..decode_in_chunks_of_size);
                         }
                     }
-                    return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                    return Err(USimpleError::new(
+                        1,
+                        translate!("base-common-invalid-input"),
+                    ));
                 }
 
                 if supports_partial_decode {
@@ -911,7 +913,10 @@ pub mod fast_decode {
             write_to_output(&mut decoded_buffer, output)?;
 
             if had_invalid_tail {
-                return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                return Err(USimpleError::new(
+                    1,
+                    translate!("base-common-invalid-input"),
+                ));
             }
         }
 

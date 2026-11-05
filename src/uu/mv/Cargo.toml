@@ -3,7 +3,6 @@ name = "uu_mv"
 description = "mv ~ (uutils) move (rename) SOURCE to DESTINATION"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/mv"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -12,25 +11,28 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/mv.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }
-fs_extra = { workspace = true }
+fluent = { workspace = true }
 indicatif = { workspace = true }
-libc = { workspace = true }
+nix = { workspace = true, features = ["fs"] }
+rustc-hash = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "backup-control",
+  "buf-copy",
   "fs",
-  "fsxattr",
+  "perms",
+  "safe-copy",
   "update-control",
 ] }
-fluent = { workspace = true }
+
+[target.'cfg(any(target_os = "freebsd", target_os = "hurd", target_os = "linux", target_os = "android", target_os = "netbsd"))'.dependencies]
+uucore = { workspace = true, features = ["fsxattr"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
@@ -40,10 +42,7 @@ windows-sys = { workspace = true, features = [
 ] }
 
 [target.'cfg(unix)'.dependencies]
-libc = { workspace = true }
-
-[features]
-selinux = ["uucore/selinux"]
+rustix = { workspace = true, features = ["fs"] }
 
 [[bin]]
 name = "mv"
@@ -53,6 +52,12 @@ path = "src/main.rs"
 divan = { workspace = true }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
+
+[features]
+selinux = ["uucore/selinux"]
+
+[lints]
+workspace = true
 
 [[bench]]
 name = "mv_bench"

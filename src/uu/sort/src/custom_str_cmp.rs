@@ -8,15 +8,13 @@
 //! The goal is to compare strings without transforming them first (i.e. not allocating new strings)
 
 use std::cmp::Ordering;
+use uucore::numeric_str_cmp::is_blank;
 
 fn filter_char(c: u8, ignore_non_printing: bool, ignore_non_dictionary: bool) -> bool {
-    if ignore_non_dictionary && !(c.is_ascii_alphanumeric() || c.is_ascii_whitespace()) {
+    if ignore_non_dictionary && !(c.is_ascii_alphanumeric() || is_blank(c)) {
         return false;
     }
-    if ignore_non_printing && (c.is_ascii_control() || !c.is_ascii()) {
-        return false;
-    }
-    true
+    !(ignore_non_printing && (c.is_ascii_control() || !c.is_ascii()))
 }
 
 fn cmp_chars(a: u8, b: u8, ignore_case: bool) -> Ordering {

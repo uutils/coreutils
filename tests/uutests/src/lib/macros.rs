@@ -5,7 +5,7 @@
 
 /// Platform-independent helper for constructing a `PathBuf` from individual elements
 #[macro_export]
-macro_rules! path_concat {
+macro_rules! path {
     ($e:expr, ..$n:expr) => {{
         use std::path::PathBuf;
         let n = $n;
@@ -13,7 +13,7 @@ macro_rules! path_concat {
         for _ in 0..n {
             pb.push($e);
         }
-        pb.to_str().unwrap().to_owned()
+        pb
     }};
     ($($e:expr),*) => {{
         use std::path::PathBuf;
@@ -21,7 +21,19 @@ macro_rules! path_concat {
         $(
             pb.push($e);
         )*
-        pb.to_str().unwrap().to_owned()
+        pb
+    }};
+}
+
+/// Wrapper around [`path`] that casts the
+/// [`std::path::PathBuf`] into a [`String`].
+#[macro_export]
+macro_rules! path_concat {
+    ($e:expr, ..$n:expr) => {{
+        ::uutests::path!($e, ..$n).to_str().unwrap().to_owned()
+    }};
+    ($($e:expr),*) => {{
+        ::uutests::path!($($e),*).to_str().unwrap().to_owned()
     }};
 }
 

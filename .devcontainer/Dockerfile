@@ -32,5 +32,5 @@ RUN apt-get update \
         python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
-# pre-commit
-RUN pip3 install --break-system-packages pre-commit
+# prek
+RUN pip3 install --break-system-packages prek

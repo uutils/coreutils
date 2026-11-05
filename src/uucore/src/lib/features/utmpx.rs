@@ -2,8 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
-// spell-checker:ignore IDLEN logind
+
+// spell-checker:ignore IDLEN logind ohos setutxdb UTXDB
 
 //! Aims to provide platform-independent methods to obtain login records
 //!
@@ -41,7 +41,7 @@ use std::path::Path;
 use std::ptr;
 use std::sync::{Mutex, MutexGuard};
 
-#[cfg(feature = "feat_systemd_logind")]
+#[cfg(all(feature = "systemd_logind", target_os = "linux"))]
 use crate::features::systemd_logind;
 
 pub use self::ut::*;
@@ -49,11 +49,13 @@ pub use self::ut::*;
 // See the FAQ at https://wiki.musl-libc.org/faq#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?
 // Musl implements only stubs for the utmp functions, and the libc crate issues a deprecation warning about this.
 // However, calling these stubs is the correct approach to maintain consistent behavior with GNU coreutils.
-#[cfg_attr(target_env = "musl", allow(deprecated))]
+#[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
 pub use libc::endutxent;
-#[cfg_attr(target_env = "musl", allow(deprecated))]
+#[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
 pub use libc::getutxent;
-#[cfg_attr(target_env = "musl", allow(deprecated))]
+#[cfg(target_os = "freebsd")]
+use libc::setutxdb;
+#[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
 pub use libc::setutxent;
 use libc::utmpx;
 #[cfg(any(
@@ -62,17 +64,10 @@ use libc::utmpx;
     target_os = "netbsd",
     target_os = "cygwin"
 ))]
-#[cfg_attr(target_env = "musl", allow(deprecated))]
+#[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
 pub use libc::utmpxname;
 
-/// # Safety
-/// Just fixed the clippy warning. Please add description here.
-#[cfg(target_os = "freebsd")]
-pub unsafe extern "C" fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
-    0
-}
-
-use crate::{LazyLock, libc}; // import macros from `../../macros.rs`
+use crate::libc; // import macros from `../../macros.rs`
 
 // In case the c_char array doesn't end with NULL
 macro_rules! chars2string {
@@ -88,56 +83,42 @@ macro_rules! chars2string {
 mod ut {
     pub static DEFAULT_FILE: &str = "/var/run/utmp";
 
-    #[cfg(not(target_env = "musl"))]
+    #[cfg(target_env = "gnu")]
     pub use libc::__UT_HOSTSIZE as UT_HOSTSIZE;
-    #[cfg(target_env = "musl")]
+    #[cfg(not(target_env = "gnu"))]
     pub use libc::UT_HOSTSIZE;
 
-    #[cfg(not(target_env = "musl"))]
+    #[cfg(target_env = "gnu")]
     pub use libc::__UT_LINESIZE as UT_LINESIZE;
-    #[cfg(target_env = "musl")]
+    #[cfg(not(target_env = "gnu"))]
     pub use libc::UT_LINESIZE;
 
-    #[cfg(not(target_env = "musl"))]
+    #[cfg(target_env = "gnu")]
     pub use libc::__UT_NAMESIZE as UT_NAMESIZE;
-    #[cfg(target_env = "musl")]
+    #[cfg(not(target_env = "gnu"))]
     pub use libc::UT_NAMESIZE;
 
     pub const UT_IDSIZE: usize = 4;
 
-    pub use libc::ACCOUNTING;
-    pub use libc::BOOT_TIME;
-    pub use libc::DEAD_PROCESS;
-    pub use libc::EMPTY;
-    pub use libc::INIT_PROCESS;
-    pub use libc::LOGIN_PROCESS;
-    pub use libc::NEW_TIME;
-    pub use libc::OLD_TIME;
-    pub use libc::RUN_LVL;
-    pub use libc::USER_PROCESS;
+    pub use libc::{
+        ACCOUNTING, BOOT_TIME, DEAD_PROCESS, EMPTY, INIT_PROCESS, LOGIN_PROCESS, NEW_TIME,
+        OLD_TIME, RUN_LVL, USER_PROCESS,
+    };
 }
 
 #[cfg(target_vendor = "apple")]
 mod ut {
     pub static DEFAULT_FILE: &str = "/var/run/utmpx";
 
-    pub use libc::_UTX_HOSTSIZE as UT_HOSTSIZE;
-    pub use libc::_UTX_IDSIZE as UT_IDSIZE;
-    pub use libc::_UTX_LINESIZE as UT_LINESIZE;
-    pub use libc::_UTX_USERSIZE as UT_NAMESIZE;
+    pub use libc::{
+        _UTX_HOSTSIZE as UT_HOSTSIZE, _UTX_IDSIZE as UT_IDSIZE, _UTX_LINESIZE as UT_LINESIZE,
+        _UTX_USERSIZE as UT_NAMESIZE,
+    };
 
-    pub use libc::ACCOUNTING;
-    pub use libc::BOOT_TIME;
-    pub use libc::DEAD_PROCESS;
-    pub use libc::EMPTY;
-    pub use libc::INIT_PROCESS;
-    pub use libc::LOGIN_PROCESS;
-    pub use libc::NEW_TIME;
-    pub use libc::OLD_TIME;
-    pub use libc::RUN_LVL;
-    pub use libc::SHUTDOWN_TIME;
-    pub use libc::SIGNATURE;
-    pub use libc::USER_PROCESS;
+    pub use libc::{
+        ACCOUNTING, BOOT_TIME, DEAD_PROCESS, EMPTY, INIT_PROCESS, LOGIN_PROCESS, NEW_TIME,
+        OLD_TIME, RUN_LVL, SHUTDOWN_TIME, SIGNATURE, USER_PROCESS,
+    };
 }
 
 #[cfg(target_os = "freebsd")]
@@ -149,58 +130,46 @@ mod ut {
     pub const UT_IDSIZE: usize = 8;
     pub const UT_HOSTSIZE: usize = 128;
 
-    pub use libc::BOOT_TIME;
-    pub use libc::DEAD_PROCESS;
-    pub use libc::EMPTY;
-    pub use libc::INIT_PROCESS;
-    pub use libc::LOGIN_PROCESS;
-    pub use libc::NEW_TIME;
-    pub use libc::OLD_TIME;
-    pub use libc::SHUTDOWN_TIME;
-    pub use libc::USER_PROCESS;
+    pub use libc::{
+        BOOT_TIME, DEAD_PROCESS, EMPTY, INIT_PROCESS, LOGIN_PROCESS, NEW_TIME, OLD_TIME,
+        SHUTDOWN_TIME, USER_PROCESS,
+    };
 }
 
 #[cfg(target_os = "netbsd")]
 mod ut {
     pub static DEFAULT_FILE: &str = "/var/run/utmpx";
 
-    pub const ACCOUNTING: usize = 9;
     pub const SHUTDOWN_TIME: usize = 11;
 
-    pub use libc::_UTX_HOSTSIZE as UT_HOSTSIZE;
-    pub use libc::_UTX_IDSIZE as UT_IDSIZE;
-    pub use libc::_UTX_LINESIZE as UT_LINESIZE;
-    pub use libc::_UTX_USERSIZE as UT_NAMESIZE;
+    pub use libc::{
+        _UTX_HOSTSIZE as UT_HOSTSIZE, _UTX_IDSIZE as UT_IDSIZE, _UTX_LINESIZE as UT_LINESIZE,
+        _UTX_USERSIZE as UT_NAMESIZE,
+    };
 
     pub use libc::ACCOUNTING;
-    pub use libc::DEAD_PROCESS;
-    pub use libc::EMPTY;
-    pub use libc::INIT_PROCESS;
-    pub use libc::LOGIN_PROCESS;
-    pub use libc::NEW_TIME;
-    pub use libc::OLD_TIME;
-    pub use libc::RUN_LVL;
-    pub use libc::SIGNATURE;
-    pub use libc::USER_PROCESS;
+    pub const BOOT_TIME: i16 = libc::BOOT_TIME as i16;
+    pub const DEAD_PROCESS: i16 = libc::DEAD_PROCESS as i16;
+    pub const EMPTY: i16 = libc::EMPTY as i16;
+    pub const INIT_PROCESS: i16 = libc::INIT_PROCESS as i16;
+    pub const LOGIN_PROCESS: i16 = libc::LOGIN_PROCESS as i16;
+    pub const NEW_TIME: i16 = libc::NEW_TIME as i16;
+    pub const OLD_TIME: i16 = libc::OLD_TIME as i16;
+    pub const RUN_LVL: i16 = libc::RUN_LVL as i16;
+    pub const SIGNATURE: i16 = libc::SIGNATURE as i16;
+    pub const USER_PROCESS: i16 = libc::USER_PROCESS as i16;
 }
 
 #[cfg(target_os = "cygwin")]
 mod ut {
     pub static DEFAULT_FILE: &str = "";
 
-    pub use libc::UT_HOSTSIZE;
-    pub use libc::UT_IDLEN;
-    pub use libc::UT_LINESIZE;
-    pub use libc::UT_NAMESIZE;
+    pub use libc::{UT_HOSTSIZE, UT_IDLEN, UT_LINESIZE, UT_NAMESIZE};
 
-    pub use libc::BOOT_TIME;
-    pub use libc::DEAD_PROCESS;
-    pub use libc::INIT_PROCESS;
-    pub use libc::LOGIN_PROCESS;
-    pub use libc::NEW_TIME;
-    pub use libc::OLD_TIME;
-    pub use libc::RUN_LVL;
-    pub use libc::USER_PROCESS;
+    pub use libc::{
+        BOOT_TIME, DEAD_PROCESS, INIT_PROCESS, LOGIN_PROCESS, NEW_TIME, OLD_TIME, RUN_LVL,
+        USER_PROCESS,
+    };
 }
 
 /// A login record
@@ -208,51 +177,71 @@ pub struct Utmpx {
     inner: utmpx,
 }
 
+#[cfg(target_os = "netbsd")]
 impl Utmpx {
-    /// A.K.A. ut.ut_type
-    pub fn record_type(&self) -> i16 {
+    fn ut_type(&self) -> i16 {
+        self.inner.ut_type as i16
+    }
+    fn ut_user(&self) -> String {
+        chars2string!(self.inner.ut_name)
+    }
+}
+
+#[cfg(not(target_os = "netbsd"))]
+impl Utmpx {
+    fn ut_type(&self) -> i16 {
         self.inner.ut_type
     }
-    /// A.K.A. ut.ut_pid
+    fn ut_user(&self) -> String {
+        chars2string!(self.inner.ut_user)
+    }
+}
+
+impl Utmpx {
+    /// A.K.A. `ut.ut_type`
+    pub fn record_type(&self) -> i16 {
+        self.ut_type()
+    }
+    /// A.K.A. `ut.ut_pid`
     pub fn pid(&self) -> i32 {
         self.inner.ut_pid
     }
-    /// A.K.A. ut.ut_id
+    /// A.K.A. `ut.ut_id`
     pub fn terminal_suffix(&self) -> String {
         chars2string!(self.inner.ut_id)
     }
-    /// A.K.A. ut.ut_user
+    ///  A.K.A. `ut.ut_user` / `ut.ut_name` (NetBSD)
     pub fn user(&self) -> String {
-        chars2string!(self.inner.ut_user)
+        self.ut_user()
     }
-    /// A.K.A. ut.ut_host
+    /// A.K.A. `ut.ut_host`
     pub fn host(&self) -> String {
         chars2string!(self.inner.ut_host)
     }
-    /// A.K.A. ut.ut_line
+    /// A.K.A. `ut.ut_line`
     pub fn tty_device(&self) -> String {
         chars2string!(self.inner.ut_line)
     }
-    /// A.K.A. ut.ut_tv
+    /// A.K.A. `ut.ut_tv`
     pub fn login_time(&self) -> time::OffsetDateTime {
         #[allow(clippy::unnecessary_cast)]
         let ts_nanos: i128 = (1_000_000_000_i64 * self.inner.ut_tv.tv_sec as i64
             + 1_000_i64 * self.inner.ut_tv.tv_usec as i64)
             .into();
-        let local_offset =
-            time::OffsetDateTime::now_local().map_or_else(|_| time::UtcOffset::UTC, |v| v.offset());
+        let local_offset = time::OffsetDateTime::now_local()
+            .map_or_else(|_| time::UtcOffset::UTC, time::OffsetDateTime::offset);
         time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos)
             .unwrap()
             .to_offset(local_offset)
     }
-    /// A.K.A. ut.ut_exit
+    /// A.K.A. `ut.ut_exit`
     ///
-    /// Return (e_termination, e_exit)
+    /// Return (`e_termination`, `e_exit`)
     #[cfg(target_os = "linux")]
     pub fn exit_status(&self) -> (i16, i16) {
         (self.inner.ut_exit.e_termination, self.inner.ut_exit.e_exit)
     }
-    /// A.K.A. ut.ut_exit
+    /// A.K.A. `ut.ut_exit`
     ///
     /// Return (0, 0) on Non-Linux platform
     #[cfg(not(target_os = "linux"))]
@@ -313,20 +302,20 @@ impl Utmpx {
     /// Only one instance of [`UtmpxIter`] may be active at a time. This
     /// function will block as long as one is still active. Beware!
     pub fn iter_all_records() -> UtmpxIter {
-        #[cfg(feature = "feat_systemd_logind")]
+        #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
         {
             // Use systemd-logind instead of traditional utmp when feature is enabled
             UtmpxIter::new_systemd()
         }
 
-        #[cfg(not(feature = "feat_systemd_logind"))]
+        #[cfg(not(all(feature = "systemd_logind", target_os = "linux")))]
         {
             let iter = UtmpxIter::new();
             unsafe {
                 // This can technically fail, and it would be nice to detect that,
                 // but it doesn't return anything so we'd have to do nasty things
                 // with errno.
-                #[cfg_attr(target_env = "musl", allow(deprecated))]
+                #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
                 setutxent();
             }
             iter
@@ -345,7 +334,7 @@ impl Utmpx {
     ///
     /// The same caveats as for [`Utmpx::iter_all_records`] apply.
     pub fn iter_all_records_from<P: AsRef<Path>>(path: P) -> UtmpxIter {
-        #[cfg(feature = "feat_systemd_logind")]
+        #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
         {
             // Use systemd-logind for default utmp file when feature is enabled
             if path.as_ref() == Path::new(DEFAULT_FILE) {
@@ -356,6 +345,9 @@ impl Utmpx {
         let iter = UtmpxIter::new();
         let path = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
         unsafe {
+            #[cfg(target_os = "freebsd")]
+            setutxdb(libc::UTXDB_ACTIVE, path.as_ptr());
+
             // In glibc, utmpxname() only fails if there's not enough memory
             // to copy the string.
             // Solaris returns 1 on success instead of 0. Supposedly there also
@@ -364,9 +356,11 @@ impl Utmpx {
             // is specified, no warning or anything.
             // So this function is pretty crazy and we don't try to detect errors.
             // Not much we can do besides pray.
-            #[cfg_attr(target_env = "musl", allow(deprecated))]
+            #[cfg(not(target_os = "freebsd"))]
+            #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
             utmpxname(path.as_ptr());
-            #[cfg_attr(target_env = "musl", allow(deprecated))]
+
+            #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
             setutxent();
         }
         iter
@@ -380,35 +374,39 @@ impl Utmpx {
 // I believe the only technical memory unsafety that could happen is a data
 // race while copying the data out of the pointer returned by getutxent(), but
 // ordinary race conditions are also very much possible.
-static LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+static LOCK: Mutex<()> = Mutex::new(());
 
 /// Iterator of login records
 pub struct UtmpxIter {
     #[allow(dead_code)]
     guard: MutexGuard<'static, ()>,
-    /// Ensure UtmpxIter is !Send. Technically redundant because MutexGuard
+    /// Ensure [`UtmpxIter`] is !Send. Technically redundant because [`MutexGuard`]
     /// is also !Send.
     phantom: PhantomData<std::rc::Rc<()>>,
-    #[cfg(feature = "feat_systemd_logind")]
+    #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
     systemd_iter: Option<systemd_logind::SystemdUtmpxIter>,
 }
 
 impl UtmpxIter {
     fn new() -> Self {
         // PoisonErrors can safely be ignored
-        let guard = LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let guard = LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         Self {
             guard,
             phantom: PhantomData,
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
             systemd_iter: None,
         }
     }
 
-    #[cfg(feature = "feat_systemd_logind")]
+    #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
     fn new_systemd() -> Self {
         // PoisonErrors can safely be ignored
-        let guard = LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let guard = LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let systemd_iter = match systemd_logind::SystemdUtmpxIter::new() {
             Ok(iter) => iter,
             Err(_) => {
@@ -428,81 +426,81 @@ impl UtmpxIter {
 /// Wrapper type that can hold either traditional utmpx records or systemd records
 pub enum UtmpxRecord {
     Traditional(Box<Utmpx>),
-    #[cfg(feature = "feat_systemd_logind")]
+    #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
     Systemd(systemd_logind::SystemdUtmpxCompat),
 }
 
 impl UtmpxRecord {
-    /// A.K.A. ut.ut_type
+    /// A.K.A. `ut.ut_type`
     pub fn record_type(&self) -> i16 {
         match self {
             Self::Traditional(utmpx) => utmpx.record_type(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
             Self::Systemd(systemd) => systemd.record_type(),
         }
     }
 
-    /// A.K.A. ut.ut_pid
+    /// A.K.A. `ut.ut_pid`
     pub fn pid(&self) -> i32 {
         match self {
             Self::Traditional(utmpx) => utmpx.pid(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
             Self::Systemd(systemd) => systemd.pid(),
         }
     }
 
-    /// A.K.A. ut.ut_id
+    /// A.K.A. `ut.ut_id`
     pub fn terminal_suffix(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.terminal_suffix(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
             Self::Systemd(systemd) => systemd.terminal_suffix(),
         }
     }
 
-    /// A.K.A. ut.ut_user
+    /// A.K.A. `ut.ut_user`
     pub fn user(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.user(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
             Self::Systemd(systemd) => systemd.user(),
         }
     }
 
-    /// A.K.A. ut.ut_host
+    /// A.K.A. `ut.ut_host`
     pub fn host(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.host(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
             Self::Systemd(systemd) => systemd.host(),
         }
     }
 
-    /// A.K.A. ut.ut_line
+    /// A.K.A. `ut.ut_line`
     pub fn tty_device(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.tty_device(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
             Self::Systemd(systemd) => systemd.tty_device(),
         }
     }
 
-    /// A.K.A. ut.ut_tv
+    /// A.K.A. `ut.ut_tv`
     pub fn login_time(&self) -> time::OffsetDateTime {
         match self {
             Self::Traditional(utmpx) => utmpx.login_time(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
             Self::Systemd(systemd) => systemd.login_time(),
         }
     }
 
-    /// A.K.A. ut.ut_exit
+    /// A.K.A. `ut.ut_exit`
     ///
-    /// Return (e_termination, e_exit)
+    /// Return (`e_termination`, `e_exit`)
     pub fn exit_status(&self) -> (i16, i16) {
         match self {
             Self::Traditional(utmpx) => utmpx.exit_status(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
             Self::Systemd(systemd) => systemd.exit_status(),
         }
     }
@@ -511,7 +509,7 @@ impl UtmpxRecord {
     pub fn is_user_process(&self) -> bool {
         match self {
             Self::Traditional(utmpx) => utmpx.is_user_process(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
             Self::Systemd(systemd) => systemd.is_user_process(),
         }
     }
@@ -520,7 +518,7 @@ impl UtmpxRecord {
     pub fn canon_host(&self) -> IOResult<String> {
         match self {
             Self::Traditional(utmpx) => utmpx.canon_host(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
             Self::Systemd(systemd) => Ok(systemd.canon_host()),
         }
     }
@@ -529,7 +527,7 @@ impl UtmpxRecord {
 impl Iterator for UtmpxIter {
     type Item = UtmpxRecord;
     fn next(&mut self) -> Option<Self::Item> {
-        #[cfg(feature = "feat_systemd_logind")]
+        #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
         {
             if let Some(ref mut systemd_iter) = self.systemd_iter {
                 // We have a systemd iterator - use it exclusively (never fall back to traditional utmp)
@@ -539,7 +537,7 @@ impl Iterator for UtmpxIter {
 
         // Traditional utmp path
         unsafe {
-            #[cfg_attr(target_env = "musl", allow(deprecated))]
+            #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
             let res = getutxent();
             if res.is_null() {
                 None
@@ -559,7 +557,7 @@ impl Iterator for UtmpxIter {
 impl Drop for UtmpxIter {
     fn drop(&mut self) {
         unsafe {
-            #[cfg_attr(target_env = "musl", allow(deprecated))]
+            #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
             endutxent();
         }
     }

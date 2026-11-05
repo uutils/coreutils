@@ -5,7 +5,6 @@ ck-common-help-algorithm = sélectionner le type de condensé à utiliser. Voir 
 ck-common-help-untagged = créer une somme de contrôle de style inversé, sans type de condensé
 ck-common-help-tag-default = créer une somme de contrôle de style BSD (par défaut)
 ck-common-help-tag = créer une somme de contrôle de style BSD
-ck-common-help-text = lire en mode texte (par défaut)
 ck-common-help-length = longueur du condensé en bits ; ne doit pas dépasser le maximum pour l'algorithme blake2 et doit être un multiple de 8
 ck-common-help-raw = émettre un condensé binaire brut, pas hexadécimal
 ck-common-help-strict = sortir avec un code non-zéro pour les lignes de somme de contrôle mal formatées

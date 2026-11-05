@@ -1,13 +1,6 @@
 # * cargo
 cdylib
-rlib
-
-# * crates
-advapi
-advapi32-sys
-aho-corasick
-backtrace
-blake2b_simd
+doctest
 
 # * uutils project
 uutils
@@ -21,13 +14,9 @@ mkfifo
 urandom
 uchild
 ello
-bstr
-bytecount
-byteorder
 chacha
 chrono
 conv
-corasick
 crossterm
 exacl
 filetime
@@ -36,8 +25,6 @@ fsext
 getopts
 getrandom
 globset
-indicatif
-itertools
 itoa
 iuse
 langid
@@ -45,27 +32,20 @@ lscolors
 mdbook
 memchr
 multifilereader
-onig
 ouroboros
 peekreader
 quickcheck
-rand_chacha
 ringbuffer
 rlimit
 rstest
 smallvec
 tempdir
-tempfile
 termion
 termios
 termsize
 termwidth
-textwrap
-thiserror
 unic
 ureq
-walkdir
-winapi
 xattr
 
 # * rust/rustc
@@ -76,6 +56,7 @@ rustc
 rustfmt
 rustup
 rustdoc
+prek
 #
 bitor # BitOr trait function
 bitxor # BitXor trait function
@@ -85,6 +66,7 @@ powi
 println
 repr
 rfind
+rsplit
 struct
 structs
 substr
@@ -102,7 +84,6 @@ chroot
 cksum
 csplit
 dircolors
-hashsum
 hostid
 logname
 mkdir
@@ -136,8 +117,10 @@ EBADF
 EBUSY
 EEXIST
 EINVAL
+EISDIR
 ENODATA
 ENOENT
+ENOSPC
 ENOSYS
 ENOTEMPTY
 EOPNOTSUPP
@@ -147,9 +130,7 @@ EROFS
 
 # * vars/fcntl
 F_GETFL
-    GETFL
 fcntl
-vmsplice
 
 # * vars/libc
 COMFOLLOW
@@ -182,10 +163,13 @@ IXUSR
 LINESIZE
 NAMESIZE
 RTLD_NEXT
-    RTLD
+RTMAX
+RTMIN
 SIGABRT
 SIGINT
 SIGKILL
+SIGRTMAX
+SIGRTMIN
 SIGSTOP
 SIGTERM
 SYS_fdatasync
@@ -233,11 +217,12 @@ strlen
 syncfs
 umask
 waitpid
-wcslen
 
 # * vars/nix
-iovec
 unistd
+
+# * vars/rustix
+fcntl_getfl
 
 # * vars/signals
 SIGPIPE
@@ -306,6 +291,7 @@ LPWSTR
 ULONG
 ULONGLONG
 UNLEN
+MSYSTEM
 WCHAR
 WSADATA
 errhandlingapi
@@ -360,11 +346,31 @@ uutests
 uutils
 
 # * function names
+sendfile
+execfn
+execveat
+fadvise
+fexecve
+ficlone
+fstatfs
+ftruncate
 getcwd
+memfd
+mkfifoat
+setpipe
 
 # * other
+auxv
+btrfs
+getlimits
 weblate
 algs
+wasm
+wasip
+statx
+Statx
+ucrt
+UCRT
 
 # * stty terminal flags
 brkint

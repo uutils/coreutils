@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
+
 // spell-checker:ignore regfile parentdir
 
 use uutests::util::{TestScenario, get_root_path};
@@ -20,7 +20,7 @@ fn test_no_args() {
     new_ucmd!()
         .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("readlink: missing operand");
+        .stderr_contains("the following required arguments were not provided"); // clap provided message
 }
 
 #[test]
@@ -33,11 +33,54 @@ fn test_resolve() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("foo");
-    at.symlink_file("foo", "bar");
+    at.relative_symlink_file("foo", "bar");
 
     ucmd.arg("bar").succeeds().stdout_contains("foo\n");
 }
 
+#[test]
+fn test_keeps_going_after_an_operand_that_cannot_be_read() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("foo");
+    at.relative_symlink_file("foo", "bar");
+    at.touch("baz");
+    at.relative_symlink_file("baz", "qux");
+
+    // GNU prints the links it could read and reports the failure through
+    // the exit status only, so nothing about `nope` stops `qux`.
+    scene
+        .ucmd()
+        .args(&["bar", "nope", "qux"])
+        .fails_with_code(1)
+        .stdout_is("foo\nbaz\n")
+        .no_stderr();
+
+    scene
+        .ucmd()
+        .args(&["-v", "bar", "nope", "qux"])
+        .fails_with_code(1)
+        .stdout_is("foo\nbaz\n")
+        .stderr_contains("nope: No such file or directory");
+}
+
+#[test]
+fn test_canonicalize_existing_keeps_going_after_a_missing_operand() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("c");
+    let actual = ucmd
+        .args(&["-e", "a", "b", "c"])
+        .fails_with_code(1)
+        .stdout_move_str();
+    let expect = path_concat!(at.root_dir_resolved(), "a")
+        + "\n"
+        + &path_concat!(at.root_dir_resolved(), "c")
+        + "\n";
+    assert_eq!(actual, expect);
+}
+
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 fn test_canonicalize() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -48,6 +91,7 @@ fn test_canonicalize() {
     assert_eq!(actual, expect);
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 fn test_canonicalize_existing() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -58,6 +102,7 @@ fn test_canonicalize_existing() {
     assert_eq!(actual, expect);
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 fn test_canonicalize_missing() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -68,6 +113,7 @@ fn test_canonicalize_missing() {
     assert_eq!(actual, expect);
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 #[cfg(unix)]
 fn test_canonicalize_symlink_before_parentdir() {
@@ -83,6 +129,7 @@ fn test_canonicalize_symlink_before_parentdir() {
     assert_eq!(actual, expect);
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 fn test_long_redirection_to_current_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -135,6 +182,22 @@ fn test_posixly_correct_regular_file() {
         .ucmd()
         .env("POSIXLY_CORRECT", "1")
         .arg("regfile")
+        .fails_with_code(1)
+        .stderr_contains("Invalid argument")
+        .no_stdout();
+
+    // GNU behavior is to ignore -s and -q when POSIXLY_CORRECT is set.
+    scene
+        .ucmd()
+        .env("POSIXLY_CORRECT", "1")
+        .args(&["-s", "regfile"])
+        .fails_with_code(1)
+        .stderr_contains("Invalid argument")
+        .no_stdout();
+    scene
+        .ucmd()
+        .env("POSIXLY_CORRECT", "1")
+        .args(&["-q", "regfile"])
         .fails_with_code(1)
         .stderr_contains("Invalid argument")
         .no_stdout();
@@ -382,6 +445,22 @@ fn test_canonicalize_trailing_slash_symlink_loop() {
 }
 
 #[test]
+fn test_canonicalize_growing_symlink_loop() {
+    // `link6 -> link6/more` grows the path on every expansion; it must fail
+    // instead of looping forever.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.relative_symlink_file("link6/more", "link6");
+    for mode in ["-f", "-e", "-m"] {
+        scene
+            .ucmd()
+            .args(&[mode, "link6"])
+            .fails_with_code(1)
+            .no_stdout();
+    }
+}
+
+#[test]
 #[cfg(not(windows))]
 fn test_delimiters() {
     new_ucmd!()
@@ -412,6 +491,7 @@ fn test_delimiters() {
         .stdout_is("/a\n/a\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_readlink_non_utf8_paths() {
@@ -432,4 +512,39 @@ fn test_readlink_non_utf8_paths() {
 
     let output = result.stdout_str_lossy();
     assert!(output.contains(file_name));
+}
+
+#[test]
+fn test_verbose_or_silent() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("regfile");
+    scene.ucmd().arg("regfile").fails_with_code(1).no_output();
+    scene
+        .ucmd()
+        .args(&["-v", "regfile"])
+        .fails_with_code(1)
+        .stderr_contains(
+            #[cfg(not(windows))]
+            "Invalid argument",
+            #[cfg(windows)]
+            "regfile: The file or directory is not a reparse point.",
+        )
+        .no_stdout();
+    scene
+        .ucmd()
+        .args(&["-vs", "regfile"])
+        .fails_with_code(1)
+        .no_output();
+    scene
+        .ucmd()
+        .args(&["-sv", "regfile"])
+        .fails_with_code(1)
+        .stderr_contains(
+            #[cfg(not(windows))]
+            "Invalid argument",
+            #[cfg(windows)]
+            "regfile: The file or directory is not a reparse point.",
+        )
+        .no_stdout();
 }

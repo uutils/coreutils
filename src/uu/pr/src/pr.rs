@@ -2,24 +2,26 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
 
-// spell-checker:ignore (ToDO) adFfmprt, kmerge
+// spell-checker:ignore (ToDO) adFfmprt, kmerge Ffabm
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
 use regex::Regex;
+use std::ffi::{OsStr, OsString};
 use std::fs::metadata;
-use std::io::{Read, Write, stderr, stdin, stdout};
+use std::io::{self, Read, Write, stderr, stdin, stdout};
+use std::num::IntErrorKind;
+use std::path::PathBuf;
+use std::str::Utf8Error;
 use std::string::FromUtf8Error;
 use std::time::SystemTime;
-use thiserror::Error;
 
 use uucore::display::Quotable;
-use uucore::error::UResult;
+use uucore::error::{UResult, strip_errno};
 use uucore::format_usage;
 use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
-use uucore::translate;
+use uucore::{show_error, translate};
 
 const TAB: char = '\t';
 const LINES_PER_PAGE: usize = 66;
@@ -32,6 +34,7 @@ const DEFAULT_COLUMN_WIDTH_WITH_S_OPTION: usize = 512;
 const DEFAULT_COLUMN_SEPARATOR: &char = &TAB;
 const FF: u8 = 0x0C_u8;
 const NL: u8 = b'\n';
+const MAX_INT_VALUE: usize = i32::MAX as usize;
 
 mod options {
     pub const HEADER: &str = "header";
@@ -49,7 +52,7 @@ mod options {
     pub const PAGE_WIDTH: &str = "page-width";
     pub const ACROSS: &str = "across";
     pub const COLUMN_DOWN: &str = "column-down";
-    pub const COLUMN: &str = "column";
+    pub const COLUMNS: &str = "columns";
     pub const COLUMN_CHAR_SEPARATOR: &str = "separator";
     pub const COLUMN_STRING_SEPARATOR: &str = "sep-string";
     pub const MERGE: &str = "merge";
@@ -57,12 +60,13 @@ mod options {
     pub const JOIN_LINES: &str = "join-lines";
     pub const HELP: &str = "help";
     pub const FILES: &str = "files";
+    pub const EXPAND_TABS: &str = "expand-tabs";
 }
 
 struct OutputOptions {
     /// Line numbering mode
     number: Option<NumberingMode>,
-    header: String,
+    header: OsString,
     double_space: bool,
     line_separator: String,
     content_line_separator: String,
@@ -74,11 +78,11 @@ struct OutputOptions {
     page_separator_char: String,
     column_mode_options: Option<ColumnModeOptions>,
     merge_files_print: Option<usize>,
-    offset_spaces: String,
+    offset_spaces: usize,
     form_feed_used: bool,
-    join_lines: bool,
     col_sep_for_printing: String,
     line_width: Option<usize>,
+    expand_tabs: Option<ExpandTabsOptions>,
 }
 
 /// One line of an input file, annotated with file, page, and line number.
@@ -87,7 +91,7 @@ struct FileLine {
     file_id: usize,
     page_number: usize,
     line_number: usize,
-    line_content: String,
+    line_content: Vec<u8>,
 }
 
 impl FileLine {
@@ -96,16 +100,25 @@ impl FileLine {
         page_number: usize,
         line_number: usize,
         buf: &[u8],
-    ) -> Result<Self, FromUtf8Error> {
-        // TODO Don't read bytes to String just to directly write them
-        // out again anyway.
-        let line_content = String::from_utf8(buf.to_vec())?;
-        Ok(Self {
+        options: &OutputOptions,
+    ) -> Self {
+        let line_content = if let Some(expand_tabs) = &options.expand_tabs {
+            let mut result =
+                Vec::with_capacity(buf.len() + buf.len() / 20 * expand_tabs.width as usize);
+            for b in buf {
+                apply_expand_tab(&mut result, *b, expand_tabs);
+            }
+            result
+        } else {
+            buf.to_vec()
+        };
+
+        Self {
             file_id,
             page_number,
             line_number,
             line_content,
-        })
+        }
     }
 }
 
@@ -133,12 +146,34 @@ impl Default for NumberingMode {
     }
 }
 
-impl From<std::io::Error> for PrError {
-    fn from(err: std::io::Error) -> Self {
-        Self::EncounteredErrors {
-            msg: err.to_string(),
+#[derive(Debug)]
+struct ExpandTabsOptions {
+    input_char: char,
+    width: i32,
+}
+
+impl Default for ExpandTabsOptions {
+    fn default() -> Self {
+        Self {
+            width: 8,
+            input_char: TAB,
         }
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+enum PrError {
+    #[error("pr: {msg}")]
+    EncounteredErrors { msg: String },
+
+    #[error("pr: {}", strip_errno(.0))]
+    Read(io::Error),
+
+    #[error("pr: {}", strip_errno(.0))]
+    Write(io::Error),
+
+    #[error("pr: {path}: {}", strip_errno(error))]
+    ReadPath { path: PathBuf, error: io::Error },
 }
 
 impl From<FromUtf8Error> for PrError {
@@ -149,16 +184,18 @@ impl From<FromUtf8Error> for PrError {
     }
 }
 
-#[derive(Debug, Error)]
-enum PrError {
-    #[error("pr: {msg}")]
-    EncounteredErrors { msg: String },
+impl From<Utf8Error> for PrError {
+    fn from(err: Utf8Error) -> Self {
+        Self::EncounteredErrors {
+            msg: err.to_string(),
+        }
+    }
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("pr")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("pr"))
         .about(translate!("pr-about"))
         .after_help(translate!("pr-after-help"))
         .override_usage(format_usage(&translate!("pr-usage")))
@@ -176,12 +213,14 @@ pub fn uu_app() -> Command {
                 .short('h')
                 .long(options::HEADER)
                 .help(translate!("pr-help-header"))
+                .allow_hyphen_values(true)
                 .value_name("STRING"),
         )
         .arg(
             Arg::new(options::DATE_FORMAT)
                 .short('D')
                 .long(options::DATE_FORMAT)
+                .allow_hyphen_values(true)
                 .value_name("FORMAT")
                 .help(translate!("pr-help-date-format")),
         )
@@ -198,6 +237,8 @@ pub fn uu_app() -> Command {
                 .long(options::NUMBER_LINES)
                 .help(translate!("pr-help-number-lines"))
                 .allow_hyphen_values(true)
+                // GNU pr makes -n optional (defaults to width 5, tab).
+                .num_args(0..=1)
                 .value_name("[char][width]"),
         )
         .arg(
@@ -205,6 +246,7 @@ pub fn uu_app() -> Command {
                 .short('N')
                 .long(options::FIRST_LINE_NUMBER)
                 .help(translate!("pr-help-first-line-number"))
+                .allow_hyphen_values(true)
                 .value_name("NUMBER"),
         )
         .arg(
@@ -226,6 +268,7 @@ pub fn uu_app() -> Command {
                 .short('l')
                 .long(options::PAGE_LENGTH)
                 .help(translate!("pr-help-page-length"))
+                .allow_hyphen_values(true)
                 .value_name("PAGE_LENGTH"),
         )
         .arg(
@@ -238,7 +281,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FORM_FEED)
                 .short('F')
-                .short_alias('f')
+                .visible_short_alias('f')
                 .long(options::FORM_FEED)
                 .help(translate!("pr-help-form-feed"))
                 .action(ArgAction::SetTrue),
@@ -248,6 +291,7 @@ pub fn uu_app() -> Command {
                 .short('w')
                 .long(options::COLUMN_WIDTH)
                 .help(translate!("pr-help-column-width"))
+                .allow_hyphen_values(true)
                 .value_name("width"),
         )
         .arg(
@@ -255,6 +299,7 @@ pub fn uu_app() -> Command {
                 .short('W')
                 .long(options::PAGE_WIDTH)
                 .help(translate!("pr-help-page-width"))
+                .allow_hyphen_values(true)
                 .value_name("width"),
         )
         .arg(
@@ -272,10 +317,10 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::COLUMN)
-                .long(options::COLUMN)
-                .help(translate!("pr-help-column"))
-                .value_name("column"),
+            Arg::new(options::COLUMNS)
+                .long(options::COLUMNS)
+                .help(translate!("pr-help-columns"))
+                .value_name("columns"),
         )
         .arg(
             Arg::new(options::COLUMN_CHAR_SEPARATOR)
@@ -307,11 +352,13 @@ pub fn uu_app() -> Command {
                 .short('o')
                 .long(options::INDENT)
                 .help(translate!("pr-help-indent"))
+                .allow_hyphen_values(true)
                 .value_name("margin"),
         )
         .arg(
             Arg::new(options::JOIN_LINES)
                 .short('J')
+                .long(options::JOIN_LINES)
                 .help(translate!("pr-help-join-lines"))
                 .action(ArgAction::SetTrue),
         )
@@ -324,27 +371,37 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FILES)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
+                .default_value(FILE_STDIN)
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
+        )
+        .arg(
+            Arg::new(options::EXPAND_TABS)
+                .long(options::EXPAND_TABS)
+                .short('e')
+                .num_args(1)
+                .value_name("[CHAR][WIDTH]")
+                .help(translate!("pr-help-expand-tabs")),
         )
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
+    let args: Vec<_> = args.collect();
 
-    let opt_args = recreate_arguments(&args);
+    let mut command = uu_app();
+    // Settle what the options leave to clap's defaults, such as how many
+    // values each takes, before the arguments are read against them.
+    command.build();
+    let (opt_args, operands) = recreate_arguments(&args, &command);
 
-    let command = uu_app();
     let matches = uucore::clap_localization::handle_clap_result(command, opt_args)?;
 
-    let mut files = matches
-        .get_many::<String>(options::FILES)
-        .map(|v| v.map(|s| s.as_str()).collect::<Vec<_>>())
-        .unwrap_or_default()
-        .clone();
-    if files.is_empty() {
-        files.insert(0, FILE_STDIN);
-    }
+    #[allow(clippy::unwrap_used, reason = "default value is set by clap")]
+    let files = matches
+        .get_many::<OsString>(options::FILES)
+        .map(|v| v.map(OsString::as_os_str).collect::<Vec<_>>())
+        .unwrap();
 
     let file_groups: Vec<_> = if matches.get_flag(options::MERGE) {
         vec![files]
@@ -353,7 +410,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     for file_group in file_groups {
-        let result_options = build_options(&matches, &file_group, &args.join(" "));
+        let result_options = build_options(&matches, &file_group, &operands);
         let options = match result_options {
             Ok(options) => options,
             Err(err) => {
@@ -362,50 +419,202 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         };
 
-        let cmd_result = if let Ok(group) = file_group.iter().exactly_one() {
-            pr(group, &options)
-        } else {
-            mpr(&file_group, &options)
-        };
+        let cmd_result = file_group
+            .iter()
+            .exactly_one()
+            .map_or_else(|_| mpr(&file_group, &options), |group| pr(group, &options));
 
-        let status = match cmd_result {
-            Err(error) => {
-                print_error(&matches, &error);
-                1
-            }
-            _ => 0,
-        };
-        if status != 0 {
-            return Err(status.into());
+        if let Err(e) = cmd_result {
+            print_error(&matches, &e);
+            return Err(1.into());
         }
     }
     Ok(())
 }
 
-/// Returns re-written arguments which are passed to the program.
-/// Removes -column and +page option as getopts cannot parse things like -3 etc
-/// # Arguments
-/// * `args` - Command line arguments
-fn recreate_arguments(args: &[String]) -> Vec<String> {
-    let column_page_option = Regex::new(r"^[-+]\d+.*").unwrap();
+/// Rewrite arguments before clap parsing, taking out the legacy numeric
+/// operands that clap would not know.
+fn recreate_arguments(args: &[OsString], cmd: &Command) -> (Vec<OsString>, ColumnPageOperands) {
     let num_regex = Regex::new(r"^[^-]\d*$").unwrap();
-    let n_regex = Regex::new(r"^-n\s*$").unwrap();
+    // `-e` ends a cluster of short flags that take no value of their own, as in `-tre`.
+    // Options that do take a value are excluded so that `-se` keeps meaning `-s e`.
+    let e_regex = Regex::new(r"^-[dtTrFfabmJ]*e$").unwrap();
     let mut arguments = args.to_owned();
-    let num_option = args.iter().find_position(|x| n_regex.is_match(x.trim()));
-    if let Some((pos, _value)) = num_option {
-        if let Some(num_val_opt) = args.get(pos + 1) {
-            if !num_regex.is_match(num_val_opt) {
-                let could_be_file = arguments.remove(pos + 1);
-                arguments.insert(pos + 1, format!("{}", NumberingMode::default().width));
-                arguments.insert(pos + 2, could_be_file);
-            }
-        }
+    let num_option = args
+        .iter()
+        .take_while(|arg| *arg != "--")
+        .position(|x| x.to_str().is_some_and(|x| x.trim() == "-n"));
+    if let Some(pos) = num_option
+        && let Some(num_val_opt) = args.get(pos + 1)
+        && !num_val_opt.to_str().is_some_and(|s| num_regex.is_match(s))
+    {
+        let could_be_file = arguments.remove(pos + 1);
+        arguments.insert(pos + 1, NumberingMode::default().width.to_string().into());
+        arguments.insert(pos + 2, could_be_file);
     }
 
-    arguments
-        .into_iter()
-        .filter(|i| !column_page_option.is_match(i))
-        .collect()
+    // `-e` takes an optional attached argument, which clap cannot express, so it is filled in
+    // here. Without it clap would report a missing value for `-tre`, or swallow the following
+    // argument, usually a file name, for a bare `-e`.
+    let expand_tabs_option = arguments
+        .iter()
+        .take_while(|arg| *arg != "--")
+        .enumerate()
+        .filter_map(|(pos, value)| value.to_str().map(|value| (pos, value)))
+        .find(|(_, value)| e_regex.is_match(value.trim()));
+    if let Some((pos, value)) = expand_tabs_option {
+        arguments[pos] = format!("{}\t8", value.trim()).into();
+    }
+
+    // Take out the whole-token legacy operands before `--`, keeping the first
+    // of each kind. The value of an option is not one, however it looks
+    // (`-l -1`, `-w +5`).
+    let mut operands = ColumnPageOperands::default();
+    let mut clap_args = Vec::with_capacity(arguments.len());
+    let mut arguments = arguments.into_iter();
+    let mut value_follows = false;
+    for arg in arguments.by_ref() {
+        if arg == "--" {
+            clap_args.push(arg);
+            break;
+        }
+        let is_value = value_follows;
+        let text = arg.to_str();
+        value_follows = text.is_some_and(|text| takes_next_argument(cmd, text));
+        if is_value {
+            clap_args.push(arg);
+        } else if let Some(digits) = text.and_then(as_column_operand) {
+            operands.column.get_or_insert_with(|| digits.to_string());
+        } else if let Some(spec) = text.and_then(as_page_operand) {
+            operands.page.get_or_insert_with(|| spec.to_string());
+        } else {
+            clap_args.push(arg);
+        }
+    }
+    clap_args.extend(arguments);
+    (clap_args, operands)
+}
+
+/// Whether `arg` is an option whose value is the next argument, going by
+/// what `cmd` knows of its options.
+fn takes_next_argument(cmd: &Command, arg: &str) -> bool {
+    let takes_value = |opt: &Arg| {
+        opt.get_action().takes_values()
+            && opt.get_num_args().is_some_and(|n| n.min_values() >= 1)
+            && !opt.is_require_equals_set()
+    };
+    if let Some(name) = arg.strip_prefix("--") {
+        // `--NAME=VALUE` carries its value. `--NAME` may be cut short to a
+        // prefix of one option only, as `uu_app()` sets `infer_long_args`,
+        // which clap has no getter for.
+        if name.is_empty() || name.contains('=') {
+            return false;
+        }
+        let named = |opt: &&Arg| {
+            opt.get_long_and_visible_aliases()
+                .is_some_and(|longs| longs.contains(&name))
+        };
+        let prefixed = |opt: &&Arg| {
+            opt.get_long_and_visible_aliases()
+                .is_some_and(|longs| longs.iter().any(|long| long.starts_with(name)))
+        };
+        let option = cmd.get_arguments().find(named).or_else(|| {
+            let mut options = cmd.get_arguments().filter(prefixed);
+            options.next().filter(|_| options.next().is_none())
+        });
+        return option.is_some_and(takes_value);
+    }
+    // In a cluster of short options, only the last one can take the next
+    // argument: an earlier one has its value attached (`-tl5`).
+    let Some(cluster) = arg.strip_prefix('-') else {
+        return false;
+    };
+    let mut chars = cluster.chars();
+    while let Some(c) = chars.next() {
+        let short = |opt: &&Arg| {
+            opt.get_short_and_visible_aliases()
+                .is_some_and(|shorts| shorts.contains(&c))
+        };
+        let Some(opt) = cmd.get_arguments().find(short) else {
+            return false;
+        };
+        if takes_value(opt) {
+            return chars.as_str().is_empty();
+        }
+    }
+    false
+}
+
+#[derive(Default)]
+struct ColumnPageOperands {
+    column: Option<String>,
+    page: Option<String>,
+}
+
+/// Return the digits from a whole-token `-COLUMN` operand.
+fn as_column_operand(arg: &str) -> Option<&str> {
+    arg.strip_prefix('-')
+        .filter(|digits| !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// Return the spec from a whole-token `+FIRST[:LAST]` operand.
+///
+/// GNU takes a spec that is not a page range for a file name, and
+/// everything else that starts with `+` for a page operand, valid or not.
+fn as_page_operand(arg: &str) -> Option<&str> {
+    arg.strip_prefix('+')
+        .filter(|spec| !matches!(parse_page_spec(spec), Err(PageSpecError::NotARange)))
+}
+
+/// Why a `FIRST[:LAST]` page spec gives no page range. The first three are
+/// errors in a number; a spec that is not a range is a file name as a `+`
+/// operand and an error as `--pages`.
+enum PageSpecError {
+    NotANumber,
+    InvalidSuffix,
+    TooLarge,
+    NotARange,
+}
+
+/// Read `FIRST[:LAST]` the way GNU does: a number is the digits up to the
+/// end or to what follows them, and a page range starts at 1 and does not
+/// go backwards.
+fn parse_page_spec(spec: &str) -> Result<(usize, Option<usize>), PageSpecError> {
+    use PageSpecError::{InvalidSuffix, NotANumber, NotARange, TooLarge};
+    fn number(part: &str) -> Result<(usize, &str), PageSpecError> {
+        let digits_end = part
+            .bytes()
+            .position(|b| !b.is_ascii_digit())
+            .unwrap_or(part.len());
+        let (digits, rest) = part.split_at(digits_end);
+        if digits.is_empty() {
+            return Err(NotANumber);
+        }
+        match digits.parse::<usize>() {
+            Ok(n) => Ok((n, rest)),
+            Err(_) if rest.is_empty() => Err(TooLarge),
+            Err(_) => Err(InvalidSuffix),
+        }
+    }
+    let (first, rest) = number(spec)?;
+    if first == 0 {
+        return Err(NotARange);
+    }
+    let Some(rest) = rest.strip_prefix(':') else {
+        return if rest.is_empty() {
+            Ok((first, None))
+        } else {
+            Err(NotARange)
+        };
+    };
+    let (last, rest) = number(rest)?;
+    if !rest.is_empty() {
+        Err(InvalidSuffix)
+    } else if last < first {
+        Err(NotARange)
+    } else {
+        Ok((first, Some(last)))
+    }
 }
 
 fn print_error(matches: &ArgMatches, err: &PrError) {
@@ -414,18 +623,91 @@ fn print_error(matches: &ArgMatches, err: &PrError) {
     }
 }
 
-fn parse_usize(matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>> {
-    let from_parse_error_to_pr_error = |value_to_parse: (String, String)| {
-        let i = value_to_parse.0;
-        let option = value_to_parse.1;
-        i.parse().map_err(|_e| PrError::EncounteredErrors {
-            msg: format!("invalid {option} argument {}", i.quote()),
-        })
-    };
+fn value_too_large(option_message: &str, raw: &str) -> String {
+    translate!("pr-error-value-too-large", "message" => option_message, "value" => raw.quote())
+}
+
+fn out_of_range(option_message: &str, raw: &str) -> String {
+    translate!("pr-error-value-out-of-range", "message" => option_message, "value" => raw.quote())
+}
+
+/// Whether `raw` is a `-` followed by digits.
+fn is_negative_number(raw: &str) -> bool {
+    raw.strip_prefix('-')
+        .is_some_and(|digits| !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// Parse the value of a numeric option, reported as GNU does: a value that
+/// is not a number is quoted after `option_message`, one that does not fit
+/// gets the errno text. A leading `+` is accepted.
+fn parse_number(raw: &str, option_message: &str) -> Result<usize, PrError> {
+    match raw.strip_prefix('+').unwrap_or(raw).parse::<usize>() {
+        Ok(n @ ..=MAX_INT_VALUE) => Ok(n),
+        Ok(_) => Err(PrError::EncounteredErrors {
+            msg: value_too_large(option_message, raw),
+        }),
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => Err(PrError::EncounteredErrors {
+            msg: value_too_large(option_message, raw),
+        }),
+        Err(_) => Err(PrError::EncounteredErrors {
+            msg: translate!("pr-error-invalid-value", "message" => option_message, "value" => raw.quote()),
+        }),
+    }
+}
+
+/// Like [`parse_number`], for an option that wants a number from 1 up:
+/// zero and negative numbers are numbers out of range.
+fn parse_positive(raw: &str, option_message: &str) -> Result<usize, PrError> {
+    match parse_number(raw, option_message) {
+        Ok(0) => Err(PrError::EncounteredErrors {
+            msg: out_of_range(option_message, raw),
+        }),
+        Err(_) if is_negative_number(raw) => Err(PrError::EncounteredErrors {
+            msg: out_of_range(option_message, raw),
+        }),
+        result => result,
+    }
+}
+
+fn parse_usize(
+    matches: &ArgMatches,
+    opt: &str,
+    option_message: &str,
+) -> Option<Result<usize, PrError>> {
     matches
         .get_one::<String>(opt)
-        .map(|i| (i.to_owned(), format!("-{opt}")))
-        .map(from_parse_error_to_pr_error)
+        .map(|raw| parse_number(raw, option_message))
+}
+
+fn parse_positive_option(
+    matches: &ArgMatches,
+    opt: &str,
+    option_message: &str,
+) -> Option<Result<usize, PrError>> {
+    matches
+        .get_one::<String>(opt)
+        .map(|raw| parse_positive(raw, option_message))
+}
+
+/// Parse `FIRST[:LAST]` from `--pages` or a `+` operand, named by `option`
+/// in the messages, as GNU reports it.
+fn parse_page_range(spec: &str, option: &str) -> Result<(usize, Option<usize>), PrError> {
+    parse_page_spec(spec).map_err(|err| PrError::EncounteredErrors {
+        msg: match err {
+            PageSpecError::NotANumber => {
+                translate!("pr-error-invalid-pages-argument", "option" => option, "spec" => spec.quote())
+            }
+            PageSpecError::InvalidSuffix => {
+                translate!("pr-error-invalid-pages-suffix", "option" => option, "spec" => spec.quote())
+            }
+            PageSpecError::TooLarge => {
+                translate!("pr-error-pages-argument-too-large", "option" => option, "spec" => spec.quote())
+            }
+            PageSpecError::NotARange => {
+                translate!("pr-error-invalid-pages-range", "range" => spec.quote())
+            }
+        },
+    })
 }
 
 fn get_date_format(matches: &ArgMatches) -> String {
@@ -435,8 +717,8 @@ fn get_date_format(matches: &ArgMatches) -> String {
             // Replicate behavior from GNU manual.
             if std::env::var("POSIXLY_CORRECT").is_ok()
                 // TODO: This needs to be moved to uucore and handled by icu?
-                && (std::env::var("LC_TIME").unwrap_or_default() == "POSIX"
-                    || std::env::var("LC_ALL").unwrap_or_default() == "POSIX")
+                && (std::env::var_os("LC_TIME").as_deref() == Some(OsStr::new("POSIX"))
+                    || std::env::var_os("LC_ALL").as_deref() == Some(OsStr::new("POSIX")))
             {
                 "%b %e %H:%M %Y"
             } else {
@@ -450,14 +732,14 @@ fn get_date_format(matches: &ArgMatches) -> String {
 #[allow(clippy::cognitive_complexity)]
 fn build_options(
     matches: &ArgMatches,
-    paths: &[&str],
-    free_args: &str,
+    paths: &[&OsStr],
+    operands: &ColumnPageOperands,
 ) -> Result<OutputOptions, PrError> {
     let form_feed_used = matches.get_flag(options::FORM_FEED);
 
     let is_merge_mode = matches.get_flag(options::MERGE);
 
-    if is_merge_mode && matches.contains_id(options::COLUMN) {
+    if is_merge_mode && matches.contains_id(options::COLUMNS) {
         return Err(PrError::EncounteredErrors {
             msg: translate!("pr-error-column-merge-conflict"),
         });
@@ -475,46 +757,88 @@ fn build_options(
         None
     };
 
-    let header = matches
-        .get_one::<String>(options::HEADER)
-        .map_or(
+    let header = matches.get_one::<String>(options::HEADER).map_or_else(
+        || {
             if is_merge_mode || paths[0] == FILE_STDIN {
-                ""
+                OsString::new()
             } else {
-                paths[0]
-            },
-            |s| s.as_str(),
-        )
-        .to_string();
+                paths[0].to_os_string()
+            }
+        },
+        OsString::from,
+    );
 
     let default_first_number = NumberingMode::default().first_number;
-    let first_number =
-        parse_usize(matches, options::FIRST_LINE_NUMBER).unwrap_or(Ok(default_first_number))?;
+    let first_number = parse_usize(
+        matches,
+        options::FIRST_LINE_NUMBER,
+        &translate!("pr-error-invalid-first-line-number"),
+    )
+    .unwrap_or(Ok(default_first_number))?;
 
     let number = matches
         .get_one::<String>(options::NUMBER_LINES)
         .map(|i| {
+            let invalid = |arg: &str| PrError::EncounteredErrors {
+                msg: format!(
+                    "{}\n{}",
+                    translate!("pr-error-invalid-number-argument", "arg" => arg),
+                    translate!("pr-try-help-message")
+                ),
+            };
+
+            let invalid_too_large = |arg: &str| PrError::EncounteredErrors {
+                msg: format!(
+                    "{}\n{}",
+                    value_too_large(
+                        "'-n' extra characters or invalid number in the argument",
+                        arg
+                    ),
+                    translate!("pr-try-help-message")
+                ),
+            };
+
             let parse_result = i.parse::<usize>();
 
+            if matches!(
+                &parse_result,
+                Err(e) if *e.kind() == IntErrorKind::PosOverflow
+            ) {
+                return Err(invalid_too_large(i));
+            }
+
             let separator = if parse_result.is_err() {
-                i[0..1].to_string()
+                match i.chars().next() {
+                    Some(c) if c.is_ascii() => c.to_string(),
+                    Some(_) | None => return Err(invalid(i)),
+                }
             } else {
                 NumberingMode::default().separator
             };
 
             let width = match parse_result {
-                Ok(res) => res,
-                Err(_) => i[1..]
-                    .parse::<usize>()
-                    .unwrap_or(NumberingMode::default().width),
+                Ok(res @ ..=MAX_INT_VALUE) => res,
+                Ok(_) => return Err(invalid_too_large(i)),
+                Err(_) => {
+                    let digits = i.get(1..).unwrap_or_default();
+                    match digits.parse::<usize>() {
+                        Ok(res @ ..=MAX_INT_VALUE) => res,
+                        Ok(_) => return Err(invalid_too_large(digits)),
+                        Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
+                            return Err(invalid_too_large(digits));
+                        }
+                        Err(_) => NumberingMode::default().width,
+                    }
+                }
             };
 
-            NumberingMode {
+            Ok(NumberingMode {
                 width,
                 separator,
                 first_number,
-            }
+            })
         })
+        .transpose()?
         .or_else(|| {
             if matches.contains_id(options::NUMBER_LINES) {
                 Some(NumberingMode::default())
@@ -522,6 +846,49 @@ fn build_options(
                 None
             }
         });
+
+    let expand_tabs = matches
+        .get_one::<String>(options::EXPAND_TABS)
+        .map(|s| {
+            s.chars()
+                .next()
+                .map_or(Ok(ExpandTabsOptions::default()), |c| {
+                    let invalid = |arg: &str| PrError::EncounteredErrors {
+                        msg: format!(
+                            "{}\n{}",
+                            translate!("pr-error-invalid-expand-tab-argument", "arg" => arg),
+                            translate!("pr-try-help-message")
+                        ),
+                    };
+                    if c.is_ascii_digit() {
+                        let width: i32 = s.parse().map_err(|_e| invalid(s))?;
+                        if width <= 0 {
+                            return Err(invalid(s));
+                        }
+                        Ok(ExpandTabsOptions {
+                            input_char: TAB,
+                            width,
+                        })
+                    } else if !c.is_ascii() {
+                        Err(invalid(s))
+                    } else if s.len() > 1 {
+                        let width: i32 = s[1..].parse().map_err(|_e| invalid(&s[1..]))?;
+                        if width <= 0 {
+                            return Err(invalid(&s[1..]));
+                        }
+                        Ok(ExpandTabsOptions {
+                            input_char: c,
+                            width,
+                        })
+                    } else {
+                        Ok(ExpandTabsOptions {
+                            input_char: c,
+                            width: 8,
+                        })
+                    }
+                })
+        })
+        .transpose()?;
 
     let double_space = matches.get_flag(options::DOUBLE_SPACE);
 
@@ -534,7 +901,7 @@ fn build_options(
     let line_separator = "\n".to_string();
 
     let last_modified_time = {
-        let time = if is_merge_mode || paths[0].eq(FILE_STDIN) {
+        let time = if is_merge_mode || paths[0] == FILE_STDIN {
             Some(SystemTime::now())
         } else {
             metadata(paths.first().unwrap())
@@ -556,77 +923,15 @@ fn build_options(
     };
 
     // +page option is less priority than --pages
-    let page_plus_re = Regex::new(r"\s*\+(\d+:*\d*)\s*").unwrap();
-    let res = page_plus_re.captures(free_args).map(|i| {
-        let unparsed_num = i.get(1).unwrap().as_str().trim();
-        let x: Vec<_> = unparsed_num.split(':').collect();
-        x[0].to_string()
-            .parse::<usize>()
-            .map_err(|_e| PrError::EncounteredErrors {
-                msg: format!("invalid {} argument {}", "+", unparsed_num.quote()),
-            })
-    });
-    let start_page_in_plus_option = match res {
-        Some(res) => res?,
-        None => 1,
+    let plus_range = operands
+        .page
+        .as_deref()
+        .map(|spec| parse_page_range(spec, "+"))
+        .transpose()?;
+    let (start_page, end_page) = match matches.get_one::<String>(options::PAGES) {
+        Some(spec) => parse_page_range(spec, "--pages")?,
+        None => plus_range.unwrap_or((1, None)),
     };
-
-    let res = page_plus_re
-        .captures(free_args)
-        .map(|i| i.get(1).unwrap().as_str().trim())
-        .filter(|i| i.contains(':'))
-        .map(|unparsed_num| {
-            let x: Vec<_> = unparsed_num.split(':').collect();
-            x[1].to_string()
-                .parse::<usize>()
-                .map_err(|_e| PrError::EncounteredErrors {
-                    msg: format!("invalid {} argument {}", "+", unparsed_num.quote()),
-                })
-        });
-    let end_page_in_plus_option = match res {
-        Some(res) => Some(res?),
-        None => None,
-    };
-
-    let invalid_pages_map = |i: String| {
-        let unparsed_value = matches.get_one::<String>(options::PAGES).unwrap();
-        i.parse::<usize>().map_err(|_e| PrError::EncounteredErrors {
-            msg: format!("invalid --pages argument {}", unparsed_value.quote()),
-        })
-    };
-
-    let res = matches
-        .get_one::<String>(options::PAGES)
-        .map(|i| {
-            let x: Vec<_> = i.split(':').collect();
-            x[0].to_string()
-        })
-        .map(invalid_pages_map);
-    let start_page = match res {
-        Some(res) => res?,
-        None => start_page_in_plus_option,
-    };
-
-    let res = matches
-        .get_one::<String>(options::PAGES)
-        .filter(|i| i.contains(':'))
-        .map(|i| {
-            let x: Vec<_> = i.split(':').collect();
-            x[1].to_string()
-        })
-        .map(invalid_pages_map);
-    let end_page = match res {
-        Some(res) => Some(res?),
-        None => end_page_in_plus_option,
-    };
-
-    if let Some(end_page) = end_page {
-        if start_page > end_page {
-            return Err(PrError::EncounteredErrors {
-                msg: translate!("pr-error-invalid-pages-range", "start" => start_page, "end" => end_page),
-            });
-        }
-    }
 
     let default_lines_per_page = if form_feed_used {
         LINES_PER_PAGE_FOR_FORM_FEED
@@ -634,10 +939,17 @@ fn build_options(
         LINES_PER_PAGE
     };
 
-    let page_length =
-        parse_usize(matches, options::PAGE_LENGTH).unwrap_or(Ok(default_lines_per_page))?;
+    let page_length = parse_positive_option(
+        matches,
+        options::PAGE_LENGTH,
+        &translate!("pr-error-invalid-page-length"),
+    )
+    .unwrap_or(Ok(default_lines_per_page))?;
 
-    let page_length_le_ht = page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
+    // `pr --help` states the rule twice: a page length of 10 or less implies
+    // `-t`. At exactly 10 the old `<` left the header and trailer in place and
+    // subtracted them from the page, so the page had no room for content at all.
+    let page_length_le_ht = page_length <= (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
 
     let display_header_and_trailer = !page_length_le_ht
         && !matches.get_flag(options::OMIT_HEADER)
@@ -672,38 +984,35 @@ fn build_options(
         DEFAULT_COLUMN_WIDTH
     };
 
-    let column_width =
-        parse_usize(matches, options::COLUMN_WIDTH).unwrap_or(Ok(default_column_width))?;
+    let column_width = parse_positive_option(
+        matches,
+        options::COLUMN_WIDTH,
+        &translate!("pr-error-invalid-column-width"),
+    )
+    .unwrap_or(Ok(default_column_width))?;
 
     let page_width = if matches.get_flag(options::JOIN_LINES) {
         None
     } else {
-        match parse_usize(matches, options::PAGE_WIDTH) {
-            Some(res) => Some(res?),
-            None => None,
-        }
+        parse_positive_option(
+            matches,
+            options::PAGE_WIDTH,
+            &translate!("pr-error-invalid-page-width"),
+        )
+        .transpose()?
     };
 
-    let re_col = Regex::new(r"\s*-(\d+)\s*").unwrap();
-
-    let res = re_col.captures(free_args).map(|i| {
-        let unparsed_num = i.get(1).unwrap().as_str().trim();
-        unparsed_num
-            .parse::<usize>()
-            .map_err(|_e| PrError::EncounteredErrors {
-                msg: format!("invalid {} argument {}", "-", unparsed_num.quote()),
-            })
-    });
-    let start_column_option = match res {
-        Some(res) => Some(res?),
-        None => None,
-    };
-
-    // --column has more priority than -column
-
-    let column_option_value = match parse_usize(matches, options::COLUMN) {
-        Some(res) => Some(res?),
-        None => start_column_option,
+    // --columns has more priority than -column
+    let column_option_value = match matches.get_one::<String>(options::COLUMNS) {
+        Some(raw) => Some(parse_positive(
+            raw,
+            &translate!("pr-error-invalid-number-of-columns"),
+        )?),
+        None => operands
+            .column
+            .as_deref()
+            .map(|digits| parse_positive(digits, &translate!("pr-error-invalid-number-of-columns")))
+            .transpose()?,
     };
 
     let column_mode_options = column_option_value.map(|columns| ColumnModeOptions {
@@ -713,7 +1022,27 @@ fn build_options(
         across_mode,
     });
 
-    let offset_spaces = " ".repeat(parse_usize(matches, options::INDENT).unwrap_or(Ok(0))?);
+    // Store the count. Spaces are streamed at print time to avoid huge allocations.
+    let offset_spaces = match matches.get_one::<String>(options::INDENT) {
+        None => 0,
+        Some(raw) => {
+            let option_message = translate!("pr-error-invalid-line-offset");
+            match parse_number(raw, &option_message) {
+                // A negative margin is reported like one that does not fit;
+                // a negative zero is zero.
+                Err(_) if is_negative_number(raw) => {
+                    if raw.parse::<i64>() != Ok(0) {
+                        return Err(PrError::EncounteredErrors {
+                            msg: value_too_large(&option_message, raw),
+                        });
+                    }
+                    0
+                }
+                result => result?,
+            }
+        }
+    };
+
     let join_lines = matches.get_flag(options::JOIN_LINES);
 
     let col_sep_for_printing = column_mode_options.as_ref().map_or_else(
@@ -756,39 +1085,73 @@ fn build_options(
         merge_files_print,
         offset_spaces,
         form_feed_used,
-        join_lines,
         col_sep_for_printing,
         line_width,
+        expand_tabs,
     })
 }
 
 /// Read the entire contents of the given path into memory.
 ///
-/// If `path` is `"-"`, then read from stdin.
-fn read_to_end(path: &str) -> Result<Vec<u8>, std::io::Error> {
-    if path == "-" {
+/// If `name` is `"-"`, then read from stdin.
+fn read_to_end(name: &OsStr) -> Result<Vec<u8>, PrError> {
+    if name == "-" {
         let mut f = stdin();
         let mut buf = vec![];
-        f.read_to_end(&mut buf)?;
+        f.read_to_end(&mut buf).map_err(PrError::Read)?;
         Ok(buf)
     } else {
-        std::fs::read(path)
+        let path = PathBuf::from(name);
+        std::fs::read(&path).map_err(|error| PrError::ReadPath { path, error })
     }
 }
 
-fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
+fn apply_expand_tab(chunk: &mut Vec<u8>, byte: u8, expand_options: &ExpandTabsOptions) {
+    if byte == expand_options.input_char as u8 {
+        // If the byte encountered is the input char we use width to calculate
+        // the amount of spaces needed (if no input char given we stored '\t'
+        // in our struct)
+        let spaces_needed =
+            expand_options.width as usize - (chunk.len() % expand_options.width as usize);
+        chunk.extend(std::iter::repeat_n(b' ', spaces_needed));
+    } else if byte == TAB as u8 {
+        // If a byte got passed to the -e flag (eg -ea1)  which is not '\t' GNU
+        // still expands it but does not use an optionally given width parameter
+        // but does the '\t' expansion with the default value (8)
+        let spaces_needed = 8 - (chunk.len() % 8);
+        chunk.extend(std::iter::repeat_n(b' ', spaces_needed));
+    } else {
+        // This arm means the byte is neither '\t' nor the bytes to be
+        // expanded
+        chunk.push(byte);
+    }
+}
+
+fn pr(name: &OsStr, options: &OutputOptions) -> Result<i32, PrError> {
     // Read the entire contents of the file into a buffer.
     //
     // TODO Read incrementally.
-    let buf = read_to_end(path)?;
+    let buf = read_to_end(name)?;
 
-    let pages = get_pages(options, 0, &buf)?;
+    let mut writer = stdout().lock();
+    let (pages, page_count) = get_pages(options, 0, &buf);
+    if options.start_page > page_count {
+        show_error!(
+            "{}",
+            translate!(
+                "pr-error-starting-page-exceeds-page-count",
+                "start" => options.start_page,
+                "count" => page_count
+            )
+        );
+        return Ok(0);
+    }
 
     // Split the text into pages, and then print each line in each page.
     for page_with_page_number in pages {
         let page_number = page_with_page_number.0 + 1;
         let page = page_with_page_number.1;
-        print_page(&page, options, page_number)?;
+        write_page(&mut writer, &page, options, page_number).map_err(PrError::Write)?;
     }
 
     Ok(0)
@@ -796,16 +1159,13 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
 
 /// Group lines of a file into pages.
 ///
-/// Returns a list of the form `(page_num, lines)`.
+/// Returns a list of the form `(page_num, lines)` and the total page count.
 ///
-/// # Errors
-///
-/// Returns an error if the bytes are not a valid UTF-8 string.
 fn get_pages(
     options: &OutputOptions,
     file_id: usize,
     buf: &[u8],
-) -> Result<Vec<(usize, Vec<FileLine>)>, FromUtf8Error> {
+) -> (Vec<(usize, Vec<FileLine>)>, usize) {
     let start_page = options.start_page;
     let end_page = options.end_page;
     let lines_needed_per_page = lines_to_read_for_page(options);
@@ -840,8 +1200,10 @@ fn get_pages(
                 // If the file has the pattern `\n\f`, don't treat the
                 // `\f` as its own line; instead ignore the empty line.
             } else {
-                let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i])?;
+                let file_line =
+                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options);
                 page.push(file_line);
+                line_num += 1;
             }
 
             // Remember where the last line ended.
@@ -854,7 +1216,7 @@ fn get_pages(
             // TODO Optimization opportunity: don't bother pushing
             // lines and pages if we aren't going to display it.
             if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-                pages.push((page_num, page.clone()));
+                pages.push((page_num, std::mem::take(&mut page)));
             }
             page_num += 1;
             page.clear();
@@ -865,7 +1227,8 @@ fn get_pages(
                 // If the file has the pattern `\f\n`, don't treat the
                 // `\n` as its own line; instead ignore the empty line.
             } else {
-                let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i])?;
+                let file_line =
+                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options);
                 page.push(file_line);
                 line_num += 1;
             }
@@ -877,7 +1240,7 @@ fn get_pages(
             // and clear the `page` buffer for the next iteration.
             if page.len() >= lines_needed_per_page {
                 if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-                    pages.push((page_num, page.clone()));
+                    pages.push((page_num, std::mem::take(&mut page)));
                 }
                 page_num += 1;
                 page.clear();
@@ -887,16 +1250,16 @@ fn get_pages(
 
     // Consider all trailing bytes as the last line.
     if prev < buf.len() {
-        let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..])?;
+        let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..], options);
         page.push(file_line);
     }
 
     // Consider all trailing lines as the last page.
     if !page.is_empty() && start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-        pages.push((page_num, page.clone()));
+        pages.push((page_num, std::mem::take(&mut page)));
     }
 
-    Ok(pages)
+    (pages, page_num + 1)
 }
 
 /// Key used to group lines together according to their file and page number.
@@ -912,6 +1275,7 @@ fn group_lines(num_files: usize, lines: Vec<FileLine>) -> Vec<(usize, Vec<FileLi
     let mut result: Vec<(usize, Vec<FileLine>)> = vec![];
     let mut current_key: Option<usize> = None;
     let mut current_group: Vec<FileLine> = vec![];
+
     for file_line in lines {
         match current_key {
             None => {
@@ -922,15 +1286,15 @@ fn group_lines(num_files: usize, lines: Vec<FileLine>) -> Vec<(usize, Vec<FileLi
                 current_group.push(file_line);
             }
             Some(key) => {
-                result.push((key, current_group.clone()));
-                current_group.clear();
+                result.push((key, std::mem::take(&mut current_group)));
                 current_key = Some(group_key(num_files, &file_line));
                 current_group.push(file_line);
             }
         }
     }
-    // TODO Handle empty file.
-    result.push((current_key.unwrap(), current_group));
+    if let Some(k) = current_key {
+        result.push((k, current_group));
+    }
     result
 }
 
@@ -939,7 +1303,7 @@ fn group_lines(num_files: usize, lines: Vec<FileLine>) -> Vec<(usize, Vec<FileLi
 /// Each group can then be merged into columns of a single page.
 fn get_file_line_groups(
     options: &OutputOptions,
-    paths: &[&str],
+    paths: &[&OsStr],
 ) -> Result<Vec<(usize, Vec<FileLine>)>, PrError> {
     let num_files = paths.len();
     let mut all_lines = vec![];
@@ -951,7 +1315,8 @@ fn get_file_line_groups(
 
         // Split the text into pages and collect each line for
         // subsequent grouping.
-        for (_, mut page) in get_pages(options, file_id, &buf)? {
+        let (pages, _) = get_pages(options, file_id, &buf);
+        for (_, mut page) in pages {
             all_lines.append(&mut page);
         }
     }
@@ -961,9 +1326,14 @@ fn get_file_line_groups(
     Ok(group_lines(num_files, all_lines))
 }
 
-fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
+fn mpr(paths: &[&OsStr], options: &OutputOptions) -> Result<i32, PrError> {
     let file_line_groups = get_file_line_groups(options, paths)?;
 
+    if file_line_groups.is_empty() {
+        return Ok(0);
+    }
+
+    let mut writer = stdout().lock();
     let start_page = options.start_page;
     let mut lines = Vec::new();
     let mut page_counter = start_page;
@@ -972,7 +1342,7 @@ fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
         for file_line in file_line_group {
             let new_page_number = file_line.page_number + 1;
             if page_counter != new_page_number {
-                print_page(&lines, options, page_counter)?;
+                write_page(&mut writer, &lines, options, page_counter).map_err(PrError::Write)?;
                 lines = Vec::new();
                 page_counter = new_page_number;
             }
@@ -980,40 +1350,40 @@ fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
         }
     }
 
-    print_page(&lines, options, page_counter)?;
+    write_page(&mut writer, &lines, options, page_counter).map_err(PrError::Write)?;
 
     Ok(0)
 }
 
-fn print_page(
+fn write_page(
+    writer: &mut impl Write,
     lines: &[FileLine],
     options: &OutputOptions,
     page: usize,
-) -> Result<(), std::io::Error> {
+) -> io::Result<()> {
     let line_separator = options.line_separator.as_bytes();
     let page_separator = options.page_separator_char.as_bytes();
 
     let header = header_content(options, page);
     let trailer_content = trailer_content(options);
 
-    let out = stdout();
-    let mut out = out.lock();
-
     for x in header {
-        out.write_all(x.as_bytes())?;
-        out.write_all(line_separator)?;
+        writer.write_all(&x)?;
+        writer.write_all(line_separator)?;
     }
 
-    write_columns(lines, options, &mut out)?;
+    write_columns(writer, lines, options)?;
 
     for (index, x) in trailer_content.iter().enumerate() {
-        out.write_all(x.as_bytes())?;
+        writer.write_all(x.as_bytes())?;
         if index + 1 != trailer_content.len() {
-            out.write_all(line_separator)?;
+            writer.write_all(line_separator)?;
         }
     }
-    out.write_all(page_separator)?;
-    out.flush()?;
+    if options.display_header_and_trailer || options.form_feed_used {
+        writer.write_all(page_separator)?;
+    }
+    writer.flush()?;
     Ok(())
 }
 
@@ -1069,14 +1439,37 @@ fn to_table(
 ///
 /// This function should be applied when there are fewer lines than the
 /// total number of cells in the table.
+///
+/// The lines are spread over the columns the way `pr` fills a page it cannot
+/// fill completely: every column takes the ceiling of what is still unplaced
+/// divided by the number of columns left to fill, so the leftmost columns are
+/// the long ones and no line is left over.
 fn to_table_short_file(
     content_lines_per_page: usize,
     columns: usize,
     lines: &[FileLine],
 ) -> Vec<Vec<Option<&FileLine>>> {
-    let num_rows = lines.len() / columns;
+    let mut bounds = Vec::with_capacity(columns + 1);
+    bounds.push(0);
+    let mut placed = 0;
+    for column in 0..columns {
+        placed += (lines.len() - placed).div_ceil(columns - column);
+        bounds.push(placed);
+    }
+
+    let num_rows = (0..columns)
+        .map(|j| bounds[j + 1] - bounds[j])
+        .max()
+        .unwrap_or(0);
     let mut table: Vec<Vec<_>> = (0..num_rows)
-        .map(|i| (0..columns).map(|j| lines.get(num_rows * j + i)).collect())
+        .map(|i| {
+            (0..columns)
+                .map(|j| {
+                    let index = bounds[j] + i;
+                    (index < bounds[j + 1]).then(|| &lines[index])
+                })
+                .collect()
+        })
         .collect();
     // Fill the rest with Nones.
     for _ in num_rows..content_lines_per_page {
@@ -1085,12 +1478,24 @@ fn to_table_short_file(
     table
 }
 
+/// Write `n` space characters to `out` in fixed-size chunks, so the indent is
+/// streamed rather than allocated up front.
+fn write_offset_spaces(out: &mut impl Write, mut n: usize) -> io::Result<()> {
+    const SPACES: [u8; 256] = [b' '; 256];
+    while n > 0 {
+        let chunk = n.min(SPACES.len());
+        out.write_all(&SPACES[..chunk])?;
+        n -= chunk;
+    }
+    Ok(())
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn write_columns(
+    writer: &mut impl Write,
     lines: &[FileLine],
     options: &OutputOptions,
-    out: &mut impl Write,
-) -> Result<(), std::io::Error> {
+) -> io::Result<()> {
     let line_separator = options.content_line_separator.as_bytes();
 
     let content_lines_per_page = if options.double_space {
@@ -1135,41 +1540,63 @@ fn write_columns(
     // cells, where each row will be printed as a single line in the
     // output.
     let merge = options.merge_files_print.is_some();
-    let table = if !merge && (lines.len() < (content_lines_per_page * columns)) {
-        to_table_short_file(content_lines_per_page, columns, lines)
+    let table = if merge {
+        to_table_merged(content_lines_per_page, columns, filled_lines)
     } else if across_mode {
         to_table_across(content_lines_per_page, columns, lines)
-    } else if merge {
-        to_table_merged(content_lines_per_page, columns, filled_lines)
+    } else if lines.len() < (content_lines_per_page * columns) {
+        to_table_short_file(content_lines_per_page, columns, lines)
     } else {
         to_table(content_lines_per_page, columns, lines)
     };
 
     let blank_line = FileLine::default();
+    // Without a page trailer there is nothing to pad the page out to.
+    let no_trailer = feed_line_present || !options.display_header_and_trailer;
     for row in table {
-        let indexes = row.len();
-        for (i, cell) in row.iter().enumerate() {
-            if cell.is_none() && options.merge_files_print.is_some() {
-                out.write_all(
-                    get_line_for_printing(options, &blank_line, columns, i, line_width, indexes)
-                        .as_bytes(),
-                )?;
-            } else if cell.is_none() {
-                not_found_break = true;
-                break;
-            } else if cell.is_some() {
-                let file_line = cell.unwrap();
-
-                out.write_all(
-                    get_line_for_printing(options, file_line, columns, i, line_width, indexes)
-                        .as_bytes(),
-                )?;
-            }
-        }
-        if not_found_break && feed_line_present {
+        // Merged files are padded with empty cells to fill the page; once
+        // every file has run out there is nothing left to print.
+        if merge && no_trailer && row.iter().all(Option::is_none) {
             break;
         }
-        out.write_all(line_separator)?;
+        // On a page that is not completely filled the last row stops part way
+        // through, and its final cell must not be followed by a column
+        // separator. Merging prints an empty cell for every column instead, so
+        // there the row always spans the full width.
+        let indexes = if merge {
+            row.len()
+        } else {
+            row.iter().take_while(|cell| cell.is_some()).count()
+        };
+        let mut cells_written = 0;
+        for (i, cell) in row.iter().enumerate() {
+            let line_to_print = match cell {
+                None if options.merge_files_print.is_some() => &blank_line,
+                None => {
+                    not_found_break = true;
+                    break;
+                }
+                Some(file_line) => file_line,
+            };
+
+            write_offset_spaces(writer, options.offset_spaces)?;
+            writer.write_all(&get_line_for_printing(
+                options,
+                line_to_print,
+                columns,
+                i,
+                line_width,
+                indexes,
+            ))?;
+            cells_written += 1;
+        }
+        // The last row of a partly filled page has content in its leading
+        // columns and nothing in the rest, so it still needs to be terminated.
+        // Only a row without any content at all means the page ran out.
+        if cells_written == 0 && not_found_break && no_trailer {
+            break;
+        }
+        writer.write_all(line_separator)?;
     }
 
     Ok(())
@@ -1182,39 +1609,58 @@ fn get_line_for_printing(
     index: usize,
     line_width: Option<usize>,
     indexes: usize,
-) -> String {
-    let blank_line = String::new();
+) -> Vec<u8> {
     let formatted_line_number = get_formatted_line_number(options, file_line.line_number, index);
 
-    let mut complete_line = format!("{formatted_line_number}{}", file_line.line_content);
+    // The content is kept as raw bytes, so input that is not valid UTF-8 is
+    // written out unchanged.
+    let mut complete_line = formatted_line_number.into_bytes();
+    complete_line.extend_from_slice(&file_line.line_content);
 
-    let offset_spaces = &options.offset_spaces;
+    let tab_count = memchr::memchr_iter(TAB as u8, &complete_line).count();
+    // Like GNU pr, a byte that is not part of a valid UTF-8 sequence is not
+    // printable and takes no width.
+    let invalid_count: usize = complete_line
+        .utf8_chunks()
+        .map(|chunk| chunk.invalid().len())
+        .sum();
 
-    let tab_count = complete_line.chars().filter(|i| i == &TAB).count();
+    let display_length = complete_line.len() - invalid_count + (tab_count * 7);
 
-    let display_length = complete_line.len() + (tab_count * 7);
+    let is_last_cell = (index + 1) == indexes;
+    if let Some(i) = line_width {
+        let min_width = i.saturating_sub(columns - 1) / columns;
+        // Like GNU pr, the last cell of a row is not padded, so the line has
+        // no trailing spaces.
+        if display_length < min_width && !is_last_cell {
+            complete_line.resize(complete_line.len() + (min_width - display_length), b' ');
+        }
+        complete_line.truncate(char_prefix_len(&complete_line, min_width));
+    }
 
-    let sep = if (index + 1) != indexes && !options.join_lines {
-        &options.col_sep_for_printing
-    } else {
-        &blank_line
-    };
+    if !is_last_cell {
+        complete_line.extend_from_slice(options.col_sep_for_printing.as_bytes());
+    }
+    complete_line
+}
 
-    format!(
-        "{offset_spaces}{}{sep}",
-        line_width
-            .map(|i| {
-                let min_width = (i - (columns - 1)) / columns;
-                if display_length < min_width {
-                    for _i in 0..(min_width - display_length) {
-                        complete_line.push(' ');
-                    }
-                }
-
-                complete_line.chars().take(min_width).collect()
-            })
-            .unwrap_or(complete_line),
-    )
+/// Returns the length in bytes of the first `n` characters of `bytes`. A byte
+/// that is not part of a valid UTF-8 sequence takes no width, so it is kept
+/// unless a character before it is already cut off.
+fn char_prefix_len(bytes: &[u8], n: usize) -> usize {
+    let mut len = 0;
+    let mut count = 0;
+    for chunk in bytes.utf8_chunks() {
+        for c in chunk.valid().chars() {
+            if count == n {
+                return len;
+            }
+            len += c.len_utf8();
+            count += 1;
+        }
+        len += chunk.invalid().len();
+    }
+    len
 }
 
 fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: usize) -> String {
@@ -1224,12 +1670,12 @@ fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: us
         let line_str = line_number.to_string();
         let num_opt = opts.number.as_ref().unwrap();
         let width = num_opt.width;
-        let separator = &num_opt.separator;
-        if line_str.len() >= width {
-            format!("{:>width$}{separator}", &line_str[line_str.len() - width..],)
-        } else {
-            format!("{line_str:>width$}{separator}")
-        }
+        let digits = &line_str[line_str.len().saturating_sub(width)..];
+        let mut output = String::with_capacity(width + num_opt.separator.len());
+        output.extend(std::iter::repeat_n(' ', width - digits.len()));
+        output.push_str(digits);
+        output.push_str(&num_opt.separator);
+        output
     } else {
         String::new()
     }
@@ -1237,7 +1683,7 @@ fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: us
 
 /// Returns a five line header content if displaying header is not disabled by
 /// using `NO_HEADER_TRAILER_OPTION` option.
-fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
+fn header_content(options: &OutputOptions, page: usize) -> Vec<Vec<u8>> {
     if !options.display_header_and_trailer {
         return Vec::new();
     }
@@ -1254,7 +1700,7 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
     let total_width = options.line_width.unwrap_or(DEFAULT_COLUMN_WIDTH);
 
     let date_len = date_part.chars().count();
-    let filename_len = filename.chars().count();
+    let filename_len = filename.to_string_lossy().chars().count();
     let page_len = page_part.chars().count();
 
     let header_line = if date_len + filename_len + page_len + 2 < total_width {
@@ -1263,22 +1709,26 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
         let padding_before_filename = (space_for_filename - filename_len) / 2;
         let padding_after_filename = space_for_filename - filename_len - padding_before_filename;
 
-        format!(
-            "{date_part}{:padding_before_filename$}{filename}{:padding_after_filename$}{page_part}",
-            "", ""
-        )
+        let mut line = Vec::with_capacity(total_width);
+        line.extend_from_slice(date_part.as_bytes());
+        line.extend(std::iter::repeat_n(b' ', padding_before_filename));
+        line.extend_from_slice(filename.as_encoded_bytes());
+        line.extend(std::iter::repeat_n(b' ', padding_after_filename));
+        line.extend_from_slice(page_part.as_bytes());
+        line
     } else {
         // If content is too long, just use single spaces
-        format!("{date_part} {filename} {page_part}")
+        [
+            date_part.as_bytes(),
+            b" ",
+            filename.as_encoded_bytes(),
+            b" ",
+            page_part.as_bytes(),
+        ]
+        .concat()
     };
 
-    vec![
-        String::new(),
-        String::new(),
-        header_line,
-        String::new(),
-        String::new(),
-    ]
+    vec![Vec::new(), Vec::new(), header_line, Vec::new(), Vec::new()]
 }
 
 /// Returns five empty lines as trailer content if displaying trailer

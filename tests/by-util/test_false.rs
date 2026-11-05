@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use regex::Regex;
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 use std::fs::OpenOptions;
@@ -59,6 +60,6 @@ fn test_full() {
             .arg(option)
             .set_stdout(dev_full)
             .fails()
-            .stderr_contains("No space left on device");
+            .stderr_is("false: No space left on device\n");
     }
 }

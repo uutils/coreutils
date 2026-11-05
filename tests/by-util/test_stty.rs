@@ -2,7 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar ispeed ospeed NCCS nonhex gstty notachar cbreak evenp oddp CSIZE
+
+#![cfg(all(unix, not(target_os = "redox")))]
 
 use uutests::util::{expected_result, pty_path};
 use uutests::{at_and_ts, new_ucmd, unwrap_or_return};
@@ -25,7 +28,6 @@ fn test_invalid_arg() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_basic() {
     let (path, _controller, _replica) = pty_path();
     new_ucmd!()
@@ -35,7 +37,6 @@ fn test_basic() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_all_flag() {
     let (path, _controller, _replica) = pty_path();
     let result = new_ucmd!().args(&["--all", "--file", &path]).succeeds();
@@ -46,7 +47,6 @@ fn test_all_flag() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_sane() {
     let (path, _controller, _replica) = pty_path();
 
@@ -154,10 +154,9 @@ fn invalid_setting() {
 #[test]
 fn invalid_baud_setting() {
     #[cfg(not(any(
+        target_vendor = "apple",
         target_os = "freebsd",
         target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
         target_os = "netbsd",
         target_os = "openbsd"
     )))]
@@ -182,10 +181,9 @@ fn invalid_baud_setting() {
         .stderr_contains("missing argument to 'ospeed'");
 
     #[cfg(not(any(
+        target_vendor = "apple",
         target_os = "freebsd",
         target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
         target_os = "netbsd",
         target_os = "openbsd"
     )))]
@@ -195,10 +193,9 @@ fn invalid_baud_setting() {
         .stderr_contains("invalid ispeed '995'");
 
     #[cfg(not(any(
+        target_vendor = "apple",
         target_os = "freebsd",
         target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
         target_os = "netbsd",
         target_os = "openbsd"
     )))]
@@ -216,7 +213,6 @@ fn invalid_baud_setting() {
 }
 
 #[test]
-#[cfg(unix)]
 fn valid_baud_formats() {
     let (path, _controller, _replica) = pty_path();
     for speed in &["  +9600", "9600.49", "9600.50", "9599.51", "  9600."] {
@@ -295,7 +291,6 @@ fn row_column_sizes() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_row_column_hex_octal() {
     let (path, _controller, _replica) = pty_path();
     let (_at, ts) = at_and_ts!();
@@ -477,10 +472,9 @@ fn grouped_flag_removal() {
 fn baud_rate_validation() {
     // Test various baud rate formats
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "freebsd",
         target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
@@ -548,7 +542,6 @@ fn conflicting_print_modes() {
 // Additional integration tests to increase coverage
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_save_format() {
     // Test --save flag outputs settings in save format
@@ -567,7 +560,6 @@ fn test_save_format() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_set_control_flags() {
     // Test setting parenb flag and verify it's set
@@ -617,7 +609,6 @@ fn test_set_control_flags() {
 
 // Tests for saved state parsing and restoration
 #[test]
-#[cfg(unix)]
 fn test_save_and_restore() {
     let (path, _controller, _replica) = pty_path();
     let saved = new_ucmd!()
@@ -632,7 +623,6 @@ fn test_save_and_restore() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_set_input_flags() {
     // Test setting ignbrk flag and verify
@@ -670,7 +660,6 @@ fn test_set_input_flags() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_save_with_g_flag() {
     let (path, _controller, _replica) = pty_path();
     let saved = new_ucmd!()
@@ -685,7 +674,6 @@ fn test_save_with_g_flag() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_set_output_flags() {
     // Test setting opost flag and verify
@@ -723,7 +711,6 @@ fn test_set_output_flags() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_set_local_flags() {
     // Test setting isig flag and verify
@@ -761,7 +748,6 @@ fn test_set_local_flags() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_combo_cbreak() {
     // Test cbreak combination setting - should disable icanon
@@ -788,7 +774,6 @@ fn test_combo_cbreak() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_combo_nl() {
     // Test nl combination setting - should disable icrnl and onlcr
@@ -805,7 +790,6 @@ fn test_combo_nl() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_combo_ek() {
     // Test ek combination setting (erase and kill) - should set erase and kill to defaults
@@ -820,7 +804,6 @@ fn test_combo_ek() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_combo_litout() {
     // Test litout combination setting - should disable parenb, istrip, opost
@@ -838,7 +821,6 @@ fn test_combo_litout() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_combo_pass8() {
     // Test pass8 combination setting - should disable parenb, istrip, set cs8
@@ -856,7 +838,6 @@ fn test_combo_pass8() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_save_restore_after_change() {
     let (path, _controller, _replica) = pty_path();
     let saved = new_ucmd!()
@@ -881,7 +862,6 @@ fn test_save_restore_after_change() {
 // These tests both validate what we expect each input to return and their error codes
 // and also use the GNU coreutils results to validate our results match expectations
 #[test]
-#[cfg(unix)]
 fn test_saved_state_valid_formats() {
     let (path, _controller, _replica) = pty_path();
     let (_at, ts) = at_and_ts!();
@@ -903,7 +883,6 @@ fn test_saved_state_valid_formats() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_combo_decctlq() {
     // Test decctlq combination setting - should enable ixany
@@ -919,7 +898,6 @@ fn test_combo_decctlq() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_combo_dec() {
     // Test dec combination setting - should set multiple flags
@@ -936,7 +914,6 @@ fn test_combo_dec() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_combo_crt() {
     // Test crt combination setting - should set echoe
@@ -952,7 +929,23 @@ fn test_combo_crt() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
+fn test_combo_tabs() {
+    // Test tabs combination setting - tabs is an alias for tab0, -tabs for tab3
+    new_ucmd!()
+        .terminal_simulation(true)
+        .args(&["tabs"])
+        .succeeds()
+        .no_stderr();
+
+    new_ucmd!()
+        .terminal_simulation(true)
+        .args(&["-tabs"])
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_multiple_settings() {
     // Test setting multiple flags at once and verify all are set
@@ -970,7 +963,6 @@ fn test_multiple_settings() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_set_all_control_chars() {
     // Test setting intr control character and verify
@@ -1015,7 +1007,6 @@ fn test_set_all_control_chars() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_print_size() {
     // Test size print setting - should output "rows <num>; columns <num>;"
@@ -1028,7 +1019,6 @@ fn test_print_size() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_print_speed() {
     // Test speed print setting - should output a numeric speed
@@ -1045,7 +1035,6 @@ fn test_print_speed() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_set_rows_cols() {
     // Test setting rows and verify
@@ -1084,7 +1073,6 @@ fn test_set_rows_cols() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_character_size_settings() {
     // Test cs5 setting and verify
@@ -1122,7 +1110,6 @@ fn test_character_size_settings() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_baud_rate_settings() {
     // Test setting ispeed and verify
@@ -1149,7 +1136,6 @@ fn test_baud_rate_settings() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_min_time_settings() {
     // Test min setting and verify
@@ -1176,7 +1162,6 @@ fn test_min_time_settings() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_complex_scenario() {
     // Test a complex scenario with multiple settings and verify all are applied
@@ -1198,7 +1183,6 @@ fn test_complex_scenario() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_raw_mode() {
     // Test raw mode setting
@@ -1215,7 +1199,6 @@ fn test_raw_mode() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_cooked_mode() {
     // Test cooked mode setting (opposite of raw)
@@ -1232,7 +1215,6 @@ fn test_cooked_mode() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_saved_state_invalid_formats() {
     let (path, _controller, _replica) = pty_path();
     let (_at, ts) = at_and_ts!();
@@ -1298,7 +1280,6 @@ fn test_saved_state_invalid_formats() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_parity_settings() {
     // Test evenp setting and verify (should set parenb and cs7)
@@ -1493,10 +1474,9 @@ fn invalid_baud_rate() {
     // On non-BSD systems, test invalid numeric baud rate
     // On BSD systems, any u32 is accepted, so we skip this test
     #[cfg(not(any(
+        target_vendor = "apple",
         target_os = "freebsd",
         target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
         target_os = "netbsd",
         target_os = "openbsd"
     )))]
@@ -1533,7 +1513,6 @@ fn control_char_decimal_overflow() {
 }
 
 #[test]
-#[cfg(unix)]
 #[ignore = "Fails because the implementation of print state is not correctly printing flags on certain platforms"]
 fn test_saved_state_with_control_chars() {
     let (path, _controller, _replica) = pty_path();
@@ -1559,7 +1538,6 @@ fn test_saved_state_with_control_chars() {
 
 // Per POSIX, stty uses stdin for TTY operations. When stdin is a pipe, it should fail.
 #[test]
-#[cfg(unix)]
 fn test_stdin_not_tty_fails() {
     // ENOTTY error message varies by platform/libc:
     // - glibc: "Inappropriate ioctl for device"
@@ -1581,7 +1559,6 @@ fn test_stdin_not_tty_fails() {
 // Test that stty uses stdin for TTY operations per POSIX.
 // Verifies: output redirection (#8012), save/restore pattern (#8608), stdin redirection (#8848)
 #[test]
-#[cfg(unix)]
 fn test_stty_uses_stdin() {
     use std::fs::File;
     use std::process::Stdio;
@@ -1628,7 +1605,6 @@ fn test_stty_uses_stdin() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_ispeed_ospeed_valid_speeds() {
     let (path, _controller, _replica) = pty_path();
     let (_at, ts) = at_and_ts!();
@@ -1656,17 +1632,13 @@ fn test_ispeed_ospeed_valid_speeds() {
 }
 
 #[test]
-#[cfg(all(
-    unix,
-    not(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))
-))]
+#[cfg(not(any(
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "netbsd",
+    target_os = "openbsd"
+)))]
 #[ignore = "Issue: #9547"]
 fn test_ispeed_ospeed_invalid_speeds() {
     let (path, _controller, _replica) = pty_path();
@@ -1693,7 +1665,6 @@ fn test_ispeed_ospeed_invalid_speeds() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_columns_env_wrapping() {
     use std::process::Stdio;
     let (path, _controller, _replica) = pty_path();

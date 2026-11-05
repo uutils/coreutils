@@ -81,10 +81,6 @@ impl<'a> StringExpander<'a> {
         self.output.extend(&*native);
     }
 
-    pub fn put_native_string(&mut self, n_str: &NativeIntStr) {
-        self.output.extend(n_str);
-    }
-
     pub fn take_collected_output(&mut self) -> Vec<NativeCharInt> {
         mem::take(&mut self.output)
     }

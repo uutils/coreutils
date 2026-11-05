@@ -3,7 +3,6 @@ name = "uu_tty"
 description = "tty ~ (uutils) display the name of the terminal connected to standard input"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/tty"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -12,20 +11,29 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/tty.rs"
+test = false
+doctest = false
 
-[dependencies]
+[target.'cfg(any(all(unix, not(target_os = "fuchsia")), windows, target_os = "wasi"))'.dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs"] }
 fluent = { workspace = true }
+uucore = { workspace = true, features = ["fs"] }
 
-[target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["term"] }
+[target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
+rustix = { workspace = true, features = ["fs", "termios"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_Storage_FileSystem",
+  "Win32_Foundation",
+] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "tty"
 path = "src/main.rs"
+required-features = ["uucore/default"]

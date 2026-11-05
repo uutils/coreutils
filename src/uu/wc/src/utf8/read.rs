@@ -2,10 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore bytestream
+
 use super::{Incomplete, str};
 use std::io::{self, BufRead};
-use thiserror::Error;
 use uucore::translate;
 
 /// Wraps a `std::io::BufRead` buffered byte stream and decode it as UTF-8.
@@ -15,7 +16,7 @@ pub struct BufReadDecoder<B: BufRead> {
     incomplete: Incomplete,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum BufReadDecoderError<'a> {
     /// Represents one UTF-8 error in the byte stream.
     ///
@@ -67,8 +68,7 @@ impl<B: BufRead> BufReadDecoder<B> {
             let buf = try_io!(self.buf_read.fill_buf());
 
             // Force loop iteration to go through an explicit `continue`
-            enum Unreachable {}
-            let _: Unreachable = if self.incomplete.is_empty() {
+            let _: std::convert::Infallible = if self.incomplete.is_empty() {
                 if buf.is_empty() {
                     return None; // EOF
                 }

@@ -2,13 +2,14 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore parens
 
 #![no_main]
 use libfuzzer_sys::fuzz_target;
 use uu_split::uumain;
 
-use rand::Rng;
+use rand::RngExt;
 use std::ffi::OsString;
 
 use uufuzz::{

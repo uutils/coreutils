@@ -3,9 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore ELEMS
+
 //! Utilities for reading files as chunks.
 
-// spell-checker:ignore ELEMS
 #![allow(dead_code)]
 // Ignores non-used warning for `borrow_buffer` in `Chunk`
 
@@ -17,12 +18,12 @@ use std::{
 
 use memchr::memchr_iter;
 use self_cell::self_cell;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::UResult;
+use uucore::numeric_str_cmp::NumInfo;
 
-use crate::{
-    GeneralBigDecimalParseResult, GlobalSettings, Line, SortMode, numeric_str_cmp::NumInfo,
-};
+use crate::{GeneralBigDecimalParseResult, GlobalSettings, Line, SortError};
 
+const ALLOC_CHUNK_SIZE: usize = 64 * 1024;
 const MAX_TOKEN_BUFFER_BYTES: usize = 4 * 1024 * 1024;
 const MAX_TOKEN_BUFFER_ELEMS: usize = MAX_TOKEN_BUFFER_BYTES / size_of::<Range<usize>>();
 
@@ -46,23 +47,42 @@ pub struct ChunkContents<'a> {
     pub line_count_hint: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct LineData<'a> {
     pub selections: Vec<&'a [u8]>,
     pub num_infos: Vec<NumInfo>,
     pub parsed_floats: Vec<GeneralBigDecimalParseResult>,
     pub line_num_floats: Vec<Option<f64>>,
+    /// Arena buffer holding all collation sort keys concatenated.
+    pub collation_key_buffer: Vec<u8>,
+    /// End offsets into `collation_key_buffer` for each line's sort key.
+    pub collation_key_ends: Vec<usize>,
+}
+
+impl LineData<'_> {
+    /// Get the collation sort key for a line at the given index.
+    pub fn collation_key(&self, index: usize) -> &[u8] {
+        let start = if index == 0 {
+            0
+        } else {
+            self.collation_key_ends[index - 1]
+        };
+        let end = self.collation_key_ends[index];
+        &self.collation_key_buffer[start..end]
+    }
 }
 
 impl Chunk {
     /// Destroy this chunk and return its components to be reused.
     pub fn recycle(mut self) -> RecycledChunk {
-        let recycled_contents = self.with_dependent_mut(|_, contents| {
+        let mut recycled_contents = self.with_dependent_mut(|_, contents| {
             contents.lines.clear();
             contents.line_data.selections.clear();
             contents.line_data.num_infos.clear();
             contents.line_data.parsed_floats.clear();
             contents.line_data.line_num_floats.clear();
+            contents.line_data.collation_key_buffer.clear();
+            contents.line_data.collation_key_ends.clear();
             contents.token_buffer.clear();
             let lines = unsafe {
                 // SAFETY: It is safe to (temporarily) transmute to a vector of lines with a longer lifetime,
@@ -80,26 +100,22 @@ impl Chunk {
                     &mut contents.line_data.selections,
                 ))
             };
-            (
+            RecycledChunk {
                 lines,
                 selections,
-                std::mem::take(&mut contents.line_data.num_infos),
-                std::mem::take(&mut contents.line_data.parsed_floats),
-                std::mem::take(&mut contents.line_data.line_num_floats),
-                std::mem::take(&mut contents.token_buffer),
-                contents.line_count_hint,
-            )
+                num_infos: std::mem::take(&mut contents.line_data.num_infos),
+                parsed_floats: std::mem::take(&mut contents.line_data.parsed_floats),
+                line_num_floats: std::mem::take(&mut contents.line_data.line_num_floats),
+                collation_key_buffer: std::mem::take(&mut contents.line_data.collation_key_buffer),
+                collation_key_ends: std::mem::take(&mut contents.line_data.collation_key_ends),
+                token_buffer: std::mem::take(&mut contents.token_buffer),
+                line_count_hint: contents.line_count_hint,
+                // buffer is set below after we consume `self`
+                buffer: Vec::new(),
+            }
         });
-        RecycledChunk {
-            lines: recycled_contents.0,
-            selections: recycled_contents.1,
-            num_infos: recycled_contents.2,
-            parsed_floats: recycled_contents.3,
-            line_num_floats: recycled_contents.4,
-            token_buffer: recycled_contents.5,
-            line_count_hint: recycled_contents.6,
-            buffer: self.into_owner(),
-        }
+        recycled_contents.buffer = self.into_owner();
+        recycled_contents
     }
 
     pub fn lines(&self) -> &Vec<Line<'_>> {
@@ -117,6 +133,8 @@ pub struct RecycledChunk {
     num_infos: Vec<NumInfo>,
     parsed_floats: Vec<GeneralBigDecimalParseResult>,
     line_num_floats: Vec<Option<f64>>,
+    collation_key_buffer: Vec<u8>,
+    collation_key_ends: Vec<usize>,
     token_buffer: Vec<Range<usize>>,
     line_count_hint: usize,
     buffer: Vec<u8>,
@@ -130,6 +148,8 @@ impl RecycledChunk {
             num_infos: Vec::new(),
             parsed_floats: Vec::new(),
             line_num_floats: Vec::new(),
+            collation_key_buffer: Vec::new(),
+            collation_key_ends: Vec::new(),
             token_buffer: Vec::new(),
             line_count_hint: 0,
             buffer: vec![0; capacity],
@@ -175,12 +195,15 @@ pub fn read<T: Read>(
         num_infos,
         parsed_floats,
         line_num_floats,
+        collation_key_buffer,
+        collation_key_ends,
         mut token_buffer,
         mut line_count_hint,
         mut buffer,
     } = recycled_chunk;
     if buffer.len() < carry_over.len() {
-        buffer.resize(carry_over.len() + 10 * 1024, 0);
+        // Separate carry_over and copy them to avoid cost of 0 fill buffer
+        buffer.extend_from_slice(&carry_over[buffer.len()..]);
     }
     buffer[..carry_over.len()].copy_from_slice(carry_over);
     let (read, should_continue) = read_to_buffer(
@@ -212,6 +235,8 @@ pub fn read<T: Read>(
                 num_infos,
                 parsed_floats,
                 line_num_floats,
+                collation_key_buffer,
+                collation_key_ends,
             };
             parse_lines(
                 read,
@@ -244,6 +269,8 @@ fn parse_lines<'a>(
     separator: u8,
     settings: &GlobalSettings,
 ) {
+    const SMALL_CHUNK_BYTES: usize = 64 * 1024;
+
     let read = read.strip_suffix(&[separator]).unwrap_or(read);
 
     assert!(lines.is_empty());
@@ -251,11 +278,9 @@ fn parse_lines<'a>(
     assert!(line_data.num_infos.is_empty());
     assert!(line_data.parsed_floats.is_empty());
     assert!(line_data.line_num_floats.is_empty());
+    assert!(line_data.collation_key_buffer.is_empty());
+    assert!(line_data.collation_key_ends.is_empty());
     token_buffer.clear();
-    if token_buffer.capacity() > MAX_TOKEN_BUFFER_ELEMS {
-        token_buffer.shrink_to(MAX_TOKEN_BUFFER_ELEMS);
-    }
-    const SMALL_CHUNK_BYTES: usize = 64 * 1024;
     let mut estimated = (*line_count_hint).max(1);
     let mut exact_line_count = None;
     if *line_count_hint == 0 || read.len() <= SMALL_CHUNK_BYTES {
@@ -267,8 +292,8 @@ fn parse_lines<'a>(
         exact_line_count = Some(count);
         estimated = count;
     } else if estimated == 1 {
-        const LINE_LEN_HINT: usize = 32;
-        estimated = (read.len() / LINE_LEN_HINT).max(1);
+        const LINE_LEN_HINT: usize = 128;
+        estimated = (read.len() / LINE_LEN_HINT).clamp(1, 1024);
     }
     lines.reserve(estimated);
     if settings.precomputed.selections_per_line > 0 {
@@ -286,7 +311,7 @@ fn parse_lines<'a>(
             .parsed_floats
             .reserve(estimated.saturating_mul(settings.precomputed.floats_per_line));
     }
-    if settings.mode == SortMode::Numeric {
+    if settings.precomputed.whole_line_numeric {
         line_data.line_num_floats.reserve(estimated);
     }
     let mut start = 0usize;
@@ -337,7 +362,6 @@ fn read_to_buffer<T: Read>(
     separator: u8,
 ) -> UResult<(usize, bool)> {
     let mut read_target = &mut buffer[start_offset..];
-    let mut last_file_empty = true;
     let mut newline_search_offset = 0;
     let mut found_newline = false;
     loop {
@@ -345,55 +369,47 @@ fn read_to_buffer<T: Read>(
             Ok(0) => {
                 if read_target.is_empty() {
                     // chunk is full
-                    if let Some(max_buffer_size) = max_buffer_size {
-                        if max_buffer_size > buffer.len() {
-                            // we can grow the buffer
-                            let prev_len = buffer.len();
-                            let target = if buffer.len() < max_buffer_size / 2 {
-                                buffer.len().saturating_mul(2)
-                            } else {
-                                max_buffer_size
-                            };
-                            buffer.resize(target.min(max_buffer_size), 0);
-                            read_target = &mut buffer[prev_len..];
-                            continue;
-                        }
+                    if max_buffer_size.is_some_and(|max_buf_size| max_buf_size > buffer.len()) {
+                        // we can grow the buffer
+                        let prev_len = buffer.len();
+                        buffer.resize(prev_len + ALLOC_CHUNK_SIZE, 0);
+                        read_target = &mut buffer[prev_len..];
+                        continue;
                     }
 
+                    let search_start = newline_search_offset;
                     let mut sep_iter =
-                        memchr_iter(separator, &buffer[newline_search_offset..buffer.len()]).rev();
+                        memchr_iter(separator, &buffer[search_start..buffer.len()]).rev();
                     newline_search_offset = buffer.len();
                     if let Some(last_line_end) = sep_iter.next() {
                         if found_newline || sep_iter.next().is_some() {
                             // We read enough lines.
                             // We want to include the separator here, because it shouldn't be carried over.
-                            return Ok((last_line_end + 1, true));
+                            return Ok((search_start + last_line_end + 1, true));
                         }
                         found_newline = true;
                     }
 
                     // We need to read more lines
                     let len = buffer.len();
-                    let grow_by = (len / 2).max(1024 * 1024);
-                    buffer.resize(len + grow_by, 0);
+                    buffer.resize(len + ALLOC_CHUNK_SIZE, 0);
                     read_target = &mut buffer[len..];
                 } else {
                     // This file has been fully read.
                     let mut leftover_len = read_target.len();
-                    if !last_file_empty {
-                        // The file was not empty.
-                        let read_len = buffer.len() - leftover_len;
-                        if buffer[read_len - 1] != separator {
-                            // The file did not end with a separator. We have to insert one.
-                            buffer[read_len] = separator;
-                            leftover_len -= 1;
-                        }
-                        let read_len = buffer.len() - leftover_len;
-                        read_target = &mut buffer[read_len..];
+                    // Decide from buffered bytes: a file may span calls, so a 0-byte read can
+                    // still leave an unterminated tail that must be separated from the next file.
+                    let read_len = buffer.len() - leftover_len;
+                    if read_len > 0 && buffer[read_len - 1] != separator {
+                        // The data so far does not end with a separator. We have to insert one.
+                        // `read_target` is non-empty here, so `buffer[read_len]` is in bounds.
+                        buffer[read_len] = separator;
+                        leftover_len -= 1;
                     }
+                    let read_len = buffer.len() - leftover_len;
+                    read_target = &mut buffer[read_len..];
                     if let Some(next_file) = next_files.next() {
                         // There is another file.
-                        last_file_empty = true;
                         *file = next_file?;
                     } else {
                         // This was the last file.
@@ -404,12 +420,42 @@ fn read_to_buffer<T: Read>(
             }
             Ok(n) => {
                 read_target = &mut read_target[n..];
-                last_file_empty = false;
             }
             Err(e) if e.kind() == ErrorKind::Interrupted => {
                 // retry
             }
-            Err(e) => return Err(USimpleError::new(2, e.to_string())),
+            Err(error) => {
+                return Err(SortError::ChunkReadFailed { error }.into());
+            }
         }
+    }
+}
+
+/// Parse a buffer into a `ChunkContents` suitable for `Chunk::try_new`.
+/// Used by the WASI single-threaded sort path.
+#[cfg(target_os = "wasi")]
+pub fn parse_into_chunk<'a>(
+    buffer: &'a [u8],
+    separator: u8,
+    settings: &GlobalSettings,
+) -> ChunkContents<'a> {
+    let mut lines = Vec::new();
+    let mut line_data = LineData::default();
+    let mut token_buffer = Vec::new();
+    let mut line_count_hint = 0;
+    parse_lines(
+        buffer,
+        &mut lines,
+        &mut line_data,
+        &mut token_buffer,
+        &mut line_count_hint,
+        separator,
+        settings,
+    );
+    ChunkContents {
+        lines,
+        line_data,
+        token_buffer,
+        line_count_hint,
     }
 }

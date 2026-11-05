@@ -7,7 +7,7 @@
 
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use rand::Rng;
+use rand::RngExt;
 use rand::prelude::IndexedRandom;
 use std::collections::HashSet;
 use std::env::temp_dir;
@@ -122,7 +122,7 @@ fn generate_non_utf8_osstring() -> OsString {
     OsString::from_vec(generate_non_utf8_bytes())
 }
 
-fn setup_test_files() -> Result<(PathBuf, Vec<PathBuf>), std::io::Error> {
+fn setup_test_files() -> std::io::Result<(PathBuf, Vec<PathBuf>)> {
     let mut rng = rand::rng();
     let temp_root = temp_dir().join(format!("utf8_test_{}", rng.random::<u64>()));
     fs::create_dir_all(&temp_root)?;

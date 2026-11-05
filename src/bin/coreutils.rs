@@ -4,52 +4,61 @@
 // file that was distributed with this source code.
 
 use clap::Command;
-use coreutils::validation;
+use coreutils::validation::{self, exit};
 use itertools::Itertools as _;
 use std::cmp;
 use std::ffi::OsString;
 use std::io::{self, Write};
-use std::process;
-use uucore::Args;
+use std::process::ExitCode;
+use uucore::{Args, error::strip_errno};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
 fn usage<T>(utils: &UtilityMap<T>, name: &str) {
-    println!("{name} {VERSION} (multi-call binary)\n");
-    println!("Usage: {name} [function [arguments...]]");
-    println!("       {name} --list");
-    println!();
-    #[cfg(feature = "feat_common_core")]
-    {
-        println!("Functions:");
-        println!("      '<uutils>' [arguments...]");
-        println!();
-    }
-    println!("Options:");
-    println!("      --list    lists all defined functions, one per row\n");
-    println!("Currently defined functions:\n");
     let display_list = utils.keys().copied().join(", ");
-    let width = cmp::min(textwrap::termwidth(), 100) - 4 * 2; // (opinion/heuristic) max 100 chars wide with 4 character side indentions
-    println!(
-        "{}",
-        textwrap::indent(&textwrap::fill(&display_list, width), "    ")
+    let width = cmp::min(textwrap::termwidth(), 100) - 8; // (opinion/heuristic) max 100 chars wide with 4 character side indentions
+    let indent_list = textwrap::indent(&textwrap::fill(&display_list, width), "    ");
+    #[cfg(feature = "feat_common_core")]
+    let common_core_string = "
+Functions:
+      '<uutils>' [arguments...]
+
+";
+    #[cfg(not(feature = "feat_common_core"))]
+    let common_core_string = "";
+    let s = format!(
+        "{name} {VERSION} (multi-call binary)
+
+Usage: {name} [function [arguments...]]
+       {name} --list
+
+{common_core_string}Options:
+      --list    lists all defined functions, one per row
+
+Currently defined functions:
+
+{indent_list}"
     );
+    if let Err(e) = writeln!(io::stdout(), "{s}")
+        && e.kind() != io::ErrorKind::BrokenPipe
+    {
+        let _ = writeln!(io::stderr(), "coreutils: {}", strip_errno(&e));
+        exit(1);
+    }
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn main() {
-    uucore::panic::mute_sigpipe_panic();
-
+fn main() -> ExitCode {
     let utils = util_map();
     let mut args = uucore::args_os();
 
     let binary = validation::binary_path(&mut args);
-    let binary_as_util = validation::name(&binary).unwrap_or_else(|| {
+    let Some(binary_as_util) = validation::name(&binary) else {
         usage(&utils, "<unknown binary name>");
-        process::exit(0);
-    });
+        return ExitCode::SUCCESS;
+    };
 
     // binary name ends with util name?
     let is_coreutils = binary_as_util.ends_with("utils");
@@ -65,80 +74,73 @@ fn main() {
         uucore::set_utility_is_second_arg();
         args.next()
     } else {
-        validation::not_found(&OsString::from(binary_as_util));
+        return validation::not_found(&OsString::from(binary_as_util));
     };
 
     // 0th argument equals util name?
     if let Some(util_os) = util_name {
         let Some(util) = util_os.to_str() else {
-            validation::not_found(&util_os)
+            return validation::not_found(&util_os);
         };
 
         match util {
             "--list" => {
-                // If --help is also present, show usage instead of list
-                if args.any(|arg| arg == "--help" || arg == "-h") {
-                    usage(&utils, binary_as_util);
-                    process::exit(0);
+                // we should fail with additional args https://github.com/uutils/coreutils/issues/11383#issuecomment-4082564058
+                if args.next().is_some() {
+                    let _ = writeln!(io::stderr(), "coreutils: invalid argument");
+                    return ExitCode::FAILURE;
                 }
-                let utils: Vec<_> = utils.keys().collect();
-                for util in utils {
-                    println!("{util}");
+                let mut out = io::stdout().lock();
+                for util in utils.keys() {
+                    if let Err(e) = writeln!(out, "{util}")
+                        && e.kind() != io::ErrorKind::BrokenPipe
+                    {
+                        let _ = writeln!(io::stderr(), "coreutils: {}", strip_errno(&e));
+                        return ExitCode::FAILURE;
+                    }
                 }
-                process::exit(0);
+                return ExitCode::SUCCESS;
             }
             "--version" | "-V" => {
-                println!("{binary_as_util} {VERSION} (multi-call binary)");
-                process::exit(0);
+                if let Err(e) = writeln!(io::stdout(), "coreutils {VERSION} (multi-call binary)")
+                    && e.kind() != io::ErrorKind::BrokenPipe
+                {
+                    let _ = writeln!(io::stderr(), "coreutils: {}", strip_errno(&e));
+                    return ExitCode::FAILURE;
+                }
+                return ExitCode::SUCCESS;
             }
             // Not a special command: fallthrough to calling a util
             _ => {}
         }
 
-        match utils.get(util) {
-            Some(&(uumain, _)) => {
-                // TODO: plug the deactivation of the translation
-                // and load the English strings directly at compilation time in the
-                // binary to avoid the load of the flt
-                // Could be something like:
-                // #[cfg(not(feature = "only_english"))]
-                validation::setup_localization_or_exit(util);
-                process::exit(uumain(vec![util_os].into_iter().chain(args)));
-            }
-            None => {
-                if util == "--help" || util == "-h" {
-                    // see if they want help on a specific util
-                    if let Some(util_os) = args.next() {
-                        let Some(util) = util_os.to_str() else {
-                            validation::not_found(&util_os)
-                        };
-
-                        match utils.get(util) {
-                            Some(&(uumain, _)) => {
-                                let code = uumain(
-                                    vec![util_os, OsString::from("--help")]
-                                        .into_iter()
-                                        .chain(args),
-                                );
-                                io::stdout().flush().expect("could not flush stdout");
-                                process::exit(code);
-                            }
-                            None => validation::not_found(&util_os),
-                        }
-                    }
-                    usage(&utils, binary_as_util);
-                    process::exit(0);
-                } else if util.starts_with('-') {
-                    // Argument looks like an option but wasn't recognized
-                    validation::unrecognized_option(binary_as_util, &util_os);
-                } else {
-                    validation::not_found(&util_os);
-                }
-            }
+        if let Some(&(uumain, _)) = utils.get(util) {
+            // TODO: plug the deactivation of the translation
+            // and load the English strings directly at compilation time in the
+            // binary to avoid the load of the flt
+            // Could be something like:
+            // #[cfg(not(feature = "only_english"))]
+            validation::setup_localization_or_exit(util);
+            let code = uumain(vec![util_os].into_iter().chain(args));
+            // ExitCode only holds a u8; larger codes (Windows) go through exit.
+            return u8::try_from(code).map_or_else(|_| exit(code), ExitCode::from);
         }
-    } else {
-        // no arguments provided
-        usage(&utils, binary_as_util);
-        process::exit(0);
+        // GNU coreutils --help string shows help for coreutils
+        if util == "-h" || (util.starts_with("--h") && "--help".starts_with(util)) {
+            usage(&utils, binary_as_util);
+            return ExitCode::SUCCESS;
+        } else if util.starts_with('-') {
+            // Argument looks like an option but wasn't recognized
+            return validation::unrecognized_option(binary_as_util, &util_os);
+        }
+        return validation::not_found(&util_os);
     }
+    // GNU just fails, but busybox tests needs usage
+    // todo: patch the test suite instead
+    if binary_as_util.ends_with("box") {
+        usage(&utils, binary_as_util);
+    } else {
+        let _ = writeln!(io::stderr(), "coreutils: missing argument");
+    }
+    ExitCode::FAILURE
 }

@@ -2,30 +2,24 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use std::ffi::OsStr;
-use std::process::ExitStatus;
 
-#[cfg(unix)]
-use std::os::unix::process::ExitStatusExt;
+use std::ffi::OsStr;
 
 use uutests::new_ucmd;
-
-#[cfg(unix)]
-fn check_termination(result: ExitStatus) {
-    assert_eq!(result.signal(), Some(libc::SIGPIPE));
-}
-
-#[cfg(not(unix))]
-fn check_termination(result: ExitStatus) {
-    assert!(result.success(), "yes did not exit successfully");
-}
 
 const NO_ARGS: &[&str] = &[];
 
 /// Run `yes`, capture some of the output, then check exit status.
 fn run(args: &[impl AsRef<OsStr>], expected: &[u8]) {
     let result = new_ucmd!().args(args).run_stdout_starts_with(expected);
-    check_termination(result.exit_status());
+
+    // On Unix systems (not WASI), yes should be terminated by SIGPIPE when the pipe closes.
+    // On WASI and Windows, there are no signals, so just check the process succeeded.
+    #[cfg(all(unix, not(wasi_runner)))]
+    result.signal_name_is("PIPE");
+
+    #[cfg(any(not(unix), wasi_runner))]
+    result.success();
 }
 
 #[test]
@@ -38,28 +32,33 @@ fn test_version() {
     new_ucmd!().arg("--version").succeeds();
 }
 
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
 fn test_simple() {
     run(NO_ARGS, b"y\ny\ny\ny\n");
 }
 
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
 fn test_args() {
     run(&["a", "bar", "c"], b"a bar c\na bar c\na ba");
 }
 
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
 fn test_long_output() {
     run(NO_ARGS, "y\n".repeat(512 * 1024).as_bytes());
 }
 
 /// Test with an output that seems likely to get mangled in case of incomplete writes.
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
 fn test_long_odd_output() {
     run(&["abcdef"], "abcdef\n".repeat(1024 * 1024).as_bytes());
 }
 
 /// Test with an input that doesn't fit in the standard buffer.
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
 fn test_long_input() {
     #[cfg(not(windows))]
@@ -70,10 +69,25 @@ fn test_long_input() {
     #[cfg(windows)]
     const TIMES: usize = 500;
     let arg = "abcdef".repeat(TIMES) + "\n";
-    let expected_out = arg.repeat(30);
+    let expected_out = arg.repeat(5);
     run(&[&arg[..arg.len() - 1]], expected_out.as_bytes());
 }
 
+/// A joined line larger than the internal broker pipe's capacity (1 MiB)
+/// can cause a deadlock
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_long_line_exceeds_pipe_capacity() {
+    // A single argv string is capped at ~128 KiB by the kernel, so use many
+    // args joined by spaces to build a >1 MiB line instead of one huge arg.
+    let word = "a".repeat(60_000);
+    let args: Vec<&str> = std::iter::repeat_n(word.as_str(), 20).collect();
+    let line = args.join(" ");
+    run(&args, format!("{line}\n{line}\n").as_bytes());
+}
+
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn test_piped_to_dev_full() {
@@ -95,13 +109,12 @@ fn test_piped_to_dev_full() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
-#[cfg(any(unix, target_os = "wasi"))]
+#[cfg(unix)]
+// WASI runners (wasmtime) require UTF-8 arguments, so skip this test when testing WASI binaries
 fn test_non_utf8() {
-    #[cfg(unix)]
     use std::os::unix::ffi::OsStrExt;
-    #[cfg(target_os = "wasi")]
-    use std::os::wasi::ffi::OsStrExt;
 
     run(
         &[

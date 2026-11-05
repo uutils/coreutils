@@ -32,18 +32,15 @@
 //! assert!(entries::Group::locate(root_group).is_ok());
 //! ```
 
-#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+use core::ffi::{CStr, c_char, c_int};
+#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
 use libc::time_t;
-use libc::{c_char, c_int, gid_t, uid_t};
-use libc::{getgrgid, getgrnam, getgroups};
-use libc::{getpwnam, getpwuid, group, passwd};
+use libc::{getgrgid, getgrnam, getpwnam, getpwuid, gid_t, group, passwd, uid_t};
 
-use std::ffi::{CStr, CString};
-use std::io::Error as IOError;
-use std::io::ErrorKind;
-use std::io::Result as IOResult;
+use std::ffi::CString;
+use std::io::{Error as IOError, ErrorKind, Result as IOResult};
 use std::ptr;
-use std::sync::{LazyLock, Mutex};
+use std::sync::Mutex;
 
 unsafe extern "C" {
     /// From: `<https://man7.org/linux/man-pages/man3/getgrouplist.3.html>`
@@ -55,42 +52,6 @@ unsafe extern "C" {
         groups: *mut gid_t,
         ngroups: *mut c_int,
     ) -> c_int;
-}
-
-/// From: `<https://man7.org/linux/man-pages/man2/getgroups.2.html>`
-/// > getgroups() returns the supplementary group IDs of the calling
-/// > process in list.
-/// > If size is zero, list is not modified, but the total number of
-/// > supplementary group IDs for the process is returned.  This allows
-/// > the caller to determine the size of a dynamically allocated list
-/// > to be used in a further call to getgroups().
-pub fn get_groups() -> IOResult<Vec<gid_t>> {
-    let mut groups = Vec::new();
-    loop {
-        let ngroups = match unsafe { getgroups(0, ptr::null_mut()) } {
-            -1 => return Err(IOError::last_os_error()),
-            // Not just optimization; 0 would mess up the next call
-            0 => return Ok(Vec::new()),
-            n => n,
-        };
-
-        // This is a small buffer, so we can afford to zero-initialize it and
-        // use safe Vec operations
-        groups.resize(ngroups.try_into().unwrap(), 0);
-        let res = unsafe { getgroups(ngroups, groups.as_mut_ptr()) };
-        if res == -1 {
-            let err = IOError::last_os_error();
-            if err.raw_os_error() == Some(libc::EINVAL) {
-                // Number of groups has increased, retry
-            } else {
-                return Err(err);
-            }
-        } else {
-            // Number of groups may have decreased
-            groups.truncate(res.try_into().unwrap());
-            return Ok(groups);
-        }
-    }
 }
 
 /// The list of group IDs returned from GNU's `groups` and GNU's `id --groups`
@@ -112,13 +73,14 @@ pub fn get_groups() -> IOResult<Vec<gid_t>> {
 /// > variations and administrative sequences cause the set of groups
 /// > appearing in the result of getgroups() to vary in order and as to
 /// > whether the effective group ID is included, even when the set of
-/// > groups is the same (in the mathematical sense of ``set''). (The
+/// > groups is the same (in the mathematical sense of "set"). (The
 /// > history of a process and its parents could affect the details of
 /// > the result.)
 #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
-pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<gid_t>> {
-    let groups = get_groups()?;
-    let egid = arg_id.unwrap_or_else(crate::features::process::getegid);
+pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<rustix::process::RawGid>> {
+    let groups = rustix::process::getgroups()
+        .map(|g| g.into_iter().map(rustix::fs::Gid::as_raw).collect())?;
+    let egid = arg_id.unwrap_or_else(|| rustix::process::getegid().as_raw());
     Ok(sort_groups(groups, egid))
 }
 
@@ -134,36 +96,41 @@ fn sort_groups(mut groups: Vec<gid_t>, egid: gid_t) -> Vec<gid_t> {
 
 #[derive(Clone, Debug)]
 pub struct Passwd {
-    /// AKA passwd.pw_name
+    /// AKA `passwd.pw_name`
     pub name: String,
-    /// AKA passwd.pw_uid
+    /// AKA `passwd.pw_uid`
     pub uid: uid_t,
-    /// AKA passwd.pw_gid
+    /// AKA `passwd.pw_gid`
     pub gid: gid_t,
-    /// AKA passwd.pw_gecos
+    /// AKA `passwd.pw_gecos`
     pub user_info: Option<String>,
-    /// AKA passwd.pw_shell
+    /// AKA `passwd.pw_shell`
     pub user_shell: Option<String>,
-    /// AKA passwd.pw_dir
+    /// AKA `passwd.pw_dir`
     pub user_dir: Option<String>,
-    /// AKA passwd.pw_passwd
+    /// AKA `passwd.pw_passwd`
+    #[expect(clippy::struct_field_names)]
     pub user_passwd: Option<String>,
-    /// AKA passwd.pw_class
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+    /// AKA `passwd.pw_class`
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     pub user_access_class: Option<String>,
-    /// AKA passwd.pw_change
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+    /// AKA `passwd.pw_change`
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
+    #[expect(clippy::struct_field_names)]
     pub passwd_change_time: time_t,
-    /// AKA passwd.pw_expire
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+    /// AKA `passwd.pw_expire`
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     pub expiration: time_t,
 }
 
 /// # Safety
-/// ptr must point to a valid C string.
 ///
-/// Returns None if ptr is null.
-fn cstr2string(ptr: *const c_char) -> Option<String> {
+/// If `ptr` is non-null, it must point to a valid, NUL-terminated C string
+///
+/// # Returns
+///
+/// Returns `None` if `ptr` is null.
+unsafe fn cstr2string(ptr: *const c_char) -> Option<String> {
     if ptr.is_null() {
         None
     } else {
@@ -174,27 +141,27 @@ fn cstr2string(ptr: *const c_char) -> Option<String> {
 impl Passwd {
     /// # Safety
     /// All the pointed-to strings must be valid and not change while
-    /// the function runs. That means PW_LOCK must be held.
+    /// the function runs. That means `PW_LOCK` must be held.
     unsafe fn from_raw(raw: passwd) -> Self {
         Self {
-            name: cstr2string(raw.pw_name).expect("passwd without name"),
+            name: unsafe { cstr2string(raw.pw_name).expect("passwd without name") },
             uid: raw.pw_uid,
             gid: raw.pw_gid,
             #[cfg(not(all(
                 target_os = "android",
                 any(target_arch = "x86", target_arch = "arm")
             )))]
-            user_info: cstr2string(raw.pw_gecos),
+            user_info: unsafe { cstr2string(raw.pw_gecos) },
             #[cfg(all(target_os = "android", any(target_arch = "x86", target_arch = "arm")))]
             user_info: None,
-            user_shell: cstr2string(raw.pw_shell),
-            user_dir: cstr2string(raw.pw_dir),
-            user_passwd: cstr2string(raw.pw_passwd),
-            #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
-            user_access_class: cstr2string(raw.pw_class),
-            #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+            user_shell: unsafe { cstr2string(raw.pw_shell) },
+            user_dir: unsafe { cstr2string(raw.pw_dir) },
+            user_passwd: unsafe { cstr2string(raw.pw_passwd) },
+            #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
+            user_access_class: unsafe { cstr2string(raw.pw_class) },
+            #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
             passwd_change_time: raw.pw_change,
-            #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+            #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
             expiration: raw.pw_expire,
         }
     }
@@ -246,19 +213,19 @@ impl Passwd {
 
 #[derive(Clone, Debug)]
 pub struct Group {
-    /// AKA group.gr_name
+    /// AKA `group.gr_name`
     pub name: String,
-    /// AKA group.gr_gid
+    /// AKA `group.gr_gid`
     pub gid: gid_t,
 }
 
 impl Group {
     /// # Safety
-    /// gr_name must be valid and not change while
-    /// the function runs. That means PW_LOCK must be held.
+    /// `gr_name` must be valid and not change while
+    /// the function runs. That means `PW_LOCK` must be held.
     unsafe fn from_raw(raw: group) -> Self {
         Self {
-            name: cstr2string(raw.gr_name).expect("group without name"),
+            name: unsafe { cstr2string(raw.gr_name).expect("group without name") },
             gid: raw.gr_gid,
         }
     }
@@ -279,7 +246,7 @@ pub trait Locate<K> {
 // to, so we must copy all the data we want before releasing the lock.
 // (Technically we must also ensure that the raw functions aren't being called
 // anywhere else in the program.)
-static PW_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+static PW_LOCK: Mutex<()> = Mutex::new(());
 
 macro_rules! f {
     ($fnam:ident, $fid:ident, $t:ident, $st:ident) => {
@@ -306,33 +273,32 @@ macro_rules! f {
             }
         }
 
-        impl<'a> Locate<&'a str> for $st {
-            fn locate(k: &'a str) -> IOResult<Self> {
+        impl $st {
+            /// Look up an entry by name only, without falling back to
+            /// parsing `k` as a numeric ID like [`Locate::locate`] does.
+            pub fn locate_name(k: &str) -> IOResult<Self> {
+                let cstring = CString::new(k)?;
                 let _guard = PW_LOCK.lock();
                 // SAFETY: We're holding PW_LOCK.
                 unsafe {
-                    let cstring = CString::new(k)?;
-                    // try to get user or group with name matching the input with these tow lines:
-                    // f!(getpwnam, getpwuid, uid_t, Passwd);
-                    // f!(getgrnam, getgrgid, gid_t, Group);
                     let data = $fnam(cstring.as_ptr());
-                    if !data.is_null() {
-                        return Ok($st::from_raw(ptr::read(data.cast_const())));
-                    }
-                    if let Ok(id) = k.parse::<$t>() {
-                        let data = $fid(id);
-                        if !data.is_null() {
-                            Ok($st::from_raw(ptr::read(data.cast_const())))
-                        } else {
-                            Err(IOError::new(
-                                ErrorKind::NotFound,
-                                format!("No such id: {id}"),
-                            ))
-                        }
-                    } else {
+                    if data.is_null() {
                         Err(IOError::new(ErrorKind::NotFound, format!("Not found: {k}")))
+                    } else {
+                        Ok($st::from_raw(ptr::read(data.cast_const())))
                     }
                 }
+            }
+        }
+
+        impl<'a> Locate<&'a str> for $st {
+            /// Look up an entry by name, or by ID if no entry has that name
+            /// and `k` parses as a number.
+            fn locate(k: &'a str) -> IOResult<Self> {
+                Self::locate_name(k).or_else(|e| match k.parse::<$t>() {
+                    Ok(id) => Self::locate(id),
+                    Err(_) => Err(e),
+                })
             }
         }
     };
@@ -357,15 +323,22 @@ pub fn usr2uid(name: &str) -> IOResult<uid_t> {
 }
 
 #[inline]
+pub fn usr2gid(name: &str) -> IOResult<gid_t> {
+    Passwd::locate(name).map(|p| p.gid)
+}
+
+#[inline]
 pub fn grp2gid(name: &str) -> IOResult<gid_t> {
     Group::locate(name).map(|p| p.gid)
 }
 
 #[cfg(test)]
 mod test {
+    #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
     use super::*;
 
     #[test]
+    #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
     fn test_sort_groups() {
         assert_eq!(sort_groups(vec![1, 2, 3], 4), vec![4, 1, 2, 3]);
         assert_eq!(sort_groups(vec![1, 2, 3], 3), vec![3, 1, 2]);
@@ -375,12 +348,16 @@ mod test {
     }
 
     #[test]
+    #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
     fn test_entries_get_groups_gnu() {
-        if let Ok(mut groups) = get_groups() {
-            if let Some(last) = groups.pop() {
-                groups.insert(0, last);
-                assert_eq!(get_groups_gnu(Some(last)).unwrap(), groups);
-            }
+        if let Ok(mut groups) = rustix::process::getgroups().map(|g| {
+            g.into_iter()
+                .map(rustix::fs::Gid::as_raw)
+                .collect::<Vec<_>>()
+        }) && let Some(last) = groups.pop()
+        {
+            groups.insert(0, last);
+            assert_eq!(get_groups_gnu(Some(last)).unwrap(), groups);
         }
     }
 }

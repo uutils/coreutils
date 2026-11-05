@@ -4,15 +4,15 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (paths) atim sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist fpath testdir testfile
-// spell-checker:ignore selfref ELOOP smallfile
+// spell-checker:ignore selfref ELOOP smallfile xstrtoumax
 
 #[cfg(not(windows))]
 use regex::Regex;
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 use uutests::unwrap_or_return;
 use uutests::util::TestScenario;
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 use uutests::util::expected_result;
 use uutests::{at_and_ucmd, new_ucmd, util_name};
 
@@ -56,7 +56,7 @@ fn du_basics(s: &str) {
     assert_eq!(s, answer);
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn du_basics(s: &str) {
     let answer = concat!(
         "0\t.\\subdir\\deeper\\deeper_dir\n",
@@ -68,11 +68,7 @@ fn du_basics(s: &str) {
     assert_eq!(s, answer);
 }
 
-#[cfg(all(
-    not(target_vendor = "apple"),
-    not(target_os = "windows"),
-    not(target_os = "openbsd")
-))]
+#[cfg(all(not(target_vendor = "apple"), not(target_os = "openbsd"), not(windows)))]
 fn du_basics(s: &str) {
     let answer = concat!(
         "8\t./subdir/deeper/deeper_dir\n",
@@ -82,6 +78,11 @@ fn du_basics(s: &str) {
         "44\t.\n"
     );
     assert_eq!(s, answer);
+}
+
+#[test]
+fn test_all_summarize() {
+    new_ucmd!().arg("-a").arg("-s").fails_with_code(1); //clap provided message
 }
 
 #[test]
@@ -111,7 +112,7 @@ fn test_du_basics_subdir() {
 fn du_basics_subdir(s: &str) {
     assert_eq!(s, "4\tsubdir/deeper/deeper_dir\n8\tsubdir/deeper\n");
 }
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn du_basics_subdir(s: &str) {
     assert_eq!(s, "0\tsubdir/deeper\\deeper_dir\n0\tsubdir/deeper\n");
 }
@@ -121,9 +122,9 @@ fn du_basics_subdir(s: &str) {
 }
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 fn du_basics_subdir(s: &str) {
     // MS-WSL linux has altered expected output
@@ -164,7 +165,7 @@ fn test_du_with_posixly_correct() {
     let dir = "a";
 
     at.mkdir(dir);
-    at.write(&format!("{dir}/file"), "some content");
+    at.write(format!("{dir}/file"), "some content");
 
     let expected = ts
         .ucmd()
@@ -184,13 +185,28 @@ fn test_du_with_posixly_correct() {
 }
 
 #[test]
+fn test_du_time_style_empty() {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkdir("a");
+    ts.ucmd()
+        .args(&["--time", "--time-style=", "a"])
+        .fails_with_code(1)
+        .stderr_contains("du: invalid argument '' for 'time style'");
+    ts.ucmd()
+        .args(&["--time", "a"])
+        .env("TIME_STYLE", "posix-")
+        .fails_with_code(1)
+        .stderr_contains("du: invalid argument '' for 'time style'");
+}
+
+#[test]
 fn test_du_zero_env_block_size() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     let dir = "a";
 
     at.mkdir(dir);
-    at.write(&format!("{dir}/file"), "some content");
+    at.write(format!("{dir}/file"), "some content");
 
     let expected = ts
         .ucmd()
@@ -216,7 +232,7 @@ fn test_du_zero_env_block_size_hierarchy() {
     let dir = "a";
 
     at.mkdir(dir);
-    at.write(&format!("{dir}/file"), "some content");
+    at.write(format!("{dir}/file"), "some content");
 
     let expected = ts
         .ucmd()
@@ -253,7 +269,7 @@ fn test_du_env_block_size_hierarchy() {
     let dir = "a";
 
     at.mkdir(dir);
-    at.write(&format!("{dir}/file"), "some content");
+    at.write(format!("{dir}/file"), "some content");
 
     let expected = ts
         .ucmd()
@@ -280,6 +296,75 @@ fn test_du_env_block_size_hierarchy() {
 
     assert_eq!(expected, result1);
     assert_eq!(expected, result2);
+}
+
+#[test]
+fn test_du_suffix_only_block_size() {
+    let ts = TestScenario::new(util_name!());
+    let file = "file";
+    ts.fixtures.write(file, "x");
+
+    for (arg, env, expected) in [
+        (Some("-BM"), None, "1M"),
+        (Some("-B1M"), None, "1"),
+        (Some("-B'M"), None, "1M"),
+        (Some("-B'1M"), None, "1"),
+        (None, Some(("DU_BLOCK_SIZE", "M")), "1M"),
+        (None, Some(("BLOCK_SIZE", "KB")), "1kB"),
+        (None, Some(("BLOCKSIZE", "MiB")), "1MiB"),
+        (None, Some(("DU_BLOCK_SIZE", "'KiB")), "1KiB"),
+        (None, Some(("DU_BLOCK_SIZE", "'1KiB")), "1"),
+        (None, Some(("DU_BLOCK_SIZE", "1M")), "1"),
+    ] {
+        let mut cmd = ts.ucmd();
+        if let Some(arg) = arg {
+            cmd.arg(arg);
+        }
+        if let Some((var, value)) = env {
+            cmd.env(var, value);
+        }
+        cmd.arg("--apparent-size")
+            .arg(file)
+            .succeeds()
+            .stdout_only(format!("{expected}\t{file}\n"));
+    }
+}
+
+#[test]
+fn test_du_block_size_locale_grouping() {
+    let ts = TestScenario::new(util_name!());
+    let file = "file";
+    let fpath = ts.fixtures.plus(file);
+    std::fs::File::create(&fpath)
+        .expect("cannot create test file")
+        .set_len(100_000_000)
+        .expect("cannot set file size");
+
+    for (block_size, expected) in [("'KiB", "97\u{202f}657KiB"), ("'1KiB", "97\u{202f}657")] {
+        ts.ucmd()
+            .arg("--apparent-size")
+            .arg(format!("--block-size={block_size}"))
+            .arg(file)
+            .env("LC_ALL", "fr_FR.UTF-8")
+            .succeeds()
+            .stdout_only(format!("{expected}\t{file}\n"));
+    }
+
+    ts.ucmd()
+        .arg("--apparent-size")
+        .arg(file)
+        .env("BLOCK_SIZE", "'KiB")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .succeeds()
+        .stdout_only(format!("97\u{202f}657KiB\t{file}\n"));
+
+    ts.ucmd()
+        .arg("--apparent-size")
+        .arg("--block-size='KiB")
+        .arg(file)
+        .env("LC_ALL", "fr_FR")
+        .succeeds()
+        .stdout_only_bytes(&b"97\xa0657KiB\tfile\n"[..]);
 }
 
 #[test]
@@ -372,6 +457,74 @@ fn test_du_invalid_binary_size() {
 }
 
 #[test]
+fn test_du_invalid_env_block_size_stops_lookup() {
+    // When DU_BLOCK_SIZE is set but invalid, it should stop the lookup
+    // and use the default block size — not fall through to BLOCK_SIZE.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a";
+
+    at.mkdir(dir);
+    at.write(format!("{dir}/file"), "some content");
+
+    let default_output = ts
+        .ucmd()
+        .arg(dir)
+        .arg("--block-size=1024")
+        .succeeds()
+        .stdout_move_str();
+
+    // Invalid DU_BLOCK_SIZE should use default (1024), not BLOCK_SIZE=1
+    let result = ts
+        .ucmd()
+        .arg(dir)
+        .env("DU_BLOCK_SIZE", "invalid")
+        .env("BLOCK_SIZE", "1")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(default_output, result);
+
+    // Empty DU_BLOCK_SIZE should also use default
+    let result = ts
+        .ucmd()
+        .arg(dir)
+        .env("DU_BLOCK_SIZE", "")
+        .env("BLOCK_SIZE", "1")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(default_output, result);
+}
+
+#[test]
+fn test_du_posixly_correct_default() {
+    // With POSIXLY_CORRECT and no block size env vars, default is 512
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a";
+
+    at.mkdir(dir);
+    at.write(format!("{dir}/file"), "some content");
+
+    let expected = ts
+        .ucmd()
+        .arg(dir)
+        .arg("--block-size=512")
+        .succeeds()
+        .stdout_move_str();
+
+    let result = ts
+        .ucmd()
+        .arg(dir)
+        .env("POSIXLY_CORRECT", "1")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(expected, result);
+}
+
+#[test]
 fn test_du_binary_edge_cases() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -434,7 +587,7 @@ fn test_du_soft_link() {
     println!("Output: {s}");
 
     // Helper closure to assert output matches one of the valid sizes
-    #[cfg(any(target_vendor = "apple", target_os = "windows", target_os = "freebsd"))]
+    #[cfg(any(target_vendor = "apple", windows, target_os = "freebsd"))]
     let assert_valid_size = |output: &str, valid_sizes: &[&str]| {
         assert!(
             valid_sizes.contains(&output),
@@ -453,7 +606,7 @@ fn test_du_soft_link() {
         assert_valid_size(s, &valid_sizes);
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
         let valid_sizes = ["4\tsubdir/links\n", "8\tsubdir/links\n"];
         assert_valid_size(s, &valid_sizes);
@@ -464,14 +617,10 @@ fn test_du_soft_link() {
         // FreeBSD may have different block allocations depending on filesystem
         // Accept both common sizes
         let valid_sizes = ["12\tsubdir/links\n", "16\tsubdir/links\n"];
-        assert_valid_size(&s, &valid_sizes);
+        assert_valid_size(s, &valid_sizes);
     }
 
-    #[cfg(all(
-        not(target_vendor = "apple"),
-        not(target_os = "windows"),
-        not(target_os = "freebsd")
-    ))]
+    #[cfg(all(not(target_vendor = "apple"), not(target_os = "freebsd"), not(windows)))]
     {
         // MS-WSL linux has altered expected output
         if uucore::os::is_wsl_1() {
@@ -508,7 +657,7 @@ fn test_du_hard_link() {
 fn du_hard_link(s: &str) {
     assert_eq!(s, "12\tsubdir/links\n");
 }
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn du_hard_link(s: &str) {
     assert_eq!(s, "8\tsubdir/links\n");
 }
@@ -518,10 +667,10 @@ fn du_hard_link(s: &str) {
 }
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
-    not(target_os = "android")
+    not(target_os = "android"),
+    not(windows)
 ))]
 fn du_hard_link(s: &str) {
     // MS-WSL linux has altered expected output
@@ -554,7 +703,7 @@ fn test_du_d_flag() {
 fn du_d_flag(s: &str) {
     assert_eq!(s, "20\t./subdir\n24\t.\n");
 }
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn du_d_flag(s: &str) {
     assert_eq!(s, "8\t.\\subdir\n8\t.\n");
 }
@@ -564,9 +713,9 @@ fn du_d_flag(s: &str) {
 }
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 fn du_d_flag(s: &str) {
     // MS-WSL linux has altered expected output
@@ -628,7 +777,7 @@ fn test_du_dereference_args() {
 fn du_dereference(s: &str) {
     assert_eq!(s, "4\tsubdir/links/deeper_dir\n16\tsubdir/links\n");
 }
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn du_dereference(s: &str) {
     assert_eq!(s, "0\tsubdir/links\\deeper_dir\n8\tsubdir/links\n");
 }
@@ -638,9 +787,9 @@ fn du_dereference(s: &str) {
 }
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 fn du_dereference(s: &str) {
     // MS-WSL linux has altered expected output
@@ -652,10 +801,10 @@ fn du_dereference(s: &str) {
 }
 
 #[cfg(not(any(
-    target_os = "windows",
     target_os = "android",
     target_os = "freebsd",
-    target_os = "openbsd"
+    target_os = "openbsd",
+    windows
 )))]
 #[test]
 fn test_du_no_dereference() {
@@ -704,13 +853,13 @@ fn test_du_inodes_basic() {
     let ts = TestScenario::new(util_name!());
     let result = ts.ucmd().arg("--inodes").succeeds();
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &["--inodes"]));
         assert_eq!(result.stdout_str(), result_reference.stdout_str());
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     assert_eq!(
         result.stdout_str(),
         concat!(
@@ -735,9 +884,9 @@ fn test_du_inodes() {
 
     let result = ts.ucmd().arg("--separate-dirs").arg("--inodes").succeeds();
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     result.stdout_contains("3\t.\\subdir\\links\n");
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     result.stdout_contains("3\t./subdir/links\n");
     result.stdout_contains("3\t.\n");
 
@@ -872,6 +1021,26 @@ fn test_du_h_precision() {
             .arg(&fpath)
             .succeeds()
             .stdout_only(format!("{expected_output}\t{}\n", fpath.to_string_lossy()));
+    }
+}
+
+#[uutests::wasi_ignore(NoLocaleData)]
+#[test]
+fn test_du_h_locale_decimal_separator() {
+    for (locale, expected) in [("fr_FR.UTF-8", "8,4K"), ("C", "8.4K")] {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let fpath = at.plus("test.txt");
+        std::fs::File::create(&fpath)
+            .expect("cannot create test file")
+            .set_len(8500)
+            .expect("cannot truncate test len to size");
+        ucmd.env("LC_ALL", locale)
+            .arg("-h")
+            .arg("--apparent-size")
+            .arg(&fpath)
+            .succeeds()
+            .stdout_only(format!("{expected}\t{}\n", fpath.to_string_lossy()));
     }
 }
 
@@ -1047,7 +1216,232 @@ fn birth_supported() -> bool {
     m.created().is_ok()
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "openbsd")))]
+#[cfg(feature = "touch")]
+#[test]
+fn test_du_time_directory() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("d");
+    at.touch("d/old");
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("202001010000")
+        .arg(at.plus("d/old"))
+        .succeeds();
+
+    at.touch("d/new");
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("202301010000")
+        .arg(at.plus("d/new"))
+        .succeeds();
+
+    // Backdate dir mtime to 2019-01-01 so the aggregated max comes from a child
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("201901010000")
+        .arg(at.plus("d"))
+        .succeeds();
+
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("d/old")
+        .succeeds();
+
+    result.stdout_only("0\t2020-01-01 00:00\td/old\n");
+
+    let result = ts.ucmd().env("TZ", "UTC").arg("--time").arg("d").succeeds();
+    let stdout = result.stdout_str();
+
+    assert!(
+        stdout.contains("2023-01-01 00:00"),
+        "wrong time in: {stdout}"
+    );
+    assert!(stdout.contains("\td\n"), "missing dir entry: {stdout}");
+
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("-a")
+        .arg("d")
+        .succeeds();
+    let stdout = result.stdout_str();
+
+    #[cfg(not(windows))]
+    {
+        assert!(stdout.contains("2020-01-01 00:00\td/old\n"), "{stdout}");
+        assert!(stdout.contains("2023-01-01 00:00\td/new\n"), "{stdout}");
+    }
+    #[cfg(windows)]
+    {
+        assert!(stdout.contains("2020-01-01 00:00\td\\old\n"), "{stdout}");
+        assert!(stdout.contains("2023-01-01 00:00\td\\new\n"), "{stdout}");
+    }
+    assert!(stdout.contains("2023-01-01 00:00\td\n"), "{stdout}");
+}
+
+#[cfg(feature = "touch")]
+#[test]
+fn test_du_time_directory_nested() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("d/sub");
+    at.touch("d/old");
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("202001010000")
+        .arg(at.plus("d/old"))
+        .succeeds();
+
+    at.touch("d/sub/new");
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("202301010000")
+        .arg(at.plus("d/sub/new"))
+        .succeeds();
+
+    // Backdate dir mtime to 2019-01-01 so the aggregated max comes from a child
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("201901010000")
+        .arg(at.plus("d/sub"))
+        .succeeds();
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("201901010000")
+        .arg(at.plus("d"))
+        .succeeds();
+
+    // The root directory should show the max time from its subtree
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("-a")
+        .arg("d")
+        .succeeds();
+    let stdout = result.stdout_str();
+
+    #[cfg(not(windows))]
+    {
+        assert!(stdout.contains("2020-01-01 00:00\td/old\n"), "{stdout}");
+        assert!(stdout.contains("2023-01-01 00:00\td/sub/new\n"), "{stdout}");
+        assert!(stdout.contains("2023-01-01 00:00\td/sub\n"), "{stdout}");
+    }
+    #[cfg(windows)]
+    {
+        assert!(stdout.contains("2020-01-01 00:00\td\\old\n"), "{stdout}");
+        assert!(
+            stdout.contains("2023-01-01 00:00\td\\sub\\new\n"),
+            "{stdout}"
+        );
+        assert!(stdout.contains("2023-01-01 00:00\td\\sub\n"), "{stdout}");
+    }
+    assert!(stdout.contains("2023-01-01 00:00\td\n"), "{stdout}");
+}
+
+#[cfg(feature = "touch")]
+#[test]
+fn test_du_time_atime() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.touch("f");
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-a")
+        .arg("-t")
+        .arg("202201010000")
+        .arg(at.plus("f"))
+        .succeeds();
+
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time=atime")
+        .arg("f")
+        .succeeds();
+    result.stdout_only("0\t2022-01-01 00:00\tf\n");
+}
+
+#[cfg(feature = "touch")]
+#[test]
+fn test_du_time_unaffected_by_exclude() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("d");
+    at.touch("d/keep");
+    at.touch("d/ignore");
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("202001010000")
+        .arg(at.plus("d/keep"))
+        .succeeds();
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("202301010000")
+        .arg(at.plus("d/ignore"))
+        .succeeds();
+
+    // Backdate dir mtime to 2019-01-01 so the aggregated max comes from a child
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("201901010000")
+        .arg(at.plus("d"))
+        .succeeds();
+
+    // Exclude "ignore" so the reported time for "d" should reflect only "keep"'s mtime
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("--exclude=ignore")
+        .arg("d")
+        .succeeds();
+    let stdout = result.stdout_str();
+
+    assert!(
+        stdout.contains("2020-01-01 00:00"),
+        "wrong time in: {stdout}"
+    );
+    assert!(stdout.contains("\td\n"), "missing dir entry: {stdout}");
+}
+
+#[cfg(not(any(windows, target_os = "openbsd")))]
 #[cfg(feature = "chmod")]
 #[test]
 fn test_du_no_permission() {
@@ -1078,7 +1472,7 @@ fn test_du_no_permission() {
     assert_eq!(result.stdout_str(), "0\tsubdir/links\n");
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 #[cfg(feature = "chmod")]
 #[test]
 fn test_du_no_exec_permission() {
@@ -1177,9 +1571,19 @@ fn test_du_invalid_threshold() {
     ts.ucmd().arg(format!("--threshold={threshold}")).fails();
 }
 
+/// GNU du hands `--threshold` to `xstrtoumax` without trimming, so a padded
+/// value is rejected rather than read as the size it surrounds.
+#[test]
+fn test_du_threshold_with_leading_whitespace() {
+    new_ucmd!()
+        .arg("--threshold=  -1K")
+        .fails()
+        .stderr_only("du: invalid --threshold argument '  -1K'\n");
+}
+
 #[test]
 fn test_du_threshold_error_handling() {
-    // Test missing threshold value - the specific case from GNU test
+    // Test missing threshold value
     new_ucmd!()
         .arg("--threshold")
         .fails()
@@ -1200,7 +1604,7 @@ fn test_du_apparent_size() {
 
     let result = ucmd.args(&["--apparent-size", "--all", "a"]).succeeds();
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         result.stdout_contains_line("1\ta/b/file2");
         result.stdout_contains_line("1\ta/b/file1");
@@ -1208,7 +1612,7 @@ fn test_du_apparent_size() {
         result.stdout_contains_line("1\ta");
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
         result.stdout_contains_line("1\ta\\b\\file2");
         result.stdout_contains_line("1\ta\\b\\file1");
@@ -1228,7 +1632,7 @@ fn test_du_bytes() {
 
     let result = ucmd.args(&["--bytes", "--all", "a"]).succeeds();
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         result.stdout_contains_line("6\ta/b/file2");
         result.stdout_contains_line("3\ta/b/file1");
@@ -1236,7 +1640,7 @@ fn test_du_bytes() {
         result.stdout_contains_line("9\ta");
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
         result.stdout_contains_line("6\ta\\b\\file2");
         result.stdout_contains_line("3\ta\\b\\file1");
@@ -1262,7 +1666,7 @@ fn test_du_exclude() {
         .arg("--exclude=subdir")
         .arg("subdir")
         .succeeds()
-        .stdout_is("");
+        .no_output();
     ts.ucmd()
         .arg("--exclude=subdir")
         .arg("--verbose")
@@ -1274,7 +1678,7 @@ fn test_du_exclude() {
 #[test]
 // Disable on Windows because we are looking for /
 // And the tests would be more complex if we have to support \ too
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_du_exclude_2() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1325,7 +1729,7 @@ fn test_du_exclude_2() {
 #[test]
 // Disable on Windows because we are looking for /
 // And the tests would be more complex if we have to support \ too
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_du_exclude_mix() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1380,7 +1784,7 @@ fn test_du_exclude_mix() {
 #[test]
 // Disable on Windows because we are looking for /
 // And the tests would be more complex if we have to support \ too
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_du_complex_exclude_patterns() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1445,6 +1849,23 @@ fn test_du_exclude_invalid_syntax() {
         .stderr_contains("du: Invalid exclude syntax");
 }
 
+#[test]
+fn test_du_exclude_from_nonexistent_file() {
+    new_ucmd!()
+        .arg("--exclude-from=nonexistent-file")
+        .fails()
+        .stderr_contains("du: No such file or directory");
+}
+
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+#[test]
+fn test_du_exclude_from_read_error() {
+    new_ucmd!()
+        .arg("--exclude-from=/proc/self/mem")
+        .fails()
+        .stderr_contains("du: Input/output error");
+}
+
 #[cfg(not(windows))]
 #[test]
 fn test_du_symlink_fail() {
@@ -1473,7 +1894,7 @@ fn test_du_symlink_multiple_fail() {
 
 #[test]
 // Disable on Windows because of different path separators and handling of null characters
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_du_files0_from() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1496,6 +1917,7 @@ fn test_du_files0_from() {
 
 #[test]
 fn test_du_files0_from_ignore_duplicate_file_names() {
+    // The same file listed twice is counted once via inode tracking.
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     let file = "testfile";
@@ -1507,6 +1929,40 @@ fn test_du_files0_from_ignore_duplicate_file_names() {
         .arg("--files0-from=filelist")
         .succeeds()
         .stdout_is(format!("0\t{file}\n"));
+}
+
+#[test]
+fn test_du_files0_from_duplicate_file_names_with_count_links() {
+    // With -l the inode dedup is disabled, so a repeated name is listed each time.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let file = "testfile";
+
+    at.touch(file);
+    at.write("filelist", &format!("{file}\0{file}\0"));
+
+    ts.ucmd()
+        .arg("-l")
+        .arg("--files0-from=filelist")
+        .succeeds()
+        .stdout_is(format!("0\t{file}\n0\t{file}\n"));
+}
+
+#[test]
+fn test_du_files0_from_missing_file_listed_twice() {
+    // A missing file listed twice must be reported each time, not deduplicated.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("filelist", "missing\0missing\0");
+
+    ts.ucmd()
+        .arg("--files0-from=filelist")
+        .fails_with_code(1)
+        .stderr_only(
+            "du: cannot access 'missing': No such file or directory\n\
+             du: cannot access 'missing': No such file or directory\n",
+        );
 }
 
 #[test]
@@ -1718,7 +2174,7 @@ fn test_du_inodes_blocksize_ineffective() {
     let at = &ts.fixtures;
     let fpath = at.plus("test.txt");
     at.touch(fpath);
-    for method in ["-B3", "--block-size=3"] {
+    for method in ["-B3", "--block-size=3", "-BM"] {
         // No warning
         ts.ucmd()
             .arg(method)
@@ -1811,7 +2267,7 @@ fn test_du_very_deep_directory() {
         at.mkdir_all(&current_path);
     }
 
-    at.write(&format!("{current_path}/file.txt"), "deep file");
+    at.write(format!("{current_path}/file.txt"), "deep file");
 
     let result = ts.ucmd().arg("-s").arg("x").succeeds();
     assert!(result.stdout_str().contains('x'));
@@ -1835,9 +2291,9 @@ fn test_du_safe_traversal_with_symlinks() {
         at.mkdir_all(&deep_path);
     }
 
-    at.write(&format!("{deep_path}/target.txt"), "target content");
+    at.write(format!("{deep_path}/target.txt"), "target content");
 
-    at.symlink_file(&format!("{deep_path}/target.txt"), "shallow_link.txt");
+    at.symlink_file(format!("{deep_path}/target.txt"), "shallow_link.txt");
 
     let result = ts.ucmd().arg("-L").arg("shallow_link.txt").succeeds();
     assert!(!result.stdout_str().is_empty());
@@ -1846,7 +2302,7 @@ fn test_du_safe_traversal_with_symlinks() {
     assert!(!result.stdout_str().is_empty());
 }
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn test_du_inaccessible_directory() {
     // tested by tests/du/no-x
     let ts = TestScenario::new(util_name!());
@@ -1903,7 +2359,7 @@ fn test_du_long_symlink_chain() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_du_bind_mount_simulation() {
     // Simulate bind mount scenario using hard links where possible
     // Note: This test simulates what bind mounts do - making the same directory
@@ -1947,7 +2403,7 @@ fn test_du_symlink_depth_tracking() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_du_long_path_from_unreadable() {
-    // Test the specific scenario from GNU's long-from-unreadable.sh test
+    // Test du behavior with unreadable directories
     // This verifies that du can handle very long paths when the current directory is unreadable
     use std::env;
     use std::fs;
@@ -1956,7 +2412,7 @@ fn test_du_long_path_from_unreadable() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    // Create a deep hierarchy similar to the GNU test
+    // Create a deep hierarchy
     // Use a more reasonable depth for unit tests
     let dir_name = "x".repeat(200);
     let mut current_path = String::new();
@@ -1970,7 +2426,7 @@ fn test_du_long_path_from_unreadable() {
         at.mkdir_all(&current_path);
     }
 
-    at.write(&format!("{current_path}/test.txt"), "test content");
+    at.write(format!("{current_path}/test.txt"), "test content");
 
     at.mkdir("inaccessible");
 
@@ -2005,7 +2461,7 @@ fn test_du_long_path_from_unreadable() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_du_hard_links_multiple_dirs_in_args() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -2022,7 +2478,7 @@ fn test_du_hard_links_multiple_dirs_in_args() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_du_hard_links_multiple_links_in_args() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -2041,7 +2497,7 @@ fn test_du_hard_links_multiple_links_in_args() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn test_du_symlinks_multiple_links_in_args() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -2202,4 +2658,352 @@ fn test_overriding_block_size_arg_with_invalid_value_still_errors() {
         .args(&["--block-size=abc", "--si"])
         .fails_with_code(1)
         .stderr_contains("invalid --block-size argument 'abc'");
+}
+
+#[test]
+fn test_du_repeated_h() {
+    new_ucmd!().args(&["-s", "-h", "-h"]).succeeds();
+}
+
+#[test]
+fn test_du_repeated_a() {
+    new_ucmd!().args(&["-a", "-a"]).succeeds();
+}
+
+#[test]
+fn test_du_repeated_apparent_size() {
+    new_ucmd!()
+        .args(&["-s", "-A", "-A"])
+        .succeeds()
+        .stdout_only("6\t.\n");
+}
+
+#[test]
+fn test_du_repeated_block_size() {
+    new_ucmd!()
+        .args(&["-s", "-B", "100", "-B", "100"])
+        .succeeds();
+}
+
+#[test]
+fn test_du_repeated_b() {
+    new_ucmd!()
+        .args(&["-s", "-b", "-b"])
+        .succeeds()
+        .stdout_only("5148\t.\n");
+}
+
+#[test]
+fn test_du_repeated_c() {
+    new_ucmd!().args(&["-s", "-c", "-c"]).succeeds();
+}
+
+#[test]
+fn test_du_repeated_d() {
+    new_ucmd!().args(&["-d", "2", "-d", "2"]).succeeds();
+}
+
+#[test]
+fn test_du_repeated_inodes() {
+    new_ucmd!()
+        .args(&["-s", "--inodes", "--inodes"])
+        .succeeds()
+        .stdout_only("11\t.\n");
+}
+
+#[test]
+fn test_du_repeated_k() {
+    new_ucmd!().args(&["-s", "-k", "-k"]).succeeds();
+}
+
+#[test]
+fn test_du_repeated_l() {
+    new_ucmd!().args(&["-s", "-l", "-l"]).succeeds();
+}
+
+#[test]
+fn test_du_repeated_dereference() {
+    new_ucmd!().args(&["-s", "-L", "-L"]).succeeds();
+}
+
+#[test]
+fn test_du_repeated_dereference_args() {
+    new_ucmd!().args(&["-s", "-D", "-D"]).succeeds();
+}
+
+#[test]
+fn test_du_repeated_no_dereference() {
+    new_ucmd!().args(&["-s", "-P", "-P"]).succeeds();
+}
+
+#[test]
+fn test_du_repeated_m() {
+    new_ucmd!()
+        .args(&["-s", "-m", "-m"])
+        .succeeds()
+        .stdout_only("1\t.\n");
+}
+
+#[test]
+fn test_du_repeated_0() {
+    new_ucmd!().args(&["-s", "-0", "-0"]).succeeds();
+}
+
+#[test]
+fn test_du_repeated_separate_dirs() {
+    new_ucmd!().args(&["-s", "-S", "-S"]).succeeds();
+}
+
+#[test]
+fn test_du_repeated_s() {
+    new_ucmd!().args(&["-s", "-s"]).succeeds();
+}
+
+#[test]
+fn test_du_repeated_si() {
+    new_ucmd!().args(&["-s", "--si", "--si"]).succeeds();
+}
+
+#[test]
+fn test_du_repeated_x() {
+    new_ucmd!().args(&["-s", "-x", "-x"]).succeeds();
+}
+
+#[test]
+fn test_du_repeated_t() {
+    new_ucmd!()
+        .args(&["-s", "-t", "100", "-t", "100"])
+        .succeeds();
+}
+
+#[test]
+fn test_du_negative_max_depth_is_rejected() {
+    // A negative depth must reach du's own parser instead of being taken for
+    // an option by the argument parser.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("deep");
+    at.mkdir("deep/deeper");
+
+    for depth in ["-7", "-1"] {
+        ts.ucmd()
+            .args(&["-d", depth, "deep"])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains(format!("du: invalid maximum depth '{depth}'"));
+    }
+
+    ts.ucmd()
+        .args(&["--max-depth=-3", "deep"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("du: invalid maximum depth '-3'");
+}
+
+#[test]
+fn test_du_repeated_v() {
+    new_ucmd!().args(&["-s", "-v", "-v"]).succeeds();
+}
+
+#[test]
+fn test_du_repeated_files0_from() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // Set up the data for use with command 'du' and argument '--files0-from'.
+    // File 'somefile' has to contain a list of NUL-terminated directory and
+    // file names.
+    at.mkdir("dir");
+    at.write("dir/file2", "xyz");
+    at.write("./somefile", "dir\0");
+
+    ts.ucmd()
+        .args(&[
+            "-s",
+            "--files0-from",
+            "somefile",
+            "--files0-from",
+            "somefile",
+        ])
+        .succeeds();
+}
+
+#[test]
+#[cfg(feature = "touch")]
+fn test_du_repeated_time() {
+    let ts = TestScenario::new(util_name!());
+
+    // du --time formats the timestamp according to the local timezone. We set the TZ
+    // environment variable to UTC in the commands below to ensure consistent outputs
+    // and test results regardless of the timezone of the machine this test runs in.
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-a")
+        .arg("-t")
+        .arg("201505150000")
+        .arg("date_test")
+        .succeeds();
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("201606160000")
+        .arg("date_test")
+        .succeeds();
+
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("date_test")
+        .arg("--time")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
+}
+
+#[test]
+#[cfg(feature = "touch")]
+fn test_du_repeated_time_style() {
+    let ts = TestScenario::new(util_name!());
+
+    // du --time formats the timestamp according to the local timezone. We set the TZ
+    // environment variable to UTC in the commands below to ensure consistent outputs
+    // and test results regardless of the timezone of the machine this test runs in.
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-a")
+        .arg("-t")
+        .arg("201505150000")
+        .arg("date_test")
+        .succeeds();
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("201606160000")
+        .arg("date_test")
+        .succeeds();
+
+    // full-iso
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("--time-style=full-iso")
+        .arg("--time-style=full-iso")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016-06-16 00:00:00.000000000 +0000\tdate_test\n");
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit_of_block_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-B", "1fb"])
+            .fails_with_code(1);
+
+        // The number parsed; only the unit did not.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+du: invalid suffix in --block-size argument '1fb'
+   ╭─[ du:1:8 ]
+   │
+ 1 │ du -B 1fb
+   │        ─┬
+   │         ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_inside_an_attached_block_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .arg("--block-size=1fb")
+            .fails_with_code(1);
+
+        assert_eq!(result.caret_column(), Some(18));
+        assert!(
+            result.stderr_as_displayed().contains("not a known unit"),
+            "{}",
+            result.stderr_as_displayed()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_a_zero_block_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-B", "0"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // Zero parses as a number but is not a usable block size, so the
+        // whole value is underlined and nothing is said about the unit.
+        assert!(
+            stderr.starts_with("du: invalid --block-size argument '0'"),
+            "{stderr}"
+        );
+        assert_eq!(result.caret_column(), Some(7));
+        assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_the_sign_of_a_rejected_threshold() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-t", "-0"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // '-0' is rejected for the sign and the zero together, so the caret
+        // covers both.
+        assert!(
+            stderr.starts_with("du: invalid --threshold argument '-0'"),
+            "{stderr}"
+        );
+        assert_eq!(result.caret_column(), Some(7));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_skips_the_sign_of_a_threshold_with_an_unknown_unit() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-t", "-1fb"])
+            .fails_with_code(1);
+
+        // Here only the unit is at fault, so the sign is not underlined.
+        assert_eq!(result.caret_column(), Some(9));
+        assert!(
+            result.stderr_as_displayed().contains("not a known unit"),
+            "{}",
+            result.stderr_as_displayed()
+        );
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-B", "1fb"])
+            .fails_with_code(1)
+            .stderr_is("du: invalid suffix in --block-size argument '1fb'\n");
+    }
 }

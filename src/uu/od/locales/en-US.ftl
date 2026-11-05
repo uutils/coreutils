@@ -44,13 +44,17 @@ od-after-help = Displays data in various human-readable formats. If multiple for
 od-error-invalid-endian = Invalid argument --endian={$endian}
 od-error-invalid-inputs = Invalid inputs: {$msg}
 od-error-too-large = value is too large
-od-error-radix-invalid = Radix must be one of [o, d, x, n], got: {$radix}
+od-error-radix-invalid = invalid output address radix '{$radix}'; it must be one character from [doxn]
+od-error-no-type-with-strings = no type may be specified when dumping strings
 od-error-radix-empty = Radix cannot be empty, and must be one of [o, d, x, n]
 od-error-invalid-width = invalid width {$width}; using {$min} instead
 od-error-missing-format-spec = missing format specification after '--format' / '-t'
-od-error-unexpected-char = unexpected char '{$char}' in format specification {$spec}
-od-error-invalid-number = invalid number {$number} in format specification {$spec}
-od-error-invalid-size = invalid size '{$size}' in format specification {$spec}
+od-error-invalid-char = invalid character '{$char}' in type string {$spec}
+od-error-invalid-type-string = invalid type string {$spec}
+od-error-invalid-size-integral = invalid type string {$spec};
+  this system doesn't provide a {$size}-byte integral type
+od-error-invalid-size-float = invalid type string {$spec};
+  this system doesn't provide a {$size}-byte floating point type
 od-error-invalid-offset = invalid offset: {$offset}
 od-error-invalid-label = invalid label: {$label}
 od-error-too-many-inputs = too many inputs after --traditional: {$input}
@@ -59,12 +63,12 @@ od-error-overflow = Numerical result out of range
 od-error-invalid-suffix = invalid suffix in {$option} argument {$value}
 od-error-invalid-argument = invalid {$option} argument {$value}
 od-error-argument-too-large = {$option} argument {$value} too large
-od-error-skip-past-end = tried to skip past end of input
+od-error-skip-past-end = cannot skip past end of combined input
 
 # Help messages
 od-help-help = Print help information.
 od-help-address-radix = Select the base in which file offsets are printed.
-od-help-skip-bytes = Skip bytes input bytes before formatting and writing.
+od-help-skip-bytes = Skip BYTES input bytes before formatting and writing.
 od-help-read-bytes = limit dump to BYTES input bytes
 od-help-endian = byte order to use for multi-byte formats
 od-help-strings = output strings of at least BYTES graphic chars. 3 is assumed when BYTES is not specified.

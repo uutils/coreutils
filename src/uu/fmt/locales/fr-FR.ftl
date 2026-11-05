@@ -4,7 +4,7 @@ fmt-usage = [OPTION]... [FICHIER]...
 # Messages d'aide
 fmt-crown-margin-help = La première et la deuxième ligne d'un paragraphe peuvent avoir des indentations différentes, auquel cas l'indentation de la première ligne est préservée, et chaque ligne suivante correspond à l'indentation de la deuxième ligne.
 fmt-tagged-paragraph-help = Comme -c, sauf que la première et la deuxième ligne d'un paragraphe *doivent* avoir des indentations différentes ou elles sont traitées comme des paragraphes séparés.
-fmt-preserve-headers-help = Tente de détecter et préserver les en-têtes de courrier dans l'entrée. Attention en combinant ce drapeau avec -p.
+fmt-preserve-headers-help = Tente de détecter et préserver les en-têtes de courrier dans l'entrée. Attention en combinant cette option avec -p.
 fmt-split-only-help = Divise les lignes seulement, ne les reformate pas.
 fmt-uniform-spacing-help = Insère exactement un espace entre les mots, et deux entre les phrases. Les fins de phrase dans l'entrée sont détectées comme [?!.] suivies de deux espaces ou d'une nouvelle ligne ; les autres ponctuations ne sont pas interprétées comme des fins de phrase.
 fmt-prefix-help = Reformate seulement les lignes commençant par PRÉFIXE, en rattachant PRÉFIXE aux lignes reformatées. À moins que -x soit spécifié, les espaces de début seront ignorés lors de la correspondance avec PRÉFIXE.
@@ -25,7 +25,7 @@ fmt-error-invalid-tabwidth = Spécification TABWIDTH invalide : {$tabwidth}
 fmt-error-first-option-width = option invalide -- {$option} ; -WIDTH n'est reconnu que lorsqu'il est la première
   option ; utilisez -w N à la place
   Essayez 'fmt --help' pour plus d'informations.
-fmt-error-read = erreur de lecture
+fmt-error-reading-is-directory = erreur de lecture de {$file} : C'est un répertoire
 fmt-error-invalid-width-malformed = largeur invalide : {$width}
 fmt-error-cannot-open-for-reading = impossible d'ouvrir {$file} en lecture
 fmt-error-cannot-get-metadata = impossible d'obtenir les métadonnées pour {$file}

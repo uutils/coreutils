@@ -2,25 +2,24 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) helloworld nodir objdump n'source nconfined
 
-#[cfg(not(target_os = "openbsd"))]
-use filetime::FileTime;
+// spell-checker:ignore (words) helloworld nodir n'source nconfined testdir ETXTBSY Cryptfs
+// spell-checker:ignore tvos watchos visionos
+
+use rstest::rstest;
+use rustix::process::{getegid, geteuid};
+use std::env::current_exe;
 use std::fs;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
-#[cfg(not(windows))]
-use std::process;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
-use uucore::process::{getegid, geteuid};
-#[cfg(feature = "feat_selinux")]
+use uucore::error::strip_errno;
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
 use uutests::util::{TestScenario, is_ci, run_ucmd_as_root};
-use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 #[test]
 fn test_invalid_arg() {
@@ -28,7 +27,7 @@ fn test_invalid_arg() {
 }
 
 #[test]
-fn test_install_basic() {
+fn test_install_basic_try_reflink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "target_dir";
     let file1 = "source_file1";
@@ -37,7 +36,23 @@ fn test_install_basic() {
     at.touch(file1);
     at.touch(file2);
     at.mkdir(dir);
+    #[cfg(not(target_os = "linux"))]
     ucmd.arg(file1).arg(file2).arg(dir).succeeds().no_stderr();
+    // mkfs.btrfs needs root. use strace instead.
+    #[cfg(target_os = "linux")]
+    if std::process::Command::new("strace")
+        .args(["-qqq", "-o", "strace.out", "-e", "trace=ioctl"])
+        .arg(uutests::util::get_tests_binary())
+        .args(["install", file1, file2, dir])
+        .current_dir(at.as_string())
+        .output()
+        .is_ok()
+    {
+        assert!(at.read("strace.out").contains("FICLONE"));
+    } else {
+        // missing strace
+        ucmd.arg(file1).arg(file2).arg(dir).succeeds().no_stderr();
+    }
 
     assert!(at.file_exists(file1));
     assert!(at.file_exists(file2));
@@ -71,7 +86,7 @@ fn test_install_failing_not_dir() {
         .arg(file2)
         .arg(file3)
         .fails()
-        .stderr_contains("not a directory");
+        .stderr_contains("Not a directory");
 }
 
 #[test]
@@ -99,12 +114,9 @@ fn test_install_ancestors_mode_directories() {
     let target_dir = "ancestor1/ancestor2/target_dir";
     let directories_arg = "-d";
     let mode_arg = "--mode=200";
-    let probe = "probe";
 
-    at.mkdir(probe);
-    let default_perms = at.metadata(probe).permissions().mode();
-
-    ucmd.args(&[mode_arg, directories_arg, target_dir])
+    ucmd.umask(0o077)
+        .args(&[mode_arg, directories_arg, target_dir])
         .succeeds()
         .no_stderr();
 
@@ -112,11 +124,10 @@ fn test_install_ancestors_mode_directories() {
     assert!(at.dir_exists(ancestor2));
     assert!(at.dir_exists(target_dir));
 
-    assert_eq!(default_perms, at.metadata(ancestor1).permissions().mode());
-    assert_eq!(default_perms, at.metadata(ancestor2).permissions().mode());
-
-    // Expected mode only on the target_dir.
-    assert_eq!(0o40_200_u32, at.metadata(target_dir).permissions().mode());
+    // Ancestors use the default mode; --mode applies only to the target.
+    assert_eq!(0o755, at.metadata(ancestor1).permissions().mode() & 0o777);
+    assert_eq!(0o755, at.metadata(ancestor2).permissions().mode() & 0o777);
+    assert_eq!(0o200, at.metadata(target_dir).permissions().mode() & 0o777);
 }
 
 #[test]
@@ -128,14 +139,11 @@ fn test_install_ancestors_mode_directories_with_file() {
     let directories_arg = "-D";
     let mode_arg = "--mode=200";
     let file = "file";
-    let probe = "probe";
-
-    at.mkdir(probe);
-    let default_perms = at.metadata(probe).permissions().mode();
 
     at.touch(file);
 
-    ucmd.args(&[mode_arg, directories_arg, file, target_file])
+    ucmd.umask(0o077)
+        .args(&[mode_arg, directories_arg, file, target_file])
         .succeeds()
         .no_stderr();
 
@@ -143,11 +151,10 @@ fn test_install_ancestors_mode_directories_with_file() {
     assert!(at.dir_exists(ancestor2));
     assert!(at.file_exists(target_file));
 
-    assert_eq!(default_perms, at.metadata(ancestor1).permissions().mode());
-    assert_eq!(default_perms, at.metadata(ancestor2).permissions().mode());
-
-    // Expected mode only on the target_file.
-    assert_eq!(0o100_200_u32, at.metadata(target_file).permissions().mode());
+    // Ancestors use the default mode; --mode applies only to the target.
+    assert_eq!(0o755, at.metadata(ancestor1).permissions().mode() & 0o777);
+    assert_eq!(0o755, at.metadata(ancestor2).permissions().mode() & 0o777);
+    assert_eq!(0o200, at.metadata(target_file).permissions().mode() & 0o777);
 }
 
 #[test]
@@ -365,6 +372,15 @@ fn test_install_target_file() {
 }
 
 #[test]
+fn test_install_missing_source_reports_cannot_stat_with_path() {
+    new_ucmd!()
+        .arg("missing_source")
+        .arg("target_file")
+        .fails_with_code(1)
+        .stderr_contains("cannot stat 'missing_source': No such file or directory");
+}
+
+#[test]
 fn test_install_target_new_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
@@ -386,7 +402,7 @@ fn test_install_target_new_file_with_group() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
     let dir = "target_dir";
-    let gid = getegid();
+    let gid = getegid().as_raw();
 
     at.touch(file);
     at.mkdir(dir);
@@ -413,7 +429,7 @@ fn test_install_target_new_file_with_owner() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
     let dir = "target_dir";
-    let uid = geteuid();
+    let uid = geteuid().as_raw();
 
     at.touch(file);
     at.mkdir(dir);
@@ -475,6 +491,38 @@ fn test_install_preserve_timestamps() {
     );
 }
 
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_install_compare_preserve_timestamps() {
+    use std::time::Duration;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "source_file";
+    let dest = "dest_file";
+
+    // Same contents, but destination has a newer timestamp than the source.
+    at.write(source, "data");
+    at.write(dest, "data");
+    let old = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
+    fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus(source))
+        .unwrap()
+        .set_modified(old)
+        .unwrap();
+
+    // With --preserve-timestamps, the timestamp difference forces the copy so
+    // the destination ends up with the source's modification time.
+    ucmd.args(&["-C", "--preserve-timestamps", source, dest])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(
+        at.metadata(source).modified().ok(),
+        at.metadata(dest).modified().ok()
+    );
+}
+
 // These two tests are failing but should work
 #[test]
 fn test_install_copy_file() {
@@ -503,6 +551,22 @@ fn test_install_target_file_dev_null() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_install_replaces_special_target() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "source_file";
+    let target = "target_fifo";
+
+    at.write(source, "contents");
+    at.mkfifo(target);
+
+    ucmd.arg(source).arg(target).succeeds().no_stderr();
+
+    assert!(at.file_exists(target));
+    assert_eq!(at.read(target), "contents");
+}
+
+#[test]
 fn test_install_nested_paths_copy_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file1 = "source_file";
@@ -527,8 +591,8 @@ fn test_multiple_mode_arguments_override_not_error() {
     let dir = "source_dir";
 
     let file = "source_file";
-    let gid = getegid();
-    let uid = geteuid();
+    let gid = getegid().as_raw();
+    let uid = geteuid().as_raw();
 
     at.touch(file);
     at.mkdir(dir);
@@ -614,7 +678,7 @@ fn test_install_failing_omitting_directory() {
         .arg(dir1)
         .arg(no_dir2)
         .fails()
-        .stderr_contains("is not a directory");
+        .stderr_contains("No such file or directory");
 
     // file1 will be copied before install fails on dir1
     scene
@@ -670,7 +734,7 @@ fn test_install_copy_then_compare_file() {
         .no_stderr();
 
     let mut file2_meta = at.metadata(file2);
-    let before = FileTime::from_last_modification_time(&file2_meta);
+    let before = file2_meta.modified().unwrap();
 
     scene
         .ucmd()
@@ -681,7 +745,7 @@ fn test_install_copy_then_compare_file() {
         .no_stderr();
 
     file2_meta = at.metadata(file2);
-    let after = FileTime::from_last_modification_time(&file2_meta);
+    let after = file2_meta.modified().unwrap();
 
     assert_eq!(before, after);
 }
@@ -705,7 +769,7 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
         .no_stderr();
 
     let mut file2_meta = at.metadata(file2);
-    let before = FileTime::from_last_modification_time(&file2_meta);
+    let before = file2_meta.modified().unwrap();
     sleep(std::time::Duration::from_millis(100));
 
     scene
@@ -721,7 +785,7 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
         );
 
     file2_meta = at.metadata(file2);
-    let after_install_sticky = FileTime::from_last_modification_time(&file2_meta);
+    let after_install_sticky = file2_meta.modified().unwrap();
 
     assert_ne!(before, after_install_sticky);
 
@@ -737,81 +801,146 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
         .no_stderr();
 
     file2_meta = at.metadata(file2);
-    let after_install_sticky_again = FileTime::from_last_modification_time(&file2_meta);
+    let after_install_sticky_again = file2_meta.modified().unwrap();
 
     assert_ne!(after_install_sticky, after_install_sticky_again);
 }
 
 const STRIP_TARGET_FILE: &str = "helloworld_installed";
-#[cfg(all(not(windows), not(target_os = "freebsd")))]
-const SYMBOL_DUMP_PROGRAM: &str = "objdump";
-#[cfg(target_os = "freebsd")]
-const SYMBOL_DUMP_PROGRAM: &str = "llvm-objdump";
-#[cfg(not(windows))]
-const STRIP_SOURCE_FILE_SYMBOL: &str = "main";
+const STRIP_PROGRAM: &str = "#!/bin/sh\n: > \"$1\"\n";
 
-fn strip_source_file() -> &'static str {
-    if cfg!(target_os = "freebsd") {
-        "helloworld_freebsd"
-    } else if cfg!(target_os = "macos") {
-        "helloworld_macos"
-    } else if cfg!(target_arch = "arm") || cfg!(target_arch = "aarch64") {
-        "helloworld_android"
-    } else {
-        "helloworld_linux"
-    }
+/// Create a fake strip program from a child process. Tests run as threads of
+/// one process: if this process held the script open for writing, a sibling
+/// test forking at that moment would inherit the fd, and exec'ing the script
+/// would then fail with ETXTBSY.
+fn write_strip_program(scene: &TestScenario, name: &str, script: &str) {
+    scene
+        .cmd("sh")
+        .env("STRIP_SCRIPT", script)
+        .arg("-c")
+        .arg(format!(
+            "printf '%s' \"$STRIP_SCRIPT\" > {name} && chmod 755 {name}"
+        ))
+        .succeeds();
 }
 
 #[test]
-#[cfg(not(windows))]
-// FIXME test runs in a timeout with macos-latest on x86_64 in the CI
-#[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
 fn test_install_and_strip() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
+
+    write_strip_program(&scene, "strip", STRIP_PROGRAM);
+    at.write("source", "file contents");
+    let path = format!(
+        "{}:{}",
+        at.plus(".").display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+
     scene
         .ucmd()
+        .umask(0o777)
+        .env("PATH", path)
         .arg("-s")
-        .arg(strip_source_file())
+        .arg("source")
         .arg(STRIP_TARGET_FILE)
         .succeeds()
         .no_stderr();
 
-    let output = process::Command::new(SYMBOL_DUMP_PROGRAM)
-        .arg("-t")
-        .arg(at.plus(STRIP_TARGET_FILE))
-        .output()
-        .unwrap();
-
-    let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(!stdout.contains(STRIP_SOURCE_FILE_SYMBOL));
+    assert_eq!(at.metadata(STRIP_TARGET_FILE).len(), 0);
 }
 
 #[test]
-#[cfg(not(windows))]
-// FIXME test runs in a timeout with macos-latest on x86_64 in the CI
-#[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
+fn test_install_strip_program_sees_zeroed_umask() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    write_strip_program(&scene, "probe", "#!/bin/sh\numask > \"$1\"\n");
+    at.write("source", "file contents");
+
+    scene
+        .ucmd()
+        .umask(0o077)
+        .args(&[
+            "-s",
+            "--strip-program",
+            "./probe",
+            "source",
+            STRIP_TARGET_FILE,
+        ])
+        .succeeds()
+        .no_stderr();
+
+    // Follow GNU's behavior: the strip program sees a zeroed umask. Shells
+    // differ on whether they print it as 000 or 0000, so compare the value.
+    let reported = at.read(STRIP_TARGET_FILE);
+    let reported = reported.trim();
+    assert_eq!(
+        u32::from_str_radix(reported, 8).unwrap(),
+        0,
+        "strip program saw umask {reported}"
+    );
+}
+
+#[test]
+fn test_install_and_strip_with_ancestor_directories() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    write_strip_program(&scene, "strip", STRIP_PROGRAM);
+    at.write("source", "file contents");
+    let path = format!(
+        "{}:{}",
+        at.plus(".").display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let target = "ancestor/helloworld_installed";
+
+    scene
+        .ucmd()
+        .umask(0o777)
+        .env("PATH", path)
+        .args(&["-s", "-D", "source", target])
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.metadata(target).len(), 0);
+}
+
+#[test]
+fn test_install_no_strip_with_program() {
+    let source = current_exe().unwrap();
+    TestScenario::new(util_name!())
+        .ucmd()
+        .arg("--strip-program")
+        .arg("false")
+        .arg(source)
+        .arg(STRIP_TARGET_FILE)
+        .succeeds()
+        .stderr_only(
+            "install: WARNING: ignoring --strip-program option as -s option was not specified\n",
+        );
+}
+
+#[test]
 fn test_install_and_strip_with_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
+
+    write_strip_program(&scene, "strip-program", STRIP_PROGRAM);
+    at.write("source", "file contents");
+
     scene
         .ucmd()
         .arg("-s")
         .arg("--strip-program")
-        .arg("/usr/bin/strip")
-        .arg(strip_source_file())
+        .arg("./strip-program")
+        .arg("source")
         .arg(STRIP_TARGET_FILE)
         .succeeds()
         .no_stderr();
 
-    let output = process::Command::new(SYMBOL_DUMP_PROGRAM)
-        .arg("-t")
-        .arg(at.plus(STRIP_TARGET_FILE))
-        .output()
-        .unwrap();
-
-    let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(!stdout.contains(STRIP_SOURCE_FILE_SYMBOL));
+    assert_eq!(at.metadata(STRIP_TARGET_FILE).len(), 0);
 }
 
 #[cfg(all(unix, feature = "chmod"))]
@@ -864,12 +993,9 @@ fn test_install_on_invalid_link_at_destination() {
     let dst_dir = at.plus("dest");
 
     at.touch("test.sh");
-    at.symlink_file(
-        "/opt/FakeDestination",
-        &dst_dir.join("test.sh").to_string_lossy(),
-    );
+    at.symlink_file("/opt/FakeDestination", dst_dir.join("test.sh"));
     scene.ccmd("chmod").arg("+x").arg("test.sh").succeeds();
-    at.symlink_file("test.sh", &src_dir.join("test.sh").to_string_lossy());
+    at.symlink_file("test.sh", src_dir.join("test.sh"));
 
     scene
         .ucmd()
@@ -877,8 +1003,7 @@ fn test_install_on_invalid_link_at_destination() {
         .arg(src_dir.join("test.sh"))
         .arg(dst_dir.join("test.sh"))
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 }
 
 #[cfg(all(unix, feature = "chmod"))]
@@ -893,12 +1018,9 @@ fn test_install_on_invalid_link_at_destination_and_dev_null_at_source() {
     let dst_dir = at.plus("dest");
 
     at.touch("test.sh");
-    at.symlink_file(
-        "/opt/FakeDestination",
-        &dst_dir.join("test.sh").to_string_lossy(),
-    );
+    at.symlink_file("/opt/FakeDestination", dst_dir.join("test.sh"));
     scene.ccmd("chmod").arg("+x").arg("test.sh").succeeds();
-    at.symlink_file("test.sh", &src_dir.join("test.sh").to_string_lossy());
+    at.symlink_file("test.sh", src_dir.join("test.sh"));
 
     scene
         .ucmd()
@@ -906,22 +1028,21 @@ fn test_install_on_invalid_link_at_destination_and_dev_null_at_source() {
         .arg("/dev/null")
         .arg(dst_dir.join("test.sh"))
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_install_and_strip_with_invalid_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
+    let source = current_exe().unwrap();
 
     scene
         .ucmd()
         .arg("-s")
         .arg("--strip-program")
         .arg("/bin/date")
-        .arg(strip_source_file())
+        .arg(source)
         .arg(STRIP_TARGET_FILE)
         .fails()
         .stderr_contains("strip program failed");
@@ -929,20 +1050,39 @@ fn test_install_and_strip_with_invalid_program() {
 }
 
 #[test]
-#[cfg(not(windows))]
+fn test_install_and_strip_with_signal_terminated_program() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("src.sh", "kill -9 $$\n");
+    scene
+        .ucmd()
+        .args(&[
+            "-s",
+            "--strip-program",
+            "/bin/sh",
+            "src.sh",
+            STRIP_TARGET_FILE,
+        ])
+        .fails()
+        .stderr_only("install: strip process terminated abnormally\n");
+    assert!(!at.file_exists(STRIP_TARGET_FILE));
+}
+
+#[test]
 fn test_install_and_strip_with_non_existent_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
+    let source = current_exe().unwrap();
 
     scene
         .ucmd()
         .arg("-s")
         .arg("--strip-program")
         .arg("/usr/bin/non_existent_program")
-        .arg(strip_source_file())
+        .arg(source)
         .arg(STRIP_TARGET_FILE)
         .fails()
-        .stderr_contains("No such file or directory");
+        .stderr_only("install: strip program failed: No such file or directory\n");
     assert!(!at.file_exists(STRIP_TARGET_FILE));
 }
 
@@ -1012,7 +1152,7 @@ fn test_install_creating_leading_dirs_with_single_source_and_target_dir() {
         .arg(source1)
         .arg(at.plus(target_dir))
         .fails()
-        .stderr_contains("missing_target_dir/' is not a directory");
+        .stderr_contains("missing_target_dir/': Not a directory");
 
     assert!(!at.dir_exists(target_dir));
 
@@ -1048,7 +1188,7 @@ fn test_install_creating_leading_dirs_with_multiple_sources_and_target_dir() {
         .arg(source2)
         .arg(at.plus(target_dir))
         .fails()
-        .stderr_contains("missing_target_dir' is not a directory");
+        .stderr_contains("missing_target_dir': No such file or directory");
 
     assert!(!at.dir_exists(target_dir));
 
@@ -1066,7 +1206,6 @@ fn test_install_creating_leading_dirs_with_multiple_sources_and_target_dir() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_install_creating_leading_dir_fails_on_long_name() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1106,36 +1245,68 @@ fn test_install_dir() {
     assert!(at.file_exists(format!("{dir}/{file1}")));
     assert!(at.file_exists(format!("{dir}/{file2}")));
 }
-//
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_non_utf8_dir() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = std::ffi::OsStr::from_bytes(b"target_dir_\xFF\xFE");
+    let file = "source";
+
+    at.touch(file);
+    fs::create_dir(at.plus(dir)).unwrap();
+
+    ucmd.arg(file)
+        .arg("--target-directory")
+        .arg(dir)
+        .succeeds()
+        .no_output();
+
+    assert!(at.plus(dir).join(file).exists());
+}
+
 // test backup functionality
-#[test]
-fn test_install_backup_short_no_args_files() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+#[rstest]
+#[case::short(&["-b"], Some("~"))]
+#[case::long(&["--backup"], Some("~"))]
+#[case::suffix(&["-b", "--suffix=super-suffix-of-the-century"], Some("super-suffix-of-the-century"))]
+#[case::suffix_implies_backup(&["--suffix=super-suffix-of-the-century"], Some("super-suffix-of-the-century"))]
+#[case::suffix_hyphen_value(&["-b", "--suffix=-v"], Some("-v"))]
+#[case::empty_suffix(&["-b", "--suffix="], Some("~"))]
+#[case::numbered_t(&["--backup=t"], Some(".~1~"))]
+#[case::numbered(&["--backup=numbered"], Some(".~1~"))]
+#[case::existing(&["--backup=existing"], Some("~"))]
+#[case::nil(&["--backup=nil"], Some("~"))]
+#[case::simple(&["--backup=simple"], Some("~"))]
+#[case::never(&["--backup=never"], Some("~"))]
+#[case::none(&["--backup=none"], None)]
+#[case::off(&["--backup=off"], None)]
+fn test_install_backup_control(#[case] args: &[&str], #[case] backup_suffix: Option<&str>) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "source";
+    let dest = "dest";
 
-    let file_a = "test_install_simple_backup_file_a";
-    let file_b = "test_install_simple_backup_file_b";
+    at.write(source, "new");
+    at.write(dest, "old");
+    ucmd.args(args).arg(source).arg(dest).succeeds().no_output();
 
-    at.touch(file_a);
-    at.touch(file_b);
-    scene
-        .ucmd()
-        .arg("-b")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}~")));
+    assert_eq!(at.read(source), "new");
+    assert_eq!(at.read(dest), "new");
+    match backup_suffix {
+        Some(suffix) => assert_eq!(at.read(format!("{dest}{suffix}")), "old"),
+        None => assert!(!at.file_exists(format!("{dest}~"))),
+    }
 }
 
-#[test]
-fn test_install_backup_short_no_args_file_to_dir() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
+// The long --backup option takes an optional value, so it is checked
+// separately from '-b' when the last operand is a directory.
+#[rstest]
+#[case::short("-b")]
+#[case::long("--backup")]
+fn test_install_backup_file_to_dir(#[case] backup_arg: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_install_simple_backup_file_a";
     let dest_dir = "test_install_dest/";
     let expect = format!("{dest_dir}{file}");
@@ -1143,9 +1314,7 @@ fn test_install_backup_short_no_args_file_to_dir() {
     at.touch(file);
     at.mkdir(dest_dir);
     at.touch(&expect);
-    scene
-        .ucmd()
-        .arg("-b")
+    ucmd.arg(backup_arg)
         .arg(file)
         .arg(dest_dir)
         .succeeds()
@@ -1156,128 +1325,24 @@ fn test_install_backup_short_no_args_file_to_dir() {
     assert!(at.file_exists(format!("{expect}~")));
 }
 
-// Long --backup option is tested separately as it requires a slightly different
-// handling than '-b' does.
-#[test]
-fn test_install_backup_long_no_args_files() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+#[rstest]
+#[case::simple("-b", "~")]
+#[case::numbered("--backup=numbered", ".~1~")]
+#[cfg(unix)]
+fn test_install_backup_dangling_symlink(#[case] backup_arg: &str, #[case] suffix: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("source", "new");
+    at.symlink_file("missing-target", "dest");
 
-    let file_a = "test_install_simple_backup_file_a";
-    let file_b = "test_install_simple_backup_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    scene
-        .ucmd()
-        .arg("--backup")
-        .arg(file_a)
-        .arg(file_b)
+    ucmd.arg(backup_arg)
+        .arg("source")
+        .arg("dest")
         .succeeds()
-        .no_stderr();
+        .no_output();
 
-    assert!(at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}~")));
-}
-
-#[test]
-fn test_install_backup_long_no_args_file_to_dir() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    let file = "test_install_simple_backup_file_a";
-    let dest_dir = "test_install_dest/";
-    let expect = format!("{dest_dir}{file}");
-
-    at.touch(file);
-    at.mkdir(dest_dir);
-    at.touch(&expect);
-    scene
-        .ucmd()
-        .arg("--backup")
-        .arg(file)
-        .arg(dest_dir)
-        .succeeds()
-        .no_stderr();
-
-    assert!(at.file_exists(file));
-    assert!(at.file_exists(&expect));
-    assert!(at.file_exists(format!("{expect}~")));
-}
-
-#[test]
-fn test_install_backup_short_custom_suffix() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    let file_a = "test_install_backup_custom_suffix_file_a";
-    let file_b = "test_install_backup_custom_suffix_file_b";
-    let suffix = "super-suffix-of-the-century";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    scene
-        .ucmd()
-        .arg("-b")
-        .arg(format!("--suffix={suffix}"))
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}{suffix}")));
-}
-
-#[test]
-fn test_install_suffix_without_backup_option() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    let file_a = "test_install_backup_custom_suffix_file_a";
-    let file_b = "test_install_backup_custom_suffix_file_b";
-    let suffix = "super-suffix-of-the-century";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    scene
-        .ucmd()
-        .arg(format!("--suffix={suffix}"))
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}{suffix}")));
-}
-
-#[test]
-fn test_install_backup_short_custom_suffix_hyphen_value() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    let file_a = "test_install_backup_custom_suffix_file_a";
-    let file_b = "test_install_backup_custom_suffix_file_b";
-    let suffix = "-v";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    scene
-        .ucmd()
-        .arg("-b")
-        .arg(format!("--suffix={suffix}"))
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}{suffix}")));
+    assert_eq!(at.read("dest"), "new");
+    assert!(at.is_symlink(format!("dest{suffix}")));
+    assert_eq!(at.resolve_link(format!("dest{suffix}")), "missing-target");
 }
 
 #[test]
@@ -1306,102 +1371,24 @@ fn test_install_backup_custom_suffix_via_env() {
 }
 
 #[test]
-fn test_install_backup_numbered_with_t() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+fn test_install_backup_error_includes_cause() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("source");
+    at.touch("target");
+    at.mkdir("target.backup");
+    let error = strip_errno(&fs::rename(at.plus("target"), at.plus("target.backup")).unwrap_err());
 
-    let file_a = "test_install_backup_numbering_file_a";
-    let file_b = "test_install_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    scene
-        .ucmd()
-        .arg("--backup=t")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}.~1~")));
+    ucmd.env("SIMPLE_BACKUP_SUFFIX", ".backup")
+        .args(&["--backup", "source", "target"])
+        .fails()
+        .stderr_is(format!("install: cannot backup 'target': {error}\n"));
 }
 
-#[test]
-fn test_install_backup_numbered_with_numbered() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    let file_a = "test_install_backup_numbering_file_a";
-    let file_b = "test_install_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    scene
-        .ucmd()
-        .arg("--backup=numbered")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}.~1~")));
-}
-
-#[test]
-fn test_install_backup_existing() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    let file_a = "test_install_backup_numbering_file_a";
-    let file_b = "test_install_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    scene
-        .ucmd()
-        .arg("--backup=existing")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}~")));
-}
-
-#[test]
-fn test_install_backup_nil() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    let file_a = "test_install_backup_numbering_file_a";
-    let file_b = "test_install_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    scene
-        .ucmd()
-        .arg("--backup=nil")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}~")));
-}
-
-#[test]
-fn test_install_backup_numbered_if_existing_backup_existing() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
+#[rstest]
+#[case::existing("--backup=existing")]
+#[case::nil("--backup=nil")]
+fn test_install_backup_numbered_if_existing_backup(#[case] backup_arg: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_install_backup_numbering_file_a";
     let file_b = "test_install_backup_numbering_file_b";
     let file_b_backup = "test_install_backup_numbering_file_b.~1~";
@@ -1409,9 +1396,7 @@ fn test_install_backup_numbered_if_existing_backup_existing() {
     at.touch(file_a);
     at.touch(file_b);
     at.touch(file_b_backup);
-    scene
-        .ucmd()
-        .arg("--backup=existing")
+    ucmd.arg(backup_arg)
         .arg(file_a)
         .arg(file_b)
         .succeeds()
@@ -1421,124 +1406,6 @@ fn test_install_backup_numbered_if_existing_backup_existing() {
     assert!(at.file_exists(file_b));
     assert!(at.file_exists(file_b_backup));
     assert!(at.file_exists(format!("{file_b}.~2~")));
-}
-
-#[test]
-fn test_install_backup_numbered_if_existing_backup_nil() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    let file_a = "test_install_backup_numbering_file_a";
-    let file_b = "test_install_backup_numbering_file_b";
-    let file_b_backup = "test_install_backup_numbering_file_b.~1~";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    at.touch(file_b_backup);
-    scene
-        .ucmd()
-        .arg("--backup=nil")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(file_b_backup));
-    assert!(at.file_exists(format!("{file_b}.~2~")));
-}
-
-#[test]
-fn test_install_backup_simple() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    let file_a = "test_install_backup_numbering_file_a";
-    let file_b = "test_install_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    scene
-        .ucmd()
-        .arg("--backup=simple")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}~")));
-}
-
-#[test]
-fn test_install_backup_never() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    let file_a = "test_install_backup_numbering_file_a";
-    let file_b = "test_install_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    scene
-        .ucmd()
-        .arg("--backup=never")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}~")));
-}
-
-#[test]
-fn test_install_backup_none() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    let file_a = "test_install_backup_numbering_file_a";
-    let file_b = "test_install_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    scene
-        .ucmd()
-        .arg("--backup=none")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(!at.file_exists(format!("{file_b}~")));
-}
-
-#[test]
-fn test_install_backup_off() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    let file_a = "test_install_backup_numbering_file_a";
-    let file_b = "test_install_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    scene
-        .ucmd()
-        .arg("--backup=off")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(!at.file_exists(format!("{file_b}~")));
 }
 
 #[test]
@@ -1635,6 +1502,53 @@ fn test_install_dir_dot() {
     assert!(at.dir_exists("dir4/cal"));
     assert!(at.dir_exists("dir5/cali"));
     assert!(at.dir_exists("dir6"));
+}
+
+#[test]
+fn test_install_dir_with_existing_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let newdir1 = "newdir1";
+    let existing_file = "existing_file";
+    let newdir2 = "newdir2";
+    at.touch(existing_file);
+
+    scene
+        .ucmd()
+        .arg("-d")
+        .arg(newdir1)
+        .arg(existing_file)
+        .arg(newdir2)
+        .fails()
+        .stderr_contains("cannot create directory 'existing_file': File exists");
+
+    assert!(at.dir_exists(newdir1));
+    assert!(!at.dir_exists(existing_file));
+    assert!(at.dir_exists(newdir2));
+}
+
+#[test]
+fn test_install_dir_with_multiple_existing_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file1 = "file1";
+    let file2 = "file2";
+
+    at.touch(file1);
+    at.touch(file2);
+
+    scene
+        .ucmd()
+        .arg("-d")
+        .arg(file1)
+        .arg(file2)
+        .fails()
+        .stderr_contains("cannot create directory 'file1': File exists")
+        .stderr_contains("cannot create directory 'file2': File exists");
+
+    assert!(at.file_exists(file1));
+    assert!(at.file_exists(file2));
 }
 
 #[test]
@@ -1793,11 +1707,12 @@ fn test_install_compare_option() {
         .args(&["-Cv", first, second])
         .succeeds()
         .stdout_contains(format!("removed '{second}'\n'{first}' -> '{second}'"));
+    // -C and --preserve-timestamps are no longer mutually exclusive
     scene
         .ucmd()
         .args(&["-C", "--preserve-timestamps", first, second])
-        .fails_with_code(1)
-        .stderr_contains("Options --compare and --preserve-timestamps are mutually exclusive");
+        .succeeds()
+        .no_output();
     scene
         .ucmd()
         .args(&["-C", "--strip", "--strip-program=echo", first, second])
@@ -1937,7 +1852,7 @@ fn test_install_compare_group_ownership() {
 
     at.write(source, "test content");
 
-    let user_group = process::Command::new("id")
+    let user_group = std::process::Command::new("id")
         .arg("-nrg")
         .output()
         .map_or_else(
@@ -2040,6 +1955,79 @@ fn test_target_file_ends_with_slash() {
         .stderr_contains("failed to access 'dir/target_file/': Not a directory");
 }
 
+/// Without `-D`, a `-t` target that is not a directory is refused, even with a
+/// single source, rather than installed over or created as a file.
+#[test]
+fn test_install_target_dir_not_a_directory() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("source", "new");
+    at.write("regular", "old");
+    at.symlink_file("nowhere", "dangling");
+
+    for (target, reason) in [
+        ("regular", "Not a directory"),
+        ("dangling", "No such file or directory"),
+        ("missing", "No such file or directory"),
+    ] {
+        scene
+            .ucmd()
+            .args(&["-t", target, "source"])
+            .fails()
+            .stderr_only(format!("install: failed to access '{target}': {reason}\n"));
+    }
+    assert_eq!(at.read("regular"), "old");
+    assert!(at.is_symlink("dangling"));
+    assert!(!at.file_exists("missing"));
+}
+
+#[test]
+fn test_install_unusable_target_diagnostics() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("source", "new");
+    at.write("other", "other source");
+    at.write("regular", "old");
+
+    for (args, message) in [
+        (
+            vec!["source", "other", "regular"],
+            "target 'regular': Not a directory",
+        ),
+        (
+            vec!["source", "other", "missing"],
+            "target 'missing': No such file or directory",
+        ),
+        (
+            vec!["source", "regular/"],
+            "cannot stat 'regular/': Not a directory",
+        ),
+        (
+            vec!["source", "missing/"],
+            "cannot create regular file 'missing/': Not a directory",
+        ),
+        (
+            vec!["source", "missing/sub/"],
+            "cannot create regular file 'missing/sub/': No such file or directory",
+        ),
+        (
+            vec!["-D", "-t", "regular/sub", "source"],
+            "failed to access 'regular/sub': Not a directory",
+        ),
+    ] {
+        scene
+            .ucmd()
+            .args(&args)
+            .fails_with_code(1)
+            .stderr_only(format!("install: {message}\n"));
+    }
+    assert_eq!(at.read("source"), "new");
+    assert_eq!(at.read("other"), "other source");
+    assert_eq!(at.read("regular"), "old");
+    assert!(!at.dir_exists("missing"));
+    assert!(!at.file_exists("missing"));
+}
+
 #[test]
 fn test_install_root_combined() {
     let ts = TestScenario::new(util_name!());
@@ -2063,8 +2051,14 @@ fn test_install_root_combined() {
     run_and_check(&["-Cv", "-o1", "-g1", "a", "b"], "b", 1, 1);
     run_and_check(&["-Cv", "-o2", "-g1", "a", "b"], "b", 2, 1);
     run_and_check(&["-Cv", "-o2", "-g2", "a", "b"], "b", 2, 2);
+    // Without -o, -C must still give the file to the invoker.
+    run_and_check(&["-Cv", "-g2", "a", "b"], "b", 0, 2);
 
     run_and_check(&["-Cv", "-o2", "c", "d"], "d", 2, 0);
+    // -o alone must compare against that owner, so nothing is copied again.
+    if let Ok(result) = run_ucmd_as_root(&ts, &["-Cv", "-o2", "c", "d"]) {
+        result.success().no_stdout();
+    }
     run_and_check(&["-Cv", "c", "d"], "d", 0, 0);
     run_and_check(&["-Cv", "c", "d"], "d", 0, 0);
 }
@@ -2103,20 +2097,46 @@ fn test_install_from_fifo() {
     assert_eq!(s.fixtures.read(target_name), test_string);
 }
 
-#[test]
 #[cfg(unix)]
-fn test_install_from_stdin() {
+#[rstest::rstest]
+#[case::fd("/dev/fd/0")]
+#[cfg_attr(
+    target_os = "android",
+    ignore = "/dev/stdin is not available on Android"
+)]
+#[case::stdin("/dev/stdin")]
+fn test_install_from_stdin(
+    #[case] source: &str,
+    #[values(false, true)] target_exists: bool,
+    #[values(false, true)] backup: bool,
+    #[values(false, true)] create_leading: bool,
+) {
     let (at, mut ucmd) = at_and_ucmd!();
-    let target = "target";
+    let target = "dir/target";
     let test_string = "Hello, World!\n";
-
-    ucmd.arg("/dev/fd/0")
+    at.mkdir("dir");
+    if target_exists {
+        at.write(target, "old content");
+    }
+    if backup {
+        ucmd.arg("--backup=simple");
+    }
+    if create_leading {
+        ucmd.arg("-D");
+    }
+    ucmd.arg(source)
         .arg(target)
         .pipe_in(test_string)
-        .succeeds();
+        .succeeds()
+        .no_stderr();
 
-    assert!(at.file_exists(target));
     assert_eq!(at.read(target), test_string);
+    assert_eq!(at.metadata(target).mode() & 0o777, 0o755);
+    if backup && target_exists {
+        assert_eq!(at.read("dir/target~"), "old content");
+    } else {
+        assert!(!at.file_exists("dir/target~"));
+    }
 }
 
 #[test]
@@ -2126,7 +2146,7 @@ fn test_install_failing_copy_file_to_target_contain_subdir_with_same_name() {
     let dir1 = "dir1";
 
     at.touch(file);
-    at.mkdir_all(&format!("{dir1}/{file}"));
+    at.mkdir_all(format!("{dir1}/{file}"));
     ucmd.arg(file)
         .arg(dir1)
         .fails()
@@ -2161,6 +2181,40 @@ fn test_install_symlink_same_file() {
         .stderr_contains(format!(
             "'{target_dir}/{file}' and '{target_link}/{file}' are the same file"
         ));
+}
+
+#[test]
+fn test_install_create_leading_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+
+    at.write(file, "content");
+    ucmd.arg("-D")
+        .arg(file)
+        .arg(file)
+        .fails()
+        .stderr_contains("'file' and 'file' are the same file");
+    assert_eq!(at.read(file), "content");
+}
+
+#[test]
+fn test_install_create_leading_symlink_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+    let target_dir = "target_dir";
+    let target_link = "target_link";
+
+    at.mkdir(target_dir);
+    at.write(format!("{target_dir}/{file}"), "content");
+    at.symlink_file(target_dir, target_link);
+    ucmd.arg("-D")
+        .arg(format!("{target_dir}/{file}"))
+        .arg(format!("{target_link}/{file}"))
+        .fails()
+        .stderr_contains(format!(
+            "'{target_dir}/{file}' and '{target_link}/{file}' are the same file"
+        ));
+    assert_eq!(at.read(format!("{target_dir}/{file}")), "content");
 }
 
 #[test]
@@ -2232,7 +2286,7 @@ fn test_install_no_target_directory_creating_leading_dirs_with_single_source_and
         .arg(source1)
         .arg(at.plus(target_dir))
         .fails()
-        .stderr_contains("missing_target_dir/' is not a directory");
+        .stderr_contains("missing_target_dir/': Not a directory");
 
     assert!(!at.dir_exists(target_dir));
 }
@@ -2334,8 +2388,49 @@ fn test_install_no_target_basic() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+fn test_context_without_selinux() {
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    if uucore::selinux::is_selinux_enabled() {
+        println!("Test skipped: SELinux is enabled");
+        return;
+    }
+
+    let warning = "install: warning: ignoring --context; it requires an SELinux-enabled kernel\n";
+    for (arg, stderr) in [
+        ("--context=con", warning),
+        ("--context=", warning),
+        ("--context", ""),
+        ("-Z", ""),
+    ] {
+        let scene = TestScenario::new(util_name!());
+        scene.fixtures.write("source", "installed data");
+        scene
+            .ucmd()
+            .args(&["-D", "source", "parent/file", arg])
+            .succeeds()
+            .no_stdout()
+            .stderr_is(stderr);
+        assert_eq!(scene.fixtures.read("parent/file"), "installed data");
+
+        scene
+            .ucmd()
+            .args(&["-d", "dir1", "dir2", arg])
+            .succeeds()
+            .no_stdout()
+            .stderr_is(stderr);
+        assert!(scene.fixtures.dir_exists("dir1"));
+        assert!(scene.fixtures.dir_exists("dir2"));
+    }
+}
+
+#[test]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_selinux() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("Test skipped: SELinux is not enabled");
+        return;
+    }
+
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let src = "orig";
@@ -2345,24 +2440,13 @@ fn test_selinux() {
 
     let args = ["-Z", "--context=unconfined_u:object_r:user_tmp_t:s0"];
     for arg in args {
-        let result = new_ucmd!()
+        new_ucmd!()
             .arg(arg)
             .arg("-v")
-            .arg(at.plus_as_string(src))
-            .arg(at.plus_as_string(dest))
-            .run();
-
-        // Skip test if SELinux is not enabled
-        if result
-            .stderr_str()
-            .contains("SELinux is not enabled on this system")
-        {
-            println!("Skipping SELinux test: SELinux is not enabled");
-            at.remove(&at.plus_as_string(dest));
-            continue;
-        }
-
-        result.success().stdout_contains("orig' -> '");
+            .arg(at.plus(src))
+            .arg(at.plus(dest))
+            .succeeds()
+            .stdout_contains("orig' -> '");
 
         // Try to get SELinux context, skip test if getfattr is not available
         let context_value =
@@ -2370,7 +2454,7 @@ fn test_selinux() {
 
         let Ok(context_value) = context_value else {
             println!("Skipping SELinux test: getfattr not available or failed");
-            at.remove(&at.plus_as_string(dest));
+            at.remove(at.plus(dest));
             continue;
         };
 
@@ -2378,13 +2462,18 @@ fn test_selinux() {
             context_value.contains("unconfined_u"),
             "Expected 'unconfined_u' not found in getfattr output:\n{context_value}"
         );
-        at.remove(&at.plus_as_string(dest));
+        at.remove(at.plus(dest));
     }
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_selinux_invalid_args() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("Test skipped: SELinux is not enabled");
+        return;
+    }
+
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let src = "orig";
@@ -2397,50 +2486,39 @@ fn test_selinux_invalid_args() {
         "--context=nconfined_u:object_r:user_tmp_t:s0",
     ];
     for arg in args {
-        let result = new_ucmd!()
+        new_ucmd!()
             .arg(arg)
             .arg("-v")
-            .arg(at.plus_as_string(src))
-            .arg(at.plus_as_string(dest))
-            .fails();
+            .arg(at.plus(src))
+            .arg(at.plus(dest))
+            .fails()
+            .stderr_contains("failed to set default file creation");
 
-        let stderr = result.stderr_str();
-        assert!(
-            stderr.contains("failed to set default file creation")
-                || stderr.contains("SELinux is not enabled on this system"),
-            "Expected stderr to contain either 'failed to set default file creation' or 'SELinux is not enabled on this system', but got: '{stderr}'"
-        );
-
-        at.remove(&at.plus_as_string(dest));
+        at.remove(at.plus(dest));
     }
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_selinux_default_context() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("Test skipped: SELinux is not enabled");
+        return;
+    }
+
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let src = "orig";
     at.touch(src);
     let dest = "orig.2";
 
-    let result = new_ucmd!()
+    new_ucmd!()
         .arg("-Z")
         .arg("-v")
-        .arg(at.plus_as_string(src))
-        .arg(at.plus_as_string(dest))
-        .run();
-
-    // Skip test if SELinux is not enabled
-    if result
-        .stderr_str()
-        .contains("SELinux is not enabled on this system")
-    {
-        println!("Skipping SELinux default context test: SELinux is not enabled");
-        return;
-    }
-
-    result.success().stdout_contains("orig' -> '");
+        .arg(at.plus(src))
+        .arg(at.plus(dest))
+        .succeeds()
+        .stdout_contains("orig' -> '");
     assert!(at.file_exists(dest));
 }
 
@@ -2514,10 +2592,69 @@ fn test_install_non_utf8_paths() {
     ucmd.arg("-D").arg(source_file).arg(&target_path).succeeds();
 }
 
+/// A failed ownership change must not leave the setuid/setgid mode applied.
+#[test]
+fn test_install_failed_chown_does_not_leave_setuid() {
+    // Only meaningful when the chown can actually fail.
+    if geteuid().is_root() {
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("src");
+
+    scene
+        .ucmd()
+        .args(&["-m", "4755", "-o", "root", "src", "dst"])
+        .fails();
+
+    if at.file_exists("dst") {
+        let mode = at.metadata("dst").permissions().mode() & 0o7777;
+        assert_eq!(
+            mode & 0o6000,
+            0,
+            "install left setuid/setgid set ({mode:o}) after the chown failed"
+        );
+    }
+
+    // The same for a directory created with -d.
+    scene
+        .ucmd()
+        .args(&["-d", "-m", "4755", "-o", "root", "newdir"])
+        .fails();
+
+    if at.dir_exists("newdir") {
+        let mode = at.metadata("newdir").permissions().mode() & 0o7777;
+        assert_eq!(
+            mode & 0o6000,
+            0,
+            "install -d left setuid/setgid set ({mode:o}) after the chown failed"
+        );
+    }
+}
+
+/// The mode must still be applied in full when no ownership change is requested.
+#[test]
+fn test_install_setuid_mode_applied_without_chown() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("src");
+
+    scene.ucmd().args(&["-m", "4755", "src", "dst"]).succeeds();
+    assert_eq!(at.metadata("dst").permissions().mode() & 0o7777, 0o4755);
+
+    scene
+        .ucmd()
+        .args(&["-d", "-m", "2755", "newdir"])
+        .succeeds();
+    assert_eq!(at.metadata("newdir").permissions().mode() & 0o7777, 0o2755);
+}
+
 #[test]
 fn test_install_unprivileged_option_u_skips_chown() {
     // This test only makes sense when not running as root.
-    if geteuid() == 0 {
+    if geteuid().is_root() {
         return;
     }
 
@@ -2543,7 +2680,7 @@ fn test_install_unprivileged_option_u_skips_chown() {
         .no_stderr();
 
     assert!(at.file_exists(dst_ok));
-    assert_eq!(at.metadata(dst_ok).uid(), geteuid());
+    assert_eq!(at.metadata(dst_ok).uid(), geteuid().as_raw());
 }
 
 #[test]
@@ -2566,4 +2703,482 @@ fn test_install_normal_file_replaces_symlink() {
 
     // Verify sensitive file was NOT modified
     assert_eq!(at.read("sensitive"), "important data");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_d_symlink_in_path_is_followed() {
+    // Test that pre-existing symlinks in the path are followed (GNU coreutils behavior).
+    // install -D should traverse symlink components rather than replacing them.
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("target");
+    at.write("source_file", "test content");
+
+    at.mkdir_all("testdir/a");
+    symlink(at.plus("target"), at.plus("testdir/a/b")).unwrap();
+
+    // install -D should follow the symlink and write into the symlink target
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(at.plus("source_file"))
+        .arg(at.plus("testdir/a/b/c/file"))
+        .succeeds();
+
+    // File must be written through the symlink, i.e. inside the real target dir
+    assert!(
+        at.plus("target/c/file").exists(),
+        "File should be written through the symlink into the real target directory"
+    );
+    assert_eq!(
+        fs::read_to_string(at.plus("target/c/file")).unwrap(),
+        "test content"
+    );
+
+    // The symlink must not have been replaced with a real directory
+    assert!(
+        at.plus("testdir/a/b").is_symlink(),
+        "Intermediate symlink should be preserved, not replaced with a real directory"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_d_follows_symlink_prefix() {
+    // Regression test for: install -D replaces symlink components instead of following them.
+    // Reproduces the exact scenario from the bug report: a symlinked install prefix
+    // (common in BOSH, Homebrew, Nix, stow) must be followed, not destroyed.
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Simulate: ln -s /tmp/target /tmp/link
+    at.mkdir("target");
+    symlink(at.plus("target"), at.plus("link")).unwrap();
+
+    at.write("file.txt", "hello");
+
+    // install -D -m 644 file.txt link/subdir/file.txt
+    scene
+        .ucmd()
+        .args(&["-D", "-m", "644"])
+        .arg(at.plus("file.txt"))
+        .arg(at.plus("link/subdir/file.txt"))
+        .succeeds();
+
+    // GNU expected: /tmp/link remains a symlink, file written to /tmp/target/subdir/file.txt
+    assert!(
+        at.plus("link").is_symlink(),
+        "The symlinked prefix must remain a symlink"
+    );
+    assert!(
+        at.plus("target/subdir/file.txt").exists(),
+        "File must be written into the real target directory via the symlink"
+    );
+    assert_eq!(
+        fs::read_to_string(at.plus("target/subdir/file.txt")).unwrap(),
+        "hello"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_d_dangling_symlink_in_path_errors() {
+    // A dangling symlink as a path component must not be silently replaced with a
+    // real directory. GNU coreutils errors out in this case; we should too.
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a symlink pointing to a nonexistent target (dangling)
+    symlink(at.plus("nonexistent"), at.plus("dangling")).unwrap();
+    assert!(at.plus("dangling").is_symlink());
+
+    at.write("file.txt", "hello");
+
+    // install -D file.txt dangling/subdir/file.txt should fail
+    scene
+        .ucmd()
+        .args(&["-D", "-m", "644"])
+        .arg(at.plus("file.txt"))
+        .arg(at.plus("dangling/subdir/file.txt"))
+        .fails();
+
+    // The dangling symlink must not have been replaced with a real directory
+    assert!(
+        at.plus("dangling").is_symlink(),
+        "Dangling symlink must not be replaced with a real directory"
+    );
+    assert!(
+        !at.plus("nonexistent").exists(),
+        "The symlink target must not have been created"
+    );
+}
+
+#[test]
+// The targets with O_PATH or O_SEARCH, as named by the `has_o_path` and
+// `has_o_search` cfg aliases in src/uucore/build.rs. Elsewhere install cannot
+// anchor on an unreadable directory and fails with EACCES.
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris",
+    target_vendor = "apple"
+))]
+fn test_install_d_leading_dirs_in_write_only_directory() {
+    // mkdir needs write and execute on the parent, not read, so -D must be
+    // able to create leading directories inside a directory it cannot read.
+    use std::os::unix::fs::PermissionsExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    if geteuid().is_root() {
+        println!("Test skipped; root ignores directory permissions");
+        return;
+    }
+
+    at.write("file.txt", "hello");
+    at.mkdir("wx");
+    fs::set_permissions(at.plus("wx"), fs::Permissions::from_mode(0o300)).unwrap();
+
+    scene
+        .ucmd()
+        .args(&["-D", "file.txt", "wx/a/b/file.txt"])
+        .succeeds();
+
+    fs::set_permissions(at.plus("wx"), fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(
+        fs::read_to_string(at.plus("wx/a/b/file.txt")).unwrap(),
+        "hello"
+    );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_set_owner_nonexistent_uid_and_gid() {
+    use std::collections::HashSet;
+
+    // Collect the ids already present on the system so we can pick unused ones.
+    let mut used_uids: HashSet<u32> = HashSet::new();
+    let mut used_gids: HashSet<u32> = HashSet::new();
+    if let Ok(passwd) = fs::read_to_string("/etc/passwd") {
+        for line in passwd.lines() {
+            let fields: Vec<&str> = line.split(':').collect();
+            if fields.len() < 4 {
+                continue;
+            }
+            if let Ok(uid) = fields[2].parse::<u32>() {
+                used_uids.insert(uid);
+            }
+            if let Ok(gid) = fields[3].parse::<u32>() {
+                used_gids.insert(gid);
+            }
+        }
+    }
+
+    // Pick high ids that are not associated with any user/group.
+    let next_uid = (60_000..u32::MAX)
+        .find(|id| !used_uids.contains(id))
+        .expect("no unused uid found");
+    let next_gid = (60_000..u32::MAX)
+        .find(|id| !used_gids.contains(id))
+        .expect("no unused gid found");
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+
+    if let Ok(result) = run_ucmd_as_root(
+        &ts,
+        &[
+            format!("-o{next_uid}").as_str(),
+            format!("-g{next_gid}").as_str(),
+            "a",
+            "b",
+        ],
+    ) {
+        result.success();
+        assert!(at.file_exists("b"));
+
+        let metadata = fs::metadata(at.plus("b")).unwrap();
+        assert_eq!(metadata.uid(), next_uid);
+        assert_eq!(metadata.gid(), next_gid);
+    } else {
+        println!("Test skipped; requires root user");
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_proc_self_mem_as_dst() {
+    let scene = TestScenario::new(util_name!());
+    let src = "/dev/full";
+    let dest = "/proc/self/mem";
+
+    scene
+        .ucmd()
+        .args(&["-g", "0"])
+        .arg(src)
+        .arg(dest)
+        .fails()
+        .stderr_contains("cannot remove");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_dev_full_as_dst() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("/dev/null")
+        .arg("/dev/full")
+        .fails()
+        .stderr_contains("cannot remove '/dev/full'");
+}
+
+#[test]
+fn test_install_backup_nil_same_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file = "test_install_backup_numbering_file";
+
+    at.write(file, "content");
+
+    let methods = [
+        "none", "off", "numbered", "t", "existing", "nil", "simple", "never",
+    ];
+
+    for method in &methods {
+        scene
+            .ucmd()
+            .args(&[
+                format!("--backup={method}"),
+                file.to_string(),
+                file.to_string(),
+            ])
+            .fails()
+            .stderr_contains("are the same file");
+        assert_eq!(at.read(file), "content");
+    }
+}
+
+#[test]
+fn test_install_backup_refuses_when_source_is_the_backup() {
+    // Installing `a~` over `a` renames `a` to `a~`, which would clobber the
+    // source before it is read. GNU refuses; so must we.
+    for mode in ["simple", "existing"] {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.touch("a");
+        at.write("a~", "source content");
+
+        scene
+            .ucmd()
+            .arg(format!("--backup={mode}"))
+            .arg("a~")
+            .arg("a")
+            .fails()
+            .stderr_is("install: backing up 'a' might destroy source;  'a~' not copied\n");
+
+        // The source must be intact.
+        assert_eq!(at.read("a~"), "source content");
+    }
+}
+
+#[test]
+fn test_install_backup_numbered_allows_source_named_like_backup() {
+    // A numbered backup never reuses an existing name, so it cannot destroy
+    // the source and must not be refused.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.write("a~", "source content");
+
+    scene
+        .ucmd()
+        .arg("--backup=numbered")
+        .arg("a~")
+        .arg("a")
+        .succeeds();
+    assert_eq!(at.read("a~"), "source content");
+    assert_eq!(at.read("a"), "source content");
+}
+
+#[test]
+// Android denies hard links on the filesystem backing the test directory, so
+// the setup cannot be built there; see the mv analogue.
+#[cfg(not(target_os = "android"))]
+fn test_install_backup_allows_hardlink_under_another_name() {
+    // `other` shares an inode with `a~` but its name is not `a` + suffix, so
+    // the backup rename cannot clobber it. GNU allows this.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.write("a~", "source content");
+    at.hard_link("a~", "other");
+
+    scene
+        .ucmd()
+        .arg("--backup=simple")
+        .arg("other")
+        .arg("a")
+        .succeeds();
+    assert_eq!(at.read("a"), "source content");
+}
+
+#[test]
+fn test_install_backup_refuses_regardless_of_spelling() {
+    // The guard compares files, not the strings naming them.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.write("a~", "source content");
+
+    scene
+        .ucmd()
+        .arg("--backup=simple")
+        .arg("./a~")
+        .arg("a")
+        .fails()
+        .stderr_contains("might destroy source");
+    assert_eq!(at.read("a~"), "source content");
+}
+
+#[test]
+fn test_install_backup_custom_suffix_refuses() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.write("a.bak", "source content");
+
+    scene
+        .ucmd()
+        .args(&["-b", "--suffix=.bak", "a.bak", "a"])
+        .fails()
+        .stderr_contains("might destroy source");
+    assert_eq!(at.read("a.bak"), "source content");
+}
+
+// The mode is only parsed where a mode means something.
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+    #[test]
+    fn test_snippet_points_at_the_bad_operator() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("source");
+
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["-m", "u+rw?x", "source", "dest"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("invalid operator"), "{stderr}");
+        // The caret lands on `?`: three columns of `-m ` and four of mode.
+        assert_eq!(result.caret_column(), Some(8), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("source");
+
+        // The test harness pipes stderr, so the report must not appear.
+        let result = ucmd
+            .args(&["-m", "u+rw?x", "source", "dest"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.starts_with("install: "), "{stderr}");
+        assert!(!stderr.contains(":1:"), "{stderr}");
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_d_parallel_mkdir_race() {
+    // Regression test for issue #12355: concurrent `install -D` invocations
+    // that share parent directories must all succeed instead of one losing
+    // the stat/mkdir race and failing with `cannot create directory`.
+    const PARALLEL: usize = 32;
+    const ROUNDS: usize = 10;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("s");
+
+    for round in 0..ROUNDS {
+        let mut children = Vec::with_capacity(PARALLEL);
+        for k in 0..PARALLEL {
+            let mut cmd = scene.ucmd();
+            cmd.arg("-D").arg("s").arg(format!("o{round}/q/f{k}"));
+            children.push(cmd.run_no_wait());
+        }
+
+        for child in children {
+            child.wait().unwrap().success().no_stderr();
+        }
+
+        for k in 0..PARALLEL {
+            assert!(at.file_exists(format!("o{round}/q/f{k}")));
+        }
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_target_without_splice_support() {
+    // Does eCryptfs not support splice on some kernel?
+    use std::process::Command;
+    if Command::new("strace")
+        .args(["-e", "inject=splice:error=EINVAL:when=2", "true"])
+        .output()
+        .is_err()
+    {
+        return; // missing strace
+    }
+    let coreutils = uutests::util::get_tests_binary();
+    Command::new("strace")
+        .args([
+            "-e",
+            "inject=splice:error=EINVAL:when=2",
+            coreutils,
+            "install",
+            coreutils,
+            "target_file",
+        ])
+        .output()
+        .unwrap();
+    // properly copied with fallback from splice?
+    assert!(uucore::fs::are_files_identical(coreutils, "target_file").unwrap());
+}
+
+#[test]
+fn test_install_will_not_overwrite_just_created() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+    at.write("a/f", "a");
+    at.write("b/f", "b");
+
+    ucmd.args(&["a/f", "b/f", "c/"])
+        .fails()
+        .stderr_contains("will not overwrite just-created 'c/f' with 'b/f'");
+
+    assert_eq!(at.read("c/f"), "a");
 }

@@ -3,7 +3,6 @@ name = "uu_id"
 description = "id ~ (uutils) display user and group information for USER"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/id"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -12,22 +11,27 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/id.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["entries", "process"] }
-selinux = { workspace = true, optional = true }
 fluent = { workspace = true }
+rustix = { workspace = true, features = ["process"] }
+uucore = { workspace = true, features = ["entries", "process"] }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+selinux = { workspace = true, optional = true }
 
 [[bin]]
 name = "id"
 path = "src/main.rs"
 
 [features]
-feat_selinux = ["selinux"]
+selinux = ["dep:selinux"]
 smack = ["uucore/smack"]
+
+[lints]
+workspace = true

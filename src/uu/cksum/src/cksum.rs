@@ -5,92 +5,50 @@
 
 // spell-checker:ignore (ToDO) fname, algo, bitlen
 
-use std::ffi::OsStr;
-use std::io::{Write, stderr};
-
 use clap::Command;
 use uu_checksum_common::{ChecksumCommand, checksum_main, default_checksum_app, options};
 
-use uucore::checksum::compute::OutputFormat;
+use uucore::checksum::compute::{DigestFormat, OutputFormat};
 use uucore::checksum::{
-    AlgoKind, ChecksumError, calculate_blake2b_length_str, sanitize_sha2_sha3_length_str,
+    AlgoKind, BlakeLength, ChecksumError, HashLength, ReadingMode, parse_blake_length,
+    sanitize_sha2_sha3_length_str,
 };
 use uucore::error::UResult;
 use uucore::hardware::{HasHardwareFeatures as _, SimdPolicy};
-use uucore::translate;
+use uucore::{show_error, translate};
 
 /// Print CPU hardware capability detection information to stderr
 /// 2>/dev/full does not abort
 /// This matches GNU cksum's --debug behavior
 fn print_cpu_debug_info() {
-    let features = SimdPolicy::detect();
-
     fn print_feature(name: &str, available: bool) {
         if available {
-            let _ = writeln!(stderr(), "using {name} hardware support");
+            show_error!("using {name} hardware support");
         } else {
-            let _ = writeln!(stderr(), "{name} support not detected");
+            show_error!("{name} support not detected");
         }
     }
 
+    let features = SimdPolicy::detect();
+
     // x86/x86_64
-    print_feature("avx512", features.has_avx512());
-    print_feature("avx2", features.has_avx2());
-    print_feature("pclmul", features.has_pclmul());
+    if cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
+        print_feature("avx512", features.has_avx512());
+        print_feature("avx2", features.has_avx2());
+        print_feature("pclmul", features.has_pclmulqdq());
+    }
 
     // ARM aarch64
     if cfg!(target_arch = "aarch64") {
-        print_feature("vmull", features.has_vmull());
+        print_feature("vmull", features.has_pmull());
     }
-}
-
-/// cksum has a bunch of legacy behavior. We handle this in this function to
-/// make sure they are self contained and "easier" to understand.
-///
-/// Returns a pair of boolean. The first one indicates if we should use tagged
-/// output format, the second one indicates if we should use the binary flag in
-/// the untagged case.
-fn handle_tag_text_binary_flags<S: AsRef<OsStr>>(
-    args: impl Iterator<Item = S>,
-) -> UResult<(bool, bool)> {
-    let mut tag = true;
-    let mut binary = false;
-    let mut text = false;
-
-    // --binary, --tag and --untagged are tight together: none of them
-    // conflicts with each other but --tag will reset "binary" and "text" and
-    // set "tag".
-
-    for arg in args {
-        let arg = arg.as_ref();
-        if arg == "-b" || arg == "--binary" {
-            text = false;
-            binary = true;
-        } else if arg == "--text" {
-            text = true;
-            binary = false;
-        } else if arg == "--tag" {
-            tag = true;
-            binary = false;
-            text = false;
-        } else if arg == "--untagged" {
-            tag = false;
-        }
-    }
-
-    // Specifying --text without ever mentioning --untagged fails.
-    if text && tag {
-        return Err(ChecksumError::TextWithoutUntagged.into());
-    }
-
-    Ok((tag, binary))
 }
 
 /// Sanitize the `--length` argument depending on `--algorithm` and `--length`.
 fn maybe_sanitize_length(
     algo_cli: Option<AlgoKind>,
     input_length: Option<&str>,
-) -> UResult<Option<usize>> {
+) -> UResult<Option<HashLength>> {
     match (algo_cli, input_length) {
         // No provided length is not a problem so far.
         (_, None) => Ok(None),
@@ -106,12 +64,14 @@ fn maybe_sanitize_length(
         // will have its extra bits set to zero.
         (Some(AlgoKind::Shake128 | AlgoKind::Shake256), Some(len)) => match len.parse::<usize>() {
             Ok(0) => Ok(None),
-            Ok(l) => Ok(Some(l)),
+            Ok(l) => Ok(Some(HashLength::from_bits(l))),
             Err(_) => Err(ChecksumError::InvalidLength(len.into()).into()),
         },
 
-        // For BLAKE2b, if a length is provided, validate it.
-        (Some(AlgoKind::Blake2b), Some(len)) => calculate_blake2b_length_str(len),
+        // For BLAKE, if a length is provided, validate it.
+        (Some(algo @ (AlgoKind::Blake2b | AlgoKind::Blake3)), Some(len)) => {
+            parse_blake_length(algo, BlakeLength::String(len)).map(Some)
+        }
 
         // For any other provided algorithm, check if length is 0.
         // Otherwise, this is an error.
@@ -134,15 +94,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(String::as_str);
 
     let length = maybe_sanitize_length(algo_cli, input_length)?;
+    let tag = !matches.get_flag(options::UNTAGGED);
+    let binary = matches.get_flag(options::BINARY);
+    let text = matches.get_flag(options::TEXT);
 
-    let (tag, binary) = handle_tag_text_binary_flags(std::env::args_os())?;
+    //Specifying --text without ever mentioning --untagged fails.
+    if text && tag {
+        return Err(ChecksumError::TextWithoutUntagged.into());
+    }
+
+    let reading_mode = if binary {
+        ReadingMode::Binary
+    } else {
+        ReadingMode::Text
+    };
+    let digest_format = if matches.get_flag(options::BASE64) {
+        DigestFormat::Base64
+    } else {
+        DigestFormat::Hexadecimal
+    };
 
     let output_format = OutputFormat::from_cksum(
         algo_cli.unwrap_or(AlgoKind::Crc),
         tag,
-        binary,
+        reading_mode,
         /* raw */ matches.get_flag(options::RAW),
-        /* base64 */ matches.get_flag(options::BASE64),
+        digest_format,
     );
 
     // Print hardware debug info if requested
@@ -150,11 +127,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         print_cpu_debug_info();
     }
 
-    checksum_main(algo_cli, length, matches, output_format)
+    checksum_main(algo_cli, length, matches, output_format, true)
 }
 
 pub fn uu_app() -> Command {
     default_checksum_app(translate!("cksum-about"), translate!("cksum-usage"))
+        .name("cksum")
         .with_algo()
         .with_untagged()
         .with_tag(true)
@@ -162,7 +140,7 @@ pub fn uu_app() -> Command {
         .with_raw()
         .with_check_and_opts()
         .with_base64()
-        .with_text(false)
+        .with_text()
         .with_binary()
         .with_zero()
         .with_debug()

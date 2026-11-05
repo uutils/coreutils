@@ -2,10 +2,12 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
+
 // spell-checker:ignore binvalid finvalid hinvalid iinvalid linvalid nabcabc nabcabcabc ninvalid vinvalid winvalid dabc näää févr
+
 use uutests::{at_and_ucmd, new_ucmd, util::TestScenario, util_name};
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_non_utf8_paths() {
@@ -152,6 +154,33 @@ fn test_number_format_rz_with_negative_line_number() {
 }
 
 #[test]
+fn test_number_format_rz_with_minimum_line_number() {
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MIN))
+        .args(&["-n", "rz", "-w", "1", "-s", ":"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is(format!("{}:a\n{}:b\n", i64::MIN, i64::MIN + 1));
+
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MIN))
+        .args(&["-n", "rz", "-w", "25", "-s", ":"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is("-000009223372036854775808:a\n-000009223372036854775807:b\n");
+}
+
+#[test]
+fn test_number_format_rz_decrementing_to_minimum_line_number() {
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MIN + 1))
+        .args(&["--line-increment=-1", "-n", "rz", "-w", "1", "-s", ":"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is(format!("{}:a\n{}:b\n", i64::MIN + 1, i64::MIN));
+}
+
+#[test]
 fn test_invalid_number_format() {
     for arg in ["-ninvalid", "--number-format=invalid"] {
         new_ucmd!()
@@ -181,8 +210,30 @@ fn test_number_width_zero() {
         new_ucmd!()
             .arg(arg)
             .fails()
-            .stderr_contains("Invalid line number field width: ‘0’: Numerical result out of range");
+            .stderr_contains("is not in 1..=2147483647");
     }
+}
+
+#[test]
+fn test_number_width_too_large() {
+    // Values > i32::MAX must be rejected to match GNU nl behavior and avoid
+    // a capacity-overflow panic in " ".repeat(number_width + 1).
+    for arg in ["-w2147483648", "--number-width=2147483648"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("")
+            .fails()
+            .stderr_contains("is not in 1..=2147483647");
+    }
+}
+
+#[test]
+fn test_number_width_max_i32() {
+    // i32::MAX (2147483647) is the largest value GNU nl accepts; it must not panic.
+    new_ucmd!()
+        .args(&["-w", "2147483647"])
+        .pipe_in("")
+        .succeeds();
 }
 
 #[test]
@@ -206,8 +257,9 @@ fn test_number_separator() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn test_number_separator_non_utf8() {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
@@ -410,6 +462,35 @@ fn test_default_body_numbering_multiple_files_and_stdin() {
         .pipe_in("b")
         .succeeds()
         .stdout_is("     1\ta\n     2\tb\n     3\tc\n");
+}
+
+#[test]
+fn test_section_continues_into_next_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // A footer started in a.txt goes on in b.txt, and a header started in
+    // b.txt goes on in stdin.
+    at.write("a.txt", "a\n\\:\n");
+    at.write("b.txt", "b\n\\:\\:\\:\n");
+    at.write("c.txt", "\\:\\:\nd\n");
+
+    ucmd.args(&["-h", "a", "a.txt", "b.txt", "-", "c.txt"])
+        .pipe_in("c\n")
+        .succeeds()
+        .stdout_is("     1\ta\n\n       b\n\n     1\tc\n\n     1\td\n");
+}
+
+#[test]
+fn test_default_body_numbering_multiple_files_with_non_existing_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("a.txt", "a");
+    at.write("b.txt", "b");
+
+    ucmd.args(&["a.txt", "non_existing", "b.txt"])
+        .fails_with_code(1)
+        .stdout_is("     1\ta\n     2\tb\n")
+        .stderr_is("nl: non_existing: No such file or directory\n");
 }
 
 #[test]
@@ -627,8 +708,9 @@ fn test_section_delimiter() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn test_section_delimiter_non_utf8() {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
@@ -693,8 +775,9 @@ fn test_one_char_section_delimiter() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn test_one_byte_section_delimiter() {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
@@ -736,23 +819,23 @@ fn test_one_byte_section_delimiter() {
 }
 
 #[test]
-fn test_non_ascii_one_char_section_delimiter() {
+fn test_multi_byte_one_char_section_delimiter() {
     for arg in ["-dä", "--section-delimiter=ä"] {
         new_ucmd!()
             .arg(arg)
-            .pipe_in("a\näää\nb") // header section
+            .pipe_in("a\nä:ä:ä:\nb") // header section
             .succeeds()
             .stdout_is("     1\ta\n\n       b\n");
 
         new_ucmd!()
             .arg(arg)
-            .pipe_in("a\nää\nb") // body section
+            .pipe_in("a\nä:ä:\nb") // body section
             .succeeds()
             .stdout_is("     1\ta\n\n     1\tb\n");
 
         new_ucmd!()
             .arg(arg)
-            .pipe_in("a\nä\nb") // footer section
+            .pipe_in("a\nä:\nb") // footer section
             .succeeds()
             .stdout_is("     1\ta\n\n       b\n");
     }
@@ -784,6 +867,20 @@ fn test_directory_as_input() {
         .fails()
         .stderr_is(format!("nl: {dir}: Is a directory\n"))
         .stdout_contains(content);
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_numeric_looking_directory_names_are_kept_verbatim() {
+    // Names such as "007" or "1e3" must not be reformatted as numbers
+    // in error messages. Windows quotes these names, so skip it there.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("007");
+    at.mkdir("1e3");
+    at.mkdir("2.50");
+    ucmd.args(&["007", "1e3", "2.50"])
+        .fails_with_code(1)
+        .stderr_is("nl: 007: Is a directory\nnl: 1e3: Is a directory\nnl: 2.50: Is a directory\n");
 }
 
 #[test]
@@ -911,4 +1008,83 @@ fn test_repeated_section_delimiter_flag() {
         .pipe_in("|:|:|:\na\nb\nc")
         .succeeds()
         .stdout_is("\n       a\n       b\n       c\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_no_skip_after_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello");
+    ucmd.args(&["/proc/self/mem", "f"])
+        .fails()
+        .stdout_is("     1\thello\n");
+}
+
+#[test]
+fn test_join_blank_lines_above_u64_saturates() {
+    // Too many blank lines to ever join, so the value saturates instead of
+    // being rejected.
+    for value in [
+        "18446744073709551615",
+        "18446744073709551616",
+        "99999999999999999999",
+        "99999999999999999999999999999999999999999999999",
+    ] {
+        for arg in [format!("-l{value}"), format!("--join-blank-lines={value}")] {
+            new_ucmd!()
+                .arg(arg)
+                .arg("-ba")
+                .pipe_in("a\n\n\n\nb\n")
+                .succeeds()
+                .stdout_is("     1\ta\n       \n       \n       \n     2\tb\n");
+        }
+    }
+}
+
+#[test]
+fn test_join_blank_lines_still_rejects_invalid_numbers() {
+    for value in [
+        "-1",
+        "abc",
+        "1K",
+        "99999999999999999999x",
+        "-99999999999999999999",
+    ] {
+        new_ucmd!()
+            .arg(format!("--join-blank-lines={value}"))
+            .fails_with_code(1)
+            .stderr_contains(format!("invalid value '{value}'"));
+    }
+}
+
+#[test]
+fn test_other_numeric_options_still_reject_values_above_the_limit() {
+    for arg in ["-v", "-i", "-w"] {
+        new_ucmd!()
+            .args(&[arg, "18446744073709551616"])
+            .fails_with_code(1)
+            .stderr_contains("invalid value '18446744073709551616'");
+    }
+}
+
+#[test]
+fn test_negative_starting_line_as_a_separate_argument() {
+    for arg in ["-v", "--starting-line-number"] {
+        new_ucmd!()
+            .args(&[arg, "-1"])
+            .pipe_in("a\nb\n")
+            .succeeds()
+            .stdout_is("    -1\ta\n     0\tb\n");
+    }
+}
+
+#[test]
+fn test_negative_line_increment_as_a_separate_argument() {
+    for arg in ["-i", "--line-increment"] {
+        new_ucmd!()
+            .args(&[arg, "-1"])
+            .pipe_in("a\nb\nc\n")
+            .succeeds()
+            .stdout_is("     1\ta\n     0\tb\n    -1\tc\n");
+    }
 }

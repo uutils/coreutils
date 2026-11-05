@@ -2,15 +2,16 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore chdir
 
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use rand::Rng;
+use rand::RngExt;
 use std::env::temp_dir;
 use std::ffi::OsString;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{self, Write};
 use std::process::Command;
 use uu_cksum::uumain;
 use uufuzz::{
@@ -61,10 +62,10 @@ fn generate_cksum_args() -> Vec<String> {
         args.push("-c".to_string());
     }
 
-    if rng.random_bool(0.25) {
-        if let Ok(file_path) = generate_random_file() {
-            args.push(file_path);
-        }
+    if rng.random_bool(0.25)
+        && let Ok(file_path) = generate_random_file()
+    {
+        args.push(file_path);
     }
 
     if args.is_empty() || !args.iter().any(|arg| arg.starts_with("file_")) {
@@ -79,11 +80,7 @@ fn generate_cksum_args() -> Vec<String> {
     args
 }
 
-fn generate_checksum_file(
-    algo: &str,
-    file_path: &str,
-    digest_opts: &[&str],
-) -> Result<String, std::io::Error> {
+fn generate_checksum_file(algo: &str, file_path: &str, digest_opts: &[&str]) -> io::Result<String> {
     let checksum_file_path = temp_dir().join("checksum_file");
     let mut cmd = Command::new(CMD_PATH);
     cmd.arg("-a").arg(algo);

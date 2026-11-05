@@ -21,6 +21,7 @@ ptx-help-gap-size = gap size in columns between output fields
 ptx-help-ignore-file = read ignore word list from FILE
 ptx-help-only-file = read only word list from this FILE
 ptx-help-references = first field of each line is a reference
+ptx-help-typeset-mode = change the default width from 72 to 100
 ptx-help-width = output width in columns, reference excluded
 
 # Error messages
@@ -29,4 +30,4 @@ ptx-error-not-implemented = { $feature } not implemented yet
 ptx-error-write-failed = write failed
 ptx-error-extra-operand = extra operand { $operand }
 ptx-error-empty-regexp = A regular expression cannot match a length zero string
-ptx-error-invalid-regexp = Invalid regexp: { $error }
+ptx-error-invalid-regexp = Invalid regular expression (for regexp { $pattern })

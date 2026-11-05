@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore formatteriteminfo docopt fvox fvoxw vals acdx
 
 use uucore::display::Quotable;
@@ -37,25 +38,19 @@ impl ParsedFormatterItemInfo {
 fn od_argument_traditional_format(ch: char) -> Option<FormatterItemInfo> {
     match ch {
         'a' => Some(FORMAT_ITEM_A),
-        'B' => Some(FORMAT_ITEM_OCT16),
+        'B' | 'o' => Some(FORMAT_ITEM_OCT16),
         'b' => Some(FORMAT_ITEM_OCT8),
         'c' => Some(FORMAT_ITEM_C),
         'D' => Some(FORMAT_ITEM_DEC32U),
         'd' => Some(FORMAT_ITEM_DEC16U),
-        'e' => Some(FORMAT_ITEM_F64),
-        'F' => Some(FORMAT_ITEM_F64),
+        'e' | 'F' => Some(FORMAT_ITEM_F64),
         'f' => Some(FORMAT_ITEM_F32),
-        'H' => Some(FORMAT_ITEM_HEX32),
-        'h' => Some(FORMAT_ITEM_HEX16),
+        'H' | 'X' => Some(FORMAT_ITEM_HEX32),
+        'h' | 'x' => Some(FORMAT_ITEM_HEX16),
         'i' => Some(FORMAT_ITEM_DEC32S),
-        'I' => Some(FORMAT_ITEM_DEC64S),
-        'L' => Some(FORMAT_ITEM_DEC64S),
-        'l' => Some(FORMAT_ITEM_DEC64S),
+        'I' | 'L' | 'l' => Some(FORMAT_ITEM_DEC64S),
         'O' => Some(FORMAT_ITEM_OCT32),
-        'o' => Some(FORMAT_ITEM_OCT16),
         's' => Some(FORMAT_ITEM_DEC16S),
-        'X' => Some(FORMAT_ITEM_HEX32),
-        'x' => Some(FORMAT_ITEM_HEX16),
         _ => None,
     }
 }
@@ -86,8 +81,8 @@ fn od_format_type(type_char: FormatType, byte_size: u8) -> Option<FormatterItemI
         (FormatType::HexadecimalInt, 8) => Some(FORMAT_ITEM_HEX64),
 
         (FormatType::Float, 2) => Some(FORMAT_ITEM_F16),
-        (FormatType::Float, 0 | 4) => Some(FORMAT_ITEM_F32),
-        (FormatType::Float, 8) => Some(FORMAT_ITEM_F64),
+        (FormatType::Float, 4) => Some(FORMAT_ITEM_F32),
+        (FormatType::Float, 0 | 8) => Some(FORMAT_ITEM_F64),
         (FormatType::Float, 16) => Some(FORMAT_ITEM_LONG_DOUBLE),
 
         _ => None,
@@ -120,7 +115,7 @@ pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo
     for arg in arg_iter {
         if expect_type_string {
             let v = parse_type_string(arg)?;
-            formats.extend(v.into_iter());
+            formats.extend(v);
             expect_type_string = false;
         } else if arg.starts_with("--") {
             if arg.len() == 2 {
@@ -129,7 +124,7 @@ pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo
             if arg.starts_with("--format=") {
                 let params: String = arg.chars().skip_while(|c| *c != '=').skip(1).collect();
                 let v = parse_type_string(&params)?;
-                formats.extend(v.into_iter());
+                formats.extend(v);
             }
             if arg == "--format" {
                 expect_type_string = true;
@@ -153,17 +148,13 @@ pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo
             }
             if !format_spec.is_empty() {
                 let v = parse_type_string(&format_spec)?;
-                formats.extend(v.into_iter());
+                formats.extend(v);
                 expect_type_string = false;
             }
         }
     }
     if expect_type_string {
         return Err(translate!("od-error-missing-format-spec"));
-    }
-
-    if formats.is_empty() {
-        formats.push(ParsedFormatterItemInfo::new(FORMAT_ITEM_OCT16, false)); // 2 byte octal is the default
     }
 
     Ok(formats)
@@ -221,29 +212,16 @@ fn is_format_size_char(
             *byte_size = 1;
             true
         }
-        (FormatTypeCategory::Integer, Some('S')) => {
+        (FormatTypeCategory::Integer, Some('S')) | (FormatTypeCategory::Float, Some('H' | 'B')) => {
             *byte_size = 2;
             true
         }
-        (FormatTypeCategory::Integer, Some('I')) => {
+        (FormatTypeCategory::Integer, Some('I')) | (FormatTypeCategory::Float, Some('F')) => {
             *byte_size = 4;
             true
         }
-        (FormatTypeCategory::Integer, Some('L')) => {
+        (FormatTypeCategory::Integer, Some('L')) | (FormatTypeCategory::Float, Some('D')) => {
             *byte_size = 8;
-            true
-        }
-
-        (FormatTypeCategory::Float, Some('F')) => {
-            *byte_size = 4;
-            true
-        }
-        (FormatTypeCategory::Float, Some('D')) => {
-            *byte_size = 8;
-            true
-        }
-        (FormatTypeCategory::Float, Some('H' | 'B')) => {
-            *byte_size = 2;
             true
         }
         (FormatTypeCategory::Float, Some('L')) => {
@@ -271,13 +249,33 @@ fn is_format_size_decimal(
     }
 }
 
-fn is_format_dump_char(ch: Option<char>, show_ascii_dump: &mut bool) -> bool {
-    match ch {
-        Some('z') => {
-            *show_ascii_dump = true;
-            true
-        }
-        _ => false,
+/// GNU od reports a size it has no type for as "invalid type string ...;
+/// this system doesn't provide a N-byte integral/floating point type".
+fn invalid_size_error(params: &str, size: u64, type_cat: FormatTypeCategory) -> String {
+    let size = size.to_string();
+    if type_cat == FormatTypeCategory::Float {
+        translate!("od-error-invalid-size-float", "size" => size, "spec" => params.quote())
+    } else {
+        translate!("od-error-invalid-size-integral", "size" => size, "spec" => params.quote())
+    }
+}
+
+/// Parse the decimal SIZE of a type string. Like GNU od, a number above
+/// `INT_MAX` is just an invalid type string; a smaller one that names no
+/// type is an invalid size.
+fn parse_decimal_size(
+    decimal_size: &str,
+    params: &str,
+    type_cat: FormatTypeCategory,
+) -> Result<u8, String> {
+    let size: u64 = decimal_size
+        .parse()
+        .ok()
+        .filter(|&size| i32::try_from(size).is_ok())
+        .ok_or_else(|| translate!("od-error-invalid-type-string", "spec" => params.quote()))?;
+    match u8::try_from(size) {
+        Ok(size) if size > 0 => Ok(size),
+        _ => Err(invalid_size_error(params, size, type_cat)),
     }
 }
 
@@ -288,9 +286,9 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
     let mut ch = chars.next();
 
     while let Some(type_char) = ch {
-        let type_char = format_type(type_char).ok_or_else(|| {
-            translate!("od-error-unexpected-char", "char" => type_char, "spec" => params.quote())
-        })?;
+        let type_char = format_type(type_char).ok_or_else(
+            || translate!("od-error-invalid-char", "char" => type_char, "spec" => params.quote()),
+        )?;
 
         let type_cat = format_type_category(type_char);
 
@@ -323,13 +321,7 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
                             ch = chars.next();
                         }
                         if !decimal_size.is_empty() {
-                            byte_size = decimal_size.parse().map_err(|_| {
-                                translate!(
-                                    "od-error-invalid-number",
-                                    "number" => decimal_size.quote(),
-                                    "spec" => params.quote()
-                                )
-                            })?;
+                            byte_size = parse_decimal_size(&decimal_size, params, type_cat)?;
                         }
                     }
                 }
@@ -342,12 +334,11 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
                 ch = chars.next();
             }
             if !decimal_size.is_empty() {
-                byte_size = decimal_size.parse().map_err(|_| {
-                    translate!("od-error-invalid-number", "number" => decimal_size.quote(), "spec" => params.quote())
-                })?;
+                byte_size = parse_decimal_size(&decimal_size, params, type_cat)?;
             }
         }
-        if is_format_dump_char(ch, &mut show_ascii_dump) {
+        if ch == Some('z') {
+            show_ascii_dump = true;
             ch = chars.next();
         }
 
@@ -358,13 +349,8 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
                 _ => unreachable!(),
             }
         } else {
-            od_format_type(type_char, byte_size).ok_or_else(|| {
-                translate!(
-                    "od-error-invalid-size",
-                    "size" => byte_size,
-                    "spec" => params.quote()
-                )
-            })?
+            od_format_type(type_char, byte_size)
+                .ok_or_else(|| invalid_size_error(params, byte_size.into(), type_cat))?
         };
         formats.push(ParsedFormatterItemInfo::new(ft, show_ascii_dump));
     }
@@ -375,13 +361,16 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
 #[cfg(test)]
 pub fn parse_format_flags_str(args_str: &[&'static str]) -> Result<Vec<FormatterItemInfo>, String> {
     let args: Vec<String> = args_str.iter().map(|s| (*s).to_string()).collect();
-    parse_format_flags(&args).map(|v| {
+    let mut formats = parse_format_flags(&args)?;
+    if formats.is_empty() {
+        formats.push(ParsedFormatterItemInfo::new(FORMAT_ITEM_OCT16, false)); // 2 byte octal is the default
+    }
+    Ok(formats
+        .into_iter()
         // tests using this function assume add_ascii_dump is not set
-        v.into_iter()
-            .inspect(|f| assert!(!f.add_ascii_dump))
-            .map(|f| f.formatter_item_info)
-            .collect()
-    })
+        .inspect(|f| assert!(!f.add_ascii_dump))
+        .map(|f| f.formatter_item_info)
+        .collect())
 }
 
 #[test]
@@ -455,6 +444,10 @@ fn test_invalid_long_format() {
     parse_format_flags_str(&["od", "--format=xzz"]).unwrap_err();
     parse_format_flags_str(&["od", "--format=xCC"]).unwrap_err();
 
+    parse_format_flags_str(&["od", "--format=x0"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format=d00"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format=f0"]).unwrap_err();
+
     parse_format_flags_str(&["od", "--format=c1"]).unwrap_err();
     parse_format_flags_str(&["od", "--format=x256"]).unwrap_err();
     parse_format_flags_str(&["od", "--format=d5"]).unwrap_err();
@@ -521,7 +514,7 @@ fn test_long_format_x_default() {
 fn test_long_format_f_default() {
     assert_eq!(
         parse_format_flags_str(&["od", "--format=f"]).unwrap(),
-        vec![FORMAT_ITEM_F32]
+        vec![FORMAT_ITEM_F64]
     );
 }
 
@@ -587,7 +580,7 @@ fn test_mixed_formats() {
             ParsedFormatterItemInfo::new(FORMAT_ITEM_HEX8, false),   // tx1
             ParsedFormatterItemInfo::new(FORMAT_ITEM_DEC16U, false), // tu2
             ParsedFormatterItemInfo::new(FORMAT_ITEM_C, false),      // tc
-            ParsedFormatterItemInfo::new(FORMAT_ITEM_F32, false),    // tf
+            ParsedFormatterItemInfo::new(FORMAT_ITEM_F64, false),    // tf
             ParsedFormatterItemInfo::new(FORMAT_ITEM_HEX16, false),  // x
         ]
     );

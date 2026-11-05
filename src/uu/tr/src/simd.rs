@@ -28,16 +28,17 @@ where
 
 /// SIMD-optimized single character replacement
 #[inline]
-pub fn process_single_char_replace(
-    input: &[u8],
-    output: &mut Vec<u8>,
+pub fn process_single_char_replace<'a>(
+    input: &'a [u8],
+    output: &'a mut Vec<u8>,
     source_char: u8,
     target_char: u8,
-) {
+) -> &'a [u8] {
     let count = bytecount::count(input, source_char);
     if count == 0 {
-        output.extend_from_slice(input);
-    } else if count == input.len() {
+        return input;
+    }
+    if count == input.len() {
         output.resize(output.len() + input.len(), target_char);
     } else {
         output.extend(
@@ -46,17 +47,70 @@ pub fn process_single_char_replace(
                 .map(|&b| if b == source_char { target_char } else { b }),
         );
     }
+    output
 }
 
 /// SIMD-optimized delete operation for single character
-pub fn process_single_delete(input: &[u8], output: &mut Vec<u8>, delete_char: u8) {
+///
+/// `keep` must be false for `delete_char` only.
+pub fn process_single_delete<'a>(
+    input: &'a [u8],
+    output: &'a mut Vec<u8>,
+    delete_char: u8,
+    keep: &[bool; 256],
+) -> &'a [u8] {
     let count = bytecount::count(input, delete_char);
     if count == 0 {
-        output.extend_from_slice(input);
+        return input;
+    }
+    if count < input.len() / 128 {
+        // Below one match per 128 bytes, copying the runs between matches
+        // beats `process_delete`.
+        let mut start = 0;
+        for pos in memchr::memchr_iter(delete_char, input) {
+            output.extend_from_slice(&input[start..pos]);
+            start = pos + 1;
+        }
+        output.extend_from_slice(&input[start..]);
     } else if count < input.len() {
-        output.extend(input.iter().filter(|&&b| b != delete_char).copied());
+        process_delete(input, output, keep);
     }
     // If count == input.len(), all deleted, output nothing
+    output
+}
+
+/// Append to `output` the bytes of `input` whose `keep` entry is true.
+pub fn process_delete(input: &[u8], output: &mut Vec<u8>, keep: &[bool; 256]) {
+    // The index is always below `BLOCK` (a power of two), so the modulo is a
+    // mask that only serves to drop the bounds check.
+    const BLOCK: usize = 1024;
+    // Below one kept byte in `FEW`, a branch per byte is well predicted and
+    // stores less.
+    const FEW: usize = 64;
+    let mut block = [0; BLOCK];
+    // Guess for the first block from its start, then go by the previous one.
+    let start = &input[..input.len().min(256)];
+    let mut few_kept = start.iter().filter(|&&b| keep[b as usize]).count() * FEW < start.len();
+    for chunk in input.chunks(BLOCK) {
+        let mut kept = 0;
+        if few_kept {
+            // Only store the kept bytes.
+            for &b in chunk {
+                if keep[b as usize] {
+                    block[kept % BLOCK] = b;
+                    kept += 1;
+                }
+            }
+        } else {
+            // Store every byte and only advance past kept ones: no branch.
+            for &b in chunk {
+                block[kept % BLOCK] = b;
+                kept += usize::from(keep[b as usize]);
+            }
+        }
+        output.extend_from_slice(&block[..kept]);
+        few_kept = kept * FEW < chunk.len();
+    }
 }
 
 /// Unified I/O processing for all operations
@@ -79,10 +133,10 @@ where
         };
 
         output_buf.clear();
-        processor.process_chunk(&buf[..length], &mut output_buf);
+        let processed = processor.process_chunk(&buf[..length], &mut output_buf);
 
-        if !output_buf.is_empty() {
-            write_output(output, &output_buf)?;
+        if !processed.is_empty() {
+            write_output(output, processed)?;
         }
     }
 
@@ -90,14 +144,16 @@ where
 }
 
 /// Helper function to handle platform-specific write operations
-#[inline]
+// Kept out of line: inlined into `translate_input`, the raw `write` made the
+// translator state go to memory on every byte, doubling the time of `tr -s`.
+#[inline(never)]
 pub fn write_output<W: Write>(output: &mut W, buf: &[u8]) -> UResult<()> {
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     return output
         .write_all(buf)
         .map_err_context(|| translate!("tr-error-write-error"));
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     match output.write_all(buf) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {

@@ -11,11 +11,15 @@ use std::path::PathBuf;
 use uucore::format_usage;
 
 use uucore::display::println_verbatim;
+#[cfg(unix)]
+use uucore::error::USimpleError;
 use uucore::error::{FromIo, UResult};
+use uucore::show_error;
 
 use uucore::translate;
 const OPT_LOGICAL: &str = "logical";
 const OPT_PHYSICAL: &str = "physical";
+const ARG_OPERANDS: &str = "operands";
 
 fn physical_path() -> io::Result<PathBuf> {
     // std::env::current_dir() is a thin wrapper around libc::getcwd().
@@ -63,16 +67,15 @@ fn logical_path() -> io::Result<PathBuf> {
                 return false;
             }
 
-            // Then, make sure there are no . or .. components.
+            // Then, make sure there are no . or .. components
             // Path::components() isn't useful here, it normalizes those out.
+            // Use as_encoded_bytes since . and .. are valid unicode
 
-            // to_string_lossy() may allocate, but that's fine, we call this
-            // only once per run. It may also lose information, but not any
-            // information that we need for this check.
             if path
-                .to_string_lossy()
-                .split(std::path::is_separator)
-                .any(|piece| piece == "." || piece == "..")
+                .as_os_str()
+                .as_encoded_bytes()
+                .split(|&b| std::path::is_separator(b as char))
+                .any(|p| p == b"." || p == b"..")
             {
                 return false;
             }
@@ -107,9 +110,15 @@ fn logical_path() -> io::Result<PathBuf> {
     }
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+
+    // GNU pwd ignores any non-option operands but warns about them.
+    if matches.contains_id(ARG_OPERANDS) {
+        show_error!("{}", translate!("pwd-ignoring-non-option-arguments"));
+    }
+
     // if POSIXLY_CORRECT is set, we want to a logical resolution.
     // This produces a different output when doing mkdir -p a/b && ln -s a/b c && cd c && pwd
     // We should get c in this case instead of a/b at the end of the path
@@ -120,7 +129,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         physical_path()
     }
-    .map_err_context(|| translate!("pwd-error-failed-to-get-current-directory"))?;
+    .or_else(|error| match error.kind() {
+        #[cfg(unix)]
+        io::ErrorKind::NotFound => Err(USimpleError::new(
+            1,
+            translate!("pwd-error-cannot-find-directory-entry"),
+        )),
+        _ => Err(error).map_err_context(|| translate!("pwd-error-failed-to-get-current-directory")),
+    })?;
 
     // \\?\ is a prefix Windows gives to paths under certain circumstances,
     // including when canonicalizing them.
@@ -139,9 +155,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("pwd")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("pwd"))
         .about(translate!("pwd-about"))
         .override_usage(format_usage(&translate!("pwd-usage")))
         .infer_long_args(true)
@@ -159,5 +175,11 @@ pub fn uu_app() -> Command {
                 .overrides_with(OPT_LOGICAL)
                 .help(translate!("pwd-help-physical"))
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(ARG_OPERANDS)
+                .action(ArgAction::Append)
+                .num_args(1..)
+                .hide(true),
         )
 }

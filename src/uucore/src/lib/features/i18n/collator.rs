@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::{cmp::Ordering, sync::OnceLock};
+use std::cmp::Ordering;
+use std::sync::OnceLock;
 
 use icu_collator::{self, CollatorBorrowed};
 
@@ -61,17 +62,29 @@ pub fn should_use_locale_collation() -> bool {
 pub fn init_locale_collation() -> bool {
     use crate::i18n::{UEncoding, get_locale_encoding};
 
-    // Check if we need locale-aware collation
-    if get_locale_encoding() != UEncoding::Utf8 {
-        // C/POSIX locale - no collator needed
+    // Use ICU collation only for UTF-8 locales that are NOT C/POSIX
+    // (e.g. en_US.UTF-8, but not C.UTF-8 — C still uses byte comparison)
+    if get_locale_encoding() != UEncoding::Utf8 || !should_use_locale_collation() {
         return false;
     }
 
     // UTF-8 locale - initialize collator with Shifted mode to match GNU behavior
     let mut opts = CollatorOptions::default();
     opts.alternate_handling = Some(AlternateHandling::Shifted);
+    opts.strength = Some(Strength::Quaternary);
 
     try_init_collator(opts)
+}
+
+/// Compute the ICU collation sort key for the given input bytes and append it to `buf`.
+/// This allows pre-computing sort keys once per line, then comparing them with simple
+/// byte comparison during sorting (much faster than calling `compare_utf8` per comparison).
+pub fn compute_sort_key_utf8(input: &[u8], buf: &mut Vec<u8>) {
+    let c = COLLATOR
+        .get()
+        .expect("compute_sort_key_utf8 called before collator initialization");
+    c.write_sort_key_utf8_to(input, buf)
+        .expect("ICU write_sort_key_utf8_to failed");
 }
 
 /// Compare both strings with regard to the current locale.
@@ -80,9 +93,9 @@ pub fn locale_cmp(left: &[u8], right: &[u8]) -> Ordering {
     if get_collating_locale().0 == DEFAULT_LOCALE {
         left.cmp(right)
     } else {
+        // Fall back to byte comparison if collator is not available
         COLLATOR
             .get()
-            .expect("Collator was not initialized")
-            .compare_utf8(left, right)
+            .map_or_else(|| left.cmp(right), |c| c.compare_utf8(left, right))
     }
 }

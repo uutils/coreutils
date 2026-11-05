@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore extendedbigdecimal
 
 //! `printf`-style formatting
@@ -37,44 +38,95 @@ pub mod human;
 pub mod num_format;
 mod spec;
 
-pub use self::escape::{EscapedChar, OctalParsing};
+pub use self::escape::{EscapeSet, EscapedChar, OctalParsing};
 use crate::extendedbigdecimal::ExtendedBigDecimal;
 pub use argument::{FormatArgument, FormatArguments};
 
-use self::{escape::parse_escape_code, num_format::Formatter};
-use crate::{NonUtf8OsStrError, error::UError};
+use self::escape::parse_escape_code;
+use self::num_format::Formatter;
+use crate::error::{UError, strip_errno};
+use crate::{NonUtf8OsStrError, translate, translate_text};
 pub use spec::Spec;
-use std::{
-    error::Error,
-    fmt::Display,
-    io::{Write, stdout},
-    marker::PhantomData,
-    ops::ControlFlow,
-};
+use std::io::{Write, stdout};
+use std::marker::PhantomData;
+use std::ops::{ControlFlow, Range};
 
 use os_display::Quotable;
 
-#[derive(Debug)]
+// Everything quoted in these messages is text the user typed and has to come
+// back unchanged, hence translate_text! rather than translate!.
+#[derive(Debug, thiserror::Error)]
 pub enum FormatError {
-    SpecError(Vec<u8>),
+    /// The spec that failed to parse and its byte range in the format string.
+    #[error("{}", translate_text!("format-error-invalid-spec", "spec" => String::from_utf8_lossy(.0)))]
+    SpecError(Vec<u8>, Range<usize>),
+    #[error("{}", translate_text!("format-error-write", "error" => strip_errno(.0)))]
     IoError(std::io::Error),
+    #[error("{}", translate!("format-error-no-more-arguments"))]
     NoMoreArguments,
+    #[error("{}", translate!("format-error-invalid-argument"))]
     InvalidArgument(FormatArgument),
+    #[error("{}", translate_text!("format-error-too-many-specs", "format" => String::from_utf8_lossy(.0)))]
     TooManySpecs(Vec<u8>),
+    #[error("{}", translate_text!("format-error-no-spec", "format" => String::from_utf8_lossy(.0)))]
     NeedAtLeastOneSpec(Vec<u8>),
+    // TODO: this message needs some work
+    #[error("{}", translate!("format-error-wrong-spec-type"))]
     WrongSpecType,
+    #[error("{}", translate_text!("format-error-invalid-precision", "precision" => .0))]
     InvalidPrecision(String),
     /// The format specifier ends with a %, as in `%f%`.
+    #[error("{}", translate_text!("format-error-ends-with-percent", "format" => String::from_utf8_lossy(.0).quote()))]
     EndsWithPercent(Vec<u8>),
     /// The escape sequence `\x` appears without a literal hexadecimal value.
-    MissingHex,
+    /// Carries its byte range in the format string, when it came from one.
+    #[error("{}", translate!("format-error-missing-hex"))]
+    MissingHex(Option<Range<usize>>),
     /// The hexadecimal characters represent a code point that cannot represent a
     /// Unicode character (e.g., a surrogate code point)
-    InvalidCharacter(char, Vec<u8>),
+    /// Carries its byte range in the format string, when it came from one.
+    #[error("{}", translate_text!("format-error-invalid-universal-character", "escape" => .0, "digits" => String::from_utf8_lossy(.1)))]
+    InvalidCharacter(char, Vec<u8>, Option<Range<usize>>),
+    #[error("{0}")]
     InvalidEncoding(NonUtf8OsStrError),
 }
 
-impl Error for FormatError {}
+impl FormatError {
+    /// Attach the byte range of the token that raised a parse-time error.
+    ///
+    /// Escape errors are constructed where only the escape itself is in
+    /// sight; the format parser knows where that escape sat and fills the
+    /// span in here. Errors parsed out of other text — a `%b` argument, an
+    /// `echo` operand — keep `None`.
+    fn spanned(self, span: Range<usize>) -> Self {
+        match self {
+            Self::MissingHex(_) => Self::MissingHex(Some(span)),
+            Self::InvalidCharacter(c, digits, _) => Self::InvalidCharacter(c, digits, Some(span)),
+            other => other,
+        }
+    }
+}
+
+/// The error for a spec [`Spec::parse`] rejected, carrying the byte range it
+/// occupies in `fmt`.
+///
+/// The range runs from the `%` that [`Spec::parse`] had already consumed to the
+/// end of what it rejected. The caller passes where that `%` is rather than
+/// letting this work it out from `slice`, which would go wrong for a `slice`
+/// that is not a subslice of `fmt`.
+///
+/// # Arguments
+///
+/// * `fmt` - The whole format string.
+/// * `percent` - The offset in `fmt` of the `%` this spec starts with.
+/// * `slice` - The subslice of `fmt` the failed parse returned.
+fn spec_error(fmt: &[u8], percent: usize, slice: &[u8]) -> FormatError {
+    let start = slice.as_ptr() as usize - fmt.as_ptr() as usize;
+    debug_assert!(start <= fmt.len() && start + slice.len() <= fmt.len());
+    debug_assert!(percent < start);
+    FormatError::SpecError(slice.to_vec(), percent..start + slice.len())
+}
+
 impl UError for FormatError {}
 
 impl From<std::io::Error> for FormatError {
@@ -89,44 +141,6 @@ impl From<NonUtf8OsStrError> for FormatError {
     }
 }
 
-impl Display for FormatError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::SpecError(s) => write!(
-                f,
-                "%{}: invalid conversion specification",
-                String::from_utf8_lossy(s)
-            ),
-            Self::TooManySpecs(s) => write!(
-                f,
-                "format '{}' has too many % directives",
-                String::from_utf8_lossy(s)
-            ),
-            Self::NeedAtLeastOneSpec(s) => write!(
-                f,
-                "format '{}' has no % directive",
-                String::from_utf8_lossy(s)
-            ),
-            Self::EndsWithPercent(s) => {
-                write!(f, "format {} ends in %", String::from_utf8_lossy(s).quote())
-            }
-            Self::InvalidPrecision(precision) => write!(f, "invalid precision: '{precision}'"),
-            // TODO: Error message below needs some work
-            Self::WrongSpecType => write!(f, "wrong % directive type was given"),
-            Self::IoError(e) => write!(f, "write error: {e}"),
-            Self::NoMoreArguments => write!(f, "no more arguments"),
-            Self::InvalidArgument(_) => write!(f, "invalid argument"),
-            Self::MissingHex => write!(f, "missing hexadecimal number in escape"),
-            Self::InvalidCharacter(escape_char, digits) => write!(
-                f,
-                "invalid universal character name \\{escape_char}{}",
-                String::from_utf8_lossy(digits)
-            ),
-            Self::InvalidEncoding(no) => no.fmt(f),
-        }
-    }
-}
-
 /// Maximum width for formatting to prevent memory allocation panics.
 /// Rust's formatter will panic when trying to allocate memory for very large widths.
 /// This limit is somewhat arbitrary but should be well above any practical use case
@@ -134,13 +148,25 @@ impl Display for FormatError {
 const MAX_FORMAT_WIDTH: usize = 1_000_000;
 
 /// Check if a width is too large for formatting.
-/// Returns an error if the width exceeds MAX_FORMAT_WIDTH.
+/// Returns an error if the width exceeds [`MAX_FORMAT_WIDTH`].
 fn check_width(width: usize) -> std::io::Result<()> {
     if width > MAX_FORMAT_WIDTH {
         Err(std::io::Error::new(
             std::io::ErrorKind::OutOfMemory,
             "formatting width too large",
         ))
+    } else {
+        Ok(())
+    }
+}
+
+/// Reject a precision larger than printf/C allows (`i32::MAX`).
+///
+/// A precision near `usize::MAX` would otherwise overflow the precision/exponent
+/// arithmetic in the float formatters, so we cap it the way C `printf` does.
+pub(crate) fn check_precision(precision: usize) -> Result<(), FormatError> {
+    if precision > i32::MAX as usize {
+        Err(FormatError::InvalidPrecision(precision.to_string()))
     } else {
         Ok(())
     }
@@ -190,10 +216,9 @@ impl<C: FormatChar> FormatItem<C> {
         args: &mut FormatArguments,
     ) -> Result<ControlFlow<()>, FormatError> {
         match self {
-            Self::Spec(spec) => spec.write(writer, args)?,
-            Self::Char(c) => return c.write(writer).map_err(FormatError::IoError),
+            Self::Spec(spec) => spec.write(writer, args),
+            Self::Char(c) => c.write(writer).map_err(FormatError::IoError),
         }
-        Ok(ControlFlow::Continue(()))
     }
 }
 
@@ -209,16 +234,26 @@ pub fn parse_spec_and_escape(
             Some(Ok(FormatItem::Char(EscapedChar::Byte(b'%'))))
         }
         [b'%', rest @ ..] => {
+            let percent = fmt.len() - current.len();
             current = rest;
             let spec = match Spec::parse(&mut current) {
                 Ok(spec) => spec,
-                Err(slice) => return Some(Err(FormatError::SpecError(slice.to_vec()))),
+                Err(slice) => return Some(Err(spec_error(fmt, percent, slice))),
             };
             Some(Ok(FormatItem::Spec(spec)))
         }
         [b'\\', rest @ ..] => {
+            let start = fmt.len() - current.len();
             current = rest;
-            Some(parse_escape_code(&mut current, OctalParsing::default()).map(FormatItem::Char))
+            Some(
+                parse_escape_code(
+                    &mut current,
+                    OctalParsing::default(),
+                    EscapeSet::WithUnicodeAndQuote,
+                )
+                .map(FormatItem::Char)
+                .map_err(|e| e.spanned(start..fmt.len() - current.len())),
+            )
         }
         [c, rest @ ..] => {
             current = rest;
@@ -240,10 +275,11 @@ pub fn parse_spec_only(
             Some(Ok(FormatItem::Char(b'%')))
         }
         [b'%', rest @ ..] => {
+            let percent = fmt.len() - current.len();
             current = rest;
             let spec = match Spec::parse(&mut current) {
                 Ok(spec) => spec,
-                Err(slice) => return Some(Err(FormatError::SpecError(slice.to_vec()))),
+                Err(slice) => return Some(Err(spec_error(fmt, percent, slice))),
             };
             Some(Ok(FormatItem::Spec(spec)))
         }
@@ -258,6 +294,7 @@ pub fn parse_spec_only(
 pub fn parse_escape_only(
     fmt: &[u8],
     zero_octal_parsing: OctalParsing,
+    escape_set: EscapeSet,
 ) -> impl Iterator<Item = EscapedChar> + '_ {
     let mut current = fmt;
     std::iter::from_fn(move || match current {
@@ -265,7 +302,7 @@ pub fn parse_escape_only(
         [b'\\', rest @ ..] => {
             current = rest;
             Some(
-                parse_escape_code(&mut current, zero_octal_parsing)
+                parse_escape_code(&mut current, zero_octal_parsing, escape_set)
                     .unwrap_or(EscapedChar::Backslash(b'x')),
             )
         }
@@ -377,11 +414,8 @@ impl<F: Formatter<T>, T> Format<F, T> {
             }
         }
 
-        let Some(spec) = spec else {
-            return Err(FormatError::NeedAtLeastOneSpec(
-                format_string.as_ref().to_vec(),
-            ));
-        };
+        let spec =
+            spec.ok_or_else(|| FormatError::NeedAtLeastOneSpec(format_string.as_ref().to_vec()))?;
 
         let formatter = F::try_from_spec(spec)?;
 
@@ -411,5 +445,31 @@ impl<F: Formatter<T>, T> Format<F, T> {
         self.formatter.fmt(&mut w, f)?;
         w.write_all(&self.suffix)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FormatError, check_precision};
+
+    #[test]
+    fn check_precision_caps_at_i32_max() {
+        // Anything up to i32::MAX is accepted.
+        assert!(check_precision(0).is_ok());
+        assert!(check_precision(42).is_ok());
+        assert!(check_precision(i32::MAX as usize).is_ok());
+
+        // Anything above i32::MAX is rejected, reporting the offending value.
+        let precision = i32::MAX as usize + 1;
+        match check_precision(precision) {
+            Err(FormatError::InvalidPrecision(reported)) => {
+                assert_eq!(reported, precision.to_string());
+            }
+            other => panic!("expected InvalidPrecision, got {other:?}"),
+        }
+        assert!(matches!(
+            check_precision(usize::MAX),
+            Err(FormatError::InvalidPrecision(_))
+        ));
     }
 }

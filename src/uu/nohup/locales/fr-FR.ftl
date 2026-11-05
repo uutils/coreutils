@@ -12,6 +12,7 @@ nohup-error-cannot-replace = Impossible de remplacer { $name } : { $err }
 nohup-error-open-failed = échec de l'ouverture de { $path } : { $err }
 nohup-error-open-failed-both = échec de l'ouverture de { $first_path } : { $first_err }
   échec de l'ouverture de { $second_path } : { $second_err }
+nohup-error-failed-to-run-command = échec de l'exécution de la commande { $command } : { $error }
 
 # Messages de statut
 nohup-ignoring-input-appending-output = entrée ignorée et sortie ajoutée à { $path }

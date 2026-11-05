@@ -3,33 +3,51 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) datelike datetime filetime lpszfilepath mktime strtime timelike utime
-// spell-checker:ignore (FORMATS) MMDDhhmm YYYYMMDDHHMM YYMMDDHHMM YYYYMMDDHHMMS
+// spell-checker:ignore (ToDO) datelike datetime filetime mktime strtime timelike utime DATETIME UTIME futimens
+// spell-checker:ignore (FORMATS) MMDDhhmm YYYYMMDDHHMM YYMMDDHHMM YYYYMMDDHHMMS CREAT ENXIO RDONLY utimensat
 
 pub mod error;
+mod platform;
 
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
-use filetime::{FileTime, set_file_times, set_symlink_file_times};
+use filetime::FileTime;
+#[cfg(all(any(not(unix), target_os = "redox"), not(target_os = "wasi")))]
+use filetime::set_file_times;
+#[cfg(not(target_os = "wasi"))]
+use filetime::set_symlink_file_times;
 use jiff::civil::Time;
 use jiff::fmt::strtime;
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan, Zoned};
+#[cfg(unix)]
+use libc::O_NONBLOCK;
+#[cfg(unix)]
+use rustix::fs::Timestamps;
+#[cfg(unix)]
+use rustix::fs::futimens;
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
-use std::fs::{self, File};
+use std::fs;
+use std::fs::OpenOptions;
 use std::io::{Error, ErrorKind};
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use uucore::libc;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
 use uucore::{format_usage, show};
 
 use crate::error::TouchError;
+#[cfg(not(unix))]
+use crate::platform::pathbuf_from_stdout;
+#[cfg(target_os = "wasi")]
+use crate::platform::{set_file_times, set_symlink_file_times};
 
 /// Options contains all the possible behaviors and flags for touch.
 ///
@@ -115,9 +133,6 @@ mod format {
     pub(crate) const YYYYMMDDHHMMSS: &str = "%Y-%m-%d %H:%M:%S.%f";
     // "%Y-%m-%d %H:%M:%S" 12 chars
     pub(crate) const YYYYMMDDHHMMS: &str = "%Y-%m-%d %H:%M:%S";
-    // "%Y-%m-%d %H:%M" 12 chars
-    // Used for example in tests/touch/no-rights.sh
-    pub(crate) const YYYY_MM_DD_HH_MM: &str = "%Y-%m-%d %H:%M";
     // "%Y%m%d%H%M" 12 chars
     pub(crate) const YYYYMMDDHHMM: &str = "%Y%m%d%H%M";
     // "%Y-%m-%d %H:%M +offset"
@@ -127,6 +142,12 @@ mod format {
 
 fn timestamp_to_filetime(ts: Timestamp) -> FileTime {
     FileTime::from_system_time(SystemTime::from(ts))
+}
+
+/// A [`FileTime`] holding the `UTIME_NOW` sentinel, which only needs write permission.
+#[cfg(target_os = "linux")]
+fn utime_now() -> FileTime {
+    FileTime::from_unix_time(0, libc::UTIME_NOW as u32)
 }
 
 fn filetime_to_zoned(ft: &FileTime) -> Option<Zoned> {
@@ -193,7 +214,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .ok_or_else(|| {
             USimpleError::new(
                 1,
-                translate!("touch-error-missing-file-operand", "help_command" => uucore::execution_phrase().to_string(),),
+                translate!("touch-error-missing-file-operand", "help_command" => uucore::execution_phrase().to_string()),
             )
         })?
         .collect();
@@ -203,11 +224,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let reference = matches.get_one::<OsString>(options::sources::REFERENCE);
     let date = matches
         .get_one::<String>(options::sources::DATE)
-        .map(|date| date.to_owned());
+        .map(ToOwned::to_owned);
 
     let mut timestamp = matches
         .get_one::<String>(options::sources::TIMESTAMP)
-        .map(|t| t.to_owned());
+        .map(ToOwned::to_owned);
 
     if is_first_filename_timestamp(reference, date.as_deref(), timestamp.as_deref(), &filenames) {
         let first_file = filenames[0].to_str().unwrap();
@@ -253,9 +274,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("touch")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("touch"))
         .about(translate!("touch-about"))
         .override_usage(format_usage(&translate!("touch-usage")))
         .infer_long_args(true)
@@ -380,7 +401,7 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
             #[cfg(target_os = "linux")]
             {
                 if opts.date.is_none() {
-                    now = FileTime::from_unix_time(0, libc::UTIME_NOW as u32);
+                    now = utime_now();
                 } else {
                     now = timestamp_to_filetime(Timestamp::now());
                 }
@@ -395,16 +416,29 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
     };
 
     let (atime, mtime) = if let Some(date) = &opts.date {
-        (
-            parse_date(
-                filetime_to_zoned(&atime).ok_or_else(|| TouchError::InvalidFiletime(atime))?,
-                date,
-            )?,
-            parse_date(
-                filetime_to_zoned(&mtime).ok_or_else(|| TouchError::InvalidFiletime(mtime))?,
-                date,
-            )?,
-        )
+        let parsed_atime = parse_date(
+            filetime_to_zoned(&atime).ok_or(TouchError::InvalidFiletime(atime))?,
+            date,
+        )?;
+        let parsed_mtime = parse_date(
+            filetime_to_zoned(&mtime).ok_or(TouchError::InvalidFiletime(mtime))?,
+            date,
+        )?;
+
+        // `-d now` -> UTIME_NOW so write permission is enough (#15019).
+        #[cfg(target_os = "linux")]
+        {
+            if opts.source == Source::Now && parsed_atime == atime {
+                let now = utime_now();
+                (now, now)
+            } else {
+                (parsed_atime, parsed_mtime)
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            (parsed_atime, parsed_mtime)
+        }
     } else {
         (atime, mtime)
     };
@@ -424,6 +458,32 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
     }
 
     Ok(())
+}
+
+/// Create `path` if it does not exist, without ever truncating it.
+///
+/// Uses `O_CREAT` but deliberately not `O_TRUNC`: if an attacker plants a
+/// symlink at `path` in the window between the metadata check in
+/// [`touch_file`] and this open, the open follows it but must not zero the
+/// symlink's target. Matches GNU touch (issue #10019).
+fn create_without_truncate(path: &Path) -> std::io::Result<fs::File> {
+    OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path)
+}
+
+// GNU reports ordinary access failures as "cannot touch", while -c and -h
+// report failures to update timestamps as "setting times of".
+#[cfg(unix)]
+fn cannot_touch_on_access_error(opts: &Options, error: &Error) -> bool {
+    !opts.no_create && !opts.no_deref && error.raw_os_error() == Some(libc::EACCES)
+}
+
+#[cfg(not(unix))]
+fn cannot_touch_on_access_error(_opts: &Options, _error: &Error) -> bool {
+    false
 }
 
 /// Create or update the timestamp for a single file.
@@ -455,9 +515,12 @@ fn touch_file(
 
     if let Err(e) = metadata_result {
         if e.kind() != ErrorKind::NotFound {
-            return Err(e.map_err_context(
-                || translate!("touch-error-setting-times-of", "filename" => filename.quote()),
-            ));
+            let context = if cannot_touch_on_access_error(opts, &e) {
+                translate!("touch-error-cannot-touch", "filename" => filename.quote())
+            } else {
+                translate!("touch-error-setting-times-of", "filename" => filename.quote())
+            };
+            return Err(e.map_err_context(|| context));
         }
 
         if opts.no_create {
@@ -476,16 +539,13 @@ fn touch_file(
             return Ok(());
         }
 
-        if let Err(e) = File::create(path) {
+        if let Err(e) = create_without_truncate(path) {
             // we need to check if the path is the path to a directory (ends with a separator)
             // we can't use File::create to create a directory
             // we cannot use path.is_dir() because it calls fs::metadata which we already called
             // when stable, we can change to use e.kind() == std::io::ErrorKind::IsADirectory
-            let is_directory = if let Some(last_char) = path.to_string_lossy().chars().last() {
-                last_char == std::path::MAIN_SEPARATOR
-            } else {
-                false
-            };
+            let is_directory = path.as_os_str().as_encoded_bytes().last()
+                == Some(&(std::path::MAIN_SEPARATOR as u8));
             if is_directory {
                 let custom_err = Error::other(translate!("touch-error-no-such-file-or-directory"));
                 return Err(custom_err.map_err_context(
@@ -577,11 +637,128 @@ fn update_times(
     // The filename, access time (atime), and modification time (mtime) are provided as inputs.
 
     if opts.no_deref && !is_stdout {
-        set_symlink_file_times(path, atime, mtime)
-    } else {
-        set_file_times(path, atime, mtime)
+        return set_symlink_file_times(path, atime, mtime).map_err_context(
+            || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
+        );
     }
-    .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
+
+    #[cfg(unix)]
+    {
+        if is_stdout {
+            // `touch -` operates on whatever file is open as stdout (fd 1),
+            // even when it was opened read-only. Use futimens on the fd
+            // directly: it preserves the UTIME_NOW sentinel, while
+            // filetime::set_file_times would normalize it into a literal
+            // 1970 timestamp.
+            let timestamps = build_timestamps(atime, mtime);
+            return futimens(std::io::stdout(), &timestamps)
+                .map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
+                .map_err_context(
+                    || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
+                );
+        }
+
+        // Open write-only and use futimens to trigger IN_CLOSE_WRITE on Linux.
+        let write_error = match try_futimens_via_write_fd(path, atime, mtime) {
+            Ok(()) => return Ok(()),
+            Err(e) => e,
+        };
+        // The write-FD approach fails on special files such as FIFOs (the
+        // write-only open returns ENXIO when there is no reader). Set the times
+        // by path with utimensat, which never opens the file and so never
+        // blocks — unlike filetime::set_file_times, which opens O_RDONLY and
+        // would hang on a reader-less FIFO.
+        match set_times_by_path(path, atime, mtime) {
+            Ok(()) => Ok(()),
+            Err(e)
+                if e.kind() == ErrorKind::PermissionDenied
+                    && cannot_touch_on_access_error(opts, &write_error) =>
+            {
+                Err(write_error.map_err_context(
+                    || translate!("touch-error-cannot-touch", "filename" => path.quote()),
+                ))
+            }
+            Err(e) => Err(e.map_err_context(
+                || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
+            )),
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        set_file_times(path, atime, mtime).map_err_context(
+            || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
+        )
+    }
+}
+
+/// Build a rustix `Timestamps` from the access and modification `FileTime`s,
+/// preserving the `UTIME_NOW`/`UTIME_OMIT` sentinels in the nanoseconds field.
+#[cfg(unix)]
+fn build_timestamps(atime: FileTime, mtime: FileTime) -> Timestamps {
+    Timestamps {
+        last_access: rustix::fs::Timespec {
+            tv_sec: atime.unix_seconds(),
+            tv_nsec: atime.nanoseconds() as _,
+        },
+        last_modification: rustix::fs::Timespec {
+            tv_sec: mtime.unix_seconds(),
+            tv_nsec: mtime.nanoseconds() as _,
+        },
+    }
+}
+
+/// Set file times by path using `utimensat`, following symlinks.
+///
+/// This never opens the file, so it does not block on special files such as
+/// FIFOs.
+#[cfg(all(unix, not(target_os = "redox")))]
+fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> std::io::Result<()> {
+    let timestamps = build_timestamps(atime, mtime);
+    rustix::fs::utimensat(
+        rustix::fs::CWD,
+        path,
+        &timestamps,
+        rustix::fs::AtFlags::empty(),
+    )
+    .map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
+}
+
+/// Set file times by path on Redox, which lacks `rustix::fs::utimensat`.
+///
+/// Falls back to `filetime::set_file_times`; unlike on other unixes this may
+/// block on a reader-less FIFO, but Redox has no FIFO support so the FIFO
+/// edge case the `utimensat` path guards against does not arise here.
+#[cfg(target_os = "redox")]
+fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> std::io::Result<()> {
+    set_file_times(path, atime, mtime)
+}
+
+/// Set file times via file descriptor using `futimens`.
+///
+/// This opens the file write-only and uses the POSIX `futimens` call to set
+/// access and modification times on the open FD (not by path), which also
+/// triggers `IN_CLOSE_WRITE` on Linux when the FD is closed.
+#[cfg(unix)]
+fn try_futimens_via_write_fd(path: &Path, atime: FileTime, mtime: FileTime) -> std::io::Result<()> {
+    let file = OpenOptions::new()
+        .write(true)
+        // Avoid blocking on special files (e.g. FIFOs) before we can inspect metadata.
+        .custom_flags(O_NONBLOCK)
+        .open(path)?;
+
+    let timestamps = Timestamps {
+        last_access: rustix::fs::Timespec {
+            tv_sec: atime.unix_seconds(),
+            tv_nsec: atime.nanoseconds() as _,
+        },
+        last_modification: rustix::fs::Timespec {
+            tv_sec: mtime.unix_seconds(),
+            tv_nsec: mtime.nanoseconds() as _,
+        },
+    };
+
+    futimens(&file, &timestamps).map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
 }
 
 /// Get metadata of the provided path
@@ -601,6 +778,19 @@ fn stat(path: &Path, follow: bool) -> std::io::Result<(FileTime, FileTime)> {
         fs::symlink_metadata(path)?
     };
 
+    // `FileTime::from_last_{access,modification}_time` is unimplemented on
+    // `wasm32-wasi`, so go through `Metadata::{accessed, modified}` (which
+    // return `SystemTime`) and convert via `FileTime::from_system_time`.
+    #[cfg(target_os = "wasi")]
+    {
+        let atime = metadata.accessed()?;
+        let mtime = metadata.modified()?;
+        Ok((
+            FileTime::from_system_time(atime),
+            FileTime::from_system_time(mtime),
+        ))
+    }
+    #[cfg(not(target_os = "wasi"))]
     Ok((
         FileTime::from_last_access_time(&metadata),
         FileTime::from_last_modification_time(&metadata),
@@ -635,7 +825,6 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
     for fmt in [
         format::YYYYMMDDHHMMS,
         format::YYYYMMDDHHMMSS,
-        format::YYYY_MM_DD_HH_MM,
         format::YYYYMMDDHHMM_OFFSET,
     ] {
         if let Ok(parsed) = strtime::parse(fmt, s)
@@ -661,13 +850,15 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
     }
 
     // "@%s" is "The number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC). (TZ) (Calculated from mktime(tm).)"
-    if s.bytes().next() == Some(b'@') {
-        if let Ok(ts) = &s[1..].parse::<i64>() {
-            return Ok(FileTime::from_unix_time(*ts, 0));
-        }
+    if s.bytes().next() == Some(b'@')
+        && let Ok(ts) = &s[1..].parse::<i64>()
+    {
+        return Ok(FileTime::from_unix_time(*ts, 0));
     }
 
-    if let Ok(zoned) = parse_datetime::parse_datetime_at_date(ref_zoned, s) {
+    if let Ok(parsed) = parse_datetime::parse_datetime_at_date(ref_zoned, s)
+        && let Some(zoned) = parsed.into_zoned()
+    {
         return Ok(timestamp_to_filetime(zoned.timestamp()));
     }
 
@@ -681,10 +872,13 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
 /// - 68 and before is interpreted as 20xx
 /// - 69 and after is interpreted as 19xx
 fn prepend_century(s: &str) -> UResult<String> {
-    let first_two_digits = s[..2].parse::<u32>().map_err(|_| {
+    // Take the first two chars rather than byte-slicing `s[..2]`: a leading
+    // multibyte char would otherwise split a UTF-8 boundary and panic.
+    let first_two: String = s.chars().take(2).collect();
+    let first_two_digits = first_two.parse::<u32>().map_err(|_| {
         USimpleError::new(
             1,
-            translate!("touch-error-invalid-date-ts-format", "date" => s.quote()),
+            translate!("touch-error-invalid-date-format", "date" => s.quote()),
         )
     })?;
     Ok(format!(
@@ -727,7 +921,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
         .map_err(|_| {
             USimpleError::new(
                 1,
-                translate!("touch-error-invalid-date-ts-format", "date" => ts.quote()),
+                translate!("touch-error-invalid-date-format", "date" => s.quote()),
             )
         })?;
 
@@ -736,7 +930,12 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
     // only care about the timestamp anyway.
     // Tested in gnu/tests/touch/60-seconds
     if dt.second() == 59 && ts.ends_with(".60") {
-        dt += 1.second();
+        dt = dt.checked_add(1.second()).map_err(|_| {
+            USimpleError::new(
+                1,
+                translate!("touch-error-invalid-date-format", "date" => s.quote()),
+            )
+        })?;
     }
 
     // Due to daylight saving time switch, local time can jump from 1:59 AM to
@@ -748,83 +947,24 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
         .map_err(|_| {
             USimpleError::new(
                 1,
-                translate!("touch-error-invalid-date-ts-format", "date" => ts.quote()),
+                translate!("touch-error-invalid-date-format", "date" => s.quote()),
             )
         })?;
 
     Ok(timestamp_to_filetime(local.timestamp()))
 }
 
-// TODO: this may be a good candidate to put in fsext.rs
 /// Returns a [`PathBuf`] to stdout.
-///
-/// On Windows, uses `GetFinalPathNameByHandleW` to attempt to get the path
-/// from the stdout handle.
-#[cfg_attr(not(windows), expect(clippy::unnecessary_wraps))]
+#[cfg(unix)]
+#[expect(clippy::unnecessary_wraps)]
 fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
-    #[cfg(all(unix, not(target_os = "android")))]
+    #[cfg(not(target_os = "android"))]
     {
         Ok(PathBuf::from("/dev/stdout"))
     }
     #[cfg(target_os = "android")]
     {
         Ok(PathBuf::from("/proc/self/fd/1"))
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::prelude::AsRawHandle;
-        use windows_sys::Win32::Foundation::{
-            ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND, GetLastError,
-            HANDLE, MAX_PATH,
-        };
-        use windows_sys::Win32::Storage::FileSystem::{
-            FILE_NAME_OPENED, GetFinalPathNameByHandleW,
-        };
-
-        let handle = std::io::stdout().lock().as_raw_handle() as HANDLE;
-        let mut file_path_buffer: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
-
-        // https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlea#examples
-        // SAFETY: We transmute the handle to be able to cast *mut c_void into a
-        // HANDLE (i32) so rustc will let us call GetFinalPathNameByHandleW. The
-        // reference example code for GetFinalPathNameByHandleW implies that
-        // it is safe for us to leave lpszfilepath uninitialized, so long as
-        // the buffer size is correct. We know the buffer size (MAX_PATH) at
-        // compile time. MAX_PATH is a small number (260) so we can cast it
-        // to a u32.
-        let ret = unsafe {
-            GetFinalPathNameByHandleW(
-                handle,
-                file_path_buffer.as_mut_ptr(),
-                file_path_buffer.len() as u32,
-                FILE_NAME_OPENED,
-            )
-        };
-
-        let buffer_size = match ret {
-            ERROR_PATH_NOT_FOUND | ERROR_NOT_ENOUGH_MEMORY | ERROR_INVALID_PARAMETER => {
-                return Err(TouchError::WindowsStdoutPathError(
-                    translate!("touch-error-windows-stdout-path-failed", "code" => ret),
-                ));
-            }
-            0 => {
-                return Err(TouchError::WindowsStdoutPathError(translate!(
-                "touch-error-windows-stdout-path-failed",
-                    "code".to_string() =>
-                    format!(
-                        "{}",
-                        // SAFETY: GetLastError is thread-safe and has no documented memory unsafety.
-                        unsafe { GetLastError() }
-                    ),
-                )));
-            }
-            e => e as usize,
-        };
-
-        // Don't include the null terminator
-        Ok(String::from_utf16(&file_path_buffer[0..buffer_size])
-            .map_err(|e| TouchError::WindowsStdoutPathError(e.to_string()))?
-            .into())
     }
 }
 
@@ -837,11 +977,13 @@ mod tests {
         uu_app,
     };
 
+    #[cfg(unix)]
+    use tempfile::tempdir;
+
     #[cfg(windows)]
     use std::env;
     #[cfg(windows)]
     use uucore::locale;
-
     #[cfg(windows)]
     #[test]
     fn test_get_pathbuf_from_stdout_fails_if_stdout_is_not_a_file() {
@@ -857,6 +999,20 @@ mod tests {
                 .to_string()
                 .contains("GetFinalPathNameByHandleW failed with code 1")
         );
+    }
+
+    #[test]
+    fn test_parse_date_now_returns_the_reference_instant() {
+        // `-d now` must parse back to the reference instant, so `touch()` can spot it (#15019).
+        let now = super::timestamp_to_filetime(jiff::Timestamp::now());
+        let reference = super::filetime_to_zoned(&now).unwrap();
+
+        assert_eq!(super::parse_date(reference.clone(), "now").unwrap(), now);
+        assert_eq!(
+            super::parse_date(reference.clone(), "0 seconds").unwrap(),
+            now
+        );
+        assert_ne!(super::parse_date(reference, "2000-01-01").unwrap(), now);
     }
 
     #[test]
@@ -907,5 +1063,64 @@ mod tests {
             Err(e) => panic!("Expected TouchError::InvalidFiletime, got {e}"),
             Ok(_) => panic!("Expected to error with TouchError::InvalidFiletime but succeeded"),
         }
+    }
+
+    // -t 999912312359.60 bumps the leap second one past the very last representable
+    // instant in jiff's calendar (9999-12-31T23:59:59), which used to overflow the
+    // civil DateTime year field via an unchecked `+=` and abort the process (SIGABRT)
+    // instead of returning a normal parse error.
+    #[test]
+    fn test_parse_timestamp_leap_second_overflow_does_not_panic() {
+        assert!(super::parse_timestamp("999912312359.60").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_try_futimens_via_write_fd_sets_times() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("futimens-file");
+        std::fs::write(&path, b"data").unwrap();
+
+        let atime = FileTime::from_unix_time(1_600_000_000, 123_456_789);
+        let mtime = FileTime::from_unix_time(1_600_000_100, 987_654_321);
+
+        super::try_futimens_via_write_fd(&path, atime, mtime).unwrap();
+
+        let metadata = std::fs::metadata(&path).unwrap();
+        let actual_atime = FileTime::from_last_access_time(&metadata);
+        let actual_mtime = FileTime::from_last_modification_time(&metadata);
+
+        assert_eq!(actual_atime, atime);
+        assert_eq!(actual_mtime, mtime);
+    }
+
+    // The #10019 fix: the create-open must use O_CREAT without O_TRUNC. During
+    // the TOCTOU race the open lands on an *existing* file (the symlink's
+    // target), so opening an existing file must leave its contents intact. This
+    // deterministically distinguishes the fix from the old File::create, which
+    // used O_TRUNC and would zero the file here.
+    #[cfg(unix)]
+    #[test]
+    fn create_without_truncate_does_not_truncate_existing_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("victim");
+        std::fs::write(&path, b"do not truncate me").unwrap();
+
+        super::create_without_truncate(&path).unwrap();
+
+        assert_eq!(std::fs::read(&path).unwrap(), b"do not truncate me");
+    }
+
+    // The other half of the contract: when the path is missing it must be
+    // created (as an empty file), matching the old File::create behavior.
+    #[cfg(unix)]
+    #[test]
+    fn create_without_truncate_creates_missing_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("new");
+
+        super::create_without_truncate(&path).unwrap();
+
+        assert_eq!(std::fs::read(&path).unwrap(), b"");
     }
 }

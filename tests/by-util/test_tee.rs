@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore nopipe FSIZE NOFILE sigxfsz
+
 #![allow(clippy::borrow_as_ptr)]
 
 use uutests::{at_and_ucmd, new_ucmd};
@@ -14,7 +17,29 @@ use std::time::Duration;
 // inspired by:
 // https://github.com/coreutils/coreutils/tests/misc/tee.sh
 
-// spell-checker:ignore nopipe
+#[test]
+#[cfg(unix)]
+fn test_error_stdin_directory() {
+    new_ucmd!()
+        .set_stdin(std::fs::File::open(".").unwrap())
+        .fails_with_code(1)
+        .stderr_is("tee: read error: Is a directory\n");
+}
+
+#[test]
+#[cfg(all(unix, not(wasi_runner)))]
+fn test_closed_stdin() {
+    // Reading a closed stdin fails with EBADF. Run through a shell so the
+    // process really starts with fd 0 closed.
+    let (at, ts) = ::uutests::at_and_ts!();
+    ts.cmd("sh")
+        .args(&["-c", "exec <&-; \"$0\" tee file"])
+        .arg(&ts.bin_path)
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("tee: read error: Bad file descriptor\n");
+    assert_eq!(at.read("file"), "");
+}
 
 #[test]
 fn test_invalid_arg() {
@@ -115,6 +140,7 @@ fn test_tee_multiple_append_flags() {
     assert_eq!(at.read(file2), format!("existing2\n{content}"));
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_readonly() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -136,6 +162,7 @@ fn test_readonly() {
     assert_eq!(at.read(writable_file), content_tee);
 }
 
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
 fn test_tee_output_not_buffered() {
     // POSIX says: The tee utility shall not buffer output
@@ -182,50 +209,89 @@ fn test_tee_output_not_buffered() {
     handle.join().unwrap();
 }
 
+#[test]
+fn test_tee_continues_after_short_read() {
+    // Regression test: `tee` must keep reading until EOF even when the
+    // first `read(2)` returns fewer bytes than its internal buffer. This
+    // happens in any pipeline where the upstream writer pauses between
+    // writes (e.g. a slow producer, a `sleep` in a shell pipeline, or a
+    // service emitting log lines in bursts). Treating a short read as
+    // end-of-file caused tee to exit prematurely and downstream producers
+    // to die with SIGPIPE on their next write.
+    //
+    // Run in a separate thread so that the test fails via timeout rather
+    // than hanging if a regression reintroduces the bug in a form where
+    // tee blocks on read instead of exiting early.
+    let handle = std::thread::spawn(move || {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let file_out = "tee_short_read_out";
+
+        let mut child = ucmd
+            .arg(file_out)
+            .set_stdin(Stdio::piped())
+            .set_stdout(Stdio::piped())
+            .run_no_wait();
+
+        // First chunk — deliberately much smaller than tee's internal
+        // buffer so that `read(2)` returns a short count.
+        child.write_in(b"first\n");
+        assert_eq!(&child.stdout_exact_bytes(6), b"first\n");
+
+        // Give a buggy implementation time to exit before we try to
+        // write again.
+        child.delay(50);
+
+        // Second chunk. A correctly-implemented tee is still reading
+        // from stdin; a buggy one has already exited and this write
+        // will either fail with EPIPE or never reach the output file.
+        child.write_in(b"second\n");
+        assert_eq!(&child.stdout_exact_bytes(7), b"second\n");
+
+        // `wait` closes stdin for us before waiting on the child.
+        child.wait().unwrap().success();
+
+        assert_eq!(at.read(file_out), "first\nsecond\n");
+    });
+
+    for _ in 0..500 {
+        std::thread::sleep(Duration::from_millis(10));
+        if handle.is_finished() {
+            break;
+        }
+    }
+
+    assert!(
+        handle.is_finished(),
+        "tee did not complete within the timeout"
+    );
+    handle.join().unwrap();
+}
+
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[cfg(target_os = "linux")]
 mod linux_only {
     use uutests::util::{AtPath, CmdResult, UCommand};
 
     use std::fmt::Write;
-    use std::fs::File;
     use std::process::Stdio;
     use std::time::Duration;
     use uutests::at_and_ucmd;
     use uutests::new_ucmd;
 
-    fn make_broken_pipe() -> File {
-        use libc::c_int;
-        use std::os::unix::io::FromRawFd;
-
-        let mut fds: [c_int; 2] = [0, 0];
-        assert_eq!(
-            unsafe { libc::pipe(std::ptr::from_mut::<c_int>(&mut fds[0])) },
-            0,
-            "Failed to create pipe"
-        );
-
+    fn make_broken_pipe() -> std::io::PipeWriter {
+        let (read, write) = std::io::pipe().expect("Failed to create pipe");
         // Drop the read end of the pipe
-        let _ = unsafe { File::from_raw_fd(fds[0]) };
-
-        // Make the write end of the pipe into a Rust File
-        unsafe { File::from_raw_fd(fds[1]) }
+        drop(read);
+        // Return the write end of the pipe
+        write
     }
 
-    fn make_hanging_read() -> File {
-        use libc::c_int;
-        use std::os::unix::io::FromRawFd;
-
-        let mut fds: [c_int; 2] = [0, 0];
-        assert_eq!(
-            unsafe { libc::pipe(std::ptr::from_mut::<c_int>(&mut fds[0])) },
-            0,
-            "Failed to create pipe"
-        );
-
+    fn make_hanging_read() -> std::io::PipeReader {
+        let (read, write) = std::io::pipe().expect("Failed to create pipe");
         // PURPOSELY leak the write end of the pipe, so the read end hangs.
-
+        std::mem::forget(write);
         // Return the read end of the pipe
-        unsafe { File::from_raw_fd(fds[0]) }
+        read
     }
 
     fn run_tee(proc: &mut UCommand) -> (String, CmdResult) {
@@ -620,7 +686,7 @@ mod linux_only {
             .pipe_in(&content[..])
             .fails()
             .stdout_contains(&content)
-            .stderr_contains("No space left on device");
+            .stderr_is("tee: /dev/full: No space left on device\n");
 
         assert_eq!(at.read(file_out), content);
     }
@@ -647,6 +713,63 @@ mod linux_only {
         assert_eq!(at.read(file_out_a), content);
         assert_eq!(at.read(file_out_b), content);
         assert!(result.stderr_str().contains("No space left on device"));
+    }
+
+    /// Runs tee with 2 outputs that fail part-way, and checks that the bytes they did
+    /// not take do not end up in the other outputs.
+    fn check_failed_outputs_do_not_spill(open_file_limit: Option<u64>) {
+        use rlimit::Resource;
+
+        const CAP: u64 = 100 * 1024;
+        let (at, mut ucmd) = at_and_ucmd!();
+        let content: Vec<u8> = (0..3 * 1024 * 1024).map(|i| (i % 251) as u8).collect();
+        at.write_bytes("in", &content);
+
+        // stdout and /dev/null are not limited by the file size. "capped" is written
+        // through tee's 2nd pipe, which stdout and /dev/null keep using after it fails;
+        // "capped2", the last output, through its 1st.
+        ucmd.args(&["capped", "/dev/null", "capped2"])
+            .limit(Resource::FSIZE, CAP, CAP)
+            .ignore_sigxfsz();
+        if let Some(limit) = open_file_limit {
+            ucmd.limit(Resource::NOFILE, limit, limit);
+        }
+        let mut child = ucmd
+            .set_stdin(std::fs::File::open(at.plus("in")).unwrap())
+            .set_stdout(Stdio::piped())
+            .run_no_wait();
+        let stdout = child.stdout_exact_bytes(content.len());
+        // Not `stderr_is`: a coverage build fails to write its profile under the
+        // same file size limit, and says so on stderr.
+        child
+            .wait()
+            .unwrap()
+            .code_is(1)
+            .stderr_contains("tee: capped: File too large\ntee: capped2: File too large\n");
+
+        assert!(stdout == content, "stdout differs from the input");
+        assert_eq!(at.metadata("capped").len(), CAP);
+        assert_eq!(at.metadata("capped2").len(), CAP);
+    }
+
+    #[test]
+    fn test_tee_failed_output_does_not_spill_into_others() {
+        check_failed_outputs_do_not_spill(None);
+    }
+
+    // Just enough file descriptors for stdio, the 3 outputs and tee's 2 pipes: a
+    // failed output's pipe has to be freed before it is replaced.
+    #[test]
+    fn test_tee_failed_output_at_open_file_limit() {
+        check_failed_outputs_do_not_spill(Some(10));
+    }
+
+    #[test]
+    fn test_permission_denied_clean() {
+        new_ucmd!()
+            .arg("/dev/mem")
+            .fails_with_code(1)
+            .stderr_is("tee: /dev/mem: Permission denied\n");
     }
 }
 
@@ -676,56 +799,38 @@ fn test_output_error_flag_without_value_defaults_warn_nopipe() {
 #[cfg(all(unix, not(target_os = "freebsd")))]
 #[test]
 fn test_output_error_presence_only_broken_pipe_unix() {
-    use std::fs::File;
-    use std::os::unix::io::FromRawFd;
+    let (read, write) = std::io::pipe().expect("Failed to create pipe");
+    // Close the read end to simulate a broken pipe on stdout
+    drop(read);
+    let content = (0..10_000).map(|_| "x").collect::<String>();
+    let result = new_ucmd!()
+        .arg("--output-error") // presence-only flag
+        .set_stdout(write)
+        .pipe_in(content.as_bytes())
+        .run();
 
-    unsafe {
-        let mut fds: [libc::c_int; 2] = [0, 0];
-        assert_eq!(libc::pipe(fds.as_mut_ptr()), 0, "Failed to create pipe");
-        // Close the read end to simulate a broken pipe on stdout
-        let _read_end = File::from_raw_fd(fds[0]);
-        let write_end = File::from_raw_fd(fds[1]);
-
-        let content = (0..10_000).map(|_| "x").collect::<String>();
-        let result = new_ucmd!()
-            .arg("--output-error") // presence-only flag
-            .set_stdout(write_end)
-            .pipe_in(content.as_bytes())
-            .run();
-
-        // Assert that a status was produced (i.e., process exited) and no crash occurred.
-        assert!(result.try_exit_status().is_some(), "process did not exit");
-    }
+    // Assert that a status was produced (i.e., process exited) and no crash occurred.
+    assert!(result.try_exit_status().is_some(), "process did not exit");
 }
 
 // Skip on FreeBSD due to repeated CI hangs in FreeBSD VM (see PR #8684)
 #[cfg(all(unix, not(target_os = "freebsd")))]
 #[test]
 fn test_broken_pipe_early_termination_stdout_only() {
-    use std::fs::File;
-    use std::os::unix::io::FromRawFd;
-
-    // Create a broken stdout by creating a pipe and dropping the read end
-    unsafe {
-        let mut fds: [libc::c_int; 2] = [0, 0];
-        assert_eq!(libc::pipe(fds.as_mut_ptr()), 0, "Failed to create pipe");
-        // Close the read end immediately to simulate a broken pipe
-        let _read_end = File::from_raw_fd(fds[0]);
-        let write_end = File::from_raw_fd(fds[1]);
-
-        let content = (0..10_000).map(|_| "x").collect::<String>();
-        let mut proc = new_ucmd!();
-        let result = proc
-            .set_stdout(write_end)
-            .ignore_stdin_write_error()
-            .pipe_in(content.as_bytes())
-            .run();
-
-        // GNU tee exits nonzero on broken pipe unless configured otherwise; implementation
-        // details vary by mode, but we should not panic and should return an exit status.
-        // Assert that a status was produced (i.e., process exited) and no crash occurred.
-        assert!(result.try_exit_status().is_some(), "process did not exit");
-    }
+    let (read, write) = std::io::pipe().expect("Failed to create pipe");
+    // Create a broken stdout
+    drop(read);
+    let content = (0..10_000).map(|_| "x").collect::<String>();
+    let mut proc = new_ucmd!();
+    let result = proc
+        .set_stdout(write)
+        .ignore_stdin_write_error()
+        .pipe_in(content.as_bytes())
+        .run();
+    // GNU tee exits nonzero on broken pipe unless configured otherwise; implementation
+    // details vary by mode, but we should not panic and should return an exit status.
+    // Assert that a status was produced (i.e., process exited) and no crash occurred.
+    assert!(result.try_exit_status().is_some(), "process did not exit");
 }
 
 #[test]
