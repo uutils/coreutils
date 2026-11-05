@@ -533,14 +533,15 @@ fn make_linux_iflags(iflags: &IFlags) -> Option<core::ffi::c_int> {
 }
 
 impl Input<'_> {
+    // Specialize reads so normal copies do not maintain error-recovery state.
     #[inline(always)]
-    fn read_block(&mut self, buf: &mut [u8]) -> io::Result<ReadOutcome> {
+    fn read_block<const NOERROR: bool>(&mut self, buf: &mut [u8]) -> io::Result<ReadOutcome> {
         let mut base_idx = 0;
         let target_len = buf.len();
         loop {
             match self.src.read(&mut buf[base_idx..]) {
                 Ok(0) => {
-                    if base_idx > 0 {
+                    if NOERROR && base_idx > 0 {
                         self.previous_partial = (base_idx < self.settings.ibs).then_some(base_idx);
                         self.partial_count_adjusted = false;
                     }
@@ -550,19 +551,23 @@ impl Input<'_> {
                     base_idx += rlen;
 
                     if base_idx >= target_len {
-                        self.previous_partial =
-                            (target_len < self.settings.ibs).then_some(target_len);
-                        self.partial_count_adjusted = false;
+                        if NOERROR {
+                            self.previous_partial =
+                                (target_len < self.settings.ibs).then_some(target_len);
+                            self.partial_count_adjusted = false;
+                        }
                         return Ok(ReadOutcome::Data(target_len));
                     }
                 }
                 Ok(len) => {
-                    self.previous_partial = (len < self.settings.ibs).then_some(len);
-                    self.partial_count_adjusted = false;
+                    if NOERROR {
+                        self.previous_partial = (len < self.settings.ibs).then_some(len);
+                        self.partial_count_adjusted = false;
+                    }
                     return Ok(ReadOutcome::Data(len));
                 }
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => (),
-                Err(e) if self.settings.iconv.noerror => {
+                Err(e) if NOERROR => {
                     if self.settings.status != Some(StatusLevel::None) {
                         let file = self.settings.infile.as_ref().map_or_else(
                             || translate!("dd-standard-input"),
@@ -614,14 +619,17 @@ impl Input<'_> {
     /// The start of each ibs-sized read follows the previous one; a short
     /// read ends the fill, so the bytes received so far form one partial
     /// record for the copy loop (as in GNU dd).
-    fn fill_consecutive(&mut self, buf: &mut [u8]) -> io::Result<(ReadStat, bool)> {
+    fn fill_consecutive<const NOERROR: bool>(
+        &mut self,
+        buf: &mut [u8],
+    ) -> io::Result<(ReadStat, bool)> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut bytes_total = 0;
         let mut read_error = false;
 
         for chunk in buf.chunks_mut(self.settings.ibs) {
-            let (rlen, failed) = match self.read_block(chunk)? {
+            let (rlen, failed) = match self.read_block::<NOERROR>(chunk)? {
                 ReadOutcome::Data(len) => (len, false),
                 ReadOutcome::RecoveredError { bytes, .. } => (bytes, true),
             };
@@ -661,7 +669,7 @@ impl Input<'_> {
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read is aligned to multiples of ibs; remaining space is filled with the 'pad' byte.
     /// Returns the read statistics and the total filled length (reads + padding).
-    fn fill_blocks(
+    fn fill_blocks<const NOERROR: bool>(
         &mut self,
         buf: &mut [u8],
         limit: usize,
@@ -678,18 +686,19 @@ impl Input<'_> {
             let next_blk = base_idx + self.settings.ibs;
             let target_len = cmp::min(self.settings.ibs, limit - base_idx);
 
-            let (rlen, failed) = match self.read_block(&mut buf[base_idx..base_idx + target_len])? {
-                ReadOutcome::Data(len) => (len, false),
-                ReadOutcome::RecoveredError {
-                    after_partial: true,
-                    ..
-                } => {
-                    // The preceding short record was already padded.
-                    read_error = true;
-                    break;
-                }
-                ReadOutcome::RecoveredError { bytes, .. } => (bytes, true),
-            };
+            let (rlen, failed) =
+                match self.read_block::<NOERROR>(&mut buf[base_idx..base_idx + target_len])? {
+                    ReadOutcome::Data(len) => (len, false),
+                    ReadOutcome::RecoveredError {
+                        after_partial: true,
+                        ..
+                    } => {
+                        // The preceding short record was already padded.
+                        read_error = true;
+                        break;
+                    }
+                    ReadOutcome::RecoveredError { bytes, .. } => (bytes, true),
+                };
             read_error |= failed;
             match rlen {
                 0 if !failed => break,
@@ -1397,12 +1406,16 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         else {
             break;
         };
-        count_bytes = count_bytes.saturating_add(
-            rstat_update
-                .bytes_total
-                .saturating_add(recovered_bytes)
-                .saturating_add(std::mem::take(&mut i.count_adjustment)),
-        );
+        if matches!(i.settings.count, Some(Num::Bytes(_))) {
+            count_bytes = count_bytes.saturating_add(
+                rstat_update
+                    .bytes_total
+                    .saturating_add(recovered_bytes)
+                    .saturating_add(std::mem::take(&mut i.count_adjustment)),
+            );
+        } else {
+            i.count_adjustment = 0;
+        }
         if rstat_update.is_empty() {
             if read_error {
                 continue;
@@ -1636,9 +1649,17 @@ fn read_helper<'a>(
         let scratch = read_buf.as_mut_bytes();
         let (rstat, data_len, read_error, recovered_bytes) = if let Some(ch) = i.settings.iconv.sync
         {
-            i.fill_blocks(scratch, bsize, ch)?
+            if i.settings.iconv.noerror {
+                i.fill_blocks::<true>(scratch, bsize, ch)?
+            } else {
+                i.fill_blocks::<false>(scratch, bsize, ch)?
+            }
         } else {
-            let (s, read_error) = i.fill_consecutive(&mut scratch[..bsize])?;
+            let (s, read_error) = if i.settings.iconv.noerror {
+                i.fill_consecutive::<true>(&mut scratch[..bsize])?
+            } else {
+                i.fill_consecutive::<false>(&mut scratch[..bsize])?
+            };
             let n = s.bytes_total as usize;
             (s, n, read_error, 0)
         };
