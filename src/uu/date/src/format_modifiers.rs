@@ -33,11 +33,12 @@
 //! - Field will be padded to this width using the padding character
 //!
 //! ### Locale modifiers
-//! - `E`: alternative representation, valid before `c C x X y Y r z`
-//!   (`%E:z` formats the base timezone; `%O:z` stays literal `%O:`).
+//! - `E`: alternative representation, valid before `c C x X y Y r z s q`
+//!   (`%E:z` formats the base timezone; `%Es`/`%Eq` ignore the modifier).
 //! - `O`: alternative numerals, valid before `d e H I m M S u U V w W y`,
-//!   `B` (`%OB`), and the GNU extensions `j z N p b h C g G k Z`.
-//!   Unlisted pairs (e.g. `%EB`, `%Oq`) stay literal.
+//!   `B` (`%OB`), the GNU extensions `j z N p b h C g G k Z`, and
+//!   `s R T r l` (modifier ignored, base conversion used).
+//!   Unlisted pairs (e.g. `%EB`, `%OY`) stay literal.
 //!
 //! ### Examples
 //! - `%10Y`: Year padded to 10 digits with zeros (0000001999)
@@ -124,17 +125,22 @@ pub struct ParsedSpec<'a> {
 
 /// Returns true if `spec` (final letter) accepts the `E` locale modifier.
 ///
-/// Covers `%c %C %x %X %y %Y` plus the GNU-verified `%Er` and `%E:z`
-/// (colon timezones end in `z`); anything else (e.g. `%EB`) stays literal.
+/// Covers `%c %C %x %X %y %Y` plus `%Er`, `%E:z` (colon timezones end in
+/// `z`), and `%Es`/`%Eq`, which ignore the modifier and use the base
+/// conversion (`%s`, `%q`). Anything else (e.g. `%EB`) stays literal.
 fn accepts_e_modifier(spec: char) -> bool {
-    matches!(spec, 'c' | 'C' | 'x' | 'X' | 'y' | 'Y' | 'r' | 'z')
+    matches!(
+        spec,
+        'c' | 'C' | 'x' | 'X' | 'y' | 'Y' | 'r' | 'z' | 's' | 'q'
+    )
 }
 
 /// Returns true if `spec` (final letter) accepts the `O` locale modifier.
 ///
-/// Covers the POSIX numeric set plus the GNU extensions verified against
-/// GNU date 9.7 (`%Oj`, `%Oz`, `%ON`, `%Op`, `%Ob`, `%Oh`, `%OC`, `%Og`,
-/// `%OG`, `%Ok`, `%OZ`); anything else (e.g. `%Oq`) stays literal.
+/// Covers the POSIX numeric set plus `%Oj`, `%Oz`, `%ON`, `%Op`, `%Ob`,
+/// `%Oh`, `%OC`, `%Og`, `%OG`, `%Ok`, `%OZ`, and the pairs `%Os`, `%OR`,
+/// `%OT`, `%Or`, `%Ol`, which ignore the modifier and use the base
+/// conversion. Anything else (e.g. `%OY`) stays literal.
 fn accepts_o_modifier(spec: char) -> bool {
     matches!(
         spec,
@@ -162,6 +168,11 @@ fn accepts_o_modifier(spec: char) -> bool {
             | 'G'
             | 'k'
             | 'Z'
+            | 's'
+            | 'R'
+            | 'T'
+            | 'r'
+            | 'l'
     )
 }
 
@@ -1288,38 +1299,38 @@ mod tests {
             usize,
         );
         let cases: &[(&str, Option<ParsedTuple>)] = &[
-            // ---- plain single-letter specifiers ----
+            // Plain single-letter specifiers.
             ("%Y", Some(("", None, None, "Y", 2))),
             ("%a", Some(("", None, None, "a", 2))),
             ("%B", Some(("", None, None, "B", 2))),
-            // ---- single flag, no width ----
+            // Single flag, no width.
             ("%-d", Some(("-", None, None, "d", 3))),
             ("%_m", Some(("_", None, None, "m", 3))),
             ("%0e", Some(("0", None, None, "e", 3))),
             ("%^B", Some(("^", None, None, "B", 3))),
             ("%#Z", Some(("#", None, None, "Z", 3))),
             ("%+Y", Some(("+", None, None, "Y", 3))),
-            // ---- combined flags ----
+            // Combined flags.
             ("%_+Y", Some(("_+", None, None, "Y", 4))),
             ("%-^B", Some(("-^", None, None, "B", 4))),
-            // ---- width only ----
+            // Width only.
             ("%10Y", Some(("", Some(10), None, "Y", 4))),
             ("%4C", Some(("", Some(4), None, "C", 3))),
             // `0` is a flag, then `5` is the width.
             ("%05d", Some(("0", Some(5), None, "d", 4))),
-            // ---- flags + width ----
+            // Flags and width.
             ("%_10m", Some(("_", Some(10), None, "m", 5))),
             ("%+6Y", Some(("+", Some(6), None, "Y", 4))),
             ("%-5d", Some(("-", Some(5), None, "d", 4))),
             ("%+4C", Some(("+", Some(4), None, "C", 4))),
-            // ---- locale modifiers ----
+            // Locale modifiers.
             ("%_10EY", Some(("_", Some(10), Some('E'), "Y", 6))),
             ("%010Od", Some(("0", Some(10), Some('O'), "d", 6))),
             ("%EY", Some(("", None, Some('E'), "Y", 3))),
             ("%Oy", Some(("", None, Some('O'), "y", 3))),
             ("%OB", Some(("", None, Some('O'), "B", 3))),
             ("%Ey", Some(("", None, Some('E'), "y", 3))),
-            // ---- GNU O extensions (verified against GNU date 9.7) ----
+            // O extensions accepted beyond POSIX.
             ("%Oj", Some(("", None, Some('O'), "j", 3))),
             ("%Oz", Some(("", None, Some('O'), "z", 3))),
             ("%ON", Some(("", None, Some('O'), "N", 3))),
@@ -1336,16 +1347,16 @@ mod tests {
             ("%E::z", Some(("", None, Some('E'), "::z", 5))),
             ("%O::z", Some(("", None, Some('O'), "::z", 5))),
             ("%O:::z", Some(("", None, Some('O'), ":::z", 6))),
-            // ---- colon-prefixed specifiers (numeric timezones) ----
+            // Colon-prefixed specifiers (numeric timezones).
             ("%:z", Some(("", None, None, ":z", 3))),
             ("%::z", Some(("", None, None, "::z", 4))),
             ("%:::z", Some(("", None, None, ":::z", 5))),
             ("%::::z", None),
             ("%-3:z", Some(("-", Some(3), None, ":z", 5))),
-            // ---- only the spec is consumed; trailing text is ignored ----
+            // Only the spec is consumed; trailing text is ignored.
             ("%Y-%m-%d", Some(("", None, None, "Y", 2))),
             ("%10Yhello", Some(("", Some(10), None, "Y", 4))),
-            // ---- invalid: should return None ----
+            // Invalid input returns None.
             ("Y", None),
             ("", None),
             ("%", None),
@@ -1356,14 +1367,14 @@ mod tests {
             ("%::", None),
             ("%%", None), // %% is not a spec — caller handles it.
             ("%é", None), // non-ASCII letter
-            // ---- invalid locale modifier pairs stay literal ----
+            // Invalid locale modifier pairs stay literal.
             ("%EB", None),
             ("%Ej", None),
             ("%EO", None),
             ("%OE", None),
             ("%Ox", None),
             ("%Oq", None),
-            // ---- colon specs need `z` under a modifier ----
+            // Colon specs need `z` under a modifier.
             ("%O:p", None),
             ("%E:p", None),
         ];
@@ -1379,7 +1390,7 @@ mod tests {
     fn test_has_gnu_modifiers() {
         // (input, expected)
         let cases: &[(&str, bool)] = &[
-            // ---- modifier present (flag and/or width) ----
+            // Modifier present (flag and/or width).
             ("%10Y", true),
             ("%^B", true),
             ("%-d", true),
@@ -1404,16 +1415,16 @@ mod tests {
             ("%a %b %e %T %Z %Y", false),
             ("", false),
             ("no percent here", false),
-            // ---- %% literals must never count as modifiers ----
+            // `%%` literals must never count as modifiers.
             ("%%", false),
             ("100%% done", false),
             ("%%Y", false),
             ("%%10", false),
             ("%%EY", false),
-            // ---- colon specs without flags/width are not modifiers ----
+            // Colon specs without flags/width are not modifiers.
             ("%:z", false),
             ("%::z", false),
-            // ---- invalid E/O pairs are literals, not modifiers ----
+            // Invalid E/O pairs are literals, not modifiers.
             ("%EB", false),
             ("%Ej", false),
             ("%Oq", false),

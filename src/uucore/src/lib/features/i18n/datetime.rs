@@ -274,27 +274,43 @@ fn get_locale_months_inner() -> Option<[Vec<u8>; 12]> {
 ///
 /// Returns `None` when no replacement is available.
 /// The caller handles fallback and invalid conversions.
+///
+/// `real_year` is the actual (Gregorian) year when formatting an
+/// out-of-range date whose `date` value is a surrogate used to fit it
+/// into jiff's calendar. It is `None` for ordinary in-range dates.
 // TODO(#10958): Implement POSIX era formatting and alternative digits;
 // verify standalone month formatting for %OB.
-pub fn resolve_eo_conversion(modifier: char, spec: char, date: JiffDate) -> Option<String> {
+pub fn resolve_eo_conversion(
+    modifier: char,
+    spec: char,
+    date: JiffDate,
+    real_year: Option<i64>,
+) -> Option<String> {
     match (modifier, spec) {
         ('E', 'Y' | 'y' | 'C') => {
             // Uses the converted calendar year, not the locale's era year or name.
             let (locale, _) = get_time_locale();
             let iso_date = Date::<Iso>::convert_from(date);
             let alt_year = match get_locale_calendar_type(locale) {
-                CalendarType::Gregorian => iso_date.year().extended_year(),
-                CalendarType::Buddhist => iso_date.to_calendar(Buddhist).year().extended_year(),
-                CalendarType::Persian => iso_date.to_calendar(Persian).year().extended_year(),
+                CalendarType::Gregorian => {
+                    real_year.unwrap_or(iso_date.year().extended_year().into())
+                }
+                CalendarType::Buddhist => {
+                    iso_date.to_calendar(Buddhist).year().extended_year().into()
+                }
+                CalendarType::Persian => {
+                    iso_date.to_calendar(Persian).year().extended_year().into()
+                }
                 CalendarType::Ethiopian => iso_date
                     .to_calendar(Ethiopian::new())
                     .year()
-                    .extended_year(),
+                    .extended_year()
+                    .into(),
             };
             Some(match spec {
                 'Y' => alt_year.to_string(),
                 'y' => format!("{:02}", alt_year % 100),
-                _ => format!("{:02}", alt_year / 100),
+                _ => format!("{}", alt_year / 100),
             })
         }
         ('E', 'c' | 'x' | 'X') => {

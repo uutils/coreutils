@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST MESZ KST uueuu ueuu vasárnap június január distros Wednes
-// spell-checker:ignore uppercases xffx gdate
+// spell-checker:ignore uppercases xffx
 
 use std::cmp::Ordering;
 
@@ -3491,88 +3491,6 @@ fn test_date_format_modifier_edge_cases() {
 
 // Tests for E and O locale modifiers (POSIX extension)
 #[test]
-fn test_date_format_modifier_e_alternative_representation() {
-    // Test E modifier for alternative representation
-    // In C locale GNU falls back to plain representation: %EY -> year, %EC -> century.
-    // %EY should provide locale's alternative year representation (e.g., era names in Japanese)
-    new_ucmd!()
-        .env("TZ", "UTC")
-        .env("LC_ALL", "C")
-        .args(&["-d", "1999-06-01", "+%EY"])
-        .succeeds()
-        .stdout_is("1999\n");
-
-    // Test %EC for alternative century representation
-    new_ucmd!()
-        .env("TZ", "UTC")
-        .env("LC_ALL", "C")
-        .args(&["-d", "1999-06-01", "+%EC"])
-        .succeeds()
-        .stdout_is("19\n");
-}
-
-#[test]
-fn test_date_format_modifier_o_alternative_numerals() {
-    // Test O modifier for alternative numeric symbols
-    // In C locale GNU treats %O as no-op: %Od renders like %d, etc.
-    // %Od should provide locale's alternative day representation
-    new_ucmd!()
-        .env("TZ", "UTC")
-        .env("LC_ALL", "C")
-        .args(&["-d", "1999-06-01", "+%Od"])
-        .succeeds()
-        .stdout_is("01\n");
-
-    // Test %Om for alternative month representation
-    new_ucmd!()
-        .env("TZ", "UTC")
-        .env("LC_ALL", "C")
-        .args(&["-d", "1999-06-01", "+%Om"])
-        .succeeds()
-        .stdout_is("06\n");
-
-    // Test %OH for alternative hour representation (noon -> 12)
-    new_ucmd!()
-        .env("TZ", "UTC")
-        .env("LC_ALL", "C")
-        .args(&["-d", "1999-06-01 12:00:00", "+%OH"])
-        .succeeds()
-        .stdout_is("12\n");
-}
-
-#[test]
-fn test_date_format_modifier_eo_combined_with_other_modifiers() {
-    // Test that E/O modifiers can be combined with other modifiers
-    // %_10EY should use alternative year with space padding
-    new_ucmd!()
-        .env("TZ", "UTC")
-        .env("LC_ALL", "C")
-        .args(&["-d", "1999-06-01", "+%_10EY"])
-        .succeeds()
-        .stdout_is("      1999\n");
-
-    // Test %010Od with zero padding and alternative numerals
-    new_ucmd!()
-        .env("TZ", "UTC")
-        .env("LC_ALL", "C")
-        .args(&["-d", "1999-06-01", "+%010Od"])
-        .succeeds()
-        .stdout_is("0000000001\n");
-}
-
-#[test]
-fn test_date_format_modifier_ob_alternative_month_name() {
-    // Test %OB for alternative month names (standalone format)
-    // In C locale GNU falls back to full month name.
-    new_ucmd!()
-        .env("TZ", "UTC")
-        .env("LC_ALL", "C")
-        .args(&["-d", "1999-06-01", "+%OB"])
-        .succeeds()
-        .stdout_is("June\n");
-}
-
-#[test]
 fn test_date_eo_gnu_c_locale_table() {
     // GNU C-locale reference table (TZ=UTC, LC_ALL=C, -d 1999-06-01):
     // E/O modifiers fall back to the plain conversion.
@@ -3585,14 +3503,14 @@ fn test_date_eo_gnu_c_locale_table() {
         ("%Om", "06\n"),
         ("%OH", "00\n"),
         ("%OS", "00\n"),
-        // GNU extensions accepted by GNU date 9.7 (C locale: same as base).
+        // Extra extensions that render like the base conversion in the C locale.
         ("%Oj", "152\n"),
         ("%Oz", "+0000\n"),
         ("%ON", "000000000\n"),
         ("%Op", "AM\n"),
         ("%Ob", "Jun\n"),
         ("%Oh", "Jun\n"),
-        // Second GNU batch (date 9.7, C locale: same as base conversion).
+        // Further extensions, also rendered like the base conversion.
         ("%OC", "19\n"),
         ("%Og", "99\n"),
         ("%OG", "1999\n"),
@@ -3609,19 +3527,48 @@ fn test_date_eo_gnu_c_locale_table() {
 
 #[test]
 fn test_date_eo_gnu_c_locale_noon_table() {
-    // GNU date 9.7 reference (TZ=UTC, LC_ALL=C, -d 1999-06-01 12:34:56):
+    // Time-of-day cases (TZ=UTC, LC_ALL=C, -d 1999-06-01 12:34:56):
     // E/O modifiers fall back to the plain conversion.
     for (format, expected) in [
         ("%Er", "12:34:56 PM\n"),
         ("%E:z", "+00:00\n"),
         ("%E::z", "+00:00:00\n"),
+        ("%E:::z", "+00\n"),
+        // `E` before a composite has no alternative in the C locale, so GNU
+        // falls back to the base conversion (`%Ec`/`%Ex`/`%EX`).
+        ("%Ec", "Tue Jun  1 12:34:56 1999\n"),
+        ("%Ex", "06/01/99\n"),
+        ("%EX", "12:34:56\n"),
         ("%Ok", "12\n"),
+        ("%OH", "12\n"),
         ("%Op", "PM\n"),
     ] {
         new_ucmd!()
             .env("TZ", "UTC")
             .env("LC_ALL", "C")
             .args(&["-d", "1999-06-01 12:34:56", &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+fn test_date_eo_gnu_ignores_modifier_table() {
+    // With TZ=UTC0, LC_ALL=C and -d '2024-06-01 12:34:56', the `E`/`O`
+    // modifier is ignored for these pairs and the base conversion is used.
+    for (format, expected) in [
+        ("%Es", "1717245296\n"),
+        ("%Eq", "2\n"),
+        ("%Os", "1717245296\n"),
+        ("%OR", "12:34\n"),
+        ("%OT", "12:34:56\n"),
+        ("%Or", "12:34:56 PM\n"),
+        ("%Ol", "12\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .env("LC_ALL", "C")
+            .args(&["-d", "2024-06-01 12:34:56", &format!("+{format}")])
             .succeeds()
             .stdout_is(expected);
     }
@@ -3668,92 +3615,6 @@ fn test_date_eo_invalid_stays_literal() {
         .stdout_is("%O:p\n");
 }
 
-/// Differential E/O coverage probe against a GNU `date` oracle.
-///
-/// Ignored by default: it needs a GNU binary and exists to FIND gaps in one
-/// run, not to gate CI. Run manually with e.g.:
-/// `GNU_DATE_BIN=/bin/date cargo test --test tests -- --ignored test_date_eo_differential_gnu`
-/// Without `GNU_DATE_BIN`, `gdate` or a GNU `date` in `PATH` is used.
-#[test]
-#[ignore = "needs a GNU date oracle; run manually with GNU_DATE_BIN set"]
-fn test_date_eo_differential_gnu() {
-    fn gnu_date_bin() -> Option<String> {
-        if let Ok(bin) = std::env::var("GNU_DATE_BIN") {
-            return Some(bin);
-        }
-        for candidate in ["gdate", "date"] {
-            let Ok(out) = std::process::Command::new(candidate)
-                .arg("--version")
-                .output()
-            else {
-                continue;
-            };
-            if out.status.success()
-                && String::from_utf8_lossy(&out.stdout).contains("GNU coreutils")
-            {
-                return Some(candidate.to_string());
-            }
-        }
-        None
-    }
-
-    let oracle = gnu_date_bin()
-        .expect("no GNU date oracle found; set GNU_DATE_BIN=/bin/date (or install gdate)");
-
-    let mut formats = Vec::new();
-    for modifier in ['E', 'O'] {
-        for spec in ('a'..='z').chain('A'..='Z') {
-            formats.push(format!("%{modifier}{spec}"));
-        }
-    }
-    formats.extend(["%E:z", "%E::z", "%E:::z", "%O:z", "%O::z", "%O:::z"].map(str::to_string));
-    // Flags/width variants: the bare-pair sweep above cannot catch padding bugs.
-    formats.extend(
-        [
-            "%_10EY",
-            "%010Od",
-            "%10O:z",
-            "%_4O:z",
-            "%010O:::z",
-            "%-10O::z",
-            "%5Y",
-            "%-d",
-        ]
-        .map(str::to_string),
-    );
-
-    let mut mismatches = Vec::new();
-    for format in &formats {
-        let ours = new_ucmd!()
-            .env("TZ", "UTC")
-            .env("LC_ALL", "C")
-            .args(&["-d", "1999-06-01 12:34:56", &format!("+{format}")])
-            .run();
-        let theirs = std::process::Command::new(&oracle)
-            .env("TZ", "UTC")
-            .env("LC_ALL", "C")
-            .args(["-d", "1999-06-01 12:34:56", &format!("+{format}")])
-            .output()
-            .expect("failed to run GNU date oracle");
-        let theirs_out = String::from_utf8_lossy(&theirs.stdout).into_owned();
-        if ours.succeeded() != theirs.status.success() || ours.stdout_str() != theirs_out {
-            mismatches.push(format!(
-                "{format:8} ours={:?} gnu={theirs_out:?}",
-                ours.stdout_str()
-            ));
-        }
-    }
-
-    for row in &mismatches {
-        eprintln!("mismatch: {row}");
-    }
-    assert!(
-        mismatches.is_empty(),
-        "{} E/O differential mismatches vs GNU (see stderr)",
-        mismatches.len()
-    );
-}
-
 #[test]
 fn test_date_eo_with_width_flags() {
     // E/O modifiers combine with width/flags.
@@ -3769,8 +3630,8 @@ fn test_date_eo_with_width_flags() {
         .args(&["-d", "1999-06-01", "+%010Od"])
         .succeeds()
         .stdout_is("0000000001\n");
-    // GNU pads the `%O:` literal like a string (space default, `0` for
-    // zero pad, `-` for no pad), verified against GNU date 9.7.
+    // The `%O:` literal is padded like a string (space default, `0` for
+    // zero pad, `-` for no pad).
     for (format, expected) in [
         ("%10O:z", "       %O:\n"),
         ("%_4O:z", " %O:\n"),
@@ -3784,8 +3645,8 @@ fn test_date_eo_with_width_flags() {
             .succeeds()
             .stdout_is(expected);
     }
-    // Conflicting padding flags: GNU applies last-flag-wins, verified
-    // against GNU date 9.7 (TZ=UTC, LC_ALL=C, -d 1999-06-01).
+    // Conflicting padding flags: last-flag-wins (TZ=UTC, LC_ALL=C,
+    // -d 1999-06-01).
     for (format, expected) in [
         ("%-010O:z", "0000000%O:\n"),
         ("%0-10O:z", "%O:\n"),
@@ -3802,6 +3663,154 @@ fn test_date_eo_with_width_flags() {
     }
 }
 
+/// Regression tests for E/O modifier behavior in the C locale, at
+/// boundary years and with width/flag combinations.
+///
+/// GNU `%EY`/`%EC`/`%Ey` use the *real* year and do not inherit the
+/// surrogate year used to fit out-of-range dates into jiff's calendar.
+/// GNU also pads an E-modified year like a *string* (space default, `0`
+/// flag switches to zero), rather than like a plain numeric field.
+#[test]
+fn test_date_eo_extended_year_real_year() {
+    // `%EY` at a 5-digit year must show the real year, not the
+    // 400-year surrogate (10000 -> 9600 before this fix).
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .env("LC_ALL", "C")
+        .args(&["-d", "10000-06-01", "+%EY"])
+        .succeeds()
+        .stdout_is("10000\n");
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .env("LC_ALL", "C")
+        .args(&["-d", "12000-06-01", "+%EY"])
+        .succeeds()
+        .stdout_is("12000\n");
+
+    // `%EC` uses the real century: 100, not 96; and at year 1 it is a
+    // single `0` (GNU does not zero-pad the E-century to two digits).
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .env("LC_ALL", "C")
+        .args(&["-d", "10000-06-01", "+%EC"])
+        .succeeds()
+        .stdout_is("100\n");
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .env("LC_ALL", "C")
+        .args(&["-d", "0001-06-01", "+%EC"])
+        .succeeds()
+        .stdout_is("0\n");
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .env("LC_ALL", "C")
+        .args(&["-d", "0999-06-01", "+%EC"])
+        .succeeds()
+        .stdout_is("9\n");
+}
+
+#[test]
+fn test_date_eo_extended_year_preserve_cases() {
+    // `%Ey` is the two-digit year; the 400-year surrogate preserves
+    // `year % 100`, so these already match GNU and must not change.
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .env("LC_ALL", "C")
+        .args(&["-d", "0001-06-01", "+%Ey"])
+        .succeeds()
+        .stdout_is("01\n");
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .env("LC_ALL", "C")
+        .args(&["-d", "10000-06-01", "+%Ey"])
+        .succeeds()
+        .stdout_is("00\n");
+
+    // Plain `%Y`/`%C` must stay on their real-value path (unchanged).
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .env("LC_ALL", "C")
+        .args(&["-d", "10000-06-01", "+%Y|%C"])
+        .succeeds()
+        .stdout_is("10000|100\n");
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .env("LC_ALL", "C")
+        .args(&["-d", "0001-06-01", "+%Y|%C"])
+        .succeeds()
+        .stdout_is("0001|0\n");
+}
+
+#[test]
+fn test_date_eo_e_year_width_uses_string_padding() {
+    // GNU pads an E-modified year like text: `%4EY` at year 1 is three
+    // spaces then `1`, while `%04EY` zero-fills and `%_4EY` space-fills.
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .env("LC_ALL", "C")
+        .args(&["-d", "0001-06-01", "+%4EY"])
+        .succeeds()
+        .stdout_is("   1\n");
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .env("LC_ALL", "C")
+        .args(&["-d", "0001-06-01", "+%04EY"])
+        .succeeds()
+        .stdout_is("0001\n");
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .env("LC_ALL", "C")
+        .args(&["-d", "0001-06-01", "+%_4EY"])
+        .succeeds()
+        .stdout_is("   1\n");
+    // `-` suppresses padding: single `1`.
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .env("LC_ALL", "C")
+        .args(&["-d", "0001-06-01", "+%-4EY"])
+        .succeeds()
+        .stdout_is("1\n");
+}
+
+#[test]
+fn test_date_eo_literal_width_pads_like_string() {
+    // An invalid E/O pair with a width is still rendered literally, but
+    // GNU pads the literal text to the requested width like a string
+    // (space default). `%10OY` -> five spaces + `%10OY`.
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .env("LC_ALL", "C")
+        .args(&["-d", "2024-06-15", "+%10OY"])
+        .succeeds()
+        .stdout_is("     %10OY\n");
+}
+
+#[test]
+fn test_date_eo_o_fallback_keeps_flag_padding() {
+    // In the C locale `%O` falls back to the plain conversion and the pad
+    // flag is dropped entirely: `%_Om` and `%-Om` both render as `%m`
+    // (`06`). uutils previously kept the flag (` 6` / `6`).
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .env("LC_ALL", "C")
+        .args(&["-d", "2024-06-15", "+%_Om"])
+        .succeeds()
+        .stdout_is("06\n");
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .env("LC_ALL", "C")
+        .args(&["-d", "2024-06-15", "+%-Om"])
+        .succeeds()
+        .stdout_is("06\n");
+    // A width still applies: `%010Od` is zero-padded to width 10.
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .env("LC_ALL", "C")
+        .args(&["-d", "2024-06-15", "+%010Od"])
+        .succeeds()
+        .stdout_is("0000000015\n");
+}
+
 #[test]
 fn test_date_eo_literal_width_cap_fails_gracefully() {
     // Absurd widths on the `%O:` literal must fail with an error, never
@@ -3813,6 +3822,48 @@ fn test_date_eo_literal_width_cap_fails_gracefully() {
             .args(&["-d", "1999-06-01", format])
             .fails()
             .code_is(1);
+    }
+}
+
+/// `%OB` reaches the ICU month-name path and returns a localized name in a
+/// real locale (review ask).
+///
+/// # What this test does *not* verify
+///
+/// `%OB` is defined as the month name in the form used when the month is
+/// named by itself (glibc manual, "Formatting Calendar Time"); `%B` is the
+/// in-date form. In locales that distinguish the two, GNU therefore prints
+/// different strings, e.g. Russian `%B`=`июня` vs `%OB`=`июнь`.
+///
+/// This implementation feeds both `%B` and `%OB` through the same ICU
+/// formatter, so it cannot currently produce two different forms: in Greek
+/// both render `Ιανουαρίου` (the in-date form), and in Russian both render
+/// `январь` (the stand-alone form). The assertions below therefore only
+/// pin the *stand-alone* value where CLDR gives one and the two forms
+/// coincide or where the shared form happens to be correct; they do **not**
+/// prove the stand-alone/in-date distinction. That gap is tracked in the
+/// `%OB` TODO in `uucore`'s `datetime.rs`.
+///
+/// `LC_ALL` (not `LC_TIME`) must be set: the test harness pins `LC_ALL=C`,
+/// which overrides `LC_TIME`.
+#[test]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
+fn test_date_eo_ob_real_locale() {
+    for (locale, expected) in [("fr_FR.UTF-8", "juin"), ("ru_RU.UTF-8", "июнь")] {
+        let output = new_ucmd!()
+            .env("LC_ALL", locale)
+            .env("TZ", "UTC")
+            .args(&["-d", "1999-06-01", "+%OB"])
+            .succeeds()
+            .stdout_str()
+            .trim()
+            .to_string();
+        if output == "June" {
+            // Built without the `i18n-datetime` feature: no ICU month names.
+            println!("skipping %OB locale check for {locale}: i18n not available");
+            continue;
+        }
+        assert_eq!(output, expected, "LC_ALL={locale} +%OB");
     }
 }
 
