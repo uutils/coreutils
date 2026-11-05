@@ -9,7 +9,6 @@ use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
-use std::num::IntErrorKind;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::encoding::{
@@ -31,6 +30,9 @@ pub const BASE_CMD_PARSE_ERROR: i32 = 1;
 pub const WRAP_DEFAULT: usize = 76;
 
 pub const DEFAULT_BUF_SIZE: usize = 32 * 1024;
+
+/// Largest "-w" value that is honored; anything larger turns wrapping off like GNU
+const MAX_WRAP: usize = isize::MAX as usize;
 
 pub struct Config {
     pub decode: bool,
@@ -72,9 +74,9 @@ impl Config {
             .get_one::<String>(options::WRAP)
             .map(|num| match num.parse::<usize>() {
                 // A size too large to represent turns wrapping off.
-                Ok(cols) if cols > isize::MAX as usize => Ok(0),
-                Ok(cols) => Ok(cols),
-                Err(e) if *e.kind() == IntErrorKind::PosOverflow => Ok(0),
+                Ok(cols @ ..=MAX_WRAP) => Ok(cols),
+                Ok(_) => Ok(0),
+                Err(e) if *e.kind() == std::num::IntErrorKind::PosOverflow => Ok(0),
                 Err(_) => Err(USimpleError::new(
                     BASE_CMD_PARSE_ERROR,
                     translate!("base-common-invalid-wrap-size", "size" => num.quote()),
