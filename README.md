@@ -86,8 +86,8 @@ installing anything.
 
 ### Rust Version
 
-uutils follows Rust's release channels and is tested against stable, beta and
-nightly.
+The minimum supported Rust version is set by `rust-version` in
+[`Cargo.toml`](Cargo.toml). CI tests that version, stable and nightly.
 
 ## Building
 
