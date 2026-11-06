@@ -141,6 +141,51 @@ fn test_symlink_overwrite_force() {
     assert_eq!(at.resolve_link(link), file_b);
 }
 
+/// Replacing a link needs write and search permission on its directory, like
+/// creating one, not read permission.
+#[test]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_symlink_overwrite_force_in_write_search_only_dir() {
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::PermissionsExt;
+
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.symlink_file("old", "dir/link");
+    set_permissions(at.plus("dir"), Permissions::from_mode(0o300)).unwrap();
+
+    let result = ucmd.args(&["-sf", "new", "dir/link"]).run();
+
+    set_permissions(at.plus("dir"), Permissions::from_mode(0o755)).unwrap();
+    result.success();
+    assert_eq!(at.resolve_link("dir/link"), "new");
+}
+
+/// Replacing a file with a hard link needs write and search permission on its
+/// directory too, not read permission.
+#[test]
+// Android's app-private filesystem refuses hard links.
+#[cfg(all(unix, not(any(target_os = "redox", target_os = "android"))))]
+fn test_hard_link_overwrite_force_in_write_search_only_dir() {
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("file", "new");
+    at.mkdir("dir");
+    at.write("dir/dest", "old");
+    at.set_mode("dir", 0o300);
+
+    let result = ucmd.args(&["-f", "file", "dir/dest"]).run();
+
+    at.set_mode("dir", 0o755);
+    result.success().no_output();
+    assert_eq!(at.read("dir/dest"), "new");
+}
+
 /// A forced replace must be atomic, so a concurrent creator always loses.
 /// Fails reliably if unlink-then-create ever comes back.
 #[uutests::wasi_ignore(RenameNotAtomicReplace)]
