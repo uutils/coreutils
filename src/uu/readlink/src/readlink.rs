@@ -88,7 +88,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         match path_result {
             Ok(path) => {
-                show(&path, line_ending).map_err_context(String::new)?;
+                // Canonicalizing on Windows can produce a \\?\ verbatim path
+                // (\\?\UNC\ for network paths); strip it when safe so the
+                // output reads like a normal path.
+                #[cfg(windows)]
+                let path = dunce::simplified(&path);
+                #[cfg(not(windows))]
+                let path = path.as_path();
+                show(path, line_ending).map_err_context(String::new)?;
             }
             Err(err) => {
                 failed = true;
