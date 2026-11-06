@@ -508,3 +508,21 @@ fn test_backspaces_before_last_tab_stop_resume_conversion() {
         .succeeds()
         .stdout_is("abcde\x08\x08\tX\n");
 }
+
+// clap treats a repeated boolean flag as a conflict unless the command
+// allows an argument to override itself.
+#[rstest]
+#[case::all(&["-a"], "\tA\t B\n")]
+#[case::all_repeated(&["-a", "-a"], "\tA\t B\n")]
+#[case::first_only(&["--first-only"], "\tA        B\n")]
+#[case::first_only_repeated(&["--first-only", "--first-only"], "\tA        B\n")]
+#[case::first_only_repeated_short_long(&["-f", "--first-only"], "\tA        B\n")]
+#[case::no_utf8(&["-U"], "\tA        B\n")]
+#[case::no_utf8_repeated(&["-U", "-U"], "\tA        B\n")]
+fn test_repeated_flags_are_accepted(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in("        A        B\n")
+        .succeeds()
+        .stdout_only(expected);
+}

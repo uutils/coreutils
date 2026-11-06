@@ -133,11 +133,8 @@ fn test_shred_u() {
     assert!(at.file_exists(file_b));
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: chmod has no ENOSYS-free syscall; -f can't restore write permission"
-)]
 fn test_shred_force() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -274,11 +271,8 @@ fn test_all_patterns_present() {
     }
 }
 
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: File::try_clone() (used for --random-source) is unsupported"
-)]
 fn test_random_source_regular_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -376,11 +370,8 @@ fn test_shred_non_utf8_paths() {
     ts.ucmd().arg(file_name).succeeds();
 }
 
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: File::try_clone() (used for --random-source) is unsupported"
-)]
 fn test_shred_twenty_passes_with_known_random_source() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -436,11 +427,8 @@ fn test_shred_twenty_passes_with_known_random_source() {
     assert!(!at.file_exists(file));
 }
 
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: File::try_clone() (used for --random-source) is unsupported"
-)]
 fn test_shred_nineteen_passes_first_and_last_are_random() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -619,12 +607,9 @@ fn test_numeric_looking_file_name_verbose_remove() {
 
 // On Unix, '-' names the file attached to standard output, not a file
 // literally named '-'. Open without truncating so the test checks shredding.
+#[uutests::wasi_ignore(StdioHandlesOpaque)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: stdout is not accessible through /dev/fd/1"
-)]
 fn test_shred_dash_wipes_stdout_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "secret.txt";
@@ -648,12 +633,9 @@ fn test_shred_dash_wipes_stdout_file() {
     assert_ne!(contents.as_slice(), &original[..]);
 }
 
+#[uutests::wasi_ignore(StdioHandlesOpaque)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: stdout is not accessible through /dev/fd/1"
-)]
 fn test_shred_dash_remove_truncates_but_does_not_unlink_stdout() {
     for remove_arg in [
         "-u",
@@ -682,12 +664,9 @@ fn test_shred_dash_remove_truncates_but_does_not_unlink_stdout() {
     }
 }
 
+#[uutests::wasi_ignore(StdioHandlesOpaque)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: stdout is not accessible through /dev/fd/1"
-)]
 fn test_shred_dash_rejects_stdout_pipe() {
     new_ucmd!()
         .arg("-")
@@ -714,9 +693,9 @@ fn test_shred_missing_file() {
         .stderr_only("shred: missing: failed to open for writing: No such file or directory\n");
 }
 
+#[uutests::wasi_ignore(NoFifo)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO or socket file types")]
 fn test_shred_fifo() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("p");
@@ -725,9 +704,9 @@ fn test_shred_fifo() {
         .stderr_only("shred: p: invalid file type\n");
 }
 
+#[uutests::wasi_ignore(NoUnixDomainSockets)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO or socket file types")]
 fn test_shred_socket() {
     // GNU reaches the open and reports its failure; so does shred here.
     let (at, mut ucmd) = at_and_ucmd!();

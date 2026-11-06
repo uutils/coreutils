@@ -56,11 +56,17 @@ pub fn wasi_ignore(args: TokenStream, item: TokenStream) -> TokenStream {
             "WASI: an empty path argument resolves to a directory instead of ENOENT"
         }
         "ErrnoMessageMismatch" => "WASI: errno/error-message mismatches",
+        "GuestRootPathResolution" => {
+            "WASI sandbox: paths resolve against the guest's preopened root, so '..', UNC-style, canonicalized, symlinked-cwd and host absolute paths differ from the host"
+        }
         "GuestRootWritablePreopen" => {
             "WASI: guest root is a writable preopen, not the protected system root"
         }
         "HostPathsNotVisible" => {
             "WASI sandbox: host paths (/dev, /private, /proc, /sys, etc.) not visible"
+        }
+        "HostSystemStateDiffers" => {
+            "WASI: host system state (clock, umask, uname, CPU features) is not shared with the guest"
         }
         "KillDiscardsUnflushedOutput" => {
             "WASI: killing the wasmtime process discards the unflushed output buffer, so the streamed bytes never reach stdout"
@@ -104,6 +110,9 @@ pub fn wasi_ignore(args: TokenStream, item: TokenStream) -> TokenStream {
             "WASI: path rename is not guaranteed to be an atomic replace, so a concurrent creator can win the race during a forced relink"
         }
         "StdinPositionNotPreserved" => "WASI: stdin file position not preserved through wasmtime",
+        "StdioHandlesOpaque" => {
+            "WASI sandbox: inherited stdin and stdout cannot be inspected, do not share a file offset and are not reachable through /dev/fd"
+        }
         "StdoutDashUnsupported" => "WASI: touch - (stdout) is unsupported",
         "SymlinkHardlinkCaps" => {
             "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
@@ -112,6 +121,9 @@ pub fn wasi_ignore(args: TokenStream, item: TokenStream) -> TokenStream {
             "WASI: symlink loop traversal does not surface ELOOP ('Too many levels of symbolic links')"
         }
         "TailFollowDisabled" => "WASI: tail follow mode disabled",
+        "UnsupportedStdApi" => {
+            "WASI: the std or libc API is unsupported (File::try_clone, setlocale LC_* constants)"
+        }
         "Usize32BitOverflow" => "WASI: usize is 32-bit, the host usize::MAX does not parse",
         other => {
             let span = args

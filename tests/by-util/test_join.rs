@@ -868,12 +868,8 @@ fn test_locale_collation() {
         .stdout_contains("ab:d 1 x");
 }
 
+#[uutests::wasi_ignore(Usize32BitOverflow)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: usize::MAX is computed for the 64-bit host test binary, \
-              but the wasm32 target binary saturates at the 32-bit usize::MAX"
-)]
 fn test_incompatible_fields_reports_exact_field_number() {
     // An out-of-range field clamps to usize::MAX, which used to overflow the
     // one-based increment. Field numbers past 2^53 also used to be rounded on

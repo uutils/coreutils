@@ -548,12 +548,9 @@ fn test_mv_file_to_broken_symlink_directory() {
     assert!(!at.file_exists("file"));
 }
 
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: mv doesn't recognize a symlink-to-directory as a directory target, so it overwrites the symlink with a plain file instead of moving into the directory it points to"
-)]
 fn test_mv_file_to_symlink_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -631,12 +628,9 @@ fn test_mv_same_file_no_clobber() {
         .fails_with_code(1);
 }
 
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: rustix::fs::stat doesn't return stable inode identity, so same-file detection via a hard link fails"
-)]
 fn test_mv_same_hardlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_same_file_a";
@@ -665,12 +659,9 @@ fn test_mv_dangling_symlink_to_folder() {
     assert!(at.symlink_exists("x/abc"));
 }
 
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: rustix::fs::stat doesn't return stable inode identity, so same-file detection via a symlink fails"
-)]
 fn test_mv_same_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_same_file_a";
@@ -759,12 +750,9 @@ fn test_mv_broken_symlink_to_another_fs() {
     scene.ucmd().arg("foo").arg(dest).succeeds().no_output();
 }
 
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: rustix::fs::stat doesn't return stable inode identity, so same-file detection via a symlink/hardlink pair fails"
-)]
 fn test_mv_hardlink_to_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
@@ -1481,7 +1469,7 @@ fn test_mv_errors() {
         .arg(dir)
         .fails()
         .stderr_only(format!(
-            "mv: cannot overwrite directory '{dir}' with non-directory\n"
+            "mv: cannot overwrite directory '{dir}' with non-directory '{file_a}'\n"
         ));
 
     // $ at.mkdir dir && at.touch file
@@ -1527,13 +1515,10 @@ fn test_mv_verbose() {
         ));
 }
 
+#[uutests::wasi_ignore(PathCreateDirectoryNoModeParam)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))] // mkdir does not support -m on windows. Freebsd doesn't return a permission error either.
 #[cfg(feature = "mkdir")]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: mkdir -m444 does not restrict write access under the WASI sandbox, so the subsequent mv succeeds instead of failing with a permission error"
-)]
 fn test_mv_permission_error() {
     let scene = TestScenario::new("mkdir");
     let folder1 = "bar";
@@ -1669,6 +1654,38 @@ fn test_mv_dir_into_dir_with_source_name_a_prefix_of_target_name() {
 }
 
 #[test]
+fn test_mv_rename_error_names_source_and_target() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    let result = scene.ucmd().arg("a").arg("missing/b").fails_with_code(1);
+    #[cfg(unix)]
+    result.stderr_only("mv: cannot move 'a' to 'missing/b': No such file or directory\n");
+    #[cfg(not(unix))]
+    result.stderr_contains("mv: cannot move 'a' to 'missing/b': ");
+
+    assert!(at.file_exists("a"));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_mv_rename_error_permission_denied_names_paths() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.mkdir("ro");
+    at.set_mode("ro", 0o555);
+    scene
+        .ucmd()
+        .arg("a")
+        .arg("ro/b")
+        .fails_with_code(1)
+        .stderr_only("mv: cannot move 'a' to 'ro/b': Permission denied\n");
+    assert!(at.file_exists("a"));
+    assert!(!at.file_exists("ro/b"));
+}
+
+#[test]
 fn test_mv_file_into_dir_where_both_are_files() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1749,11 +1766,8 @@ fn test_mv_seen_multiple_files_to_directory() {
     assert!(at.plus("c").join("g").exists());
 }
 
+#[uutests::wasi_ignore(ErrnoMessageMismatch)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: raw ENOTDIR (\"Not a directory\") surfaces instead of the translated cannot-stat message, because stat() doesn't enforce the trailing-slash-requires-directory rule for non-directory sources"
-)]
 fn test_mv_dir_into_file_where_both_are_files() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

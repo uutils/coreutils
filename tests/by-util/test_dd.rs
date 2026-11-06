@@ -1334,6 +1334,25 @@ fn test_invalid_flag_arg_gnu_compatibility() {
 }
 
 #[test]
+fn test_numeric_looking_values_are_kept_verbatim_in_errors() {
+    // Values such as "007" or "1e3" must not be reformatted as numbers.
+    for (arg, msg) in [
+        ("007", "unrecognized operand '007'"),
+        ("iflag=007", "invalid input flag: '007'"),
+        ("oflag=1e3", "invalid output flag: '1e3'"),
+        ("conv=007", "invalid conversion: '007'"),
+        ("status=007", "invalid status level: '007'"),
+        ("count=1.50", "invalid number: '1.50'"),
+        ("bs=1e3", "invalid number: '1e3'"),
+    ] {
+        new_ucmd!()
+            .arg(arg)
+            .fails_with_code(1)
+            .stderr_contains(format!("dd: {msg}\n"));
+    }
+}
+
+#[test]
 fn test_invalid_file_arg_gnu_compatibility() {
     new_ucmd!()
         .args(&["if="])

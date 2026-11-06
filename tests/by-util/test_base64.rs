@@ -232,6 +232,17 @@ fn test_wrap_negative_arg() {
 }
 
 #[test]
+fn test_wrap_too_large_disables_wrapping() {
+    for arg in ["99999999999999999999", "9223372036854775808"] {
+        new_ucmd!()
+            .args(&["-w", arg])
+            .pipe_in("abc")
+            .succeeds()
+            .stdout_only("YWJj");
+    }
+}
+
+#[test]
 fn test_base64_extra_operand() {
     // Expect a failure when multiple files are specified.
     new_ucmd!()
