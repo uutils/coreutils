@@ -400,6 +400,9 @@ rlimit = { workspace = true }
 nix = { workspace = true, features = ["fs", "signal"] }
 rustix = { workspace = true, features = ["net", "process"] }
 
+[target.'cfg(windows)'.dev-dependencies]
+dunce = { workspace = true }
+
 [build-dependencies]
 phf_codegen.workspace = true
 
