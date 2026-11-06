@@ -3076,17 +3076,25 @@ fn test_mv_xattr_enotsup_warns_once() {
             .collect();
         apply_xattrs(at.plus(name), attrs)
     };
-    // user::rw-, user:0:r--, group::r--, mask::r--, other::---. The named user
-    // keeps the kernel from folding it into the mode bits.
-    let acl: &[u8] = &[
-        2, 0, 0, 0, 1, 0, 6, 0, 255, 255, 255, 255, 2, 0, 4, 0, 0, 0, 0, 0, 4, 0, 4, 0, 255, 255,
-        255, 255, 16, 0, 4, 0, 255, 255, 255, 255, 32, 0, 0, 0, 255, 255, 255, 255,
-    ];
-    if set_xattrs("one_attr", &[("user.test", b"v")]).is_err()
-        || set_xattrs("acl_only", &[("system.posix_acl_access", acl)]).is_err()
-    {
-        println!("test skipped: the test directory does not accept xattrs and ACLs");
+    if set_xattrs("one_attr", &[("user.test", b"v")]).is_err() {
+        println!("test skipped: the test directory does not accept xattrs");
         return;
+    }
+    at.write("acl_only", "content");
+    match std::process::Command::new("setfacl")
+        .args(["-m", "u:0:r"])
+        .arg(at.plus("acl_only"))
+        .status()
+    {
+        Ok(status) if status.success() => {}
+        Ok(_) => {
+            println!("test skipped: setfacl failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfacl failed with {e}");
+            return;
+        }
     }
     let three: &[(&str, &[u8])] = &[("user.one", b"1"), ("user.two", b"2"), ("user.three", b"3")];
     set_xattrs("three_attrs", three).unwrap();

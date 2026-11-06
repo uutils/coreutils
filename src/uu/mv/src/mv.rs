@@ -1078,7 +1078,7 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     ))]
     {
         if let Ok(failed) = fsxattr::copy_xattrs_ignore_unsupported(from, to) {
-            show_xattr_failures(failed);
+            show_xattr_failures(None, failed);
         }
     }
     let _ = preserve_ownership(from, to);
@@ -1413,7 +1413,7 @@ fn copy_file_with_hardlinks_helper(
         ))]
         {
             if let Ok(failed) = fsxattr::copy_xattrs_ignore_unsupported(from, to) {
-                show_xattr_failures(failed);
+                show_xattr_failures(None, failed);
             }
         }
         // Preserve ownership (uid/gid) from the source
@@ -1486,7 +1486,7 @@ fn rename_file_fallback(
         ))]
         {
             if let Ok(failed) = fsxattr::copy_xattrs_fd(&src_file, &dst_file) {
-                show_xattr_failures_for(to, failed);
+                show_xattr_failures(Some(to), failed);
             }
         }
 
@@ -1517,9 +1517,9 @@ fn rename_file_fallback(
     Ok(())
 }
 
-/// Like [`show_xattr_failures`], but for a file moved to `to`. When `to` does
-/// not support xattrs at all, GNU 9.12 warns once for the file rather than once
-/// per attribute. It says nothing when only a POSIX ACL could not be set.
+/// Report xattr failures as warnings without failing the move. When `to` is
+/// provided, unsupported xattrs produce one warning for the file, except when
+/// only POSIX ACLs could not be set. Other failures are reported per attribute.
 #[cfg(any(
     target_os = "freebsd",
     target_os = "hurd",
@@ -1527,44 +1527,34 @@ fn rename_file_fallback(
     target_os = "android",
     target_os = "netbsd"
 ))]
-fn show_xattr_failures_for(to: &Path, failed: Vec<(OsString, io::Error)>) {
+fn show_xattr_failures(to: Option<&Path>, failed: Vec<(OsString, io::Error)>) {
     use uucore::error::strip_errno;
     use uucore::show_error;
 
-    let (unsupported, failed): (Vec<_>, Vec<_>) = failed
-        .into_iter()
-        .partition(|(_, err)| fsxattr::is_xattr_unsupported(err));
-    let is_acl = |name: &OsString| {
-        matches!(
-            name.to_str(),
-            Some("system.posix_acl_access" | "system.posix_acl_default")
-        )
-    };
-    if let Some((_, err)) = unsupported.iter().find(|(name, _)| !is_acl(name)) {
-        show_error!(
-            "{}",
-            translate!(
-                "mv-error-setting-attributes",
-                "path" => to.quote(),
-                "err" => strip_errno(err)
+    let failed = if let Some(to) = to {
+        let (unsupported, failed): (Vec<_>, Vec<_>) = failed
+            .into_iter()
+            .partition(|(_, err)| fsxattr::is_xattr_unsupported(err));
+        let is_acl = |name: &OsString| {
+            matches!(
+                name.to_str(),
+                Some("system.posix_acl_access" | "system.posix_acl_default")
             )
-        );
-    }
-    show_xattr_failures(failed);
-}
-
-/// Report each xattr that a cross-device move could not copy. Like GNU, these
-/// are only warnings: the move itself still succeeds.
-#[cfg(any(
-    target_os = "freebsd",
-    target_os = "hurd",
-    target_os = "linux",
-    target_os = "android",
-    target_os = "netbsd"
-))]
-fn show_xattr_failures(failed: Vec<(OsString, io::Error)>) {
-    use uucore::error::strip_errno;
-    use uucore::show_error;
+        };
+        if let Some((_, err)) = unsupported.iter().find(|(name, _)| !is_acl(name)) {
+            show_error!(
+                "{}",
+                translate!(
+                    "mv-error-setting-attributes",
+                    "path" => to.quote(),
+                    "err" => strip_errno(err)
+                )
+            );
+        }
+        failed
+    } else {
+        failed
+    };
 
     for (name, err) in failed {
         show_error!(
