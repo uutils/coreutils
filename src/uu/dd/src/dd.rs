@@ -407,13 +407,9 @@ struct ReadRecovery {
     bytes: u64,
 }
 
-enum ReadOutcome {
-    Data(usize),
-    RecoveredError {
-        bytes: usize,
-        after_partial: bool,
-        count_adjustment: u64,
-    },
+struct RecoveredRead {
+    after_partial: bool,
+    count_adjustment: u64,
 }
 
 impl<'a> Input<'a> {
@@ -536,9 +532,14 @@ fn make_linux_iflags(iflags: &IFlags) -> Option<core::ffi::c_int> {
 }
 
 impl Input<'_> {
-    // Specialize reads so normal copies do not maintain error-recovery state.
+    // Keep recovery metadata out of the return value so ordinary reads
+    // retain the small Result<usize> return path.
     #[inline]
-    fn read_block<const NOERROR: bool>(&mut self, buf: &mut [u8]) -> io::Result<ReadOutcome> {
+    fn read_block<const NOERROR: bool>(
+        &mut self,
+        buf: &mut [u8],
+        recovered: &mut Option<RecoveredRead>,
+    ) -> io::Result<usize> {
         let mut base_idx = 0;
         let target_len = buf.len();
         loop {
@@ -551,7 +552,7 @@ impl Input<'_> {
                                 skipped: false,
                             });
                     }
-                    return Ok(ReadOutcome::Data(base_idx));
+                    return Ok(base_idx);
                 }
                 Ok(rlen) if self.settings.iflags.fullblock => {
                     base_idx += rlen;
@@ -564,7 +565,7 @@ impl Input<'_> {
                                     skipped: false,
                                 });
                         }
-                        return Ok(ReadOutcome::Data(target_len));
+                        return Ok(target_len);
                     }
                 }
                 Ok(len) => {
@@ -574,7 +575,7 @@ impl Input<'_> {
                             skipped: false,
                         });
                     }
-                    return Ok(ReadOutcome::Data(len));
+                    return Ok(len);
                 }
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => (),
                 Err(e) if NOERROR => {
@@ -603,14 +604,14 @@ impl Input<'_> {
                     };
                     self.src
                         .skip_failed_read(self.settings.ibs - read_in_block)?;
-                    return Ok(ReadOutcome::RecoveredError {
-                        bytes: if self.settings.iconv.sync.is_some() {
-                            base_idx
-                        } else {
-                            0
-                        },
+                    *recovered = Some(RecoveredRead {
                         after_partial,
                         count_adjustment,
+                    });
+                    return Ok(if self.settings.iconv.sync.is_some() {
+                        base_idx
+                    } else {
+                        0
                     });
                 }
                 Err(e) => return Err(e),
@@ -645,18 +646,12 @@ impl Input<'_> {
         let mut recovery = ReadRecovery::default();
 
         for chunk in buf.chunks_mut(self.settings.ibs) {
-            let rlen = match self.read_block::<NOERROR>(chunk)? {
-                ReadOutcome::Data(len) => len,
-                ReadOutcome::RecoveredError {
-                    bytes,
-                    count_adjustment,
-                    ..
-                } => {
-                    recovery.failed = true;
-                    recovery.bytes += count_adjustment;
-                    bytes
-                }
-            };
+            let mut recovered = None;
+            let rlen = self.read_block::<NOERROR>(chunk, &mut recovered)?;
+            if NOERROR && let Some(error) = recovered {
+                recovery.failed = true;
+                recovery.bytes += error.count_adjustment;
+            }
             match rlen {
                 rlen if rlen == self.settings.ibs => {
                     bytes_total += rlen;
@@ -707,24 +702,18 @@ impl Input<'_> {
             let next_blk = cmp::min(base_idx + self.settings.ibs, buf.len());
             let target_len = next_blk - base_idx;
 
-            let (rlen, failed) = match self.read_block::<NOERROR>(&mut buf[base_idx..next_blk])? {
-                ReadOutcome::Data(len) => (len, false),
-                ReadOutcome::RecoveredError {
-                    after_partial: true,
-                    count_adjustment,
-                    ..
-                } => {
+            let mut recovered = None;
+            let rlen = self.read_block::<NOERROR>(&mut buf[base_idx..next_blk], &mut recovered)?;
+            let failed = NOERROR && recovered.is_some();
+            if NOERROR && let Some(error) = recovered {
+                recovery.failed = true;
+                if error.after_partial {
                     // The preceding short record was already padded.
-                    recovery.failed = true;
-                    recovery.bytes += count_adjustment;
+                    recovery.bytes += error.count_adjustment;
                     break;
                 }
-                ReadOutcome::RecoveredError { bytes, .. } => {
-                    recovery.failed = true;
-                    recovery.bytes += (self.settings.ibs - bytes) as u64;
-                    (bytes, true)
-                }
-            };
+                recovery.bytes += (self.settings.ibs - rlen) as u64;
+            }
             match rlen {
                 0 if !failed => break,
                 rlen if rlen < target_len => {
@@ -1293,7 +1282,7 @@ fn flush_caches_full_length(i: &Input, o: &Output) {
 ///
 /// If there is a problem reading from the input or writing to
 /// this output.
-fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
+fn dd_copy<const NOERROR: bool>(mut i: Input, o: Output) -> io::Result<()> {
     // The read and write statistics.
     //
     // These objects are counters, initialized to zero. After each
@@ -1413,17 +1402,18 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // blocks already read and the number of blocks remaining.
         let loop_bsize = calc_loop_bsize(count_limit, &rstat, i.settings.ibs, bsize);
         let Ok((rstat_update, data, recovery)) =
-            read_helper(&mut i, &mut buf, loop_bsize).map_err(|e| copy_error = Some(e))
+            read_helper::<NOERROR>(&mut i, &mut buf, loop_bsize).map_err(|e| copy_error = Some(e))
         else {
             break;
         };
-        if recovery.bytes != 0
+        if NOERROR
+            && recovery.bytes != 0
             && let Some(Num::Bytes(limit)) = &mut count_limit
         {
             *limit = limit.saturating_sub(recovery.bytes);
         }
         if rstat_update.is_empty() {
-            if recovery.failed {
+            if NOERROR && recovery.failed {
                 continue;
             }
             // Dropping the cache is best-effort: a failure (a pipe cannot
@@ -1640,7 +1630,7 @@ fn alloc_copy_buffer(bsize: usize) -> io::Result<Vec<u8>> {
 ///
 /// `read_buf` is the page-aligned scratch read into directly. The other
 /// `conv=` transformations are applied by [`Converter`].
-fn read_helper<'a>(
+fn read_helper<'a, const NOERROR: bool>(
     i: &mut Input,
     read_buf: &'a mut AlignedBuf,
     bsize: usize,
@@ -1654,17 +1644,9 @@ fn read_helper<'a>(
     let (rstat, data_len, recovery) = {
         let scratch = &mut read_buf.as_mut_bytes()[..bsize];
         let (rstat, data_len, recovery) = if let Some(ch) = i.settings.iconv.sync {
-            if i.settings.iconv.noerror {
-                i.fill_blocks::<true>(scratch, ch)?
-            } else {
-                i.fill_blocks::<false>(scratch, ch)?
-            }
+            i.fill_blocks::<NOERROR>(scratch, ch)?
         } else {
-            let (s, recovery) = if i.settings.iconv.noerror {
-                i.fill_consecutive::<true>(scratch)?
-            } else {
-                i.fill_consecutive::<false>(scratch)?
-            };
+            let (s, recovery) = i.fill_consecutive::<NOERROR>(scratch)?;
             let n = s.bytes_total as usize;
             (s, n, recovery)
         };
@@ -1817,7 +1799,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None if is_stdout_redirected_to_seekable_file() => Output::new_file_from_stdout(&settings)?,
         None => Output::new_stdout(&settings)?,
     };
-    dd_copy(i, o).map_err_context(|| translate!("dd-error-io-error"))
+    if settings.iconv.noerror {
+        dd_copy::<true>(i, o)
+    } else {
+        dd_copy::<false>(i, o)
+    }
+    .map_err_context(|| translate!("dd-error-io-error"))
 }
 
 pub fn uu_app() -> Command {
