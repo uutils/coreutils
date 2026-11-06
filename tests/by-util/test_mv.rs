@@ -1950,6 +1950,8 @@ mod inter_partition_copying {
         at.write("site/private/notes.txt", "internal only");
         set_permissions(at.plus("site/private"), PermissionsExt::from_mode(0o700))
             .expect("Unable to set the mode of site/private");
+        set_permissions(at.plus("site"), PermissionsExt::from_mode(0o700))
+            .expect("Unable to set the mode of site");
 
         let get_acl = |path: &Path| {
             Command::new("getfacl")
@@ -1981,12 +1983,11 @@ mod inter_partition_copying {
             .arg(dest.to_str().unwrap())
             .succeeds();
 
+        let mode_of = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o7777;
+        let mode = mode_of(&dest);
+        assert_eq!(mode, 0o700, "site should stay 0700, got {mode:o}");
         let moved = dest.join("private");
-        let mode = fs::metadata(&moved)
-            .expect("site/private should exist")
-            .permissions()
-            .mode()
-            & 0o7777;
+        let mode = mode_of(&moved);
         assert_eq!(mode, 0o700, "site/private should stay 0700, got {mode:o}");
         if check_acl {
             assert_eq!(get_acl(&moved), acl_before, "site/private lost its ACL");
