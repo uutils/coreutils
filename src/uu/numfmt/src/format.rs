@@ -8,7 +8,7 @@
 use std::fmt::Write as _;
 
 use uucore::display::Quotable;
-use uucore::i18n::decimal::{locale_decimal_separator, locale_grouping_separator};
+use uucore::i18n::decimal::{group_digits, locale_decimal_separator, locale_grouping_separator};
 use uucore::translate;
 
 use crate::numeric::ParsedNumber;
@@ -334,28 +334,13 @@ fn apply_grouping(s: &str) -> String {
         return s.to_string();
     }
 
-    let sep_len = grouping_separator.len();
-    let num_seps = (integer.len() - 1) / 3;
-    let mut grouped = String::with_capacity(
-        sign.len()
-            + integer.len()
-            + num_seps * sep_len
-            + if fraction.is_empty() {
-                0
-            } else {
-                1 + fraction.len()
-            },
-    );
+    let mut grouped = String::with_capacity(s.len() + integer.len() / 3 * grouping_separator.len());
     grouped.push_str(sign);
-
-    let first_group = integer.len() % 3;
-    let first_group = if first_group == 0 { 3 } else { first_group };
-    grouped.push_str(&integer[..first_group]);
-    for chunk in integer.as_bytes()[first_group..].chunks(3) {
-        grouped.push_str(grouping_separator);
-        // SAFETY: integer is known to be valid UTF-8 ASCII digits
-        grouped.push_str(std::str::from_utf8(chunk).unwrap());
-    }
+    // Both inputs are UTF-8, so the grouped digits are too.
+    grouped.push_str(&String::from_utf8_lossy(&group_digits(
+        integer.as_bytes(),
+        grouping_separator.as_bytes(),
+    )));
 
     if !fraction.is_empty() {
         grouped.push_str(dec_sep);
