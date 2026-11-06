@@ -1641,6 +1641,25 @@ fn test_seek_output_fifo() {
         .stderr_only("0+0 records in\n0+0 records out\n");
 }
 
+/// `oflag=nofollow` and `conv=excl` refuse a symlink to an output FIFO
+/// before the seek reads from the FIFO (#15763). Without the check, `dd`
+/// blocks opening the FIFO for reading, so the timeout turns that into a failure.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[rstest]
+#[case::nofollow("oflag=nofollow")]
+#[case::excl("conv=excl")]
+fn test_seek_output_fifo_symlink_refused(#[case] flag: &str) {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("fifo");
+    at.symlink_file("fifo", "slot");
+
+    ts.ucmd()
+        .args(&["if=/dev/null", "of=slot", flag, "seek=1", "count=0"])
+        .timeout(Duration::from_secs(10))
+        .fails();
+}
+
 /// Test that a skip on an input FIFO results in a read.
 #[test]
 #[cfg(unix)]
