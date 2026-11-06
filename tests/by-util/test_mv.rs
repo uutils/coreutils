@@ -1936,6 +1936,63 @@ mod inter_partition_copying {
         );
     }
 
+    // Directories below the moved one keep their mode and their ACL (#15784).
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
+    #[test]
+    pub(crate) fn test_mv_inter_partition_keeps_subdir_mode_and_acl() {
+        use std::path::Path;
+        use std::process::Command;
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.mkdir_all("site/private");
+        at.write("site/private/notes.txt", "internal only");
+        set_permissions(at.plus("site/private"), PermissionsExt::from_mode(0o700))
+            .expect("Unable to set the mode of site/private");
+
+        let get_acl = |path: &Path| {
+            Command::new("getfacl")
+                .args(["-c", "-n"])
+                .arg(path)
+                .output()
+                .ok()
+                .filter(|out| out.status.success())
+                .map(|out| out.stdout)
+        };
+        // The ACL part is skipped when setfacl is missing or either filesystem has no ACLs.
+        let set_acl = |path: &Path| {
+            Command::new("setfacl")
+                .args(["-m", "u:65534:---"])
+                .arg(path)
+                .status()
+                .is_ok_and(|status| status.success())
+        };
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        let dest = other_fs_tempdir.path().join("site");
+
+        let check_acl = set_acl(&at.plus("site/private")) && set_acl(other_fs_tempdir.path());
+        let acl_before = get_acl(&at.plus("site/private"));
+
+        scene
+            .ucmd()
+            .arg("site")
+            .arg(dest.to_str().unwrap())
+            .succeeds();
+
+        let moved = dest.join("private");
+        let mode = fs::metadata(&moved)
+            .expect("site/private should exist")
+            .permissions()
+            .mode()
+            & 0o7777;
+        assert_eq!(mode, 0o700, "site/private should stay 0700, got {mode:o}");
+        if check_acl {
+            assert_eq!(get_acl(&moved), acl_before, "site/private lost its ACL");
+        }
+    }
+
     // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
     #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
