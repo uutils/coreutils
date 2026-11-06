@@ -24,14 +24,16 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { target: wasm32-wasip1, rust-flags: "--cfg wasi_runner" }
-          - { target: wasm32-wasip2, rust-flags: "--cfg wasi_runner --cfg wasip2_runner" }
+          - { target: wasm32-wasip1, rust-flags: "--cfg wasi_runner", toolchain: stable }
+          # wasm32-wasip2 needs nightly, where `std::process::exit` keeps the exit code.
+          - { target: wasm32-wasip2, rust-flags: "--cfg wasi_runner --cfg wasip2_runner", toolchain: nightly }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
+    - uses: dtolnay/rust-toolchain@master
       with:
+        toolchain: ${{ matrix.job.toolchain }}
         targets: ${{ matrix.job.target }}
     - uses: Swatinem/rust-cache@v2
       with:
