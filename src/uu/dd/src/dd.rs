@@ -929,7 +929,19 @@ impl<'a> Output<'a> {
         // file for reading. But then we need to close the file and
         // re-open it for writing.
         if settings.seek > 0 {
-            Dest::Fifo(File::open(filename)?).seek(settings.seek, settings.obs)?;
+            // The checks of the write-side open below must come first, or the
+            // seek reads from a FIFO that `conv=excl` or `oflag=nofollow` refuses.
+            if settings.oconv.excl {
+                // The FIFO already exists, so the exclusive create can only fail.
+                return Err(io::Error::from_raw_os_error(libc::EEXIST).into());
+            }
+            let mut opts = OpenOptions::new();
+            opts.read(true);
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            if settings.oflags.nofollow {
+                opts.custom_flags(libc::O_NOFOLLOW);
+            }
+            Dest::Fifo(opts.open(filename)?).seek(settings.seek, settings.obs)?;
         }
         // If `count=0`, then we don't bother opening the file for
         // writing because that would cause this process to block
