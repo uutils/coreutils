@@ -6,7 +6,7 @@
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
 // spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot EOVERFLOW chowned chmoded
-// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat
+// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat renameat unguessability linkat symlinkat
 
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
@@ -792,6 +792,23 @@ impl AsFd for DirFd {
     }
 }
 
+/// `symlinkat`/`linkat` relative to an open directory.
+pub(crate) fn link_at<Fd: AsFd>(
+    target: &Path,
+    dir: Fd,
+    name: &OsStr,
+    symbolic: bool,
+) -> io::Result<()> {
+    use rustix::fs::{AtFlags, CWD, linkat, symlinkat};
+
+    if symbolic {
+        symlinkat(target, dir, name).map_err(Into::into)
+    } else {
+        // `AtFlags::empty()` matches `std::fs::hard_link`: not dereferenced.
+        linkat(CWD, target, dir, name, AtFlags::empty()).map_err(Into::into)
+    }
+}
+
 /// A directory to create entries in, held open where the platform allows. Without a
 /// search-only open, an unreadable one is reached by its path, resolved again on each call.
 pub(crate) struct DirAnchor {
@@ -814,10 +831,7 @@ impl DirAnchor {
     }
 
     /// The directory and name to pass to an `*at` call for the entry `name`.
-    pub(crate) fn at<'a>(
-        &'a self,
-        name: &'a OsStr,
-    ) -> io::Result<(BorrowedFd<'a>, Cow<'a, OsStr>)> {
+    fn at<'a>(&'a self, name: &'a OsStr) -> io::Result<(BorrowedFd<'a>, Cow<'a, OsStr>)> {
         // Joined to the path, an empty name would be the directory itself.
         if name.is_empty() {
             return Err(io::Error::from_raw_os_error(libc::ENOENT));
@@ -829,6 +843,67 @@ impl DirAnchor {
                 Cow::Owned(self.path.join(name).into_os_string()),
             ),
         })
+    }
+
+    /// Create `name` as a link to `target`, symbolic if `symbolic` is set.
+    pub(crate) fn link_at(&self, target: &Path, name: &OsStr, symbolic: bool) -> io::Result<()> {
+        let (dir, name) = self.at(name)?;
+        link_at(target, dir, &name, symbolic)
+    }
+
+    /// Replace the existing entry `name` with one made by `create`: build it under a
+    /// temporary name and rename it over, so the name is never free.
+    pub(crate) fn replace_existing_entry_at(
+        &self,
+        name: &OsStr,
+        create: impl FnMut(&Self, &OsStr) -> io::Result<()>,
+    ) -> io::Result<()> {
+        use rustix::fs::{AtFlags, renameat, unlinkat};
+
+        let (dir, dest) = self.at(name)?;
+        let ((), tmp) = self.create_at_temp_name(create)?;
+        let (_, tmp) = self.at(&tmp)?;
+        let renamed = renameat(dir, &*tmp, dir, &*dest);
+        // Renaming onto an existing link to the same inode is a
+        // no-op, which leaves the temp behind.
+        let _ = unlinkat(dir, &*tmp, AtFlags::empty());
+        renamed.map_err(Into::into)
+    }
+
+    /// Create an entry under an unused random name with `create`, which must fail with
+    /// `EEXIST` on a taken name. Returns what `create` returned and the name.
+    fn create_at_temp_name<T>(
+        &self,
+        mut create: impl FnMut(&Self, &OsStr) -> io::Result<T>,
+    ) -> io::Result<(T, OsString)> {
+        use std::io::Read;
+
+        // GNU's template `CuXXXXXX`; the ~3% modulo bias per random char is
+        // irrelevant for an 8-char unguessability budget.
+        const ALPHABET: &[u8; 62] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+        let mut urandom = fs::File::open("/dev/urandom")?;
+
+        for _ in 0..32 {
+            let mut tmp = *b"Cu------";
+            let mut raw = [0u8; 6];
+            urandom.read_exact(&mut raw)?;
+            for (slot, byte) in tmp[2..].iter_mut().zip(raw) {
+                *slot = ALPHABET[byte as usize % ALPHABET.len()];
+            }
+            let tmp = OsStr::from_bytes(&tmp);
+
+            match create(self, tmp) {
+                Ok(created) => return Ok((created, tmp.to_owned())),
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            translate!("error-no-unique-temp-name"),
+        ))
     }
 }
 
@@ -1652,6 +1727,31 @@ mod tests {
         fs::set_permissions(&write_only, fs::Permissions::from_mode(0o755)).unwrap();
         assert!(write_only.join("sub").is_dir());
         assert!(write_only.join("file").is_file());
+    }
+
+    #[test]
+    fn test_dir_anchor_replaces_entry_by_fd_and_by_path() {
+        let temp_dir = TempDir::new().unwrap();
+        let dir = temp_dir.path();
+        let by_path = DirAnchor {
+            path: dir.to_owned(),
+            fd: None,
+        };
+        for anchor in [DirAnchor::open(dir).unwrap(), by_path] {
+            fs::write(dir.join("entry"), "old").unwrap();
+            anchor
+                .replace_existing_entry_at(OsStr::new("entry"), |dir, name| {
+                    dir.link_at(Path::new("target"), name, true)
+                })
+                .unwrap();
+            assert_eq!(
+                fs::read_link(dir.join("entry")).unwrap(),
+                Path::new("target")
+            );
+            // The temporary entry is renamed away, not left behind.
+            assert_eq!(fs::read_dir(dir).unwrap().count(), 1);
+            fs::remove_file(dir.join("entry")).unwrap();
+        }
     }
 
     #[test]
