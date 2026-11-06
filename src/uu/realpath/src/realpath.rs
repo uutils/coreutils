@@ -243,13 +243,8 @@ fn canonicalize_relative(
     Ok(abs)
 }
 
-/// Like GNU, treat an empty name as a file that does not exist, so it is
-/// reported with the usual "No such file or directory" and the remaining
-/// operands are still processed.
 fn empty_name_error() -> io::Error {
-    std::fs::symlink_metadata("")
-        .err()
-        .unwrap_or_else(|| io::ErrorKind::NotFound.into())
+    io::ErrorKind::NotFound.into()
 }
 
 /// Resolve a path to an absolute form and print it.
