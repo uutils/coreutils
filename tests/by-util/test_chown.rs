@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist groupname notexisting passgrp
+// spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist groupname notexisting passgrp NOFILE
 
 #[cfg(all(unix, not(target_os = "openbsd")))]
 use std::os::unix::fs::MetadataExt;
@@ -1499,6 +1499,73 @@ fn test_chown_recursive_verbose_reports_failed_entry() {
             "chown: changing ownership of 'dir': Operation not permitted\n\
              chown: changing ownership of 'dir/file': Operation not permitted\n",
         );
+}
+
+/// -R keeps only a few directories open, so a tree deeper than the descriptor
+/// limit is still walked in full, up and down.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_recursive_deeper_than_descriptor_limit() {
+    use rlimit::Resource;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let Some((_, second)) = two_groups(&scene) else {
+        return;
+    };
+    let mut dir = String::from("deep");
+    let mut files = Vec::new();
+    for _ in 0..100 {
+        at.mkdir(&dir);
+        at.touch(format!("{dir}/f"));
+        files.push(format!("{dir}/f"));
+        dir.push_str("/d");
+    }
+
+    scene
+        .ucmd()
+        .args(&["-R", &format!(":{second}"), "deep"])
+        .limit(Resource::NOFILE, 32, 32)
+        .succeeds()
+        .no_output();
+    for file in files {
+        assert_eq!(at.plus(&file).metadata().unwrap().gid(), second, "{file}");
+    }
+}
+
+/// Under -L, a directory reached through a symlink is left through the link,
+/// not through its "..", also below the directories kept open.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_recursive_big_l_deep_through_symlink() {
+    use rlimit::Resource;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let Some((_, second)) = two_groups(&scene) else {
+        return;
+    };
+    let mut files = Vec::new();
+    for top in ["deep", "other"] {
+        let mut dir = String::from(top);
+        for _ in 0..40 {
+            at.mkdir(&dir);
+            at.touch(format!("{dir}/f"));
+            files.push(format!("{dir}/f"));
+            dir.push_str("/d");
+        }
+    }
+    at.symlink_dir("other", format!("deep{}/link", "/d".repeat(30)));
+
+    scene
+        .ucmd()
+        .args(&["-R", "-L", &format!(":{second}"), "deep"])
+        .limit(Resource::NOFILE, 32, 32)
+        .succeeds()
+        .no_output();
+    for file in files {
+        assert_eq!(at.plus(&file).metadata().unwrap().gid(), second, "{file}");
+    }
 }
 
 /// Two different groups the caller is in, if there are.
