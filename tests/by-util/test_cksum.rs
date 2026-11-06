@@ -3470,30 +3470,52 @@ mod debug_flag {
     #[uutests::wasi_ignore(HostSystemStateDiffers)]
     #[test]
     fn test_debug_with_glibc_tunables() {
-        if is_x86_feature_detected!("avx2") {
-            for (tunables, expected) in [
-                ("glibc.cpu.hwcaps=-AVX2", "cksum: avx2 support not detected"), // correctly disabling AVX2
-                (
-                    "glibc.cpu.hwcaps=-avx2",
-                    "cksum: using avx2 hardware support",
-                ), // lowercase invalidates AVX2 disabling
-                (
-                    "glibc.cpu.hwcaps=-AVX2:glibc.cpu.hwcaps=-AVX512F",
-                    "cksum: using avx2 hardware support",
-                ), // last wins
-                (
-                    "glibc.cpu.hwcaps=-AVX2 ",
-                    "cksum: using avx2 hardware support",
-                ), // trailing spaces invalidate AVX2 disabling
-            ] {
-                new_ucmd!()
-                    .arg("--debug")
-                    .arg("lorem_ipsum.txt")
-                    .env("GLIBC_TUNABLES", tunables)
-                    .succeeds()
-                    .stderr_contains(expected);
-            }
+        let using = if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("vpclmulqdq") {
+            "cksum: using avx2 hardware support"
+        } else {
+            "cksum: avx2 support not detected"
+        };
+        let not_detected = "cksum: avx2 support not detected";
+        for (tunables, expected) in [
+            ("glibc.cpu.hwcaps=-AVX2", not_detected), // correctly disabling AVX2
+            ("glibc.cpu.hwcaps=-avx2", using),        // lowercase invalidates AVX2 disabling
+            ("glibc.cpu.hwcaps=-AVX2:glibc.cpu.hwcaps=-AVX512F", using), // last wins
+            ("glibc.cpu.hwcaps=-AVX2 ", using),       // trailing spaces invalidate AVX2 disabling
+        ] {
+            new_ucmd!()
+                .arg("--debug")
+                .arg("lorem_ipsum.txt")
+                .env("GLIBC_TUNABLES", tunables)
+                .succeeds()
+                .stderr_contains(expected);
         }
+    }
+
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[uutests::wasi_ignore(HostSystemStateDiffers)]
+    #[test]
+    fn test_debug_disabling_vpclmulqdq_keeps_pclmul() {
+        // Disabling VPCLMULQDQ turns the avx2 line off and nothing else.
+        let avx512 = if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw")
+        {
+            "cksum: using avx512 hardware support\n"
+        } else {
+            "cksum: avx512 support not detected\n"
+        };
+        let pclmul = if is_x86_feature_detected!("pclmulqdq") {
+            "cksum: using pclmul hardware support\n"
+        } else {
+            "cksum: pclmul support not detected\n"
+        };
+        new_ucmd!()
+            .arg("--debug")
+            .arg("lorem_ipsum.txt")
+            .env("GLIBC_TUNABLES", "glibc.cpu.hwcaps=-VPCLMULQDQ")
+            .succeeds()
+            .stdout_is_fixture("crc_single_file.expected")
+            .stderr_is(format!(
+                "{avx512}cksum: avx2 support not detected\n{pclmul}"
+            ));
     }
 
     #[uutests::wasi_ignore(HostSystemStateDiffers)]
