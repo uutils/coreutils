@@ -737,7 +737,8 @@ pub mod fast_decode {
         let supports_partial_decode = supports_fast_decode_and_encode.supports_partial_decode();
 
         for &byte in &input {
-            if byte == b'\n' || byte == b'\r' {
+            // Newlines are always allowed in encoded input; other bytes need -i.
+            if byte == b'\n' {
                 continue;
             }
 
@@ -829,7 +830,8 @@ pub mod fast_decode {
             && let read_len @ 1.. = read_buffer.len()
         {
             for &byte in read_buffer {
-                if byte == b'\n' || byte == b'\r' {
+                // Newlines are always allowed in encoded input; other bytes need -i.
+                if byte == b'\n' {
                     continue;
                 }
 
