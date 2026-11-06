@@ -10,12 +10,12 @@ use super::num_format::{
     UnsignedIntVariant,
 };
 use super::{
-    EscapeSet, ExtendedBigDecimal, FormatChar, FormatError, OctalParsing, check_precision,
-    parse_escape_only,
+    check_precision, parse_escape_only, EscapeSet, ExtendedBigDecimal, FormatChar, FormatError,
+    OctalParsing,
 };
 use crate::format::FormatArguments;
 use crate::os_str_as_bytes;
-use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
+use crate::quoting_style::{locale_aware_escape_name, QuotingStyle};
 use std::io::Write;
 use std::num::NonZero;
 use std::ops::ControlFlow;
@@ -409,14 +409,14 @@ impl Spec {
                 let value = args.next_string(*position);
 
                 let has_brace = os_str_as_bytes(value)
-                    .is_ok_and(|bytes| bytes.contains(&b'{') || bytes.contains(&b'}'));
+                    .is_ok_and(|bytes| bytes.iter().any(|b| matches!(b, b'{' | b'}')));
 
                 let style = QuotingStyle::SHELL_ESCAPE.always_quote(has_brace);
-                let s = locale_aware_escape_name(value, style)
-                    .into_string()
-                    .unwrap(); // SAFETY: string was just escaped
+                let s = locale_aware_escape_name(value, style);
 
-                writer.write_all(s.as_bytes()).map_err(FormatError::IoError)
+                writer
+                    .write_all(s.as_encoded_bytes())
+                    .map_err(FormatError::IoError)
             }
             Self::SignedInt {
                 width,
