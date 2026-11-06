@@ -225,15 +225,16 @@ enum Source {
     /// Input from a named pipe, also known as a FIFO.
     #[cfg(unix)]
     Fifo(File),
-
-    #[cfg(all(test, not(target_os = "wasi")))]
-    Faulty(tests::FaultySource),
 }
 
 impl Source {
     fn skip_failed_read(&mut self, n: usize) -> io::Result<()> {
-        let offset = i64::try_from(n)
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "input block too large"))?;
+        let offset = i64::try_from(n).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                translate!("dd-error-input-block-too-large"),
+            )
+        })?;
         let result = match self {
             Self::File(f) => f.seek(SeekFrom::Current(offset)),
             #[cfg(unix)]
@@ -242,8 +243,6 @@ impl Source {
             Self::Fifo(_) => return Ok(()),
             #[cfg(not(unix))]
             Self::Stdin(_) => return Ok(()),
-            #[cfg(all(test, not(target_os = "wasi")))]
-            Self::Faulty(f) => f.seek(SeekFrom::Current(offset)),
         };
         match result {
             Ok(_) => Ok(()),
@@ -269,8 +268,6 @@ impl Source {
 
     fn skip(&mut self, n: u64, ibs: usize) -> io::Result<u64> {
         match self {
-            #[cfg(all(test, not(target_os = "wasi")))]
-            Self::Faulty(f) => f.seek(SeekFrom::Current(n.try_into().unwrap())),
             #[cfg(not(unix))]
             Self::Stdin(stdin) => {
                 let m = uucore::io::read_and_discard(stdin, n, ibs)?;
@@ -376,8 +373,6 @@ impl Read for Source {
             Self::StdinFile(f) => f.read(buf),
             #[cfg(unix)]
             Self::Fifo(f) => f.read(buf),
-            #[cfg(all(test, not(target_os = "wasi")))]
-            Self::Faulty(f) => f.read(buf),
         }
     }
 }
@@ -395,16 +390,30 @@ struct Input<'a> {
     /// Configuration settings for how to read the data.
     settings: &'a Settings,
     /// A failed read after a short record skips only the rest of that record.
-    previous_partial: Option<usize>,
-    /// Count the skipped remainder once even if subsequent reads also fail.
-    partial_count_adjusted: bool,
-    /// Recovered bytes to include in the next `count_bytes` update.
-    count_adjustment: u64,
+    previous_partial: Option<PartialRead>,
+}
+
+// Keep the skipped remainder with its short record so repeated errors
+// cannot count the same missing bytes twice.
+struct PartialRead {
+    bytes: usize,
+    skipped: bool,
+}
+
+// Recovery bytes affect count= without changing the records/bytes reported.
+#[derive(Default)]
+struct ReadRecovery {
+    failed: bool,
+    bytes: u64,
 }
 
 enum ReadOutcome {
     Data(usize),
-    RecoveredError { bytes: usize, after_partial: bool },
+    RecoveredError {
+        bytes: usize,
+        after_partial: bool,
+        count_adjustment: u64,
+    },
 }
 
 impl<'a> Input<'a> {
@@ -445,8 +454,6 @@ impl<'a> Input<'a> {
             src,
             settings,
             previous_partial: None,
-            partial_count_adjusted: false,
-            count_adjustment: 0,
         })
     }
 
@@ -474,8 +481,6 @@ impl<'a> Input<'a> {
             src,
             settings,
             previous_partial: None,
-            partial_count_adjusted: false,
-            count_adjustment: 0,
         })
     }
 
@@ -494,8 +499,6 @@ impl<'a> Input<'a> {
             src,
             settings,
             previous_partial: None,
-            partial_count_adjusted: false,
-            count_adjustment: 0,
         })
     }
 }
@@ -534,7 +537,7 @@ fn make_linux_iflags(iflags: &IFlags) -> Option<core::ffi::c_int> {
 
 impl Input<'_> {
     // Specialize reads so normal copies do not maintain error-recovery state.
-    #[inline(always)]
+    #[inline]
     fn read_block<const NOERROR: bool>(&mut self, buf: &mut [u8]) -> io::Result<ReadOutcome> {
         let mut base_idx = 0;
         let target_len = buf.len();
@@ -542,8 +545,11 @@ impl Input<'_> {
             match self.src.read(&mut buf[base_idx..]) {
                 Ok(0) => {
                     if NOERROR && base_idx > 0 {
-                        self.previous_partial = (base_idx < self.settings.ibs).then_some(base_idx);
-                        self.partial_count_adjusted = false;
+                        self.previous_partial =
+                            (base_idx < self.settings.ibs).then_some(PartialRead {
+                                bytes: base_idx,
+                                skipped: false,
+                            });
                     }
                     return Ok(ReadOutcome::Data(base_idx));
                 }
@@ -553,16 +559,20 @@ impl Input<'_> {
                     if base_idx >= target_len {
                         if NOERROR {
                             self.previous_partial =
-                                (target_len < self.settings.ibs).then_some(target_len);
-                            self.partial_count_adjusted = false;
+                                (target_len < self.settings.ibs).then_some(PartialRead {
+                                    bytes: target_len,
+                                    skipped: false,
+                                });
                         }
                         return Ok(ReadOutcome::Data(target_len));
                     }
                 }
                 Ok(len) => {
                     if NOERROR {
-                        self.previous_partial = (len < self.settings.ibs).then_some(len);
-                        self.partial_count_adjusted = false;
+                        self.previous_partial = (len < self.settings.ibs).then_some(PartialRead {
+                            bytes: len,
+                            skipped: false,
+                        });
                     }
                     return Ok(ReadOutcome::Data(len));
                 }
@@ -575,19 +585,24 @@ impl Input<'_> {
                         );
                         show_error!("{}: {e}", translate!("dd-error-reading", "file" => file));
                     }
-                    let previous_partial = self.previous_partial;
-                    let after_partial = base_idx == 0 && previous_partial.is_some();
-                    let read_in_block = if base_idx > 0 {
-                        base_idx
+                    let after_partial = base_idx == 0 && self.previous_partial.is_some();
+                    let (read_in_block, count_adjustment) = if base_idx > 0 {
+                        (base_idx, 0)
+                    } else if let Some(previous) = &mut self.previous_partial {
+                        // A short record's missing bytes count only once,
+                        // even if more than one subsequent read fails.
+                        let adjustment = if previous.skipped {
+                            0
+                        } else {
+                            (self.settings.ibs - previous.bytes) as u64
+                        };
+                        previous.skipped = true;
+                        (previous.bytes, adjustment)
                     } else {
-                        previous_partial.unwrap_or(0)
+                        (0, 0)
                     };
                     self.src
                         .skip_failed_read(self.settings.ibs - read_in_block)?;
-                    if after_partial && !self.partial_count_adjusted {
-                        self.count_adjustment += (self.settings.ibs - read_in_block) as u64;
-                        self.partial_count_adjusted = true;
-                    }
                     return Ok(ReadOutcome::RecoveredError {
                         bytes: if self.settings.iconv.sync.is_some() {
                             base_idx
@@ -595,6 +610,7 @@ impl Input<'_> {
                             0
                         },
                         after_partial,
+                        count_adjustment,
                     });
                 }
                 Err(e) => return Err(e),
@@ -622,18 +638,25 @@ impl Input<'_> {
     fn fill_consecutive<const NOERROR: bool>(
         &mut self,
         buf: &mut [u8],
-    ) -> io::Result<(ReadStat, bool)> {
+    ) -> io::Result<(ReadStat, ReadRecovery)> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut bytes_total = 0;
-        let mut read_error = false;
+        let mut recovery = ReadRecovery::default();
 
         for chunk in buf.chunks_mut(self.settings.ibs) {
-            let (rlen, failed) = match self.read_block::<NOERROR>(chunk)? {
-                ReadOutcome::Data(len) => (len, false),
-                ReadOutcome::RecoveredError { bytes, .. } => (bytes, true),
+            let rlen = match self.read_block::<NOERROR>(chunk)? {
+                ReadOutcome::Data(len) => len,
+                ReadOutcome::RecoveredError {
+                    bytes,
+                    count_adjustment,
+                    ..
+                } => {
+                    recovery.failed = true;
+                    recovery.bytes += count_adjustment;
+                    bytes
+                }
             };
-            read_error |= failed;
             match rlen {
                 rlen if rlen == self.settings.ibs => {
                     bytes_total += rlen;
@@ -661,7 +684,7 @@ impl Input<'_> {
                 records_truncated: 0,
                 bytes_total: bytes_total.try_into().unwrap(),
             },
-            read_error,
+            recovery,
         ))
     }
 
@@ -672,44 +695,42 @@ impl Input<'_> {
     fn fill_blocks<const NOERROR: bool>(
         &mut self,
         buf: &mut [u8],
-        limit: usize,
         pad: u8,
-    ) -> io::Result<(ReadStat, usize, bool, u64)> {
+    ) -> io::Result<(ReadStat, usize, ReadRecovery)> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut base_idx = 0;
         let mut bytes_total = 0;
-        let mut read_error = false;
-        let mut recovered_bytes = 0;
+        let mut recovery = ReadRecovery::default();
 
-        while base_idx < limit {
-            let next_blk = base_idx + self.settings.ibs;
-            let target_len = cmp::min(self.settings.ibs, limit - base_idx);
+        while base_idx < buf.len() {
+            let next_blk = cmp::min(base_idx + self.settings.ibs, buf.len());
+            let target_len = next_blk - base_idx;
 
-            let (rlen, failed) =
-                match self.read_block::<NOERROR>(&mut buf[base_idx..base_idx + target_len])? {
-                    ReadOutcome::Data(len) => (len, false),
-                    ReadOutcome::RecoveredError {
-                        after_partial: true,
-                        ..
-                    } => {
-                        // The preceding short record was already padded.
-                        read_error = true;
-                        break;
-                    }
-                    ReadOutcome::RecoveredError { bytes, .. } => (bytes, true),
-                };
-            read_error |= failed;
+            let (rlen, failed) = match self.read_block::<NOERROR>(&mut buf[base_idx..next_blk])? {
+                ReadOutcome::Data(len) => (len, false),
+                ReadOutcome::RecoveredError {
+                    after_partial: true,
+                    count_adjustment,
+                    ..
+                } => {
+                    // The preceding short record was already padded.
+                    recovery.failed = true;
+                    recovery.bytes += count_adjustment;
+                    break;
+                }
+                ReadOutcome::RecoveredError { bytes, .. } => {
+                    recovery.failed = true;
+                    recovery.bytes += (self.settings.ibs - bytes) as u64;
+                    (bytes, true)
+                }
+            };
             match rlen {
                 0 if !failed => break,
-                rlen if rlen < self.settings.ibs => {
+                rlen if rlen < target_len => {
                     bytes_total += rlen;
                     reads_partial += 1;
                     buf[base_idx + rlen..next_blk].fill(pad);
-                    if failed {
-                        // Padding a failed record consumes the missing input bytes.
-                        recovered_bytes += (self.settings.ibs - rlen) as u64;
-                    }
                 }
                 rlen => {
                     bytes_total += rlen;
@@ -717,7 +738,7 @@ impl Input<'_> {
                 }
             }
 
-            base_idx = next_blk;
+            base_idx += self.settings.ibs;
         }
 
         Ok((
@@ -728,8 +749,7 @@ impl Input<'_> {
                 bytes_total: bytes_total.try_into().unwrap(),
             },
             base_idx,
-            read_error,
-            recovered_bytes,
+            recovery,
         ))
     }
 }
@@ -1280,7 +1300,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     // iteration of the main loop, each will be incremented by the
     // number of blocks read and written, respectively.
     let mut rstat = ReadStat::default();
-    let mut count_bytes = 0u64;
+    let mut count_limit = i.settings.count;
     let mut wstat = WriteStat::default();
 
     // The time at which the main loop starts executing.
@@ -1385,31 +1405,25 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     // the progress reporting thread.
     // A failure ends the loop, so the statistics gathered so far still get reported.
     let mut copy_error = None;
-    while below_count_limit(i.settings.count, &rstat, count_bytes) {
+    while below_count_limit(count_limit, &rstat) {
         // Read a block from the input then write the block to the output.
         //
         // As an optimization, make an educated guess about the
         // best buffer size for reading based on the number of
         // blocks already read and the number of blocks remaining.
-        let loop_bsize =
-            calc_loop_bsize(i.settings.count, &rstat, count_bytes, i.settings.ibs, bsize);
-        let Ok((rstat_update, data, read_error, recovered_bytes)) =
+        let loop_bsize = calc_loop_bsize(count_limit, &rstat, i.settings.ibs, bsize);
+        let Ok((rstat_update, data, recovery)) =
             read_helper(&mut i, &mut buf, loop_bsize).map_err(|e| copy_error = Some(e))
         else {
             break;
         };
-        if matches!(i.settings.count, Some(Num::Bytes(_))) {
-            count_bytes = count_bytes.saturating_add(
-                rstat_update
-                    .bytes_total
-                    .saturating_add(recovered_bytes)
-                    .saturating_add(std::mem::take(&mut i.count_adjustment)),
-            );
-        } else {
-            i.count_adjustment = 0;
+        if recovery.bytes != 0
+            && let Some(Num::Bytes(limit)) = &mut count_limit
+        {
+            *limit = limit.saturating_sub(recovery.bytes);
         }
         if rstat_update.is_empty() {
-            if read_error {
+            if recovery.failed {
                 continue;
             }
             // Dropping the cache is best-effort: a failure (a pipe cannot
@@ -1630,47 +1644,41 @@ fn read_helper<'a>(
     i: &mut Input,
     read_buf: &'a mut AlignedBuf,
     bsize: usize,
-) -> io::Result<(ReadStat, &'a [u8], bool, u64)> {
+) -> io::Result<(ReadStat, &'a [u8], ReadRecovery)> {
     fn perform_swab(buf: &mut [u8]) {
         for base in (1..buf.len()).step_by(2) {
             buf.swap(base, base - 1);
         }
     }
 
-    let (rstat, data_len, read_error, recovered_bytes) = {
-        let scratch = read_buf.as_mut_bytes();
-        let (rstat, data_len, read_error, recovered_bytes) = if let Some(ch) = i.settings.iconv.sync
-        {
+    let (rstat, data_len, recovery) = {
+        let scratch = &mut read_buf.as_mut_bytes()[..bsize];
+        let (rstat, data_len, recovery) = if let Some(ch) = i.settings.iconv.sync {
             if i.settings.iconv.noerror {
-                i.fill_blocks::<true>(scratch, bsize, ch)?
+                i.fill_blocks::<true>(scratch, ch)?
             } else {
-                i.fill_blocks::<false>(scratch, bsize, ch)?
+                i.fill_blocks::<false>(scratch, ch)?
             }
         } else {
-            let (s, read_error) = if i.settings.iconv.noerror {
-                i.fill_consecutive::<true>(&mut scratch[..bsize])?
+            let (s, recovery) = if i.settings.iconv.noerror {
+                i.fill_consecutive::<true>(scratch)?
             } else {
-                i.fill_consecutive::<false>(&mut scratch[..bsize])?
+                i.fill_consecutive::<false>(scratch)?
             };
             let n = s.bytes_total as usize;
-            (s, n, read_error, 0)
+            (s, n, recovery)
         };
         if !rstat.is_empty() && i.settings.iconv.swab {
             perform_swab(&mut scratch[..data_len]);
         }
-        (rstat, data_len, read_error, recovered_bytes)
+        (rstat, data_len, recovery)
     };
 
     if rstat.is_empty() {
-        return Ok((rstat, &[], read_error, recovered_bytes));
+        return Ok((rstat, &[], recovery));
     }
 
-    Ok((
-        rstat,
-        &read_buf.as_bytes()[..data_len],
-        read_error,
-        recovered_bytes,
-    ))
+    Ok((rstat, &read_buf.as_bytes()[..data_len], recovery))
 }
 
 // Calculate a 'good' internal buffer size.
@@ -1688,13 +1696,7 @@ fn calc_bsize(ibs: usize, obs: usize) -> usize {
 
 /// Calculate the buffer size appropriate for this loop iteration, respecting
 /// a `count=N` if present.
-fn calc_loop_bsize(
-    count: Option<Num>,
-    rstat: &ReadStat,
-    count_bytes: u64,
-    ibs: usize,
-    ideal_bsize: usize,
-) -> usize {
+fn calc_loop_bsize(count: Option<Num>, rstat: &ReadStat, ibs: usize, ideal_bsize: usize) -> usize {
     match count {
         Some(Num::Blocks(rmax)) => {
             let rsofar = rstat.reads_complete + rstat.reads_partial;
@@ -1702,7 +1704,8 @@ fn calc_loop_bsize(
             cmp::min(ideal_bsize as u64, rremain * ibs as u64) as usize
         }
         Some(Num::Bytes(bmax)) => {
-            let bremain = bmax.saturating_sub(count_bytes);
+            // `iflag=count_bytes` limits input, so use bytes read.
+            let bremain = bmax.saturating_sub(rstat.bytes_total);
             cmp::min(ideal_bsize as u64, bremain) as usize
         }
         None => ideal_bsize,
@@ -1711,10 +1714,10 @@ fn calc_loop_bsize(
 
 /// Decide if the current progress is below a `count=N` limit or return
 /// `true` if no such limit is set.
-fn below_count_limit(count: Option<Num>, rstat: &ReadStat, count_bytes: u64) -> bool {
+fn below_count_limit(count: Option<Num>, rstat: &ReadStat) -> bool {
     match count {
         Some(Num::Blocks(n)) => rstat.reads_complete + rstat.reads_partial < n,
-        Some(Num::Bytes(n)) => count_bytes < n,
+        Some(Num::Bytes(n)) => rstat.bytes_total < n,
         None => true,
     }
 }
@@ -1832,276 +1835,7 @@ pub fn uu_app() -> Command {
 mod tests {
     use crate::{Output, Parser, calc_bsize};
 
-    #[cfg(not(target_os = "wasi"))]
-    use std::io::{Read, Seek};
     use std::path::Path;
-
-    #[cfg(not(target_os = "wasi"))]
-    pub(super) struct FaultySource {
-        cursor: std::io::Cursor<Vec<u8>>,
-        reads: usize,
-        failure_start: usize,
-        failures: usize,
-        short_read_limit: Option<usize>,
-        short_reads: usize,
-        seekable: bool,
-    }
-
-    #[cfg(not(target_os = "wasi"))]
-    impl Read for FaultySource {
-        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            self.reads += 1;
-            if self.reads >= self.failure_start && self.reads < self.failure_start + self.failures {
-                return Err(std::io::Error::other("injected read error"));
-            }
-            let limit = if self.reads <= self.short_reads {
-                self.short_read_limit.unwrap_or(buf.len()).min(buf.len())
-            } else {
-                buf.len()
-            };
-            self.cursor.read(&mut buf[..limit])
-        }
-    }
-
-    #[cfg(not(target_os = "wasi"))]
-    impl Seek for FaultySource {
-        fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
-            if !self.seekable {
-                return Err(std::io::Error::from_raw_os_error(libc::ESPIPE));
-            }
-            self.cursor.seek(pos)
-        }
-    }
-
-    #[cfg(not(target_os = "wasi"))]
-    #[test]
-    fn noerror_continues_after_failed_input_block() {
-        use crate::{Input, Num, Settings, Source, dd_copy, progress::StatusLevel};
-        use std::io::Cursor;
-
-        for (sync, count, expected) in [
-            (false, None, &b"AAAACCCC"[..]),
-            (true, None, &b"AAAA\0\0\0\0CCCC"[..]),
-            (false, Some(Num::Blocks(2)), &b"AAAACCCC"[..]),
-            (true, Some(Num::Blocks(2)), &b"AAAA\0\0\0\0"[..]),
-            (false, Some(Num::Bytes(5)), &b"AAAAC"[..]),
-            (true, Some(Num::Bytes(5)), &b"AAAA\0\0\0\0"[..]),
-            (true, Some(Num::Bytes(8)), &b"AAAA\0\0\0\0"[..]),
-        ] {
-            let dir = tempfile::tempdir().unwrap();
-            let path = dir.path().join("output");
-            let mut settings = Settings {
-                ibs: 4,
-                obs: 4,
-                count,
-                status: Some(StatusLevel::None),
-                ..Settings::default()
-            };
-            settings.iconv.noerror = true;
-            settings.iconv.sync = sync.then_some(0);
-            let input = Input {
-                src: Source::Faulty(FaultySource {
-                    cursor: Cursor::new(b"AAAABBBBCCCC".to_vec()),
-                    reads: 0,
-                    failure_start: 2,
-                    failures: 1,
-                    short_read_limit: None,
-                    short_reads: 1,
-                    seekable: true,
-                }),
-                settings: &settings,
-                previous_partial: None,
-                partial_count_adjusted: false,
-                count_adjustment: 0,
-            };
-            let output = Output::new_file(&path, &settings).unwrap();
-            dd_copy(input, output).unwrap();
-            assert_eq!(std::fs::read(path).unwrap(), expected);
-        }
-    }
-
-    #[cfg(not(target_os = "wasi"))]
-    #[test]
-    fn noerror_fullblock_after_partial_read() {
-        use crate::{Input, Settings, Source, dd_copy, progress::StatusLevel};
-        use std::io::Cursor;
-
-        for (sync, expected) in [(false, &b"BBBBCCCC"[..]), (true, &b"AA\0\0BBBBCCCC"[..])] {
-            let dir = tempfile::tempdir().unwrap();
-            let path = dir.path().join("output");
-            let mut settings = Settings {
-                ibs: 4,
-                obs: 4,
-                status: Some(StatusLevel::None),
-                ..Settings::default()
-            };
-            settings.iconv.noerror = true;
-            settings.iconv.sync = sync.then_some(0);
-            settings.iflags.fullblock = true;
-            let input = Input {
-                src: Source::Faulty(FaultySource {
-                    cursor: Cursor::new(b"AAAABBBBCCCC".to_vec()),
-                    reads: 0,
-                    failure_start: 2,
-                    failures: 1,
-                    short_read_limit: Some(2),
-                    short_reads: 1,
-                    seekable: true,
-                }),
-                settings: &settings,
-                previous_partial: None,
-                partial_count_adjusted: false,
-                count_adjustment: 0,
-            };
-            let output = Output::new_file(&path, &settings).unwrap();
-            dd_copy(input, output).unwrap();
-            assert_eq!(std::fs::read(path).unwrap(), expected);
-        }
-    }
-
-    #[cfg(not(target_os = "wasi"))]
-    #[test]
-    fn noerror_after_short_read_skips_to_next_input_block() {
-        use crate::{Input, Num, Settings, Source, dd_copy, progress::StatusLevel};
-        use std::io::Cursor;
-
-        for (sync, count, failures, short_reads, expected) in [
-            (false, None, 1, 1, &b"AABBBBCCCC"[..]),
-            (true, None, 1, 1, &b"AA\0\0BBBBCCCC"[..]),
-            (false, Some(Num::Bytes(5)), 1, 1, &b"AAB"[..]),
-            (true, Some(Num::Bytes(5)), 1, 1, &b"AA\0\0B\0\0\0"[..]),
-            (false, Some(Num::Bytes(5)), 0, 1, &b"AAAAB"[..]),
-            (true, Some(Num::Bytes(5)), 0, 1, &b"AA\0\0AAB\0"[..]),
-            (false, None, 2, 1, &b"AABBCCCC"[..]),
-            (true, None, 2, 1, &b"AA\0\0BBCCCC\0\0"[..]),
-            (false, Some(Num::Bytes(5)), 2, 1, &b"AAB"[..]),
-            (true, Some(Num::Bytes(5)), 2, 1, &b"AA\0\0B\0\0\0"[..]),
-            (false, None, 1, 2, &b"AAAABBCCCC"[..]),
-            (true, None, 1, 2, &b"AA\0\0AA\0\0BBCCCC\0\0"[..]),
-        ] {
-            let dir = tempfile::tempdir().unwrap();
-            let path = dir.path().join("output");
-            let mut settings = Settings {
-                ibs: 4,
-                obs: 4,
-                count,
-                status: Some(StatusLevel::None),
-                ..Settings::default()
-            };
-            settings.iconv.noerror = true;
-            settings.iconv.sync = sync.then_some(0);
-            let input = Input {
-                src: Source::Faulty(FaultySource {
-                    cursor: Cursor::new(b"AAAABBBBCCCC".to_vec()),
-                    reads: 0,
-                    failure_start: short_reads + 1,
-                    failures,
-                    short_read_limit: Some(2),
-                    short_reads,
-                    seekable: true,
-                }),
-                settings: &settings,
-                previous_partial: None,
-                partial_count_adjusted: false,
-                count_adjustment: 0,
-            };
-            let output = Output::new_file(&path, &settings).unwrap();
-            dd_copy(input, output).unwrap();
-            assert_eq!(std::fs::read(path).unwrap(), expected);
-        }
-    }
-
-    #[cfg(all(unix, not(target_os = "wasi")))]
-    #[test]
-    fn noerror_continues_on_nonseekable_input() {
-        use crate::{Input, Settings, Source, dd_copy, progress::StatusLevel};
-        use std::io::Cursor;
-
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("output");
-        let mut settings = Settings {
-            ibs: 4,
-            obs: 4,
-            status: Some(StatusLevel::None),
-            ..Settings::default()
-        };
-        settings.iconv.noerror = true;
-        let input = Input {
-            src: Source::Faulty(FaultySource {
-                cursor: Cursor::new(b"AAAABBBBCCCC".to_vec()),
-                reads: 0,
-                failure_start: 2,
-                failures: 1,
-                short_read_limit: None,
-                short_reads: 1,
-                seekable: false,
-            }),
-            settings: &settings,
-            previous_partial: None,
-            partial_count_adjusted: false,
-            count_adjustment: 0,
-        };
-        let output = Output::new_file(&path, &settings).unwrap();
-        dd_copy(input, output).unwrap();
-        assert_eq!(std::fs::read(path).unwrap(), b"AAAABBBBCCCC");
-    }
-
-    #[cfg(not(target_os = "wasi"))]
-    #[test]
-    fn read_error_without_noerror_stops_copy() {
-        use crate::{Input, Settings, Source, dd_copy, progress::StatusLevel};
-        use std::io::Cursor;
-
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("output");
-        let settings = Settings {
-            ibs: 4,
-            obs: 4,
-            status: Some(StatusLevel::None),
-            ..Settings::default()
-        };
-        let input = Input {
-            src: Source::Faulty(FaultySource {
-                cursor: Cursor::new(b"AAAABBBBCCCC".to_vec()),
-                reads: 0,
-                failure_start: 2,
-                failures: 1,
-                short_read_limit: None,
-                short_reads: 1,
-                seekable: true,
-            }),
-            settings: &settings,
-            previous_partial: None,
-            partial_count_adjusted: false,
-            count_adjustment: 0,
-        };
-        let output = Output::new_file(&path, &settings).unwrap();
-        assert!(dd_copy(input, output).is_err());
-        assert_eq!(std::fs::read(path).unwrap(), b"AAAA");
-    }
-
-    #[cfg(not(target_os = "wasi"))]
-    #[test]
-    fn sync_count_bytes_pads_final_record() {
-        use crate::{Input, Num, Settings, dd_copy, progress::StatusLevel};
-
-        let dir = tempfile::tempdir().unwrap();
-        let input_path = dir.path().join("input");
-        let output_path = dir.path().join("output");
-        std::fs::write(&input_path, b"AB\nCD\nEFGH").unwrap();
-        let mut settings = Settings {
-            ibs: 4,
-            obs: 2,
-            count: Some(Num::Bytes(5)),
-            status: Some(StatusLevel::None),
-            ..Settings::default()
-        };
-        settings.iconv.sync = Some(0);
-        let input = Input::new_file(&input_path, &settings).unwrap();
-        let output = Output::new_file(&output_path, &settings).unwrap();
-        dd_copy(input, output).unwrap();
-        assert_eq!(std::fs::read(output_path).unwrap(), b"AB\nCD\0\0\0");
-    }
 
     #[test]
     fn bsize_test_primes() {
@@ -2231,7 +1965,7 @@ mod tests {
                 ..ReadStat::default()
             };
             assert_eq!(
-                calc_loop_bsize(Some(Num::Bytes(1000)), &rstat, bytes_read, 512, 512),
+                calc_loop_bsize(Some(Num::Bytes(1000)), &rstat, 512, 512),
                 expected
             );
         }

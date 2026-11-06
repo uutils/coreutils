@@ -105,6 +105,7 @@ dd-error-multiplier-overflow = Multiplier string would overflow on current syste
 dd-error-status-not-recognized = invalid status level: '{ $level }'
 dd-error-unimplemented = feature not implemented on this system -> { $feature }
 dd-error-reading = error reading { $file }
+dd-error-input-block-too-large = input block too large
 dd-error-bs-out-of-range = { $param }=N cannot fit into memory
 dd-error-invalid-number = invalid number: '{ $input }'
 

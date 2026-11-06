@@ -2255,7 +2255,7 @@ fn test_noerror_recovers_after_read_error() {
     at.write("input", "AAAABBBBCCCC");
     let input = at.plus_as_string("input");
     let trace = at.plus_as_string("trace");
-    let run = |extra: &[&str]| {
+    let run = |when: &str, extra: &[&str]| {
         Command::new("strace")
             .args([
                 "-qq",
@@ -2266,7 +2266,7 @@ fn test_noerror_recovers_after_read_error() {
                 "-e",
                 "trace=read,lseek",
                 "-e",
-                "inject=read:error=EIO:when=2",
+                &format!("inject=read:error=EIO:when={when}"),
             ])
             .arg(get_tests_binary())
             .args(["dd", &format!("if={input}"), "bs=4"])
@@ -2276,7 +2276,7 @@ fn test_noerror_recovers_after_read_error() {
     };
 
     // Check both strace availability and that this environment permits fault injection.
-    let Ok(probe) = run(&["status=none"]) else {
+    let Ok(probe) = run("2", &["status=none"]) else {
         eprintln!("TEST SKIPPED: strace is unavailable");
         return;
     };
@@ -2290,28 +2290,33 @@ fn test_noerror_recovers_after_read_error() {
     assert!(!probe.status.success());
     assert_eq!(probe.stdout, b"AAAA");
 
-    for (args, expected, diagnostic) in [
+    for (when, args, expected, diagnostic) in [
         (
+            "2",
             &["conv=noerror", "status=noxfer"][..],
             &b"AAAACCCC"[..],
             true,
         ),
         (
+            "2",
             &["conv=noerror,sync", "status=noxfer"],
             &b"AAAA\0\0\0\0CCCC"[..],
             true,
         ),
         (
+            "2",
             &["conv=noerror", "count=2", "status=noxfer"],
             &b"AAAACCCC"[..],
             true,
         ),
         (
+            "2",
             &["conv=noerror,sync", "count=2", "status=noxfer"],
             &b"AAAA\0\0\0\0"[..],
             true,
         ),
         (
+            "2",
             &[
                 "conv=noerror",
                 "iflag=count_bytes",
@@ -2322,18 +2327,42 @@ fn test_noerror_recovers_after_read_error() {
             true,
         ),
         (
+            "2",
             &[
                 "conv=noerror,sync",
                 "iflag=count_bytes",
-                "count=5",
+                "count=8",
                 "status=noxfer",
             ],
             &b"AAAA\0\0\0\0"[..],
             true,
         ),
-        (&["conv=noerror", "status=none"], &b"AAAACCCC"[..], false),
+        (
+            "2",
+            &["conv=noerror", "status=none"],
+            &b"AAAACCCC"[..],
+            false,
+        ),
+        (
+            "2",
+            &["conv=noerror", "iflag=fullblock", "status=noxfer"],
+            &b"AAAACCCC"[..],
+            true,
+        ),
+        (
+            "2..3",
+            &["conv=noerror", "status=noxfer"],
+            &b"AAAA"[..],
+            true,
+        ),
+        (
+            "2..3",
+            &["conv=noerror,sync", "status=noxfer"],
+            &b"AAAA\0\0\0\0\0\0\0\0"[..],
+            true,
+        ),
     ] {
-        let result = run(args).expect("failed to run strace");
+        let result = run(when, args).expect("failed to run strace");
         assert!(at.read("trace").contains("(INJECTED)"), "{args:?}");
         assert!(result.status.success(), "{args:?}: {result:?}");
         assert_eq!(result.stdout, expected, "{args:?}");
