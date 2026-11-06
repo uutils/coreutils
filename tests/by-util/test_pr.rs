@@ -708,6 +708,24 @@ fn test_join_lines_keeps_column_separator() {
 }
 
 #[test]
+fn test_merge_with_column_separator() {
+    // like GNU pr, -s joins the merged lines with the separator, unpadded
+    // unless -w is given
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("one", "first line\n2\n");
+    at.write("two", "x\ny\n");
+    ucmd.args(&["-m", "-t", "-s,", "one", "two", "one"])
+        .succeeds()
+        .stdout_is("first line,x,first line\n2,y,2\n");
+    new_ucmd!()
+        .args(&["-m", "-t", "-s,", "-w", "10"])
+        .arg(at.plus("one"))
+        .arg(at.plus("two"))
+        .succeeds()
+        .stdout_is("firs,x\n2   ,y\n");
+}
+
+#[test]
 fn test_merge_stops_after_last_line_without_header() {
     // without a page trailer there is nothing to pad to: like GNU pr, stop
     // after the last merged line (-F still prints the 5 header lines and a form feed)
