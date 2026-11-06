@@ -929,17 +929,13 @@ impl<'a> Output<'a> {
         // file for reading. But then we need to close the file and
         // re-open it for writing.
         if settings.seek > 0 {
-            // The checks of the write-side open below must come first, or the
-            // seek reads from a FIFO that `conv=excl` or `oflag=nofollow` refuses.
-            if settings.oconv.excl {
-                // The FIFO already exists, so the exclusive create can only fail.
-                return Err(io::Error::from_raw_os_error(libc::EEXIST).into());
-            }
+            // `oflag=` flags such as `nofollow` and `nonblock` apply to this
+            // open as well, or the seek reads from a FIFO they would refuse.
             let mut opts = OpenOptions::new();
             opts.read(true);
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            if settings.oflags.nofollow {
-                opts.custom_flags(libc::O_NOFOLLOW);
+            if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
+                opts.custom_flags(libc_flags & !(libc::O_APPEND | libc::O_DSYNC | libc::O_SYNC));
             }
             Dest::Fifo(opts.open(filename)?).seek(settings.seek, settings.obs)?;
         }
@@ -1642,7 +1638,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
     let o = match settings.outfile {
         #[cfg(unix)]
-        Some(ref outfile) if is_fifo(outfile) => Output::new_fifo(Path::new(&outfile), &settings)?,
+        // `conv=excl` must fail on an existing FIFO, which the exclusive create
+        // in `new_file` does before anything is read from it.
+        Some(ref outfile) if is_fifo(outfile) && !settings.oconv.excl => {
+            Output::new_fifo(Path::new(&outfile), &settings)?
+        }
         Some(ref outfile) => Output::new_file(Path::new(&outfile), &settings)?,
         None if is_stdout_redirected_to_seekable_file() => Output::new_file_from_stdout(&settings)?,
         None => Output::new_stdout(&settings)?,
