@@ -16,6 +16,7 @@
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;
 
+use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::mem::MaybeUninit;
@@ -802,6 +803,46 @@ impl AsRawFd for DirFd {
 impl AsFd for DirFd {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
+    }
+}
+
+/// A directory to create entries in, held open where the platform allows. Without a
+/// search-only open, an unreadable one is reached by its path, resolved again on each call.
+pub(crate) struct DirAnchor {
+    path: PathBuf,
+    fd: Option<DirFd>,
+}
+
+impl DirAnchor {
+    /// Open `path` with [`DirFd::open_anchor`], keeping only the path where that is denied.
+    pub(crate) fn open(path: &Path) -> io::Result<Self> {
+        let fd = match DirFd::open_anchor(path) {
+            Ok(fd) => Some(fd),
+            Err(e) if SEARCH_ONLY.is_none() && e.kind() == io::ErrorKind::PermissionDenied => None,
+            Err(e) => return Err(e),
+        };
+        Ok(Self {
+            path: path.to_owned(),
+            fd,
+        })
+    }
+
+    /// The directory and name to pass to an `*at` call for the entry `name`.
+    pub(crate) fn at<'a>(
+        &'a self,
+        name: &'a OsStr,
+    ) -> io::Result<(BorrowedFd<'a>, Cow<'a, OsStr>)> {
+        // Joined to the path, an empty name would be the directory itself.
+        if name.is_empty() {
+            return Err(io::Error::from_raw_os_error(libc::ENOENT));
+        }
+        Ok(match &self.fd {
+            Some(dir) => (dir.as_fd(), Cow::Borrowed(name)),
+            None => (
+                rustix::fs::CWD,
+                Cow::Owned(self.path.join(name).into_os_string()),
+            ),
+        })
     }
 }
 
