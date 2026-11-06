@@ -319,3 +319,25 @@ fn test_base64_file_with_trailing_slash() {
         .fails()
         .stderr_only("base64: a/: Not a directory\n");
 }
+
+#[test]
+fn test_decode_rejects_carriage_return() {
+    // GNU rejects CR in encoded input unless -i (LF alone is fine).
+    let input = "\raGVsbG8=";
+    new_ucmd!()
+        .args(&["-d"])
+        .pipe_in(input)
+        .fails()
+        .code_is(1)
+        .stderr_only("base64: invalid input\n");
+}
+
+#[test]
+fn test_decode_ignore_garbage_allows_carriage_return() {
+    let input = "\raGVsbG8=";
+    new_ucmd!()
+        .args(&["-d", "-i"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("hello");
+}

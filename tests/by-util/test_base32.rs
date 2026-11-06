@@ -180,3 +180,25 @@ fn test_base32_file_with_trailing_slash() {
         .fails()
         .stderr_only("base32: a/: Not a directory\n");
 }
+
+#[test]
+fn test_decode_rejects_carriage_return() {
+    // Encoded "hello" with CR between groups: GNU rejects CR unless -i.
+    let input = "NBSW\rY3DP\r";
+    new_ucmd!()
+        .args(&["-d"])
+        .pipe_in(input)
+        .fails()
+        .code_is(1)
+        .stderr_only("base32: invalid input\n");
+}
+
+#[test]
+fn test_decode_ignore_garbage_allows_carriage_return() {
+    let input = "NBSW\rY3DP\r";
+    new_ucmd!()
+        .args(&["-d", "-i"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("hello");
+}
