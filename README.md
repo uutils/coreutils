@@ -79,11 +79,6 @@ installing anything.
 
 <!-- ANCHOR: build (this mark is needed for mdbook) -->
 
-## Requirements
-
-- Rust (`cargo`, `rustc`)
-- GNU Make (optional)
-
 ## Building
 
 There are currently two methods to build the uutils binaries: either Cargo or
