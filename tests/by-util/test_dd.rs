@@ -1678,6 +1678,14 @@ fn test_seek_output_fifo_symlink_nofollow() {
     at.mkfifo("fifo");
     at.symlink_file("fifo", "slot");
 
+    // The C libraries word ELOOP differently.
+    #[cfg(all(target_os = "linux", not(target_env = "musl")))]
+    let eloop = "Too many levels of symbolic links";
+    #[cfg(all(target_os = "linux", target_env = "musl"))]
+    let eloop = "Symbolic link loop";
+    #[cfg(target_os = "android")]
+    let eloop = "Too many symbolic links encountered";
+
     ts.ucmd()
         .args(&[
             "if=/dev/null",
@@ -1688,7 +1696,7 @@ fn test_seek_output_fifo_symlink_nofollow() {
         ])
         .timeout(Duration::from_secs(10))
         .fails()
-        .stderr_contains("Too many levels of symbolic links");
+        .stderr_contains(eloop);
 }
 
 /// `oflag=nonblock` reaches the open that seeks in an output FIFO, so it does
