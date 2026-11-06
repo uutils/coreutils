@@ -1109,7 +1109,7 @@ pub fn get_filename(file: &Path) -> Option<&str> {
 pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> {
     #[cfg(all(unix, not(target_os = "redox")))]
     {
-        use rustix::fs::{AtFlags, CWD, Mode, OFlags, openat, renameat, unlinkat};
+        use rustix::fs::{AtFlags, CWD, renameat, unlinkat};
         use std::ffi::OsStr;
         use std::io::Read;
         use std::os::unix::ffi::OsStrExt;
@@ -1134,12 +1134,8 @@ pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> 
             .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid link path"))?;
         // No NOFOLLOW: the parent may be a symlink to a directory, which the
         // create attempt above already followed.
-        let dir = openat(
-            CWD,
-            parent,
-            OFlags::DIRECTORY | OFlags::RDONLY | OFlags::CLOEXEC,
-            Mode::empty(),
-        )?;
+        let dir = crate::safe_traversal::DirAnchor::open(parent)?;
+        let (dir_fd, dest_name) = dir.at(basename)?;
         let mut urandom = fs::File::open("/dev/urandom")?;
 
         for _ in 0..32 {
@@ -1149,14 +1145,14 @@ pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> 
             for (slot, byte) in name[2..].iter_mut().zip(raw) {
                 *slot = ALPHABET[byte as usize % ALPHABET.len()];
             }
-            let tmp = OsStr::from_bytes(&name);
+            let (_, tmp) = dir.at(OsStr::from_bytes(&name))?;
 
-            match link_at(target, &dir, tmp, symbolic) {
+            match link_at(target, dir_fd, &tmp, symbolic) {
                 Ok(()) => {
-                    let renamed = renameat(&dir, tmp, &dir, basename);
+                    let renamed = renameat(dir_fd, &*tmp, dir_fd, &*dest_name);
                     // Renaming onto an existing link to the same inode is a
                     // no-op, which leaves the temp behind.
-                    let _ = unlinkat(&dir, tmp, AtFlags::empty());
+                    let _ = unlinkat(dir_fd, &*tmp, AtFlags::empty());
                     return renamed.map_err(Into::into);
                 }
                 Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
