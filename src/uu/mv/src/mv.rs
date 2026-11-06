@@ -1320,9 +1320,7 @@ fn copy_dir_contents_recursive(
 
             // Preserve ownership (uid/gid) of the subdirectory
             #[cfg(unix)]
-            {
-                let _ = preserve_ownership(&from_path, &to_path);
-            }
+            let ownership_preserved = preserve_ownership(&from_path, &to_path).unwrap_or(false);
 
             print_verbose(&from_path, &to_path);
 
@@ -1337,6 +1335,9 @@ fn copy_dir_contents_recursive(
                 progress_bar,
                 display_manager,
             )?;
+
+            #[cfg(unix)]
+            copy_subdir_xattrs_and_mode(&from_path, &to_path, ownership_preserved);
         } else {
             // Copy file with or without hardlink support based on platform
             #[cfg(unix)]
@@ -1365,6 +1366,43 @@ fn copy_dir_contents_recursive(
     }
 
     Ok(())
+}
+
+/// Give a subdirectory copied by the cross-device fallback the xattrs (POSIX
+/// ACLs included) and the mode of its source.
+///
+/// This runs once the subdirectory's contents are copied, so that neither a
+/// default ACL nor a read-only mode applies to the entries created in it.
+/// The mode is set after the ACL: while a directory has an ACL, the group bits
+/// of its mode are the ACL mask, and chmod sets the mask from them.
+#[cfg(unix)]
+fn copy_subdir_xattrs_and_mode(from: &Path, to: &Path, ownership_preserved: bool) {
+    use std::os::unix::fs::MetadataExt;
+
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "hurd",
+        target_os = "linux",
+        target_os = "android",
+        target_os = "netbsd"
+    ))]
+    {
+        if let Ok(failed) = fsxattr::copy_xattrs_ignore_unsupported(from, to) {
+            show_xattr_failures(failed);
+        }
+    }
+
+    if let Ok(metadata) = from.symlink_metadata() {
+        let mode = metadata.mode() & 0o7777;
+        // As for files: if the chown did not take, the setuid/setgid bits
+        // would apply to the wrong owner or group, so drop them.
+        let mode = if ownership_preserved {
+            mode
+        } else {
+            mode & !0o6000
+        };
+        let _ = fs::set_permissions(to, fs::Permissions::from_mode(mode));
+    }
 }
 
 #[cfg(unix)]
