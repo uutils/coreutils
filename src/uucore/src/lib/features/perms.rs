@@ -26,12 +26,10 @@ use std::ffi::OsString;
 #[cfg(not(target_os = "linux"))]
 use walkdir::WalkDir;
 
-#[cfg(target_os = "linux")]
-use crate::features::fs::FileInformation;
 use crate::features::fs::{metadata_is_root_dir, path_is_root_dir};
 #[cfg(target_os = "linux")]
 use crate::features::safe_traversal::{
-    DirFd, FileInfo, Metadata as TraversalMetadata, PinnedFile, SymlinkBehavior,
+    DirFd, FileInfo, Metadata as TraversalMetadata, OPEN_DIR_FDS, PinnedFile, SymlinkBehavior,
 };
 
 #[cfg(target_os = "redox")]
@@ -43,6 +41,8 @@ use std::os::unix::fs::MetadataExt;
 #[cfg(target_os = "redox")]
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
+#[cfg(target_os = "linux")]
+use std::path::PathBuf;
 
 #[derive(Debug, thiserror::Error)]
 enum PermsError {
@@ -286,6 +286,30 @@ fn report_root(path: &Path) {
 fn fd_is(dir_fd: &DirFd, meta: &Metadata) -> IOResult<bool> {
     let opened = FileInfo::from_stat(&dir_fd.fstat()?);
     Ok(opened == FileInfo::new(meta.dev(), meta.ino()))
+}
+
+/// A directory suspended while a subdirectory is walked; past the deepest
+/// [`OPEN_DIR_FDS`], it gets its descriptor back through ".." on the way up.
+#[cfg(target_os = "linux")]
+struct Frame {
+    fd: Option<DirFd>,
+    info: Option<FileInfo>,
+    entries: std::vec::IntoIter<OsString>,
+    path: PathBuf,
+    /// The subdirectory being walked was reached through a symlink, so its ".."
+    /// is not this directory: the descriptor stays open.
+    linked: bool,
+}
+
+/// What the -R walk does after changing an entry.
+#[cfg(target_os = "linux")]
+enum Visit {
+    Next,
+    /// Skip the rest of the directory.
+    LeaveDir,
+    /// Walk the subdirectory, held open, at this path, reached through a
+    /// symlink or not.
+    Descend(DirFd, PathBuf, bool),
 }
 
 pub fn get_metadata(file: &Path, follow: bool) -> std::io::Result<Metadata> {
@@ -612,32 +636,108 @@ impl ChownExecutor {
             dir_fd
         };
 
-        let mut ancestors = HashSet::new();
-        let mut ret = 0;
-        self.safe_traverse_dir(&dir_fd, root, &mut ret, &mut ancestors);
-        ret
+        self.safe_traverse_dir(dir_fd, root)
     }
 
+    /// Change everything below the directory `dir_fd`, at `dir_path`.
     #[cfg(target_os = "linux")]
-    fn safe_traverse_dir(
+    fn safe_traverse_dir(&self, dir_fd: DirFd, dir_path: &Path) -> i32 {
+        let mut ret = 0;
+        let mut ancestors = HashSet::new();
+        let Some((mut info, mut entries)) =
+            self.enter_dir(&dir_fd, dir_path, &mut ancestors, &mut ret)
+        else {
+            return ret;
+        };
+        let (mut cur_fd, mut cur_path) = (dir_fd, dir_path.to_path_buf());
+        // An explicit stack rather than recursion: depth then costs neither
+        // call stack nor, past `OPEN_DIR_FDS`, descriptors.
+        let mut stack: Vec<Frame> = Vec::new();
+        loop {
+            let Some(entry_name) = entries.next() else {
+                // Backtrack so sibling subtrees that legitimately reach the same
+                // directory (e.g. two symlinks to one dir) are not taken for cycles.
+                if let Some(info) = &info {
+                    ancestors.remove(info);
+                }
+                let Some(parent) = stack.pop() else {
+                    return ret;
+                };
+                cur_fd = match parent.fd {
+                    Some(fd) => fd,
+                    None => match parent
+                        .info
+                        .as_ref()
+                        .map_or(Ok(None), |info| cur_fd.reopen_parent(info))
+                    {
+                        Ok(Some(fd)) => fd,
+                        // Without the parent, the walk cannot go on.
+                        Ok(None) => {
+                            if self.verbosity.level != VerbosityLevel::Silent {
+                                show_error!(
+                                    "{}",
+                                    translate!("perms-cannot-access-replaced", "file" => parent.path.quote())
+                                );
+                            }
+                            return 1;
+                        }
+                        Err(e) => {
+                            if self.verbosity.level != VerbosityLevel::Silent {
+                                show_error!(
+                                    "{}",
+                                    translate!("perms-cannot-access", "file" => parent.path.quote(), "error" => strip_errno(&e))
+                                );
+                            }
+                            return 1;
+                        }
+                    },
+                };
+                (info, entries, cur_path) = (parent.info, parent.entries, parent.path);
+                continue;
+            };
+            match self.visit_entry(&cur_fd, &cur_path, &entry_name, &mut ret) {
+                Visit::Next => {}
+                Visit::LeaveDir => entries = Vec::new().into_iter(),
+                Visit::Descend(sub_fd, sub_path, linked) => {
+                    let Some((sub_info, sub_entries)) =
+                        self.enter_dir(&sub_fd, &sub_path, &mut ancestors, &mut ret)
+                    else {
+                        continue;
+                    };
+                    stack.push(Frame {
+                        fd: Some(std::mem::replace(&mut cur_fd, sub_fd)),
+                        info: std::mem::replace(&mut info, sub_info),
+                        entries: std::mem::replace(&mut entries, sub_entries),
+                        path: std::mem::replace(&mut cur_path, sub_path),
+                        linked,
+                    });
+                    if let Some(far) = stack.len().checked_sub(OPEN_DIR_FDS)
+                        && !stack[far].linked
+                        && stack[far].info.is_some()
+                    {
+                        stack[far].fd = None;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Read the directory `dir_fd`, at `dir_path`, and mark it as being walked;
+    /// `None` if it cannot be read or is already being walked, a cycle.
+    #[cfg(target_os = "linux")]
+    fn enter_dir(
         &self,
         dir_fd: &DirFd,
         dir_path: &Path,
+        ancestors: &mut HashSet<FileInfo>,
         ret: &mut i32,
-        ancestors: &mut HashSet<FileInformation>,
-    ) {
-        // Cycle detection: identify this directory by (dev, ino) via the already-open
-        // fd. Using the fd is TOCTOU-safe (no path re-resolution through symlinks) and
-        // avoids a redundant path walk. If it's already on the current path, it's a cycle.
-        let dir_info = FileInformation::from_file(dir_fd).ok();
-        if dir_info
-            .as_ref()
-            .is_some_and(|info| !ancestors.insert(info.clone()))
-        {
-            return; // cycle detected, stop silently
+    ) -> Option<(Option<FileInfo>, std::vec::IntoIter<OsString>)> {
+        // Identify the directory through its descriptor, not its path, which
+        // could be re-pointed. A cycle stops silently.
+        let info = dir_fd.metadata().ok().map(|meta| meta.file_info());
+        if info.as_ref().is_some_and(|info| ancestors.contains(info)) {
+            return None;
         }
-
-        // Read directory entries
         let entries = match dir_fd.read_dir() {
             Ok(entries) => entries,
             Err(e) => {
@@ -649,18 +749,125 @@ impl ChownExecutor {
                         strip_errno(&e)
                     );
                 }
-                return;
+                return None;
+            }
+        };
+        if let Some(info) = &info {
+            ancestors.insert(info.clone());
+        }
+        Some((info, entries.into_iter()))
+    }
+
+    /// Change the entry `entry_name` of `dir_fd`, at `dir_path`, and say
+    /// whether to descend into it.
+    #[cfg(target_os = "linux")]
+    fn visit_entry(
+        &self,
+        dir_fd: &DirFd,
+        dir_path: &Path,
+        entry_name: &OsStr,
+        ret: &mut i32,
+    ) -> Visit {
+        let entry_path = dir_path.join(entry_name);
+
+        // Get metadata for the entry
+        let follow = self.traverse_symlinks == TraverseSymlinks::All;
+
+        let meta = match dir_fd.metadata_at(entry_name, follow.into()) {
+            Ok(m) => m,
+            Err(e) => {
+                *ret = 1;
+                if self.verbosity.level != VerbosityLevel::Silent {
+                    show_error!(
+                        "{}",
+                        translate!("perms-cannot-access", "file" => entry_path.quote(), "error" => strip_errno(&e))
+                    );
+                }
+                self.report_owner_unknown(&entry_path);
+                return Visit::Next;
             }
         };
 
-        for entry_name in entries {
-            let entry_path = dir_path.join(&entry_name);
+        if self.preserve_root
+            && is_root(&entry_path, self.traverse_symlinks == TraverseSymlinks::All)
+        {
+            *ret = 1;
+            return Visit::LeaveDir;
+        }
 
-            // Get metadata for the entry
-            let follow = self.traverse_symlinks == TraverseSymlinks::All;
+        // Under -H a symlink is stat'd itself for the descent, but changed
+        // through, so `--from` and the report concern the file it points to.
+        let target_meta = if self.dereference && meta.file_type().is_symlink() {
+            match dir_fd.metadata_at(entry_name, SymlinkBehavior::Follow) {
+                Ok(target) => Some(target),
+                // As with GNU, a link whose target cannot be stat'd is left alone.
+                Err(e) => {
+                    *ret = 1;
+                    if self.verbosity.level != VerbosityLevel::Silent {
+                        show_error!(
+                            "cannot dereference {}: {}",
+                            entry_path.quote(),
+                            strip_errno(&e)
+                        );
+                    }
+                    self.report_owner_unknown(&entry_path);
+                    return Visit::Next;
+                }
+            }
+        } else {
+            None
+        };
+        let owner = target_meta.as_ref().unwrap_or(&meta);
 
-            let meta = match dir_fd.metadata_at(&entry_name, follow.into()) {
-                Ok(m) => m,
+        // Check if we should chown this entry
+        if self.matched(owner.uid(), owner.gid()) {
+            let changed = self.chown_entry(dir_fd, entry_name, owner, self.dereference);
+            if let Ok(false) = changed {
+                // Replaced: as with GNU, fail with no error, only -v's line.
+                *ret = 1;
+                self.report_failed_change(&entry_path, owner);
+            } else if let Err(e) = changed {
+                *ret = 1;
+                if self.verbosity.level != VerbosityLevel::Silent {
+                    let msg = format!(
+                        "changing {} of {}: {}",
+                        if self.verbosity.groups_only {
+                            "group"
+                        } else {
+                            "ownership"
+                        },
+                        entry_path.quote(),
+                        strip_errno(&e)
+                    );
+                    show_error!("{msg}");
+                }
+                self.report_failed_change(&entry_path, owner);
+            } else {
+                // Report the successful ownership change using the shared helper
+                self.report_ownership_change_success(&entry_path, owner.uid(), owner.gid());
+            }
+        } else if self.print_verbose_ownership_retained_as(
+            &entry_path,
+            owner.uid(),
+            self.dest_gid.map(|_| owner.gid()),
+        ) != 0
+        {
+            *ret = 1;
+        }
+
+        // Open as the stat did: under -P/-H, O_NOFOLLOW stops a directory swapped
+        // for a symlink since from redirecting the descent off the tree.
+        if meta.is_dir() && (follow || !meta.file_type().is_symlink()) {
+            match dir_fd.open_subdir(entry_name, follow.into()) {
+                Ok(subdir_fd) => {
+                    // Under -L the directory may be a symlink's target, whose
+                    // ".." is not `dir_fd`.
+                    let linked = follow
+                        && dir_fd
+                            .metadata_at(entry_name, SymlinkBehavior::NoFollow)
+                            .map_or(true, |meta| meta.file_type().is_symlink());
+                    return Visit::Descend(subdir_fd, entry_path, linked);
+                }
                 Err(e) => {
                     *ret = 1;
                     if self.verbosity.level != VerbosityLevel::Silent {
@@ -669,106 +876,10 @@ impl ChownExecutor {
                             translate!("perms-cannot-access", "file" => entry_path.quote(), "error" => strip_errno(&e))
                         );
                     }
-                    self.report_owner_unknown(&entry_path);
-                    continue;
-                }
-            };
-
-            if self.preserve_root
-                && is_root(&entry_path, self.traverse_symlinks == TraverseSymlinks::All)
-            {
-                *ret = 1;
-                return;
-            }
-
-            // Under -H a symlink is stat'd itself for the descent, but changed
-            // through, so `--from` and the report concern the file it points to.
-            let target_meta = if self.dereference && meta.file_type().is_symlink() {
-                match dir_fd.metadata_at(&entry_name, SymlinkBehavior::Follow) {
-                    Ok(target) => Some(target),
-                    // As with GNU, a link whose target cannot be stat'd is left alone.
-                    Err(e) => {
-                        *ret = 1;
-                        if self.verbosity.level != VerbosityLevel::Silent {
-                            show_error!(
-                                "cannot dereference {}: {}",
-                                entry_path.quote(),
-                                strip_errno(&e)
-                            );
-                        }
-                        self.report_owner_unknown(&entry_path);
-                        continue;
-                    }
-                }
-            } else {
-                None
-            };
-            let owner = target_meta.as_ref().unwrap_or(&meta);
-
-            // Check if we should chown this entry
-            if self.matched(owner.uid(), owner.gid()) {
-                let changed = self.chown_entry(dir_fd, &entry_name, owner, self.dereference);
-                if let Ok(false) = changed {
-                    // Replaced: as with GNU, fail with no error, only -v's line.
-                    *ret = 1;
-                    self.report_failed_change(&entry_path, owner);
-                } else if let Err(e) = changed {
-                    *ret = 1;
-                    if self.verbosity.level != VerbosityLevel::Silent {
-                        let msg = format!(
-                            "changing {} of {}: {}",
-                            if self.verbosity.groups_only {
-                                "group"
-                            } else {
-                                "ownership"
-                            },
-                            entry_path.quote(),
-                            strip_errno(&e)
-                        );
-                        show_error!("{msg}");
-                    }
-                    self.report_failed_change(&entry_path, owner);
-                } else {
-                    // Report the successful ownership change using the shared helper
-                    self.report_ownership_change_success(&entry_path, owner.uid(), owner.gid());
-                }
-            } else if self.print_verbose_ownership_retained_as(
-                &entry_path,
-                owner.uid(),
-                self.dest_gid.map(|_| owner.gid()),
-            ) != 0
-            {
-                *ret = 1;
-            }
-
-            // Recurse into subdirectories. Open with the same symlink behavior
-            // used for the stat above: with NoFollow (the default, `-P`/`-H`) an
-            // attacker that swaps the just-stat'd directory for a symlink between
-            // the stat and this open cannot redirect the descent off-tree
-            // (O_NOFOLLOW makes openat fail). Only follow when `-L` was requested.
-            if meta.is_dir() && (follow || !meta.file_type().is_symlink()) {
-                match dir_fd.open_subdir(&entry_name, follow.into()) {
-                    Ok(subdir_fd) => {
-                        self.safe_traverse_dir(&subdir_fd, &entry_path, ret, ancestors);
-                    }
-                    Err(e) => {
-                        *ret = 1;
-                        if self.verbosity.level != VerbosityLevel::Silent {
-                            show_error!(
-                                "{}",
-                                translate!("perms-cannot-access", "file" => entry_path.quote(), "error" => strip_errno(&e))
-                            );
-                        }
-                    }
                 }
             }
         }
-
-        // Backtrack so sibling subtrees that legitimately reach the same directory
-        // (e.g. two symlinks to one dir) are not mistaken for cycles.
-        if let Some(info) = dir_info {
-            ancestors.remove(&info);
-        }
+        Visit::Next
     }
 
     #[cfg(not(target_os = "linux"))]
