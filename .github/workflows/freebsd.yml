@@ -20,84 +20,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+# linting is done at code-quality.yml
 jobs:
-  style:
-    name: Style and Lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    steps:
-    - uses: actions/checkout@v7.0.1
-      with:
-        persist-credentials: false
-    - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.5.9
-      with:
-        usesh: true
-        sync: rsync
-        copyback: false
-        # We need bash for inline shell string replacement
-        prepare: pkg install -y rust sudo bash python3
-        run: |
-          ## Prepare, build, and test
-          # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
-          # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
-          set -e
-          #
-          TEST_USER=tester
-          REPO_NAME=${GITHUB_WORKSPACE##*/}
-          WORKSPACE_PARENT="/home/runner/work/${REPO_NAME}"
-          WORKSPACE="${WORKSPACE_PARENT}/${REPO_NAME}"
-          #
-          pw adduser -n ${TEST_USER} -d /root/ -g wheel -c "Coreutils user to build" -w random
-          chown -R ${TEST_USER}:wheel /root/ "${WORKSPACE_PARENT}"/
-          whoami
-          #
-          # Further work needs to be done in a sudo as we are changing users
-          sudo -i -u ${TEST_USER} bash << EOF
-          set -e
-          whoami
-          ## VARs setup
-          cd "${WORKSPACE}"
-          unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
-          ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
-          *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
-          esac;
-          FAULT_PREFIX=\$(echo "\${FAULT_TYPE}" | tr '[:lower:]' '[:upper:]')
-          ## Info
-          # environment
-          echo "## environment"
-          echo "CI='${CI}'"
-          echo "REPO_NAME='${REPO_NAME}'"
-          echo "TEST_USER='${TEST_USER}'"
-          echo "WORKSPACE_PARENT='${WORKSPACE_PARENT}'"
-          echo "WORKSPACE='${WORKSPACE}'"
-          echo "FAULT_PREFIX='\${FAULT_PREFIX}'"
-          env | sort
-          # tooling info
-          echo "## tooling info"
-          cargo -V
-          rustc -V
-          #
-          # To ensure that files are cleaned up, we don't want to exit on error
-          set +e
-          unset FAULT
-          export CARGO_INCREMENTAL=0
-          ## cargo fmt testing
-          echo "## cargo fmt testing"
-          # * convert any errors/warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-          S=\$(cargo fmt -- --check) && printf "%s\n" "\$S" || { printf "%s\n" "\$S" ; printf "%s\n" "\$S" | sed -E -n -e "s/^Diff[[:space:]]+in[[:space:]]+\${PWD//\//\\\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*\$/::\${FAULT_TYPE} file=\1,line=\2::\${FAULT_PREFIX}: \\\`cargo fmt\\\`: style violation (file:'\1', line:\2; use \\\`cargo fmt -- \"\1\"\\\`)/p" ; FAULT=true ; }
-          ## cargo clippy lint testing
-          if [ -z "\${FAULT}" ]; then
-            echo "## cargo clippy lint testing"
-            CLIPPY_ARGS="--features feat_os_unix --fault-type \${FAULT_TYPE}"
-            if [ -n "\${FAIL_ON_FAULT}" ]; then CLIPPY_ARGS="\${CLIPPY_ARGS} --fail-on-fault"; fi
-            python3 util/run-clippy.py \${CLIPPY_ARGS} || FAULT=true
-          fi
-          # Clean to avoid to rsync back the files
-          cargo clean
-          if [ -n "\${FAIL_ON_FAULT}" ] && [ -n "\${FAULT}" ]; then exit 1 ; fi
-          EOF
-
   test:
     name: Tests
     runs-on: ubuntu-latest
