@@ -109,6 +109,12 @@ pub fn is_ci() -> bool {
     env::var("CI").is_ok_and(|s| s.eq_ignore_ascii_case("true"))
 }
 
+/// Check whether both SELinux and SMACK are disabled on the running kernel.
+#[cfg(all(target_os = "linux", feature = "selinux", feature = "smack"))]
+pub fn security_contexts_disabled() -> bool {
+    !uucore::selinux::is_selinux_enabled() && !uucore::smack::is_smack_enabled()
+}
+
 /// Check if a locale is available on the system by verifying that
 /// `locale charmap` returns `"UTF-8"` when `LC_ALL` is set to the given locale.
 #[cfg(unix)]
