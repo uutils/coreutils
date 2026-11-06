@@ -113,7 +113,10 @@ where
     T: BufRead,
 {
     let enumerated_input_lines = LinesWithNewlines::new(input)
-        .map(|line| line.map_err_context(|| translate!("csplit-read-error")))
+        .map(|line| {
+            line.map_err(uucore::error::wasi_normalize_read_error)
+                .map_err_context(|| translate!("csplit-read-error"))
+        })
         .enumerate();
     let mut input_iter = InputSplitter::new(enumerated_input_lines);
     let mut split_writer = SplitWriter::new(options);

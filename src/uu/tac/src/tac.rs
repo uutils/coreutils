@@ -395,7 +395,10 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &OsStr) -> 
                     &buf
                 }
                 Err(e) => {
-                    show!(TacError::ReadError(filename.clone(), e));
+                    show!(TacError::ReadError(
+                        filename.clone(),
+                        uucore::error::wasi_normalize_read_error(e)
+                    ));
                     continue;
                 }
             }
