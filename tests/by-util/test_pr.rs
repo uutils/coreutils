@@ -451,9 +451,8 @@ fn test_with_offset_space_option() {
 
 #[test]
 fn test_indent_applies_to_header_line() {
-    // GNU print_header puts the -o margin on the first blank separator line and
-    // on the header text line. Body lines already had the margin; trailers stay
-    // bare.
+    // -o applies to the first blank separator line and to the header text
+    // line. Body lines already had the margin; trailers stay bare.
     new_ucmd!()
         .args(&["-h", "HDR", "-D", "DATE", "-l", "12", "-o", "2"])
         .pipe_in("x\n")
