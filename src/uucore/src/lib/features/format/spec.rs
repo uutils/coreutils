@@ -10,12 +10,12 @@ use super::num_format::{
     UnsignedIntVariant,
 };
 use super::{
-    check_precision, parse_escape_only, EscapeSet, ExtendedBigDecimal, FormatChar, FormatError,
-    OctalParsing,
+    EscapeSet, ExtendedBigDecimal, FormatChar, FormatError, OctalParsing, check_precision, 
+    parse_escape_only,
 };
 use crate::format::FormatArguments;
 use crate::os_str_as_bytes;
-use crate::quoting_style::{locale_aware_escape_name, QuotingStyle};
+use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use std::io::Write;
 use std::num::NonZero;
 use std::ops::ControlFlow;
