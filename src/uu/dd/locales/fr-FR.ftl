@@ -86,6 +86,7 @@ dd-error-failed-to-seek = échec de la recherche dans le fichier de sortie
 dd-error-failed-to-truncate = échec de la troncature à { $size } octets du fichier de sortie { $file }
 dd-error-io-error = erreur E/S
 dd-error-reading = erreur de lecture de { $file }
+dd-error-input-block-too-large = bloc d’entrée trop volumineux
 dd-error-cannot-skip-offset = '{ $file }' : impossible d'ignorer jusqu'au décalage spécifié
 dd-error-cannot-skip-invalid = '{ $file }' : impossible d'ignorer : Argument invalide
 dd-error-cannot-seek-invalid = '{ $output }' : impossible de rechercher : Argument invalide
