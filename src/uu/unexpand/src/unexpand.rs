@@ -244,6 +244,7 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(&translate!("unexpand-usage")))
         .about(translate!("unexpand-about"))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
@@ -579,8 +580,9 @@ fn unexpand_buf(
     }
 
     while byte < buf.len() {
-        // when we have a finite number of columns, never convert past the last column
-        if lastcol > 0 && print_state.col >= lastcol {
+        // when we have a finite number of columns, never convert past the last column,
+        // but only fast forward if there are no backspaces that could move col back
+        if lastcol > 0 && print_state.col >= lastcol && !buf[byte..].contains(&b'\x08') {
             write_tabs(output, tab_config, print_state, true)?;
             output.write_all(&buf[byte..])?;
             print_state.scol = print_state.col;

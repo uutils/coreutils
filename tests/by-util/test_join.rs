@@ -712,8 +712,8 @@ fn non_line_feeds() {
         .stdout_only_fixture("non-line_feeds.expected");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn non_unicode() {
     new_ucmd!()
         .arg("non-unicode_1.bin")
@@ -800,9 +800,9 @@ fn test_full() {
         .stderr_contains("No space left on device");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_join_non_utf8_paths() {
     use std::fs::File;
     use std::io::Write;
@@ -848,9 +848,9 @@ fn join_emoji_delim_inner_key() {
         .stdout_only("b🗿a🗿u\n");
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[cfg(unix)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: locale database not visible")]
 fn test_locale_collation() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -868,12 +868,8 @@ fn test_locale_collation() {
         .stdout_contains("ab:d 1 x");
 }
 
+#[uutests::wasi_ignore(Usize32BitOverflow)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: usize::MAX is computed for the 64-bit host test binary, \
-              but the wasm32 target binary saturates at the 32-bit usize::MAX"
-)]
 fn test_incompatible_fields_reports_exact_field_number() {
     // An out-of-range field clamps to usize::MAX, which used to overflow the
     // one-based increment. Field numbers past 2^53 also used to be rounded on

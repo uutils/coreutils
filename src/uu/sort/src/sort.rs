@@ -2219,7 +2219,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     settings.dictionary_order = dictionary_order;
-    settings.ignore_non_printing = ignore_non_printing;
+    // -i has no effect when -d is also given, as for key options
+    settings.ignore_non_printing = ignore_non_printing && !dictionary_order;
     settings.ignore_case = ignore_case;
 
     let threads = match matches.get_one::<String>(options::PARALLEL) {
@@ -2341,6 +2342,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if matches.contains_id(options::OUTPUT) && settings.check {
         let opts = if settings.check_silent { "Co" } else { "co" };
         return Err(incompatible_options_error(opts));
+    }
+
+    if matches.contains_id(options::OUTPUT) && settings.debug {
+        return Err(incompatible_options_error("o --debug"));
     }
 
     settings.ignore_leading_blanks = matches.get_flag(options::IGNORE_LEADING_BLANKS);

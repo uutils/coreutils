@@ -31,6 +31,9 @@ pub const WRAP_DEFAULT: usize = 76;
 
 pub const DEFAULT_BUF_SIZE: usize = 32 * 1024;
 
+/// Largest "-w" value that is honored; anything larger turns wrapping off like GNU
+const MAX_WRAP: usize = isize::MAX as usize;
+
 pub struct Config {
     pub decode: bool,
     pub ignore_garbage: bool,
@@ -69,13 +72,15 @@ impl Config {
 
         let wrap_cols = options
             .get_one::<String>(options::WRAP)
-            .map(|num| {
-                num.parse::<usize>().map_err(|_| {
-                    USimpleError::new(
-                        BASE_CMD_PARSE_ERROR,
-                        translate!("base-common-invalid-wrap-size", "size" => num.quote()),
-                    )
-                })
+            .map(|num| match num.parse::<usize>() {
+                // A size too large to represent turns wrapping off.
+                Ok(cols @ ..=MAX_WRAP) => Ok(cols),
+                Ok(_) => Ok(0),
+                Err(e) if *e.kind() == std::num::IntErrorKind::PosOverflow => Ok(0),
+                Err(_) => Err(USimpleError::new(
+                    BASE_CMD_PARSE_ERROR,
+                    translate!("base-common-invalid-wrap-size", "size" => num.quote()),
+                )),
             })
             .transpose()?;
 

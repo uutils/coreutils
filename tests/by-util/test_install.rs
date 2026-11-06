@@ -1345,6 +1345,44 @@ fn test_install_backup_dangling_symlink(#[case] backup_arg: &str, #[case] suffix
     assert_eq!(at.resolve_link(format!("dest{suffix}")), "missing-target");
 }
 
+#[rstest]
+#[case::short(&["-b", "keys", "dest/"])]
+#[case::no_slash(&["-b", "keys", "dest"])]
+#[case::numbered(&["--backup=numbered", "keys", "dest/"])]
+#[case::suffix(&["-S", ".bak", "keys", "dest/"])]
+#[case::target_dir(&["-b", "-t", "dest", "keys"])]
+#[case::create_leading(&["-b", "-D", "keys", "dest/"])]
+fn test_install_backup_refuses_to_replace_directory(#[case] args: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("keys", "new");
+    at.mkdir_all("dest/keys");
+    at.touch("dest/keys/keep");
+
+    ucmd.args(args)
+        .fails_with_code(1)
+        .stderr_is("install: cannot create regular file 'dest/keys': Is a directory\n");
+
+    assert!(at.dir_exists("dest/keys"));
+    assert!(at.file_exists("dest/keys/keep"));
+    assert!(!at.file_exists("dest/keys~"));
+    assert!(!at.file_exists("dest/keys.~1~"));
+    assert!(!at.file_exists("dest/keys.bak"));
+}
+
+#[test]
+fn test_install_backup_symlink_to_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("link", "new");
+    at.mkdir_all("dest/real");
+    at.relative_symlink_dir("real", "dest/link");
+
+    ucmd.args(&["-b", "link", "dest/"]).succeeds().no_stderr();
+
+    assert_eq!(at.read("dest/link"), "new");
+    assert_eq!(at.resolve_link("dest/link~"), "real");
+    assert!(at.dir_exists("dest/real"));
+}
+
 #[test]
 fn test_install_backup_custom_suffix_via_env() {
     let scene = TestScenario::new(util_name!());
@@ -2828,15 +2866,11 @@ fn test_install_d_dangling_symlink_in_path_errors() {
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
-    target_os = "macos",
-    target_os = "ios",
-    target_os = "tvos",
-    target_os = "watchos",
-    target_os = "visionos",
     target_os = "freebsd",
     target_os = "netbsd",
     target_os = "illumos",
-    target_os = "solaris"
+    target_os = "solaris",
+    target_vendor = "apple"
 ))]
 fn test_install_d_leading_dirs_in_write_only_directory() {
     // mkdir needs write and execute on the parent, not read, so -D must be

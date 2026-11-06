@@ -15,12 +15,12 @@ use uucore::display::Quotable;
 use uucore::error::UError;
 use uucore::parser::parse_size::{ParseSizeError, Parser as SizeParser};
 use uucore::show_warning;
-use uucore::translate;
+use uucore::{translate, translate_text};
 
 /// Parser Errors describe errors with parser input
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ParseError {
-    #[error("{}", translate!("dd-error-unrecognized-operand", "operand" => .0))]
+    #[error("{}", translate_text!("dd-error-unrecognized-operand", "operand" => .0))]
     UnrecognizedOperand(String),
     #[error("{}", translate!("dd-error-multiple-format-table"))]
     MultipleFmtTable,
@@ -30,23 +30,23 @@ pub enum ParseError {
     MultipleBlockUnblock,
     #[error("{}", translate!("dd-error-multiple-excl"))]
     MultipleExclNoCreate,
-    #[error("{}", translate!("dd-error-invalid-flag", "flag" => .0))]
+    #[error("{}", translate_text!("dd-error-invalid-flag", "flag" => .0))]
     FlagNoMatch(String),
-    #[error("{}", translate!("dd-error-invalid-output-flag", "flag" => .0))]
+    #[error("{}", translate_text!("dd-error-invalid-output-flag", "flag" => .0))]
     OutputFlagNoMatch(String),
-    #[error("{}", translate!("dd-error-conv-flag-no-match", "flag" => .0))]
+    #[error("{}", translate_text!("dd-error-conv-flag-no-match", "flag" => .0))]
     ConvFlagNoMatch(String),
-    #[error("{}", translate!("dd-error-multiplier-parse-failure", "input" => .0))]
+    #[error("{}", translate_text!("dd-error-multiplier-parse-failure", "input" => .0))]
     MultiplierStringParseFailure(String),
-    #[error("{}", translate!("dd-error-multiplier-overflow", "input" => .0))]
+    #[error("{}", translate_text!("dd-error-multiplier-overflow", "input" => .0))]
     MultiplierStringOverflow(String),
-    #[error("{}", translate!("dd-error-status-not-recognized", "level" => .0))]
+    #[error("{}", translate_text!("dd-error-status-not-recognized", "level" => .0))]
     StatusLevelNotRecognized(String),
-    #[error("{}", translate!("dd-error-unimplemented", "feature" => .0))]
+    #[error("{}", translate_text!("dd-error-unimplemented", "feature" => .0))]
     Unimplemented(String),
-    #[error("{}", translate!("dd-error-bs-out-of-range", "param" => .0))]
+    #[error("{}", translate_text!("dd-error-bs-out-of-range", "param" => .0))]
     BsOutOfRange(String),
-    #[error("{}", translate!("dd-error-invalid-number", "input" => .0))]
+    #[error("{}", translate_text!("dd-error-invalid-number", "input" => .0))]
     InvalidNumber(String),
     #[error("invalid number: '{0}': {1}")]
     InvalidNumberWithErrMsg(String, String),

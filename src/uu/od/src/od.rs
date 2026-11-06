@@ -37,6 +37,7 @@ use crate::parse_nrofbytes::{parse_number_of_bytes, parse_width};
 use crate::partial_reader::PartialReader;
 use crate::peek_reader::{PeekRead, PeekReader};
 use crate::prn_char::format_ascii_dump;
+use crate::prn_int::FORMAT_ITEM_OCT16;
 use clap::ArgAction;
 use clap::{Arg, ArgMatches, Command, parser::ValueSource};
 use std::ffi::OsString;
@@ -138,7 +139,11 @@ impl OdOptions {
             }
         };
 
-        let formats = parse_format_flags(args).map_err(|e| USimpleError::new(1, e))?;
+        let mut formats = parse_format_flags(args).map_err(|e| USimpleError::new(1, e))?;
+        let has_type_option = !formats.is_empty();
+        if formats.is_empty() {
+            formats.push(ParsedFormatterItemInfo::new(FORMAT_ITEM_OCT16, false)); // 2 byte octal is the default
+        }
 
         let mut line_bytes = if let (Some(s), Some(ValueSource::CommandLine)) = (
             matches.get_one::<String>(options::WIDTH),
@@ -195,6 +200,13 @@ impl OdOptions {
         let read_bytes = parse_bytes_option(matches, args, diag_args, options::READ_BYTES, 'N')?;
 
         let strings = parse_bytes_option(matches, args, diag_args, options::STRINGS, 'S')?;
+        if strings.is_some() && has_type_option {
+            return Err(USimpleError::new(
+                1,
+                translate!("od-error-no-type-with-strings"),
+            ));
+        }
+
         let string_min_length = match strings {
             None => None,
             Some(n) => Some(usize::try_from(n).map_err(|_| {
@@ -223,7 +235,7 @@ impl OdOptions {
                         _ => {
                             return Err(USimpleError::new(
                                 1,
-                                translate!("od-error-radix-invalid", "radix" => s),
+                                translate!("od-error-radix-invalid", "radix" => s.chars().next().unwrap_or_default()),
                             ));
                         }
                     }

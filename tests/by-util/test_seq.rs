@@ -180,6 +180,37 @@ fn test_option_with_detected_negative_argument() {
         .stdout_is("-1,0,1,2\n");
 }
 
+#[rstest]
+#[case::unknown_long(&["--no-such-flag"])]
+#[case::unknown_short(&["-x", "1"])]
+#[case::inf(&["-inf", "1"])]
+fn test_option_like_argument_before_operands(#[case] args: &[&str]) {
+    // in front of the first operand, an argument starting with "-" is an
+    // option unless a digit or "." follows, so these are not numbers
+    new_ucmd!()
+        .args(args)
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("unexpected argument");
+}
+
+#[rstest]
+#[case::after_operand(&["1", "--no-such-flag"], "--no-such-flag")]
+#[case::after_double_dash(&["--", "-x"], "-x")]
+fn test_option_like_argument_as_operand(#[case] args: &[&str], #[case] arg: &str) {
+    new_ucmd!()
+        .args(args)
+        .fails()
+        .usage_error(format!("invalid floating point argument: '{arg}'"));
+}
+
+#[rstest]
+#[case::separator(&["--separator", "-x", "1", "3"], "1-x2-x3\n")]
+#[case::negative_first(&["-w", "-.5", "1"], "-0.5\n00.5\n")]
+fn test_hyphen_values_before_operands(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!().args(args).succeeds().stdout_is(expected);
+}
+
 #[test]
 fn test_negative_number_as_separator() {
     new_ucmd!()

@@ -210,7 +210,7 @@ fn test_with_valid_page_ranges() {
     scenario
         .args(&["--pages=20:5", test_file_path])
         .fails()
-        .stderr_only("pr: invalid --pages argument '20:5'\n");
+        .stderr_only("pr: invalid page range '20:5'\n");
     new_ucmd!()
         .args(&["--pages=1:5", test_file_path])
         .succeeds();
@@ -226,7 +226,7 @@ fn test_with_valid_page_ranges() {
     new_ucmd!()
         .args(&["--pages=5:1", test_file_path])
         .fails()
-        .stderr_only("pr: invalid --pages argument '5:1'\n");
+        .stderr_only("pr: invalid page range '5:1'\n");
 }
 
 #[test]
@@ -557,11 +557,8 @@ fn test_large_page_width_does_not_panic() {
 }
 
 #[cfg(target_os = "linux")]
+#[uutests::wasi_ignore(AddressSpaceLimitUnsuitable)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: wasmtime itself needs more memory than the guest's rlimit allows"
-)]
 fn test_offset_large_value_does_not_abort_under_memory_limit() {
     use rlimit::Resource;
     use std::process::Stdio;
@@ -581,12 +578,21 @@ fn test_offset_invalid() {
     new_ucmd!()
         .args(&["--indent=-5"])
         .fails_with_code(1)
-        .stderr_is("pr: '-o MARGIN' invalid line offset: '-5'\n");
+        .stderr_is(
+            "pr: '-o MARGIN' invalid line offset: '-5': Value too large for defined data type\n",
+        );
 
     new_ucmd!()
         .args(&["-o", "abc"])
         .fails_with_code(1)
         .stderr_is("pr: '-o MARGIN' invalid line offset: 'abc'\n");
+
+    // A negative zero is a margin of zero, as in GNU.
+    new_ucmd!()
+        .args(&["-t", "-o", "-0"])
+        .pipe_in("a\n")
+        .succeeds()
+        .stdout_only("a\n");
 }
 
 #[test]
@@ -628,8 +634,8 @@ fn test_with_date_format() {
         .stdout_only(format!("\n\nHello!{whitespace}Page 1\n\n\na{blank_lines}"));
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: locale database not visible")]
 fn test_with_date_format_env() {
     // POSIXLY_CORRECT + LC_ALL/TIME=POSIX uses "%b %e %H:%M %Y" date format
     let whitespace = " ".repeat(49);
@@ -791,11 +797,8 @@ fn test_version() {
 }
 
 #[cfg(unix)]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: host paths (/dev/null) not visible"
-)]
 fn test_pr_char_device_dev_null() {
     new_ucmd!().arg("/dev/null").succeeds();
 }
@@ -899,6 +902,30 @@ fn test_form_feed_followed_by_new_line() {
         .pipe_in("\x0c\nabc")
         .succeeds()
         .stdout_matches(&regex);
+}
+
+#[test]
+fn test_line_numbers_continue_after_form_feed() {
+    // Command line: `printf "a\fb\nc\n" | pr -T -n:1`.
+    new_ucmd!()
+        .args(&["-T", "-n:1"])
+        .pipe_in("a\x0cb\nc\n")
+        .succeeds()
+        .stdout_is("1:a\n2:b\n3:c\n");
+
+    // Command line: `printf "a\fb\fc\n" | pr -T -n:1`.
+    new_ucmd!()
+        .args(&["-T", "-n:1"])
+        .pipe_in("a\x0cb\x0cc\n")
+        .succeeds()
+        .stdout_is("1:a\n2:b\n3:c\n");
+
+    // Command line: `printf "a\n\fb\nc\n" | pr -T -n:1`.
+    new_ucmd!()
+        .args(&["-T", "-n:1"])
+        .pipe_in("a\n\x0cb\nc\n")
+        .succeeds()
+        .stdout_is("1:a\n2:b\n3:c\n");
 }
 
 #[test]
@@ -1218,7 +1245,7 @@ fn test_zero_columns() {
     new_ucmd!()
         .arg("--columns=0")
         .fails_with_code(1)
-        .stderr_contains("pr: invalid --columns argument '0'");
+        .stderr_contains("pr: invalid number of columns: '0': Numerical result out of range");
 }
 
 #[test]
@@ -1226,7 +1253,7 @@ fn test_zero_columns_shortcut() {
     new_ucmd!()
         .arg("-0")
         .fails_with_code(1)
-        .stderr_contains("pr: invalid --columns argument '0'");
+        .stderr_contains("pr: invalid number of columns: '0': Numerical result out of range");
 }
 
 #[test]
@@ -1296,18 +1323,16 @@ fn test_zero_expand_tab_width() {
 
 #[test]
 fn test_zero_column_width() {
-    new_ucmd!()
-        .args(&["-w", "0"])
-        .fails_with_code(1)
-        .stderr_is("pr: invalid --width argument '0'\n");
+    new_ucmd!().args(&["-w", "0"]).fails_with_code(1).stderr_is(
+        "pr: '-w PAGE_WIDTH' invalid number of characters: '0': Numerical result out of range\n",
+    );
 }
 
 #[test]
 fn test_zero_page_width() {
-    new_ucmd!()
-        .args(&["-W", "0"])
-        .fails_with_code(1)
-        .stderr_is("pr: invalid --page-width argument '0'\n");
+    new_ucmd!().args(&["-W", "0"]).fails_with_code(1).stderr_is(
+        "pr: '-W PAGE_WIDTH' invalid number of characters: '0': Numerical result out of range\n",
+    );
 }
 
 #[test]
@@ -1340,10 +1365,9 @@ fn test_page_length_eleven_keeps_header() {
 
 #[test]
 fn test_zero_length() {
-    new_ucmd!()
-        .args(&["-l", "0"])
-        .fails_with_code(1)
-        .stderr_is("pr: invalid --length argument '0'\n");
+    new_ucmd!().args(&["-l", "0"]).fails_with_code(1).stderr_is(
+        "pr: '-l PAGE_LENGTH' invalid number of lines: '0': Numerical result out of range\n",
+    );
 }
 
 #[test]
@@ -1351,7 +1375,7 @@ fn test_zero_pages() {
     new_ucmd!()
         .args(&["--pages", "0"])
         .fails_with_code(1)
-        .stderr_is("pr: invalid --pages argument '0'\n");
+        .stderr_is("pr: invalid page range '0'\n");
 }
 
 #[test]
@@ -1364,11 +1388,8 @@ fn test_hyphen_in_expand_tabs() {
 }
 
 #[cfg(unix)]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: host paths (/dev/null) not visible"
-)]
 fn test_merge_empty_input() {
     new_ucmd!()
         .args(&["-m", "/dev/null", "/dev/null"])
@@ -1388,9 +1409,9 @@ fn test_missing_file_error_message() {
         .stderr_does_not_contain("(os error");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
-#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
 fn test_non_utf8_input_filename() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1404,9 +1425,9 @@ fn test_non_utf8_input_filename() {
         .stdout_only("from file\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
 fn test_missing_non_utf8_input_does_not_read_stdin() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1420,10 +1441,9 @@ fn test_missing_non_utf8_input_does_not_read_stdin() {
         .stderr_does_not_contain("(os error");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
-#[ignore = "https://github.com/uutils/coreutils/issues/16147"]
-#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
 fn test_merge_non_utf8_input_filename() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1435,12 +1455,12 @@ fn test_merge_non_utf8_input_filename() {
         .arg(name)
         .arg("right")
         .succeeds()
-        .stdout_only(format!("{:<35}\t{:<35}\n", "left", "right"));
+        .stdout_only(format!("{:<35}\t{}\n", "left", "right"));
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
-#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
 fn test_header_preserves_non_utf8_filename() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1452,4 +1472,146 @@ fn test_header_preserves_non_utf8_filename() {
         .arg(name)
         .succeeds()
         .stdout_only_bytes(b"\n\ndate input-\xff  Page 1\n\n\n01234567890123456789\n\n\n\n\n\n\n");
+}
+
+#[test]
+fn test_non_utf8_input_is_written_unchanged() {
+    new_ucmd!()
+        .arg("-t")
+        .pipe_in(b"\xff\xfe abc\n\xc3( x\n\x80\n")
+        .succeeds()
+        .stdout_is_bytes(b"\xff\xfe abc\n\xc3( x\n\x80\n");
+
+    new_ucmd!()
+        .args(&["-n", "-t"])
+        .pipe_in(b"\xff\n")
+        .succeeds()
+        .stdout_is_bytes(b"    1\t\xff\n");
+}
+
+#[test]
+fn test_non_utf8_input_in_columns() {
+    // As in GNU pr, an invalid byte takes no width, so "\xff\xfeab" is padded
+    // like "ab" to the column width of 4.
+    new_ucmd!()
+        .args(&["-2", "-t", "-w", "9", "-s|"])
+        .pipe_in(b"\xff\xfeab\nc\n")
+        .succeeds()
+        .stdout_is_bytes(b"\xff\xfeab  |c\n");
+
+    // An invalid byte right after a full column is kept, and the next
+    // character is cut off.
+    new_ucmd!()
+        .args(&["-2", "-t", "-w", "9", "-s|"])
+        .pipe_in(b"abcd\xffe\nc\n")
+        .succeeds()
+        .stdout_is_bytes(b"abcd\xff|c\n");
+}
+
+#[test]
+fn test_numeric_option_diagnostics() {
+    // A value that is not a number is quoted after the option; a number
+    // that is out of range gets the errno text, as GNU reports them.
+    let cases = [
+        (
+            &["-l", "x"][..],
+            "pr: '-l PAGE_LENGTH' invalid number of lines: 'x'\n",
+        ),
+        (
+            &["-l", "-1"],
+            "pr: '-l PAGE_LENGTH' invalid number of lines: '-1': Numerical result out of range\n",
+        ),
+        (
+            &["-l", "-0"],
+            "pr: '-l PAGE_LENGTH' invalid number of lines: '-0': Numerical result out of range\n",
+        ),
+        (
+            &["-w", "+0"],
+            "pr: '-w PAGE_WIDTH' invalid number of characters: '+0': Numerical result out of range\n",
+        ),
+        (
+            &["-W", "x"],
+            "pr: '-W PAGE_WIDTH' invalid number of characters: 'x'\n",
+        ),
+        (
+            &["-N", "x"],
+            "pr: '-N NUMBER' invalid starting line number: 'x'\n",
+        ),
+        (&["--columns=x"], "pr: invalid number of columns: 'x'\n"),
+        (&["--pages=1:x"], "pr: invalid --pages argument '1:x'\n"),
+        (&["--pages=1:0"], "pr: invalid page range '1:0'\n"),
+        (&["--pages=1x"], "pr: invalid page range '1x'\n"),
+        (
+            &["--pages=99999999999999999999"],
+            "pr: --pages argument '99999999999999999999' too large\n",
+        ),
+        (&["+x"], "pr: invalid + argument 'x'\n"),
+        (&["+1:"], "pr: invalid + argument '1:'\n"),
+        (&["+1:3x"], "pr: invalid suffix in + argument '1:3x'\n"),
+        (
+            &["+99999999999999999999"],
+            "pr: + argument '99999999999999999999' too large\n",
+        ),
+        (
+            &["+99999999999999999999:3"],
+            "pr: invalid suffix in + argument '99999999999999999999:3'\n",
+        ),
+    ];
+    for (args, stderr) in cases {
+        new_ucmd!()
+            .args(args)
+            .arg("test_one_page.log")
+            .fails()
+            .stderr_only(stderr);
+    }
+}
+
+#[test]
+fn test_option_value_is_not_an_operand() {
+    // `-l -1` holds no column operand, and `-l +5` no page operand: the
+    // value goes with the option, however it looks.
+    new_ucmd!()
+        .args(&["-l", "+5", "-t", "test_one_page.log"])
+        .succeeds()
+        .stdout_is_fixture("test_one_page.log");
+    new_ucmd!()
+        .args(&["-N", "-1", "test_one_page.log"])
+        .fails()
+        .stderr_only("pr: '-N NUMBER' invalid starting line number: '-1'\n");
+    // The option may end a cluster, or be cut short.
+    for args in [&["-tl", "-1"][..], &["--len", "-1"]] {
+        new_ucmd!()
+            .args(args)
+            .arg("test_one_page.log")
+            .fails()
+            .stderr_only(
+                "pr: '-l PAGE_LENGTH' invalid number of lines: '-1': Numerical result out of range\n",
+            );
+    }
+    new_ucmd!()
+        .args(&["-h", "-1"])
+        .pipe_in("a")
+        .succeeds()
+        .stdout_contains(" -1 ");
+    // A value attached to the option leaves the next argument an operand,
+    // also for `-e`, whose value is filled in before the scan.
+    for args in [&["-tl1", "+2"][..], &["-e", "+2", "-l", "1"]] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("a\nb\nc\n")
+            .succeeds()
+            .stdout_only("b\nc\n");
+    }
+}
+
+#[test]
+fn test_plus_operand_that_is_not_a_page_range_names_a_file() {
+    // GNU takes a first page of 0, a last page before the first, or digits
+    // followed by other characters for a file name.
+    for operand in ["+0", "+2:1", "+1x", "+1x:3"] {
+        new_ucmd!()
+            .args(&[operand, "test_one_page.log"])
+            .fails()
+            .stderr_contains(format!("pr: {operand}: "));
+    }
 }
