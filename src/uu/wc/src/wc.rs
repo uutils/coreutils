@@ -902,6 +902,7 @@ fn hardware_feature_label(feature: HardwareFeature) -> &'static str {
         HardwareFeature::Avx512 => "AVX512F",
         HardwareFeature::Avx2 => "AVX2",
         HardwareFeature::Pclmulqdq => "PCLMUL",
+        HardwareFeature::Vpclmulqdq => "VPCLMULQDQ",
         HardwareFeature::Pmull => "VMULL",
         HardwareFeature::Sse2 => "SSE2",
         HardwareFeature::Asimd => "ASIMD",

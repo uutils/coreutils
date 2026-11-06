@@ -54,6 +54,8 @@ pub enum HardwareFeature {
     Avx2,
     /// PCLMULQDQ support for CRC acceleration (`x86/x86_64` only)
     Pclmulqdq,
+    /// VPCLMULQDQ support for wide CRC acceleration (`x86/x86_64` only)
+    Vpclmulqdq,
     /// PMULL (polynomial multiply) support for CRC acceleration (aarch64 only)
     Pmull,
     /// SSE2 support (`x86/x86_64` only)
@@ -68,13 +70,14 @@ impl TryFrom<&str> for HardwareFeature {
     type Error = InvalidHardwareFeature;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        use HardwareFeature::{Asimd, Avx2, Avx512, Pclmulqdq, Pmull, Sse2};
+        use HardwareFeature::{Asimd, Avx2, Avx512, Pclmulqdq, Pmull, Sse2, Vpclmulqdq};
         // TODO: like GNU, accept `PCLMULQDQ` for `Pclmulqdq` and `PMULL` for
         // `Pmull`.
         match value {
             "AVX512" | "AVX512F" => Ok(Avx512),
             "AVX2" => Ok(Avx2),
             "PCLMUL" | "PMULL" => Ok(Pclmulqdq),
+            "VPCLMULQDQ" => Ok(Vpclmulqdq),
             "VMULL" => Ok(Pmull),
             "SSE2" => Ok(Sse2),
             "ASIMD" => Ok(Asimd),
@@ -109,6 +112,12 @@ pub trait HasHardwareFeatures {
     #[inline]
     fn has_pclmulqdq(&self) -> bool {
         self.has_feature(HardwareFeature::Pclmulqdq)
+    }
+
+    /// Check if VPCLMULQDQ is available (`x86/x86_64` only)
+    #[inline]
+    fn has_vpclmulqdq(&self) -> bool {
+        self.has_feature(HardwareFeature::Vpclmulqdq)
     }
 
     /// Check if PMULL is available (aarch64 only)
@@ -149,6 +158,7 @@ impl CpuFeatures {
             (HardwareFeature::Avx512, detect_avx512 as fn() -> bool),
             (HardwareFeature::Avx2, detect_avx2),
             (HardwareFeature::Pclmulqdq, detect_pclmulqdq),
+            (HardwareFeature::Vpclmulqdq, detect_vpclmulqdq),
             (HardwareFeature::Pmull, detect_pmull),
             (HardwareFeature::Sse2, detect_sse2),
             (HardwareFeature::Asimd, detect_asimd),
@@ -285,6 +295,20 @@ fn detect_pclmulqdq() -> bool {
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+fn detect_vpclmulqdq() -> bool {
+    if cfg!(target_os = "android") {
+        false
+    } else {
+        std::arch::is_x86_feature_detected!("vpclmulqdq")
+    }
+}
+
+#[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+fn detect_vpclmulqdq() -> bool {
+    false
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn detect_sse2() -> bool {
     if cfg!(target_os = "android") {
         false
@@ -409,6 +433,17 @@ mod tests {
         expected.insert(HardwareFeature::Avx2);
 
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_parse_disabled_features_vpclmulqdq() {
+        let result = parse_disabled_features("glibc.cpu.hwcaps=-VPCLMULQDQ");
+        assert_eq!(result, BTreeSet::from([HardwareFeature::Vpclmulqdq]));
+        let result = parse_disabled_features("glibc.cpu.hwcaps=-AVX2,-VPCLMULQDQ");
+        assert_eq!(
+            result,
+            BTreeSet::from([HardwareFeature::Avx2, HardwareFeature::Vpclmulqdq])
+        );
     }
 
     #[test]
