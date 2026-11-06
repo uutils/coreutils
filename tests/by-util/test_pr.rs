@@ -557,11 +557,8 @@ fn test_large_page_width_does_not_panic() {
 }
 
 #[cfg(target_os = "linux")]
+#[uutests::wasi_ignore(AddressSpaceLimitUnsuitable)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: wasmtime itself needs more memory than the guest's rlimit allows"
-)]
 fn test_offset_large_value_does_not_abort_under_memory_limit() {
     use rlimit::Resource;
     use std::process::Stdio;
@@ -800,11 +797,8 @@ fn test_version() {
 }
 
 #[cfg(unix)]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: host paths (/dev/null) not visible"
-)]
 fn test_pr_char_device_dev_null() {
     new_ucmd!().arg("/dev/null").succeeds();
 }
@@ -908,6 +902,30 @@ fn test_form_feed_followed_by_new_line() {
         .pipe_in("\x0c\nabc")
         .succeeds()
         .stdout_matches(&regex);
+}
+
+#[test]
+fn test_line_numbers_continue_after_form_feed() {
+    // Command line: `printf "a\fb\nc\n" | pr -T -n:1`.
+    new_ucmd!()
+        .args(&["-T", "-n:1"])
+        .pipe_in("a\x0cb\nc\n")
+        .succeeds()
+        .stdout_is("1:a\n2:b\n3:c\n");
+
+    // Command line: `printf "a\fb\fc\n" | pr -T -n:1`.
+    new_ucmd!()
+        .args(&["-T", "-n:1"])
+        .pipe_in("a\x0cb\x0cc\n")
+        .succeeds()
+        .stdout_is("1:a\n2:b\n3:c\n");
+
+    // Command line: `printf "a\n\fb\nc\n" | pr -T -n:1`.
+    new_ucmd!()
+        .args(&["-T", "-n:1"])
+        .pipe_in("a\n\x0cb\nc\n")
+        .succeeds()
+        .stdout_is("1:a\n2:b\n3:c\n");
 }
 
 #[test]
@@ -1370,11 +1388,8 @@ fn test_hyphen_in_expand_tabs() {
 }
 
 #[cfg(unix)]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: host paths (/dev/null) not visible"
-)]
 fn test_merge_empty_input() {
     new_ucmd!()
         .args(&["-m", "/dev/null", "/dev/null"])

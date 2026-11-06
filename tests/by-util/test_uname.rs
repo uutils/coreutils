@@ -95,11 +95,8 @@ fn test_uname_kernel() {
     ucmd.arg("-o").succeeds();
 }
 
+#[uutests::wasi_ignore(HostSystemStateDiffers)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: uname reports the guest OS (WASI), not the host's"
-)]
 fn test_uname_operating_system() {
     #[cfg(target_os = "android")]
     new_ucmd!()

@@ -922,12 +922,8 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
     // try to parse integer (hex, octal, or decimal)
     let ascii_num = if let Some(hex) = s.strip_prefix("0x") {
         u32::from_str_radix(hex, 16).ok()
-    } else if let Some(octal) = s.strip_prefix("0") {
-        if octal.is_empty() {
-            Some(0)
-        } else {
-            u32::from_str_radix(octal, 8).ok()
-        }
+    } else if s.starts_with('0') {
+        u32::from_str_radix(s, 8).ok()
     } else {
         s.parse::<u32>().ok()
     };
@@ -1035,8 +1031,7 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
 fn get_sane_control_char(cc_index: S) -> u8 {
     SANE_CONTROL_CHARS
         .iter()
-        .copied()
-        .find_map(|(i, v)| (i == cc_index).then_some(v))
+        .find_map(|&(i, v)| (i == cc_index).then_some(v))
         .unwrap_or(u8::from(cc_index == S::VMIN))
 }
 

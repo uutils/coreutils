@@ -163,8 +163,15 @@ fn tail_file(
         }
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
     } else {
+        // Stdin is read through a duplicate of fd 0 rather than reopened by
+        // path, so the read moves the offset that the caller shares.
         #[cfg(unix)]
-        let open_result = open_file(path, settings.pid.is_some_and(|pid| pid != 0));
+        let open_result = if input.is_stdin() {
+            use std::os::fd::AsFd;
+            stdin().as_fd().try_clone_to_owned().map(File::from)
+        } else {
+            open_file(path, settings.pid.is_some_and(|pid| pid != 0))
+        };
         #[cfg(not(unix))]
         let open_result = File::open(path);
 
