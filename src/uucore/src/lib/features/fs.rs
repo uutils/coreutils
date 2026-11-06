@@ -88,6 +88,10 @@ impl FileInformation {
     pub fn from_path(path: impl AsRef<Path>, dereference: bool) -> IOResult<Self> {
         #[cfg(any(unix, target_os = "wasi"))]
         {
+            #[cfg(all(target_os = "wasi", target_env = "p2"))]
+            if dereference && let Some(info) = Self::from_symlink_target_p2(path.as_ref()) {
+                return Ok(info);
+            }
             let stat = if dereference {
                 rustix::fs::stat(path.as_ref())
             } else {
@@ -110,6 +114,20 @@ impl FileInformation {
             let file = open_options.read(true).open(path.as_ref())?;
             Self::from_file(&file)
         }
+    }
+
+    /// Returns the identity of a symlink target on WASI preview 2.
+    ///
+    /// Path-based `stat` on a symlink reports the inode of the link itself, so two paths to
+    /// the same file compare as different. Statting an open descriptor reports the target.
+    #[cfg(all(target_os = "wasi", target_env = "p2"))]
+    fn from_symlink_target_p2(path: &Path) -> Option<Self> {
+        let link = rustix::fs::lstat(path).ok()?;
+        if rustix::fs::FileType::from_raw_mode(link.st_mode) != rustix::fs::FileType::Symlink {
+            return None;
+        }
+        let file = fs::File::open(path).ok()?;
+        Self::from_file(&file).ok()
     }
 
     pub fn file_size(&self) -> u64 {
