@@ -1296,8 +1296,14 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             None => o.write_blocks(data),
             Some(c) => write_converted(c, data, &mut conv_rstat, &mut conv_wstat, &mut o),
         };
-        let Ok(wstat_update) = written.map_err(|e| copy_error = Some(e)) else {
-            break;
+        let wstat_update = match written {
+            Ok(wstat_update) => wstat_update,
+            Err(e) => {
+                // The block was read even though writing it failed.
+                rstat += rstat_update;
+                copy_error = Some(e);
+                break;
+            }
         };
 
         // Discard the system file cache for the read portion of
@@ -1415,17 +1421,19 @@ fn finalize<T>(
     output_thread: thread::JoinHandle<T>,
 ) -> io::Result<()> {
     // Flush the output in case a partial write has been buffered but
-    // not yet written.
-    let wstat_update = output.flush()?;
+    // not yet written, sync it if configured to do so, and, with
+    // `conv=sparse`, extend it over the trailing zero blocks that were
+    // skipped rather than written.
+    let mut wstat = wstat;
+    let result = output.flush().and_then(|wstat_update| {
+        wstat += wstat_update;
+        output.sync()?;
+        output.extend_sparse()
+    });
+    // A failed flush may still have written part of the buffered block.
+    wstat += output.take_failed_wstat();
 
-    // Sync the output, if configured to do so.
-    output.sync()?;
-
-    // With `conv=sparse`, trailing zero blocks were skipped, not written.
-    output.extend_sparse()?;
-
-    // Print the final read/write statistics.
-    let wstat = wstat + wstat_update;
+    // Print the final read/write statistics, even after an error.
     let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), ProgUpdateType::Final);
     prog_tx.send(prog_update).unwrap_or(());
     // Wait for the output thread to finish
@@ -1433,7 +1441,7 @@ fn finalize<T>(
         .join()
         .expect("Failed to join with the output thread.");
 
-    Ok(())
+    result
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]

@@ -2538,10 +2538,14 @@ fn test_short_last_write_fails() {
 
     const CAP: u64 = 768 * 1024;
 
-    for args in [
-        &["bs=512K", "count=2"][..],
-        &["ibs=512K", "obs=512K", "count=2"],
-        &["ibs=512K", "obs=2M", "count=2"],
+    // GNU dd reports the bytes of the short write in all three cases. With
+    // bs=, it does not count that write as a partial record ("1+0 records
+    // out"), which is inconsistent with the obs= case, so here it is counted.
+    for (args, records_out) in [
+        (&["bs=512K", "count=2"][..], "1+1 records out"),
+        (&["ibs=512K", "obs=512K", "count=2"], "1+1 records out"),
+        // The whole output is a single 2 MiB block, written by the final flush.
+        (&["ibs=512K", "obs=2M", "count=2"], "0+1 records out"),
     ] {
         let (at, mut ucmd) = at_and_ucmd!();
         let result = ucmd
@@ -2550,10 +2554,9 @@ fn test_short_last_write_fails() {
             .limit(Resource::FSIZE, CAP, CAP)
             .ignore_sigxfsz()
             .fails();
-        if args[0] == "bs=512K" {
-            result.stderr_contains("1+1 records out");
-            result.stderr_contains("786432 bytes");
-        }
+        result.stderr_contains("2+0 records in");
+        result.stderr_contains(records_out);
+        result.stderr_contains("786432 bytes");
         assert_eq!(at.metadata("capped.bin").len(), CAP);
     }
 }
