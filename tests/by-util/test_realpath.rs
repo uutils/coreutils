@@ -591,12 +591,11 @@ fn test_realpath_non_utf8_paths() {
 
 #[test]
 fn test_realpath_empty_string() {
-    // Like GNU, an empty operand is reported as a missing file
     new_ucmd!()
         .arg("")
         .fails_with_code(1)
         .no_stdout()
-        .stderr_is("realpath: '': No such file or directory\n");
+        .stderr_is("realpath: '': entity not found\n");
 
     // Empty --relative-base / --relative-to are rejected the same way
     new_ucmd!()
@@ -605,14 +604,14 @@ fn test_realpath_empty_string() {
         .arg(".")
         .fails_with_code(1)
         .no_stdout()
-        .stderr_is("realpath: '': No such file or directory\n");
+        .stderr_is("realpath: '': entity not found\n");
 
     new_ucmd!()
         .arg("--relative-to=")
         .arg(".")
         .fails_with_code(1)
         .no_stdout()
-        .stderr_is("realpath: '': No such file or directory\n");
+        .stderr_is("realpath: '': entity not found\n");
 }
 
 #[test]
@@ -622,13 +621,13 @@ fn test_realpath_empty_string_does_not_stop_other_operands() {
     ucmd.args(&["", "file"])
         .fails_with_code(1)
         .stdout_contains(format!("{MAIN_SEPARATOR}file\n"))
-        .stderr_is("realpath: '': No such file or directory\n");
+        .stderr_is("realpath: '': entity not found\n");
 
     // -q silences the message but keeps the exit status
     new_ucmd!()
         .args(&["-q", "", "."])
         .fails_with_code(1)
-        .stderr_is("");
+        .no_stderr();
 }
 
 #[test]
