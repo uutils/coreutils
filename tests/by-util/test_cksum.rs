@@ -690,6 +690,42 @@ fn test_check_tagged_missing_algo() {
         .stderr_contains("no properly formatted checksum lines found");
 }
 
+/// Opens /dev/full, where every write fails with ENOSPC.
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn dev_full() -> std::fs::File {
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap()
+}
+
+#[rstest]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[case::after_ok(true, "")]
+#[case::cannot_open(false, "cksum: missing: No such file or directory\n")]
+fn test_check_write_error(#[case] after_ok: bool, #[case] stderr_before: &str) {
+    // The first report line that cannot be written, an OK line or the line
+    // of a file that cannot be opened, ends the check with exit 1. Nothing
+    // after it is checked, so the missing file behind the OK line leaves no
+    // trace.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ok = if after_ok {
+        at.read("sha256_single_file.expected")
+    } else {
+        String::new()
+    };
+    at.write(
+        "sums",
+        &format!("{ok}SHA256 (missing) = {}\n", "0".repeat(64)),
+    );
+    ucmd.args(&["-c", "sums"])
+        .set_stdout(dev_full())
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "{stderr_before}cksum: write error: No space left on device\n"
+        ));
+}
+
 #[test]
 fn test_check_tagged_blanks_around_equal_sign() {
     // Like GNU, accept any blanks, or none, around the '=' of a tagged line,
@@ -1005,13 +1041,9 @@ fn test_write_error() {
     // A normal line fails at its newline. The raw digest has no newline, so
     // only a flush reports its write error.
     for args in [&["lorem_ipsum.txt"][..], &["--raw", "lorem_ipsum.txt"]] {
-        let dev_full = std::fs::OpenOptions::new()
-            .write(true)
-            .open("/dev/full")
-            .unwrap();
         new_ucmd!()
             .args(args)
-            .set_stdout(dev_full)
+            .set_stdout(dev_full())
             .fails_with_code(1)
             .stderr_is("cksum: write error: No space left on device\n");
     }
