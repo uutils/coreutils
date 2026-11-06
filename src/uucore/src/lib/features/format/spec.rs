@@ -10,7 +10,7 @@ use super::num_format::{
     UnsignedIntVariant,
 };
 use super::{
-    EscapeSet, ExtendedBigDecimal, FormatChar, FormatError, OctalParsing, check_precision, 
+    EscapeSet, ExtendedBigDecimal, FormatChar, FormatError, OctalParsing, check_precision,
     parse_escape_only,
 };
 use crate::format::FormatArguments;
