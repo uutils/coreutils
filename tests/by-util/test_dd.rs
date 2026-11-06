@@ -1641,23 +1641,75 @@ fn test_seek_output_fifo() {
         .stderr_only("0+0 records in\n0+0 records out\n");
 }
 
-/// `oflag=nofollow` and `conv=excl` refuse a symlink to an output FIFO
-/// before the seek reads from the FIFO (#15763). Without the check, `dd`
+/// `conv=excl` fails on an existing output FIFO, also through a symlink and
+/// with `seek=`, before reading from it (#15763). Without the check, `dd`
 /// blocks opening the FIFO for reading, so the timeout turns that into a failure.
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(unix)]
 #[rstest]
-#[case::nofollow("oflag=nofollow")]
-#[case::excl("conv=excl")]
-fn test_seek_output_fifo_symlink_refused(#[case] flag: &str) {
+#[case::fifo("fifo", "seek=0")]
+#[case::fifo_seek("fifo", "seek=1")]
+#[case::symlink_seek("slot", "seek=1")]
+fn test_excl_output_fifo_fails(#[case] of: &str, #[case] seek: &str) {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkfifo("fifo");
     at.symlink_file("fifo", "slot");
 
     ts.ucmd()
-        .args(&["if=/dev/null", "of=slot", flag, "seek=1", "count=0"])
+        .args(&[
+            "if=/dev/null",
+            &format!("of={of}"),
+            "conv=excl",
+            seek,
+            "count=0",
+        ])
         .timeout(Duration::from_secs(10))
-        .fails();
+        .fails()
+        .stderr_contains("File exists");
+}
+
+/// `oflag=nofollow` refuses a symlink to an output FIFO before the seek
+/// reads from it (#15763).
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_seek_output_fifo_symlink_nofollow() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("fifo");
+    at.symlink_file("fifo", "slot");
+
+    ts.ucmd()
+        .args(&[
+            "if=/dev/null",
+            "of=slot",
+            "oflag=nofollow",
+            "seek=1",
+            "count=0",
+        ])
+        .timeout(Duration::from_secs(10))
+        .fails()
+        .stderr_contains("Too many levels of symbolic links");
+}
+
+/// `oflag=nonblock` reaches the open that seeks in an output FIFO, so it does
+/// not wait for a writer (#15763).
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_seek_output_fifo_nonblock() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("fifo");
+
+    ts.ucmd()
+        .args(&[
+            "if=/dev/null",
+            "of=fifo",
+            "oflag=nonblock",
+            "seek=1",
+            "count=0",
+        ])
+        .timeout(Duration::from_secs(10))
+        .succeeds();
 }
 
 /// Test that a skip on an input FIFO results in a read.
