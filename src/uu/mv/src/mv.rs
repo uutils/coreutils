@@ -1182,6 +1182,12 @@ fn rename_dir_fallback(
 
     result?;
 
+    // As for subdirectories, the mode goes on last.
+    #[cfg(unix)]
+    if let (Ok(src), Ok(dst)) = (open_dir_nofollow(from), open_dir_nofollow(to)) {
+        copy_dir_mode(&src, &dst);
+    }
+
     // Remove the source directory after successful copy
     fs::remove_dir_all(from)?;
 
@@ -1320,7 +1326,7 @@ fn copy_dir_contents_recursive(
 
             // Preserve ownership (uid/gid) of the subdirectory
             #[cfg(unix)]
-            let ownership_preserved = preserve_ownership(&from_path, &to_path).unwrap_or(false);
+            let _ = preserve_ownership(&from_path, &to_path);
 
             print_verbose(&from_path, &to_path);
 
@@ -1337,7 +1343,7 @@ fn copy_dir_contents_recursive(
             )?;
 
             #[cfg(unix)]
-            copy_subdir_xattrs_and_mode(&from_path, &to_path, ownership_preserved);
+            copy_subdir_xattrs_and_mode(&from_path, &to_path);
         } else {
             // Copy file with or without hardlink support based on platform
             #[cfg(unix)]
@@ -1373,12 +1379,13 @@ fn copy_dir_contents_recursive(
 ///
 /// This runs once the subdirectory's contents are copied, so that neither a
 /// default ACL nor a read-only mode applies to the entries created in it.
-/// The mode is set after the ACL: while a directory has an ACL, the group bits
-/// of its mode are the ACL mask, and chmod sets the mask from them.
+/// Both directories are opened without following symlinks, and the xattrs and
+/// mode go through those fds, so a path swapped for a symlink is not followed.
 #[cfg(unix)]
-fn copy_subdir_xattrs_and_mode(from: &Path, to: &Path, ownership_preserved: bool) {
-    use std::os::unix::fs::MetadataExt;
-
+fn copy_subdir_xattrs_and_mode(from: &Path, to: &Path) {
+    let (Ok(src), Ok(dst)) = (open_dir_nofollow(from), open_dir_nofollow(to)) else {
+        return;
+    };
     #[cfg(any(
         target_os = "freebsd",
         target_os = "hurd",
@@ -1387,21 +1394,50 @@ fn copy_subdir_xattrs_and_mode(from: &Path, to: &Path, ownership_preserved: bool
         target_os = "netbsd"
     ))]
     {
-        if let Ok(failed) = fsxattr::copy_xattrs_ignore_unsupported(from, to) {
+        if let Ok(failed) = fsxattr::copy_xattrs_fd_ignore_unsupported(&src, &dst) {
             show_xattr_failures(failed);
         }
     }
+    copy_dir_mode(&src, &dst);
+}
 
-    if let Ok(metadata) = from.symlink_metadata() {
-        let mode = metadata.mode() & 0o7777;
-        // As for files: if the chown did not take, the setuid/setgid bits
-        // would apply to the wrong owner or group, so drop them.
-        let mode = if ownership_preserved {
-            mode
-        } else {
-            mode & !0o6000
-        };
-        let _ = fs::set_permissions(to, fs::Permissions::from_mode(mode));
+/// Give the directory `dst` the mode of `src`.
+///
+/// Call it after the ACL is set: while a directory has an ACL, the group bits
+/// of its mode are the ACL mask, and chmod sets the mask from them.
+#[cfg(unix)]
+fn copy_dir_mode(src: &fs::File, dst: &fs::File) {
+    use std::os::unix::fs::MetadataExt;
+
+    if let (Ok(src_meta), Ok(dst_meta)) = (src.metadata(), dst.metadata()) {
+        let ownership_preserved =
+            src_meta.uid() == dst_meta.uid() && src_meta.gid() == dst_meta.gid();
+        let mode = moved_mode(src_meta.mode(), ownership_preserved);
+        let _ = dst.set_permissions(fs::Permissions::from_mode(mode));
+    }
+}
+
+#[cfg(unix)]
+fn open_dir_nofollow(path: &Path) -> io::Result<fs::File> {
+    use rustix::fs::{CWD, Mode, OFlags, openat};
+
+    let flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC;
+    Ok(openat(CWD, path, flags, Mode::empty())?.into())
+}
+
+/// The mode to give a moved file or directory.
+///
+/// If the chown did not take, the destination belongs to whoever ran `mv`,
+/// and re-applying setuid/setgid would hand them a binary running as
+/// themselves that used to run as someone else. GNU strips the bits in that
+/// case and so do we.
+#[cfg(unix)]
+fn moved_mode(src_mode: u32, ownership_preserved: bool) -> u32 {
+    let mode = src_mode & 0o7777;
+    if ownership_preserved {
+        mode
+    } else {
+        mode & !0o6000
     }
 }
 
@@ -1524,17 +1560,8 @@ fn rename_file_fallback(
 
         // chown before chmod: chown(2) clears setuid/setgid for non-root,
         // so the final mode must be applied last to preserve those bits.
-        //
-        // If the chown did not take, the destination belongs to whoever ran
-        // `mv`, and re-applying setuid/setgid would hand them a binary running
-        // as themselves that used to run as someone else. GNU strips the bits
-        // in that case and so do we.
         let ownership_preserved = preserve_ownership(from, to).unwrap_or(false);
-        let dest_mode = if ownership_preserved {
-            src_mode
-        } else {
-            src_mode & !0o6000
-        };
+        let dest_mode = moved_mode(src_mode, ownership_preserved);
         let _ = dst_file.set_permissions(Permissions::from_mode(dest_mode));
     }
 
