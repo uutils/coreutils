@@ -213,7 +213,7 @@ float_cmp = "allow"                          # 12
 return_self_not_must_use = "allow"           # 8
 inline_always = "allow"                      # 6
 should_panic_without_expect = "allow"        # 2
-const_is_empty = "allow"
+assert_is_empty = "allow"
 
 unused_self = "allow"
 implicit_hasher = "allow"
