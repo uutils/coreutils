@@ -372,6 +372,7 @@ fn test_follow_redirect_stdin_name_retry() {
     }
 }
 
+#[uutests::wasi_ignore(StdioHandlesOpaque)]
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
@@ -415,6 +416,7 @@ fn test_stdin_redirect_dir() {
 // FIXME: If `std::io::ErrorKind::IsADirectory` becomes stable or macos handles
 //  redirected directories like linux show the correct message like in
 //  `test_stdin_redirect_dir`
+#[uutests::wasi_ignore(HostSystemStateDiffers)]
 #[test]
 #[cfg(target_vendor = "apple")]
 fn test_stdin_redirect_dir_when_target_os_is_macos() {
@@ -4293,6 +4295,7 @@ fn test_when_follow_retry_then_initial_print_of_file_is_written_to_stdout() {
 }
 
 // TODO: Add test for the warning `--pid=PID is not supported on this system`
+#[uutests::wasi_ignore(TailFollowDisabled)]
 #[test]
 fn test_args_when_settings_check_warnings_then_shows_warnings() {
     let scene = TestScenario::new(util_name!());
@@ -5371,6 +5374,7 @@ fn test_child_when_run_with_stderr_to_stdout() {
 }
 
 #[cfg(target_os = "linux")]
+#[uutests::wasip2_ignore(DevFullUnavailable)]
 #[test]
 fn test_failed_write_is_reported() {
     new_ucmd!()
@@ -5405,6 +5409,7 @@ fn test_failed_warning_write_is_reported() {
 }
 
 #[cfg(target_os = "linux")]
+#[uutests::wasip2_ignore(DevFullUnavailable)]
 #[test]
 fn test_failed_write_is_reported_on_seekable_input() {
     let ts = TestScenario::new("tail");

@@ -920,8 +920,9 @@ fn test_all_but_last_lines() {
         .stdout_is_fixture("lorem_ipsum_backwards_15_lines.expected");
 }
 
-#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[uutests::wasip2_ignore(DevFullUnavailable)]
 #[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn test_write_to_dev_full() {
     use std::fs::OpenOptions;
 

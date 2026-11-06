@@ -1086,6 +1086,7 @@ fn test_touch_leap_second() {
     assert_eq!(mtime.unix_seconds() - epoch.unix_seconds(), 60);
 }
 
+#[uutests::wasip2_ignore(DanglingSymlinkTrailingSlashEnotdir)]
 #[test]
 #[cfg(not(windows))]
 // File::create doesn't support trailing separator in Windows
@@ -1311,11 +1312,9 @@ fn test_touch_device_files() {
 #[test]
 #[cfg(unix)]
 fn test_touch_does_not_truncate_symlink_target() {
-    use std::os::unix::fs::symlink;
-
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("victim", "do not truncate me");
-    symlink(at.plus("victim"), at.plus("link")).unwrap();
+    at.symlink_file("victim", "link");
 
     ucmd.arg("link").succeeds();
 
@@ -1327,10 +1326,8 @@ fn test_touch_does_not_truncate_symlink_target() {
 #[test]
 #[cfg(unix)]
 fn test_touch_through_dangling_symlink_creates_target() {
-    use std::os::unix::fs::symlink;
-
     let (at, mut ucmd) = at_and_ucmd!();
-    symlink(at.plus("missing"), at.plus("link")).unwrap();
+    at.symlink_file("missing", "link");
 
     ucmd.arg("link").succeeds();
 

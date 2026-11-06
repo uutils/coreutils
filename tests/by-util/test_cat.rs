@@ -200,6 +200,7 @@ fn test_piped_to_dev_null() {
     }
 }
 
+#[uutests::wasip2_ignore(DevFullUnavailable)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn test_piped_to_dev_full() {
@@ -653,9 +654,14 @@ fn test_domain_socket() {
     s.ucmd()
         .args(&[socket_path])
         .fails()
-        .stderr_contains("No such device or address");
+        .stderr_contains(if cfg!(wasi_runner) {
+            "No such file or directory"
+        } else {
+            "No such device or address"
+        });
 }
 
+#[uutests::wasi_ignore(NoStdoutFileRedirection)]
 #[test]
 fn test_write_to_self_empty() {
     // it's ok if the input file is also the output file if it's empty
@@ -923,6 +929,7 @@ fn test_write_error_handling() {
         .stderr_contains("No space left on device");
 }
 
+#[uutests::wasip2_ignore(DevFullUnavailable)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_version_help_dev_full() {

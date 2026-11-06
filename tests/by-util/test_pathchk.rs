@@ -23,6 +23,7 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+#[uutests::wasi_ignore(EmptyPathResolvesToDirectory)]
 #[test]
 #[cfg(unix)]
 fn test_default_mode() {

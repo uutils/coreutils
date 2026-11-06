@@ -134,6 +134,7 @@ fn test_version() {
         .stdout_is(format!("dir {}\n", uucore::crate_version!()));
 }
 
+#[uutests::wasip2_ignore(DevFullUnavailable)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_write_error() {

@@ -787,9 +787,9 @@ fn null_line_endings() {
         .stdout_only_fixture("z.expected");
 }
 
+#[uutests::wasip2_ignore(DevFullUnavailable)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
-#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_full() {
     let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
     new_ucmd!()

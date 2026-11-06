@@ -16,12 +16,14 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 fn test_default() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.succeeds().stdout_is(at.root_dir_resolved() + "\n");
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 fn test_ignores_non_option_arguments() {
     // GNU pwd ignores non-option operands, warning on stderr but exiting 0.
