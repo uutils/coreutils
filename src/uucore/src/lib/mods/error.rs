@@ -509,6 +509,34 @@ pub fn strip_errno(err: &std::io::Error) -> String {
     msg
 }
 
+/// Maps the WASI `EBADF` error for a directory to `ErrorKind::IsADirectory`.
+///
+/// WASI returns `EBADF` where Unix returns `EISDIR`. This function does nothing on other targets.
+pub fn wasi_normalize_open_error(err: std::io::Error) -> std::io::Error {
+    #[cfg(target_os = "wasi")]
+    if err.raw_os_error() == Some(8) {
+        return std::io::Error::new(std::io::ErrorKind::IsADirectory, "Is a directory");
+    }
+    err
+}
+
+/// Maps the WASI error for reading a directory to `ErrorKind::IsADirectory`.
+///
+/// The errno depends on the preview version and on who opened the descriptor.
+/// WASI defers the directory check from `open` to the first `read`.
+/// This function does nothing on other targets.
+pub fn wasi_normalize_read_error(err: std::io::Error) -> std::io::Error {
+    #[cfg(all(target_os = "wasi", target_env = "p1"))]
+    if matches!(err.raw_os_error(), Some(31 | 8)) {
+        return std::io::Error::new(std::io::ErrorKind::IsADirectory, "Is a directory");
+    }
+    #[cfg(all(target_os = "wasi", target_env = "p2"))]
+    if matches!(err.raw_os_error(), Some(29 | 8)) {
+        return std::io::Error::new(std::io::ErrorKind::IsADirectory, "Is a directory");
+    }
+    err
+}
+
 /// Enables the conversion from [`std::io::Error`] to [`UError`] and from [`std::io::Result`] to
 /// [`UResult`].
 pub trait FromIo<T> {
