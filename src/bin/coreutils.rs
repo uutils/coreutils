@@ -114,7 +114,12 @@ fn main() -> ExitCode {
             // #[cfg(not(feature = "only_english"))]
             validation::setup_localization_or_exit(util);
             let code = uumain(vec![util_os].into_iter().chain(args));
+            // WASI preview 2 maps every nonzero `ExitCode` returned from main to 1,
+            // so the code must go through exit to reach the host.
+            #[cfg(all(target_os = "wasi", target_env = "p2"))]
+            exit(code);
             // ExitCode only holds a u8; larger codes (Windows) go through exit.
+            #[cfg(not(all(target_os = "wasi", target_env = "p2")))]
             return u8::try_from(code).map_or_else(|_| exit(code), ExitCode::from);
         }
         // GNU coreutils --help string shows help for coreutils
