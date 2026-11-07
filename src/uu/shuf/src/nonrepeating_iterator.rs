@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::ops::RangeInclusive;
 
 use uucore::error::{UResult, USimpleError};
@@ -23,8 +23,8 @@ use crate::WrappedRng;
 /// - When the hash table starts to get big relative to the remaining items
 ///   we switch over to an array.
 ///
-/// - We store the array backwards so that we can shrink it as we go and free excess
-///   memory every now and then.
+/// - We store the array backwards so that we can remove selected values with `pop()` and
+///   retain the allocation while consuming it instead of repeatedly reallocating it.
 ///
 /// Both the hash table and the array give the same output.
 ///
@@ -45,8 +45,21 @@ pub(crate) struct NonrepeatingIterator<'a> {
 }
 
 enum Values {
+    /// Materialized permutation used for relatively small ranges.
+    ///
+    /// Values are stored in reverse order so that Fisher-Yates can efficiently
+    /// remove the selected value with `pop()`.
     Full(Vec<u64>),
-    Sparse(RangeInclusive<u64>, FxHashMap<u64, u64>),
+
+    /// Lazily materialized permutation used for large ranges.
+    ///
+    /// `items` contains only positions whose value differs from the identity
+    /// permutation.
+    Sparse {
+        next: Option<u64>,
+        end: u64,
+        items: FxHashMap<u64, u64>,
+    },
 }
 
 impl<'a> NonrepeatingIterator<'a> {
@@ -55,60 +68,107 @@ impl<'a> NonrepeatingIterator<'a> {
         rng: &'a mut WrappedRng,
         head_count: Option<usize>,
     ) -> UResult<Self> {
-        // Save RAM usage with shuf -i 1-huge_number -n small_number
+        // Avoid allocating enormous vectors for ranges that are unlikely
+        // to be consumed completely.
         const TOO_LARGE_VEC_SIZE: usize = 16_777_216;
+
+        // For callers without a consumption bound, keep the hash map's initial
+        // allocation small. The shuf range path passes usize::MAX when no
+        // --head-count was requested, so that path intentionally reserves the
+        // full range and fails cleanly for impossible full permutations.
+        const MAX_SPARSE_CAPACITY: usize = 128;
+        // Lower bound on the length of the range.
         let range_len = range.size_hint().0;
-        let mut items = Vec::new();
-        let values = if range_len < TOO_LARGE_VEC_SIZE && items.try_reserve(range_len).is_ok() {
-            items.extend(range.rev());
-            Values::Full(items)
-        } else {
-            const MAX_CAPACITY: usize = 128; // todo: optimize this
-            // `capacity` is the requested output count; with no --head-count it
-            // defaults to the whole range, which can be up to usize::MAX.
-            // Reserve fallibly so an unsatisfiable request errors cleanly
-            // instead of panicking in hashbrown (capacity overflow) or aborting
-            // in the allocator — mirroring the `try_reserve` on the Vec branch.
-            let capacity = head_count.unwrap_or(MAX_CAPACITY).min(range_len);
-            let mut map = FxHashMap::with_hasher(rustc_hash::FxBuildHasher);
-            map.try_reserve(capacity)
-                .map_err(|_| USimpleError::new(1, translate!("shuf-error-memory-exhausted")))?;
-            Values::Sparse(range, map)
-        };
-        Ok(NonrepeatingIterator { rng, values })
+        let full_range_requested = head_count.is_some_and(|count| count >= range_len);
+
+        // For reasonably sized ranges, or when the whole range is requested,
+        // use a normal Fisher-Yates shuffle. The sparse representation avoids
+        // allocation only when it can stop before materializing the range.
+        if range_len < TOO_LARGE_VEC_SIZE || full_range_requested {
+            let mut items = Vec::new();
+
+            if items.try_reserve_exact(range_len).is_ok() {
+                // Preserve the backwards representation used by the
+                // Fisher-Yates implementation.
+                items.extend(range.rev());
+
+                return Ok(Self {
+                    rng,
+                    values: Values::Full(items),
+                });
+            }
+        }
+
+        // Sparse representation:
+        // reserve approximately the number of values we expect to consume.
+        //
+        let capacity = head_count.unwrap_or(MAX_SPARSE_CAPACITY).min(range_len);
+
+        let mut items = FxHashMap::with_hasher(FxBuildHasher);
+
+        items
+            .try_reserve(capacity)
+            .map_err(|_| USimpleError::new(1, translate!("shuf-error-memory-exhausted")))?;
+
+        Ok(Self {
+            rng,
+            values: Values::Sparse {
+                next: Some(*range.start()),
+                end: *range.end(),
+                items,
+            },
+        })
     }
 
-    fn produce(&mut self) -> UResult<u64> {
+    #[inline]
+    fn produce(&mut self) -> Option<UResult<u64>> {
         match &mut self.values {
             Values::Full(items) => {
-                let this_idx = items.len() - 1;
+                let len = items.len();
+                let last = len.checked_sub(1)?;
 
-                let other_idx = self.rng.choose_from_range(0..=items.len() as u64 - 1)? as usize;
-                // Flip the index to pretend we're going left-to-right
-                let other_idx = items.len() - other_idx - 1;
-
-                items.swap(this_idx, other_idx);
-
-                let val = items.pop().unwrap();
-                if items.len().is_power_of_two() && items.len() >= 512 {
-                    items.shrink_to_fit();
-                }
-                Ok(val)
-            }
-            Values::Sparse(range, items) => {
-                let this_idx = *range.start();
-                let this_val = items.remove(&this_idx).unwrap_or(this_idx);
-
-                let other_idx = self.rng.choose_from_range(range.clone())?;
-
-                let val = if this_idx == other_idx {
-                    this_val
-                } else {
-                    items.insert(other_idx, this_val).unwrap_or(other_idx)
+                // Fisher-Yates: choose an element from [0, len -1].
+                let selected = match self.rng.choose_from_range(0..=(last as u64)) {
+                    Ok(selected) => selected as usize,
+                    Err(error) => return Some(Err(error)),
                 };
-                *range = *range.start() + 1..=*range.end();
 
-                Ok(val)
+                // The vector is stored backwards, so convert the selected
+                // index to the corresponding index in the reversed vector.
+                let selected = last - selected;
+
+                items.swap(selected, last);
+
+                Some(Ok(items.pop()?))
+            }
+
+            Values::Sparse { next, end, items } => {
+                let current = (*next)?;
+
+                // Remove the lazily materialized value at the current
+                // position. If none exists, the identity permutation applies.
+                let current_value = items.remove(&current).unwrap_or(current);
+
+                // Select uniformly from the remaining range.
+                let selected = match self.rng.choose_from_bounds(current, *end) {
+                    Ok(selected) => selected,
+                    Err(error) => return Some(Err(error)),
+                };
+
+                let value = if selected == current {
+                    current_value
+                } else {
+                    // Move the value at `current` to `selected`.
+                    //
+                    // If `selected` was already materialized, its previous
+                    // value is returned. Otherwise, its identity value is
+                    // returned.
+                    items.insert(selected, current_value).unwrap_or(selected)
+                };
+
+                *next = current.checked_add(1);
+
+                Some(Ok(value))
             }
         }
     }
@@ -117,23 +177,42 @@ impl<'a> NonrepeatingIterator<'a> {
 impl Iterator for NonrepeatingIterator<'_> {
     type Item = UResult<u64>;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        match &self.values {
-            Values::Full(items) if items.is_empty() => return None,
-            Values::Full(_) => (),
-            Values::Sparse(range, _) if range.is_empty() => return None,
-            Values::Sparse(range, items) => {
-                if items.len() >= items.capacity() {
-                    self.values = Values::Full(hashmap_to_vec(range.clone(), items));
-                }
+        if let Values::Full(items) = &self.values {
+            if items.is_empty() {
+                return None;
+            }
+        } else if let Values::Sparse { next, end, items } = &self.values {
+            let next_value = (*next)?;
+
+            // Except for a range ending at u64::MAX, the next value is one
+            // past the end after the last draw. Do not sample that empty range.
+            if next_value > *end {
+                return None;
+            }
+
+            // Once the sparse table is full, materialize the remaining
+            // permutation.
+            if items.len() >= items.capacity() {
+                let values = hashmap_to_vec(next_value..=*end, items);
+
+                self.values = Values::Full(values);
             }
         }
 
-        Some(self.produce())
+        self.produce()
     }
 }
 
+#[inline]
 fn hashmap_to_vec(range: RangeInclusive<u64>, map: &FxHashMap<u64, u64>) -> Vec<u64> {
-    let lookup = |idx| *map.get(&idx).unwrap_or(&idx);
-    range.rev().map(lookup).collect()
+    let len = range.size_hint().0;
+    let mut values = Vec::with_capacity(len);
+
+    for idx in range.rev() {
+        values.push(map.get(&idx).copied().unwrap_or(idx));
+    }
+
+    values
 }
