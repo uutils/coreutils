@@ -1833,6 +1833,12 @@ fn test_cp_backup_invalid_option_reports_program_name_once() {
         result.stderr_str().lines().next(),
         Some("cp: invalid argument 'bogus' for 'backup type'")
     );
+    // GNU ends with the usage hint, as mv, ln and install do.
+    assert!(
+        result
+            .stderr_str()
+            .ends_with("cp --help' for more information.\n")
+    );
 }
 
 #[test]

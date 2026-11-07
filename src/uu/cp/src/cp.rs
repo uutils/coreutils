@@ -109,6 +109,11 @@ pub enum CpError {
     #[error("{0}")]
     InvalidArgument(String),
 
+    /// Invalid backup type, from the command line or `VERSION_CONTROL`. Like
+    /// GNU, it is followed by a hint to run `--help`.
+    #[error("{0}")]
+    Backup(String),
+
     /// All standard options are included as an implementation
     /// path, but those that are not implemented yet should return
     /// a `NotImplemented` error.
@@ -139,6 +144,10 @@ impl From<String> for CpError {
 impl UError for CpError {
     fn code(&self) -> i32 {
         EXIT_ERR
+    }
+
+    fn usage(&self) -> bool {
+        matches!(self, Self::Backup(_))
     }
 }
 
@@ -1079,8 +1088,8 @@ impl Options {
 
         let copy_mode = CopyMode::from_matches(matches);
 
-        let backup_mode =
-            backup_control::determine_backup_mode(matches).map_err(|e| e.to_string())?;
+        let backup_mode = backup_control::determine_backup_mode(matches)
+            .map_err(|e| CpError::Backup(e.to_string()))?;
         let update_mode = update_control::determine_update_mode(matches);
 
         if backup_mode != BackupMode::None
