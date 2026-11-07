@@ -19,7 +19,7 @@ test = false
 doctest = false
 
 [target.'cfg(any(target_vendor = "apple", target_os = "cygwin", target_os = "freebsd", target_os = "linux", target_os = "netbsd"))'.dependencies]
-uucore = { workspace = true, features = ["utmpx"] }
+uucore = { workspace = true, features = ["utmpx", "systemd-logind"] }
 
 [target.'cfg(any(target_vendor = "apple", target_os = "cygwin", target_os = "freebsd", target_os = "linux", target_os = "netbsd", target_os = "openbsd"))'.dependencies]
 clap = { workspace = true }
@@ -28,9 +28,6 @@ uucore = { workspace = true, features = [] }
 
 [target.'cfg(target_os = "openbsd")'.dependencies]
 utmp-classic = { workspace = true }
-
-[features]
-systemd_logind = ["uucore/systemd_logind"]
 
 [lints]
 workspace = true

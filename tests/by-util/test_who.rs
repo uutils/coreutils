@@ -3,12 +3,287 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (flags) runlevel mesg
+// spell-checker:ignore (flags) runlevel mesg WRLCK SETLK UNLCK
 
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
 use uutests::util::{TestScenario, expected_result, gnu_cmd_result};
 use uutests::util_name;
+
+#[cfg(all(target_os = "linux", target_env = "gnu", feature = "test_logind"))]
+mod logind {
+    use std::collections::HashMap;
+    use std::process::{Child, Command, Stdio};
+    use std::time::{Duration, Instant};
+    use uutests::util::TestScenario;
+
+    fn systemd(command: &str, args: &[&str]) -> String {
+        let output = Command::new(command)
+            .args(args)
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{command}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).unwrap()
+    }
+
+    struct Session {
+        child: Child,
+        unit: String,
+    }
+
+    impl Drop for Session {
+        fn drop(&mut self) {
+            let _ = Command::new("systemctl")
+                .args(["stop", &self.unit])
+                .output();
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+
+    #[test]
+    #[ignore = "requires systemd, PAM, and permission to create a system service; see DEVELOPMENT.md"]
+    #[uutests::wasi_ignore(NoSubprocessSpawning)]
+    fn sessions_match_loginctl() {
+        use uucore::utmpx::time::{UtcOffset, macros::format_description};
+
+        // The caller supplies an empty utmp in a private mount namespace.
+        assert!(
+            std::fs::metadata(uucore::utmpx::DEFAULT_FILE)
+                .map_or(true, |m| m.is_file() && m.len() == 0)
+        );
+        let unit = format!("uutils-logind-test-{}", std::process::id());
+        let user = format!("User={}", rustix::process::getuid().as_raw());
+        let child = Command::new("systemd-run")
+            .args([
+                "--quiet",
+                "--collect",
+                "--pty",
+                "--unit",
+                &unit,
+                "--property",
+                &user,
+                "--property=PAMName=login",
+                "/bin/sleep",
+                "60",
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let _session = Session {
+            child,
+            unit: unit.clone(),
+        };
+        let started = Instant::now();
+        let properties = loop {
+            let leader = systemd(
+                "systemctl",
+                &["show", &unit, "--property=MainPID", "--value"],
+            );
+            let sessions = systemd("loginctl", &["list-sessions", "--no-legend", "--no-pager"]);
+            let found = sessions
+                .lines()
+                .filter_map(|line| line.split_whitespace().next())
+                .find_map(|id| {
+                    let properties = systemd(
+                        "loginctl",
+                        &[
+                            "show-session",
+                            id,
+                            "--property=Name",
+                            "--property=TTY",
+                            "--property=Timestamp",
+                            "--property=Leader",
+                        ],
+                    );
+                    let properties: HashMap<_, _> = properties
+                        .lines()
+                        .filter_map(|line| line.split_once('='))
+                        .map(|(k, v)| (k.to_owned(), v.to_owned()))
+                        .collect();
+                    (properties
+                        .get("Leader")
+                        .is_some_and(|pid| pid == leader.trim())
+                        && properties.get("TTY").is_some_and(|tty| !tty.is_empty()))
+                    .then_some(properties)
+                });
+            if let Some(properties) = found {
+                break properties;
+            }
+            assert!(
+                started.elapsed() < Duration::from_secs(10),
+                "systemd-run did not create a TTY session"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        let name = &properties["Name"];
+        let tty = &properties["TTY"];
+        let pid: u32 = properties["Leader"].parse().unwrap();
+        let records = uucore::systemd_logind::read_login_records().unwrap();
+        let record = records.iter().find(|r| r.raw_device == *tty).unwrap();
+        assert_eq!(&record.user, name);
+        assert_eq!(record.pid, pid);
+        let timestamp = record
+            .try_login_time_offset()
+            .unwrap()
+            .to_offset(UtcOffset::UTC);
+        let expected = timestamp
+            .format(format_description!(
+                "[year]-[month]-[day] [hour]:[minute]:[second]"
+            ))
+            .unwrap();
+        assert!(properties["Timestamp"].contains(&expected));
+        let displayed = timestamp
+            .format(format_description!(
+                "[month repr:short] [day padding:space] [hour]:[minute]"
+            ))
+            .unwrap();
+        let ts = TestScenario::new("who");
+        let who = ts
+            .ucmd()
+            .arg("-u")
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .succeeds()
+            .stdout_move_str();
+        let row = who
+            .lines()
+            .find(|row| row.split_whitespace().nth(1) == Some(tty.as_str()))
+            .unwrap();
+        assert_eq!(row.split_whitespace().next(), Some(name.as_str()));
+        assert!(row.contains(&displayed));
+        assert!(
+            row.split_whitespace()
+                .any(|field| field == properties["Leader"])
+        );
+        ts.ccmd("pinky")
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .succeeds()
+            .stdout_contains(tty)
+            .stdout_contains(&displayed);
+        let names = ts.ccmd("users").succeeds().stdout_move_str();
+        assert!(names.split_whitespace().any(|user| user == name));
+        let users = records.iter().filter(|r| r.is_user_process()).count();
+        ts.ucmd()
+            .arg("-q")
+            .env("LC_ALL", "C")
+            .succeeds()
+            .stdout_contains(format!("={users}"));
+        ts.ccmd("uptime")
+            .env("LC_ALL", "C")
+            .succeeds()
+            .stdout_contains(format!("{users} user"));
+    }
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[uutests::wasi_ignore(NoFifo)]
+#[rstest::rstest]
+#[case(false)]
+#[case(true)]
+fn test_utmp_fifo_is_rejected(#[case] with_writer: bool) {
+    use std::io::Write;
+    use std::mem::offset_of;
+    use std::os::unix::fs::OpenOptionsExt;
+    use std::time::Duration;
+
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkfifo("utmp");
+    let path = ts.fixtures.plus("utmp");
+    let _writer = with_writer.then(|| {
+        // Linux permits opening a FIFO for both reading and writing without
+        // another endpoint, so the test does not block during setup.
+        let mut writer = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(&path)
+            .unwrap();
+        let mut bytes = vec![0; size_of::<libc::utmpx>()];
+        let record_type = libc::USER_PROCESS.to_ne_bytes();
+        let type_offset = offset_of!(libc::utmpx, ut_type);
+        bytes[type_offset..type_offset + record_type.len()].copy_from_slice(&record_type);
+        let user_offset = offset_of!(libc::utmpx, ut_user);
+        bytes[user_offset..user_offset + 4].copy_from_slice(b"fifo");
+        writer.write_all(&bytes).unwrap();
+        writer
+    });
+
+    ts.ucmd()
+        .arg("-q")
+        .arg(&path)
+        .timeout(Duration::from_secs(5))
+        .succeeds()
+        .stdout_is("\n# users=0\n");
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[rstest::rstest]
+#[case(false)]
+#[case(true)]
+fn test_utmp_lock_wait_is_bounded(#[case] release: bool) {
+    use std::os::fd::AsRawFd;
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    let ts = TestScenario::new(util_name!());
+    let path = ts.fixtures.plus("locked-utmp");
+    std::fs::write(&path, vec![0; size_of::<libc::utmpx>()]).unwrap();
+    let file = Arc::new(
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&path)
+            .unwrap(),
+    );
+    // SAFETY: flock is initialized and the descriptor remains owned by file.
+    let mut lock: libc::flock = unsafe { std::mem::zeroed() };
+    lock.l_type = libc::F_WRLCK as _;
+    lock.l_whence = libc::SEEK_SET as _;
+    assert_eq!(
+        unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETLK, &lock) },
+        0
+    );
+    let writer = release.then(|| {
+        let file = Arc::clone(&file);
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(250));
+            lock.l_type = libc::F_UNLCK as _;
+            // SAFETY: file and the initialized lock remain live through the call.
+            assert_eq!(
+                unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETLK, &lock) },
+                0
+            );
+        })
+    });
+    // POSIX record locks are process-associated: the utility must be a child
+    // process, rather than another reader thread in this process.
+    let started = Instant::now();
+    ts.ucmd()
+        .arg("-q")
+        .arg(&path)
+        .timeout(Duration::from_secs(15))
+        .succeeds()
+        .stdout_contains("# users=0");
+    let elapsed = started.elapsed();
+    if let Some(writer) = writer {
+        writer.join().unwrap();
+        assert!(elapsed < Duration::from_secs(5), "{elapsed:?}");
+    } else {
+        assert!(elapsed >= Duration::from_secs(9), "{elapsed:?}");
+    }
+}
+
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
@@ -343,6 +618,7 @@ mod utmp_file {
         user: &'a str,
         host: &'a str,
         exit: (i16, i16),
+        timestamp: Option<i32>,
     }
 
     impl Record<'_> {
@@ -364,7 +640,7 @@ mod utmp_file {
             buf.extend_from_slice(&self.exit.0.to_ne_bytes());
             buf.extend_from_slice(&self.exit.1.to_ne_bytes());
             buf.extend_from_slice(&0_i32.to_ne_bytes()); // ut_session
-            buf.extend_from_slice(&TIMESTAMP.to_ne_bytes()); // ut_tv.tv_sec
+            buf.extend_from_slice(&self.timestamp.unwrap_or(TIMESTAMP).to_ne_bytes()); // ut_tv.tv_sec
             buf.extend_from_slice(&0_i32.to_ne_bytes()); // ut_tv.tv_usec
             buf.extend_from_slice(&[0; 16]); // ut_addr_v6
             buf.extend_from_slice(&[0; 20]); // reserved
@@ -448,6 +724,31 @@ mod utmp_file {
             .args(args)
             .arg("utmp")
             .succeeds()
+    }
+
+    #[rstest::rstest]
+    #[case(1_782_907_200, "Jul  1 08:00")]
+    #[case(1_767_268_800, "Jan  1 07:00")]
+    #[uutests::wasi_ignore(NoLocaleData)]
+    fn login_time_uses_the_offset_at_login(#[case] timestamp: i32, #[case] expected: &str) {
+        let (at, mut command) = at_and_ucmd!();
+        at.write_bytes(
+            "utmp",
+            &Record {
+                kind: USER_PROCESS,
+                line: "pts/test",
+                user: "alice",
+                timestamp: Some(timestamp),
+                ..Record::default()
+            }
+            .to_bytes(),
+        );
+        command
+            .env("LC_ALL", "C")
+            .env("TZ", "EST5EDT,M3.2.0/2,M11.1.0/2")
+            .arg("utmp")
+            .succeeds()
+            .stdout_contains(expected);
     }
 
     #[test]
