@@ -71,6 +71,9 @@ pub fn init_locale_collation() -> bool {
     // UTF-8 locale - initialize collator with Shifted mode to match GNU behavior
     let mut opts = CollatorOptions::default();
     opts.alternate_handling = Some(AlternateHandling::Shifted);
+    // Like glibc, also ignore symbols such as `+`, `|` and `~` at the first level, not
+    // only spaces and punctuation
+    opts.max_variable = Some(MaxVariable::Symbol);
     opts.strength = Some(Strength::Quaternary);
 
     try_init_collator(opts)
