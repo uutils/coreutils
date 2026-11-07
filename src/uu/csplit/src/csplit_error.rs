@@ -31,6 +31,8 @@ pub struct PatternProblem {
 pub enum CsplitError {
     #[error("{}", strip_errno(_0))]
     IoError(#[from] io::Error),
+    #[error("{}", translate!("csplit-error-memory-exhausted"))]
+    MemoryExhausted,
     #[error("{}", translate!("csplit-error-line-out-of-range", "pattern" => _0.quote()))]
     LineOutOfRange(String),
     #[error("{}", translate!("csplit-error-line-out-of-range-on-repetition", "pattern" => _0.quote(), "repetition" => _1))]
