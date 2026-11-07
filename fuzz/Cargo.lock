@@ -1869,6 +1869,7 @@ dependencies = [
  "md-5",
  "memchr",
  "nix",
+ "num-bigint",
  "num-traits",
  "os_display",
  "procfs",
