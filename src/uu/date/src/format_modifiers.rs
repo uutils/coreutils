@@ -647,13 +647,15 @@ pub fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, F
     {
         // `%F` applies the sign to its year only when the width can expand the
         // complete composite; narrower widths leave the existing date intact.
+        // `result` is never longer than `unmodified_width`, so for `%F` only
+        // the width check below can add the sign.
         let natural_width = if specifier == "F" {
             unmodified_width
         } else {
             get_default_width(specifier)
         };
         let width_allows_sign = width.is_some_and(|width| width > natural_width);
-        if width_allows_sign || (specifier != "F" && result.len() > natural_width) {
+        if width_allows_sign || result.len() > natural_width {
             result.insert(0, '+');
         }
     }
