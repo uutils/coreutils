@@ -4227,6 +4227,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "libc",
+ "rlimit",
  "rustix",
  "uucore",
 ]
