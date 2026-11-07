@@ -5,16 +5,22 @@
 
 use divan::{Bencher, black_box};
 use uu_false::uumain;
-use uucore::benchmark::run_util_function;
+use uucore::benchmark::get_bench_args;
 
 /// Benchmark multiple consecutive invocations (avoid less than 1 ns)
 #[divan::bench]
 fn false_consecutive_calls(bencher: Bencher) {
-    bencher.bench(|| {
-        for _ in 0..100 {
-            black_box(run_util_function(uumain, &[]));
-        }
-    });
+    bencher
+        .with_inputs(|| {
+            (0..100)
+                .map(|_| get_bench_args(&[]).into_iter())
+                .collect::<Vec<_>>()
+        })
+        .bench_values(|args| {
+            for args in args {
+                black_box(uumain(args));
+            }
+        });
 }
 
 fn main() {

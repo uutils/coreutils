@@ -7,14 +7,18 @@
 
 use divan::{Bencher, black_box};
 use uu_factor::uumain;
-use uucore::benchmark::run_util_function;
+use uucore::benchmark::get_bench_args;
 
 /// Benchmark multiple u64 digits.
 #[divan::bench(args = [(2)])]
 fn factor_multiple_u64s(bencher: Bencher, start_num: u64) {
-    bencher.bench(|| {
-        for n in start_num..=start_num + 2500 {
-            black_box(run_util_function(uumain, &[&n.to_string()]));
+    let args = (start_num..=start_num + 2500)
+        .map(|number| get_bench_args(&[&number.to_string()]).into_iter())
+        .collect::<Vec<_>>();
+
+    bencher.with_inputs(|| args.clone()).bench_values(|args| {
+        for args in args {
+            black_box(uumain(args));
         }
     });
 }
@@ -22,17 +26,19 @@ fn factor_multiple_u64s(bencher: Bencher, start_num: u64) {
 /// Benchmark a large u64 prime.
 #[divan::bench]
 fn factor_large_u64_prime(bencher: Bencher) {
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &["18446744073709551557"]));
-    });
+    let args = get_bench_args(&[&"18446744073709551557"]);
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark a 64-bit semiprime made from two 32-bit primes.
 #[divan::bench]
 fn factor_64bit_semiprime(bencher: Bencher) {
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &["18446743979220271189"]));
-    });
+    let args = get_bench_args(&[&"18446743979220271189"]);
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Products of several primes of similar, moderate size.
@@ -42,10 +48,13 @@ fn factor_64bit_semiprime(bencher: Bencher) {
 /// splits anything, and any O(n^(1/4)) fallback never finishes. Each of them
 /// is an input GNU factor handles in well under a second.
 mod hard {
-    use super::{Bencher, black_box, run_util_function, uumain};
+    use super::{Bencher, black_box, get_bench_args, uumain};
 
     fn factor(bencher: Bencher, number: &str) {
-        bencher.bench(|| black_box(run_util_function(uumain, &[number])));
+        let args = get_bench_args(&[&number]);
+        bencher
+            .with_inputs(|| args.clone().into_iter())
+            .bench_values(|args| black_box(uumain(args)));
     }
 
     /// 529341446939 * 529341447079 * 529341447139

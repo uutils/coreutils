@@ -5,7 +5,7 @@
 
 use divan::{Bencher, black_box};
 use uu_uniq::uumain;
-use uucore::benchmark::{get_bench_args, run_util_function, setup_test_file};
+use uucore::benchmark::{get_bench_args, setup_test_file};
 
 /// Generate data with many consecutive duplicate lines
 /// This directly tests the core optimization of PR #8703 - avoiding allocations when comparing lines
@@ -120,12 +120,10 @@ fn uniq_check_chars(bencher: Bencher, (num_lines, check_chars): (usize, &str)) {
     let file_path = setup_test_file(&data);
     let file_path_str = file_path.to_str().unwrap();
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-w", check_chars, file_path_str],
-        ));
-    });
+    let args = get_bench_args(&[&"-w", &check_chars, &file_path_str]);
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 fn main() {
