@@ -146,7 +146,11 @@ impl Separator for WhitespaceSep {
             }
             last_end = i + 1;
         }
-        field_ranges.push((last_end, haystack.len()));
+        // trailing whitespace should be dropped too, rather than ending an empty field,
+        // but a line with no fields at all still has an empty one to join on
+        if last_end < haystack.len() || field_ranges.is_empty() {
+            field_ranges.push((last_end, haystack.len()));
+        }
         field_ranges
     }
 
