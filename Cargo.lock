@@ -3637,6 +3637,7 @@ dependencies = [
 name = "uu_ln"
 version = "0.13.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "fluent",
  "rustix",
