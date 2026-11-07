@@ -28,9 +28,10 @@ options might be missing or different behavior might be experienced.
 
 <div class="oranda-hide">
 
-We provide prebuilt binaries, manpages, and shell completions from main branch at https://github.com/uutils/coreutils/releases/tag/latest-commit .
-The latest stable tag https://github.com/uutils/coreutils/releases/latest also exists for reproducible products and packagers.
-Bug reporters should use binary from latest commit.
+We were providing prebuilt binaries, manpages, and shell completions from main branch at https://github.com/uutils/coreutils/releases/tag/latest-commit
+which is currently outdated. However, you can build binaries from main branch by forking this repository and running `CICD.yml`.
+The latest stable version is provided at https://github.com/uutils/coreutils/releases/latest for reproducible products and packagers.
+If possible, please test the latest commit before reporting bugs.
 
 Minimal compatible glibc version is same with ubuntu-latest runner. Use `coreutils-*-musl` if `coreutils-*-gnu` is not compatible with your system.
 
