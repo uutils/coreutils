@@ -18,7 +18,7 @@ path = "src/who.rs"
 test = false
 doctest = false
 
-[dependencies]
+[target.'cfg(any(target_vendor = "apple", target_os = "cygwin", target_os = "freebsd", target_os = "linux", target_os = "netbsd"))'.dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
 rustix = { workspace = true, features = ["fs", "termios"] }
@@ -33,3 +33,4 @@ workspace = true
 [[bin]]
 name = "who"
 path = "src/main.rs"
+required-features = ["uucore/default"]
