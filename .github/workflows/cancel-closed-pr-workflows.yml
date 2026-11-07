@@ -1,0 +1,29 @@
+name: Cancel workflows for closed PRs
+
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  actions: write
+
+jobs:
+  cancel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel unfinished PR workflow runs
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+              ...context.repo,
+              event: 'pull_request',
+              per_page: 100,
+            });
+
+            await Promise.all(runs
+              .filter(({ status, pull_requests }) =>
+                status !== 'completed' &&
+                pull_requests.some(({ number }) => number === context.issue.number))
+              .map(({ id }) =>
+                github.rest.actions.cancelWorkflowRun({ ...context.repo, run_id: id })));
