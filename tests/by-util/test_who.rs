@@ -3,12 +3,112 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (flags) runlevel mesg
+// spell-checker:ignore (flags) runlevel mesg WRLCK SETLK UNLCK
 
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
 use uutests::util::{TestScenario, expected_result, gnu_cmd_result};
 use uutests::util_name;
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[uutests::wasi_ignore(NoFifo)]
+#[rstest::rstest]
+#[case(false)]
+#[case(true)]
+fn test_utmp_fifo_is_rejected(#[case] with_writer: bool) {
+    use std::io::Write;
+    use std::mem::offset_of;
+    use std::os::unix::fs::OpenOptionsExt;
+    use std::time::Duration;
+
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkfifo("utmp");
+    let path = ts.fixtures.plus("utmp");
+    let _writer = with_writer.then(|| {
+        // Linux permits opening a FIFO for both reading and writing without
+        // another endpoint, so the test does not block during setup.
+        let mut writer = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(&path)
+            .unwrap();
+        let mut bytes = vec![0; size_of::<libc::utmpx>()];
+        let record_type = libc::USER_PROCESS.to_ne_bytes();
+        let type_offset = offset_of!(libc::utmpx, ut_type);
+        bytes[type_offset..type_offset + record_type.len()].copy_from_slice(&record_type);
+        let user_offset = offset_of!(libc::utmpx, ut_user);
+        bytes[user_offset..user_offset + 4].copy_from_slice(b"fifo");
+        writer.write_all(&bytes).unwrap();
+        writer
+    });
+
+    ts.ucmd()
+        .arg("-q")
+        .arg(&path)
+        .timeout(Duration::from_secs(5))
+        .succeeds()
+        .stdout_is("\n# users=0\n");
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[rstest::rstest]
+#[case(false)]
+#[case(true)]
+fn test_utmp_lock_wait_is_bounded(#[case] release: bool) {
+    use std::os::fd::AsRawFd;
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    let ts = TestScenario::new(util_name!());
+    let path = ts.fixtures.plus("locked-utmp");
+    std::fs::write(&path, vec![0; size_of::<libc::utmpx>()]).unwrap();
+    let file = Arc::new(
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&path)
+            .unwrap(),
+    );
+    // SAFETY: flock is initialized and the descriptor remains owned by file.
+    let mut lock: libc::flock = unsafe { std::mem::zeroed() };
+    lock.l_type = libc::F_WRLCK as _;
+    lock.l_whence = libc::SEEK_SET as _;
+    assert_eq!(
+        unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETLK, &lock) },
+        0
+    );
+    let writer = release.then(|| {
+        let file = Arc::clone(&file);
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(250));
+            lock.l_type = libc::F_UNLCK as _;
+            // SAFETY: file and the initialized lock remain live through the call.
+            assert_eq!(
+                unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETLK, &lock) },
+                0
+            );
+        })
+    });
+    // POSIX record locks are process-associated: the utility must be a child
+    // process, rather than another reader thread in this process.
+    let started = Instant::now();
+    ts.ucmd()
+        .arg("-q")
+        .arg(&path)
+        .timeout(Duration::from_secs(15))
+        .succeeds()
+        .stdout_contains("# users=0");
+    let elapsed = started.elapsed();
+    if let Some(writer) = writer {
+        writer.join().unwrap();
+        assert!(elapsed < Duration::from_secs(5), "{elapsed:?}");
+    } else {
+        assert!(elapsed >= Duration::from_secs(9), "{elapsed:?}");
+    }
+}
+
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);

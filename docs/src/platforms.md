@@ -1,6 +1,7 @@
 # Platform support
 
 <!-- markdownlint-disable MD033 MD060 -->
+<!-- spell-checker:ignore logind -->
 
 uutils aims to be as "universal" as possible, meaning that we try to support
 many platforms. However, it is infeasible for us to guarantee that every
@@ -45,3 +46,16 @@ Note that for some utilities, not all functionality is supported on each
 platform. This is documented per utility.
 
 {{ #include platform_table.md }}
+
+## Linux traditional login records
+
+The traditional Linux reader opens utmp without waiting for FIFO writers,
+checks that the opened file is regular, and reads from that same file descriptor.
+Replacing the path with a FIFO after opening therefore cannot redirect its reads.
+Waiting for record locks has a shared ten-second budget per iterator. Exhausting
+that budget ends iteration without reading unlocked data. As with other utmp
+read errors, the iterator does not report an error separately from end of file.
+The selected path is retained across successive iterators.
+With the `systemd_logind` feature enabled, the default path selects systemd;
+custom paths select traditional files, including for subsequent iterators.
+Selecting the default path explicitly switches back to systemd.
