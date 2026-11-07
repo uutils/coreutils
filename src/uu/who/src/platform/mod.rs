@@ -3,10 +3,18 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(all(unix, not(target_os = "openbsd")))]
 mod unix;
+#[cfg(all(unix, not(target_os = "openbsd")))]
+pub(crate) use unix::*;
+
+#[cfg(windows)]
+mod windows;
+
 #[cfg(not(target_os = "openbsd"))]
-pub use self::unix::*;
+mod common;
+#[cfg(not(target_os = "openbsd"))]
+pub use self::common::*;
 
 #[cfg(target_os = "openbsd")]
 mod openbsd;
