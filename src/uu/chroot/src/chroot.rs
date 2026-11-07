@@ -130,7 +130,10 @@ fn parse_group_list(list_str: &str) -> Result<Vec<String>, ChrootError> {
 impl Options {
     /// Parse parameters from the command-line arguments.
     fn from(matches: &clap::ArgMatches) -> UResult<Self> {
-        let newroot = match matches.get_one::<OsString>(options::NEWROOT) {
+        let newroot = match matches
+            .get_many::<OsString>(options::NEWROOT)
+            .and_then(|mut values| values.next())
+        {
             Some(v) => PathBuf::from(v),
             None => return Err(ChrootError::MissingNewRoot.into()),
         };
@@ -234,7 +237,6 @@ pub fn uu_app() -> Command {
         // the command, even when it looks like one of our options.
         .arg(
             Arg::new(options::NEWROOT)
-                .value_hint(clap::ValueHint::DirPath)
                 .value_parser(clap::value_parser!(OsString))
                 .num_args(1..)
                 .hide(true)
