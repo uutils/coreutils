@@ -17,12 +17,11 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-fancy-regex = { workspace = true, default-features = false }
 fluent = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["i18n-collator"] }
+uucore = { workspace = true, features = ["i18n-collator", "regex"] }
 
 [dev-dependencies]
 divan = { workspace = true }
