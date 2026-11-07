@@ -28,9 +28,9 @@ const BUF_SIZE: usize = 64 * 1024;
 /// caller will fall back to a simpler method.
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn count_bytes_using_splice(fd: &impl rustix::fd::AsFd) -> Result<usize, usize> {
+fn count_bytes_using_splice(fd: &impl rustix::fd::AsFd) -> Result<u64, u64> {
     use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice};
-    let null_file = uucore::pipes::dev_null().ok_or(0_usize)?;
+    let null_file = uucore::pipes::dev_null().ok_or(0_u64)?;
     let mut byte_count = 0;
     // no need to increase pipe size of input fd since
     // - sender with splice probably increased size already
@@ -38,13 +38,13 @@ fn count_bytes_using_splice(fd: &impl rustix::fd::AsFd) -> Result<usize, usize> 
     loop {
         match splice(fd, &null_file, MAX_ROOTLESS_PIPE_SIZE) {
             Ok(0) => return Ok(byte_count),
-            Ok(res) => byte_count += res,
+            Ok(res) => byte_count += res as u64,
             Err(_) => break, // input is not pipe. needs additional pipe...
         }
     }
     let (pipe_rd, pipe_wr) = pipe::<false>().map_err(|_| byte_count)?;
     while let s @ 1.. = splice(fd, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE).map_err(|_| byte_count)? {
-        byte_count += s;
+        byte_count += s as u64;
         // pipe to null is not blocked. So this returns the same length at most cases
         // next splice does not hang if we discarded 1+ pages
         splice(&pipe_rd, &null_file, s).map_err(|_| byte_count)?;
@@ -61,7 +61,7 @@ fn count_bytes_using_splice(fd: &impl rustix::fd::AsFd) -> Result<usize, usize> 
 ///   3. Otherwise, we just read normally, but without the overhead of counting
 ///      other things such as lines and words.
 #[inline]
-pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Option<io::Error>) {
+pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (u64, Option<io::Error>) {
     let mut byte_count = 0;
 
     #[cfg(unix)]
@@ -109,10 +109,10 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
             && stat.st_size > 0
         {
             let sys_page_size = rustix::param::page_size();
-            if !(stat.st_size as usize).is_multiple_of(sys_page_size) {
+            if !(stat.st_size as u64).is_multiple_of(sys_page_size as u64) {
                 // regular file or file from /proc, /sys and similar pseudo-filesystems
                 // with size that is NOT a multiple of system page size
-                return (stat.st_size as usize, None);
+                return (stat.st_size as u64, None);
             } else if let Some(file) = handle.inner_file() {
                 // On some platforms `stat.st_blksize` and `stat.st_size`
                 // are of different types: i64 vs i32
@@ -125,7 +125,7 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
                     stat.st_size as i64 - stat.st_size as i64 % (stat.st_blksize as i64 + 1);
 
                 if let Ok(n) = file.seek(SeekFrom::Start(offset as u64)) {
-                    byte_count = n as usize;
+                    byte_count = n;
                 }
             }
         }
@@ -143,7 +143,7 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
     {
         let attributes = metadata.file_attributes();
         if (attributes & FILE_ATTRIBUTE_ARCHIVE) != 0 || (attributes & FILE_ATTRIBUTE_NORMAL) != 0 {
-            return (metadata.file_size() as usize, None);
+            return (metadata.file_size(), None);
         }
     }
 
@@ -153,7 +153,7 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
     loop {
         match handle.read(&mut buf) {
             Ok(0) => return (byte_count, None),
-            Ok(n) => byte_count += n,
+            Ok(n) => byte_count += n as u64,
             Err(e) if e.kind() == ErrorKind::Interrupted => (),
             Err(e) => return (byte_count, Some(e)),
         }
@@ -201,21 +201,21 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
             Ok(0) => return (total, None),
             Ok(n) => {
                 if COUNT_BYTES {
-                    total.bytes += n;
+                    total.bytes += n as u64;
                 }
                 if COUNT_CHARS {
                     total.chars += if simd_allowed {
                         bytecount::num_chars(&buf[..n])
                     } else {
                         bytecount::naive_num_chars(&buf[..n])
-                    };
+                    } as u64;
                 }
                 if COUNT_LINES {
                     total.lines += if simd_allowed {
                         bytecount::count(&buf[..n], b'\n')
                     } else {
                         bytecount::naive_count(&buf[..n], b'\n')
-                    };
+                    } as u64;
                 }
             }
             Err(e) if e.kind() == ErrorKind::Interrupted => (),
