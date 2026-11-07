@@ -216,7 +216,11 @@ impl Entry {
         // `join("")` adds a separator that makes `copy_direntry` look through a
         // symlinked target; only `src/.` or `src/..` without `-T` keeps it, to copy into it.
         let local_to_target = if descendant.as_os_str().is_empty()
-            && (no_target_dir || !ends_with_dot_component(context.root))
+            && (no_target_dir
+                || !context
+                    .root_parent
+                    .as_deref()
+                    .is_some_and(ends_with_dot_component))
         {
             context.target.to_path_buf()
         } else {
