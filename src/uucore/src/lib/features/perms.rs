@@ -25,6 +25,8 @@ use walkdir::WalkDir;
 
 #[cfg(target_os = "linux")]
 use crate::features::fs::FileInformation;
+#[cfg(target_os = "linux")]
+use crate::features::fs::dev_ino_is_root_dir;
 use crate::features::fs::path_is_root_dir;
 #[cfg(target_os = "linux")]
 use crate::features::safe_traversal::{DirFd, FileInfo, SymlinkBehavior};
@@ -243,7 +245,11 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
     if !path_is_root_dir(path, would_traverse_symlink) {
         return false;
     }
+    show_preserve_root_error(path);
+    true
+}
 
+fn show_preserve_root_error(path: &Path) {
     if path.as_os_str() == "/" {
         show_error!("it is dangerous to operate recursively on '/'");
     } else {
@@ -253,7 +259,6 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
         );
     }
     show_error!("use --no-preserve-root to override this failsafe");
-    true
 }
 
 /// Whether `dir_fd` refers to the very object `meta` describes.
@@ -526,6 +531,17 @@ impl ChownExecutor {
         // fd. Using the fd is TOCTOU-safe (no path re-resolution through symlinks) and
         // avoids a redundant path walk. If it's already on the current path, it's a cycle.
         let dir_info = FileInformation::from_file(dir_fd).ok();
+        // The directory that was actually opened may be `/`, even when the
+        // pathname checks before the open said otherwise.
+        if self.preserve_root
+            && dir_info
+                .as_ref()
+                .is_some_and(|info| dev_ino_is_root_dir(info.dev(), info.inode()))
+        {
+            show_preserve_root_error(dir_path);
+            *ret = 1;
+            return;
+        }
         if dir_info
             .as_ref()
             .is_some_and(|info| !ancestors.insert(info.clone()))
@@ -569,9 +585,11 @@ impl ChownExecutor {
                 }
             };
 
-            if self.preserve_root
-                && is_root(&entry_path, self.traverse_symlinks == TraverseSymlinks::All)
-            {
+            // `meta` follows symlinks only under `-L`, like `is_root()` would. Use
+            // it rather than looking `entry_path` up again, which fails when the
+            // path is longer than PATH_MAX or crosses too many symlinks.
+            if self.preserve_root && dev_ino_is_root_dir(meta.dev(), meta.ino()) {
+                show_preserve_root_error(&entry_path);
                 *ret = 1;
                 return;
             }

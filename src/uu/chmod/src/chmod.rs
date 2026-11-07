@@ -22,6 +22,8 @@ use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
 
 #[cfg(not(target_os = "redox"))]
+use uucore::fs::dev_ino_is_root_dir;
+#[cfg(not(target_os = "redox"))]
 use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 use uucore::{format_usage, show, show_error};
 
@@ -704,6 +706,16 @@ impl Chmoder {
         // fd. Using the fd is TOCTOU-safe (no path re-resolution through symlinks) and
         // avoids a redundant path walk. If it's already on the current path, it's a cycle.
         let dir_info = FileInformation::from_file(dir_fd).ok();
+        // The directory that was actually opened may be `/`, even when the
+        // pathname checks before the open said otherwise.
+        if self.preserve_root
+            && dir_info
+                .as_ref()
+                .is_some_and(|info| dev_ino_is_root_dir(info.dev(), info.inode()))
+        {
+            show!(ChmodError::PreserveRootSameAs(dir_path.into()));
+            return;
+        }
         if dir_info
             .as_ref()
             .is_some_and(|info| !ancestors.insert(info.clone()))
@@ -730,6 +742,14 @@ impl Chmoder {
                     continue;
                 }
             };
+
+            // `/` reached through a symlink (under `-L`) or a bind mount. Decide
+            // from the fd-relative stat: looking `entry_path` up again fails when
+            // it is longer than PATH_MAX or crosses too many symlinks.
+            if self.preserve_root && dev_ino_is_root_dir(meta.dev(), meta.ino()) {
+                show!(ChmodError::PreserveRootSameAs(entry_path));
+                continue;
+            }
 
             if entry_path.is_symlink() {
                 if let Err(err) = self.handle_symlink_during_safe_recursion(
