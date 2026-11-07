@@ -39,6 +39,7 @@ mv-error-no-symlink-support = votre système d'exploitation ne prend pas en char
 mv-error-permission-denied = Permission refusée
 mv-error-inter-device-move-failed = échec du déplacement inter-périphérique : {$from} vers {$to} ; impossible de supprimer la cible : {$err}
 mv-error-setting-attribute = définition de l'attribut {$name} : {$err}
+mv-error-setting-attributes = définition des attributs de {$path} : {$err}
 mv-error-exchange-two-operands = --exchange nécessite exactement deux opérandes
 mv-error-exchange-not-supported = --exchange n'est pas pris en charge sur cette plateforme
 
@@ -75,3 +76,4 @@ mv-error-hardlink-io = erreur d'E/S lors de l'opération sur le lien physique : 
 mv-error-hardlink-scan = échec de l'analyse des fichiers pour les liens physiques : { $error }
 mv-error-hardlink-preserve = échec de la préservation du lien physique : { $source } -> { $target }
 mv-error-hardlink-metadata = erreur d'accès aux métadonnées de { $path } : { $error }
+mv-error-staging-not-private = un répertoire créé ici n'appartient pas à l'utilisateur de mv avec le mode 0700

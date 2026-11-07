@@ -19,7 +19,7 @@ doctest = false
 clap = { workspace = true }
 fluent = { workspace = true }
 indicatif = { workspace = true }
-nix = { workspace = true, features = ["fs"] }
+nix = { workspace = true, features = ["fs", "user"] }
 rustc-hash = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
@@ -28,6 +28,7 @@ uucore = { workspace = true, features = [
   "fs",
   "perms",
   "safe-copy",
+  "safe-traversal",
   "update-control",
 ] }
 
@@ -42,7 +43,10 @@ windows-sys = { workspace = true, features = [
 ] }
 
 [target.'cfg(unix)'.dependencies]
-rustix = { workspace = true, features = ["fs"] }
+rustix = { workspace = true, features = ["fs", "process"] }
+
+[build-dependencies]
+cfg_aliases = { workspace = true }
 
 [[bin]]
 name = "mv"
