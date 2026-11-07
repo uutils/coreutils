@@ -389,6 +389,92 @@ fn reset_term() -> UResult<()> {
     Ok(())
 }
 
+/// True when the tty crossterm reads keys from has hung up, so we should stop
+/// waiting for keys instead of spinning on EOF.
+///
+/// Matches crossterm's `use-dev-tty` `tty_fd()` choice: stdin when it is a
+/// terminal, otherwise `/dev/tty`. Never polls a non-tty stdin (e.g. `cat |
+/// more`), which would report hangup as soon as the writer closes.
+#[cfg(unix)]
+fn keyboard_input_lost() -> bool {
+    use std::fs::OpenOptions;
+    use std::os::fd::{AsFd, BorrowedFd};
+    use std::sync::OnceLock;
+
+    fn fd_hung_up(fd: impl AsFd) -> bool {
+        // Request POLLIN: with `events=0`, Linux ppoll often times out without
+        // filling HUP/ERR into revents. POLLIN alone is ignored below.
+        let mut fds = [rustix::event::PollFd::new(
+            &fd,
+            rustix::event::PollFlags::IN,
+        )];
+        match rustix::event::poll(&mut fds, Some(&rustix::event::Timespec::default())) {
+            Ok(_) => fds[0].revents().intersects(
+                rustix::event::PollFlags::HUP
+                    | rustix::event::PollFlags::ERR
+                    | rustix::event::PollFlags::NVAL,
+            ),
+            Err(_) => false,
+        }
+    }
+
+    // Crossterm picks the key fd once (stdin if it is a tty, else `/dev/tty`).
+    // After hangup, `isatty(stdin)` becomes false — do not switch sources.
+    static KEY_FD_IS_STDIN: OnceLock<bool> = OnceLock::new();
+    let key_fd_is_stdin = *KEY_FD_IS_STDIN.get_or_init(|| stdin().is_terminal());
+
+    if key_fd_is_stdin {
+        // SAFETY: stdin (fd 0) is open for the lifetime of the process.
+        fd_hung_up(unsafe { BorrowedFd::borrow_raw(0) })
+    } else {
+        OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/tty")
+            .is_ok_and(fd_hung_up)
+    }
+}
+
+#[cfg(not(unix))]
+fn keyboard_input_lost() -> bool {
+    false
+}
+
+/// Result of a non-blocking key wait.
+enum KeyWait {
+    Idle,
+    Event(Event),
+    /// Key tty hung up; leave the pager cleanly.
+    Hangup,
+}
+
+/// Wait for a key event without sitting inside crossterm's timed `poll`, which
+/// busy-loops for the whole timeout once the key tty has hung up.
+fn poll_key_event() -> UResult<KeyWait> {
+    if keyboard_input_lost() {
+        return Ok(KeyWait::Hangup);
+    }
+    // Zero-timeout: one crossterm poll, then we re-check hangup ourselves.
+    match event::poll(Duration::ZERO) {
+        Ok(false) => {
+            std::thread::sleep(Duration::from_millis(50));
+            Ok(KeyWait::Idle)
+        }
+        Ok(true) => {
+            if keyboard_input_lost() {
+                return Ok(KeyWait::Hangup);
+            }
+            match event::read() {
+                Ok(ev) => Ok(KeyWait::Event(ev)),
+                Err(_) if keyboard_input_lost() => Ok(KeyWait::Hangup),
+                Err(e) => Err(e.into()),
+            }
+        }
+        Err(_) if keyboard_input_lost() => Ok(KeyWait::Hangup),
+        Err(e) => Err(e.into()),
+    }
+}
+
 #[cfg(target_os = "fuchsia")]
 #[inline(always)]
 fn reset_term() -> UResult<()> {
@@ -411,6 +497,8 @@ fn more(
     next_file: Option<&str>,
     options: &mut Options,
 ) -> UResult<()> {
+    // Cache which fd crossterm will use for keys before any hangup can flip isatty.
+    let _ = keyboard_input_lost();
     // Initialize output
     let out = setup_term()?;
     // Ensure raw mode is disabled on drop
@@ -552,15 +640,15 @@ impl<'a> Pager<'a> {
             return Ok(());
         }
         loop {
-            if event::poll(Duration::from_millis(100))?
-                && let Event::Key(KeyEvent {
+            match poll_key_event()? {
+                KeyWait::Hangup
+                | KeyWait::Event(Event::Key(KeyEvent {
                     code: KeyCode::Enter,
                     modifiers: KeyModifiers::NONE,
                     kind: KeyEventKind::Press,
                     ..
-                }) = event::read()?
-            {
-                return Ok(());
+                })) => return Ok(()),
+                KeyWait::Idle | KeyWait::Event(_) => {}
             }
         }
     }
@@ -641,11 +729,13 @@ impl<'a> Pager<'a> {
     /// Process user input events until exit
     fn process_events(&mut self, options: &Options) -> UResult<()> {
         loop {
-            if !event::poll(Duration::from_millis(100))? {
-                continue;
-            }
+            let ev = match poll_key_event()? {
+                KeyWait::Hangup => return Ok(()),
+                KeyWait::Idle => continue,
+                KeyWait::Event(ev) => ev,
+            };
             let mut wrong_key = None;
-            match event::read()? {
+            match ev {
                 // --- Quit commands ---
                 Event::Key(
                     KeyEvent {
