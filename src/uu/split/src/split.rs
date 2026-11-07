@@ -810,6 +810,9 @@ struct OutFile {
     filename: OsString,
     maybe_writer: Option<Writer>,
     is_new: bool,
+    /// Whether `--verbose` already reported this file, so that retries and
+    /// re-opens of the writer stay silent.
+    announced: bool,
 }
 
 /// A set of output files
@@ -853,6 +856,9 @@ impl ManageOutFiles for OutFiles {
             let maybe_writer = if is_writer_optional {
                 None
             } else {
+                if settings.verbose {
+                    print_creating_file(&filename)?;
+                }
                 let instantiated = settings.instantiate_current_writer(&filename, true);
                 // If there was an error instantiating the writer for a file,
                 // it could be due to hitting the system limit of open files,
@@ -873,12 +879,17 @@ impl ManageOutFiles for OutFiles {
                 filename,
                 maybe_writer,
                 is_new: true,
+                announced: !is_writer_optional,
             });
         }
         Ok(out_files)
     }
 
     fn instantiate_writer(&mut self, idx: usize, settings: &Settings) -> UResult<&mut Writer> {
+        if settings.verbose && !self[idx].announced {
+            print_creating_file(&self[idx].filename)?;
+            self[idx].announced = true;
+        }
         let mut count = 0;
         // Use-case for doing multiple tries of closing fds:
         // E.g. split running in parallel to other processes (e.g. another split) doing similar stuff,
