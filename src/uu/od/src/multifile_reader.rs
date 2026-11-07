@@ -237,6 +237,7 @@ impl io::Read for MultifileReader<'_> {
                             Ok(0) => break,
                             Ok(n) => n,
                             Err(e) => {
+                                let e = uucore::error::wasi_normalize_read_error(e);
                                 show_error!(
                                     "{}: {}",
                                     self.file_name

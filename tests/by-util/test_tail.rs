@@ -372,7 +372,6 @@ fn test_follow_redirect_stdin_name_retry() {
     }
 }
 
-#[uutests::wasi_ignore(StdioHandlesOpaque)]
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
@@ -5339,7 +5338,6 @@ fn test_when_piped_input_then_no_broken_pipe() {
     }
 }
 
-#[uutests::wasi_ignore(ClosedStdoutGenericIoError)]
 #[test]
 #[cfg(unix)]
 fn test_when_output_closed_then_no_broken_pipe() {
@@ -5374,7 +5372,7 @@ fn test_child_when_run_with_stderr_to_stdout() {
 }
 
 #[cfg(target_os = "linux")]
-#[uutests::wasip2_ignore(DevFullUnavailable)]
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 fn test_failed_write_is_reported() {
     new_ucmd!()
@@ -5385,6 +5383,7 @@ fn test_failed_write_is_reported() {
 }
 
 #[cfg(target_os = "linux")]
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 fn test_multiple_input_files_failed_write_is_reported() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -5409,7 +5408,7 @@ fn test_failed_warning_write_is_reported() {
 }
 
 #[cfg(target_os = "linux")]
-#[uutests::wasip2_ignore(DevFullUnavailable)]
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 fn test_failed_write_is_reported_on_seekable_input() {
     let ts = TestScenario::new("tail");

@@ -387,7 +387,7 @@ fn test_zero_width_data_line_counts() {
     );
 }
 
-#[uutests::wasip2_ignore(DevFullUnavailable)]
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn test_fold_reports_no_space_left_on_dev_full() {

@@ -1766,7 +1766,6 @@ fn test_mv_seen_multiple_files_to_directory() {
     assert!(at.plus("c").join("g").exists());
 }
 
-#[uutests::wasi_ignore(ErrnoMessageMismatch)]
 #[test]
 fn test_mv_dir_into_file_where_both_are_files() {
     let scene = TestScenario::new(util_name!());

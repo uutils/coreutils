@@ -664,7 +664,6 @@ fn test_shred_dash_remove_truncates_but_does_not_unlink_stdout() {
     }
 }
 
-#[uutests::wasi_ignore(StdioHandlesOpaque)]
 #[test]
 #[cfg(unix)]
 fn test_shred_dash_rejects_stdout_pipe() {

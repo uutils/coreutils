@@ -699,6 +699,7 @@ fn dev_full() -> std::fs::File {
         .unwrap()
 }
 
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[rstest]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 #[case::after_ok(true, "")]
@@ -1035,6 +1036,7 @@ fn test_raw_multiple_files() {
         .stderr_contains("cksum: the --raw option is not supported with multiple files");
 }
 
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn test_write_error() {
@@ -1760,7 +1762,6 @@ fn test_check_untagged_flag_without_file_name() {
         .stderr_contains("WARNING: 2 lines are improperly formatted");
 }
 
-#[uutests::wasi_ignore(EmptyPathResolvesToDirectory)]
 #[test]
 #[cfg(all(not(windows), feature = "b2sum"))]
 fn test_check_untagged_without_file_name() {

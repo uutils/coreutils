@@ -30,9 +30,6 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
         "CannotExecShellFromDeletedCwd" => {
             "WASI: wasmtime cannot exec the binary via a raw shell from a deleted cwd"
         }
-        "ClosedStdoutGenericIoError" => {
-            "WASI: closed stdout reports a generic I/O error rather than BrokenPipe"
-        }
         "DebugReportsUnsupported" => {
             "WASI: --debug reports 'unsupported' instead of 'unknown' for this platform"
         }
@@ -43,10 +40,6 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
         "DotDotCanonicalizationDiffers" => {
             "WASI sandbox: relative '..' path canonicalization differs, causing a false self-copy detection"
         }
-        "EmptyPathResolvesToDirectory" => {
-            "WASI: an empty path argument resolves to a directory instead of ENOENT"
-        }
-        "ErrnoMessageMismatch" => "WASI: errno/error-message mismatches",
         "GuestRootPathResolution" => {
             "WASI sandbox: paths resolve against the guest's preopened root, so '..', UNC-style, canonicalized, symlinked-cwd and host absolute paths differ from the host"
         }
@@ -123,10 +116,10 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
 /// Returns the ignore reason registered for a `wasip2_ignore` key.
 fn wasip2_reason(key: &str) -> Option<&'static str> {
     Some(match key {
-        "DanglingSymlinkTrailingSlashEnotdir" => {
-            "WASI P2: stat on a dangling symlink with a trailing slash returns ENOTDIR instead of ENOENT"
+        // FIXME: wasi-sdk-35 fixes this (wasi-libc #887); remove the ignore once Rust bundles it.
+        "StreamWriteGenericIoError" => {
+            "WASI P2: stream write errors report a generic I/O error instead of their errno, for example ENOSPC on a full device"
         }
-        "DevFullUnavailable" => "WASI P2: /dev/full filesystem not available",
         "OsStringRequiresUtf8" => "WASI P2: OsString requires valid UTF-8, unlike unix and WASI P1",
         _ => return None,
     })

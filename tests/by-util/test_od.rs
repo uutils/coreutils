@@ -1549,7 +1549,7 @@ fn test_od_eintr_handling() {
 }
 
 // Regression test: od should handle write errors to /dev/full without aborting.
-#[uutests::wasip2_ignore(DevFullUnavailable)]
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_write_error_dev_full() {
@@ -1583,7 +1583,6 @@ fn test_hex_lowercase() {
         ));
 }
 
-#[uutests::wasi_ignore(ErrnoMessageMismatch)]
 #[test]
 #[cfg(not(windows))]
 fn test_is_a_directory() {

@@ -200,7 +200,7 @@ fn test_piped_to_dev_null() {
     }
 }
 
-#[uutests::wasip2_ignore(DevFullUnavailable)]
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn test_piped_to_dev_full() {
@@ -661,7 +661,6 @@ fn test_domain_socket() {
         });
 }
 
-#[uutests::wasi_ignore(NoStdoutFileRedirection)]
 #[test]
 fn test_write_to_self_empty() {
     // it's ok if the input file is also the output file if it's empty
@@ -794,7 +793,6 @@ fn test_u_ignored() {
     }
 }
 
-#[uutests::wasi_ignore(ErrnoMessageMismatch)]
 #[test]
 #[cfg(unix)]
 fn test_write_fast_read_error() {
@@ -929,7 +927,7 @@ fn test_write_error_handling() {
         .stderr_contains("No space left on device");
 }
 
-#[uutests::wasip2_ignore(DevFullUnavailable)]
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_version_help_dev_full() {

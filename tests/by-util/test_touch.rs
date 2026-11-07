@@ -1086,7 +1086,6 @@ fn test_touch_leap_second() {
     assert_eq!(mtime.unix_seconds() - epoch.unix_seconds(), 60);
 }
 
-#[uutests::wasip2_ignore(DanglingSymlinkTrailingSlashEnotdir)]
 #[test]
 #[cfg(not(windows))]
 // File::create doesn't support trailing separator in Windows

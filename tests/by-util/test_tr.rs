@@ -1344,7 +1344,7 @@ fn test_octal_escape_ambiguous_followed_by_non_utf8() {
         .stderr_contains("warning: invalid utf8 sequence");
 }
 
-#[uutests::wasip2_ignore(DevFullUnavailable)]
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_failed_write_is_reported() {

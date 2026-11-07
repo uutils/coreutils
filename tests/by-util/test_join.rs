@@ -787,7 +787,7 @@ fn null_line_endings() {
         .stdout_only_fixture("z.expected");
 }
 
-#[uutests::wasip2_ignore(DevFullUnavailable)]
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn test_full() {

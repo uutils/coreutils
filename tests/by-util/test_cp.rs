@@ -100,7 +100,7 @@ fn test_cp_stream_to_full() {
         .stderr_contains("No space");
 }
 
-#[uutests::wasip2_ignore(DevFullUnavailable)]
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_cp_verbose_write_error_is_reported() {
@@ -451,7 +451,6 @@ fn test_cp_multiple_files_with_nonexistent_file() {
     assert_eq!(at.read(TEST_HOW_ARE_YOU_DEST), "How are you?\n");
 }
 
-#[uutests::wasi_ignore(EmptyPathResolvesToDirectory)]
 #[test]
 fn test_cp_multiple_files_with_empty_file_name() {
     #[cfg(windows)]

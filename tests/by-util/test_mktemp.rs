@@ -1318,6 +1318,7 @@ fn test_mktemp_hidden_file_single_dot() {
 
 // When the name cannot be printed the caller never learns it, so the file must
 // not be left behind for nothing to clean up.
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_write_error_removes_the_temporary_file() {
@@ -1336,6 +1337,7 @@ fn test_write_error_removes_the_temporary_file() {
     assert!(leftovers.is_empty(), "left behind: {leftovers:?}");
 }
 
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_write_error_removes_the_temporary_directory() {

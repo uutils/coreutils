@@ -1042,7 +1042,7 @@ fn test_emoji_delim() {
         .stdout_only("🌹\n");
 }
 
-#[uutests::wasip2_ignore(DevFullUnavailable)]
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_failed_write_is_reported() {
