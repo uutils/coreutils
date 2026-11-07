@@ -1,6 +1,6 @@
 name: OpenBSD
 
-# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc sccache nextest copyback logind
+# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc nextest copyback logind
 
 env:
   FEATURES: "feat_Tier1,feat_require_unix"

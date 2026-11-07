@@ -1,7 +1,7 @@
 name: Benchmarks
 
 # spell-checker:ignore (people) taiki-e
-# spell-checker:ignore (misc) codspeed sccache
+# spell-checker:ignore (misc) codspeed
 
 on:
   pull_request:
