@@ -75,3 +75,4 @@ mv-error-hardlink-io = erreur d'E/S lors de l'opération sur le lien physique : 
 mv-error-hardlink-scan = échec de l'analyse des fichiers pour les liens physiques : { $error }
 mv-error-hardlink-preserve = échec de la préservation du lien physique : { $source } -> { $target }
 mv-error-hardlink-metadata = erreur d'accès aux métadonnées de { $path } : { $error }
+mv-error-staging-not-private = un répertoire créé ici n'appartient pas à l'utilisateur de mv avec le mode 0700

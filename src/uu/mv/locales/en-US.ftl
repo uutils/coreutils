@@ -78,3 +78,4 @@ mv-error-hardlink-io = I/O error during hardlink operation: { $error }
 mv-error-hardlink-scan = failed to scan files for hardlinks: { $error }
 mv-error-hardlink-preserve = failed to preserve hardlink: { $source } -> { $target }
 mv-error-hardlink-metadata = metadata access error for { $path }: { $error }
+mv-error-staging-not-private = a directory created here does not belong to the user running mv with mode 0700
