@@ -8,7 +8,7 @@
 #![cfg(unix)]
 
 use clap::{Arg, ArgAction, Command};
-use std::collections::HashSet;
+use rustc_hash::FxHashSet;
 use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -554,7 +554,7 @@ impl Chmoder {
                 .into());
             }
             if self.recursive {
-                let mut ancestors = HashSet::new();
+                let mut ancestors = FxHashSet::default();
                 self.walk_dir_with_context(file, true, &mut ancestors);
             } else if let Err(err) = self.chmod_file(file) {
                 self.report_failure(err);
@@ -582,7 +582,7 @@ impl Chmoder {
         &self,
         file_path: &Path,
         is_command_line_arg: bool,
-        ancestors: &mut HashSet<FileInformation>,
+        ancestors: &mut FxHashSet<FileInformation>,
     ) {
         // Skip (and diagnose) an entry that is '/' (a symlink to it, or a bind
         // mount) before touching it.
@@ -649,7 +649,7 @@ impl Chmoder {
         &self,
         file_path: &Path,
         is_command_line_arg: bool,
-        ancestors: &mut HashSet<FileInformation>,
+        ancestors: &mut FxHashSet<FileInformation>,
     ) {
         // Skip (and diagnose) an entry that is '/' (a symlink to it, or a bind
         // mount) before touching it.
@@ -687,7 +687,7 @@ impl Chmoder {
         &self,
         dir_fd: &DirFd,
         dir_path: &Path,
-        ancestors: &mut HashSet<FileInformation>,
+        ancestors: &mut FxHashSet<FileInformation>,
     ) {
         // A directory that opens but cannot be listed (read permission without
         // search permission, on some platforms) is reported like one that does
@@ -783,7 +783,7 @@ impl Chmoder {
         path: &Path,
         dir_fd: &DirFd,
         entry_name: &std::ffi::OsStr,
-        ancestors: &mut HashSet<FileInformation>,
+        ancestors: &mut FxHashSet<FileInformation>,
     ) -> UResult<()> {
         // During recursion, determine behavior based on traversal mode
         match self.traverse_symlinks {
