@@ -11,6 +11,7 @@
 //! when moving files across different filesystems/partitions.
 
 use rustc_hash::FxHashMap;
+use std::cell::OnceCell;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
@@ -24,15 +25,18 @@ pub struct HardlinkTracker {
     inode_map: FxHashMap<(u64, u64), PathBuf>,
 }
 
-/// Pre-scans files to identify hardlink groups with optimized memory usage
+type HardlinkGroups = FxHashMap<(u64, u64), Vec<PathBuf>>;
+
+/// Groups the files being moved by hardlink, scanning them on first use
 #[derive(Debug, Default)]
 pub struct HardlinkGroupScanner {
-    /// Maps (device, inode) -> list of source paths that are hardlinked together
-    hardlink_groups: FxHashMap<(u64, u64), Vec<PathBuf>>,
-    /// List of source files/directories being moved (for destination mapping)
+    /// Maps (device, inode) -> list of source paths that are hardlinked together.
+    /// Only filled when a copy needs it, so a move that is just a rename never
+    /// walks the source tree.
+    hardlink_groups: OnceCell<HardlinkGroups>,
+    /// List of source files/directories being moved
     source_files: Vec<PathBuf>,
-    /// Whether scanning has been performed
-    scanned: bool,
+    verbose: bool,
 }
 
 /// Configuration options for hardlink preservation
@@ -87,6 +91,10 @@ impl HardlinkTracker {
     ) -> Option<PathBuf> {
         use std::os::unix::fs::MetadataExt;
 
+        // Scan now, before this first copy removes its source, so that every
+        // member of a hardlink group is still in place.
+        let groups = scanner.groups();
+
         let metadata = match source.symlink_metadata() {
             Ok(meta) => meta,
             Err(e) => {
@@ -107,10 +115,7 @@ impl HardlinkTracker {
         // Check if we've already processed a file with this inode
         if let Some(existing_path) = self.inode_map.get(&key) {
             // Check if this file is part of a hardlink group from the scanner
-            let has_hardlinks = scanner
-                .hardlink_groups
-                .get(&key)
-                .is_some_and(|group| group.len() > 1);
+            let has_hardlinks = groups.get(&key).is_some_and(|group| group.len() > 1);
 
             if has_hardlinks {
                 if options.verbose {
@@ -137,35 +142,43 @@ impl HardlinkGroupScanner {
         Self::default()
     }
 
-    /// Scan files and group them by hardlinks, including recursive directory scanning
+    /// Remember the files to scan. The scan itself runs the first time the
+    /// groups are needed, which only happens when `rename` fails and the
+    /// files have to be copied.
     pub fn scan_files(&mut self, files: &[PathBuf], options: &HardlinkOptions) {
-        if self.scanned {
-            return;
-        }
-
-        // Store the source files for destination mapping
         self.source_files = files.to_vec();
+        self.verbose = options.verbose;
+    }
 
-        for file in files {
-            if let Err(e) = self.scan_single_path(file)
-                && options.verbose
-            {
-                // Only show warnings for verbose mode
-                let _ = writeln!(
-                    io::stderr(),
-                    "warning: failed to scan {}: {e}",
-                    file.quote()
-                );
-                // For non-verbose mode, silently continue for missing files
-                // This provides graceful degradation - we'll lose hardlink info for this file
-                // but can still preserve hardlinks for other files
+    fn groups(&self) -> &HardlinkGroups {
+        self.hardlink_groups.get_or_init(|| self.scan())
+    }
+
+    /// Scan the source files and group them by hardlinks, including recursive directory scanning
+    fn scan(&self) -> HardlinkGroups {
+        let mut groups = HardlinkGroups::default();
+
+        for file in &self.source_files {
+            match Self::scan_single_path(file, &mut groups) {
+                // A source that is gone was already renamed by this mv, or
+                // never existed, which mv reports on its own.
+                Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                // Only show warnings for verbose mode. Otherwise continue
+                // silently: we lose hardlink info for this file but can still
+                // preserve hardlinks for other files.
+                Err(e) if self.verbose => {
+                    let _ = writeln!(
+                        io::stderr(),
+                        "warning: failed to scan {}: {e}",
+                        file.quote()
+                    );
+                }
+                _ => {}
             }
         }
 
-        self.scanned = true;
-
-        if options.verbose {
-            let stats = self.stats();
+        if self.verbose {
+            let stats = ScannerStats::of(&groups);
             if stats.total_groups > 0 {
                 let _ = writeln!(
                     io::stderr(),
@@ -175,28 +188,27 @@ impl HardlinkGroupScanner {
                 );
             }
         }
+
+        groups
     }
 
     /// Scan a single path (file or directory)
-    fn scan_single_path(&mut self, path: &Path) -> io::Result<()> {
+    fn scan_single_path(path: &Path, groups: &mut HardlinkGroups) -> io::Result<()> {
         use std::os::unix::fs::MetadataExt;
 
         let metadata = path.symlink_metadata()?;
         if metadata.is_dir() {
             // Recursively scan directory contents
-            self.scan_directory_recursive(path)?;
+            Self::scan_directory_recursive(path, groups)?;
         } else if metadata.is_file() && metadata.nlink() > 1 {
             let key = (metadata.dev(), metadata.ino());
-            self.hardlink_groups
-                .entry(key)
-                .or_default()
-                .push(path.to_path_buf());
+            groups.entry(key).or_default().push(path.to_path_buf());
         }
         Ok(())
     }
 
     /// Recursively scan a directory for hardlinked files
-    fn scan_directory_recursive(&mut self, dir: &Path) -> io::Result<()> {
+    fn scan_directory_recursive(dir: &Path, groups: &mut HardlinkGroups) -> io::Result<()> {
         use std::os::unix::fs::MetadataExt;
 
         let entries = std::fs::read_dir(dir)?;
@@ -204,29 +216,15 @@ impl HardlinkGroupScanner {
             let entry = entry?;
 
             if entry.file_type()?.is_dir() {
-                self.scan_directory_recursive(&entry.path())?;
+                Self::scan_directory_recursive(&entry.path(), groups)?;
             } else {
                 let metadata = entry.metadata()?;
                 if metadata.is_file() && metadata.nlink() > 1 {
                     let key = (metadata.dev(), metadata.ino());
-                    self.hardlink_groups
-                        .entry(key)
-                        .or_default()
-                        .push(entry.path());
+                    groups.entry(key).or_default().push(entry.path());
                 }
             }
         }
-        Ok(())
-    }
-
-    #[cfg(not(unix))]
-    pub fn scan_files(
-        &mut self,
-        files: &[PathBuf],
-        _options: &HardlinkOptions,
-    ) -> HardlinkResult<()> {
-        self.source_files = files.to_vec();
-        self.scanned = true;
         Ok(())
     }
 
@@ -239,15 +237,9 @@ impl HardlinkGroupScanner {
     }
 
     /// Get statistics about scanned hardlinks
-    #[cfg(unix)]
+    #[cfg(test)]
     pub fn stats(&self) -> ScannerStats {
-        let total_groups = self.hardlink_groups.len();
-        let total_files = self.hardlink_groups.values().map(Vec::len).sum();
-
-        ScannerStats {
-            total_groups,
-            total_files,
-        }
+        ScannerStats::of(self.groups())
     }
 }
 
@@ -256,6 +248,15 @@ impl HardlinkGroupScanner {
 pub struct ScannerStats {
     pub total_groups: usize,
     pub total_files: usize,
+}
+
+impl ScannerStats {
+    fn of(groups: &HardlinkGroups) -> Self {
+        Self {
+            total_groups: groups.len(),
+            total_files: groups.values().map(Vec::len).sum(),
+        }
+    }
 }
 
 /// Create a new hardlink tracker and scanner pair
