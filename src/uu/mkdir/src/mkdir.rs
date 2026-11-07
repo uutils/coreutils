@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ugoa cmode fchmod NOFOLLOW EACCES ENOTDIR gnulib lchmod
+// spell-checker:ignore (ToDO) ugoa cmode fchmod NOFOLLOW
 
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
@@ -274,64 +274,40 @@ fn create_dir_with_mode(path: &Path, mode: u32, shaped_umask: u32) -> std::io::R
     })
 }
 
+/// Whether -m asks for special bits that mkdir(2) does not set by itself.
+#[cfg(unix)]
+fn needs_special_bits_fixup(requested: u32, kept: u32) -> bool {
+    // Linux honors the sticky bit in the mkdir(2) mode, other systems (e.g.
+    // macOS, the BSDs) drop it. setgid inherited from the parent is applied by
+    // the kernel; only clearing it needs a chmod.
+    let honored = if cfg!(any(target_os = "linux", target_os = "android")) {
+        0o1000
+    } else {
+        0
+    };
+    requested & SPECIAL_BITS & !honored != 0 || kept & 0o2000 == 0
+}
+
 /// mkdir(2) ignores setuid/setgid in its mode argument (and setgid may be
 /// inherited from the parent), so fix them up afterwards. The rwx bits are
-/// left as created, so a default ACL is not disturbed.
+/// left as created, so a default ACL is not disturbed, except for the owner
+/// read bit that [`create_single_dir`] adds so that the directory can be opened.
 #[cfg(unix)]
 fn apply_special_bits(path: &Path, requested: u32, kept: u32) -> std::io::Result<()> {
     use std::fs::{OpenOptions, Permissions};
     use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
     use uucore::libc;
 
-    // The kernel already honors the sticky bit and setgid inheritance; only
-    // setting setuid/setgid or clearing an inherited setgid needs a chmod.
-    if requested & 0o6000 == 0 && kept & 0o2000 != 0 {
-        return Ok(());
-    }
-    let wanted = |current: u32| {
-        let current = current & 0o7777;
-        (current & !SPECIAL_BITS) | (current & kept) | (requested & SPECIAL_BITS)
-    };
-
     // Work through an fd so a swapped-in symlink cannot redirect the chmod.
-    let flags = libc::O_DIRECTORY | libc::O_NOFOLLOW;
-    match OpenOptions::new().read(true).custom_flags(flags).open(path) {
-        Ok(dir) => {
-            let current = dir.metadata()?.permissions().mode();
-            if wanted(current) != current & 0o7777 {
-                dir.set_permissions(Permissions::from_mode(wanted(current)))?;
-            }
-        }
-        // The new directory is not readable by its owner (e.g. -m 2300):
-        // fchmod does not work on an O_PATH fd, but its /proc link does.
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        Err(e) if e.raw_os_error() == Some(libc::EACCES) => {
-            use std::os::fd::AsRawFd;
-            use std::os::unix::fs::MetadataExt;
-            let dir = OpenOptions::new()
-                .read(true)
-                .custom_flags(flags | libc::O_PATH)
-                .open(path)?;
-            let meta = dir.metadata()?;
-            let current = meta.permissions().mode();
-            if wanted(current) != current & 0o7777 {
-                let perms = Permissions::from_mode(wanted(current));
-                let link = format!("/proc/self/fd/{}", dir.as_raw_fd());
-                match std::fs::set_permissions(link, perms.clone()) {
-                    // Without /proc, do as gnulib's lchmod: chmod by path, but
-                    // only if the path still names the directory we opened.
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                        let now = std::fs::symlink_metadata(path)?;
-                        if !now.is_dir() || now.dev() != meta.dev() || now.ino() != meta.ino() {
-                            return Err(std::io::Error::from_raw_os_error(libc::ENOTDIR));
-                        }
-                        std::fs::set_permissions(path, perms)?;
-                    }
-                    res => res?,
-                }
-            }
-        }
-        Err(e) => return Err(e),
+    let dir = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW)
+        .open(path)?;
+    let current = dir.metadata()?.permissions().mode() & 0o7777;
+    let rwx = current & 0o777 & !(0o400 & !requested);
+    let wanted = rwx | (current & kept) | (requested & SPECIAL_BITS);
+    if wanted != current {
+        dir.set_permissions(Permissions::from_mode(wanted))?;
     }
     Ok(())
 }
@@ -359,7 +335,16 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
         } else {
             match config.mode {
                 // Explicit -m: shape umask so it cannot block explicitly requested bits.
-                Some(m) => (m, umask & !m),
+                // If the special bits need fixing up afterwards, the owner must be
+                // able to open the directory; the read bit is dropped again then.
+                Some(m) => {
+                    let m = if needs_special_bits_fixup(m, config.special_bits_kept) {
+                        m | 0o400
+                    } else {
+                        m
+                    };
+                    (m, umask & !m)
+                }
                 // No -m: leave umask fully intact; kernel applies umask + ACL naturally.
                 None => (DEFAULT_PERM, umask),
             }
@@ -383,7 +368,10 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
     match create_dir_with_mode(path, mkdir_mode, shaped_umask) {
         Ok(()) => {
             #[cfg(unix)]
-            if let Some(requested) = config.mode.filter(|_| !is_parent) {
+            if let Some(requested) = config
+                .mode
+                .filter(|&m| !is_parent && needs_special_bits_fixup(m, config.special_bits_kept))
+            {
                 apply_special_bits(path, requested, config.special_bits_kept).map_err_context(
                     || {
                         translate_text!("mkdir-error-cannot-set-permissions", "path" => locale_aware_c_single_escape(path))
