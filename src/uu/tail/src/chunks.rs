@@ -292,13 +292,15 @@ impl BytesChunkBuffer {
             self.bytes += chunk.bytes as u64;
             self.chunks.push_back(chunk);
 
-            let first = &self.chunks[0];
-            if self.bytes - first.bytes as u64 > self.num_print {
-                chunk = self.chunks.pop_front().unwrap();
-                self.bytes -= chunk.bytes as u64;
-            } else {
-                chunk = Box::new(BytesChunk::new());
+            // Chunks can hold anything from 1 to BUFFER_SIZE bytes (a pipe may return short
+            // reads), so a single new chunk can make more than one old chunk superfluous.
+            let mut reusable = None;
+            while self.bytes - self.chunks[0].bytes as u64 > self.num_print {
+                let old = self.chunks.pop_front().unwrap();
+                self.bytes -= old.bytes as u64;
+                reusable = Some(old);
             }
+            chunk = reusable.unwrap_or_else(|| Box::new(BytesChunk::new()));
         }
 
         let Some(chunk) = self.chunks.pop_front() else {
@@ -623,7 +625,44 @@ impl LinesChunkBuffer {
 
 #[cfg(test)]
 mod tests {
-    use crate::chunks::{BUFFER_SIZE, BytesChunk};
+    use crate::chunks::{BUFFER_SIZE, BytesChunk, BytesChunkBuffer};
+    use std::collections::VecDeque;
+    use std::io::{BufRead, Read};
+
+    /// A reader which returns each of its segments in a separate `read` call, like a pipe whose
+    /// writer sends data in pieces of different sizes.
+    struct SegmentedReader {
+        segments: VecDeque<Vec<u8>>,
+    }
+
+    impl Read for SegmentedReader {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let Some(mut segment) = self.segments.pop_front() else {
+                return Ok(0);
+            };
+            let n = segment.len().min(buf.len());
+            buf[..n].copy_from_slice(&segment[..n]);
+            if n < segment.len() {
+                self.segments.push_front(segment.split_off(n));
+            }
+            Ok(n)
+        }
+    }
+
+    impl BufRead for SegmentedReader {
+        fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+            Ok(self.segments.front().map_or(&[], Vec::as_slice))
+        }
+
+        fn consume(&mut self, amount: usize) {
+            if let Some(segment) = self.segments.front_mut() {
+                segment.drain(..amount);
+                if segment.is_empty() {
+                    self.segments.pop_front();
+                }
+            }
+        }
+    }
 
     #[test]
     fn test_bytes_chunk_from_when_offset_is_zero() {
@@ -696,5 +735,20 @@ mod tests {
         chunk.bytes = 1;
         let new_chunk = BytesChunk::from_chunk(&chunk, 1);
         assert_eq!(0, new_chunk.bytes);
+    }
+
+    #[test]
+    fn test_bytes_chunk_buffer_short_reads_followed_by_full_reads() {
+        let num_print = 100;
+        let mut segments: VecDeque<Vec<u8>> = (0..=num_print).map(|_| vec![b'.']).collect();
+        segments.extend((0..=num_print).map(|i| vec![(i % 251) as u8; BUFFER_SIZE]));
+        let input: Vec<u8> = segments.iter().flatten().copied().collect();
+
+        let mut chunks = BytesChunkBuffer::new(num_print as u64);
+        chunks.fill(&mut SegmentedReader { segments }).unwrap();
+        let mut output = Vec::new();
+        chunks.write(&mut output).unwrap();
+
+        assert_eq!(&input[input.len() - num_print..], output.as_slice());
     }
 }
