@@ -390,7 +390,6 @@ jobs:
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,test_risky_names", use-cross: use-cross, skip-publish: true }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,openssl,uudoc"   , use-cross: no, workspace-tests: true, pgo: PGO }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl , use-cross: use-cross }
-          - { os: ubuntu-latest  , target: x86_64-unknown-netbsd, features: "feat_os_unix", use-cross: use-cross , skip-tests: true , check-only: true }
           - { os: ubuntu-latest  , target: wasm32-wasip1, default-features: false, features: feat_wasm, skip-tests: true }
           - { os: ubuntu-latest  , target: wasm32-wasip2, default-features: false, features: feat_wasm, skip-tests: true }
           - { os: macos-latest   , target: aarch64-apple-darwin        , features: "feat_os_unix,openssl", workspace-tests: true, pgo: PGO } # M1 CPU
@@ -517,16 +516,9 @@ jobs:
         esac
         outputs CARGO_TEST_OPTIONS
     - uses: taiki-e/install-action@v2
-      # `cross` v0.2.5 lacks `libexecinfo` on NetBSD. However, this has been added in main.
-      # See https://github.com/cross-rs/cross/blob/main/docker/netbsd.sh
-      # We are pulling cross from a specific commit hash rather than HEAD to avoid any potential breakage that may be introduced.
-      # Once `cross` v0.3 is out, these conditionals can be removed.
-      if: steps.vars.outputs.CARGO_CMD == 'cross' && matrix.job.target != 'x86_64-unknown-netbsd'
+      if: steps.vars.outputs.CARGO_CMD == 'cross'
       with:
         tool: cross@0.2.5
-    - name: Install cross from git (NetBSD)
-      if: steps.vars.outputs.CARGO_CMD == 'cross' && matrix.job.target == 'x86_64-unknown-netbsd'
-      run: cargo install cross --git https://github.com/cross-rs/cross --rev f86fd03bb70b4c6802847c18087e21391498b0b4
     - name: Create all needed build/work directories
       shell: bash
       run: |
