@@ -857,6 +857,19 @@ fn tr_translate_repeat_in_set2() {
 }
 
 #[test]
+fn tr_translate_class_other_than_upper_lower_in_set2() {
+    for set2 in ["[:alpha:]", "[:digit:]"] {
+        new_ucmd!()
+            .args(&["a", set2])
+            .pipe_in("")
+            .fails_with_code(1)
+            .stderr_is(
+                "tr: when translating, the only character classes that may appear in\nstring2 are 'upper' and 'lower'\n",
+            );
+    }
+}
+
+#[test]
 fn tr_translate_repeat_octal() {
     // # Weird repeat counts.
     new_ucmd!()
