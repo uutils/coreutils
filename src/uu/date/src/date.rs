@@ -1598,13 +1598,18 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Optio
         return None;
     }
 
-    // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT.
-    let parsed = parse_datetime::parse_datetime_at_date(now.clone(), date_part).ok()?;
+    // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT. Parsing
+    // against the local `now` would move a wall-clock time that falls into a
+    // local DST gap forward before the abbreviation is applied. Keep `now`'s
+    // local wall clock, not its instant: GNU takes the default date from local
+    // time, so at 08:00 in Tokyo "10:30 UTC" is still today, not yesterday.
+    let now_in_tz = now.datetime().to_zoned(tz.clone()).ok()?;
+    let parsed = parse_datetime::parse_datetime_at_date(now_in_tz.clone(), date_part).ok()?;
     let zoned = parsed.into_zoned()?;
 
-    // `parse_datetime` returns the zone the input named, or `now`'s when it named
+    // `parse_datetime` returns the zone the input named, or `now_in_tz`'s when it named
     // none, so a mismatch means `date_part` carries one of its own.
-    if zoned.time_zone() != now.time_zone() {
+    if zoned.time_zone() != now_in_tz.time_zone() {
         return None;
     }
 
@@ -1615,7 +1620,7 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Optio
         || date_part.contains(|c: char| c.is_ascii_alphabetic())
         || date_part.split_whitespace().any(|w| w.starts_with('-'));
     if names_zone {
-        parse_datetime::parse_datetime_at_date(now.clone(), format!("{date_part} EST")).ok()?;
+        parse_datetime::parse_datetime_at_date(now_in_tz, format!("{date_part} EST")).ok()?;
     }
 
     let zoned = zoned.datetime().to_zoned(tz).ok()?;
