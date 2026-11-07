@@ -8,13 +8,14 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
+use uucore::output::StdoutBuffer;
 use uucore::show;
 use uucore::translate;
 
@@ -91,7 +92,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => vec![OsString::from("-")],
     };
 
-    fold(&files, bytes, characters, spaces, width)
+    let output = StdoutBuffer::new(stdout());
+    match output {
+        StdoutBuffer::Block(mut output) => {
+            fold(&files, bytes, characters, spaces, width, &mut output)
+        }
+        #[cfg(unix)]
+        StdoutBuffer::Unbuffered(output) => {
+            let mut output = StdoutBuffer::into_unbuffered(output);
+            fold(&files, bytes, characters, spaces, width, &mut output)
+        }
+        #[cfg(unix)]
+        StdoutBuffer::Line(mut output) => {
+            fold(&files, bytes, characters, spaces, width, &mut output)
+        }
+    }
 }
 
 pub fn uu_app() -> Command {
@@ -217,15 +232,14 @@ fn handle_obsolete(args: &[OsString]) -> Vec<OsString> {
     result
 }
 
-fn fold(
+fn fold<W: Write>(
     filenames: &[OsString],
     bytes: bool,
     characters: bool,
     spaces: bool,
     width: usize,
+    output: &mut W,
 ) -> UResult<()> {
-    let mut output = BufWriter::new(stdout());
-
     for filename in filenames {
         let mut stdin_buf;
         let mut file_buf;
@@ -247,14 +261,14 @@ fn fold(
         });
 
         if bytes {
-            fold_file_bytewise(buffer, spaces, width, &mut output)?;
+            fold_file_bytewise(buffer, spaces, width, output)?;
         } else {
             let mode = if characters {
                 WidthMode::Characters
             } else {
                 WidthMode::Columns
             };
-            fold_file(buffer, spaces, width, mode, &mut output)?;
+            fold_file(buffer, spaces, width, mode, output)?;
         }
     }
 

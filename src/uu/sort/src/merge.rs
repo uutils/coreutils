@@ -19,7 +19,7 @@ use std::{
     fs::File,
     io::{self, BufWriter, Read, Write},
     iter,
-    path::Path,
+    path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     rc::Rc,
     sync::mpsc::{Receiver, Sender, SyncSender, TryRecvError, channel, sync_channel},
@@ -348,9 +348,36 @@ impl FileMerger<'_> {
     /// Write the merged contents to the output file.
     fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
         let ctx = output.write_failed_context();
-        let mut out = output.into_write()?;
-        self.write_all_to(settings, &mut out, &ctx)?;
-        out.flush().map_err_context(ctx)
+        if let Some((name, file)) = output.file {
+            if file.metadata().is_ok_and(|meta| meta.is_file()) {
+                file.set_len(0).map_err(|error| SortError::TruncateFailed {
+                    path: PathBuf::from(name),
+                    error,
+                })?;
+            }
+            let mut out = BufWriter::new(file);
+            self.write_all_to(settings, &mut out, &ctx)?;
+            out.flush().map_err_context(ctx)
+        } else {
+            let out = uucore::output::StdoutBuffer::new(io::stdout());
+            match out {
+                uucore::output::StdoutBuffer::Block(mut out) => {
+                    self.write_all_to(settings, &mut out, &ctx)?;
+                    out.flush().map_err_context(ctx)
+                }
+                #[cfg(unix)]
+                uucore::output::StdoutBuffer::Unbuffered(out) => {
+                    let mut out = uucore::output::StdoutBuffer::into_unbuffered(out);
+                    self.write_all_to(settings, &mut out, &ctx)?;
+                    out.flush().map_err_context(ctx)
+                }
+                #[cfg(unix)]
+                uucore::output::StdoutBuffer::Line(mut out) => {
+                    self.write_all_to(settings, &mut out, &ctx)?;
+                    out.flush().map_err_context(ctx)
+                }
+            }
+        }
     }
 
     /// Write the merged contents to `out`, reporting write errors with `ctx`.

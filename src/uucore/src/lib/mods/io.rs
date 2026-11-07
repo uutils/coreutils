@@ -28,8 +28,8 @@ type NativeType = OwnedHandle;
 #[cfg(not(windows))]
 type NativeType = OwnedFd;
 
-// create reader without buffering
 #[cfg(any(unix, target_os = "wasi"))]
+/// Reads directly from the underlying file descriptor without a userspace buffer.
 pub struct RawReader<T: AsFd>(pub T);
 #[cfg(any(unix, target_os = "wasi"))]
 impl<T: AsFd> io::Read for RawReader<T> {
@@ -38,8 +38,8 @@ impl<T: AsFd> io::Read for RawReader<T> {
     }
 }
 
-// create writer without buffering
 #[cfg(any(unix, target_os = "wasi"))]
+/// Writes directly to the underlying file descriptor without a userspace buffer.
 pub struct RawWriter<T: AsFd>(pub T);
 #[cfg(any(unix, target_os = "wasi"))]
 impl<T: AsFd> io::Write for RawWriter<T> {

@@ -8,13 +8,14 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
 use uucore::char_width::char_width_at;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
+use uucore::output::StdoutBuffer;
 use uucore::{format_usage, show, translate};
 
 pub mod options {
@@ -375,9 +376,9 @@ fn write_spaces(output: &mut impl Write, mut n: usize) -> std::io::Result<()> {
     Ok(())
 }
 
-fn expand_buf(
+fn expand_buf<W: Write>(
     buf: &[u8],
-    output: &mut BufWriter<std::io::Stdout>,
+    output: &mut W,
     tabstops: &[usize],
     options: &Options,
     col: &mut usize,
@@ -469,11 +470,7 @@ fn expand_buf(
     Ok(())
 }
 
-fn expand_file(
-    file: &OsString,
-    output: &mut BufWriter<std::io::Stdout>,
-    options: &Options,
-) -> UResult<()> {
+fn expand_file<W: Write>(file: &OsString, output: &mut W, options: &Options) -> UResult<()> {
     let mut input = open(file)?;
     let ts = options.tabstops.as_ref();
     let mut col = 0;
@@ -492,11 +489,9 @@ fn expand_file(
     Ok(())
 }
 
-fn expand(options: &Options) -> UResult<()> {
-    let mut output = BufWriter::new(stdout());
-
+fn expand_with_output<W: Write>(options: &Options, output: &mut W) -> UResult<()> {
     for file in &options.files {
-        if let Err(e) = expand_file(file, &mut output, options) {
+        if let Err(e) = expand_file(file, output, options) {
             show!(e);
             set_exit_code(1);
         }
@@ -506,6 +501,20 @@ fn expand(options: &Options) -> UResult<()> {
         .flush()
         .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
     Ok(())
+}
+
+fn expand(options: &Options) -> UResult<()> {
+    let output = StdoutBuffer::new(stdout());
+    match output {
+        StdoutBuffer::Block(mut output) => expand_with_output(options, &mut output),
+        #[cfg(unix)]
+        StdoutBuffer::Unbuffered(output) => {
+            let mut output = StdoutBuffer::into_unbuffered(output);
+            expand_with_output(options, &mut output)
+        }
+        #[cfg(unix)]
+        StdoutBuffer::Line(mut output) => expand_with_output(options, &mut output),
+    }
 }
 
 #[cfg(test)]

@@ -10,13 +10,14 @@ use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, IsTerminal, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code, strip_errno};
 use uucore::i18n::charmap::{Encoding, locale_encoding, mb_char_len};
 use uucore::line_ending::LineEnding;
 use uucore::os_str_as_bytes;
+use uucore::output::StdoutBuffer;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 
 use self::searcher::Searcher;
@@ -924,12 +925,31 @@ fn cut_files<'a, I>(filenames: I, mode: &Mode)
 where
     I: IntoIterator<Item = &'a OsString>,
 {
+    if stdout().is_terminal() {
+        let mut out = stdout();
+        cut_files_with_output(filenames, mode, &mut out);
+        return;
+    }
+
+    let output = StdoutBuffer::new(stdout());
+    match output {
+        StdoutBuffer::Block(mut out) => cut_files_with_output(filenames, mode, &mut out),
+        #[cfg(unix)]
+        StdoutBuffer::Unbuffered(out) => {
+            let mut out = StdoutBuffer::into_unbuffered(out);
+            cut_files_with_output(filenames, mode, &mut out);
+        }
+        #[cfg(unix)]
+        StdoutBuffer::Line(mut out) => cut_files_with_output(filenames, mode, &mut out),
+    }
+}
+
+fn cut_files_with_output<'a, I, W>(filenames: I, mode: &Mode, out: &mut W)
+where
+    I: IntoIterator<Item = &'a OsString>,
+    W: Write,
+{
     let mut stdin_read = false;
-    let mut out: Box<dyn Write> = if stdout().is_terminal() {
-        Box::new(stdout())
-    } else {
-        Box::new(BufWriter::new(stdout())) as Box<dyn Write>
-    };
 
     for filename in filenames {
         if filename == "-" {
@@ -938,9 +958,11 @@ where
             }
 
             show_if_err!(match mode {
-                Mode::Bytes(ranges, opts) => cut_chars(stdin(), &mut out, ranges, opts, false),
-                Mode::Characters(ranges, opts) => cut_chars(stdin(), &mut out, ranges, opts, true),
-                Mode::Fields(ranges, opts) => cut_fields(stdin(), &mut out, ranges, opts),
+                Mode::Bytes(ranges, opts) => cut_chars(stdin(), &mut *out, ranges, opts, false),
+                Mode::Characters(ranges, opts) => {
+                    cut_chars(stdin(), &mut *out, ranges, opts, true)
+                }
+                Mode::Fields(ranges, opts) => cut_fields(stdin(), &mut *out, ranges, opts),
             });
 
             stdin_read = true;
@@ -963,12 +985,12 @@ where
                     .and_then(|file| {
                         match &mode {
                             Mode::Bytes(ranges, opts) => {
-                                cut_chars(file, &mut out, ranges, opts, false)
+                                cut_chars(file, &mut *out, ranges, opts, false)
                             }
                             Mode::Characters(ranges, opts) => {
-                                cut_chars(file, &mut out, ranges, opts, true)
+                                cut_chars(file, &mut *out, ranges, opts, true)
                             }
-                            Mode::Fields(ranges, opts) => cut_fields(file, &mut out, ranges, opts),
+                            Mode::Fields(ranges, opts) => cut_fields(file, &mut *out, ranges, opts),
                         }
                     })
             );

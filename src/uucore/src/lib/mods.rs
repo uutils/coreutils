@@ -8,10 +8,11 @@
 pub mod clap_localization;
 pub mod display;
 pub mod error;
-#[cfg(all(feature = "fs", any(unix, windows, target_os = "wasi")))]
+#[cfg(any(unix, windows, target_os = "wasi"))]
 pub mod io;
 pub mod line_ending;
 pub mod locale;
 pub mod os;
+pub mod output;
 pub mod panic;
 pub mod posix;

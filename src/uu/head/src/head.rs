@@ -9,7 +9,7 @@ use clap::ArgMatches;
 use memchr::memrchr_iter;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::num::TryFromIntError;
 #[cfg(unix)]
 use std::os::fd::AsFd;
@@ -243,7 +243,7 @@ fn print_n_lines(input: &mut impl io::BufRead, n: u64, separator: u8) -> io::Res
     // Write those bytes to `stdout`.
     let stdout = io::stdout();
     let stdout = stdout.lock();
-    let mut writer = BufWriter::with_capacity(BUF_SIZE, stdout);
+    let mut writer = uucore::output::StdoutBuffer::with_capacity(BUF_SIZE, stdout);
 
     let bytes_written = io::copy(&mut reader, &mut writer).map_err(wrap_in_stdout_error)?;
 
