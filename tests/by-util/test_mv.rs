@@ -1912,6 +1912,32 @@ fn test_mv_dir_with_symlink_cycles_terminates() {
     assert!(!at.dir_exists("dir"));
 }
 
+// A directory moved within one filesystem is renamed in one step, so its tree
+// must not be walked to look for hardlinks first. The scan reports what it
+// finds with -v, which shows whether it ran.
+#[test]
+#[cfg(unix)]
+fn test_mv_dir_rename_does_not_scan_hardlinks() {
+    use std::os::unix::fs::MetadataExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("dir");
+    at.mkdir("dest");
+    at.write("dir/file", "content");
+    at.hard_link("dir/file", "dir/link");
+
+    ucmd.args(&["-v", "dir", "dest/"])
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("renamed");
+
+    assert_eq!(
+        at.metadata("dest/dir/file").ino(),
+        at.metadata("dest/dir/link").ino()
+    );
+}
+
 // Todo:
 
 // $ at.touch a b
