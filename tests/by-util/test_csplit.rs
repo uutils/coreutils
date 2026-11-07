@@ -1742,8 +1742,7 @@ fn suffix_format_huge_width_reports_memory_exhausted() {
         .pipe_in("a\nb\nc\n")
         .fails_with_code(1)
         .no_stdout()
-        .stderr_only("csplit: memory exhausted\n")
-        .stderr_does_not_contain("panicked");
+        .stderr_only("csplit: memory exhausted\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
