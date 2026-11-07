@@ -688,7 +688,7 @@ feat_os_unix_redox = [
   "nproc",
   "stat",
   "stty",
-  "timeout",
+  # "timeout", use rustix::process::{Resource, Rlimit, setrlimit};
   "whoami",
 ]
 ##
