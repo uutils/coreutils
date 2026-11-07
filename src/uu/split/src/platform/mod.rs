@@ -24,6 +24,12 @@ mod windows;
 #[cfg(target_os = "wasi")]
 mod wasi;
 
+fn open_file_error(filename: &std::ffi::OsStr, e: std::io::Error) -> std::io::Error {
+    use uucore::display::Quotable;
+    let e = uucore::error::strip_errno(&e);
+    std::io::Error::other(format!("{}: {e}", filename.quote()))
+}
+
 // todo: add .as_fd for std::io::copy's specialization for --bytes
 pub enum Writer {
     File(std::fs::File),
