@@ -10,6 +10,188 @@ use uutests::unwrap_or_return;
 use uutests::util::{TestScenario, expected_result, gnu_cmd_result};
 use uutests::util_name;
 
+#[cfg(all(target_os = "linux", target_env = "gnu", feature = "test_logind"))]
+mod logind {
+    use std::collections::HashMap;
+    use std::process::{Child, Command, Stdio};
+    use std::time::{Duration, Instant};
+    use uutests::util::TestScenario;
+
+    fn systemd(command: &str, args: &[&str]) -> String {
+        let output = Command::new(command)
+            .args(args)
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{command}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).unwrap()
+    }
+
+    struct Session {
+        child: Child,
+        unit: String,
+    }
+
+    impl Drop for Session {
+        fn drop(&mut self) {
+            let _ = Command::new("systemctl")
+                .args(["stop", &self.unit])
+                .output();
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+
+    #[test]
+    #[ignore = "requires systemd, PAM, and permission to create a system service; see DEVELOPMENT.md"]
+    #[uutests::wasi_ignore(NoSubprocessSpawning)]
+    fn sessions_match_loginctl() {
+        use uucore::utmpx::time::{UtcOffset, macros::format_description};
+
+        // The caller supplies an empty utmp in a private mount namespace.
+        assert!(
+            std::fs::metadata(uucore::utmpx::DEFAULT_FILE)
+                .map_or(true, |m| m.is_file() && m.len() == 0)
+        );
+        let unit = format!("uutils-logind-test-{}", std::process::id());
+        let user = format!("User={}", rustix::process::getuid().as_raw());
+        let child = Command::new("systemd-run")
+            .args([
+                "--quiet",
+                "--collect",
+                "--pty",
+                "--unit",
+                &unit,
+                "--property",
+                &user,
+                "--property=PAMName=login",
+                "/bin/sleep",
+                "60",
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let _session = Session {
+            child,
+            unit: unit.clone(),
+        };
+        let started = Instant::now();
+        let properties = loop {
+            let leader = systemd(
+                "systemctl",
+                &["show", &unit, "--property=MainPID", "--value"],
+            );
+            let sessions = systemd("loginctl", &["list-sessions", "--no-legend", "--no-pager"]);
+            let found = sessions
+                .lines()
+                .filter_map(|line| line.split_whitespace().next())
+                .find_map(|id| {
+                    let properties = systemd(
+                        "loginctl",
+                        &[
+                            "show-session",
+                            id,
+                            "--property=Name",
+                            "--property=TTY",
+                            "--property=Timestamp",
+                            "--property=Leader",
+                        ],
+                    );
+                    let properties: HashMap<_, _> = properties
+                        .lines()
+                        .filter_map(|line| line.split_once('='))
+                        .map(|(k, v)| (k.to_owned(), v.to_owned()))
+                        .collect();
+                    (properties
+                        .get("Leader")
+                        .is_some_and(|pid| pid == leader.trim())
+                        && properties.get("TTY").is_some_and(|tty| !tty.is_empty()))
+                    .then_some(properties)
+                });
+            if let Some(properties) = found {
+                break properties;
+            }
+            assert!(
+                started.elapsed() < Duration::from_secs(10),
+                "systemd-run did not create a TTY session"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        let name = &properties["Name"];
+        let tty = &properties["TTY"];
+        let pid: u32 = properties["Leader"].parse().unwrap();
+        let records = uucore::systemd_logind::read_login_records().unwrap();
+        let record = records.iter().find(|r| r.raw_device == *tty).unwrap();
+        assert_eq!(&record.user, name);
+        let version = systemd("systemctl", &["--version"]);
+        let version: u32 = version.split_whitespace().nth(1).unwrap().parse().unwrap();
+        let has_metadata = version >= 254;
+        assert_eq!(record.try_login_time_offset().is_some(), has_metadata);
+        assert_eq!(record.pid, if has_metadata { pid } else { 0 });
+        let displayed = if let Some(timestamp) = record.try_login_time_offset() {
+            let timestamp = timestamp.to_offset(UtcOffset::UTC);
+            let expected = timestamp
+                .format(format_description!(
+                    "[year]-[month]-[day] [hour]:[minute]:[second]"
+                ))
+                .unwrap();
+            assert!(properties["Timestamp"].contains(&expected));
+            timestamp
+                .format(format_description!(
+                    "[month repr:short] [day padding:space] [hour]:[minute]"
+                ))
+                .unwrap()
+        } else {
+            "?".to_owned()
+        };
+        let displayed_pid = if has_metadata {
+            properties["Leader"].as_str()
+        } else {
+            "?"
+        };
+        let ts = TestScenario::new("who");
+        let who = ts
+            .ucmd()
+            .arg("-u")
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .succeeds()
+            .stdout_move_str();
+        let row = who
+            .lines()
+            .find(|row| row.split_whitespace().nth(1) == Some(tty.as_str()))
+            .unwrap();
+        assert_eq!(row.split_whitespace().next(), Some(name.as_str()));
+        assert!(row.contains(&displayed));
+        assert!(row.split_whitespace().any(|field| field == displayed_pid));
+        ts.ccmd("pinky")
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .succeeds()
+            .stdout_contains(tty)
+            .stdout_contains(&displayed);
+        let names = ts.ccmd("users").succeeds().stdout_move_str();
+        assert!(names.split_whitespace().any(|user| user == name));
+        let users = records.iter().filter(|r| r.is_user_process()).count();
+        ts.ucmd()
+            .arg("-q")
+            .env("LC_ALL", "C")
+            .succeeds()
+            .stdout_contains(format!("={users}"));
+        ts.ccmd("uptime")
+            .env("LC_ALL", "C")
+            .succeeds()
+            .stdout_contains(format!("{users} user"));
+    }
+}
+
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 #[uutests::wasi_ignore(NoFifo)]
 #[rstest::rstest]

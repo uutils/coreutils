@@ -136,6 +136,31 @@ If you would prefer to test a select few utilities:
 cargo test --features "chmod mv tail" --no-default-features
 ```
 
+The logind record assembly and error tests run as `uucore` unit tests without a running
+systemd instance or compiled shared-library fixtures:
+
+```shell
+cargo test -p uucore --features 'utmpx systemd-logind' --lib
+```
+
+The comparison against real systemd commands requires Linux with systemd as
+PID 1, an active systemd-logind/D-Bus service, and a PAM `login` stack including
+pam_systemd. Enable the four utilities and build the integration test executable:
+
+```shell
+cargo test --no-default-features --features test_logind --test tests --no-run
+bash util/test-logind.sh /absolute/path/to/target/debug/deps/tests-HASH
+```
+
+Use the executable path printed by Cargo. This runs the otherwise ignored
+`sessions_match_loginctl` test as a system service, using sudo when needed.
+An empty utmp is mounted only inside that service's namespace. The test creates
+a temporary PAM/TTY session with systemd-run, compares session metadata with
+loginctl and the four utilities, then stops its session. The Logind CI jobs run
+this comparison on Ubuntu 22.04 and 24.04 to cover older and newer sd-login APIs.
+Older libraries cannot supply session timestamps or PIDs; the comparison checks
+that the utilities show `?` for these fields.
+
 If you also want to test the core utilities:
 
 ```shell
