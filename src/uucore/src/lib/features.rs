@@ -109,25 +109,7 @@ pub mod fsxattr;
 pub mod hardware;
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 pub mod selinux;
-#[cfg(all(
-    feature = "signals",
-    any(
-        windows,
-        target_vendor = "apple",
-        target_os = "aix",
-        target_os = "android",
-        target_os = "cygwin",
-        target_os = "freebsd",
-        target_os = "haiku",
-        target_os = "hurd",
-        target_os = "illumos",
-        target_os = "linux",
-        target_os = "netbsd",
-        target_os = "openbsd",
-        target_os = "redox",
-        target_os = "solaris"
-    )
-))]
+#[cfg(has_signals)]
 pub mod signals;
 #[cfg(all(feature = "smack", target_os = "linux"))]
 pub mod smack;
