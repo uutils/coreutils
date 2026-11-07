@@ -151,16 +151,12 @@ pub(crate) fn preserve_signal_info(signal: core::ffi::c_int) -> core::ffi::c_int
 
 /// Make sure this process won't dump core, returning whether that worked.
 fn disable_core_dumps() -> bool {
-    use rustix::process::{Resource, Rlimit, setrlimit};
+    use rlimit::{Resource, setrlimit};
     #[cfg(any(target_os = "linux", target_os = "android"))]
     if rustix::process::set_dumpable_behavior(rustix::process::DumpableBehavior::NotDumpable)
         .is_ok()
     {
         return true;
     }
-    let limit = Rlimit {
-        current: Some(0),
-        maximum: Some(0),
-    };
-    setrlimit(Resource::Core, limit).is_ok()
+    setrlimit(Resource::CORE, 0, 0).is_ok()
 }
