@@ -96,8 +96,10 @@ fn sort_groups(mut groups: Vec<gid_t>, egid: gid_t) -> Vec<gid_t> {
 
 #[derive(Clone, Debug)]
 pub struct Passwd {
-    /// AKA `passwd.pw_name`
+    /// AKA `passwd.pw_name`, lossily converted to UTF-8 for printing
     pub name: String,
+    /// AKA `passwd.pw_name`, byte for byte, to look the user up again
+    raw_name: CString,
     /// AKA `passwd.pw_uid`
     pub uid: uid_t,
     /// AKA `passwd.pw_gid`
@@ -143,8 +145,11 @@ impl Passwd {
     /// All the pointed-to strings must be valid and not change while
     /// the function runs. That means `PW_LOCK` must be held.
     unsafe fn from_raw(raw: passwd) -> Self {
+        assert!(!raw.pw_name.is_null(), "passwd without name");
+        let raw_name = unsafe { CStr::from_ptr(raw.pw_name) }.to_owned();
         Self {
-            name: unsafe { cstr2string(raw.pw_name).expect("passwd without name") },
+            name: raw_name.to_string_lossy().into_owned(),
+            raw_name,
             uid: raw.pw_uid,
             gid: raw.pw_gid,
             #[cfg(not(all(
@@ -184,12 +189,11 @@ impl Passwd {
         let mut ngroups: c_int = 8;
         let mut ngroups_old: c_int;
         let mut groups = vec![0; ngroups.try_into().unwrap()];
-        let name = CString::new(self.name.as_bytes()).unwrap();
         loop {
             ngroups_old = ngroups;
             if unsafe {
                 getgrouplist(
-                    name.as_ptr(),
+                    self.raw_name.as_ptr(),
                     self.gid,
                     groups.as_mut_ptr(),
                     &raw mut ngroups,
@@ -359,5 +363,17 @@ mod test {
             groups.insert(0, last);
             assert_eq!(get_groups_gnu(Some(last)).unwrap(), groups);
         }
+    }
+
+    #[test]
+    #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
+    fn test_passwd_keeps_the_name_bytes() {
+        // ISO-8859-1 "jürgen": getgrouplist() must get these bytes, not U+FFFD.
+        let name = c"j\xfcrgen";
+        let mut raw: passwd = unsafe { std::mem::zeroed() };
+        raw.pw_name = name.as_ptr().cast_mut();
+        let pw = unsafe { Passwd::from_raw(raw) };
+        assert_eq!(pw.name, "j\u{FFFD}rgen");
+        assert_eq!(pw.raw_name.as_c_str(), name);
     }
 }
