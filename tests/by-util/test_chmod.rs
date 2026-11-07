@@ -1530,6 +1530,54 @@ fn test_chmod_dangling_symlink_recursive_combos() {
 }
 
 #[test]
+fn test_chmod_recursive_dereference_dangling_symlink_below_operand() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    at.symlink_file("missing", "d/dang");
+
+    ucmd.args(&["-v", "-R", "-L", "755", "d"])
+        .fails_with_code(1)
+        .stderr_is("chmod: cannot operate on dangling symlink 'd/dang'\n")
+        .stdout_contains("'d/dang' could not be accessed\n");
+}
+
+#[test]
+fn test_chmod_recursive_verbose_unstatable_entry_below_operand() {
+    use rustix::process::geteuid;
+
+    // `d` loses its search bit before its entries are visited, so `d/f` can
+    // be listed but not stat'ed. root ignores directory permissions.
+    if geteuid().is_root() {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    at.touch("d/f");
+
+    let result = ucmd.args(&["-v", "-R", "u=r", "d"]).run();
+    at.set_mode("d", 0o755);
+    result
+        .code_is(1)
+        .stderr_is("chmod: cannot access 'd/f': Permission denied\n")
+        .stdout_contains("'d/f' could not be accessed\n");
+}
+
+#[test]
+fn test_chmod_recursive_dereference_symlink_loop_below_operand() {
+    // Errors other than a dangling symlink or EACCES still name the entry.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    std::os::unix::fs::symlink("loop", at.plus("d/loop")).unwrap();
+    let error = uucore::error::strip_errno(&std::io::Error::from_raw_os_error(libc::ELOOP));
+
+    ucmd.args(&["-v", "-R", "-L", "755", "d"])
+        .fails_with_code(1)
+        .stderr_is(format!("chmod: cannot access 'd/loop': {error}\n"))
+        .stdout_contains("'d/loop' could not be accessed\n");
+}
+
+#[test]
 fn test_chmod_traverse_symlink_combo() {
     let scenarios = [
         (
