@@ -614,3 +614,34 @@ mod fifo {
             .stderr_contains("cannot open 'fifo' for writing: No such device or address");
     }
 }
+
+#[test]
+#[cfg(all(unix, not(target_os = "openbsd"), not(wasi_runner)))]
+fn test_truncate_stdin_reference() {
+    // A terminal is not a regular file and does not support seeking, so its size is unknown.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-r", "/dev/stdin", "dst"])
+        .terminal_simulation(true)
+        .fails_with_code(1)
+        .stderr_contains("truncate: cannot get the size of '/dev/stdin': ");
+    assert!(!at.file_exists("dst"));
+}
+
+#[test]
+#[cfg(all(unix, not(wasi_runner)))]
+fn test_truncate_char_device_reference() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("file", "some content");
+    ucmd.args(&["-r", "/dev/null", "file"]).succeeds();
+    assert_eq!(at.metadata("file").len(), 0);
+}
+
+#[test]
+fn test_truncate_directory_reference() {
+    // The size of a directory reference comes from its metadata, not from
+    // seeking to its end.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    ucmd.args(&["-r", "dir", "file"]).succeeds();
+    assert_eq!(at.metadata("file").len(), at.metadata("dir").len());
+}
