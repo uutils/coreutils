@@ -2757,8 +2757,10 @@ fn calculate_dest_permissions(
             let mut permissions = source_metadata.permissions();
             let mode = handle_no_preserve_mode(options, permissions.mode());
 
-            // Apply umask
-            let mode = mode & !uucore::mode::get_umask();
+            // Apply umask. Like GNU, never put the setuid/setgid bits on the
+            // copy before its ownership is set: when the mode is preserved,
+            // copy_attributes() restores them after the chown.
+            let mode = mode & !0o6000 & !uucore::mode::get_umask();
             permissions.set_mode(mode);
             permissions
         }

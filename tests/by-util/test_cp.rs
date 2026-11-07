@@ -9391,6 +9391,44 @@ fn test_cp_preserve_setuid_when_chown_succeeds() {
     );
 }
 
+// The setuid/setgid bits are only applied once the ownership has been set
+// (like GNU), so a mode-preserving copy must still end up with them, while a
+// plain copy drops them.
+#[uutests::wasi_ignore(NoPermissionBits)]
+#[test]
+#[cfg(unix)]
+fn test_cp_setuid_setgid_applied_after_ownership() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("src");
+    at.set_mode("src", 0o6755);
+
+    for (i, (args, expected)) in [
+        (&[][..], 0o755),
+        (&["-p"][..], 0o6755),
+        (&["-a"][..], 0o6755),
+        (&["--preserve=mode"][..], 0o6755),
+        (&["--preserve=mode,ownership"][..], 0o6755),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let dst = format!("dst{i}");
+        scene
+            .ucmd()
+            .umask(0o022)
+            .args(args)
+            .arg("src")
+            .arg(&dst)
+            .succeeds();
+        assert_eq!(
+            at.metadata(&dst).mode() & 0o7777,
+            expected,
+            "cp {args:?} src {dst}"
+        );
+    }
+}
+
 #[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
