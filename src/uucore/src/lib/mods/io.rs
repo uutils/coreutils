@@ -17,7 +17,7 @@
 use std::fs::{File, OpenOptions};
 use std::io;
 #[cfg(not(windows))]
-use std::os::fd::{AsFd, OwnedFd};
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 #[cfg(windows)]
 use std::os::windows::io::{AsHandle, OwnedHandle};
 use std::path::Path;
@@ -28,13 +28,19 @@ type NativeType = OwnedHandle;
 #[cfg(not(windows))]
 type NativeType = OwnedFd;
 
-// create reader without buffering
+/// Reader without buffering, unlike std's Stdin it does not read EBADF as end of file
 #[cfg(any(unix, target_os = "wasi"))]
 pub struct RawReader<T: AsFd>(pub T);
 #[cfg(any(unix, target_os = "wasi"))]
 impl<T: AsFd> io::Read for RawReader<T> {
     fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
         rustix::io::read(&self.0, b).map_err(Into::into)
+    }
+}
+#[cfg(any(unix, target_os = "wasi"))]
+impl<T: AsFd> AsFd for RawReader<T> {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.0.as_fd()
     }
 }
 
