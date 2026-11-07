@@ -57,10 +57,11 @@ ls-help-escape-quoting-style = Use escape quoting style. Equivalent to `--quotin
 ls-help-c-quoting-style = Use C quoting style. Equivalent to `--quoting-style=c`
 ls-help-replace-control-chars = Replace control characters with '?' if they are not escaped.
 ls-help-show-control-chars = Show control characters 'as is' if they are not escaped.
-ls-help-show-time-field = Show time in `<field>`:
+ls-help-time-type = If the long listing format (e.g., -l, -o) is being used, print the time corresponding to `<type>`.
+  When explicitly sorting by time (--sort=time or -t) or when not using a long listing format, sort according to `<type>` (newest first).
     access time (-u): atime, access, use;
-    change time (-t): ctime, status.
-    modification time: mtime, modification.
+    change time (-c): ctime, status;
+    modification time (default): mtime, modification;
     birth time: birth, creation;
 ls-help-time-change = If the long listing format (e.g., -l, -o) is being used, print the
   status change time (the 'ctime' in the inode) instead of the modification
@@ -75,7 +76,7 @@ ls-help-ignore-pattern = do not list implied entries matching shell PATTERN
 ls-help-ignore-backups = Ignore entries which end with ~.
 ls-help-sort-by-field = Sort by `<field>`: name, none (-U), time (-t), size (-S), extension (-X) or width
 ls-help-sort-by-size = Sort by file size, largest first.
-ls-help-sort-by-time = Sort by modification time (the 'mtime' in the inode), newest first.
+ls-help-sort-by-time = Sort by time (see --time, mtime by default), newest first.
 ls-help-sort-by-version = Natural sort of (version) numbers in the filenames.
 ls-help-sort-by-extension = Sort alphabetically by entry extension.
 ls-help-sort-none = Do not sort; list the files in whatever order they are stored in the
