@@ -636,6 +636,15 @@ pub fn path_is_root_dir<P: AsRef<Path>>(path: P, dereference: bool) -> bool {
     }
 }
 
+/// Whether `(dev, ino)` identifies `/`, for a stat taken from an open
+/// descriptor or relative to one. Unlike [`path_is_root_dir`], this can't be
+/// misled by a pathname that is too long or crosses too many symlinks to be
+/// looked up again.
+#[cfg(unix)]
+pub fn dev_ino_is_root_dir(dev: u64, ino: u64) -> bool {
+    root_file_information().is_some_and(|root| root.dev() == dev && root.inode() == ino)
+}
+
 /// Check if two files are identical by comparing their contents.
 ///
 /// Returns `Ok(true)` if both files exist, are regular files, and have identical contents.
