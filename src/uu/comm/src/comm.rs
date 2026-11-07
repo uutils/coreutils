@@ -13,7 +13,7 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::i18n::collator::{
-    AlternateHandling, CollatorOptions, locale_cmp, should_use_locale_collation, try_init_collator,
+    locale_cmp, locale_collator_options, should_use_locale_collation, try_init_collator,
 };
 use uucore::line_ending::LineEnding;
 use uucore::translate;
@@ -342,9 +342,7 @@ fn open_file(name: &OsString, line_ending: LineEnding) -> io::Result<LineReader>
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let mut collator_opts = CollatorOptions::default();
-    collator_opts.alternate_handling = Some(AlternateHandling::Shifted);
-    let _ = try_init_collator(collator_opts);
+    let _ = try_init_collator(locale_collator_options());
 
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
     let filename1 = matches.get_one::<OsString>(options::FILE_1).unwrap();

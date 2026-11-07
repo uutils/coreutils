@@ -19,7 +19,7 @@ use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::i18n::collator::{
-    AlternateHandling, CollatorOptions, locale_cmp, should_use_locale_collation, try_init_collator,
+    locale_cmp, locale_collator_options, should_use_locale_collation, try_init_collator,
 };
 use uucore::line_ending::LineEnding;
 use uucore::numeric_str_cmp::{NumInfo, NumInfoParseSettings, numeric_str_cmp};
@@ -922,9 +922,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         1,
     )?;
 
-    let mut opts = CollatorOptions::default();
-    opts.alternate_handling = Some(AlternateHandling::Shifted);
-    let _ = try_init_collator(opts);
+    let _ = try_init_collator(locale_collator_options());
 
     let settings = parse_settings(&matches, diag_args.as_deref())?;
 
