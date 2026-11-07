@@ -1703,6 +1703,144 @@ fn test_cp_backup_numbered_allows_source_named_like_backup() {
     assert_eq!(at.read(TEST_HELLO_WORLD_SOURCE), "source content");
 }
 
+// The VERSION_CONTROL variable selects the backup type when the command line
+// does not. These tests live here rather than as unit tests in uucore because
+// changing an environment variable of the test process itself would require
+// unsafe code; here it is only set for the spawned cp process.
+#[test]
+fn test_cp_backup_short_reads_env() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.env("VERSION_CONTROL", "numbered")
+        .arg("-b")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(
+        at.read(format!("{TEST_HOW_ARE_YOU_SOURCE}.~1~")),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_long_without_arg_reads_env() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.env("VERSION_CONTROL", "none")
+        .arg("--backup")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert!(!at.file_exists(format!("{TEST_HOW_ARE_YOU_SOURCE}~")));
+}
+
+// An empty --backup= value still lets VERSION_CONTROL decide
+#[test]
+fn test_cp_backup_empty_arg_reads_env() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.env("VERSION_CONTROL", "numbered")
+        .arg("--backup=")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(
+        at.read(format!("{TEST_HOW_ARE_YOU_SOURCE}.~1~")),
+        "How are you?\n"
+    );
+}
+
+// Abbreviations are accepted, here "si" for "simple"
+#[test]
+fn test_cp_backup_env_abbreviated() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.env("VERSION_CONTROL", "si")
+        .arg("--backup")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(
+        at.read(format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
+        "How are you?\n"
+    );
+}
+
+// --suffix alone is enough to enable backups, and the type still comes from env
+#[test]
+fn test_cp_backup_suffix_without_backup_reads_env() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.env("VERSION_CONTROL", "numbered")
+        .arg("--suffix")
+        .arg(".keep")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(
+        at.read(format!("{TEST_HOW_ARE_YOU_SOURCE}.~1~")),
+        "How are you?\n"
+    );
+}
+
+// "n" could be "none" or "numbered", so it must be rejected
+#[test]
+fn test_cp_backup_env_ambiguous() {
+    new_ucmd!()
+        .env("VERSION_CONTROL", "n")
+        .arg("--backup")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .fails()
+        .stderr_contains("ambiguous argument 'n' for '$VERSION_CONTROL'");
+}
+
+// A rejected backup type must be reported once, like GNU does. cp used to wrap
+// the error in a message that repeated the program name, giving "cp: cp: ...".
+#[test]
+fn test_cp_backup_invalid_env_reports_program_name_once() {
+    let result = new_ucmd!()
+        .env("VERSION_CONTROL", "bogus")
+        .arg("-b")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .fails();
+    assert_eq!(
+        result.stderr_str().lines().next(),
+        Some("cp: invalid argument 'bogus' for '$VERSION_CONTROL'")
+    );
+}
+
+#[test]
+fn test_cp_backup_invalid_option_reports_program_name_once() {
+    let result = new_ucmd!()
+        .arg("--backup=bogus")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .fails();
+    assert_eq!(
+        result.stderr_str().lines().next(),
+        Some("cp: invalid argument 'bogus' for 'backup type'")
+    );
+    // GNU ends with the usage hint, as mv, ln and install do.
+    assert!(
+        result
+            .stderr_str()
+            .ends_with("cp --help' for more information.\n")
+    );
+}
+
 #[test]
 fn test_cp_backup_no_clobber_conflicting_options() {
     new_ucmd!()
