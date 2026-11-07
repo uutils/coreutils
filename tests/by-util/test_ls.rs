@@ -2950,6 +2950,36 @@ mod quoting {
         );
     }
 
+    // Regression test for https://github.com/uutils/coreutils/issues/15745:
+    // the Unicode line and paragraph separators must be escaped (or replaced
+    // with '?' when control characters are hidden) instead of being printed
+    // verbatim.
+    #[test]
+    fn test_ls_quoting_line_separator() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("line\u{2028}sep");
+
+        ucmd.arg("--quoting-style=escape")
+            .arg("-1")
+            .succeeds()
+            .stdout_is("line\\342\\200\\250sep\n");
+
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("line\u{2029}sep");
+        ucmd.arg("--quoting-style=c")
+            .arg("-1")
+            .succeeds()
+            .stdout_is("\"line\\342\\200\\251sep\"\n");
+
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("line\u{2028}sep");
+        ucmd.env("LC_ALL", "C")
+            .arg("-q")
+            .arg("-1")
+            .succeeds()
+            .stdout_is("line???sep\n");
+    }
+
     // Regression test for GNU tests/ls/quoting-utf8.sh: in a UTF-8 locale the
     // locale/clocale quoting styles use Unicode quotation marks U+2018/U+2019
     // and must not escape embedded apostrophes or double quotes; in the C
