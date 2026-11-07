@@ -90,6 +90,43 @@ fn test_fail_silently() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_chgrp_recursive_unreadable_directory() {
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::PermissionsExt;
+
+    if getegid().is_root() {
+        // root can read any directory
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("d/a/y");
+    set_permissions(at.plus_as_string("d/a"), Permissions::from_mode(0o311)).unwrap();
+
+    ucmd.args(&["-R", "--reference=d", "d"])
+        .fails_with_code(1)
+        .stderr_is("chgrp: cannot read directory 'd/a': Permission denied\n");
+
+    // -f hides the message; the failure still sets the exit status.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("d/a/y");
+    set_permissions(at.plus_as_string("d/a"), Permissions::from_mode(0o311)).unwrap();
+    ucmd.args(&["-f", "-R", "--reference=d", "d"])
+        .fails_with_code(1)
+        .no_output();
+    set_permissions(at.plus_as_string("d/a"), Permissions::from_mode(0o755)).unwrap();
+
+    // The operand itself.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    set_permissions(at.plus_as_string("d"), Permissions::from_mode(0o311)).unwrap();
+    ucmd.args(&["-R", "--reference=d", "d"])
+        .fails_with_code(1)
+        .stderr_is("chgrp: cannot read directory 'd': Permission denied\n");
+    set_permissions(at.plus_as_string("d"), Permissions::from_mode(0o755)).unwrap();
+}
+
+#[test]
 fn test_preserve_root() {
     // It's weird that on OS X, `realpath /etc/..` returns '/private'
     new_ucmd!()
@@ -336,7 +373,7 @@ fn test_permission_denied() {
             .arg(group.as_raw().to_string())
             .arg("dir")
             .fails()
-            .stderr_only("chgrp: cannot access 'dir': Permission denied\n");
+            .stderr_only("chgrp: cannot read directory 'dir': Permission denied\n");
     }
 }
 
@@ -355,7 +392,7 @@ fn test_subdir_permission_denied() {
             .arg(group.as_raw().to_string())
             .arg("dir")
             .fails()
-            .stderr_only("chgrp: cannot access 'dir/subdir': Permission denied\n");
+            .stderr_only("chgrp: cannot read directory 'dir/subdir': Permission denied\n");
     }
 }
 
