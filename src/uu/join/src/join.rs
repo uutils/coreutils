@@ -19,7 +19,8 @@ use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::i18n::collator::{
-    AlternateHandling, CollatorOptions, locale_cmp, should_use_locale_collation, try_init_collator,
+    AlternateHandling, CollatorOptions, locale_cmp_unchecked, should_use_locale_collation,
+    try_init_collator,
 };
 use uucore::line_ending::LineEnding;
 use uucore::numeric_str_cmp::{NumInfo, NumInfoParseSettings, numeric_str_cmp};
@@ -333,6 +334,7 @@ impl<Sep: Separator> Input<Sep> {
 
     /// Compare two join fields. Like `sort -k`, a field missing from a line
     /// that is too short compares as an empty field.
+    #[inline]
     fn compare(&self, field1: Option<&[u8]>, field2: Option<&[u8]>) -> Ordering {
         let field1 = field1.unwrap_or_default();
         let field2 = field2.unwrap_or_default();
@@ -346,7 +348,7 @@ impl<Sep: Separator> Input<Sep> {
             let field2 = CaseInsensitiveSlice { v: field2 };
             field1.cmp(&field2)
         } else if self.use_locale {
-            locale_cmp(field1, field2)
+            locale_cmp_unchecked(field1, field2)
         } else {
             field1.cmp(field2)
         }
