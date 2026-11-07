@@ -651,6 +651,43 @@ fn test_block_size_1m_option_with_output() {
 }
 
 #[test]
+fn test_last_size_option_wins() {
+    // GNU df 9.11: -B, -h, -H, -k and -m override each other, the last one wins.
+    for (args, expected) in [
+        (&["-h", "-B", "1K"][..], "1K-blocks"),
+        (&["-B", "1K", "-h"][..], "Size"),
+        (&["-h", "-k"][..], "1K-blocks"),
+        (&["-k", "-h"][..], "Size"),
+        (&["-H", "-k"][..], "1K-blocks"),
+        (&["-k", "-H"][..], "Size"),
+        (&["-h", "-m"][..], "1M-blocks"),
+        (&["-m", "-h"][..], "Size"),
+    ] {
+        let output = new_ucmd!()
+            .args(args)
+            .arg("--output=size")
+            .succeeds()
+            .stdout_str_lossy();
+        let header = output.lines().next().unwrap().trim();
+
+        assert_eq!(header, expected, "df {}", args.join(" "));
+    }
+}
+
+#[test]
+fn test_block_size_after_human_readable_sets_the_values() {
+    // The header alone would pass if only the header code followed the order,
+    // so also check the value is a plain block count, not a human size like "461G".
+    let output = new_ucmd!()
+        .args(&["-h", "-B", "1", "--output=size", "."])
+        .succeeds()
+        .stdout_str_lossy();
+    let value = output.lines().nth(1).unwrap().trim();
+
+    assert!(value.chars().all(|c| c.is_ascii_digit()), "got {value}");
+}
+
+#[test]
 fn test_block_size_with_suffix() {
     fn get_header(block_size: &str) -> String {
         let output = new_ucmd!()
