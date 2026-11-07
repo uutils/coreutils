@@ -7,7 +7,6 @@
 
 use std::borrow::Borrow;
 use std::ffi::OsString;
-use std::io;
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint};
@@ -19,7 +18,7 @@ use uucore::checksum::validate::{self, ChecksumValidateOptions, ChecksumVerbose}
 use uucore::checksum::{AlgoKind, ChecksumError, HashLength, SizedAlgoKind};
 use uucore::error::UResult;
 use uucore::line_ending::LineEnding;
-use uucore::{crate_version, format_usage, localized_help_template, util_name};
+use uucore::{crate_version, format_usage, localized_help_template, stdout_writer, util_name};
 
 mod cli;
 pub use cli::ChecksumCommand;
@@ -218,7 +217,7 @@ pub fn checksum_main(
         line_ending,
     };
 
-    perform_checksum_computation(io::stdout(), opts, files)?;
+    perform_checksum_computation(stdout_writer(), opts, files)?;
 
     Ok(())
 }

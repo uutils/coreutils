@@ -23,6 +23,26 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             target_os = "solaris",
             target_vendor = "apple"
         ) },
+        // Targets that build the signals module.
+        has_signals: { all(
+            feature = "signals",
+            any(
+                windows,
+                target_vendor = "apple",
+                target_os = "aix",
+                target_os = "android",
+                target_os = "cygwin",
+                target_os = "freebsd",
+                target_os = "haiku",
+                target_os = "hurd",
+                target_os = "illumos",
+                target_os = "linux",
+                target_os = "netbsd",
+                target_os = "openbsd",
+                target_os = "redox",
+                target_os = "solaris"
+            )
+        ) },
     }
 
     let out_dir = env::var("OUT_DIR")?;
