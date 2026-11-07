@@ -2560,6 +2560,235 @@ fn test_selinux_default_context() {
     assert!(at.file_exists(dest));
 }
 
+// Like GNU, an unusable --context fails before any directory is created.
+#[rstest]
+#[case::dir(&["-d", "-v", "--context=a", "new/dir"])]
+#[case::leading(&["-D", "-v", "--context=a", "source", "new/dir/file"])]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+fn test_selinux_invalid_context_creates_nothing(#[case] args: &[&str]) {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("Skipping SELinux test: SELinux is not enabled");
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("source");
+    ucmd.args(args).fails_with_code(1).stderr_only(
+        "install: failed to set default file creation context to 'a': Invalid argument\n",
+    );
+    assert!(!at.dir_exists("new"));
+}
+
+// Like GNU, an unusable --context fails even when the target directory exists.
+#[test]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+fn test_selinux_invalid_context_existing_directory() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("Skipping SELinux test: SELinux is not enabled");
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("existing");
+    ucmd.args(&["-d", "--context=a", "existing"])
+        .fails_with_code(1)
+        .stderr_only(
+            "install: failed to set default file creation context to 'a': Invalid argument\n",
+        );
+}
+
+/// A scene whose `existing` directory has a context of its own, or `None` where
+/// SELinux can't be used.
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+fn selinux_scene_with_existing_dir() -> Option<TestScenario> {
+    use uucore::selinux::{is_selinux_enabled, set_selinux_security_context};
+
+    if !is_selinux_enabled() {
+        println!("Skipping SELinux test: SELinux is not enabled");
+        return None;
+    }
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("existing");
+    let home_ctx = String::from("unconfined_u:object_r:user_home_t:s0");
+    if set_selinux_security_context(&scene.fixtures.plus("existing"), Some(&home_ctx)).is_err() {
+        println!("Skipping SELinux test: cannot set a context on the fixture");
+        return None;
+    }
+    Some(scene)
+}
+
+// -d --context labels only the directories it creates; an existing target or
+// parent keeps its context.
+#[test]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+fn test_selinux_context_only_on_created_directories() {
+    let Some(scene) = selinux_scene_with_existing_dir() else {
+        return;
+    };
+    let at = &scene.fixtures;
+    let before = selinux_type(&at.plus("existing"));
+
+    scene
+        .ucmd()
+        .args(&[
+            "-d",
+            "--context=unconfined_u:object_r:user_tmp_t:s0",
+            "existing/new/deeper",
+            "existing",
+        ])
+        .succeeds();
+
+    assert_eq!(selinux_type(&at.plus("existing")), before);
+    for dir in ["existing/new", "existing/new/deeper"] {
+        assert_eq!(selinux_type(&at.plus(dir)), "user_tmp_t", "{dir}");
+    }
+}
+
+// -D --context labels only the leading directories it creates; an existing
+// parent keeps its context.
+#[test]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+fn test_selinux_context_only_on_created_leading_directories() {
+    let Some(scene) = selinux_scene_with_existing_dir() else {
+        return;
+    };
+    let at = &scene.fixtures;
+    let before = selinux_type(&at.plus("existing"));
+    at.write("source", "installed content\n");
+
+    scene
+        .ucmd()
+        .args(&[
+            "-D",
+            "--context=unconfined_u:object_r:user_tmp_t:s0",
+            "source",
+            "existing/leading/deeper/file",
+        ])
+        .succeeds();
+
+    assert_eq!(selinux_type(&at.plus("existing")), before);
+    for path in [
+        "existing/leading",
+        "existing/leading/deeper",
+        "existing/leading/deeper/file",
+    ] {
+        assert_eq!(selinux_type(&at.plus(path)), "user_tmp_t", "{path}");
+    }
+    assert_eq!(
+        at.read("existing/leading/deeper/file"),
+        "installed content\n"
+    );
+}
+
+/// A dir in target/tmp (with a policy default, unlike /tmp) holding an `etc_t` `parent`,
+/// and the type the policy gives a new dir there; `None` where this can't be set up.
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+fn selinux_scene_in_policy_default_dir() -> Option<(TestScenario, tempfile::TempDir, String)> {
+    use uucore::selinux::{is_selinux_enabled, set_selinux_security_context};
+
+    if !is_selinux_enabled() {
+        println!("Skipping SELinux test: SELinux is not enabled");
+        return None;
+    }
+    let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    fs::create_dir(dir.path().join("parent")).unwrap();
+    let ctx = String::from("root:object_r:etc_t:s0");
+    if set_selinux_security_context(&dir.path().join("parent"), Some(&ctx)).is_err() {
+        println!("Skipping SELinux test: cannot set a context on the fixture");
+        return None;
+    }
+    let Some(expected) = policy_dir_type(&dir.path().join("parent/reference")) else {
+        println!("Skipping SELinux test: cannot set the default context on the fixture");
+        return None;
+    };
+    if expected == "etc_t" {
+        println!("Skipping SELinux test: the policy has no default for {dir:?}");
+        return None;
+    }
+    Some((TestScenario::new(util_name!()), dir, expected))
+}
+
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+fn selinux_type(path: &std::path::Path) -> String {
+    let ctx = uucore::selinux::get_selinux_security_context(path, false).unwrap();
+    ctx.split(':').nth(2).unwrap().to_owned()
+}
+
+/// The type the policy gives a new directory at `path`, from a reference directory
+/// labelled there without install; `None` where that label cannot be set.
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+fn policy_dir_type(path: &std::path::Path) -> Option<String> {
+    fs::create_dir(path).unwrap();
+    let labelled = uucore::selinux::set_selinux_security_context(path, None).is_ok();
+    let ty = selinux_type(path);
+    fs::remove_dir(path).unwrap();
+    labelled.then_some(ty)
+}
+
+// Like GNU, -d -Z resets an existing target to the policy default.
+#[test]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+fn test_selinux_default_context_resets_existing_directory() {
+    let Some((scene, dir, expected)) = selinux_scene_in_policy_default_dir() else {
+        return;
+    };
+    fs::create_dir(dir.path().join("parent/existing")).unwrap();
+    assert_eq!(selinux_type(&dir.path().join("parent/existing")), "etc_t");
+
+    scene
+        .ucmd()
+        .current_dir(dir.path())
+        .args(&["-d", "-Z", "parent/existing"])
+        .succeeds();
+
+    assert_eq!(selinux_type(&dir.path().join("parent/existing")), expected);
+}
+
+// -Z looks a relative name up by its absolute name, also when its parents are
+// created by the same command.
+#[rstest]
+#[case::dir(&["-d", "-Z", "parent/new/deeper"])]
+#[case::leading(&["-D", "-Z", "source", "parent/new/deeper/file"])]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+fn test_selinux_default_context_relative_name_missing_parents(#[case] args: &[&str]) {
+    let Some((scene, dir, expected)) = selinux_scene_in_policy_default_dir() else {
+        return;
+    };
+    fs::write(dir.path().join("source"), "content").unwrap();
+
+    scene.ucmd().current_dir(dir.path()).args(args).succeeds();
+
+    for name in ["parent/new", "parent/new/deeper"] {
+        assert_eq!(selinux_type(&dir.path().join(name)), expected, "{name}");
+    }
+}
+
+// Like GNU, -Z looks up each created directory, not just the last one.
+#[rstest]
+#[case::dir(&["-d", "-Z", "parent/new/.snapshots/deeper"])]
+#[case::leading(&["-D", "-Z", "source", "parent/new/.snapshots/deeper/file"])]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+fn test_selinux_default_context_per_created_directory(#[case] args: &[&str]) {
+    let Some((scene, dir, expected)) = selinux_scene_in_policy_default_dir() else {
+        return;
+    };
+    // Fedora's policy gives `.snapshots` under /home its own type at any depth.
+    let snapshots = policy_dir_type(&dir.path().join("parent/.snapshots"));
+    let Some(snapshots) = snapshots.filter(|snapshots| *snapshots != expected) else {
+        println!("Skipping SELinux test: the policy has no type of its own for .snapshots");
+        return;
+    };
+    fs::write(dir.path().join("source"), "content").unwrap();
+
+    scene.ucmd().current_dir(dir.path()).args(args).succeeds();
+
+    for (name, ty) in [
+        ("parent/new", &expected),
+        ("parent/new/.snapshots", &snapshots),
+        ("parent/new/.snapshots/deeper", &snapshots),
+    ] {
+        assert_eq!(&selinux_type(&dir.path().join(name)), ty, "{name}");
+    }
+}
+
 #[test]
 #[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
 fn test_install_compare_with_mode_bits() {
