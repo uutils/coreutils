@@ -21,4 +21,5 @@ textwrap
 thiserror
 walkdir
 winapi
+zbus
 zerocopy
