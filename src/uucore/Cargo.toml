@@ -174,7 +174,7 @@ format = [
   "unit-prefix",
 ]
 i18n-all = ["i18n-charmap", "i18n-collator", "i18n-decimal", "i18n-datetime"]
-i18n-charmap = ["i18n-common"]
+i18n-charmap = ["i18n-common", "dep:nix"]
 i18n-common = ["icu_locale", "windows-sys"]
 i18n-collator = ["i18n-common", "icu_collator"]
 i18n-decimal = ["i18n-common", "icu_decimal", "icu_provider"]
