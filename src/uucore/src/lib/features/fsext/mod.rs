@@ -175,12 +175,16 @@ fn replace_special_chars(s: &[u8]) -> Vec<u8> {
 
     // Replace
     //
-    // * ASCII space with a regular space character,
+    // * \040 ASCII space with a regular space character,
     // * \011 ASCII horizontal tab with a tab character,
-    // * ASCII backslash with an actual backslash character.
+    // * \012 ASCII line feed with a newline character,
+    // * \134 ASCII backslash with an actual backslash character.
     //
+    // The backslash must be replaced last, so that an escaped backslash
+    // followed by digits (e.g. "\134012") is not decoded a second time.
     s.replace(r"\040", " ")
         .replace(r"\011", "	")
+        .replace(r"\012", "\n")
         .replace(r"\134", r"\")
 }
 
@@ -1014,6 +1018,55 @@ mod tests {
         .unwrap();
 
         assert_eq!(info.mount_dir, r"/mnt/f\ 	oo");
+    }
+
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_mountinfo_dir_newline() {
+        let info = MountInfo::new(
+            LINUX_MOUNTINFO,
+            &br"317 61 7:0 / /mnt/foo\012bar rw,relatime shared:641 - tmpfs tmpfs rw"
+                .split(|c| *c == b' ')
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+
+        assert_eq!(info.mount_dir, "/mnt/foo\nbar");
+
+        let info = MountInfo::new(
+            LINUX_MTAB,
+            &br"tmpfs /mnt/a\040b\011c\012d\134e tmpfs rw,relatime 0 0"
+                .split(|c| *c == b' ')
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+
+        assert_eq!(info.mount_dir, "/mnt/a b\tc\nd\\e");
+    }
+
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_mountinfo_dir_escaped_backslash_digits() {
+        // A literal "\012" in the name is escaped by the kernel as "\134012".
+        let info = MountInfo::new(
+            LINUX_MOUNTINFO,
+            &br"317 61 7:0 / /mnt/x\134012 rw,relatime shared:641 - tmpfs tmpfs rw"
+                .split(|c| *c == b' ')
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+
+        assert_eq!(info.mount_dir, r"/mnt/x\012");
+
+        let info = MountInfo::new(
+            LINUX_MTAB,
+            &br"tmpfs /mnt/x\134012 tmpfs rw,relatime 0 0"
+                .split(|c| *c == b' ')
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+
+        assert_eq!(info.mount_dir, r"/mnt/x\012");
     }
 
     #[test]
