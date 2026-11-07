@@ -23,4 +23,3 @@ shuf-error-no-lines-to-repeat = aucune ligne à répéter
 shuf-error-invalid-input-range = plage d'entrée invalide : { $range }
 shuf-error-invalid-input-range-too-large = plage d'entrée invalide : { $range } : valeur trop grande pour être stockée dans le type de données
 shuf-error-write-failed = échec de l'écriture
-shuf-error-memory-exhausted = mémoire épuisée

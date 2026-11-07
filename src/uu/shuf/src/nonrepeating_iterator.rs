@@ -72,7 +72,7 @@ impl<'a> NonrepeatingIterator<'a> {
             let capacity = head_count.unwrap_or(MAX_CAPACITY).min(range_len);
             let mut map = FxHashMap::with_hasher(rustc_hash::FxBuildHasher);
             map.try_reserve(capacity)
-                .map_err(|_| USimpleError::new(1, translate!("shuf-error-memory-exhausted")))?;
+                .map_err(|_| USimpleError::new(1, translate!("common-out-of-memory")))?;
             Values::Sparse(range, map)
         };
         Ok(NonrepeatingIterator { rng, values })
