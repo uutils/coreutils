@@ -269,6 +269,12 @@ pub fn remove_dir_with_special_cases(path: &Path, options: &Options, error_occur
 /// own device differs from this is a mount point, which `--preserve-root=all`
 /// refuses to cross.
 fn parent_device(path: &Path) -> Option<u64> {
+    // With a trailing slash the operand resolves through a symbolic link, so the
+    // directory it names is not the one that sits before the last component of
+    // its text. Its real parent is then reached through "..", as GNU rm does.
+    if path.as_os_str().as_bytes().ends_with(b"/") {
+        return fs::metadata(path.join("..")).ok().map(|m| m.dev());
+    }
     let parent = match path.parent()? {
         // A bare name like "b" has an empty parent, meaning the current dir.
         p if p.as_os_str().is_empty() => Path::new("."),
