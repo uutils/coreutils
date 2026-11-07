@@ -941,6 +941,67 @@ fn test_unset_locale_is_byte_oriented() {
         .stdout_only_bytes(b"\xb6\n");
 }
 
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
+#[test]
+fn test_bare_locale_name_is_not_assumed_utf8() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    // These bare glibc locale names use single-byte encodings when installed.
+    // If either locale is unavailable, setlocale fails and libc remains in C,
+    // which is byte-oriented as well.
+    for locale in ["de_DE", "de_DE@euro"] {
+        // The UTF-8-looking C3 A4 pair consists of two characters here.
+        new_ucmd!()
+            .env("LC_ALL", locale)
+            .arg("-c2")
+            .pipe_in(&b"\xc3\xa4x\n"[..])
+            .succeeds()
+            .stdout_only_bytes(b"\xa4\n");
+
+        new_ucmd!()
+            .env("LC_ALL", locale)
+            .args(&["-b2", "-n"])
+            .pipe_in(&b"\xc3\xa4x\n"[..])
+            .succeeds()
+            .stdout_only_bytes(b"\xa4\n");
+
+        // E3 80 80 must remain ordinary bytes; only the ASCII space splits.
+        new_ucmd!()
+            .env("LC_ALL", locale)
+            .args(&["-w", "-f2"])
+            .pipe_in(&b"a\xe3\x80\x80b c\n"[..])
+            .succeeds()
+            .stdout_only_bytes(b"c\n");
+
+        // A7 is a delimiter even when preceded by C2, which resembles a UTF-8
+        // lead byte. Field two must be "user", not "admin".
+        let delimiter = OsString::from_vec(vec![0xa7]);
+        new_ucmd!()
+            .env("LC_ALL", locale)
+            .arg("-d")
+            .arg(&delimiter)
+            .arg("-f2")
+            .pipe_in(&b"alice\xc2\xa7user\xa7admin\n"[..])
+            .succeeds()
+            .stdout_only("user\n");
+    }
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[test]
+fn test_unavailable_bare_locale_falls_back_to_single_byte() {
+    // A locale that libc cannot activate leaves it in C, so byte 2 is a
+    // character even when the input bytes resemble a UTF-8 sequence.
+    new_ucmd!()
+        .env("LC_ALL", "uutils_missing_locale")
+        .arg("-c2")
+        .pipe_in(&b"\xc3\xa4x\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"\xa4\n");
+}
+
 #[test]
 fn test_newline_delim_suppress_missing_field() {
     // -s with the newline as delimiter must not emit a spurious blank line.
