@@ -3051,28 +3051,103 @@ fn test_mv_no_prompt_unwriteable_file_with_no_tty() {
     assert!(at.file_exists("target_notty"));
 }
 
-/// Test mv silently succeeds when dest filesystem doesn't support xattrs (ENOTSUP)
+/// Moving a file with xattrs onto a file system without xattr support warns
+/// once for the file, however many attributes it has, and still succeeds, as
+/// GNU 9.12 does. A file without xattrs, or with only a POSIX ACL, moves
+/// without a word. Mounting ramfs needs root, so this skips without sudo.
+#[uutests::wasi_ignore(AclXattrPreservationFails)]
 #[test]
 #[cfg(target_os = "linux")]
-fn test_mv_xattr_enotsup_silent() {
-    use std::process::Command;
+fn test_mv_xattr_enotsup_warns_once() {
+    // spell-checker:ignore noxattr ramfs
+    use rustc_hash::FxHashMap;
+    use std::ffi::OsString;
+    use uucore::fsxattr::apply_xattrs;
+    use uutests::util::path;
+
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.write("src", "x");
 
-    if Command::new("setfattr")
-        .args(["-n", "user.t", "-v", "v", &at.plus_as_string("src")])
-        .status()
-        .is_ok_and(|s| s.success())
-    {
-        scene
-            .ucmd()
-            .arg(at.plus("src"))
-            .arg("/dev/shm/mv_test")
-            .succeeds()
-            .no_stderr();
-        std::fs::remove_file("/dev/shm/mv_test").ok();
+    let set_xattrs = |name: &str, attrs: &[(&str, &[u8])]| {
+        at.write(name, "content");
+        let attrs: FxHashMap<OsString, Vec<u8>> = attrs
+            .iter()
+            .map(|(attr, value)| (OsString::from(attr), value.to_vec()))
+            .collect();
+        apply_xattrs(at.plus(name), attrs)
+    };
+    if set_xattrs("one_attr", &[("user.test", b"v")]).is_err() {
+        println!("test skipped: the test directory does not accept xattrs");
+        return;
     }
+    at.write("acl_only", "content");
+    match std::process::Command::new("setfacl")
+        .args(["-m", "u:0:r"])
+        .arg(at.plus("acl_only"))
+        .status()
+    {
+        Ok(status) if status.success() => {}
+        Ok(_) => {
+            println!("test skipped: setfacl failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfacl failed with {e}");
+            return;
+        }
+    }
+    let three: &[(&str, &[u8])] = &[("user.one", b"1"), ("user.two", b"2"), ("user.three", b"3")];
+    set_xattrs("three_attrs", three).unwrap();
+    set_xattrs("same_fs", &[("user.test", b"v")]).unwrap();
+    at.write("no_attrs", "content");
+
+    at.mkdir("noxattr");
+    // sudo may not even be installed, as in the cross containers.
+    let mounted = std::process::Command::new("sudo")
+        .current_dir(at.as_string())
+        .env("PATH", path())
+        .args(["-E", "--non-interactive", "mount", "-t", "ramfs"])
+        .args(["-o", "mode=0777", "ramfs", "noxattr"])
+        .status()
+        .is_ok_and(|status| status.success());
+    if !mounted {
+        println!("test skipped: mounting ramfs requires root");
+        return;
+    }
+
+    let move_onto_ramfs = |name: &str| {
+        let dest = format!("noxattr/{name}");
+        let result = scene.ucmd().arg(name).arg(&dest).run();
+        let moved = !at.file_exists(name) && at.file_exists(&dest);
+        (name.to_owned(), result, moved)
+    };
+    let warned = [move_onto_ramfs("one_attr"), move_onto_ramfs("three_attrs")];
+    let silent = [move_onto_ramfs("no_attrs"), move_onto_ramfs("acl_only")];
+
+    // Unmount before the asserts so a failure does not leave it mounted.
+    scene
+        .cmd("sudo")
+        .env("PATH", path())
+        .args(&["-E", "--non-interactive", "umount", "noxattr"])
+        .succeeds();
+
+    for (name, result, moved) in warned {
+        assert!(moved, "{name} was not moved");
+        result.success().stderr_is(format!(
+            "mv: setting attributes for 'noxattr/{name}': Operation not supported\n"
+        ));
+    }
+    for (name, result, moved) in silent {
+        assert!(moved, "{name} was not moved");
+        result.success().no_stderr();
+    }
+
+    scene
+        .ucmd()
+        .arg("same_fs")
+        .arg("same_fs_moved")
+        .succeeds()
+        .no_stderr();
 }
 
 /// Cross-device mv of a directory must preserve the directory's own xattrs.
