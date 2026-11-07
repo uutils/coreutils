@@ -1,11 +1,12 @@
 name: Fuzzing
 
-# spell-checker:ignore (people) bamf taiki-e
+# spell-checker:ignore (people) taiki-e
 # spell-checker:ignore (misc) fuzzer PIPESTATUS
 
 env:
   CARGO_INCREMENTAL: "0"
-
+  GNU_COREUTILS_DEB_URL: "https://github.com/uutils/thirdparty-artifacts/releases/download/coreutils-ppa-9.12-0ubuntu1-ppa1/gnu-coreutils_9.12-0ubuntu1.ppa1_amd64.deb"
+  GNU_COREUTILS_DEB_SHA256: "c6f5b255a927d24d769a39d714cca8b41c6125b7e04a5186c0d99007ab296cf1"
 on:
   pull_request:
     paths: &fuzz_paths
@@ -121,12 +122,14 @@ jobs:
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: "fuzz -> target"
+    - name: fetch gnu-coreutils .deb
+      run: |
+        curl -fsSL --retry 2 -o coreutils.deb ${GNU_COREUTILS_DEB_URL}
+        echo $GNU_COREUTILS_DEB_SHA256 coreutils.deb | sha256sum -c
     - name: Use latest GNU coreutils as system coreutils
       run: |
-        sudo add-apt-repository -y ppa:bamf0/coreutils-reference
-        sudo apt-get update
-        apt-cache policy gnu-coreutils
-        sudo apt-get install -y gnu-coreutils=9.12-0ubuntu1~ppa1 coreutils-from-gnu coreutils-from-uutils- --allow-remove-essential
+        sudo dpkg -i coreutils.deb
+        sudo apt-get install -y coreutils-from-gnu coreutils-from-uutils- --allow-remove-essential
         stty --version | grep 9.12
     - name: Build uufuzz library
       run: |
@@ -193,12 +196,15 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
+    - name: fetch gnu-coreutils .deb
+      run: |
+        curl -fsSL --retry 2 -o coreutils.deb ${GNU_COREUTILS_DEB_URL}
+        echo ${GNU_COREUTILS_DEB_SHA256} coreutils.deb | sha256sum -c
     - name: Use latest GNU coreutils as system coreutils
       run: |
-        sudo add-apt-repository -y ppa:bamf0/coreutils-reference
-        sudo apt-get update
-        sudo apt-get install -y gnu-coreutils=9.12-0ubuntu1~ppa1 coreutils-from-gnu coreutils-from-uutils- --allow-remove-essential
-        stty --version
+        sudo dpkg -i coreutils.deb
+        sudo apt-get install -y coreutils-from-gnu coreutils-from-uutils- --allow-remove-essential
+        stty --version | grep 9.12
     - name: Install `cargo-fuzz`
       uses: taiki-e/install-action@v2
       with:
