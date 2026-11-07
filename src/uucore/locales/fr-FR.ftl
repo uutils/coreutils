@@ -34,6 +34,7 @@ error-invalid-argument = Argument invalide
 error-is-a-directory-text = Est un répertoire
 error-is-a-directory = { $file }: { error-is-a-directory-text }
 error-too-many-symlink-levels = Trop de niveaux de liens symboliques
+error-bad-file-descriptor = Mauvais descripteur de fichier
 
 # Actions communes
 action-copying = copie
