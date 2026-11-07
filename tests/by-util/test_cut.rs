@@ -942,7 +942,6 @@ fn test_unset_locale_is_byte_oriented() {
 }
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
-#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 fn test_bare_locale_name_is_not_assumed_utf8() {
     use std::ffi::OsString;

@@ -113,28 +113,19 @@ pub fn mb_char_len(bytes: &[u8]) -> usize {
     locale_encoding().char_len(bytes)
 }
 
-#[cfg(all(
-    unix,
-    not(any(
-        target_os = "android",
-        target_os = "redox",
-        target_os = "cygwin",
-        target_os = "netbsd"
-    )),
-))]
+#[cfg(has_locale_codeset)]
 fn bare_locale_encoding(s: &str) -> Encoding {
-    #[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
+    #[cfg(not(needs_nl_langinfo_l_binding))]
     use nix::libc::nl_langinfo_l;
     use nix::libc::{CODESET, LC_CTYPE_MASK, freelocale, newlocale};
+    #[cfg(needs_nl_langinfo_l_binding)]
+    use nix::libc::{locale_t, nl_item};
     use std::ffi::{CStr, CString};
 
     // These systems provide the function, but libc 0.2.191 omits its binding.
-    #[cfg(any(target_os = "macos", target_os = "openbsd"))]
+    #[cfg(needs_nl_langinfo_l_binding)]
     unsafe extern "C" {
-        fn nl_langinfo_l(
-            item: nix::libc::nl_item,
-            locale: nix::libc::locale_t,
-        ) -> *mut std::ffi::c_char;
+        fn nl_langinfo_l(item: nl_item, locale: locale_t) -> *mut std::ffi::c_char;
     }
 
     let Ok(name) = CString::new(s) else {
@@ -157,8 +148,9 @@ fn bare_locale_encoding(s: &str) -> Encoding {
         // locale object. Convert it before freeing that object.
         unsafe { CStr::from_ptr(codeset) }
             .to_str()
-            .map(|name| encoding_from_name(&name.to_ascii_lowercase()))
-            .unwrap_or(Encoding::SingleByte)
+            .map_or(Encoding::SingleByte, |name| {
+                encoding_from_name(&name.to_ascii_lowercase())
+            })
     };
 
     // SAFETY: locale was created successfully and is no longer used.
@@ -167,13 +159,7 @@ fn bare_locale_encoding(s: &str) -> Encoding {
     encoding
 }
 
-#[cfg(any(
-    not(unix),
-    target_os = "android",
-    target_os = "redox",
-    target_os = "cygwin",
-    target_os = "netbsd"
-))]
+#[cfg(not(has_locale_codeset))]
 fn bare_locale_encoding(s: &str) -> Encoding {
     // Match glibc's default encodings for bare locale names.
     match s.split('@').next().unwrap_or(s) {
@@ -279,6 +265,15 @@ fn big5_len(b: &[u8], b0: u8) -> usize {
 #[cfg(test)]
 mod tests {
     use super::{Encoding, is_unicode_blank};
+
+    #[cfg(has_locale_codeset)]
+    #[test]
+    fn invalid_locale_is_single_byte() {
+        assert_eq!(
+            super::bare_locale_encoding("uutils_nonexistent_locale"),
+            Encoding::SingleByte
+        );
+    }
 
     #[test]
     fn private_c_locale_is_single_byte() {
