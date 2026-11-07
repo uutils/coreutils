@@ -413,16 +413,17 @@ fn forwards_thru_file(
 /// Iterate over bytes in the file, in reverse, until we find the
 /// `num_delimiters` instance of `delimiter`. The `file` is left seek'd to the
 /// position just after that delimiter.
-fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
+fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) -> UResult<()> {
     if num_delimiters == 0 {
-        file.seek(SeekFrom::End(0)).unwrap();
-        return;
+        file.seek(SeekFrom::End(0))?;
+        return Ok(());
     }
     // This variable counts the number of delimiters found in the file
     // so far (reading from the end of the file toward the beginning).
     let mut counter = 0;
     let mut first_slice = true;
-    for slice in ReverseChunks::new(file) {
+    for slice in ReverseChunks::new(file)? {
+        let slice = slice?;
         // Iterate over each byte in the slice in reverse order.
         let mut iter = memrchr_iter(delimiter, &slice);
 
@@ -447,11 +448,12 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
                 // cursor in the file is at the *beginning* of the
                 // block, so seeking forward by `i + 1` bytes puts
                 // us right after the found delimiter.
-                file.seek(SeekFrom::Current((i + 1) as i64)).unwrap();
-                return;
+                file.seek(SeekFrom::Current((i + 1) as i64))?;
+                return Ok(());
             }
         }
     }
+    Ok(())
 }
 
 /// When tail'ing a file, we do not need to read the whole file from start to
@@ -466,7 +468,7 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
     // Find the position in the file to start printing from.
     match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), delimiter) => {
-            backwards_thru_file(file, *count, *delimiter);
+            backwards_thru_file(file, *count, *delimiter)?;
         }
         FilterMode::Lines(Signum::Positive(count), delimiter) if count > &1 => {
             let i = forwards_thru_file(file, *count - 1, *delimiter).unwrap();

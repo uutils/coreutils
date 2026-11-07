@@ -12,7 +12,7 @@
 
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::{BufRead, Read, Seek, SeekFrom, Write};
+use std::io::{self, BufRead, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::error::UResult;
 
 /// When reading files in reverse in `bounded_tail`, this is the size of each
@@ -46,31 +46,27 @@ pub struct ReverseChunks<'a> {
 }
 
 impl<'a> ReverseChunks<'a> {
-    pub fn new(file: &'a mut File) -> Self {
+    pub fn new(file: &'a mut File) -> io::Result<Self> {
         let current = if cfg!(unix) {
-            file.stream_position().unwrap()
+            file.stream_position()?
         } else {
             0
         };
-        let size = file.seek(SeekFrom::End(0)).unwrap() - current;
+        let size = file.seek(SeekFrom::End(0))? - current;
         let max_blocks_to_read = (size as f64 / BLOCK_SIZE as f64).ceil() as usize;
         let block_idx = 0;
-        ReverseChunks {
+        Ok(ReverseChunks {
             file,
             size,
             max_blocks_to_read,
             block_idx,
-        }
+        })
     }
-}
 
-impl Iterator for ReverseChunks<'_> {
-    type Item = Vec<u8>;
-
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next_chunk(&mut self) -> io::Result<Option<Vec<u8>>> {
         // If there are no more chunks to read, terminate the iterator.
         if self.block_idx >= self.max_blocks_to_read {
-            return None;
+            return Ok(None);
         }
 
         // The chunk size is `BLOCK_SIZE` for all but the last chunk
@@ -86,20 +82,34 @@ impl Iterator for ReverseChunks<'_> {
         // Seek backwards by the next chunk, read the full chunk into
         // `buf`, and then seek back to the start of the chunk again.
         let mut buf = vec![0; block_size as usize];
-        let pos = self
-            .file
-            .seek(SeekFrom::Current(-(block_size as i64)))
-            .unwrap();
-        self.file.read_exact(&mut buf).unwrap();
-        let pos2 = self
-            .file
-            .seek(SeekFrom::Current(-(block_size as i64)))
-            .unwrap();
+        let pos = self.file.seek(SeekFrom::Current(-(block_size as i64)))?;
+        match self.file.read_exact(&mut buf) {
+            Ok(()) => {}
+            // The file may have been truncated after its size was measured.
+            // Treat the remaining bytes as the start of the file instead of
+            // panicking; GNU tail exits successfully in the same situation.
+            // Rewind so the caller prints whatever is left of the file.
+            Err(err) if err.kind() == ErrorKind::UnexpectedEof => {
+                self.file.seek(SeekFrom::Start(0))?;
+                return Ok(None);
+            }
+            // Propagate real I/O errors (EIO, etc.) to the caller.
+            Err(err) => return Err(err),
+        }
+        let pos2 = self.file.seek(SeekFrom::Current(-(block_size as i64)))?;
         assert_eq!(pos, pos2);
 
         self.block_idx += 1;
 
-        Some(buf)
+        Ok(Some(buf))
+    }
+}
+
+impl Iterator for ReverseChunks<'_> {
+    type Item = io::Result<Vec<u8>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next_chunk().transpose()
     }
 }
 
@@ -623,7 +633,43 @@ impl LinesChunkBuffer {
 
 #[cfg(test)]
 mod tests {
-    use crate::chunks::{BUFFER_SIZE, BytesChunk};
+    use crate::chunks::{BLOCK_SIZE, BUFFER_SIZE, BytesChunk, ReverseChunks};
+    use std::io::{Seek, Write};
+    use tempfile::tempdir;
+
+    // WASI has no temporary directory, so this file-backed case is skipped there.
+    #[cfg(not(target_os = "wasi"))]
+    #[test]
+    fn test_reverse_chunks_stops_gracefully_when_file_is_truncated() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("truncated");
+        {
+            let mut file = std::fs::File::create(&path).unwrap();
+            file.write_all(&vec![b'a'; BLOCK_SIZE as usize + 1])
+                .unwrap();
+        }
+
+        {
+            let mut file = std::fs::File::open(&path).unwrap();
+            let mut chunks = ReverseChunks::new(&mut file).unwrap();
+            assert!(matches!(chunks.next(), Some(Ok(_))));
+
+            // Truncate through a second handle while the iterator still holds its
+            // previously measured size, then make sure the next read stops instead
+            // of panicking.
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open(&path)
+                .unwrap()
+                .set_len(0)
+                .unwrap();
+            assert!(chunks.next().is_none());
+
+            // The rewind must leave the file at the start so the caller can
+            // print whatever is left of the truncated file.
+            assert_eq!(file.stream_position().unwrap(), 0);
+        }
+    }
 
     #[test]
     fn test_bytes_chunk_from_when_offset_is_zero() {
