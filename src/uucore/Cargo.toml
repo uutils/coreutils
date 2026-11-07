@@ -180,6 +180,7 @@ i18n-collator = ["i18n-common", "icu_collator"]
 i18n-decimal = ["i18n-common", "icu_decimal", "icu_provider"]
 i18n-datetime = [
   "i18n-common",
+  "libc",
   "icu_calendar",
   "icu_datetime",
   "jiff-icu",
@@ -194,7 +195,7 @@ parser-size = ["parser-num", "procfs"]
 parser-glob = ["glob"]
 parser = ["parser-num", "parser-size", "parser-glob"]
 pipes = ["fs", "rustix/pipe"]
-process = ["libc", "nix/user", "rustix/process", "windows-sys"]
+process = ["libc", "rustix/process", "windows-sys"]
 proc-info = ["tty", "walkdir"]
 quoting-style = ["i18n-common"]
 ranges = []
@@ -203,7 +204,7 @@ safe-copy = ["rustix/fs"]
 safe-traversal = ["libc", "nix/fs", "nix/dir", "nix/user", "rustix/fs"]
 selinux = ["dep:selinux", "libc"]
 smack = ["xattr"]
-signals = ["nix/fs", "nix/signal", "nix/poll"]
+signals = ["libc", "rustix/event", "rustix/fs", "rustix/process"]
 sum = [
   "digest",
   "hex",
