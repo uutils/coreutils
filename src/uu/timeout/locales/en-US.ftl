@@ -8,7 +8,6 @@ timeout-help-preserve-status = exit with the same status as COMMAND, even when t
 timeout-help-signal = specify the signal to be sent on timeout; SIGNAL may be a name like 'HUP' or a number; see 'kill -l' for a list of signals
 timeout-help-verbose = diagnose to stderr any signal sent upon timeout
 timeout-help-duration = a floating point number with an optional suffix: 's' for seconds (the default), 'm' for minutes, 'h' for hours or 'd' for days ; a duration of 0 disables the associated timeout
-timeout-help-command = a command to execute with optional arguments
 timeout-after-help = Upon timeout, send the TERM signal to COMMAND, if no other SIGNAL specified. The TERM signal kills any process that does not block or catch that signal. It may be necessary to use the KILL signal, since this signal can't be caught.
 
   Exit status:
