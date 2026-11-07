@@ -1191,6 +1191,19 @@ fn test_invalid_count_keeps_its_leading_zeros() {
 }
 
 #[test]
+fn test_sign_only_count_is_reported_with_its_sign() {
+    // GNU keeps a lone '+' in the message but reports a lone '-' as ''.
+    for (args, message) in [
+        (&["-n", "+"][..], "head: invalid number of lines: '+'\n"),
+        (&["-n", "-"][..], "head: invalid number of lines: ''\n"),
+        (&["-c", "+"][..], "head: invalid number of bytes: '+'\n"),
+        (&["-c", "-"][..], "head: invalid number of bytes: ''\n"),
+    ] {
+        new_ucmd!().args(args).fails_with_code(1).stderr_is(message);
+    }
+}
+
+#[test]
 fn test_lowercase_multiplier_suffixes_rejected() {
     // GNU accepts a lowercase suffix only for "k" and "m"; every other
     // multiplier must be uppercase. "b" is bare-only (no B/iB/D form).
@@ -1246,4 +1259,12 @@ fn test_header_quotes_name_with_control_char() {
         .args(&["-v", "-n1", "tab\there"])
         .succeeds()
         .stdout_only("==> 'tab'$'\\t''here' <==\nt\n");
+}
+
+#[test]
+fn test_invalid_overridden_byte_count_is_rejected() {
+    new_ucmd!()
+        .args(&["-c1-3", "-n1"])
+        .fails_with_code(1)
+        .stderr_is("head: invalid number of bytes: '1-3'\n");
 }
