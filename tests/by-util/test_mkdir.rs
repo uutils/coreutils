@@ -251,6 +251,20 @@ fn test_symbolic_mode() {
     assert_eq!(perms, 0o40777);
 }
 
+#[test]
+#[cfg(not(windows))]
+fn test_mkdir_whitespace_in_mode_is_rejected() {
+    let scene = TestScenario::new(util_name!());
+    for mode in [" 755", "u+x, +755", "u+x, ,g+w"] {
+        scene
+            .ucmd()
+            .args(&["-m", mode, "d"])
+            .fails_with_code(1)
+            .stderr_contains("invalid mode");
+        assert!(!scene.fixtures.dir_exists("d"));
+    }
+}
+
 #[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(not(windows))]

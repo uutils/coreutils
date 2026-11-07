@@ -1135,6 +1135,19 @@ fn test_gnu_invalid_mode() {
 }
 
 #[test]
+fn test_chmod_whitespace_in_mode_is_rejected() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    set_permissions(at.plus("file"), Permissions::from_mode(0o600)).unwrap();
+
+    for mode in [" 644", "644 ", "+ 644", "u+x, +755", "u+x, ,g+w"] {
+        scene.ucmd().args(&["--", mode, "file"]).fails_with_code(1);
+        assert_eq!(at.metadata("file").permissions().mode() & 0o7777, 0o600);
+    }
+}
+
+#[test]
 fn test_chmod_invalid_mode_checked_before_any_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir_all("d/a");
