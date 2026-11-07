@@ -89,6 +89,7 @@ thiserror = { workspace = true }
 cfg_aliases = { workspace = true }
 
 [dev-dependencies]
+rstest = { workspace = true }
 tempfile = { workspace = true }
 
 [target.'cfg(any(target_os = "freebsd", target_os = "hurd", target_os = "linux", target_os = "android", target_os = "macos", target_os = "netbsd"))'.dependencies]
@@ -119,6 +120,7 @@ time = { workspace = true, optional = true, features = [
 walkdir = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+libloading = { workspace = true, optional = true }
 procfs = { workspace = true, optional = true }
 
 [target.'cfg(windows)'.dependencies]
@@ -227,7 +229,6 @@ sum = [
   "crc-fast",
   "data-encoding",
 ]
-systemd_logind = ["utmpx", "libc"]
 # Use OpenSSL (libcrypto) for md5/sha1/sha2-family digests instead of the
 # pure-Rust crates. This dramatically speeds up checksum utilities on CPUs
 # without SHA-NI by using OpenSSL's optimized assembly implementations.
@@ -235,6 +236,7 @@ openssl = ["dep:openssl"]
 update-control = ["parser"]
 utf8 = []
 utmpx = ["time", "time/macros", "libc", "dns-lookup"]
+systemd-logind = ["utmpx", "dep:libloading"]
 version-cmp = []
 wide = []
 tty = []

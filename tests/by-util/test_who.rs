@@ -384,6 +384,7 @@ mod utmp_file {
         user: &'a str,
         host: &'a str,
         exit: (i16, i16),
+        timestamp: Option<i32>,
     }
 
     impl Record<'_> {
@@ -405,7 +406,7 @@ mod utmp_file {
             buf.extend_from_slice(&self.exit.0.to_ne_bytes());
             buf.extend_from_slice(&self.exit.1.to_ne_bytes());
             buf.extend_from_slice(&0_i32.to_ne_bytes()); // ut_session
-            buf.extend_from_slice(&TIMESTAMP.to_ne_bytes()); // ut_tv.tv_sec
+            buf.extend_from_slice(&self.timestamp.unwrap_or(TIMESTAMP).to_ne_bytes()); // ut_tv.tv_sec
             buf.extend_from_slice(&0_i32.to_ne_bytes()); // ut_tv.tv_usec
             buf.extend_from_slice(&[0; 16]); // ut_addr_v6
             buf.extend_from_slice(&[0; 20]); // reserved
@@ -489,6 +490,31 @@ mod utmp_file {
             .args(args)
             .arg("utmp")
             .succeeds()
+    }
+
+    #[rstest::rstest]
+    #[case(1_782_907_200, "Jul  1 08:00")]
+    #[case(1_767_268_800, "Jan  1 07:00")]
+    #[uutests::wasi_ignore(NoLocaleData)]
+    fn login_time_uses_the_offset_at_login(#[case] timestamp: i32, #[case] expected: &str) {
+        let (at, mut command) = at_and_ucmd!();
+        at.write_bytes(
+            "utmp",
+            &Record {
+                kind: USER_PROCESS,
+                line: "pts/test",
+                user: "alice",
+                timestamp: Some(timestamp),
+                ..Record::default()
+            }
+            .to_bytes(),
+        );
+        command
+            .env("LC_ALL", "C")
+            .env("TZ", "EST5EDT,M3.2.0/2,M11.1.0/2")
+            .arg("utmp")
+            .succeeds()
+            .stdout_contains(expected);
     }
 
     #[test]
