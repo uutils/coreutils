@@ -7,13 +7,24 @@
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
-#[cfg(all(unix, not(feature = "feat_external_libstdbuf")))]
+#[cfg(all(
+    unix,
+    not(feature = "feat_external_libstdbuf"),
+    not(any(target_os = "linux", target_os = "android"))
+))]
 use std::fs::Permissions;
-#[cfg(all(unix, not(feature = "feat_external_libstdbuf")))]
+#[cfg(all(
+    unix,
+    not(feature = "feat_external_libstdbuf"),
+    not(any(target_os = "linux", target_os = "android"))
+))]
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process;
-#[cfg(not(feature = "feat_external_libstdbuf"))]
+#[cfg(all(
+    not(feature = "feat_external_libstdbuf"),
+    not(any(target_os = "linux", target_os = "android"))
+))]
 use tempfile::TempDir;
 use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
@@ -153,7 +164,11 @@ fn set_command_env(command: &mut process::Command, buffer_name: &str, buffer_typ
     }
 }
 
-#[cfg(not(feature = "feat_external_libstdbuf"))]
+/// Extract the embedded library into `tmp_dir` (non-Linux Unix / fallback).
+#[cfg(all(
+    not(feature = "feat_external_libstdbuf"),
+    not(any(target_os = "linux", target_os = "android"))
+))]
 fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
     use std::fs::OpenOptions;
     use std::io::Write;
@@ -171,6 +186,37 @@ fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
     file.write_all(STDBUF_INJECT)?;
 
     Ok((preload.to_owned(), inject_path))
+}
+
+/// On Linux, put the embedded library in a memfd so we can `exec` the command
+/// without leaving a temporary file behind (and so `killall stdbuf` hits the
+/// real command). Returns `(env_var, /proc/self/fd/N, owned_fd)`.
+#[cfg(all(
+    not(feature = "feat_external_libstdbuf"),
+    any(target_os = "linux", target_os = "android")
+))]
+fn get_preload_env_memfd() -> UResult<(String, PathBuf, std::os::fd::OwnedFd)> {
+    use rustix::fs::{MemfdFlags, SealFlags, fcntl_add_seals, memfd_create};
+    use std::io::Write;
+    use std::os::fd::{AsRawFd, OwnedFd};
+
+    let (preload, _) = preload_strings();
+    // No CLOEXEC: the fd must survive exec so LD_PRELOAD keeps working.
+    // ALLOW_SEALING so we can freeze the contents after writing (no tmpfs/
+    // umask race like #13939).
+    let fd = memfd_create("libstdbuf.so", MemfdFlags::ALLOW_SEALING)
+        .map_err(|e| UUsageError::new(125, format!("failed to create memfd for libstdbuf: {e}")))?;
+    let mut file = std::fs::File::from(fd);
+    file.write_all(STDBUF_INJECT)?;
+    file.flush()?;
+    let owned = OwnedFd::from(file);
+    // Best-effort: if sealing is unsupported, still preload the memfd.
+    let _ = fcntl_add_seals(
+        &owned,
+        SealFlags::SEAL | SealFlags::SHRINK | SealFlags::GROW | SealFlags::WRITE,
+    );
+    let path = PathBuf::from(format!("/proc/self/fd/{}", owned.as_raw_fd()));
+    Ok((preload.to_owned(), path, owned))
 }
 
 #[cfg(feature = "feat_external_libstdbuf")]
@@ -219,10 +265,17 @@ fn get_preload_env() -> UResult<(String, PathBuf)> {
 
 /// The exit status to report for a child that has already terminated.
 ///
-/// `exec()` would have let the shell observe the child's own fate directly.
-/// Now that a waiter sits in between, reproduce it: a child killed by a signal
-/// is reported as `128 + signal`, the convention shells use, instead of the 0
-/// that `ExitStatus::code()` yields for a signalled process.
+/// Used when we `spawn` and wait (Windows / non-Linux embedded). With `exec`,
+/// the shell observes the command's fate directly.
+#[cfg(any(
+    not(unix),
+    all(
+        unix,
+        not(feature = "feat_external_libstdbuf"),
+        not(target_os = "linux"),
+        not(target_os = "android")
+    )
+))]
 fn exit_status_code(status: process::ExitStatus) -> i32 {
     #[cfg(unix)]
     {
@@ -268,12 +321,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut command = process::Command::new(first_command);
     let command_params: Vec<&OsString> = command_values.collect();
 
-    // When embedding the library, extract it into a temporary directory that is
-    // private to this user (0700 on Unix, where the mode is applied at mkdir
-    // time so the directory is never world-accessible in between). The TempDir
-    // is kept alive until the child exits, so the loader can still find the
-    // library, and is removed afterwards instead of being leaked.
-    #[cfg(not(feature = "feat_external_libstdbuf"))]
+    // Resolve LD_PRELOAD / DYLD path to the libstdbuf library.
+    #[cfg(all(
+        not(feature = "feat_external_libstdbuf"),
+        any(target_os = "linux", target_os = "android")
+    ))]
+    let (preload_env, libstdbuf, _memfd) = get_preload_env_memfd()?;
+    #[cfg(all(
+        not(feature = "feat_external_libstdbuf"),
+        not(any(target_os = "linux", target_os = "android"))
+    ))]
     let (tmp_dir, preload_env, libstdbuf) = {
         let mut builder = tempfile::Builder::new();
         #[cfg(unix)]
@@ -304,39 +361,71 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     set_command_env(&mut command, "_STDBUF_E", &options.stderr);
     command.args(command_params);
 
-    // Windows has no exec(), so it has always waited on a child here; the
-    // library it preloads is Cygwin's, shipped by a separate package, and no
-    // temporary directory is involved.
-    //
-    // Unix used to exec(), which replaced this process before the TempDir
-    // destructor could run and leaked the extracted library on every
-    // invocation. Waiting on a child instead gives us somewhere to clean up
-    // from.
-    let e = match command.spawn() {
-        Ok(mut child) => {
-            let status = child.wait();
-            // The child is gone: the library is no longer needed, remove it.
-            #[cfg(not(feature = "feat_external_libstdbuf"))]
-            drop(tmp_dir);
-            let status = status.map_err(|err| {
-                USimpleError::new(
-                    1,
-                    translate!("stdbuf-error-failed-to-execute", "error" => strip_errno(&err)),
-                )
-            })?;
-            process::exit(exit_status_code(status));
-        }
-        Err(err) => err,
-    };
-    let exit_code = match e.kind() {
-        std::io::ErrorKind::PermissionDenied => 126,
-        std::io::ErrorKind::NotFound => 127,
-        _ => 1,
-    };
-    Err(USimpleError::new(
-        exit_code,
-        translate!("stdbuf-error-failed-to-execute", "error" => strip_errno(&e)),
-    ))
+    // Prefer exec on Unix when we do not need to clean up a TempDir afterwards
+    // (external libstdbuf, or Linux memfd). That way `killall stdbuf` cannot
+    // signal a long-lived waiter that is not the intended command (#15259).
+    #[cfg(all(
+        unix,
+        any(
+            feature = "feat_external_libstdbuf",
+            target_os = "linux",
+            target_os = "android"
+        )
+    ))]
+    {
+        use std::os::unix::process::CommandExt;
+        // Keep `_memfd` alive until exec replaces us (Linux embedded path).
+        let err = command.exec();
+        let exit_code = match err.kind() {
+            std::io::ErrorKind::PermissionDenied => 126,
+            std::io::ErrorKind::NotFound => 127,
+            _ => 1,
+        };
+        Err(USimpleError::new(
+            exit_code,
+            translate!("stdbuf-error-failed-to-execute", "error" => strip_errno(&err)),
+        ))
+    }
+
+    // Windows, and non-Linux Unix with an embedded library (TempDir cleanup).
+    #[cfg(any(
+        not(unix),
+        all(
+            unix,
+            not(feature = "feat_external_libstdbuf"),
+            not(target_os = "linux"),
+            not(target_os = "android")
+        )
+    ))]
+    {
+        let e = match command.spawn() {
+            Ok(mut child) => {
+                let status = child.wait();
+                #[cfg(all(
+                    not(feature = "feat_external_libstdbuf"),
+                    not(any(target_os = "linux", target_os = "android"))
+                ))]
+                drop(tmp_dir);
+                let status = status.map_err(|err| {
+                    USimpleError::new(
+                        1,
+                        translate!("stdbuf-error-failed-to-execute", "error" => strip_errno(&err)),
+                    )
+                })?;
+                process::exit(exit_status_code(status));
+            }
+            Err(err) => err,
+        };
+        let exit_code = match e.kind() {
+            std::io::ErrorKind::PermissionDenied => 126,
+            std::io::ErrorKind::NotFound => 127,
+            _ => 1,
+        };
+        Err(USimpleError::new(
+            exit_code,
+            translate!("stdbuf-error-failed-to-execute", "error" => strip_errno(&e)),
+        ))
+    }
 }
 
 pub fn uu_app() -> Command {
