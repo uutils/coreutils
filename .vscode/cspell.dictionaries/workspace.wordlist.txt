@@ -224,6 +224,11 @@ unistd
 # * vars/rustix
 fcntl_getfl
 
+# * vars/rustix_openpty
+Winsize
+ws_xpixel
+ws_ypixel
+
 # * vars/signals
 SIGPIPE
 
@@ -346,6 +351,7 @@ uutests
 uutils
 
 # * function names
+openpty
 sendfile
 execfn
 execveat
