@@ -70,7 +70,7 @@ enum InstallError {
     #[error("{}", translate!("install-error-dir-needs-arg", "util_name" => "install"))]
     DirNeedsArg,
 
-    #[error("{}", translate!("install-error-create-dir-failed", "path" => .0.quote()))]
+    #[error("{}", translate!("install-error-create-dir-failed", "path" => .0.quote(), "error" => strip_errno(.1)))]
     CreateDirFailed(PathBuf, #[source] std::io::Error),
 
     #[error("{}", translate!("install-error-chmod-failed", "path" => .0.quote()))]
@@ -834,6 +834,13 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                 if let Err(e) = parent_fd.unlink_at(filename.as_os_str(), false)
                     && e.kind() != std::io::ErrorKind::NotFound
                 {
+                    // GNU -D reports an inaccessible parent as "cannot create
+                    // directory 'parent': Permission denied" rather than a
+                    // failed unlink of the destination basename.
+                    if b.create_leading && e.kind() == std::io::ErrorKind::PermissionDenied {
+                        let parent = target.parent().unwrap_or(target.as_path()).to_path_buf();
+                        return Err(InstallError::CreateDirFailed(parent, e).into());
+                    }
                     show_error!(
                         "{}",
                         translate!("install-error-failed-to-remove", "path" => target.quote(), "error" => strip_errno(&e))
