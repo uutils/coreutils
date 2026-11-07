@@ -1953,11 +1953,9 @@ pub(crate) fn copy_attributes(
     })?;
 
     handle_preserve(mode, || -> CopyResult<()> {
-        // The `chmod()` system call that underlies the
-        // `fs::set_permissions()` call is unable to change the
-        // permissions of a symbolic link. In that case, we just
-        // do nothing, since every symbolic link has the same
-        // permissions.
+        // Leave a symlink alone, like GNU. `chmod_nofollow` alone is not
+        // enough: FreeBSD and macOS would change the link's own mode, and
+        // the fallback on other targets follows it.
         if !dest.is_symlink() {
             #[cfg(unix)]
             let source_perms = {
@@ -2771,13 +2769,9 @@ fn calculate_dest_permissions(
 
 /// Apply `permissions` to `dest` without following a symlink at the final component.
 ///
-/// Both callers test `dest` for being a symlink well before the chmod, so one swapped
-/// in inside that gap would otherwise redirect the mode onto the link's target. A
-/// symlink is the callers' "do nothing" case, so it is not an error; anything else is.
-#[cfg(all(
-    unix,
-    not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))
-))]
+/// The callers check `dest` well before the chmod, so a symlink swapped in meanwhile
+/// must not redirect the mode onto its target. Finding one is not an error.
+#[cfg(all(unix, not(target_os = "redox")))]
 fn chmod_nofollow(dest: &Path, permissions: &Permissions) -> io::Result<()> {
     let Err(e) = uucore::safe_traversal::chmod_nofollow(dest, permissions.mode()) else {
         return Ok(());
@@ -2794,10 +2788,7 @@ fn chmod_nofollow(dest: &Path, permissions: &Permissions) -> io::Result<()> {
     Err(e)
 }
 
-#[cfg(not(all(
-    unix,
-    not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))
-)))]
+#[cfg(not(all(unix, not(target_os = "redox"))))]
 fn chmod_nofollow(dest: &Path, permissions: &Permissions) -> io::Result<()> {
     fs::set_permissions(dest, permissions.clone())
 }
@@ -3020,8 +3011,8 @@ fn copy_file(
     //
     // Check the destination as it is now, not as it was before the copy:
     // copying a symlink without dereferencing recreates it as a symlink here,
-    // and chmod() would follow it and change the mode of the link target,
-    // which can live outside the copied tree. Conversely, --remove-destination
+    // which is left alone (see copy_attributes for why `chmod_nofollow` does
+    // not make this check redundant). Conversely, --remove-destination
     // replaces a symlink with a regular file that still needs its mode set.
     // With --link, dest shares the source's inode, so chmod would change the
     // mode of the source file as well.

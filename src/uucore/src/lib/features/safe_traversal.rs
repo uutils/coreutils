@@ -6,7 +6,7 @@
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
 // spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot EOVERFLOW chowned chmoded FDCWD
-// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat
+// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat ESTALE
 
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
@@ -459,7 +459,7 @@ impl DirFd {
     /// which passes `AT_FDCWD` as `dirfd`.
     fn chmod_at_fd(
         dirfd: BorrowedFd<'_>,
-        name_cstr: &core::ffi::CStr,
+        name_cstr: &CStr,
         mode: u32,
         symlink_behavior: SymlinkBehavior,
     ) -> io::Result<()> {
@@ -568,8 +568,7 @@ impl DirFd {
     /// `EOPNOTSUPP`, as `fchmodat(AT_SYMLINK_NOFOLLOW)` does.
     ///
     /// Without procfs (e.g. a bare chroot), a regular file or a directory is
-    /// reopened without following symlinks and changed with `fchmod`, once the
-    /// reopened fd is confirmed to be the pinned inode.
+    /// changed through [`DirFd::fchmod_reopened`] instead.
     #[cfg(target_os = "linux")]
     fn chmod_at_fd_via_opath(dirfd: BorrowedFd<'_>, name: &CStr, mode: u32) -> io::Result<()> {
         // Same reason as in chmod_at: rustix's linux_raw backend would make
@@ -609,21 +608,38 @@ impl DirFd {
         {
             return Err(err);
         }
-        let Ok(reopened) = openat(
-            dirfd,
-            name,
-            OFlag::O_RDONLY
-                | OFlag::O_NOFOLLOW
-                | OFlag::O_NONBLOCK
-                | OFlag::O_NOCTTY
-                | OFlag::O_CLOEXEC,
-            Mode::empty(),
-        ) else {
-            return Err(err);
-        };
+        Self::fchmod_reopened(dirfd, name, &pinned, mode).map_err(|_| err)
+    }
+
+    /// The procfs-less half of [`DirFd::chmod_at_fd_via_opath`]: reopen `name`
+    /// without following a symlink, check that it is still the `pinned` inode,
+    /// and `fchmod` it.
+    ///
+    /// A regular file without read permission (e.g. mode 0200) is reopened
+    /// write-only instead; opening it that way neither truncates nor changes it.
+    /// A directory has no such alternative, so one the caller cannot read
+    /// still fails.
+    #[cfg(target_os = "linux")]
+    fn fchmod_reopened(
+        dirfd: BorrowedFd<'_>,
+        name: &CStr,
+        pinned: &nix::sys::stat::FileStat,
+        mode: u32,
+    ) -> io::Result<()> {
+        let to_io = |e: nix::errno::Errno| io::Error::from_raw_os_error(e as i32);
+        let flags = OFlag::O_NOFOLLOW | OFlag::O_NONBLOCK | OFlag::O_NOCTTY | OFlag::O_CLOEXEC;
+
+        let reopened = match openat(dirfd, name, flags | OFlag::O_RDONLY, Mode::empty()) {
+            Err(nix::errno::Errno::EACCES) if pinned.st_mode & libc::S_IFMT == libc::S_IFREG => {
+                openat(dirfd, name, flags | OFlag::O_WRONLY, Mode::empty())
+            }
+            other => other,
+        }
+        .map_err(to_io)?;
+
         let current = nix::sys::stat::fstat(&reopened).map_err(to_io)?;
         if current.st_dev != pinned.st_dev || current.st_ino != pinned.st_ino {
-            return Err(err);
+            return Err(io::Error::from_raw_os_error(libc::ESTALE));
         }
         nix::sys::stat::fchmod(&reopened, Mode::from_bits_truncate(mode as libc::mode_t))
             .map_err(to_io)
@@ -698,11 +714,13 @@ impl DirFd {
 
 /// Change the mode of `path` without following a symlink at its final component.
 ///
-/// The `AT_FDCWD` counterpart of [`DirFd::chmod_at`]: where a no-follow
-/// `fchmodat` is available, the whole path goes to that one call, so it costs the
-/// same as the `chmod(2)` it replaces rather than also opening the parent
-/// directory. On Linux kernels without `fchmodat2`, it takes the same `O_PATH`
-/// fallback as [`DirFd::chmod_at`].
+/// The `AT_FDCWD` counterpart of [`DirFd::chmod_at`]: the whole path goes to a
+/// no-follow `fchmodat`, so the parent directory is not opened first. That is a
+/// single syscall only where the kernel has `fchmodat2` (Linux 6.6+) or a native
+/// no-follow `fchmodat` (the BSDs, macOS). On older Linux kernels it becomes an
+/// `O_PATH` open, an `fstat`, a chmod through `/proc/self/fd` and a close, done
+/// by glibc's `fchmodat` or, where the libc cannot, by the same fallback as
+/// [`DirFd::chmod_at`].
 pub fn chmod_nofollow(path: &Path, mode: u32) -> io::Result<()> {
     let path_cstr = CString::new(path.as_os_str().as_bytes())
         .map_err(|_| SafeTraversalError::PathContainsNull)?;
@@ -1839,6 +1857,88 @@ mod tests {
                 .mode()
                 & 0o777,
             0o640
+        );
+    }
+
+    /// Without procfs, the fallback reopens the file. One without read
+    /// permission must still get its mode.
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_fchmod_reopened_changes_a_write_only_file() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_dir = TempDir::new().unwrap();
+        let file = temp_dir.path().join("f");
+        fs::write(&file, b"x").unwrap();
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o200)).unwrap();
+
+        let dir = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        let pinned =
+            nix::sys::stat::fstatat(dir.as_fd(), c"f", nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW)
+                .unwrap();
+        DirFd::fchmod_reopened(dir.as_fd(), c"f", &pinned, 0o640).unwrap();
+
+        assert_eq!(
+            fs::metadata(&file).unwrap().permissions().mode() & 0o777,
+            0o640
+        );
+        assert_eq!(fs::read(&file).unwrap(), b"x");
+    }
+
+    /// The reopened file must be the inode that was pinned: one swapped in
+    /// under the same name is left alone.
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_fchmod_reopened_refuses_a_replaced_file() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_dir = TempDir::new().unwrap();
+        let file = temp_dir.path().join("f");
+        fs::write(&file, b"x").unwrap();
+        let dir = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        let pinned =
+            nix::sys::stat::fstatat(dir.as_fd(), c"f", nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW)
+                .unwrap();
+
+        // Keep the old inode alive so its number cannot be reused.
+        fs::rename(&file, temp_dir.path().join("old")).unwrap();
+        fs::write(&file, b"y").unwrap();
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o600)).unwrap();
+
+        let err = DirFd::fchmod_reopened(dir.as_fd(), c"f", &pinned, 0o777).unwrap_err();
+
+        assert_eq!(err.raw_os_error(), Some(libc::ESTALE));
+        assert_eq!(
+            fs::metadata(&file).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    }
+
+    /// A symlink swapped in under the pinned name is not followed.
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_fchmod_reopened_does_not_follow_a_symlink() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path().join("target");
+        fs::write(&target, b"x").unwrap();
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o600)).unwrap();
+        let dir = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        // Pin the target itself, then reach it through a symlink.
+        let pinned = nix::sys::stat::fstatat(
+            dir.as_fd(),
+            c"target",
+            nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW,
+        )
+        .unwrap();
+        symlink(&target, temp_dir.path().join("link")).unwrap();
+
+        DirFd::fchmod_reopened(dir.as_fd(), c"link", &pinned, 0o777).unwrap_err();
+
+        assert_eq!(
+            fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+            0o600
         );
     }
 

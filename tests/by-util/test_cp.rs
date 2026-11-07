@@ -7394,12 +7394,9 @@ fn test_cp_recursive_target_dir_symlink_still_allowed() {
 /// following `set_permissions`. Pin the modes it is responsible for, including
 /// the setuid and read-only cases, so the no-follow path cannot silently stop
 /// applying them.
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
-)]
 fn test_cp_preserve_mode_via_nofollow_chmod() {
     for mode in [0o644, 0o600, 0o755, 0o444, 0o4755] {
         let scene = TestScenario::new(util_name!());
@@ -7419,9 +7416,9 @@ fn test_cp_preserve_mode_via_nofollow_chmod() {
 
 /// Overwriting an existing destination keeps the destination's mode, not the
 /// source's — the other branch feeding the same chmod.
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: no chmod syscall")]
 fn test_cp_existing_dest_keeps_its_mode() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
