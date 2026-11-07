@@ -103,8 +103,13 @@ pub fn version_cmp(mut a: &[u8], mut b: &[u8]) -> Ordering {
 
     // Try to strip file extensions
     let (mut a, mut b) = match (remove_file_ending(a), remove_file_ending(b)) {
-        (a_stripped, b_stripped) if a_stripped == b_stripped => {
+        (a_stripped, b_stripped)
+            if a_stripped == b_stripped
+                || ((a_stripped, b_stripped) != (a, b)
+                    && version_cmp(a_stripped, b_stripped) == Ordering::Equal) =>
+        {
             // If both would be the same after stripping file extensions, don't strip them.
+            // "Same" means equal as versions, not only as bytes (`1.00` and `1.0`).
             (a, b)
         }
         stripped => stripped,
@@ -366,6 +371,27 @@ mod tests {
             version_cmp(b"a\0a", b"a"),
             Ordering::Greater,
             "NULL bytes are handled comparison"
+        );
+    }
+
+    #[test]
+    fn test_version_cmp_endings_decide_version_equal_stems() {
+        // The stems only differ in leading zeros, so they tie as versions and the
+        // endings must decide. Equal here makes `sort -V -u` drop one of the lines.
+        for (a, b) in [
+            (&b"tool-1.00.txt"[..], &b"tool-1.0.exe"[..]),
+            (b"tool-1.00", b"tool-1.0.exe"),
+            (b"01.txt", b"1.log"),
+            (b"setup0.txt", b"setup.exe"),
+            (b"lib-2.010.so", b"lib-2.10.a"),
+            (b"app-1.00.zip", b"app-1.0.tar.gz"),
+        ] {
+            assert_ne!(version_cmp(a, b), Ordering::Equal);
+            assert_eq!(version_cmp(a, b), version_cmp(b, a).reverse());
+        }
+        assert_eq!(
+            version_cmp(b"tool-1.00.txt", b"tool-1.0.exe"),
+            Ordering::Greater
         );
     }
 }
