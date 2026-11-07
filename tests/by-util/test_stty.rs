@@ -18,6 +18,16 @@ fn normalize_stderr(stderr: &str) -> String {
     re.replace_all(stderr, "Try 'stty --help'").to_string()
 }
 
+#[cfg(target_os = "linux")]
+fn run_with_tty(args: &str) -> std::process::Output {
+    let coreutils = uutests::util::get_tests_binary();
+    let cmd = format!("{coreutils} stty {args}");
+    std::process::Command::new("script")
+        .args(["-q", "-c", &cmd])
+        .output()
+        .expect("util-linux should be installed")
+}
+
 #[test]
 fn test_invalid_arg() {
     new_ucmd!()
@@ -468,7 +478,7 @@ fn grouped_flag_removal() {
 }
 
 #[test]
-#[ignore = "Fails because cargo test does not run in a tty"]
+#[cfg(target_os = "linux")] // needs util-linux
 fn baud_rate_validation() {
     // Test various baud rate formats
     #[cfg(any(
@@ -480,12 +490,14 @@ fn baud_rate_validation() {
     ))]
     {
         // BSD accepts numeric baud rates
-        new_ucmd!().args(&["9600"]).fails(); // Fails due to no TTY, but validates parsing
+        new_ucmd!().args(&["9600"]).succeeds(); // Fails due to no TTY, but validates parsing
     }
 
     // Test ispeed/ospeed with valid baud rates
-    new_ucmd!().args(&["ispeed", "9600"]).fails(); // Fails due to no TTY
-    new_ucmd!().args(&["ospeed", "115200"]).fails(); // Fails due to no TTY
+    assert!(run_with_tty("ispeed 9600").status.success());
+    assert!(run_with_tty("ispeed 115200").status.success());
+    // todo: support any baud rates on Linux
+    //assert!(run_with_tty("ispeed 51").status.success());
 }
 
 #[test]
