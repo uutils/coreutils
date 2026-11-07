@@ -47,7 +47,7 @@ enum FileNum {
     File2,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 enum SepSetting {
     /// Any single-byte separator.
     Byte(u8),
@@ -772,9 +772,29 @@ fn parse_print_settings(matches: &clap::ArgMatches) -> UResult<(bool, bool, bool
     Ok((print_joined, print_unpaired1, print_unpaired2))
 }
 
-fn get_and_parse_field_number(matches: &clap::ArgMatches, key: &str) -> UResult<Option<usize>> {
-    let value = matches.get_one::<String>(key).map(String::as_str);
-    parse_field_number_option(value)
+/// Reads `-j`, `-1` and `-2` in command-line order, like GNU.
+/// A repeated field option is accepted only when it names the same field again.
+fn parse_key_fields(matches: &clap::ArgMatches) -> UResult<(usize, usize)> {
+    let mut fields = Vec::new();
+    for key in ["j", "1", "2"] {
+        if let (Some(indices), Some(values)) =
+            (matches.indices_of(key), matches.get_many::<String>(key))
+        {
+            fields.extend(indices.zip(values).map(|(i, v)| (i, key, v)));
+        }
+    }
+    fields.sort_by_key(|&(i, _, _)| i);
+    let (mut key1, mut key2) = (None, None);
+    for (_, key, value) in fields {
+        let field = parse_field_number(value)?;
+        if key != "2" {
+            key1 = Some(get_field_number(key1, field)?);
+        }
+        if key != "1" {
+            key2 = Some(get_field_number(key2, field)?);
+        }
+    }
+    Ok((key1.unwrap_or(0), key2.unwrap_or(0)))
 }
 
 /// Parses the command-line arguments and constructs a `Settings` struct.
@@ -783,9 +803,7 @@ fn get_and_parse_field_number(matches: &clap::ArgMatches, key: &str) -> UResult<
 /// and returns a `Settings` struct that encapsulates the configuration for the program.
 #[allow(clippy::field_reassign_with_default)]
 fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Settings> {
-    let keys = get_and_parse_field_number(matches, "j")?;
-    let key1 = get_and_parse_field_number(matches, "1")?;
-    let key2 = get_and_parse_field_number(matches, "2")?;
+    let (key1, key2) = parse_key_fields(matches)?;
 
     let (print_joined, print_unpaired1, print_unpaired2) = parse_print_settings(matches)?;
 
@@ -797,10 +815,22 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
 
     settings.ignore_case = matches.get_flag("i");
     settings.numeric = matches.get_flag("n");
-    settings.key1 = get_field_number(keys, key1)?;
-    settings.key2 = get_field_number(keys, key2)?;
-    if let Some(value_os) = matches.get_one::<OsString>("t") {
-        settings.separator = parse_separator(value_os)?;
+    settings.key1 = key1;
+    settings.key2 = key2;
+    // A repeated -t is accepted only when every occurrence parses to the same tab.
+    let mut separator = None;
+    for value_os in matches.get_many::<OsString>("t").into_iter().flatten() {
+        let parsed = parse_separator(value_os)?;
+        if separator.as_ref().is_some_and(|old| *old != parsed) {
+            return Err(USimpleError::new(
+                1,
+                translate!("join-error-incompatible-tabs"),
+            ));
+        }
+        separator = Some(parsed);
+    }
+    if let Some(separator) = separator {
+        settings.separator = separator;
     }
     if let Some(formats) = matches.get_many::<String>("o") {
         let formats: Vec<&String> = formats.collect();
@@ -937,6 +967,7 @@ pub fn uu_app() -> Command {
         .about(translate!("join-about"))
         .override_usage(format_usage(&translate!("join-usage")))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new("a")
                 .short('a')
@@ -979,6 +1010,8 @@ pub fn uu_app() -> Command {
             Arg::new("j")
                 .short('j')
                 .value_name("FIELD")
+                .action(ArgAction::Append)
+                .num_args(1)
                 .allow_hyphen_values(true)
                 .help(translate!("join-help-j")),
         )
@@ -994,6 +1027,8 @@ pub fn uu_app() -> Command {
             Arg::new("t")
                 .short('t')
                 .value_name("CHAR")
+                .action(ArgAction::Append)
+                .num_args(1)
                 .value_parser(ValueParser::os_string())
                 .allow_hyphen_values(true)
                 .help(translate!("join-help-t")),
@@ -1002,6 +1037,8 @@ pub fn uu_app() -> Command {
             Arg::new("1")
                 .short('1')
                 .value_name("FIELD")
+                .action(ArgAction::Append)
+                .num_args(1)
                 .allow_hyphen_values(true)
                 .help(translate!("join-help-1")),
         )
@@ -1009,6 +1046,8 @@ pub fn uu_app() -> Command {
             Arg::new("2")
                 .short('2')
                 .value_name("FIELD")
+                .action(ArgAction::Append)
+                .num_args(1)
                 .allow_hyphen_values(true)
                 .help(translate!("join-help-2")),
         )
@@ -1192,21 +1231,18 @@ fn exec<Sep: Separator>(
 
 /// Check that keys for both files and for a particular file are not
 /// contradictory and return the key index.
-fn get_field_number(keys: Option<usize>, key: Option<usize>) -> UResult<usize> {
-    match (keys, key) {
-        // Show zero-based field numbers as one-based.
-        (Some(k1), Some(k2)) if k1 != k2 => Err(USimpleError::new(
+fn get_field_number(old: Option<usize>, new: usize) -> UResult<usize> {
+    match old {
+        // GNU prints the zero-based field numbers, the earlier one first.
+        Some(old) if old != new => Err(USimpleError::new(
             1,
-            // `parse_field_number` clamps an out-of-range field to `usize::MAX`,
-            // so the one-based increment has to saturate rather than overflow.
             translate!(
                 "join-error-incompatible-fields",
-                "field1" => k1.saturating_add(1),
-                "field2" => k2.saturating_add(1)
+                "field1" => old,
+                "field2" => new
             ),
         )),
-        (Some(k), _) | (_, Some(k)) => Ok(k),
-        (None, None) => Ok(0),
+        _ => Ok(new),
     }
 }
 
@@ -1231,12 +1267,5 @@ fn parse_file_number(value: &str) -> UResult<FileNum> {
             1,
             translate!("join-error-invalid-file-number-simple", "value" => value.quote()),
         )),
-    }
-}
-
-fn parse_field_number_option(value: Option<&str>) -> UResult<Option<usize>> {
-    match value {
-        None => Ok(None),
-        Some(val) => Ok(Some(parse_field_number(val)?)),
     }
 }
