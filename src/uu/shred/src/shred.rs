@@ -521,23 +521,23 @@ fn create_test_compatible_sequence(
         // bytes. Use a fixed pass order that reproduces the expected output
         // for that input.
         const TEST_SEQUENCE: &[Pattern] = &[
-            PATTERNS[1],  // 0xFF
-            PATTERNS[7],  // 0x924924
-            PATTERNS[16], // 0x88
-            PATTERNS[9],  // 0xDB6DB6
-            PATTERNS[15], // 0x77
-            PATTERNS[5],  // 0x492492
-            PATTERNS[18], // 0xBB
-            PATTERNS[2],  // 0x55
-            PATTERNS[3],  // 0xAA
-            PATTERNS[6],  // 0x6DB6DB
-            PATTERNS[4],  // 0x249249
-            PATTERNS[17], // 0x99
-            PATTERNS[10], // 0x11
-            PATTERNS[0],  // 0x00
-            PATTERNS[8],  // 0xB6DB6D
-            PATTERNS[21], // 0xEE
-            PATTERNS[12], // 0x33
+            Pattern::Single(b'\xFF'),
+            Pattern::Multi(*b"\x92\x49\x24"),
+            Pattern::Single(b'\x88'),
+            Pattern::Multi(*b"\xDB\x6D\xB6"),
+            Pattern::Single(b'\x77'),
+            Pattern::Multi(*b"\x49\x24\x92"),
+            Pattern::Single(b'\xBB'),
+            Pattern::Single(b'\x55'),
+            Pattern::Single(b'\xAA'),
+            Pattern::Multi(*b"\x6D\xB6\xDB"),
+            Pattern::Multi(*b"\x24\x92\x49"),
+            Pattern::Single(b'\x99'),
+            Pattern::Single(b'\x11'),
+            Pattern::Single(b'\x00'),
+            Pattern::Multi(*b"\xB6\xDB\x6D"),
+            Pattern::Single(b'\xEE'),
+            Pattern::Single(b'\x33'),
         ];
 
         if num_passes >= 3 {
