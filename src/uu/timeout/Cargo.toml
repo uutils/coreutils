@@ -23,6 +23,7 @@ uucore = { workspace = true, features = ["parser", "process", "signals"] }
 
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
 libc = { workspace = true }
+rlimit = { workspace = true }
 rustix = { workspace = true, features = ["process"] }
 
 [[bin]]
