@@ -184,6 +184,23 @@ fn test_mknod_invalid_mode() {
 }
 
 #[test]
+fn test_mknod_comma_separated_numeric_mode_is_rejected() {
+    // A numeric mode has to be the whole mode, so a node is not created when
+    // it is mixed into a clause list.
+    for mode in ["1,2", "u=r,2", "1,u=w"] {
+        let ts = TestScenario::new(util_name!());
+        ts.ucmd()
+            .args(&["-m", mode, "test_file", "p"])
+            .fails_with_code(1)
+            .stderr_contains("invalid mode");
+        assert!(
+            !ts.fixtures.plus("test_file").exists(),
+            "{mode} made the node"
+        );
+    }
+}
+
+#[test]
 fn test_mknod_mode_permissions() {
     for test_mode in [0o0666, 0o0000, 0o0444, 0o0004, 0o0040, 0o0400, 0o0644] {
         let ts = TestScenario::new(util_name!());

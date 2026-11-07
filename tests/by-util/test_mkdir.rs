@@ -1245,6 +1245,40 @@ mod diagnostics {
     }
 
     #[test]
+    fn test_comma_separated_mode_is_rejected() {
+        use std::os::unix::fs::PermissionsExt;
+
+        // A numeric mode has to be the whole mode, so it cannot share the
+        // list with anything else.
+        for mode in [
+            "1,2", "755,u+w", "+1,2", "u=r,2", "1,u=w", "u+w,755", "a=rx,700",
+        ] {
+            let ts = TestScenario::new(util_name!());
+            ts.ucmd()
+                .args(&["-m", mode, "some_dir"])
+                .fails_with_code(1)
+                .stderr_only(format!("mkdir: invalid mode '{mode}'\n"));
+            assert!(
+                !ts.fixtures.dir_exists("some_dir"),
+                "{mode} made the directory"
+            );
+        }
+
+        // A purely symbolic comma-separated mode is still valid.
+        let ts = TestScenario::new(util_name!());
+        ts.ucmd()
+            .args(&["-m", "u=rwx,g=rx,o=", "good_dir"])
+            .succeeds();
+        assert!(ts.fixtures.dir_exists("good_dir"));
+        let mode = std::fs::metadata(ts.fixtures.plus("good_dir"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o750);
+    }
+
+    #[test]
     fn test_terminal_message_quotes_control_character() {
         let result = new_ucmd!()
             .terminal_sim_stderr()
