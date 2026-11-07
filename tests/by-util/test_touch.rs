@@ -650,10 +650,6 @@ fn test_touch_set_date7() {
 
 #[uutests::wasi_ignore(NoTzdb)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: no tzdb; TZ env var is not honoured so timezone-dependent timestamps differ"
-)]
 fn test_touch_set_posix_locale_date_uses_system_timezone() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_posix_locale_date";
@@ -671,10 +667,7 @@ fn test_touch_set_posix_locale_date_uses_system_timezone() {
 }
 
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: no tzdb; TZ env var is not honoured so timezone-dependent timestamps differ"
-)]
+#[uutests::wasi_ignore(NoTzdb)]
 fn test_touch_set_minute_only_date_in_dst_gap_fails() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_minute_only_date_in_dst_gap";
@@ -688,10 +681,7 @@ fn test_touch_set_minute_only_date_in_dst_gap_fails() {
 }
 
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: no tzdb; TZ env var is not honoured so timezone-dependent timestamps differ"
-)]
+#[uutests::wasi_ignore(NoTzdb)]
 fn test_touch_set_date_in_dst_gap_fails() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_date_in_dst_gap";
@@ -706,10 +696,7 @@ fn test_touch_set_date_in_dst_gap_fails() {
 }
 
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: no tzdb; TZ env var is not honoured so timezone-dependent timestamps differ"
-)]
+#[uutests::wasi_ignore(NoTzdb)]
 fn test_touch_t_in_dst_fold_uses_earlier() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_t_in_dst_fold_uses_earlier";
@@ -729,10 +716,7 @@ fn test_touch_t_in_dst_fold_uses_earlier() {
 }
 
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: no tzdb; TZ env var is not honoured so timezone-dependent timestamps differ"
-)]
+#[uutests::wasi_ignore(NoTzdb)]
 fn test_touch_set_date_without_offset_uses_system_timezone() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_date_without_offset";
