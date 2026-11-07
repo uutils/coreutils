@@ -9,7 +9,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::io::{IsTerminal, Write};
-use uucore::error::{UResult, set_exit_code, strip_errno};
+use uucore::error::{UClapError, UResult, USimpleError, set_exit_code, strip_errno};
 use uucore::{format_usage, show_error, translate};
 
 mod options {
@@ -18,7 +18,16 @@ mod options {
 
 #[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
+    // A usage error exits with 2, but failing to write --help or --version is
+    // a write error like any other, which exits with 3.
+    let matches = uu_app().try_get_matches_from(args).map_err(|e| {
+        if e.exit_code() == 0 {
+            e.with_exit_code(3).into()
+        } else {
+            let formatter = uucore::clap_localization::ErrorFormatter::new("tty");
+            USimpleError::new(formatter.print_error(&e, 2), "")
+        }
+    })?;
 
     // Disable SIGPIPE so we can handle broken pipe errors gracefully
     // and exit with code 3 instead of being killed by the signal.

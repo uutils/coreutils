@@ -115,3 +115,18 @@ fn test_write_error() {
         .fails()
         .stderr_is("tty: No space left on device\n");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_help_write_error() {
+    for flag in ["--help", "--version"] {
+        let dev_full = std::fs::OpenOptions::new()
+            .write(true)
+            .open("/dev/full")
+            .unwrap();
+        new_ucmd!()
+            .arg(flag)
+            .set_stdout(dev_full)
+            .fails_with_code(3);
+    }
+}

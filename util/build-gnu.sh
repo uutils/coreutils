@@ -293,6 +293,9 @@ sed -i "s|# Independent of whether SELinux|return 0\n  #|g" init.cfg
 # making it too restrictive for us
 sed -i "s|\$PACKAGE_VERSION|[0-9]*|g" tests/rm/fail-2eperm.sh tests/mv/sticky-to-xpart.sh init.cfg
 
+# help-version.sh expects --version to print the GNU version number
+sed -i 's/test "x\$v" = "x\$VERSION"/test -n "$v"/' tests/help/help-version.sh
+
 # usage_vs_getopt.sh is heavily modified as it runs all the binaries
 # with the option -/ is used, clap is returning a better error than GNU's. Adjust the GNU test
 sed -i -e "s~  grep \" '\*/'\*\" err || framework_failure_~  grep \" '*-/'*\" err || framework_failure_~" tests/misc/usage_vs_getopt.sh
