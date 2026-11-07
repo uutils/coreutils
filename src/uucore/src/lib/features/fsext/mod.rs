@@ -310,9 +310,38 @@ fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
 
 #[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 fn is_remote_filesystem(dev_name: &str, fs_type: &str) -> bool {
-    dev_name.find(':').is_some()
-        || (dev_name.starts_with("//") && fs_type == "smbfs" || fs_type == "cifs")
+    // Remote filesystems can use a device name without a hostname.
+    // spell-checker:disable
+    dev_name.contains(':')
         || dev_name == "-hosts"
+        || matches!(
+            fs_type,
+            "acfs"
+                | "afs"
+                | "auristorfs"
+                | "autofs"
+                | "ceph"
+                | "cifs"
+                | "coda"
+                | "fhgfs"
+                | "gfs"
+                | "gfs2"
+                | "gpfs"
+                | "ibrix"
+                | "lustre"
+                | "ncpfs"
+                | "nfs"
+                | "nfs4"
+                | "ocfs2"
+                | "panfs"
+                | "smb"
+                | "smb2"
+                | "smb3"
+                | "smbfs"
+                | "snfs"
+                | "vxfs"
+        )
+    // spell-checker:enable
 }
 
 /// Parse the `major:minor` field of a mountinfo line like [`mount_dev_id`].
@@ -924,6 +953,36 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
+    fn test_remote_filesystem_device_names() {
+        // spell-checker:disable
+        for (device, fs_type, expected) in [
+            ("server:/export", "nfs", true),
+            ("server:/export", "unknown", true),
+            ("-hosts", "unknown", true),
+            ("//server/share", "smbfs", true),
+            ("//server/share", "unknown", false),
+            ("none", "nfs", true),
+            ("none", "smb3", true),
+            ("none", "ceph", true),
+            ("none", "gfs2", true),
+            ("none", "ext4", false),
+            ("none", "tmpfs", false),
+            ("none", "9p", false),
+            ("none", "virtiofs", false),
+            ("none", "fuse.sshfs", false),
+            ("server:/export", "fuse.sshfs", true),
+        ] {
+            assert_eq!(
+                is_remote_filesystem(device, fs_type),
+                expected,
+                "{device} {fs_type}"
+            );
+        }
+        // spell-checker:enable
+    }
 
     #[test]
     #[cfg(unix)]
