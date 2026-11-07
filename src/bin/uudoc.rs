@@ -386,10 +386,13 @@ fn main() -> io::Result<()> {
         };
         let p = format!("docs/src/utils/{usage_name}.md");
 
-        let fluent = if all_fluent.is_empty() {
-            None
-        } else {
-            Some(all_fluent.clone())
+        // The utility's own file goes first so its keys win over any
+        // same-named key defined by another crate.
+        let own_fluent = fs::read_to_string(format!("src/uu/{utils_name}/locales/en-US.ftl"));
+        let fluent = match own_fluent {
+            Ok(own) => Some(own + &all_fluent),
+            Err(_) if all_fluent.is_empty() => None,
+            Err(_) => Some(all_fluent.clone()),
         };
 
         if let Ok(f) = File::create(&p) {
@@ -415,16 +418,18 @@ fn main() -> io::Result<()> {
 /// Load and concatenate all `en-US.ftl` files from utility locale directories.
 /// This allows shared Fluent keys (e.g., `ck-common-help-*` in `checksum_common`)
 /// to be resolved when generating docs for utilities that depend on them.
+/// Directories are read in sorted order so the output does not depend on the
+/// file system's directory order.
 fn load_all_ftl(uu_dir: &str) -> String {
+    let mut dirs: Vec<_> = fs::read_dir(Path::new(uu_dir))
+        .map(|entries| entries.flatten().map(|entry| entry.path()).collect())
+        .unwrap_or_default();
+    dirs.sort();
     let mut combined = String::new();
-    let base = Path::new(uu_dir);
-    if let Ok(entries) = fs::read_dir(base) {
-        for entry in entries.flatten() {
-            let ftl_path = entry.path().join("locales/en-US.ftl");
-            if let Ok(content) = fs::read_to_string(&ftl_path) {
-                combined.push('\n');
-                combined.push_str(&content);
-            }
+    for dir in dirs {
+        if let Ok(content) = fs::read_to_string(dir.join("locales/en-US.ftl")) {
+            combined.push('\n');
+            combined.push_str(&content);
         }
     }
     combined
@@ -477,7 +482,9 @@ impl MDWriter<'_, '_> {
     /// Extract value for a Fluent key from the .ftl content
     fn extract_fluent_value(&self, key: &str) -> Option<String> {
         let content = self.fluent.as_ref()?;
-        let resource = parser::parse(content.clone()).ok()?;
+        // Keep the entries that parsed: one malformed file in the combined
+        // content must not hide the keys of every other utility.
+        let resource = parser::parse(content.as_str()).unwrap_or_else(|(resource, _)| resource);
 
         for entry in resource.body {
             if let Entry::Message(Message {
@@ -490,12 +497,11 @@ impl MDWriter<'_, '_> {
                 // Simple text extraction - just concatenate text elements
                 let mut result = String::new();
                 for element in elements {
-                    if let TextElement { ref value } = element {
+                    if let TextElement { value } = element {
                         result.push_str(value);
                     }
                     if let Placeable {
-                        expression:
-                            Expression::Inline(InlineExpression::StringLiteral { ref value }),
+                        expression: Expression::Inline(InlineExpression::StringLiteral { value }),
                     } = element
                     {
                         result.push_str(value);
@@ -929,7 +935,7 @@ mod tests {
         assert_eq!(result, expected);
     }
 
-    /// Helper to create an MDWriter with given FTL content for testing
+    /// Helper to create an `MDWriter` with given FTL content for testing
     fn make_test_writer(fluent_content: &str, fluent_key: &str) -> MDWriter<'static, 'static> {
         // Leak the HashMap to get a 'static reference (fine in tests)
         let platforms: &'static HashMap<&'static str, Vec<String>> =
@@ -988,6 +994,36 @@ mod tests {
         let writer = make_test_writer(ftl, "base32");
 
         assert_eq!(writer.extract_fluent_value("nonexistent-key"), None);
+    }
+
+    #[test]
+    fn test_extract_fluent_value_skips_malformed_entries() {
+        // A syntax error in one of the combined files must not hide the keys
+        // defined by the others.
+        let ftl = "base32-about = encode/decode data\n\
+                    broken-key has no equals sign\n\
+                    ck-common-help-check = read checksums from the FILEs and check them\n";
+        let writer = make_test_writer(ftl, "base32");
+
+        assert_eq!(
+            writer.extract_fluent_value("base32-about"),
+            Some("encode/decode data".to_string())
+        );
+        assert_eq!(
+            writer.extract_fluent_value("ck-common-help-check"),
+            Some("read checksums from the FILEs and check them".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_fluent_value_first_definition_wins() {
+        let ftl = "shared-key = from the utility\nshared-key = from another crate\n";
+        let writer = make_test_writer(ftl, "test");
+
+        assert_eq!(
+            writer.extract_fluent_value("shared-key"),
+            Some("from the utility".to_string())
+        );
     }
 
     #[test]
@@ -1141,8 +1177,8 @@ ck-common-help-status = don't output anything, status code shows success
     #[test]
     fn test_load_all_ftl_combines_files() {
         // Create a temporary directory structure mirroring src/uu/*/locales/
-        let tmp = std::env::temp_dir().join("uudoc_test_ftl");
-        let _ = fs::remove_dir_all(&tmp);
+        let dir = tempfile::tempdir().unwrap();
+        let tmp = dir.path();
 
         let util_a = tmp.join("util_a/locales");
         let util_b = tmp.join("util_b/locales");
@@ -1156,9 +1192,10 @@ ck-common-help-status = don't output anything, status code shows success
 
         assert!(combined.contains("key-a = value A"), "Missing key-a");
         assert!(combined.contains("key-b = value B"), "Missing key-b");
-
-        // Clean up
-        let _ = fs::remove_dir_all(&tmp);
+        assert!(
+            combined.find("key-a").unwrap() < combined.find("key-b").unwrap(),
+            "Files must be combined in sorted directory order"
+        );
     }
 
     #[test]
