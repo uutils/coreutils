@@ -17,7 +17,7 @@ use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
 use uucore::prompt_yes;
-use uucore::safe_traversal::{DirFd, FileStat, SymlinkBehavior};
+use uucore::safe_traversal::{DirFd, FileInfo, FileStat, OPEN_DIR_FDS, SymlinkBehavior};
 use uucore::show_error;
 use uucore::translate;
 
@@ -417,9 +417,6 @@ struct Frame {
     path_len: usize,
 }
 
-#[cfg(not(target_os = "redox"))]
-const OPEN_DIR_FDS: usize = 16;
-
 /// The path of the directory being walked, kept as raw bytes so that stepping
 /// into an entry and back out again is a truncation rather than a fresh
 /// allocation: a tree deep enough to need this walk has paths long enough that
@@ -448,19 +445,6 @@ fn is_subdir_empty(dir_fd: &DirFd, name: &OsStr) -> bool {
         .open_subdir(name, SymlinkBehavior::NoFollow)
         .and_then(|fd| fd.read_dir())
         .is_ok_and(|entries| entries.is_empty())
-}
-
-/// Reopen the parent of `child_fd` through "..", checking it is still the
-/// directory we descended from and not one swapped in mid-walk.
-#[cfg(not(target_os = "redox"))]
-fn reopen_parent(child_fd: &DirFd, dev: u64, ino: u64) -> std::io::Result<DirFd> {
-    let parent_fd = child_fd.open_subdir(OsStr::new(".."), SymlinkBehavior::NoFollow)?;
-    let info = parent_fd.metadata()?.file_info();
-    if info.device() == dev && info.inode() == ino {
-        Ok(parent_fd)
-    } else {
-        Err(std::io::Error::from(std::io::ErrorKind::NotFound))
-    }
 }
 
 #[cfg(not(target_os = "redox"))]
@@ -504,7 +488,10 @@ pub fn safe_remove_dir_recursive_impl(
             cur_fd = if let Some(fd) = parent.dir_fd {
                 fd
             } else {
-                match reopen_parent(&cur_fd, parent.dev, parent.ino) {
+                let reopened = cur_fd
+                    .reopen_parent(&FileInfo::new(parent.dev, parent.ino))
+                    .and_then(|fd| fd.ok_or_else(|| std::io::ErrorKind::NotFound.into()));
+                match reopened {
                     Ok(fd) => fd,
                     Err(e) => {
                         // Name the parent, not the entry we came up from.

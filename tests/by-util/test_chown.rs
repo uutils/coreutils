@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist groupname notexisting passgrp
+// spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist groupname notexisting passgrp NOFILE
 
 #[cfg(all(unix, not(target_os = "openbsd")))]
 use std::os::unix::fs::MetadataExt;
@@ -117,7 +117,7 @@ fn test_chown_only_owner() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains("failed to change");
+        .stdout_contains("failed to change");
 }
 
 #[test]
@@ -170,7 +170,7 @@ fn test_chown_only_owner_colon() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains("failed to change");
+        .stdout_contains("failed to change");
 }
 
 /// Test that `chown USER:` sets the group to USER's login group.
@@ -334,16 +334,37 @@ fn test_chown_only_colon() {
         .stderr_contains("invalid group: '..'");
 }
 
+/// With -v, a change that fails is reported on stdout.
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_chown_failed_stdout() {
-    // test chown root file.txt
+    use chown::entries::{gid2grp, uid2usr};
 
-    // TODO: implement once output "failed to change" to stdout is fixed
-    // expected:
-    // $ chown -v root file.txt 2>out_err ; echo $? ; cat out_err
-    // failed to change ownership of 'file.txt' from jhs to root
-    // 1
-    // chown: changing ownership of 'file.txt': Operation not permitted
+    // Root can give the files to root, so nothing fails.
+    if rustix::process::geteuid().is_root() {
+        println!("Test skipped: running as root");
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    at.mkdir("dir");
+    let user = uid2usr(rustix::process::geteuid().as_raw()).unwrap();
+    let root = uid2usr(0).unwrap();
+
+    for path in ["file", "dir"] {
+        let group = gid2grp(at.plus(path).metadata().unwrap().gid()).unwrap();
+        scene
+            .ucmd()
+            .args(&["-R", "-v", "root", path])
+            .fails_with_code(1)
+            .stdout_is(format!(
+                "failed to change ownership of '{path}' from {user}:{group} to {root}:{group}\n"
+            ))
+            .stderr_is(format!(
+                "chown: changing ownership of '{path}': Operation not permitted\n"
+            ));
+    }
 }
 
 #[test]
@@ -405,7 +426,7 @@ fn test_chown_owner_group() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains("failed to change");
+        .stdout_contains("failed to change");
 }
 
 #[test]
@@ -503,7 +524,7 @@ fn test_chown_only_group() {
             .arg("--verbose")
             .arg(file1)
             .fails()
-            .stderr_contains("failed to change");
+            .stdout_contains("failed to change");
     }
 }
 
@@ -538,7 +559,7 @@ fn test_chown_only_user_id() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains("failed to change");
+        .stdout_contains("failed to change");
 }
 
 #[test]
@@ -637,7 +658,7 @@ fn test_chown_only_group_id() {
             .arg("--verbose")
             .arg(file1)
             .fails()
-            .stderr_contains("failed to change");
+            .stdout_contains("failed to change");
     }
 }
 
@@ -721,7 +742,7 @@ fn test_chown_owner_group_id() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains("failed to change");
+        .stdout_contains("failed to change");
 }
 
 #[test]
@@ -763,7 +784,7 @@ fn test_chown_owner_group_mix() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains("failed to change");
+        .stdout_contains("failed to change");
 }
 
 #[test]
@@ -1057,39 +1078,27 @@ fn test_chown_symlink_cycles() {
 
     let result = scene.ucmd().arg("-vRL").arg(&user_name).arg("a").run();
 
-    if cfg!(target_vendor = "apple") || cfg!(target_os = "openbsd") || cfg!(target_os = "android") {
-        result
-            .stdout_contains(format!("ownership of 'a' retained as {user_name}"))
-            .stdout_contains(format!("ownership of 'a/b' retained as {user_name}"))
-            .stdout_contains(format!("ownership of 'a/b/c' retained as {user_name}"))
-            .stdout_does_not_contain(format!("ownership of 'a/b/c/d' retained as {user_name}"))
-            .stdout_does_not_contain(format!("ownership of 'a/b/c/d/b' retained as {user_name}"))
-            .stdout_does_not_contain(format!(
-                "ownership of 'a/b/c/d/b/c' retained as {user_name}"
-            ));
-    } else {
-        result
-            .success()
-            .stdout_contains(format!("ownership of 'a' retained as {user_name}"))
-            .stdout_contains(format!("ownership of 'a/b' retained as {user_name}"))
-            .stdout_contains(format!("ownership of 'a/b/c' retained as {user_name}"))
-            .stdout_contains(format!("ownership of 'a/b/c/d' retained as {user_name}"))
-            .stdout_does_not_contain(format!("ownership of 'a/b/c/d/b' retained as {user_name}"))
-            .stdout_does_not_contain(format!(
-                "ownership of 'a/b/c/d/b/c' retained as {user_name}"
-            ))
-            .stdout_does_not_contain(format!(
-                "ownership of 'a/b/c/d/b/c/d' retained as {user_name}"
-            ));
-    }
+    result
+        .success()
+        .stdout_contains(format!("ownership of 'a' retained as {user_name}"))
+        .stdout_contains(format!("ownership of 'a/b' retained as {user_name}"))
+        .stdout_contains(format!("ownership of 'a/b/c' retained as {user_name}"))
+        .stdout_contains(format!("ownership of 'a/b/c/d' retained as {user_name}"))
+        .stdout_does_not_contain(format!("ownership of 'a/b/c/d/b' retained as {user_name}"))
+        .stdout_does_not_contain(format!(
+            "ownership of 'a/b/c/d/b/c' retained as {user_name}"
+        ))
+        .stdout_does_not_contain(format!(
+            "ownership of 'a/b/c/d/b/c/d' retained as {user_name}"
+        ));
 }
 
 #[test]
 fn test_chown_symlink_two_links_same_dir() {
     // Two symlinks pointing at the same directory is NOT a cycle: neither link is
     // an ancestor of the other, so the target's contents must be visited through
-    // *both* links. This guards the backtracking in the linux safe-traversal
-    // cycle detection against false positives.
+    // *both* links. This guards the backtracking in the safe-traversal cycle
+    // detection against false positives.
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
@@ -1108,21 +1117,17 @@ fn test_chown_symlink_two_links_same_dir() {
 
     let result = scene.ucmd().arg("-vRL").arg(&user_name).arg("base").run();
 
-    // Only linux uses the safe-traversal cycle detection that this test exercises;
-    // other platforms fall back to walkdir with its own loop handling.
-    if cfg!(target_os = "linux") {
-        result
-            .success()
-            .stdout_contains(format!(
-                "ownership of 'base/realdir/file' retained as {user_name}"
-            ))
-            .stdout_contains(format!(
-                "ownership of 'base/link1/file' retained as {user_name}"
-            ))
-            .stdout_contains(format!(
-                "ownership of 'base/link2/file' retained as {user_name}"
-            ));
-    }
+    result
+        .success()
+        .stdout_contains(format!(
+            "ownership of 'base/realdir/file' retained as {user_name}"
+        ))
+        .stdout_contains(format!(
+            "ownership of 'base/link1/file' retained as {user_name}"
+        ))
+        .stdout_contains(format!(
+            "ownership of 'base/link2/file' retained as {user_name}"
+        ));
     // spell-checker:enable
 }
 
@@ -1167,4 +1172,736 @@ fn test_repeated_flags_are_accepted() {
             .arg("dir")
             .succeeds();
     }
+}
+
+/// Under `-R -H` a symlink met in the tree is changed through, so the file
+/// changed is not the link that was looked at: `--from` must not refuse it.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_from_changes_through_symlink_in_tree_under_big_h() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("target");
+    at.relative_symlink_file("../target", "dir/link");
+    let meta = at.plus("target").metadata().unwrap();
+    let owner = format!("{}:{}", meta.uid(), meta.gid());
+
+    let scene_names = TestScenario::new(util_name!());
+    let user = scene_names
+        .cmd("id")
+        .arg("-un")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .to_owned();
+    let group = scene_names
+        .cmd("id")
+        .arg("-gn")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .to_owned();
+
+    ucmd.args(&["-R", "-H", "-v", &format!("--from={owner}"), &owner, "dir"])
+        .succeeds()
+        .stdout_is(format!(
+            "ownership of 'dir' retained as {user}:{group}\nownership of 'dir/link' retained as {user}:{group}\n"
+        ));
+}
+
+/// A group of the current user other than the effective one, if any.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+fn other_group() -> Option<u32> {
+    let current = rustix::process::getegid().as_raw();
+    let other = rustix::process::getgroups()
+        .unwrap()
+        .into_iter()
+        .map(rustix::process::Gid::as_raw)
+        .find(|&group| group != current);
+    if other.is_none() {
+        println!("Test skipped: the user is in only one group");
+    }
+    other
+}
+
+/// `-R --from` changes the entries it judged, through a descriptor held on each.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_chown_recursive_from_changes_entries() {
+    let Some(other) = other_group() else {
+        return;
+    };
+    let current = rustix::process::getegid().as_raw();
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/file");
+
+    ucmd.args(&[
+        "-R",
+        &format!("--from=:{current}"),
+        &format!(":{other}"),
+        "dir",
+    ])
+    .succeeds()
+    .no_output();
+    for path in ["dir", "dir/file"] {
+        assert_eq!(at.plus(path).metadata().unwrap().gid(), other, "{path}");
+    }
+}
+
+/// With -h, `--from` on a symlink operand changes the link and not its target.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_from_changes_symlink_operand_itself() {
+    let Some(other) = other_group() else {
+        return;
+    };
+    let current = rustix::process::getegid().as_raw();
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("target");
+    at.relative_symlink_file("target", "link");
+
+    ucmd.args(&[
+        "-h",
+        &format!("--from=:{current}"),
+        &format!(":{other}"),
+        "link",
+    ])
+    .succeeds()
+    .no_output();
+    assert_eq!(at.plus("link").symlink_metadata().unwrap().gid(), other);
+    assert_eq!(at.plus("target").metadata().unwrap().gid(), current);
+}
+
+/// A directory operand that cannot be read is still changed without -R.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_unreadable_dir_operand() {
+    use chown::entries::{gid2grp, uid2usr};
+    use std::os::unix::fs::PermissionsExt;
+
+    // Root can read the directory anyway.
+    if rustix::process::geteuid().is_root() {
+        println!("Test skipped: running as root");
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    let meta = at.plus("dir").metadata().unwrap();
+    let owner = format!("{}:{}", meta.uid(), meta.gid());
+    let names = format!(
+        "{}:{}",
+        uid2usr(meta.uid()).unwrap(),
+        gid2grp(meta.gid()).unwrap()
+    );
+    std::fs::set_permissions(at.plus("dir"), std::fs::Permissions::from_mode(0o000)).unwrap();
+
+    for from in [None, Some(format!("--from={owner}"))] {
+        scene
+            .ucmd()
+            .arg("-v")
+            .args(from.as_slice())
+            .args(&[owner.as_str(), "dir"])
+            .succeeds()
+            .stdout_is(format!("ownership of 'dir' retained as {names}\n"));
+    }
+}
+
+/// Under `-R -H` a symlink met in the tree is followed for the change, so
+/// `--from` and -v concern the file it points to, not the link.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_from_judges_symlink_target_under_big_h() {
+    use chown::entries::{gid2grp, uid2usr};
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let Some((target_group, link_group)) = two_groups(&scene) else {
+        return;
+    };
+    let user = uid2usr(rustix::process::geteuid().as_raw()).unwrap();
+    let target_name = gid2grp(target_group).unwrap();
+    let link_name = gid2grp(link_group).unwrap();
+
+    at.mkdir("dir");
+    at.touch("target");
+    at.relative_symlink_file("../target", "dir/link");
+    std::os::unix::fs::chown(at.plus("dir"), None, Some(target_group)).unwrap();
+    std::os::unix::fs::chown(at.plus("target"), None, Some(target_group)).unwrap();
+    std::os::unix::fs::lchown(at.plus("dir/link"), None, Some(link_group)).unwrap();
+
+    // Only the link is in `link_group`: the target is left alone.
+    scene
+        .ucmd()
+        .args(&["-R", "-H", "-v", &format!("--from=:{link_group}")])
+        .arg(format!(":{link_group}"))
+        .arg("dir")
+        .succeeds()
+        .stdout_is(format!(
+            "ownership of 'dir' retained as {target_name}\n\
+             ownership of 'dir/link' retained as {target_name}\n"
+        ));
+    assert_eq!(at.plus("target").metadata().unwrap().gid(), target_group);
+
+    // The target is in `target_group`, so it is changed.
+    scene
+        .ucmd()
+        .args(&["-R", "-H", "-v", &format!("--from=:{target_group}")])
+        .arg(format!(":{link_group}"))
+        .arg("dir")
+        .succeeds()
+        .stdout_is(format!(
+            "changed ownership of 'dir' from {user}:{target_name} to {user}:{link_name}\n\
+             changed ownership of 'dir/link' from {user}:{target_name} to {user}:{link_name}\n"
+        ));
+    assert_eq!(at.plus("target").metadata().unwrap().gid(), link_group);
+}
+
+/// Under `-R -H` a symlink whose target cannot be stat'd is left alone and
+/// reported, whatever `--from` says about the link itself.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_dangling_symlink_under_big_h() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.relative_symlink_file("../nowhere", "dir/dangling");
+    let gid = at.plus("dir/dangling").symlink_metadata().unwrap().gid();
+
+    for from in [None, Some(format!("--from=:{gid}"))] {
+        scene
+            .ucmd()
+            .args(&["-R", "-H"])
+            .args(from.as_slice())
+            .arg(format!(":{gid}"))
+            .arg("dir")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_is("chown: cannot dereference 'dir/dangling': No such file or directory\n");
+    }
+
+    // -v says the change was not made, as for an operand.
+    let user = chown::entries::uid2usr(rustix::process::geteuid().as_raw()).unwrap();
+    let group = chown::entries::gid2grp(at.plus("dir").metadata().unwrap().gid()).unwrap();
+    scene
+        .ucmd()
+        .args(&["-R", "-H", "-v"])
+        .arg(format!(":{gid}"))
+        .arg("dir")
+        .fails_with_code(1)
+        .stdout_is(format!(
+            "ownership of 'dir' retained as {user}:{group}\n\
+             failed to change ownership of 'dir/dangling' to :{gid}\n"
+        ))
+        .stderr_is("chown: cannot dereference 'dir/dangling': No such file or directory\n");
+}
+
+/// Under -R -L -v, an entry that cannot be stat'd is reported as an operand
+/// would be.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_verbose_reports_dangling_symlink_under_big_l() {
+    use chown::entries::{gid2grp, uid2usr};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.relative_symlink_file("../nowhere", "dir/dangling");
+    let gid = at.plus("dir").metadata().unwrap().gid();
+    let user = uid2usr(rustix::process::geteuid().as_raw()).unwrap();
+    let group = gid2grp(gid).unwrap();
+
+    ucmd.args(&["-R", "-L", "-v"])
+        .arg(format!(":{gid}"))
+        .arg("dir")
+        .fails_with_code(1)
+        .stdout_is(format!(
+            "ownership of 'dir' retained as {user}:{group}\n\
+             failed to change ownership of 'dir/dangling' to :{gid}\n"
+        ))
+        .stderr_is("chown: cannot access 'dir/dangling': No such file or directory\n");
+}
+
+/// Under -R -v, a directory operand that cannot be read is left alone, whatever
+/// --from says, and -v says so. `from` offsets the group --from asks for.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[rstest::rstest]
+#[case::no_from(None)]
+#[case::matching_from(Some(0))]
+#[case::other_from(Some(1))]
+fn test_chown_verbose_reports_unreadable_dir_operand(#[case] from: Option<u32>) {
+    // Root can read the directory anyway.
+    if rustix::process::geteuid().is_root() {
+        println!("Test skipped: running as root");
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    let gid = at.plus("dir").metadata().unwrap().gid();
+    at.set_mode("dir", 0o000);
+    let from = from.map(|offset| format!("--from=:{}", gid.wrapping_add(offset)));
+
+    ucmd.args(&["-R", "-v"])
+        .args(from.as_slice())
+        .arg(format!(":{gid}"))
+        .arg("dir")
+        .fails_with_code(1)
+        .stdout_is(format!("failed to change ownership of 'dir' to :{gid}\n"))
+        .stderr_is("chown: cannot access 'dir': Permission denied\n");
+}
+
+/// With -R -v, a change below the operand that fails is reported as for the
+/// operand itself.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_recursive_verbose_reports_failed_entry() {
+    use chown::entries::{gid2grp, uid2usr};
+
+    // Root can give the files to root, so nothing fails.
+    if rustix::process::geteuid().is_root() {
+        println!("Test skipped: running as root");
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/file");
+    let user = uid2usr(rustix::process::geteuid().as_raw()).unwrap();
+    let root = uid2usr(0).unwrap();
+    let failed: String = ["dir", "dir/file"]
+        .map(|path| {
+            let group = gid2grp(at.plus(path).metadata().unwrap().gid()).unwrap();
+            format!(
+                "failed to change ownership of '{path}' from {user}:{group} to {root}:{group}\n"
+            )
+        })
+        .concat();
+
+    ucmd.args(&["-R", "-v", "root", "dir"])
+        .fails_with_code(1)
+        .stdout_is(failed)
+        .stderr_is(
+            "chown: changing ownership of 'dir': Operation not permitted\n\
+             chown: changing ownership of 'dir/file': Operation not permitted\n",
+        );
+}
+
+/// -R keeps only a few directories open, so a tree deeper than the descriptor
+/// limit is still walked in full, up and down.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_recursive_deeper_than_descriptor_limit() {
+    use rlimit::Resource;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let Some((_, second)) = two_groups(&scene) else {
+        return;
+    };
+    let mut dir = String::from("deep");
+    let mut files = Vec::new();
+    for _ in 0..100 {
+        at.mkdir(&dir);
+        at.touch(format!("{dir}/f"));
+        files.push(format!("{dir}/f"));
+        dir.push_str("/d");
+    }
+
+    scene
+        .ucmd()
+        .args(&["-R", &format!(":{second}"), "deep"])
+        .limit(Resource::NOFILE, 32, 32)
+        .succeeds()
+        .no_output();
+    for file in files {
+        assert_eq!(at.plus(&file).metadata().unwrap().gid(), second, "{file}");
+    }
+}
+
+/// Under -L, a directory reached through a symlink is left through the link,
+/// not through its "..", also below the directories kept open.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_recursive_big_l_deep_through_symlink() {
+    use rlimit::Resource;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let Some((_, second)) = two_groups(&scene) else {
+        return;
+    };
+    let mut files = Vec::new();
+    for top in ["deep", "other"] {
+        let mut dir = String::from(top);
+        for _ in 0..40 {
+            at.mkdir(&dir);
+            at.touch(format!("{dir}/f"));
+            files.push(format!("{dir}/f"));
+            dir.push_str("/d");
+        }
+    }
+    at.symlink_dir("other", format!("deep{}/link", "/d".repeat(30)));
+
+    scene
+        .ucmd()
+        .args(&["-R", "-L", &format!(":{second}"), "deep"])
+        .limit(Resource::NOFILE, 32, 32)
+        .succeeds()
+        .no_output();
+    for file in files {
+        assert_eq!(at.plus(&file).metadata().unwrap().gid(), second, "{file}");
+    }
+}
+
+/// Two different groups the caller is in, if there are.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+fn two_groups(scene: &TestScenario) -> Option<(u32, u32)> {
+    let groups: Vec<u32> = scene
+        .cmd("id")
+        .arg("-G")
+        .succeeds()
+        .stdout_str()
+        .split_whitespace()
+        .map(|g| g.parse().unwrap())
+        .collect();
+    let first = *groups.first()?;
+    let second = *groups.iter().find(|&&g| g != first)?;
+    Some((first, second))
+}
+
+/// -H and -L follow a symlinked directory operand also with -h: as with GNU,
+/// `--from` is judged on the directory and it is descended into.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[rstest::rstest]
+#[case::big_h("-H")]
+#[case::big_l("-L")]
+fn test_chown_h_judges_symlink_operand_on_its_target(#[case] opt: &str) {
+    use std::os::unix::fs::lchown;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let Some((first, second)) = two_groups(&scene) else {
+        return;
+    };
+    let gid = |path: &str| at.plus(path).symlink_metadata().unwrap().gid();
+    at.mkdir("dir");
+    at.touch("dir/file");
+    at.symlink_dir("dir", "link");
+    lchown(at.plus("dir"), None, Some(second)).unwrap();
+    lchown(at.plus("dir/file"), None, Some(first)).unwrap();
+    lchown(at.plus("link"), None, Some(first)).unwrap();
+
+    // The link is in `first`, but the directory is not: only the file is.
+    scene
+        .ucmd()
+        .args(&["-R", opt, "-h", &format!("--from=:{first}")])
+        .arg(format!(":{second}"))
+        .arg("link")
+        .succeeds()
+        .no_output();
+    assert_eq!(
+        (gid("link"), gid("dir"), gid("dir/file")),
+        (first, second, second)
+    );
+}
+
+/// -H and -L follow a symlinked directory operand also with -h, but as with
+/// GNU, the link itself is changed and not the directory.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[rstest::rstest]
+#[case::big_h("-H")]
+#[case::big_l("-L")]
+fn test_chown_h_changes_symlink_operand_itself(#[case] opt: &str) {
+    use std::os::unix::fs::lchown;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let Some((first, second)) = two_groups(&scene) else {
+        return;
+    };
+    let gid = |path: &str| at.plus(path).symlink_metadata().unwrap().gid();
+    at.mkdir("dir");
+    at.touch("dir/file");
+    at.symlink_dir("dir", "link");
+    for path in ["dir", "dir/file", "link"] {
+        lchown(at.plus(path), None, Some(second)).unwrap();
+    }
+
+    scene
+        .ucmd()
+        .args(&["-R", opt, "-h"])
+        .arg(format!(":{first}"))
+        .arg("link")
+        .succeeds()
+        .no_output();
+    assert_eq!(
+        (gid("link"), gid("dir"), gid("dir/file")),
+        (first, second, first)
+    );
+}
+
+/// With -h, -R -H and -L leave a link to a directory they cannot read alone,
+/// as GNU does, as they would the directory.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[rstest::rstest]
+#[case::big_h("-H")]
+#[case::big_l("-L")]
+fn test_chown_h_leaves_link_to_unreadable_dir(#[case] opt: &str) {
+    use std::os::unix::fs::lchown;
+
+    // Root can read the directory anyway.
+    if rustix::process::geteuid().is_root() {
+        println!("Test skipped: running as root");
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let Some((first, second)) = two_groups(&scene) else {
+        return;
+    };
+    at.mkdir("dir");
+    at.symlink_dir("dir", "link");
+    lchown(at.plus("link"), None, Some(first)).unwrap();
+    at.set_mode("dir", 0o000);
+
+    scene
+        .ucmd()
+        .args(&["-R", opt, "-h", "-v"])
+        .arg(format!(":{second}"))
+        .arg("link")
+        .fails_with_code(1)
+        .stdout_is(format!(
+            "failed to change ownership of 'link' to :{second}\n"
+        ))
+        .stderr_is("chown: cannot access 'link': Permission denied\n");
+    assert_eq!(at.plus("link").symlink_metadata().unwrap().gid(), first);
+}
+
+/// Under -L -h a symlink met in the tree is followed for the descent but, as
+/// with GNU, changed itself, also with `--from`.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[rstest::rstest]
+#[case::all(false)]
+#[case::from(true)]
+fn test_chown_big_l_with_h_changes_symlinks_in_tree(#[case] with_from: bool) {
+    use std::os::unix::fs::lchown;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let Some((first, second)) = two_groups(&scene) else {
+        return;
+    };
+    let gid = |path: &str| at.plus(path).symlink_metadata().unwrap().gid();
+    at.mkdir("dir");
+    at.mkdir("other");
+    at.touch("other/file");
+    at.symlink_dir("other", "dir/link");
+    for path in ["dir", "dir/link", "other", "other/file"] {
+        lchown(at.plus(path), None, Some(first)).unwrap();
+    }
+    let from = with_from.then(|| format!("--from=:{first}"));
+
+    scene
+        .ucmd()
+        .args(&["-R", "-L", "-h"])
+        .args(from.as_slice())
+        .arg(format!(":{second}"))
+        .arg("dir")
+        .succeeds()
+        .no_output();
+    assert_eq!(
+        (gid("dir/link"), gid("other"), gid("other/file")),
+        (second, first, second)
+    );
+}
+
+/// Under -L -h, `--from` judges a symlink met in the tree by its target, as GNU
+/// does, and then changes the link.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_big_l_with_h_judges_from_on_link_target() {
+    use std::os::unix::fs::lchown;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let Some((first, second)) = two_groups(&scene) else {
+        return;
+    };
+    at.mkdir("dir");
+    at.mkdir("other");
+    at.symlink_dir("other", "dir/link");
+    for path in ["dir", "other"] {
+        lchown(at.plus(path), None, Some(first)).unwrap();
+    }
+    lchown(at.plus("dir/link"), None, Some(second)).unwrap();
+
+    scene
+        .ucmd()
+        .args(&["-R", "-L", "-h", &format!("--from=:{first}")])
+        .arg(format!(":{first}"))
+        .arg("dir")
+        .succeeds()
+        .no_output();
+    assert_eq!(at.plus("dir/link").symlink_metadata().unwrap().gid(), first);
+}
+
+/// With -h, -H and -L judge a symlink operand on its target but change the
+/// link: a group not asked for stays as the link has it.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[rstest::rstest]
+#[case::big_h("-H")]
+#[case::big_l("-L")]
+fn test_chown_h_keeps_unchanged_group_of_symlink_operand(#[case] opt: &str) {
+    use std::os::unix::fs::lchown;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let Some((first, second)) = two_groups(&scene) else {
+        return;
+    };
+    at.touch("target");
+    at.symlink_file("target", "link");
+    lchown(at.plus("target"), None, Some(first)).unwrap();
+    lchown(at.plus("link"), None, Some(second)).unwrap();
+    let uid = rustix::process::geteuid().as_raw();
+
+    scene
+        .ucmd()
+        .args(&["-R", opt, "-h", &uid.to_string(), "link"])
+        .succeeds()
+        .no_output();
+    assert_eq!(at.plus("link").symlink_metadata().unwrap().gid(), second);
+}
+
+/// With -h, -H and -L judge a dangling symlink operand, as GNU does, on the
+/// link itself and change it.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[rstest::rstest]
+#[case::big_h("-H")]
+#[case::big_l("-L")]
+fn test_chown_h_changes_dangling_symlink_operand(#[case] opt: &str) {
+    use std::os::unix::fs::lchown;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let Some((first, second)) = two_groups(&scene) else {
+        return;
+    };
+    at.relative_symlink_file("nowhere", "link");
+    lchown(at.plus("link"), None, Some(first)).unwrap();
+
+    scene
+        .ucmd()
+        .args(&["-R", opt, "-h", &format!("--from=:{first}")])
+        .arg(format!(":{second}"))
+        .arg("link")
+        .succeeds()
+        .no_output();
+    assert_eq!(at.plus("link").symlink_metadata().unwrap().gid(), second);
+}
+
+/// With -h, -H and -L fail on a symlink operand that cannot be followed for
+/// another reason than a missing target, as GNU does.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[rstest::rstest]
+#[case::big_h("-H")]
+#[case::big_l("-L")]
+fn test_chown_h_fails_on_symlink_loop_operand(#[case] opt: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.relative_symlink_file("loop", "loop");
+    let gid = at.plus("loop").symlink_metadata().unwrap().gid();
+
+    #[cfg(all(not(target_env = "musl"), not(target_os = "android")))]
+    let expected = "chown: cannot access 'loop': Too many levels of symbolic links\n";
+    #[cfg(target_os = "android")]
+    let expected = "chown: cannot access 'loop': Too many symbolic links encountered\n";
+    #[cfg(target_env = "musl")]
+    let expected = "chown: cannot access 'loop': Symbolic link loop\n";
+
+    ucmd.args(&["-R", opt, "-h"])
+        .arg(format!(":{gid}"))
+        .arg("loop")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is(expected);
+}
+
+/// With --from, the file is held open before it is changed: that must neither
+/// wait for a writer on a FIFO nor fail on a file the caller cannot read.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[rstest::rstest]
+#[case::operands(&["dir/fifo", "dir/file"], &["dir/fifo", "dir/file"])]
+#[case::recursive(&["-R", "dir"], &["dir", "dir/fifo", "dir/file"])]
+fn test_chown_from_fifo_and_unreadable_file(#[case] args: &[&str], #[case] paths: &[&str]) {
+    use chown::entries::{gid2grp, uid2usr};
+
+    // Root can read the file anyway.
+    if rustix::process::geteuid().is_root() {
+        println!("Test skipped: running as root");
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.mkfifo("dir/fifo");
+    at.touch("dir/file");
+    at.set_mode("dir/file", 0o000);
+    let meta = at.plus("dir").metadata().unwrap();
+    let owner = format!("{}:{}", meta.uid(), meta.gid());
+    let names = format!(
+        "{}:{}",
+        uid2usr(meta.uid()).unwrap(),
+        gid2grp(meta.gid()).unwrap()
+    );
+
+    let result = ucmd
+        .args(&["-v", &format!("--from={owner}"), &owner])
+        .args(args)
+        .succeeds();
+    // -R lists the entries in directory order; `paths` is sorted.
+    let mut lines: Vec<&str> = result.stdout_str().lines().collect();
+    lines.sort_unstable();
+    let expected: Vec<String> = paths
+        .iter()
+        .map(|path| format!("ownership of '{path}' retained as {names}"))
+        .collect();
+    assert_eq!(lines, expected);
+}
+
+/// Under -R, where GNU opens no entry, a file the system refuses to open is
+/// changed by name. As an operand with --from it fails, as with GNU.
+#[cfg(target_vendor = "apple")]
+#[test]
+fn test_chown_from_file_refused_by_sandbox() {
+    let scene = TestScenario::new(util_name!());
+    // A process already inside a sandbox cannot apply another profile.
+    let probe = ["-p", "(version 1)(allow default)", "true"];
+    if !scene.cmd("sandbox-exec").args(&probe).run().succeeded() {
+        println!("Test skipped: sandbox-exec cannot apply a profile here");
+        return;
+    }
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.touch("dir/file");
+    let meta = at.plus("dir/file").metadata().unwrap();
+    let owner = format!("{}:{}", meta.uid(), meta.gid());
+    let from = format!("--from={owner}");
+    // Reading the file fails with EPERM, as under TCC or a sandbox.
+    let file = at.plus("dir/file").canonicalize().unwrap();
+    let profile = format!("(version 1)(allow default)(deny file-read-data (literal {file:?}))");
+    let run_denied = |args: &[&str]| {
+        scene
+            .cmd("sandbox-exec")
+            .args(&["-p", &profile])
+            .arg(&scene.bin_path)
+            .arg("chown")
+            .args(args)
+            .run()
+    };
+
+    run_denied(&["-R", &from, &owner, "dir"])
+        .success()
+        .no_output();
+    run_denied(&[&from, &owner, "dir/file"])
+        .code_is(1)
+        .no_stdout()
+        .stderr_is("chown: changing ownership of 'dir/file': Operation not permitted\n");
 }

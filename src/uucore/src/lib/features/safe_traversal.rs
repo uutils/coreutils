@@ -6,7 +6,7 @@
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
 // spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot EOVERFLOW chowned chmoded
-// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat
+// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat FDCWD
 
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
@@ -247,6 +247,10 @@ const SEARCH_ONLY: Option<OFlag> = Some(OFlag::O_SEARCH);
 #[cfg(not(any(has_o_path, has_o_search)))]
 const SEARCH_ONLY: Option<OFlag> = None;
 
+/// How many directory descriptors a recursive walk keeps open; directories
+/// further up get theirs back through [`DirFd::reopen_parent`].
+pub const OPEN_DIR_FDS: usize = 16;
+
 impl DirFd {
     /// Open a directory and return a file descriptor
     ///
@@ -324,6 +328,23 @@ impl DirFd {
             }
         })?;
         Ok(Self { fd })
+    }
+
+    /// Reopen this directory's parent through "..": `None` if it is not the
+    /// directory `parent` identifies, but one swapped in since.
+    pub fn reopen_parent(&self, parent: &FileInfo) -> io::Result<Option<Self>> {
+        let fd = self.open_subdir(OsStr::new(".."), SymlinkBehavior::NoFollow)?;
+        let same = fd.metadata()?.file_info() == *parent;
+        Ok(same.then_some(fd))
+    }
+
+    /// Hold the file `name` relative to this directory, see [`PinnedFile`]
+    pub fn pin_at(
+        &self,
+        name: &OsStr,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<PinnedFile> {
+        PinnedFile::open_at(&self.fd, name, symlink_behavior)
     }
 
     /// Get raw stat data for a file relative to this directory
@@ -556,17 +577,11 @@ impl DirFd {
         // these raw syscalls, invisible to LD_PRELOAD wrappers.
         use std::os::unix::fs::PermissionsExt;
 
-        let fd = openat(
-            &self.fd,
-            name,
-            OFlag::O_PATH | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
-            Mode::empty(),
-        )
-        .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        let file = PinnedFile::open_at(&self.fd, name, SymlinkBehavior::NoFollow)?;
 
         // set_permissions goes through the libc chmod() symbol.
         fs::set_permissions(
-            format!("/proc/self/fd/{}", fd.as_raw_fd()),
+            format!("/proc/self/fd/{}", file.fd.as_raw_fd()),
             fs::Permissions::from_mode(mode),
         )
     }
@@ -802,6 +817,78 @@ impl AsRawFd for DirFd {
 impl AsFd for DirFd {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
+    }
+}
+
+/// Flags that open a file only to hold on to it, without reading it.
+fn pin_flags(symlink_behavior: SymlinkBehavior) -> OFlag {
+    // O_PATH needs no read access and opens no device; elsewhere the file is
+    // opened for reading, O_NONBLOCK keeping a FIFO from waiting for a writer.
+    #[cfg(has_o_path)]
+    let flags = OFlag::O_PATH;
+    #[cfg(not(has_o_path))]
+    let flags = OFlag::O_RDONLY | OFlag::O_NONBLOCK | OFlag::O_NOCTTY | LARGEFILE;
+    // With O_PATH, O_NOFOLLOW holds a symlink itself, as O_SYMLINK does on
+    // Apple systems. Elsewhere O_NOFOLLOW refuses one.
+    #[cfg(has_o_symlink)]
+    let nofollow = OFlag::from_bits_retain(libc::O_SYMLINK);
+    #[cfg(not(has_o_symlink))]
+    let nofollow = OFlag::O_NOFOLLOW;
+    let nofollow = if symlink_behavior.should_follow() {
+        OFlag::empty()
+    } else {
+        nofollow
+    };
+    flags | nofollow | OFlag::O_CLOEXEC
+}
+
+/// Whether [`PinnedFile`] can hold a symlink itself, rather than refusing it
+/// under [`SymlinkBehavior::NoFollow`].
+pub(crate) const CAN_PIN_SYMLINKS: bool = cfg!(any(has_o_path, has_o_symlink));
+
+/// Whether [`PinnedFile`] can hold a FIFO, socket or device node: opening one for
+/// reading may fail, act on the device or let a writer waiting on a FIFO go on.
+pub(crate) const CAN_PIN_SPECIAL_FILES: bool = cfg!(has_o_path);
+
+/// A file held open so that what is learned about it and done to it concern the
+/// same file; `CAN_PIN_SYMLINKS` and `CAN_PIN_SPECIAL_FILES` say what can't be.
+pub struct PinnedFile {
+    fd: OwnedFd,
+}
+
+impl PinnedFile {
+    /// Hold the file at `path`
+    pub fn open(path: &Path, symlink_behavior: SymlinkBehavior) -> io::Result<Self> {
+        Self::open_at(nix::fcntl::AT_FDCWD, path, symlink_behavior)
+    }
+
+    fn open_at<P: ?Sized + nix::NixPath>(
+        dir: impl AsFd,
+        path: &P,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<Self> {
+        let fd = openat(dir, path, pin_flags(symlink_behavior), Mode::empty())
+            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        Ok(Self { fd })
+    }
+
+    /// Get metadata for the held file
+    pub fn metadata(&self) -> io::Result<Metadata> {
+        fstat_fd(&self.fd).map(Metadata::from_stat)
+    }
+
+    /// Change ownership of the held file
+    /// Use uid/gid of None to keep the current value
+    pub fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> io::Result<()> {
+        let uid = uid.map(Uid::from_raw);
+        let gid = gid.map(Gid::from_raw);
+        // fchown refuses an O_PATH descriptor; an empty path names the
+        // descriptor itself.
+        #[cfg(has_o_path)]
+        let result = fchownat(&self.fd, c"", uid, gid, nix::fcntl::AtFlags::AT_EMPTY_PATH);
+        #[cfg(not(has_o_path))]
+        let result = fchown(&self.fd, uid, gid);
+        result.map_err(|e| io::Error::from_raw_os_error(e as i32))
     }
 }
 
@@ -1684,6 +1771,28 @@ mod tests {
         assert!(target.join("subdir").exists());
     }
 
+    /// A walk that reopens a parent through ".." must notice that the directory
+    /// it descended into was moved elsewhere meanwhile.
+    #[test]
+    fn test_reopen_parent_refuses_moved_child() {
+        let temp_dir = TempDir::new().unwrap();
+        let (parent, other) = (
+            temp_dir.path().join("parent"),
+            temp_dir.path().join("other"),
+        );
+        fs::create_dir_all(parent.join("child")).unwrap();
+        fs::create_dir(&other).unwrap();
+        let info = DirFd::open(&parent, SymlinkBehavior::NoFollow)
+            .and_then(|dir| dir.metadata())
+            .unwrap()
+            .file_info();
+        let child = DirFd::open(&parent.join("child"), SymlinkBehavior::NoFollow).unwrap();
+        assert!(child.reopen_parent(&info).unwrap().is_some());
+
+        fs::rename(parent.join("child"), other.join("child")).unwrap();
+        assert!(child.reopen_parent(&info).unwrap().is_none());
+    }
+
     #[test]
     fn test_open_subdir_nofollow_fails_on_symlink() {
         let temp_dir = TempDir::new().unwrap();
@@ -1757,5 +1866,25 @@ mod tests {
         // With follow_symlinks=false, should fail
         let result_nofollow = DirFd::open(&link, SymlinkBehavior::NoFollow);
         assert!(result_nofollow.is_err());
+    }
+
+    /// Under `NoFollow` a symlink itself is held on Linux, Android and Apple
+    /// systems and refused elsewhere, never the file it points to.
+    #[test]
+    fn test_pin_nofollow_holds_symlink_itself() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path().join("target");
+        fs::write(&target, "").unwrap();
+        let link = temp_dir.path().join("link");
+        symlink(&target, &link).unwrap();
+
+        let held = PinnedFile::open(&link, SymlinkBehavior::NoFollow);
+        if cfg!(any(has_o_path, has_o_symlink)) {
+            assert!(held.unwrap().metadata().unwrap().file_type().is_symlink());
+        } else {
+            assert!(held.is_err());
+        }
+        let held = PinnedFile::open(&link, SymlinkBehavior::Follow).unwrap();
+        assert!(!held.metadata().unwrap().file_type().is_symlink());
     }
 }

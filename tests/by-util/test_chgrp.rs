@@ -209,7 +209,8 @@ fn test_reference() {
             .arg("/etc")
             .fails()
             // group name can differ, so just check the first part of the message
-            .stderr_contains("chgrp: changing group of '/etc': Operation not permitted\nfailed to change group of '/etc' from ");
+            .stderr_contains("chgrp: changing group of '/etc': Operation not permitted\n")
+            .stdout_contains("failed to change group of '/etc' from ");
     }
 }
 
@@ -222,7 +223,8 @@ fn test_reference() {
         .arg("/etc")
         .fails()
         // group name can differ, so just check the first part of the message
-        .stderr_contains("chgrp: changing group of '/etc': Operation not permitted\nfailed to change group of '/etc' from ");
+        .stderr_contains("chgrp: changing group of '/etc': Operation not permitted\n")
+        .stdout_contains("failed to change group of '/etc' from ");
 }
 
 #[test]
@@ -708,4 +710,57 @@ fn test_repeated_flags_are_accepted() {
         .arg(getegid().to_string())
         .arg("dir")
         .succeeds();
+}
+
+/// Under -R -L -v, an entry that cannot be stat'd gets chgrp's failure line.
+#[cfg(not(target_os = "openbsd"))]
+#[test]
+fn test_chgrp_verbose_reports_dangling_symlink_under_big_l() {
+    use std::os::unix::fs::MetadataExt;
+    use uucore::entries::gid2grp;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.relative_symlink_file("../nowhere", "dir/dangling");
+    let group = gid2grp(at.plus("dir").metadata().unwrap().gid()).unwrap();
+
+    ucmd.args(&["-R", "-L", "-v", &group, "dir"])
+        .fails_with_code(1)
+        .stdout_is(format!(
+            "group of 'dir' retained as {group}\n\
+             failed to change group of 'dir/dangling' to {group}\n"
+        ))
+        .stderr_is("chgrp: cannot access 'dir/dangling': No such file or directory\n");
+}
+
+/// With -R -v, a change below the operand that fails is reported as for the
+/// operand itself.
+#[cfg(not(target_os = "openbsd"))]
+#[test]
+fn test_chgrp_recursive_verbose_reports_failed_entry() {
+    use std::os::unix::fs::MetadataExt;
+    use uucore::entries::gid2grp;
+
+    // Root can give the files to any group, so nothing fails.
+    if rustix::process::geteuid().is_root() {
+        println!("Test skipped: running as root");
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/file");
+    let failed: String = ["dir", "dir/file"]
+        .map(|path| {
+            let group = gid2grp(at.plus(path).metadata().unwrap().gid()).unwrap();
+            format!("failed to change group of '{path}' from {group} to bin\n")
+        })
+        .concat();
+
+    ucmd.args(&["-R", "-v", "bin", "dir"])
+        .fails_with_code(1)
+        .stdout_is(failed)
+        .stderr_is(
+            "chgrp: changing group of 'dir': Operation not permitted\n\
+             chgrp: changing group of 'dir/file': Operation not permitted\n",
+        );
 }
