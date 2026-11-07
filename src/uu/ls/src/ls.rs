@@ -858,10 +858,21 @@ impl<'a> PathData<'a> {
             )
         };
 
+        let md: OnceCell<Option<Metadata>> = OnceCell::new();
         let must_dereference = match &config.dereference {
             Dereference::All => true,
             Dereference::Args => command_line,
-            Dereference::DirArgs => command_line && p_buf.metadata().is_ok_and(|m| m.is_dir()),
+            Dereference::DirArgs => {
+                if command_line
+                    && let Ok(metadata) = p_buf.metadata()
+                    && metadata.is_dir()
+                {
+                    md.get_or_init(|| Some(metadata));
+                    true
+                } else {
+                    false
+                }
+            }
             Dereference::None => false,
         };
 
@@ -872,7 +883,6 @@ impl<'a> PathData<'a> {
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
         let ft: OnceCell<Option<FileType>> = OnceCell::new();
-        let md: OnceCell<Option<Metadata>> = OnceCell::new();
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
         let de: RefCell<Option<DirEntry>> = if let Some(de) = dir_entry {
@@ -964,8 +974,13 @@ impl<'a> PathData<'a> {
     }
 
     fn security_context(&self, config: &Config) -> &str {
-        self.security_context
-            .get_or_init(|| get_security_context(&self.p_buf, self.must_dereference, config).into())
+        self.security_context.get_or_init(|| {
+            // metadata() reports lookup errors once and retains the result for all columns.
+            if self.must_dereference && self.metadata().is_none() {
+                return "?".into();
+            }
+            get_security_context(&self.p_buf, self.must_dereference, config).into()
+        })
     }
 
     fn path(&self) -> &Path {
@@ -1688,25 +1703,19 @@ fn file_is_executable(md: &Metadata) -> bool {
 
 /// This returns the `SELinux` security context as UTF8 `String`.
 /// In the long term this should be changed to [`OsStr`], see discussions at #2621/#2656
+#[cfg_attr(
+    not(any(
+        all(feature = "selinux", any(target_os = "linux", target_os = "android")),
+        all(feature = "smack", target_os = "linux")
+    )),
+    allow(unused_variables)
+)]
 fn get_security_context<'a>(
     path: &'a Path,
     must_dereference: bool,
     config: &'a Config,
 ) -> Cow<'a, str> {
     static SUBSTITUTE_STRING: &str = "?";
-
-    // If we must dereference, ensure that the symlink is actually valid even if the system
-    // does not support SELinux.
-    // Conforms to the GNU coreutils where a dangling symlink results in exit code 1.
-    if must_dereference && let Err(err) = get_metadata_with_deref_opt(path, must_dereference) {
-        // The Path couldn't be dereferenced, so return early and set exit code 1
-        // to indicate a minor error
-        // Only show error when context display is requested to avoid duplicate messages
-        if config.context {
-            show!(LsError::IOErrorContext(path.to_path_buf(), err, false));
-        }
-        return Cow::Borrowed(SUBSTITUTE_STRING);
-    }
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     if config.selinux_supported {
