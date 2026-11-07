@@ -209,7 +209,8 @@ fn test_reference() {
             .arg("/etc")
             .fails()
             // group name can differ, so just check the first part of the message
-            .stderr_contains("chgrp: changing group of '/etc': Operation not permitted\nfailed to change group of '/etc' from ");
+            .stderr_contains("chgrp: changing group of '/etc': Operation not permitted\n")
+            .stdout_contains("failed to change group of '/etc' from ");
     }
 }
 
@@ -222,7 +223,8 @@ fn test_reference() {
         .arg("/etc")
         .fails()
         // group name can differ, so just check the first part of the message
-        .stderr_contains("chgrp: changing group of '/etc': Operation not permitted\nfailed to change group of '/etc' from ");
+        .stderr_contains("chgrp: changing group of '/etc': Operation not permitted\n")
+        .stdout_contains("failed to change group of '/etc' from ");
 }
 
 #[test]
