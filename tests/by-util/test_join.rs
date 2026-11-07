@@ -71,7 +71,7 @@ fn only_whitespace_separators_merge() {
         .arg("-")
         .pipe_in(" a  ,c ")
         .succeeds()
-        .stdout_only("a ,,,b ,c \n");
+        .stdout_only("a ,,,b ,c\n");
 
     new_ucmd!()
         .arg("contiguous_separators.txt")
@@ -581,6 +581,35 @@ fn empty_fields_kept_without_empty_filler() {
         .args(&["-t", ",", "-e", "", "-o", "0,1.1,1.2,1.3", "gap", "gap"])
         .succeeds()
         .stdout_only("a,a,,b\n");
+}
+
+#[test]
+fn trailing_blanks_do_not_end_a_field() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // Like leading blanks, trailing blanks are not followed by an empty field.
+    at.write("a", "1 a \n2 b\t\n");
+    at.write("b", "1 x\n2 y  \n");
+
+    ts.ucmd()
+        .args(&["a", "b"])
+        .succeeds()
+        .stdout_only("1 a x\n2 b y\n");
+
+    ts.ucmd()
+        .args(&["-o", "auto", "-e", "X", "a", "b"])
+        .succeeds()
+        .stdout_only("1 a x\n2 b y\n");
+
+    // With -z, newline is a blank too, so one at the end of a line is dropped.
+    at.write("z1", "1 a\n\x002 b\n");
+    at.write("z2", "1 x\x002 y\n");
+
+    ts.ucmd()
+        .args(&["-z", "-o", "auto", "-e", "X", "z1", "z2"])
+        .succeeds()
+        .stdout_only("1 a x\x002 b y\x00");
 }
 
 #[test]
