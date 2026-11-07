@@ -1434,6 +1434,7 @@ fn test_missing_non_utf8_input_does_not_read_stdin() {
     new_ucmd!()
         .arg("-t")
         .arg(OsStr::from_bytes(b"missing-\xff"))
+        .ignore_stdin_write_error()
         .pipe_in("from stdin\n")
         .fails_with_code(1)
         .no_stdout()

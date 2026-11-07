@@ -842,7 +842,11 @@ fn test_follow_with_pid() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     let dummy_cmd = "sh";
-    let mut dummy = Command::new(dummy_cmd).spawn().unwrap();
+    // Keep the shell alive without letting it read the CI script from stdin.
+    let mut dummy = Command::new(dummy_cmd)
+        .stdin(Stdio::piped())
+        .spawn()
+        .unwrap();
     let pid = dummy.id();
 
     let mut child = ucmd
