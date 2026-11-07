@@ -459,10 +459,16 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
             if let Some(raw_error) = e.raw_os_error() {
                 // On Unix-like systems, the error code for "Too many levels of symbolic links" is 40 (ELOOP).
                 // we want to provide a proper error message in this case.
-                #[cfg(not(any(target_vendor = "apple", target_os = "freebsd")))]
+                #[cfg(not(any(
+                    target_vendor = "apple",
+                    target_os = "freebsd",
+                    target_os = "wasi"
+                )))]
                 let too_many_symlink_code = 40;
                 #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
                 let too_many_symlink_code = 62;
+                #[cfg(target_os = "wasi")]
+                let too_many_symlink_code = 32;
                 if raw_error == too_many_symlink_code {
                     return Err(CatError::TooManySymlinks);
                 }
