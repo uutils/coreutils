@@ -916,3 +916,15 @@ fn test_numeric_looking_file_names_are_kept_verbatim() {
              md5sum: WARNING: 1 line is improperly formatted\n",
         );
 }
+
+#[test]
+#[cfg(all(unix, not(wasi_runner)))]
+fn test_closed_stdout() {
+    // Run through a shell so the process really starts with fd 1 closed.
+    let ts = TestScenario::new(util_name!());
+    ts.cmd("sh")
+        .args(&["-c", &format!("\"$0\" {} input.txt >&-", ts.util_name)])
+        .arg(&ts.bin_path)
+        .fails_with_code(1)
+        .stderr_is("md5sum: write error: Bad file descriptor\n");
+}

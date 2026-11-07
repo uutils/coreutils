@@ -19,6 +19,7 @@ use crate::sum::{
 use crate::{show_error, translate, translate_text};
 
 pub mod compute;
+pub mod output;
 pub mod validate;
 
 pub const ALGORITHM_OPTIONS_SYSV: &str = "sysv";
