@@ -150,12 +150,15 @@ fn test_decode_unpadded_stream_without_equals() {
 
 #[test]
 fn test_garbage() {
+    // The NUL stops the decode. Bytes before it are still written.
     let input = "aGVsbG8sIHdvcmxkIQ==\0"; // spell-checker:disable-line
     new_ucmd!()
         .arg("-d")
         .pipe_in(input)
         .fails()
-        .stderr_only("base64: invalid input\n");
+        .code_is(1)
+        .stdout_is("hello, world!")
+        .stderr_is("base64: invalid input\n");
 }
 
 #[test]
@@ -318,4 +321,43 @@ fn test_base64_file_with_trailing_slash() {
     ucmd.arg("a/")
         .fails()
         .stderr_only("base64: a/: Not a directory\n");
+}
+
+#[test]
+fn test_decode_rejects_carriage_return() {
+    // A CR is invalid, but input before it is decoded and written first.
+    new_ucmd!()
+        .args(&["-d"])
+        .pipe_in("aGVsbG8=\r")
+        .fails()
+        .code_is(1)
+        .stdout_is("hello")
+        .stderr_is("base64: invalid input\n");
+
+    new_ucmd!()
+        .args(&["-d"])
+        .pipe_in("aGV\rsbG8=")
+        .fails()
+        .code_is(1)
+        .stdout_is("he")
+        .stderr_is("base64: invalid input\n");
+
+    new_ucmd!()
+        .args(&["-d"])
+        .pipe_in("\raGVsbG8=")
+        .fails()
+        .code_is(1)
+        .no_stdout()
+        .stderr_is("base64: invalid input\n");
+}
+
+#[test]
+fn test_decode_ignore_garbage_allows_carriage_return() {
+    for input in ["aGVsbG8=\r", "aGV\rsbG8=", "\raGVsbG8="] {
+        new_ucmd!()
+            .args(&["-d", "-i"])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only("hello");
+    }
 }
