@@ -643,66 +643,42 @@ impl DirFd {
 /// Returns the existing ancestor path and a list of components that need to be created.
 /// Uses `metadata` (follows symlinks) so that symlinks to directories are treated as
 /// existing ancestors rather than components to create.
-fn find_existing_ancestor(path: &Path) -> io::Result<(PathBuf, Vec<OsString>)> {
+///
+/// A file, a dangling symlink or an unreadable parent goes in the component
+/// list, so that `create_dir_all_safe` names the component that fails.
+fn find_existing_ancestor(path: &Path) -> (PathBuf, Vec<OsString>) {
     let mut current = path.to_path_buf();
     let mut components: Vec<OsString> = Vec::new();
 
     loop {
         // Use metadata (follow symlinks) so that symlinks to directories are
         // treated as existing ancestors rather than components to create.
-        match fs::metadata(&current) {
-            Ok(meta) => {
-                if meta.is_dir() {
-                    // Found a directory (real or via symlink)
-                    components.reverse();
-                    return Ok((current, components));
-                }
-                // It's a file or other non-directory - treat as needing creation
-                if let Some(file_name) = current.file_name() {
-                    components.push(file_name.to_os_string());
-                }
-                if let Some(parent) = current.parent() {
-                    if parent.as_os_str().is_empty() {
-                        // Reached empty parent (for relative paths), use "."
-                        components.reverse();
-                        return Ok((PathBuf::from("."), components));
-                    }
-                    current = parent.to_path_buf();
-                } else {
-                    // Reached filesystem root
-                    let root = if path.is_absolute() {
-                        PathBuf::from("/")
-                    } else {
-                        PathBuf::from(".")
-                    };
-                    components.reverse();
-                    return Ok((root, components));
-                }
+        if fs::metadata(&current).is_ok_and(|meta| meta.is_dir()) {
+            // Found a directory (real or via symlink)
+            components.reverse();
+            return (current, components);
+        }
+
+        if let Some(file_name) = current.file_name() {
+            components.push(file_name.to_os_string());
+        }
+        match current.parent() {
+            // Reached an empty parent (for relative paths), use "."
+            Some(parent) if parent.as_os_str().is_empty() => {
+                components.reverse();
+                return (PathBuf::from("."), components);
             }
-            Err(e) if e.kind() == io::ErrorKind::NotFound => {
-                // Doesn't exist, record component and move up to parent
-                if let Some(file_name) = current.file_name() {
-                    components.push(file_name.to_os_string());
-                }
-                if let Some(parent) = current.parent() {
-                    if parent.as_os_str().is_empty() {
-                        // Reached empty parent (for relative paths), use "."
-                        components.reverse();
-                        return Ok((PathBuf::from("."), components));
-                    }
-                    current = parent.to_path_buf();
+            Some(parent) => current = parent.to_path_buf(),
+            // Reached the filesystem root
+            None => {
+                let root = if path.is_absolute() {
+                    PathBuf::from("/")
                 } else {
-                    // Reached filesystem root
-                    let root = if path.is_absolute() {
-                        PathBuf::from("/")
-                    } else {
-                        PathBuf::from(".")
-                    };
-                    components.reverse();
-                    return Ok((root, components));
-                }
+                    PathBuf::from(".")
+                };
+                components.reverse();
+                return (root, components);
             }
-            Err(e) => return Err(e),
         }
     }
 }
@@ -713,6 +689,9 @@ fn find_existing_ancestor(path: &Path) -> io::Result<(PathBuf, Vec<OsString>)> {
 /// path component. If a symlink to a directory exists, it is followed (GNU
 /// coreutils behavior). Dangling symlinks and non-directory entries are errors.
 ///
+/// As with GNU, a name that exists but cannot be descended into fails with
+/// `EEXIST` if it does not resolve, and with `ENOTDIR` if it is not a directory.
+///
 /// # Arguments
 /// * `parent_fd` - The parent directory file descriptor
 /// * `name` - The name of the subdirectory to open or create
@@ -720,8 +699,8 @@ fn find_existing_ancestor(path: &Path) -> io::Result<(PathBuf, Vec<OsString>)> {
 ///
 /// # Returns
 /// A [`DirFd`] for the subdirectory
-fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Result<DirFd> {
-    match parent_fd.stat_at(name, SymlinkBehavior::NoFollow) {
+fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> Result<DirFd, StepError> {
+    let created = match parent_fd.stat_at(name, SymlinkBehavior::NoFollow) {
         Ok(stat) => {
             let file_type = (stat.st_mode as libc::mode_t) & libc::S_IFMT;
             match file_type {
@@ -730,15 +709,21 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
                     // Follow symlinks to directories (GNU coreutils behavior).
                     // O_DIRECTORY in open_subdir ensures we only succeed if the
                     // symlink resolves to a directory; dangling or non-dir symlinks error out.
-                    parent_fd.open_subdir(name, SymlinkBehavior::Follow)
+                    parent_fd
+                        .open_subdir(name, SymlinkBehavior::Follow)
+                        .map_err(|e| {
+                            if e.kind() == io::ErrorKind::NotFound {
+                                // A dangling symlink: the name itself exists, so
+                                // `mkdir` would fail with EEXIST rather than ENOENT.
+                                io::Error::from_raw_os_error(libc::EEXIST)
+                            } else {
+                                e
+                            }
+                        })
                 }
-                _ => Err(io::Error::new(
-                    io::ErrorKind::AlreadyExists,
-                    format!(
-                        "path component exists but is not a directory: {}",
-                        name.display()
-                    ),
-                )),
+                // The name exists and is not a directory, so descending into it
+                // fails with ENOTDIR.
+                _ => Err(io::Error::from_raw_os_error(libc::ENOTDIR)),
             }
         }
         Err(e) if e.kind() == io::ErrorKind::NotFound => match parent_fd.mkdir_at(name, mode) {
@@ -751,7 +736,39 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
             }
             Err(e) => Err(e),
         },
+        // A lookup in an unsearchable directory is denied.
+        Err(e) if e.kind() == io::ErrorKind::PermissionDenied => return Err(StepError::Parent(e)),
         Err(e) => Err(e),
+    };
+    created.map_err(StepError::Component)
+}
+
+/// A failed step of [`create_dir_all_safe`], by the entry GNU would name for it.
+enum StepError {
+    /// The directory holding the component cannot be searched.
+    Parent(io::Error),
+    /// The component itself cannot be created or opened.
+    Component(io::Error),
+}
+
+/// The directory holding `path`, if `path` names one.
+fn parent_dir(path: &Path) -> Option<&Path> {
+    path.parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+}
+
+/// The path to name when creating `failed` by path failed: its parent if that
+/// cannot be searched, as GNU names `r--` for `r--/x` but `r-x/x` for `r-x/x`.
+fn blame(failed: PathBuf) -> PathBuf {
+    use rustix::fs::{Access, access};
+
+    let Some(parent) = parent_dir(&failed) else {
+        return failed;
+    };
+    if access(parent, Access::EXEC_OK).is_ok() {
+        failed
+    } else {
+        parent.to_path_buf()
     }
 }
 
@@ -780,17 +797,63 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
 ///
 /// # Returns
 /// A [`DirFd`] for the final created directory, or the first existing parent if
-/// all directories already exist.
+/// all directories already exist; on failure, the prefix that could not be created.
 #[cfg(unix)]
-pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
-    let (existing_ancestor, components_to_create) = find_existing_ancestor(path)?;
-    let mut dir_fd = DirFd::open_anchor(&existing_ancestor)?;
+pub fn create_dir_all_safe(path: &Path, mode: u32) -> Result<DirFd, CreateDirError> {
+    let (existing_ancestor, components_to_create) = find_existing_ancestor(path);
 
-    for component in &components_to_create {
-        dir_fd = open_or_create_subdir(&dir_fd, component.as_os_str(), mode)?;
+    let fail = |index: usize, step: StepError| {
+        let failed = failing_prefix(path, &components_to_create, index);
+        match step {
+            StepError::Parent(error) => CreateDirError {
+                path: parent_dir(&failed).map(Path::to_path_buf).unwrap_or(failed),
+                error,
+            },
+            StepError::Component(error) => CreateDirError {
+                path: failed,
+                error,
+            },
+        }
+    };
+
+    let mut dir_fd = DirFd::open_anchor(&existing_ancestor).map_err(|error| CreateDirError {
+        path: blame(failing_prefix(path, &components_to_create, 0)),
+        error,
+    })?;
+
+    for (index, component) in components_to_create.iter().enumerate() {
+        dir_fd = open_or_create_subdir(&dir_fd, component.as_os_str(), mode)
+            .map_err(|step| fail(index, step))?;
     }
 
     Ok(dir_fd)
+}
+
+/// The prefix of `path` to report when creating it by path failed: the first
+/// component that is not an existing directory, as [`create_dir_all_safe`] does.
+pub fn failed_create_dir_prefix(path: &Path) -> PathBuf {
+    let (_, components_to_create) = find_existing_ancestor(path);
+    blame(failing_prefix(path, &components_to_create, 0))
+}
+
+/// The prefix of `path` ending at `components_to_create[index]`, which is the
+/// tail of `path`.
+fn failing_prefix(path: &Path, components_to_create: &[OsString], index: usize) -> PathBuf {
+    let mut failed = path.to_path_buf();
+    for _ in index + 1..components_to_create.len() {
+        failed.pop();
+    }
+    failed
+}
+
+/// Failure of [`create_dir_all_safe`], naming the first prefix it could not
+/// create, as GNU does: `install -d a/b/c` with `a` dangling reports `a`.
+#[derive(Debug)]
+pub struct CreateDirError {
+    /// The prefix of the requested path whose creation failed.
+    pub path: PathBuf,
+    /// The underlying OS error.
+    pub error: io::Error,
 }
 
 impl AsRawFd for DirFd {
@@ -1655,6 +1718,37 @@ mod tests {
 
         let result = create_dir_all_safe(&file_path, 0o755);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_create_dir_all_safe_reports_failing_component() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("file");
+        fs::write(&file_path, "content").unwrap();
+
+        // The failing component is the file, not the whole requested path.
+        let err = create_dir_all_safe(&file_path.join("a/b"), 0o755)
+            .err()
+            .unwrap();
+        assert_eq!(err.path, file_path);
+        assert_eq!(err.error.raw_os_error(), Some(libc::ENOTDIR));
+    }
+
+    #[test]
+    fn test_create_dir_all_safe_dangling_symlink_reports_eexist() {
+        let temp_dir = TempDir::new().unwrap();
+        let link_path = temp_dir.path().join("dangling");
+        symlink(temp_dir.path().join("nonexistent"), &link_path).unwrap();
+
+        // The name exists, so GNU reports EEXIST rather than the ENOENT of the
+        // unresolvable target.
+        let err = create_dir_all_safe(&link_path.join("sub"), 0o755)
+            .err()
+            .unwrap();
+        assert_eq!(err.path, link_path);
+        assert_eq!(err.error.raw_os_error(), Some(libc::EEXIST));
+        assert!(link_path.is_symlink());
+        assert!(!temp_dir.path().join("nonexistent").exists());
     }
 
     #[test]
