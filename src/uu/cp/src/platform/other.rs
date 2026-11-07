@@ -5,12 +5,13 @@
 
 // spell-checker:ignore reflink
 
-use std::fs;
+use std::fs::{self, File};
 use std::path::Path;
 use uucore::translate;
 
 use crate::{
     CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode,
+    cannot_open_for_reading,
 };
 
 /// Copies `source` to `dest` for systems without copy-on-write
@@ -36,7 +37,12 @@ pub(crate) fn copy_on_write(
         reflink: OffloadReflinkDebug::Unsupported,
         sparse_detection: SparseDebug::Unsupported,
     };
-    fs::copy(source, dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+    // `fs::copy` doesn't say whether reading the source or writing the
+    // destination failed, so look at the source only once it has failed.
+    fs::copy(source, dest).map_err(|e| match File::open(source) {
+        Err(open_err) => cannot_open_for_reading(open_err, source),
+        Ok(_) => CpError::IoErrContext(e, context.to_owned()),
+    })?;
 
     Ok(copy_debug)
 }
