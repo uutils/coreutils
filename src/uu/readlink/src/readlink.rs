@@ -119,21 +119,39 @@ pub fn uu_app() -> Command {
                 .short('f')
                 .long(OPT_CANONICALIZE)
                 .help(translate!("readlink-help-canonicalize"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                // GNU: the last of -e/-f/-m wins.
+                .overrides_with_all([
+                    OPT_CANONICALIZE,
+                    OPT_CANONICALIZE_EXISTING,
+                    OPT_CANONICALIZE_MISSING,
+                ]),
         )
         .arg(
             Arg::new(OPT_CANONICALIZE_EXISTING)
                 .short('e')
                 .long("canonicalize-existing")
                 .help(translate!("readlink-help-canonicalize-existing"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                // GNU: the last of -e/-f/-m wins.
+                .overrides_with_all([
+                    OPT_CANONICALIZE,
+                    OPT_CANONICALIZE_EXISTING,
+                    OPT_CANONICALIZE_MISSING,
+                ]),
         )
         .arg(
             Arg::new(OPT_CANONICALIZE_MISSING)
                 .short('m')
                 .long(OPT_CANONICALIZE_MISSING)
                 .help(translate!("readlink-help-canonicalize-missing"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                // GNU: the last of -e/-f/-m wins.
+                .overrides_with_all([
+                    OPT_CANONICALIZE,
+                    OPT_CANONICALIZE_EXISTING,
+                    OPT_CANONICALIZE_MISSING,
+                ]),
         )
         .arg(
             Arg::new(OPT_NO_NEWLINE)
