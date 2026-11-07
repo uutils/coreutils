@@ -47,15 +47,44 @@ platform. This is documented per utility.
 
 {{ #include platform_table.md }}
 
-## Linux traditional login records
+## Linux login records
 
+Library users can enable `uucore`'s `utmpx` feature alone for traditional records.
+The separate `systemd-logind` feature adds Linux logind support and its runtime
+dependencies. The four utilities below enable both features.
+
+`who`, `pinky`, `users`, and `uptime` prefer the default utmp file when it is a
+readable regular file containing at least one complete record. This checks file
+availability, not record validity: all-zero records and files containing only
+boot records still take precedence over systemd-logind. Explicit non-default
+utmp paths always use the traditional reader.
+
+Otherwise these utilities try libsystemd at runtime and return to the
+traditional reader if loading or session enumeration fails.
 The traditional Linux reader opens utmp without waiting for FIFO writers,
 checks that the opened file is regular, and reads from that same file descriptor.
 Replacing the path with a FIFO after opening therefore cannot redirect its reads.
 Waiting for record locks has a shared ten-second budget per iterator. Exhausting
 that budget ends iteration without reading unlocked data. As with other utmp
 read errors, the iterator does not report an error separately from end of file.
-The selected path is retained across successive iterators.
-With the `systemd_logind` feature enabled, the default path selects systemd;
-custom paths select traditional files, including for subsequent iterators.
-Selecting the default path explicitly switches back to systemd.
+The selected path is retained across successive iterators. Selecting the default
+path again restores the default file/logind selection rules.
+
+When libsystemd cannot provide session timestamps or leader PIDs, `who`
+and `pinky` display `?` for the unavailable timestamp; `who -u` also displays
+`?` for an unavailable PID. These sessions still count toward the user total.
+Callers can select session metadata with `utmpx::ReadOptions`; its default
+requests both timestamps and PIDs. `ReadOptions::BASIC` omits those session
+fields while retaining the boot timestamp. `users`, `who -q`, and `uptime` use
+this mode. Other listings request only the fields they display.
+
+Both traditional and logind timestamps use the local UTC offset at the record's
+time, including the daylight saving rules in effect then.
+
+The public `UtmpxRecord::pid()` and `login_time()` accessors retain their original
+return types, using zero and the Unix epoch for unavailable logind values.
+Callers displaying these values should use `try_pid()` and `try_login_time()`
+to distinguish missing data, as the utilities do.
+
+Static musl builds cannot load libsystemd dynamically. They retain musl's utmp
+stub behavior, so login listings can be empty even on a system running logind.

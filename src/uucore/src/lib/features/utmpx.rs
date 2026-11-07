@@ -37,7 +37,7 @@ pub extern crate time;
 use std::ffi::CString;
 use std::io::Result as IOResult;
 use std::marker::PhantomData;
-#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+#[cfg(target_os = "linux")]
 use std::mem::size_of;
 #[cfg(not(target_os = "linux"))]
 use std::os::unix::ffi::OsStrExt;
@@ -46,7 +46,7 @@ use std::path::{Path, PathBuf};
 use std::ptr;
 use std::sync::{Mutex, MutexGuard};
 
-#[cfg(all(target_os = "linux", feature = "systemd_logind"))]
+#[cfg(all(target_os = "linux", feature = "systemd-logind"))]
 use crate::features::systemd_logind;
 
 pub use self::ut::*;
@@ -177,6 +177,34 @@ mod ut {
     };
 }
 
+/// Optional session metadata to obtain when reading logind records.
+/// The default requests both fields. Traditional utmp records and the boot
+/// timestamp are unaffected.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReadOptions {
+    /// Obtain a user session's login timestamp.
+    pub session_time: bool,
+    /// Obtain a user session's leader PID.
+    pub session_pid: bool,
+}
+
+impl ReadOptions {
+    /// Enumerate sessions without querying their login times or leader PIDs.
+    pub const BASIC: Self = Self {
+        session_time: false,
+        session_pid: false,
+    };
+}
+
+impl Default for ReadOptions {
+    fn default() -> Self {
+        Self {
+            session_time: true,
+            session_pid: true,
+        }
+    }
+}
+
 /// A login record
 pub struct Utmpx {
     inner: utmpx,
@@ -233,11 +261,7 @@ impl Utmpx {
         let ts_nanos: i128 = (1_000_000_000_i64 * self.inner.ut_tv.tv_sec as i64
             + 1_000_i64 * self.inner.ut_tv.tv_usec as i64)
             .into();
-        let local_offset = time::OffsetDateTime::now_local()
-            .map_or_else(|_| time::UtcOffset::UTC, time::OffsetDateTime::offset);
-        time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos)
-            .unwrap()
-            .to_offset(local_offset)
+        local_login_time(time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos).unwrap())
     }
     /// A.K.A. `ut.ut_exit`
     ///
@@ -264,88 +288,147 @@ impl Utmpx {
 
     /// Canonicalize host name using DNS
     pub fn canon_host(&self) -> IOResult<String> {
-        let host = self.host();
-
-        let (hostname, display) = host.split_once(':').unwrap_or((&host, ""));
-
-        if !hostname.is_empty() {
-            use dns_lookup::{AddrInfoHints, getaddrinfo};
-
-            const AI_CANONNAME: i32 = 0x2;
-            let hints = AddrInfoHints {
-                flags: AI_CANONNAME,
-                ..AddrInfoHints::default()
-            };
-            if let Ok(sockets) = getaddrinfo(Some(hostname), None, Some(hints)) {
-                let sockets = sockets.collect::<IOResult<Vec<_>>>()?;
-                for socket in sockets {
-                    if let Some(ai_canonname) = socket.canonname {
-                        return Ok(if display.is_empty() {
-                            ai_canonname
-                        } else {
-                            format!("{ai_canonname}:{display}")
-                        });
-                    }
-                }
-            } else {
-                // GNU coreutils has this behavior
-                return Ok(hostname.to_string());
-            }
-        }
-
-        Ok(host)
+        canonicalize_host(self.host())
     }
 
     /// Iterate through all utmp records using the most recently selected path.
     ///
-    /// On Linux with `systemd_logind` enabled, the default path selects systemd.
-    /// A custom path selects traditional records, including on subsequent calls
-    /// to this method. Call [`Self::iter_all_records_from`] with [`DEFAULT_FILE`]
-    /// to select systemd again.
+    /// On Linux with `systemd-logind`, a default file without a complete record
+    /// falls back to logind. Custom paths always select traditional records.
+    /// Call [`Self::iter_all_records_from`] with [`DEFAULT_FILE`] to restore
+    /// the default source selection rules.
     ///
     /// Only one iterator may be active at a time; this blocks until it is dropped.
     pub fn iter_all_records() -> UtmpxIter {
-        #[cfg(target_os = "linux")]
-        return UtmpxIter::new_traditional(None);
+        Self::iter_all_records_with_options(ReadOptions::default())
+    }
 
+    /// Iterate through records, selecting which logind session details to obtain.
+    /// The same locking and selected-path rules as [`Self::iter_all_records`] apply.
+    pub fn iter_all_records_with_options(options: ReadOptions) -> UtmpxIter {
+        let iter = UtmpxIter::new();
+        #[cfg(target_os = "linux")]
+        return iter.with_systemd_fallback(options);
+
+        // SAFETY: The iterator holds LOCK while accessing libc's global utmp state.
+        #[cfg(not(target_os = "linux"))]
+        unsafe {
+            #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
+            setutxent();
+        }
         #[cfg(not(target_os = "linux"))]
         {
-            let iter = UtmpxIter::new();
-            // SAFETY: The iterator holds LOCK while accessing libc's global state.
-            unsafe {
-                setutxent();
-            }
+            let _ = options;
             iter
         }
     }
 
     /// Read a specific file, remembering it for subsequent iterators.
     ///
-    /// On Linux with `systemd_logind` enabled, [`DEFAULT_FILE`] selects systemd
-    /// instead of reading the file. Other paths select traditional records.
+    /// On Linux with `systemd-logind`, a default file without a complete record
+    /// falls back to logind, then returns to the file if logind is unavailable.
+    /// Other paths always select traditional records.
     ///
     /// Only one iterator may be active at a time; failures produce no records.
     pub fn iter_all_records_from<P: AsRef<Path>>(path: P) -> UtmpxIter {
-        #[cfg(target_os = "linux")]
-        return UtmpxIter::new_traditional(Some(path.as_ref()));
+        Self::iter_all_records_from_with_options(path, ReadOptions::default())
+    }
 
+    /// Read the selected file with explicit logind session metadata requirements.
+    /// The same rules as [`Self::iter_all_records_from`] apply.
+    pub fn iter_all_records_from_with_options<P: AsRef<Path>>(
+        path: P,
+        options: ReadOptions,
+    ) -> UtmpxIter {
+        let iter = UtmpxIter::new();
+        #[cfg(target_os = "linux")]
+        {
+            let mut iter = iter;
+            *iter.guard = Some(path.as_ref().to_path_buf());
+            iter.with_systemd_fallback(options)
+        }
         #[cfg(not(target_os = "linux"))]
         {
-            let iter = UtmpxIter::new();
             let filename = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
-            // SAFETY: The iterator holds LOCK, and filename remains valid.
+            // SAFETY: The iterator holds LOCK, and filename remains valid for these calls.
             unsafe {
                 #[cfg(target_os = "freebsd")]
                 setutxdb(libc::UTXDB_ACTIVE, filename.as_ptr());
+
+                // These APIs report failures inconsistently across platforms.
+                // Preserve the traditional reader's empty output on invalid paths.
                 #[cfg(not(target_os = "freebsd"))]
                 #[cfg_attr(target_env = "ohos", allow(deprecated))]
                 utmpxname(filename.as_ptr());
+
                 #[cfg_attr(target_env = "ohos", allow(deprecated))]
                 setutxent();
             }
+            let _ = options;
             iter
         }
     }
+}
+
+/// Apply the local UTC offset at the record's timestamp, including historical DST.
+pub(crate) fn local_login_time(datetime: time::OffsetDateTime) -> time::OffsetDateTime {
+    let offset = time::UtcOffset::local_offset_at(datetime).unwrap_or(time::UtcOffset::UTC);
+    datetime.to_offset(offset)
+}
+
+pub(crate) fn canonicalize_host(host: String) -> IOResult<String> {
+    use dns_lookup::{AddrInfoHints, getaddrinfo};
+
+    const AI_CANONNAME: i32 = 0x2;
+    let hints = AddrInfoHints {
+        flags: AI_CANONNAME,
+        ..AddrInfoHints::default()
+    };
+    canonicalize_host_with(host, |hostname| {
+        getaddrinfo(Some(hostname), None, Some(hints))
+            .map(|sockets| sockets.map(|socket| socket.map(|info| info.canonname)))
+            .map_err(|error| std::io::Error::other(error.to_string()))
+    })
+}
+
+fn canonicalize_host_with<I>(
+    host: String,
+    lookup: impl FnOnce(&str) -> IOResult<I>,
+) -> IOResult<String>
+where
+    I: IntoIterator<Item = IOResult<Option<String>>>,
+{
+    let (hostname, display) = split_host_display(&host);
+    if !hostname.is_empty() {
+        if let Ok(sockets) = lookup(hostname) {
+            let sockets = sockets.into_iter().collect::<IOResult<Vec<_>>>()?;
+            if let Some(ai_canonname) = sockets.into_iter().flatten().next() {
+                return Ok(if display.is_empty() {
+                    ai_canonname
+                } else {
+                    format!("{ai_canonname}:{display}")
+                });
+            }
+        } else {
+            return Ok(hostname.to_string());
+        }
+    }
+    Ok(host)
+}
+
+fn split_host_display(host: &str) -> (&str, &str) {
+    // Colons inside an IPv6 address are not X11 display separators.
+    let address = host
+        .strip_prefix('[')
+        .and_then(|rest| rest.split_once(']'))
+        .map_or(host, |(address, _)| address);
+    let address = address
+        .split_once('%')
+        .map_or(address, |(address, _)| address);
+    if address.parse::<std::net::Ipv6Addr>().is_ok() {
+        return (host, "");
+    }
+    host.split_once(':').unwrap_or((host, ""))
 }
 
 // On some systems these functions are not thread-safe. On others they're
@@ -377,8 +460,13 @@ fn open_traditional_utmp(path: &Path) -> Option<std::fs::File> {
             .custom_flags(libc::O_NONBLOCK)
             .open(path)
             .ok()?;
-        file.metadata().ok()?.is_file().then_some(file)
+        regular_utmp(file)
     }
+}
+
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+fn regular_utmp(file: std::fs::File) -> Option<std::fs::File> {
+    file.metadata().ok()?.is_file().then_some(file)
 }
 
 // Bound lock contention waits across one iteration.
@@ -421,7 +509,7 @@ pub struct UtmpxIter {
     /// Ensure [`UtmpxIter`] is !Send. Technically redundant because [`MutexGuard`]
     /// is also !Send.
     phantom: PhantomData<std::rc::Rc<()>>,
-    #[cfg(all(target_os = "linux", feature = "systemd_logind"))]
+    #[cfg(all(target_os = "linux", feature = "systemd-logind"))]
     systemd_iter: Option<systemd_logind::SystemdUtmpxIter>,
     #[cfg(target_os = "linux")]
     traditional_file: Option<std::fs::File>,
@@ -438,7 +526,7 @@ impl UtmpxIter {
         Self {
             guard,
             phantom: PhantomData,
-            #[cfg(all(target_os = "linux", feature = "systemd_logind"))]
+            #[cfg(all(target_os = "linux", feature = "systemd-logind"))]
             systemd_iter: None,
             #[cfg(target_os = "linux")]
             traditional_file: None,
@@ -448,37 +536,68 @@ impl UtmpxIter {
     }
 
     #[cfg(target_os = "linux")]
-    fn new_traditional(path: Option<&Path>) -> Self {
-        let mut iter = Self::new();
-        if let Some(path) = path {
-            *iter.guard = Some(path.to_path_buf());
+    fn with_systemd_fallback(self, options: ReadOptions) -> Self {
+        #[cfg(feature = "systemd-logind")]
+        {
+            self.with_login_reader(
+                options,
+                Path::new(DEFAULT_FILE),
+                systemd_logind::SystemdUtmpxIter::with_options,
+            )
         }
-        let path = iter.guard.as_deref().unwrap_or(Path::new(DEFAULT_FILE));
-        #[cfg(feature = "systemd_logind")]
-        if path == Path::new(DEFAULT_FILE) {
-            iter.systemd_iter = Some(
-                systemd_logind::SystemdUtmpxIter::new()
-                    .unwrap_or_else(|_| systemd_logind::SystemdUtmpxIter::empty()),
-            );
-            return iter;
+        #[cfg(not(feature = "systemd-logind"))]
+        {
+            let _ = options;
+            let mut iter = self;
+            let path = iter.guard.as_deref().unwrap_or(Path::new(DEFAULT_FILE));
+            iter.traditional_file = open_traditional_utmp(path);
+            iter
         }
-        iter.traditional_file = open_traditional_utmp(path);
-        iter
+    }
+
+    #[cfg(all(target_os = "linux", feature = "systemd-logind"))]
+    fn with_login_reader(
+        mut self,
+        options: ReadOptions,
+        default_path: &Path,
+        read_logind: impl FnOnce(ReadOptions) -> crate::error::UResult<systemd_logind::SystemdUtmpxIter>,
+    ) -> Self {
+        let path = self.guard.as_deref().unwrap_or(default_path);
+        self.traditional_file = open_traditional_utmp(path);
+        // Availability, not record contents, determines which source wins.
+        let usable = self
+            .traditional_file
+            .as_ref()
+            .and_then(|file| file.metadata().ok())
+            .is_some_and(|metadata| metadata.len() >= size_of::<utmpx>() as u64);
+        if path == default_path && !usable {
+            self.systemd_iter = read_logind(options).ok();
+            self.traditional_file = if self.systemd_iter.is_none() {
+                // The file may have appeared while logind was being tried.
+                open_traditional_utmp(path)
+            } else {
+                None
+            };
+        }
+        self
     }
 }
 
 #[cfg(all(test, target_os = "linux", not(target_env = "musl")))]
 mod tests {
     use super::*;
+    #[cfg(feature = "systemd-logind")]
+    use std::cell::Cell;
     use std::fs::File;
     use std::io::Write;
     use std::mem::offset_of;
     use std::os::fd::AsRawFd;
-    use std::os::unix::fs::OpenOptionsExt;
+    use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
     use std::time::Duration;
 
-    // Path selections persist after an iterator is dropped.
-    static ITERATOR_TEST_LOCK: Mutex<()> = Mutex::new(());
+    // The selected utmp path persists between iterators. Keep tests that use
+    // several iterators together so another test cannot replace that path.
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     fn utmpx_record(user: &str) -> Vec<u8> {
         let mut bytes = vec![0; size_of::<utmpx>()];
@@ -508,7 +627,9 @@ mod tests {
 
     #[test]
     fn traditional_paths_persist_across_iterators() {
-        let _guard = ITERATOR_TEST_LOCK.lock().unwrap();
+        let _test_lock = TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let directory = tempfile::tempdir().unwrap();
         let custom_path = directory.path().join("custom-utmp");
         let fallback_path = directory.path().join("fallback-utmp");
@@ -523,7 +644,13 @@ mod tests {
         write_utmpx_records(&fallback_path, &["fallback"]);
 
         let custom_users = Utmpx::iter_all_records_from(&custom_path)
-            .map(|record| record.user())
+            .map(|record| {
+                let pid: i32 = record.pid();
+                let timestamp: time::OffsetDateTime = record.login_time();
+                assert_eq!(record.try_pid(), Some(pid));
+                assert_eq!(record.try_login_time(), Some(timestamp));
+                record.user()
+            })
             .collect::<Vec<_>>();
         let repeated_custom_users = Utmpx::iter_all_records()
             .map(|record| record.user())
@@ -537,11 +664,12 @@ mod tests {
 
         // Restore the default before the temporary files are removed.
         let default_iter = Utmpx::iter_all_records_from(DEFAULT_FILE);
-        #[cfg(feature = "systemd_logind")]
-        assert!(default_iter.systemd_iter.is_some());
+        assert_eq!(default_iter.guard.as_deref(), Some(Path::new(DEFAULT_FILE)));
         drop(default_iter);
-        #[cfg(feature = "systemd_logind")]
-        assert!(Utmpx::iter_all_records().systemd_iter.is_some());
+        assert_eq!(
+            Utmpx::iter_all_records().guard.as_deref(),
+            Some(Path::new(DEFAULT_FILE))
+        );
 
         assert_eq!(custom_users, ["custom"]);
         assert_eq!(repeated_custom_users, custom_users);
@@ -551,6 +679,9 @@ mod tests {
 
     #[test]
     fn traditional_utmp_opens_only_regular_files() {
+        let _test_lock = TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("utmp");
 
@@ -579,11 +710,155 @@ mod tests {
     }
 
     #[test]
+    fn replacing_an_open_file_with_a_fifo_keeps_the_original_record() {
+        let _test_lock = TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("utmp");
+        write_utmpx_records(&path, &["original"]);
+        let file = File::open(&path).unwrap();
+        std::fs::remove_file(&path).unwrap();
+        nix::unistd::mkfifo(&path, nix::sys::stat::Mode::S_IRUSR).unwrap();
+        assert!(path.metadata().unwrap().file_type().is_fifo());
+
+        // Validate after the replacement, just as the reader does after open.
+        let mut iter = UtmpxIter::new();
+        *iter.guard = None;
+        iter.traditional_file = regular_utmp(file);
+        assert_eq!(iter.next().unwrap().user(), "original");
+        assert!(iter.next().is_none());
+    }
+
+    #[cfg(feature = "systemd-logind")]
+    #[rstest::rstest]
+    #[case("missing", true)]
+    #[case("empty", true)]
+    #[case("short", true)]
+    #[case("fifo", true)]
+    #[case("traditional", false)]
+    #[case("zeros", false)]
+    #[case("boot-only", false)]
+    fn default_utmp_source_selection(#[case] contents: &str, #[case] logind: bool) {
+        let _test_lock = TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("utmp");
+        match contents {
+            "missing" => {}
+            "empty" => {
+                File::create(&path).unwrap();
+            }
+            "short" => std::fs::write(&path, [0]).unwrap(),
+            "fifo" => nix::unistd::mkfifo(&path, nix::sys::stat::Mode::S_IRUSR).unwrap(),
+            "zeros" => File::create(&path)
+                .unwrap()
+                .set_len(size_of::<utmpx>() as u64)
+                .unwrap(),
+            _ => {
+                write_utmpx_records(&path, &["traditional"]);
+                if contents == "boot-only" {
+                    File::options()
+                        .write(true)
+                        .open(&path)
+                        .unwrap()
+                        .write_all(&BOOT_TIME.to_ne_bytes())
+                        .unwrap();
+                }
+            }
+        }
+        let called = Cell::new(false);
+        let mut iter = UtmpxIter::new();
+        *iter.guard = None;
+        let mut iter = iter.with_login_reader(ReadOptions::BASIC, &path, |options| {
+            called.set(true);
+            assert_eq!(options, ReadOptions::BASIC);
+            Ok(systemd_logind::SystemdUtmpxIter::empty())
+        });
+        assert_eq!(called.get(), logind);
+        assert_eq!(iter.systemd_iter.is_some(), logind);
+        assert_eq!(iter.traditional_file.is_none(), logind);
+        if contents == "traditional" {
+            assert_eq!(iter.next().unwrap().user(), "traditional");
+        }
+    }
+
+    #[cfg(feature = "systemd-logind")]
+    #[test]
+    fn explicit_utmp_path_does_not_try_logind() {
+        let _test_lock = TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("explicit-utmp");
+        File::create(&path).unwrap();
+        let mut iter = UtmpxIter::new();
+        *iter.guard = Some(path);
+        let mut iter = iter.with_login_reader(
+            ReadOptions::default(),
+            &directory.path().join("default-utmp"),
+            |_| panic!("an explicit non-default file must not try logind"),
+        );
+        assert!(iter.next().is_none());
+        *iter.guard = None;
+    }
+
+    #[cfg(feature = "systemd-logind")]
+    #[rstest::rstest]
+    #[case(false)]
+    #[case(true)]
+    fn failed_logind_reopens_utmp(#[case] initially_exists: bool) {
+        let _test_lock = TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("utmp");
+        if initially_exists {
+            File::create(&path).unwrap();
+        }
+        let mut iter = UtmpxIter::new();
+        *iter.guard = None;
+        let mut iter = iter.with_login_reader(ReadOptions::default(), &path, |_| {
+            let replacement = directory.path().join("replacement");
+            write_utmpx_records(&replacement, &["fallback"]);
+            std::fs::rename(&replacement, &path).unwrap();
+            Err(crate::error::USimpleError::new(1, "logind unavailable"))
+        });
+        assert!(iter.systemd_iter.is_none());
+        assert_eq!(iter.next().unwrap().user(), "fallback");
+        assert!(iter.next().is_none());
+    }
+
+    #[cfg(feature = "systemd-logind")]
+    #[rstest::rstest]
+    #[case(false)]
+    #[case(true)]
+    fn failed_logind_without_a_regular_utmp_is_empty(#[case] fifo: bool) {
+        let _test_lock = TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("utmp");
+        if fifo {
+            nix::unistd::mkfifo(&path, nix::sys::stat::Mode::S_IRUSR).unwrap();
+        }
+        let mut iter = UtmpxIter::new();
+        *iter.guard = None;
+        let mut iter = iter.with_login_reader(ReadOptions::default(), &path, |_| {
+            Err(crate::error::USimpleError::new(1, "logind unavailable"))
+        });
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
     fn traditional_iterator_keeps_file_after_fifo_replacement() {
         use std::ffi::CString;
         use std::os::unix::ffi::OsStrExt;
 
-        let _guard = ITERATOR_TEST_LOCK.lock().unwrap();
+        let _test_lock = TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("utmp");
         write_utmpx_records(&path, &["first", "second"]);
@@ -612,7 +887,9 @@ mod tests {
 
     #[test]
     fn traditional_lock_wait_budget_is_shared_across_records() {
-        let _guard = ITERATOR_TEST_LOCK.lock().unwrap();
+        let _test_lock = TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("utmp");
         write_utmpx_records(&path, &["first", "second"]);
@@ -659,7 +936,7 @@ mod tests {
 /// Wrapper type that can hold either traditional utmpx records or systemd records
 pub enum UtmpxRecord {
     Traditional(Box<Utmpx>),
-    #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
+    #[cfg(all(target_os = "linux", feature = "systemd-logind"))]
     Systemd(systemd_logind::SystemdUtmpxCompat),
 }
 
@@ -668,25 +945,36 @@ impl UtmpxRecord {
     pub fn record_type(&self) -> i16 {
         match self {
             Self::Traditional(utmpx) => utmpx.record_type(),
-            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
+            #[cfg(all(target_os = "linux", feature = "systemd-logind"))]
             Self::Systemd(systemd) => systemd.record_type(),
         }
     }
 
     /// A.K.A. `ut.ut_pid`
-    pub fn pid(&self) -> i32 {
+    /// Returns None when logind could not provide a session leader PID.
+    #[cfg_attr(
+        not(all(target_os = "linux", feature = "systemd-logind")),
+        allow(clippy::unnecessary_wraps)
+    )]
+    pub fn try_pid(&self) -> Option<i32> {
         match self {
-            Self::Traditional(utmpx) => utmpx.pid(),
-            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
-            Self::Systemd(systemd) => systemd.pid(),
+            Self::Traditional(utmpx) => Some(utmpx.pid()),
+            #[cfg(all(target_os = "linux", feature = "systemd-logind"))]
+            Self::Systemd(systemd) => systemd.try_pid(),
         }
+    }
+
+    /// A.K.A. `ut.ut_pid`. Returns zero when a logind PID is unavailable.
+    /// Use [`Self::try_pid`] to distinguish an unavailable PID.
+    pub fn pid(&self) -> i32 {
+        self.try_pid().unwrap_or_default()
     }
 
     /// A.K.A. `ut.ut_id`
     pub fn terminal_suffix(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.terminal_suffix(),
-            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
+            #[cfg(all(target_os = "linux", feature = "systemd-logind"))]
             Self::Systemd(systemd) => systemd.terminal_suffix(),
         }
     }
@@ -695,7 +983,7 @@ impl UtmpxRecord {
     pub fn user(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.user(),
-            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
+            #[cfg(all(target_os = "linux", feature = "systemd-logind"))]
             Self::Systemd(systemd) => systemd.user(),
         }
     }
@@ -704,7 +992,7 @@ impl UtmpxRecord {
     pub fn host(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.host(),
-            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
+            #[cfg(all(target_os = "linux", feature = "systemd-logind"))]
             Self::Systemd(systemd) => systemd.host(),
         }
     }
@@ -713,18 +1001,30 @@ impl UtmpxRecord {
     pub fn tty_device(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.tty_device(),
-            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
+            #[cfg(all(target_os = "linux", feature = "systemd-logind"))]
             Self::Systemd(systemd) => systemd.tty_device(),
         }
     }
 
     /// A.K.A. `ut.ut_tv`
-    pub fn login_time(&self) -> time::OffsetDateTime {
+    /// Returns None when a systemd record has no known login time.
+    #[cfg_attr(
+        not(all(target_os = "linux", feature = "systemd-logind")),
+        allow(clippy::unnecessary_wraps)
+    )]
+    pub fn try_login_time(&self) -> Option<time::OffsetDateTime> {
         match self {
-            Self::Traditional(utmpx) => utmpx.login_time(),
-            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
-            Self::Systemd(systemd) => systemd.login_time(),
+            Self::Traditional(utmpx) => Some(utmpx.login_time()),
+            #[cfg(all(target_os = "linux", feature = "systemd-logind"))]
+            Self::Systemd(systemd) => systemd.try_login_time(),
         }
+    }
+
+    /// A.K.A. `ut.ut_tv`. Returns the Unix epoch when a logind time is unavailable.
+    /// Use [`Self::try_login_time`] when displaying a login time to users.
+    pub fn login_time(&self) -> time::OffsetDateTime {
+        self.try_login_time()
+            .unwrap_or(time::OffsetDateTime::UNIX_EPOCH)
     }
 
     /// A.K.A. `ut.ut_exit`
@@ -733,7 +1033,7 @@ impl UtmpxRecord {
     pub fn exit_status(&self) -> (i16, i16) {
         match self {
             Self::Traditional(utmpx) => utmpx.exit_status(),
-            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
+            #[cfg(all(target_os = "linux", feature = "systemd-logind"))]
             Self::Systemd(systemd) => systemd.exit_status(),
         }
     }
@@ -742,7 +1042,7 @@ impl UtmpxRecord {
     pub fn is_user_process(&self) -> bool {
         match self {
             Self::Traditional(utmpx) => utmpx.is_user_process(),
-            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
+            #[cfg(all(target_os = "linux", feature = "systemd-logind"))]
             Self::Systemd(systemd) => systemd.is_user_process(),
         }
     }
@@ -751,8 +1051,8 @@ impl UtmpxRecord {
     pub fn canon_host(&self) -> IOResult<String> {
         match self {
             Self::Traditional(utmpx) => utmpx.canon_host(),
-            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
-            Self::Systemd(systemd) => Ok(systemd.canon_host()),
+            #[cfg(all(target_os = "linux", feature = "systemd-logind"))]
+            Self::Systemd(systemd) => systemd.try_canon_host(),
         }
     }
 }
@@ -762,9 +1062,11 @@ impl Iterator for UtmpxIter {
     fn next(&mut self) -> Option<Self::Item> {
         #[cfg(target_os = "linux")]
         {
-            #[cfg(feature = "systemd_logind")]
+            #[cfg(feature = "systemd-logind")]
             if let Some(ref mut systemd_iter) = self.systemd_iter {
-                // Use the selected systemd source exclusively.
+                // Once a systemd iterator was successfully created, use it exclusively.
+                // If systemd initialization failed, `systemd_iter` is None and we use
+                // traditional utmp below.
                 return systemd_iter.next().map(UtmpxRecord::Systemd);
             }
             #[cfg(not(target_env = "musl"))]
@@ -834,5 +1136,55 @@ impl Drop for UtmpxIter {
             #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
             endutxent();
         }
+    }
+}
+
+#[cfg(test)]
+mod host_tests {
+    use super::{canonicalize_host_with, split_host_display};
+
+    #[rstest::rstest]
+    #[case("alias.test", "alias.test", "canonical.test")]
+    #[case("alias.test:0", "alias.test", "canonical.test:0")]
+    #[case("192.0.2.1", "192.0.2.1", "canonical.test")]
+    #[case("dead:beef::1", "dead:beef::1", "canonical.test")]
+    #[case("[dead:beef::1]:0", "[dead:beef::1]:0", "canonical.test")]
+    fn canonical_names_preserve_display_suffixes(
+        #[case] host: &str,
+        #[case] lookup: &str,
+        #[case] expected: &str,
+    ) {
+        let result = canonicalize_host_with(host.into(), |name| {
+            assert_eq!(name, lookup);
+            Ok([Ok(None), Ok(Some("canonical.test".into()))])
+        })
+        .unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn addresses_without_a_canonical_name_are_preserved() {
+        for host in ["192.0.2.1", "dead:beef::1", "[dead:beef::1]:0"] {
+            assert_eq!(
+                canonicalize_host_with(host.into(), |_| Ok([Ok(None)])).unwrap(),
+                host
+            );
+        }
+    }
+
+    #[rstest::rstest]
+    #[case("192.0.2.1", "192.0.2.1", "")]
+    #[case("dead:beef::1", "dead:beef::1", "")]
+    #[case("fe80::1%eth0", "fe80::1%eth0", "")]
+    #[case("[dead:beef::1]:0", "[dead:beef::1]:0", "")]
+    #[case("host.example", "host.example", "")]
+    #[case("host.example:0.1", "host.example", "0.1")]
+    #[case(":0", "", "0")]
+    fn ipv6_colons_are_not_display_separators(
+        #[case] host: &str,
+        #[case] hostname: &str,
+        #[case] display: &str,
+    ) {
+        assert_eq!(split_host_display(host), (hostname, display));
     }
 }
