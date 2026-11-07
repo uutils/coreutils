@@ -1078,8 +1078,9 @@ impl LsOutput for TextOutput<'_> {
         if !is_first {
             writeln!(self.state.out)?;
             if config.dired {
-                self.dired.line_offset += 1; // account for the blank line before recursive directory headings
-                self.dired.padding = 0;
+                // Account for the blank line before the heading. Keep the padding: after a
+                // directory that listed no entry it still holds that heading and "total" line.
+                self.dired.line_offset += 1;
             }
         }
         if config.dired {
