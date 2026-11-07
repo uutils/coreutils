@@ -140,6 +140,9 @@ fn filter_args(
     filter
 }
 
+/// Short options that take a value, as in '-b 10' or '-b10'
+const SHORT_OPTS_WITH_VALUE: &[u8] = b"abClnt"; // spell-checker:disable-line
+
 /// Helper function to [`filter_args`]
 /// Checks if the slice is a true short option (and not hyphen prefixed value of an option)
 /// and if so, a short option that can contain obsolete lines value
@@ -151,7 +154,9 @@ fn should_extract_obs_lines(
     !preceding_long_opt_req_value
         && !preceding_short_opt_req_value
         && slice.strip_prefix("-").is_some_and(|s| {
-            !s.as_bytes().first().is_some_and(|s| b"-abClnt".contains(s)) // spell-checker:disable-line
+            !s.as_bytes()
+                .first()
+                .is_some_and(|s| *s == b'-' || SHORT_OPTS_WITH_VALUE.contains(s))
         })
 }
 
@@ -161,9 +166,18 @@ fn should_extract_obs_lines(
 fn handle_extract_obs_lines(slice: &str, obs_lines: &mut Option<String>) -> Option<OsString> {
     let mut obs_lines_extracted: Vec<char> = vec![];
     let mut obs_lines_end_reached = false;
+    let mut option_value_reached = false;
     let filtered_slice: Vec<char> = slice
         .chars()
         .filter(|c| {
+            // The rest of the argument after an option that takes a value,
+            // as in '-dn10', is that value and not an obsolete lines value
+            if option_value_reached {
+                return true;
+            }
+            if u8::try_from(*c).is_ok_and(|c| SHORT_OPTS_WITH_VALUE.contains(&c)) {
+                option_value_reached = true;
+            }
             // To correctly process scenario like '-x200a4'
             // we need to stop extracting digits once alphabetic character is encountered
             // after we already have something in obs_lines_extracted
@@ -225,10 +239,21 @@ fn handle_preceding_options(
                 | options::SEPARATOR
         );
     }
-    // capture if current slice is a preceding short option that requires value and does not have value in the same slice (value separated by whitespace)
+    // capture if current slice is a short option, alone or ending a group like '-dl', that requires value and does not have value in the same slice (value separated by whitespace)
     // following slice should be treaded as value for this option
     // even if it starts with '-' (which would be treated as hyphen prefixed value)
-    *preceding_short_opt_req_value = matches!(slice, "-b" | "-C" | "-l" | "-n" | "-a" | "-t");
+    // the first short option in the group that requires value takes the rest of the group as its value,
+    // so only a group where that option is the last character leaves the following slice to it
+    *preceding_short_opt_req_value = slice
+        .strip_prefix('-')
+        .filter(|shorts| !shorts.starts_with('-'))
+        .and_then(|shorts| {
+            shorts
+                .bytes()
+                .position(|c| SHORT_OPTS_WITH_VALUE.contains(&c))
+                .map(|i| i == shorts.len() - 1)
+        })
+        .unwrap_or(false);
 }
 
 /// Parameters that control how a file gets split.

@@ -98,9 +98,44 @@ fn test_stdin_explicit() {
 fn test_wc_fixture(#[case] args: &[&str], #[case] fixture: &str, #[case] expected: &str) {
     new_ucmd!()
         .args(args)
+        .env("LC_ALL", "C.UTF-8")
         .pipe_in_fixture(fixture)
         .succeeds()
         .stdout_only(expected);
+}
+
+#[test]
+fn test_chars_in_c_locale_count_bytes() {
+    new_ucmd!()
+        .arg("-m")
+        .env("LC_ALL", "C")
+        .pipe_in("é")
+        .succeeds()
+        .stdout_is("2\n");
+
+    new_ucmd!()
+        .arg("-mw")
+        .env("LC_ALL", "C")
+        .pipe_in("é")
+        .succeeds()
+        .stdout_is("      1       2\n");
+
+    new_ucmd!()
+        .arg("-ml")
+        .env("LC_ALL", "C")
+        .pipe_in("é")
+        .succeeds()
+        .stdout_is("      0       2\n");
+}
+
+#[test]
+fn test_chars_invalid_byte_sequence_in_c_locale() {
+    new_ucmd!()
+        .arg("-mw")
+        .env("LC_ALL", "C")
+        .pipe_in([0xe9])
+        .succeeds()
+        .stdout_is("      1       1\n");
 }
 
 #[test]

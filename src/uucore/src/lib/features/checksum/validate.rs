@@ -247,10 +247,10 @@ fn write_file_report<W: Write>(
     filename: &OsStr,
     result: FileChecksumResult,
     verbose: ChecksumVerbose,
-) -> io::Result<()> {
+) -> Result<(), ChecksumError> {
     if result.can_display(verbose) {
         let filename = locale_aware_shell_escape(filename);
-        writeln!(w, "{filename}: {result}")?;
+        writeln!(w, "{filename}: {result}").map_err(ChecksumError::Write)?;
     }
     Ok(())
 }
@@ -600,12 +600,12 @@ fn get_file_to_check(
         Ok(Box::new(stdin())) // Use stdin if "-" is specified in the checksum file
     } else {
         let failed_open = || {
-            let _ = write_file_report(
+            write_file_report(
                 io::stdout(),
                 filename,
                 FileChecksumResult::CantOpen,
                 opts.verbose,
-            );
+            )
         };
         let print_error = |err: io::Error| {
             show!(err.map_err_context(|| { locale_aware_shell_escape(filename) }));
@@ -621,7 +621,7 @@ fn get_file_to_check(
                         "Is a directory",
                     ));
                     // also regarded as a failed open
-                    failed_open();
+                    failed_open()?;
                     Err(LineCheckError::FileIsDirectory)
                 } else {
                     Ok(Box::new(f))
@@ -631,7 +631,7 @@ fn get_file_to_check(
                 if !opts.ignore_missing {
                     // yes, we have both stderr and stdout here
                     print_error(err);
-                    failed_open();
+                    failed_open()?;
                 }
                 // we could not open the file but we want to continue
                 Err(LineCheckError::FileNotFound)
@@ -640,7 +640,7 @@ fn get_file_to_check(
                 // The file exists but cannot be opened. `--ignore-missing` does
                 // not cover this, so report it whether or not it is set.
                 print_error(err);
-                failed_open();
+                failed_open()?;
                 Err(LineCheckError::CantOpenFile)
             }
         }
@@ -766,12 +766,12 @@ fn compute_and_check_digest_from_file(
                     err.map_err_context(|| { locale_aware_shell_escape(real_filename_to_check) })
                 );
 
-                let _ = write_file_report(
+                write_file_report(
                     io::stdout(),
                     real_filename_to_check,
                     FileChecksumResult::CantOpen,
                     opts.verbose,
-                );
+                )?;
                 return Err(LineCheckError::CantOpenFile);
             }
         };
@@ -782,12 +782,12 @@ fn compute_and_check_digest_from_file(
         DigestOutput::Crc(n) => n.to_be_bytes() == expected_checksum,
         DigestOutput::U16(n) => n.to_be_bytes() == expected_checksum,
     };
-    let _ = write_file_report(
+    write_file_report(
         io::stdout(),
         real_filename_to_check,
         FileChecksumResult::from_bool(checksum_correct),
         opts.verbose,
-    );
+    )?;
 
     if checksum_correct {
         Ok(())

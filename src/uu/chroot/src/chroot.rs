@@ -12,7 +12,7 @@ use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::io::{Error, ErrorKind};
 use std::os::unix::process::CommandExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process;
 use uucore::entries::{Locate, Passwd, grp2gid, usr2gid, usr2uid};
 use uucore::error::{UResult, UUsageError};
@@ -26,7 +26,6 @@ mod options {
     pub const NEWROOT: &str = "newroot";
     pub const GROUPS: &str = "groups";
     pub const USERSPEC: &str = "userspec";
-    pub const COMMAND: &str = "command";
     pub const SKIP_CHDIR: &str = "skip-chdir";
 }
 
@@ -131,8 +130,11 @@ fn parse_group_list(list_str: &str) -> Result<Vec<String>, ChrootError> {
 impl Options {
     /// Parse parameters from the command-line arguments.
     fn from(matches: &clap::ArgMatches) -> UResult<Self> {
-        let newroot = match matches.get_one::<String>(options::NEWROOT) {
-            Some(v) => Path::new(v).to_path_buf(),
+        let newroot = match matches
+            .get_many::<OsString>(options::NEWROOT)
+            .and_then(|mut values| values.next())
+        {
+            Some(v) => PathBuf::from(v),
             None => return Err(ChrootError::MissingNewRoot.into()),
         };
         let groups = match matches.get_one::<String>(options::GROUPS) {
@@ -195,10 +197,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         options.chroot_target = resolved;
     }
 
+    // The first value is NEWROOT, the rest is COMMAND [ARG]...
     let mut cmd_iter = matches
-        .get_many::<OsString>(options::COMMAND)
+        .get_many::<OsString>(options::NEWROOT)
         .into_iter()
-        .flatten();
+        .flatten()
+        .skip(1);
     let (chroot_command, args) = match cmd_iter.next() {
         Some(c) => (c.clone(), cmd_iter.cloned().collect::<Vec<OsString>>()),
         None => (
@@ -228,9 +232,13 @@ pub fn uu_app() -> Command {
         .infer_long_args(true)
         .trailing_var_arg(true);
     uucore::clap_localization::configure_localized_command(cmd)
+        // NEWROOT and COMMAND [ARG]... are a single positional so that, like
+        // GNU, option parsing stops at NEWROOT: everything after it belongs to
+        // the command, even when it looks like one of our options.
         .arg(
             Arg::new(options::NEWROOT)
-                .value_hint(clap::ValueHint::DirPath)
+                .value_parser(clap::value_parser!(OsString))
+                .num_args(1..)
                 .hide(true)
                 .required(true)
                 .index(1),
@@ -253,14 +261,6 @@ pub fn uu_app() -> Command {
                 .long(options::SKIP_CHDIR)
                 .help(translate!("chroot-help-skip-chdir"))
                 .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::COMMAND)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::CommandName)
-                .value_parser(clap::value_parser!(OsString))
-                .hide(true)
-                .index(2),
         )
 }
 
