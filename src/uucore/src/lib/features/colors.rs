@@ -7,6 +7,11 @@
 
 //! Provides color handling for `ls` and other utilities.
 
+// The color database below is derived from the dircolors database:
+// Copyright (C) 1996-2022 Free Software Foundation, Inc.
+// Copying and distribution of this file, with or without modification,
+// are permitted provided the copyright notice and this notice are preserved.
+
 /// The keywords COLOR, OPTIONS, and EIGHTBIT (honored by the
 /// slackware version of dircolors) are recognized but ignored.
 /// Global config options can be specified before TERM or COLORTERM entries
