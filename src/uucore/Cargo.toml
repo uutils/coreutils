@@ -106,6 +106,7 @@ dns-lookup = { workspace = true, optional = true }
 rustix = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
 # utmpx is unix-only, so its dependencies must not be pulled into other targets
 # (the uptime feature enables utmpx and now builds on windows too).
 nix = { workspace = true, optional = true }
@@ -184,17 +185,18 @@ i18n-datetime = [
   "icu_datetime",
   "jiff-icu",
   "jiff",
+  "libc",
 ]
 mode = ["libc", "quoting-style", "rustix/process"]
 numeric-str-cmp = ["i18n-decimal"]
-perms = ["entries", "libc", "safe-traversal", "walkdir"]
+perms = ["entries", "fs", "libc", "safe-traversal", "walkdir"]
 buf-copy = ["pipes"]
 parser-num = ["extendedbigdecimal", "num-traits"]
 parser-size = ["parser-num", "procfs"]
 parser-glob = ["glob"]
 parser = ["parser-num", "parser-size", "parser-glob"]
 pipes = ["fs", "rustix/pipe"]
-process = ["libc", "nix/user", "rustix/process", "windows-sys"]
+process = ["libc", "nix/signal", "nix/user", "rustix/process", "windows-sys"]
 proc-info = ["tty", "walkdir"]
 quoting-style = ["i18n-common"]
 ranges = []
