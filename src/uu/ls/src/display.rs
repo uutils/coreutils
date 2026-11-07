@@ -410,6 +410,7 @@ fn display_items_non_long(
             &mut state.out,
             quoted,
             config.tab_size,
+            config.line_ending,
         ),
         Format::Across => display_grid(
             names.into_iter(),
@@ -418,6 +419,7 @@ fn display_items_non_long(
             &mut state.out,
             quoted,
             config.tab_size,
+            config.line_ending,
         ),
         Format::Commas => display_commas_format(
             names.into_iter(),
@@ -497,6 +499,7 @@ fn display_grid(
     out: &mut BufWriter<Stdout>,
     quoted: bool,
     tab_size: usize,
+    line_ending: LineEnding,
 ) -> UResult<()> {
     if width == 0 {
         // If the width is 0 we print one single line
@@ -509,7 +512,7 @@ fn display_grid(
             write_os_str(out, &name.displayed)?;
         }
         if printed_something {
-            writeln!(out)?;
+            write!(out, "{line_ending}")?;
         }
     } else {
         let names: Vec<String> = {
@@ -547,7 +550,6 @@ fn display_grid(
                 tab_size,
             },
         };
-
         let grid = Grid::new(
             names,
             GridOptions {
@@ -556,7 +558,39 @@ fn display_grid(
                 width: width as usize,
             },
         );
-        write!(out, "{grid}")?;
+        match line_ending {
+            LineEnding::Newline => write!(out, "{grid}")?,
+            LineEnding::Nul => {
+                struct GridNulWriter<'a, W> {
+                    out: &'a mut W,
+                    io_error: Option<std::io::Error>,
+                }
+                impl<W: Write> FmtWrite for GridNulWriter<'_, W> {
+                    fn write_str(&mut self, s: &str) -> std::fmt::Result {
+                        let res = if s == "\n" {
+                            self.out.write_all(b"\0")
+                        } else {
+                            self.out.write_all(s.as_bytes())
+                        };
+                        if let Err(e) = res {
+                            self.io_error = Some(e);
+                            return Err(std::fmt::Error);
+                        }
+                        Ok(())
+                    }
+                }
+                let mut writer = GridNulWriter {
+                    out,
+                    io_error: None,
+                };
+                if let Err(e) = write!(writer, "{grid}") {
+                    if let Some(io_err) = writer.io_error {
+                        return Err(io_err.into());
+                    }
+                    return Err(std::io::Error::other(e).into());
+                }
+            }
+        }
     }
     Ok(())
 }
