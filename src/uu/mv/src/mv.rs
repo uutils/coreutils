@@ -1595,7 +1595,7 @@ fn is_empty_dir(path: &Path) -> bool {
 /// Check if file is writable, returning the mode for potential reuse.
 #[cfg(unix)]
 fn is_writable(path: &Path) -> (bool, Option<u32>) {
-    if let Ok(metadata) = path.metadata() {
+    if let Ok(metadata) = path.symlink_metadata() {
         let mode = metadata.permissions().mode();
         // Check if user write bit is set
         ((mode & 0o200) != 0, Some(mode))
@@ -1617,7 +1617,7 @@ fn is_writable(path: &Path) -> (bool, Option<u32>) {
 #[cfg(unix)]
 fn get_interactive_prompt(to: &Path, cached_mode: Option<u32>) -> String {
     // Use cached mode if available, otherwise fetch it
-    let mode = cached_mode.or_else(|| to.metadata().ok().map(|m| m.permissions().mode()));
+    let mode = cached_mode.or_else(|| to.symlink_metadata().ok().map(|m| m.permissions().mode()));
     if let Some(mode) = mode {
         let file_mode = mode & 0o777;
         // Check if file is not writable by user
