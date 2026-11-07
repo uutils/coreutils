@@ -20,6 +20,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::error::{UResult, USimpleError};
 use crate::utmpx::ReadOptions;
 
+mod bus;
+
 /// Dynamically loaded FFI bindings for libsystemd login functions.
 mod ffi {
     use core::ffi::{c_char, c_int, c_uint};
@@ -410,7 +412,7 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
 pub fn read_login_records_with_options(options: ReadOptions) -> UResult<Vec<SystemdLoginRecord>> {
     let api = ffi::SystemdLoginApi::load()
         .map_err(|e| USimpleError::new(1, format!("Failed to load libsystemd: {e}")))?;
-    read_login_records_with_api(&api, options)
+    read_login_records_with_api(&api, options, bus::session_details)
 }
 
 #[derive(Clone, Default)]
@@ -506,8 +508,12 @@ impl LoginApi for ffi::SystemdLoginApi {
 fn read_login_records_with_api(
     api: &impl LoginApi,
     options: ReadOptions,
+    session_details: impl FnOnce(
+        Vec<(String, ReadOptions)>,
+    ) -> std::collections::HashMap<String, bus::SessionDetails>,
 ) -> UResult<Vec<SystemdLoginRecord>> {
     let mut records = Vec::new();
+    let mut missing_details = Vec::new();
 
     // Add boot time record first
     if let Ok(boot_time) = login::get_boot_time() {
@@ -570,6 +576,14 @@ fn read_login_records_with_api(
         // Skip sessions that have neither TTY nor seat (e.g., manager sessions)
         if tty.is_empty() && seat.is_empty() && display.is_empty() {
             continue;
+        }
+
+        let missing = ReadOptions {
+            session_time: options.session_time && start_time == UNIX_EPOCH,
+            session_pid: options.session_pid && leader.is_none(),
+        };
+        if missing.session_time || missing.session_pid {
+            missing_details.push((session_id.clone(), missing));
         }
 
         // A single session can be associated with both a TTY and a seat.
@@ -640,6 +654,21 @@ fn read_login_records_with_api(
         }
     }
 
+    let details = session_details(missing_details);
+    for record in &mut records {
+        if let Some(details) = details.get(&record.session_id) {
+            if record.login_time == UNIX_EPOCH {
+                record.login_time = details
+                    .start_time
+                    .and_then(|usec| UNIX_EPOCH.checked_add(std::time::Duration::from_micros(usec)))
+                    .unwrap_or(UNIX_EPOCH);
+            }
+            if record.pid == 0 {
+                record.pid = details.leader.unwrap_or_default();
+                record.session_leader_pid = record.pid;
+            }
+        }
+    }
     Ok(records)
 }
 
@@ -700,7 +729,7 @@ impl SystemdUtmpxCompat {
         self.record.login_time_offset()
     }
 
-    /// Login time, or None when sd-login could not provide one.
+    /// Login time, or None when neither sd-login nor D-Bus provided one.
     pub fn try_login_time(&self) -> Option<time::OffsetDateTime> {
         self.record.try_login_time_offset()
     }

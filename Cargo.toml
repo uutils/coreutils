@@ -42,6 +42,7 @@ readme = "README.package.md"
 version = "0.13.0"
 
 [workspace.dependencies]
+async-io = "2.6.0"
 ansi-width = "0.1.1"
 # The diagnostics rewrite ariadne's output by row number, so a release that
 # changes the shape of a report is a breaking change here even when it is not
@@ -67,6 +68,7 @@ dns-lookup = { version = "4.0.0" }
 dunce = "1.0.4"
 filetime = "0.2.29"
 foldhash = "0.2.0"
+futures-lite = "2.6.1"
 glob = "0.3.1"
 half = "2.4.1"
 hashbrown = '0.17.1'
@@ -166,6 +168,8 @@ uu_base32 = { version = "0.13.0", path = "src/uu/base32" }
 uu_checksum_common = { version = "0.13.0", path = "src/uu/checksum_common" }
 uutests = { version = "0.13.0", path = "tests/uutests" }
 uutests_procs = { version = "0.13.0", path = "tests/uutests_procs" }
+
+zbus = { version = "6.2.1", default-features = false, features = ["default-rt"] }
 
 # This is the linting configuration for all crates.
 # In order to use these, all crates have `[lints] workspace = true` section.
@@ -436,7 +440,7 @@ openssl = [
 ]
 # "test_risky_names" == enable tests that create problematic file names (would make a network share inaccessible to Windows, breaks SVN on Mac OS, etc.)
 test_risky_names = []
-# Linux logind integration tests.
+# Linux integration tests against a running systemd-logind instance.
 test_logind = ["who", "pinky", "users", "uptime"]
 # * only build `uudoc` when `--feature uudoc` is activated
 uudoc = [

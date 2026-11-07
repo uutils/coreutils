@@ -136,7 +136,7 @@ If you would prefer to test a select few utilities:
 cargo test --features "chmod mv tail" --no-default-features
 ```
 
-The logind record assembly and error tests run as `uucore` unit tests without a running
+The logind error and timeout tests run as `uucore` unit tests without a running
 systemd instance or compiled shared-library fixtures:
 
 ```shell
@@ -158,8 +158,6 @@ An empty utmp is mounted only inside that service's namespace. The test creates
 a temporary PAM/TTY session with systemd-run, compares session metadata with
 loginctl and the four utilities, then stops its session. The Logind CI jobs run
 this comparison on Ubuntu 22.04 and 24.04 to cover older and newer sd-login APIs.
-Older libraries cannot supply session timestamps or PIDs; the comparison checks
-that the utilities show `?` for these fields.
 
 If you also want to test the core utilities:
 

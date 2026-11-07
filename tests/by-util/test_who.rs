@@ -130,32 +130,22 @@ mod logind {
         let records = uucore::systemd_logind::read_login_records().unwrap();
         let record = records.iter().find(|r| r.raw_device == *tty).unwrap();
         assert_eq!(&record.user, name);
-        let version = systemd("systemctl", &["--version"]);
-        let version: u32 = version.split_whitespace().nth(1).unwrap().parse().unwrap();
-        let has_metadata = version >= 254;
-        assert_eq!(record.try_login_time_offset().is_some(), has_metadata);
-        assert_eq!(record.pid, if has_metadata { pid } else { 0 });
-        let displayed = if let Some(timestamp) = record.try_login_time_offset() {
-            let timestamp = timestamp.to_offset(UtcOffset::UTC);
-            let expected = timestamp
-                .format(format_description!(
-                    "[year]-[month]-[day] [hour]:[minute]:[second]"
-                ))
-                .unwrap();
-            assert!(properties["Timestamp"].contains(&expected));
-            timestamp
-                .format(format_description!(
-                    "[month repr:short] [day padding:space] [hour]:[minute]"
-                ))
-                .unwrap()
-        } else {
-            "?".to_owned()
-        };
-        let displayed_pid = if has_metadata {
-            properties["Leader"].as_str()
-        } else {
-            "?"
-        };
+        assert_eq!(record.pid, pid);
+        let timestamp = record
+            .try_login_time_offset()
+            .unwrap()
+            .to_offset(UtcOffset::UTC);
+        let expected = timestamp
+            .format(format_description!(
+                "[year]-[month]-[day] [hour]:[minute]:[second]"
+            ))
+            .unwrap();
+        assert!(properties["Timestamp"].contains(&expected));
+        let displayed = timestamp
+            .format(format_description!(
+                "[month repr:short] [day padding:space] [hour]:[minute]"
+            ))
+            .unwrap();
         let ts = TestScenario::new("who");
         let who = ts
             .ucmd()
@@ -170,7 +160,10 @@ mod logind {
             .unwrap();
         assert_eq!(row.split_whitespace().next(), Some(name.as_str()));
         assert!(row.contains(&displayed));
-        assert!(row.split_whitespace().any(|field| field == displayed_pid));
+        assert!(
+            row.split_whitespace()
+                .any(|field| field == properties["Leader"])
+        );
         ts.ccmd("pinky")
             .env("LC_ALL", "C")
             .env("TZ", "UTC")

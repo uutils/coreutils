@@ -51,7 +51,7 @@ platform. This is documented per utility.
 
 Library users can enable `uucore`'s `utmpx` feature alone for traditional records.
 The separate `systemd-logind` feature adds Linux logind support and its runtime
-dependencies. The four utilities below enable both features.
+and D-Bus dependencies. The four utilities below enable both features.
 
 `who`, `pinky`, `users`, and `uptime` prefer the default utmp file when it is a
 readable regular file containing at least one complete record. This checks file
@@ -70,13 +70,22 @@ read errors, the iterator does not report an error separately from end of file.
 The selected path is retained across successive iterators. Selecting the default
 path again restores the default file/logind selection rules.
 
-When libsystemd cannot provide session timestamps or leader PIDs, `who`
+Before systemd 254, session timestamps and leader PIDs are obtained from the
+[public logind D-Bus interface](https://www.freedesktop.org/software/systemd/man/252/org.freedesktop.login1.html).
+If neither source can provide a value, `who`
 and `pinky` display `?` for the unavailable timestamp; `who -u` also displays
 `?` for an unavailable PID. These sessions still count toward the user total.
 Callers can select session metadata with `utmpx::ReadOptions`; its default
 requests both timestamps and PIDs. `ReadOptions::BASIC` omits those session
 fields while retaining the boot timestamp. `users`, `who -q`, and `uptime` use
-this mode. Other listings request only the fields they display.
+this mode, so they do not query D-Bus. Other listings request only the fields
+they display, and only missing values are queried.
+
+The D-Bus fallback has a shared one-second wait budget across all sessions,
+including connection startup. It uses zbus with cancellable asynchronous I/O;
+a timeout drops the pending connection and requests. Later calls can retry
+without waiting for an earlier query to finish. Session enumeration and values
+already obtained through sd-login remain available.
 
 Both traditional and logind timestamps use the local UTC offset at the record's
 time, including the daylight saving rules in effect then.

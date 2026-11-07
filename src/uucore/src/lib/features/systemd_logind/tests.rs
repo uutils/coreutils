@@ -5,6 +5,7 @@
 
 use super::*;
 use std::cell::RefCell;
+use std::collections::HashMap;
 
 #[derive(Default)]
 struct Login {
@@ -59,14 +60,17 @@ fn enumeration_errors_are_propagated() {
         fail: true,
         ..Login::default()
     };
-    assert!(read_login_records_with_api(&login, ReadOptions::default()).is_err());
+    assert!(
+        read_login_records_with_api(&login, ReadOptions::default(), |_| unreachable!()).is_err()
+    );
 }
 
 #[test]
 fn sessions_without_a_terminal_are_skipped() {
     let mut login = Login::new(None, None);
     login.records[0].1.tty.clear();
-    let records = read_login_records_with_api(&login, ReadOptions::default()).unwrap();
+    let records =
+        read_login_records_with_api(&login, ReadOptions::default(), |_| HashMap::new()).unwrap();
     assert!(!records.iter().any(SystemdLoginRecord::is_user_process));
 }
 
@@ -75,7 +79,7 @@ fn seat_and_tty_keep_their_metadata() {
     let mut login = Login::new(Some(1_700_000_000_000_000), Some(31337));
     login.records[0].1.seat = "?seat0".into();
     login.records[0].1.tty = "?tty1".into();
-    let records = read_login_records_with_api(&login, ReadOptions::default())
+    let records = read_login_records_with_api(&login, ReadOptions::default(), |_| HashMap::new())
         .unwrap()
         .into_iter()
         .filter(SystemdLoginRecord::is_user_process)
@@ -110,10 +114,13 @@ fn requested_session_metadata_is_preserved(
     #[case] pid: u32,
 ) {
     let login = Login::new(time, leader);
-    let records = read_login_records_with_api(&login, options).unwrap();
+    let records = read_login_records_with_api(&login, options, |_| HashMap::new()).unwrap();
     let record = records.iter().find(|r| r.is_user_process()).unwrap();
     assert_eq!(*login.requested.borrow(), [options]);
     assert_eq!(record.login_time != UNIX_EPOCH, known_time);
     assert_eq!(record.pid, pid);
     assert_eq!(record.session_leader_pid, pid);
 }
+
+#[path = "bus_tests.rs"]
+mod bus_tests;
