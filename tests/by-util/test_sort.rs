@@ -313,6 +313,54 @@ fn test_version_sort_stable() {
 }
 
 #[test]
+fn test_version_sort_dictionary_order() {
+    // -d drops the underscores before the key is compared as a version
+    new_ucmd!()
+        .arg("-dV")
+        .pipe_in("b\n_a\na10\na_9\n")
+        .succeeds()
+        .stdout_is("_a\na_9\na10\nb\n");
+}
+
+#[test]
+fn test_version_sort_dictionary_order_key() {
+    new_ucmd!()
+        .arg("-k1dV")
+        .pipe_in("b\n_a\na10\na_9\n")
+        .succeeds()
+        .stdout_is("_a\na_9\na10\nb\n");
+}
+
+#[test]
+fn test_version_sort_dictionary_order_bounded_key() {
+    new_ucmd!()
+        .arg("-k1,1dV")
+        .pipe_in("b\n_a\na10\na_9\n")
+        .succeeds()
+        .stdout_is("_a\na_9\na10\nb\n");
+}
+
+#[test]
+fn test_version_sort_ignore_nonprinting() {
+    // -i drops the control character before the key is compared as a version
+    new_ucmd!()
+        .arg("-iV")
+        .pipe_in("a10\na\x019\n")
+        .succeeds()
+        .stdout_is("a\x019\na10\n");
+}
+
+#[test]
+fn test_version_sort_ignore_nonprinting_check() {
+    // The key of the second line is empty, so it sorts before "0"
+    new_ucmd!()
+        .args(&["-c", "-iV"])
+        .pipe_in("0\n\t\n")
+        .fails_with_code(1)
+        .stderr_only("sort: -:2: disorder: \t\n");
+}
+
+#[test]
 fn test_ignore_case_orders_punctuation_after_letters() {
     new_ucmd!()
         .arg("-f")
