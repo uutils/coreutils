@@ -2288,6 +2288,30 @@ fn handle_existing_dest(
     let mut is_dest_removed = false;
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
     if let Some(backup_path) = backup_path {
+        // Leave the destination in place if the source can't be read: the copy
+        // fails later with the source's error, and nothing should be renamed.
+        let Ok(source_metadata) = (if options.dereference(source_in_command_line) {
+            fs::metadata(source)
+        } else {
+            fs::symlink_metadata(source)
+        }) else {
+            return Ok(());
+        };
+        // With -u, a destination that is not older than the source is left
+        // alone, so it must not be backed up either. The backup replaces the
+        // destination entry itself, so -u looks at the entry, not what it
+        // points to.
+        if options.update == UpdateMode::IfOlder
+            && let Ok(dest_metadata) = fs::symlink_metadata(dest)
+            && source_metadata.modified()? <= dest_metadata.modified()?
+        {
+            return Err(CpError::Skipped(false));
+        }
+        // Ask before the backup, so that answering no leaves no backup behind.
+        // The `CopyMode::Update` branch skips its own prompt in this case.
+        if options.update == UpdateMode::IfOlder {
+            options.overwrite.verify(dest, options.debug)?;
+        }
         if backup_would_destroy_source(source, dest, &options.backup_suffix, options.backup, true) {
             return Err(translate!("cp-error-backing-up-destroy-source", "dest" => dest.quote(), "source" => source.quote())
             .into());
@@ -2662,7 +2686,11 @@ fn handle_copy_mode(
                             return Ok(PerformedAction::Skipped);
                         }
 
-                        options.overwrite.verify(dest, options.debug)?;
+                        // With a backup, `handle_existing_dest` already asked,
+                        // except when --attributes-only bypassed that handling.
+                        if options.backup == BackupMode::None || options.attributes_only {
+                            options.overwrite.verify(dest, options.debug)?;
+                        }
 
                         copy_helper(
                             source,
@@ -2818,12 +2846,15 @@ fn copy_file(
         }
 
         let copy_contents = options.dereference(source_in_command_line) || !source_is_symlink;
+        // With a backup, the link is renamed out of the way first, so nothing
+        // is written through it.
         if copy_contents
             && !dest_target_exists
             && !matches!(
                 options.overwrite,
                 OverwriteMode::Clobber(ClobberMode::RemoveDestination)
             )
+            && options.backup == BackupMode::None
             && !is_symlink_loop(dest)
             && std::env::var_os("POSIXLY_CORRECT").is_none()
         {
