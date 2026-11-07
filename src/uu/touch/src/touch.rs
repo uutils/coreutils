@@ -822,11 +822,18 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
     // Also support other formats found in the GNU tests like
     // in tests/misc/stat-nanoseconds.sh
     // or tests/touch/no-rights.sh
-    for fmt in [
-        format::YYYYMMDDHHMMS,
-        format::YYYYMMDDHHMMSS,
-        format::YYYYMMDDHHMM_OFFSET,
-    ] {
+    // A date and time without an explicit timezone is interpreted in the
+    // local zone (GNU behavior), not as UTC (issue #15291). Formats that
+    // carry a trailing %z offset are still resolved via that offset, so they
+    // keep an explicit UTC branch.
+    if let Ok(filetime) = strtime::parse(format::YYYYMMDDHHMMS, s)
+        .and_then(|tm| tm.to_datetime())
+        .and_then(|dt| TimeZone::system().to_ambiguous_zoned(dt).unambiguous())
+        .map(|zdt| timestamp_to_filetime(zdt.timestamp()))
+    {
+        return Ok(filetime);
+    }
+    for fmt in [format::YYYYMMDDHHMMSS, format::YYYYMMDDHHMM_OFFSET] {
         if let Ok(parsed) = strtime::parse(fmt, s)
             .and_then(|tm| tm.to_datetime())
             .and_then(|dt| TimeZone::UTC.to_zoned(dt))
