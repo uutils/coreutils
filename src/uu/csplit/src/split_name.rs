@@ -58,6 +58,16 @@ impl SplitName {
             Err(_) => Err(CsplitError::SuffixFormatIncorrect),
         }?;
 
+        // The field width is the same for every split, so a width too large to
+        // allocate is caught here once instead of on every call to `get`.
+        format.fmt(&mut Vec::new(), 0).map_err(|err| {
+            if err.kind() == io::ErrorKind::OutOfMemory {
+                CsplitError::MemoryExhausted
+            } else {
+                CsplitError::IoError(err)
+            }
+        })?;
+
         Ok(Self {
             prefix: prefix.as_bytes().to_owned(),
             format,
@@ -65,21 +75,10 @@ impl SplitName {
     }
 
     /// Returns the filename of the i-th split.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`CsplitError::MemoryExhausted`] if the suffix format requests a
-    /// field width too large to allocate.
-    pub fn get(&self, n: usize) -> Result<String, CsplitError> {
+    pub fn get(&self, n: usize) -> String {
         let mut v = self.prefix.clone();
-        self.format.fmt(&mut v, n as u64).map_err(|err| {
-            if err.kind() == io::ErrorKind::OutOfMemory {
-                CsplitError::MemoryExhausted
-            } else {
-                CsplitError::IoError(err)
-            }
-        })?;
-        Ok(String::from_utf8_lossy(&v).to_string())
+        self.format.fmt(&mut v, n as u64).unwrap();
+        String::from_utf8_lossy(&v).to_string()
     }
 }
 
@@ -119,31 +118,31 @@ mod tests {
     #[test]
     fn default_formatter() {
         let split_name = SplitName::new(None, None, None).unwrap();
-        assert_eq!(split_name.get(2).unwrap(), "xx02");
+        assert_eq!(split_name.get(2), "xx02");
     }
 
     #[test]
     fn default_formatter_with_prefix() {
         let split_name = SplitName::new(Some(String::from("aaa")), None, None).unwrap();
-        assert_eq!(split_name.get(2).unwrap(), "aaa02");
+        assert_eq!(split_name.get(2), "aaa02");
     }
 
     #[test]
     fn default_formatter_with_width() {
         let split_name = SplitName::new(None, None, Some(String::from("5"))).unwrap();
-        assert_eq!(split_name.get(2).unwrap(), "xx00002");
+        assert_eq!(split_name.get(2), "xx00002");
     }
 
     #[test]
     fn no_padding_decimal() {
         let split_name = SplitName::new(None, Some(String::from("cst-%d-")), None).unwrap();
-        assert_eq!(split_name.get(2).unwrap(), "xxcst-2-");
+        assert_eq!(split_name.get(2), "xxcst-2-");
     }
 
     #[test]
     fn zero_padding_decimal1() {
         let split_name = SplitName::new(None, Some(String::from("cst-%03d-")), None).unwrap();
-        assert_eq!(split_name.get(2).unwrap(), "xxcst-002-");
+        assert_eq!(split_name.get(2), "xxcst-002-");
     }
 
     #[test]
@@ -154,7 +153,7 @@ mod tests {
             None,
         )
         .unwrap();
-        assert_eq!(split_name.get(2).unwrap(), "pre-cst-002-post");
+        assert_eq!(split_name.get(2), "pre-cst-002-post");
     }
 
     #[test]
@@ -165,101 +164,97 @@ mod tests {
             Some(String::from("42")),
         )
         .unwrap();
-        assert_eq!(split_name.get(2).unwrap(), "xxcst-002-");
+        assert_eq!(split_name.get(2), "xxcst-002-");
     }
 
     #[test]
     fn zero_padding_decimal4() {
         let split_name = SplitName::new(None, Some(String::from("cst-%03i-")), None).unwrap();
-        assert_eq!(split_name.get(2).unwrap(), "xxcst-002-");
+        assert_eq!(split_name.get(2), "xxcst-002-");
     }
 
     #[test]
     fn zero_padding_decimal5() {
         let split_name = SplitName::new(None, Some(String::from("cst-%03u-")), None).unwrap();
-        assert_eq!(split_name.get(2).unwrap(), "xxcst-002-");
+        assert_eq!(split_name.get(2), "xxcst-002-");
     }
 
     #[test]
     fn zero_padding_octal() {
         let split_name = SplitName::new(None, Some(String::from("cst-%03o-")), None).unwrap();
-        assert_eq!(split_name.get(42).unwrap(), "xxcst-052-");
+        assert_eq!(split_name.get(42), "xxcst-052-");
     }
 
     #[test]
     fn zero_padding_lower_hex() {
         let split_name = SplitName::new(None, Some(String::from("cst-%03x-")), None).unwrap();
-        assert_eq!(split_name.get(42).unwrap(), "xxcst-02a-");
+        assert_eq!(split_name.get(42), "xxcst-02a-");
     }
 
     #[test]
     fn zero_padding_upper_hex() {
         let split_name = SplitName::new(None, Some(String::from("cst-%03X-")), None).unwrap();
-        assert_eq!(split_name.get(42).unwrap(), "xxcst-02A-");
+        assert_eq!(split_name.get(42), "xxcst-02A-");
     }
 
     #[test]
     fn alternate_form_octal() {
         let split_name = SplitName::new(None, Some(String::from("cst-%#10o-")), None).unwrap();
-        assert_eq!(split_name.get(42).unwrap(), "xxcst-       052-");
+        assert_eq!(split_name.get(42), "xxcst-       052-");
     }
 
     #[test]
     fn alternate_form_lower_hex() {
         let split_name = SplitName::new(None, Some(String::from("cst-%#10x-")), None).unwrap();
-        assert_eq!(split_name.get(42).unwrap(), "xxcst-      0x2a-");
+        assert_eq!(split_name.get(42), "xxcst-      0x2a-");
     }
 
     #[test]
     fn alternate_form_upper_hex() {
         let split_name = SplitName::new(None, Some(String::from("cst-%#10X-")), None).unwrap();
-        assert_eq!(split_name.get(42).unwrap(), "xxcst-      0X2A-");
+        assert_eq!(split_name.get(42), "xxcst-      0X2A-");
     }
 
     #[test]
     fn left_adjusted_decimal1() {
         let split_name = SplitName::new(None, Some(String::from("cst-%-10d-")), None).unwrap();
-        assert_eq!(split_name.get(42).unwrap(), "xxcst-42        -");
+        assert_eq!(split_name.get(42), "xxcst-42        -");
     }
 
     #[test]
     fn left_adjusted_decimal2() {
         let split_name = SplitName::new(None, Some(String::from("cst-%-10i-")), None).unwrap();
-        assert_eq!(split_name.get(42).unwrap(), "xxcst-42        -");
+        assert_eq!(split_name.get(42), "xxcst-42        -");
     }
 
     #[test]
     fn left_adjusted_decimal3() {
         let split_name = SplitName::new(None, Some(String::from("cst-%-10u-")), None).unwrap();
-        assert_eq!(split_name.get(42).unwrap(), "xxcst-42        -");
+        assert_eq!(split_name.get(42), "xxcst-42        -");
     }
 
     #[test]
     fn left_adjusted_octal() {
         let split_name = SplitName::new(None, Some(String::from("cst-%-10o-")), None).unwrap();
-        assert_eq!(split_name.get(42).unwrap(), "xxcst-52        -");
+        assert_eq!(split_name.get(42), "xxcst-52        -");
     }
 
     #[test]
     fn left_adjusted_lower_hex() {
         let split_name = SplitName::new(None, Some(String::from("cst-%-10x-")), None).unwrap();
-        assert_eq!(split_name.get(42).unwrap(), "xxcst-2a        -");
+        assert_eq!(split_name.get(42), "xxcst-2a        -");
     }
 
     #[test]
     fn left_adjusted_upper_hex() {
         let split_name = SplitName::new(None, Some(String::from("cst-%-10X-")), None).unwrap();
-        assert_eq!(split_name.get(42).unwrap(), "xxcst-2A        -");
+        assert_eq!(split_name.get(42), "xxcst-2A        -");
     }
 
     #[test]
     fn formatting_width_too_large_returns_error() {
-        let split_name =
-            SplitName::new(None, Some(String::from("%9999999999999999999d")), None).unwrap();
-        assert!(matches!(
-            split_name.get(0),
-            Err(CsplitError::MemoryExhausted)
-        ));
+        let split_name = SplitName::new(None, Some(String::from("%9999999999999999999d")), None);
+        assert!(matches!(split_name, Err(CsplitError::MemoryExhausted)));
     }
 
     #[test]
