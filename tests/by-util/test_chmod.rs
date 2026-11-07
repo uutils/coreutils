@@ -823,6 +823,31 @@ fn test_chmod_preserve_root_symlink_during_recursion() {
         );
 }
 
+/// The guard must also see a symlink to `/` whose path is longer than
+/// `PATH_MAX`, which can't be looked up by name. `u+r` is harmless if it fails.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_chmod_preserve_root_symlink_beyond_path_max() {
+    use rustix::fs::{CWD, Mode, OFlags, mkdirat, openat, symlinkat};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    // 17 nested 250-byte names put `r` more than `PATH_MAX` bytes deep, so
+    // the tree has to be built one level at a time with openat/mkdirat.
+    at.mkdir("deep");
+    let flags = OFlags::RDONLY | OFlags::DIRECTORY;
+    let mut fd = openat(CWD, at.plus("deep"), flags, Mode::empty()).unwrap();
+    let name = "a".repeat(250);
+    for _ in 0..17 {
+        mkdirat(&fd, &name, Mode::from_bits_truncate(0o755)).unwrap();
+        fd = openat(&fd, &name, flags, Mode::empty()).unwrap();
+    }
+    symlinkat("/", &fd, "r").unwrap();
+
+    ucmd.args(&["-R", "-L", "--preserve-root", "u+r", "deep"])
+        .fails_with_code(1)
+        .stderr_contains("(same as '/')");
+}
+
 #[test]
 fn test_chmod_recursive_reference_does_not_follow_inner_symlink() {
     // A symlink met inside the tree during `chmod -R` must not have its referent
