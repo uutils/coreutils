@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fieldsets prefs febr abmon langinfo uppercased
+// spell-checker:ignore fieldsets fset prefs febr abmon langinfo uppercased wcswidth alef Pagume
 
 //! Locale-aware datetime formatting utilities using ICU and jiff-icu
 
@@ -18,6 +18,16 @@ use jiff_icu::ConvertFrom;
 use std::sync::OnceLock;
 
 use crate::i18n::get_locale_from_env;
+
+/// Controls whether localized month and weekday names are padded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NamePadding {
+    /// Raw names with no trailing padding, for `date` and similar utilities.
+    Raw,
+    /// Names padded with trailing spaces to the display width of the widest
+    /// name of the same kind, for columnar output like `ls` (GNU abmon-align).
+    Padded,
+}
 
 /// Get the locale for time/date formatting from `LC_TIME` environment variable
 pub fn get_time_locale() -> &'static (Locale, super::UEncoding) {
@@ -111,8 +121,94 @@ macro_rules! format_with {
     };
 }
 
-/// Transform a strftime format string to use locale-specific calendar values
-pub fn localize_format_string(format: &str, date: JiffDate) -> String {
+/// ICU's medium month format may include trailing periods (e.g., "febr." for
+/// Hungarian), which when combined with locale format strings that also add
+/// periods after %b (e.g., "%Y. %b. %d") results in double periods ("febr..").
+/// The standard C/POSIX locale via `nl_langinfo` returns abbreviations WITHOUT
+/// trailing periods, so we strip them for consistency.
+fn strip_abbrev_dots(name: &str) -> &str {
+    name.trim_end_matches('.')
+}
+
+fn as_is(name: &str) -> &str {
+    name
+}
+
+/// Sum of the per-character display widths of `s`.
+///
+/// `UnicodeWidthStr::width` is intentionally not used: it treats the Arabic
+/// lam-alef sequence (ل+أ) as a single cell, which glibc's `wcswidth` (used by
+/// GNU ls for padding) does not.
+fn display_width(s: &str) -> usize {
+    use unicode_width::UnicodeWidthChar;
+    s.chars().map(|c| c.width().unwrap_or(0)).sum()
+}
+
+/// Largest display width of the names that `$formatter` gives to `$dates`,
+/// or 0 if the formatter is unavailable.
+macro_rules! max_name_width {
+    ($formatter:ident, $dates:expr, $normalize:expr) => {
+        $formatter.with(|f| {
+            f.as_ref().map_or(0, |f| {
+                $dates
+                    .map(|d| display_width($normalize(&f.format(&d).to_string())))
+                    .max()
+                    .unwrap_or(0)
+            })
+        })
+    };
+}
+
+/// One date every five days over a year: this reaches every month of every
+/// supported calendar, including the five-day Ethiopian Pagume.
+fn month_sample_dates() -> impl Iterator<Item = Date<Iso>> {
+    jiff::civil::date(2001, 1, 1)
+        .series(jiff::Span::new().days(5))
+        .take(74)
+        .map(Date::<Iso>::convert_from)
+}
+
+/// Seven consecutive days, one for each weekday.
+fn weekday_sample_dates() -> impl Iterator<Item = Date<Iso>> {
+    jiff::civil::date(2001, 1, 1)
+        .series(jiff::Span::new().days(1))
+        .take(7)
+        .map(Date::<Iso>::convert_from)
+}
+
+thread_local! {
+    // Widest name of each kind, only computed when padded names are requested.
+    static MONTH_LONG_WIDTH: usize =
+        max_name_width!(MONTH_LONG, month_sample_dates(), as_is);
+    static MONTH_MEDIUM_WIDTH: usize =
+        max_name_width!(MONTH_MEDIUM, month_sample_dates(), strip_abbrev_dots);
+    static WEEKDAY_LONG_WIDTH: usize =
+        max_name_width!(WEEKDAY_LONG, weekday_sample_dates(), as_is);
+    static WEEKDAY_SHORT_WIDTH: usize =
+        max_name_width!(WEEKDAY_SHORT, weekday_sample_dates(), as_is);
+}
+
+/// Pad `name` with trailing spaces up to the display width stored in
+/// `width` when `padding` is [`NamePadding::Padded`].
+fn pad_name(
+    name: &str,
+    padding: NamePadding,
+    width: &'static std::thread::LocalKey<usize>,
+) -> String {
+    match padding {
+        NamePadding::Raw => name.to_string(),
+        NamePadding::Padded => {
+            let fill = width.with(|w| w.saturating_sub(display_width(name)));
+            format!("{name}{:fill$}", "")
+        }
+    }
+}
+
+/// Transform a strftime format string to use locale-specific calendar values.
+///
+/// With [`NamePadding::Padded`], month and weekday names are padded to a
+/// uniform display width; with [`NamePadding::Raw`] they are used as is.
+pub fn localize_format_string(format: &str, date: JiffDate, padding: NamePadding) -> String {
     const PERCENT_PLACEHOLDER: &str = "\x00\x00";
 
     let (locale, _) = get_time_locale();
@@ -161,17 +257,12 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     if fmt.contains("%B")
         && let Some(name) = format_with!(MONTH_LONG, &iso_date)
     {
-        fmt = fmt.replace("%B", &name);
+        fmt = fmt.replace("%B", &pad_name(&name, padding, &MONTH_LONG_WIDTH));
     }
     if (fmt.contains("%b") || fmt.contains("%h"))
-        && let Some(month_abbrev) = format_with!(MONTH_MEDIUM, &iso_date)
+        && let Some(name) = format_with!(MONTH_MEDIUM, &iso_date)
     {
-        // ICU's medium format may include trailing periods (e.g., "febr." for Hungarian),
-        // which when combined with locale format strings that also add periods after
-        // %b (e.g., "%Y. %b. %d") results in double periods ("febr..").
-        // The standard C/POSIX locale via nl_langinfo returns abbreviations
-        // WITHOUT trailing periods, so we strip them here for consistency.
-        let month_abbrev = month_abbrev.trim_end_matches('.').to_string();
+        let month_abbrev = pad_name(strip_abbrev_dots(&name), padding, &MONTH_MEDIUM_WIDTH);
         fmt = fmt
             .replace("%b", &month_abbrev)
             .replace("%h", &month_abbrev);
@@ -179,12 +270,12 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     if fmt.contains("%A")
         && let Some(name) = format_with!(WEEKDAY_LONG, &iso_date)
     {
-        fmt = fmt.replace("%A", &name);
+        fmt = fmt.replace("%A", &pad_name(&name, padding, &WEEKDAY_LONG_WIDTH));
     }
     if fmt.contains("%a")
         && let Some(name) = format_with!(WEEKDAY_SHORT, &iso_date)
     {
-        fmt = fmt.replace("%a", &name);
+        fmt = fmt.replace("%a", &pad_name(&name, padding, &WEEKDAY_SHORT_WIDTH));
     }
 
     fmt.replace(PERCENT_PLACEHOLDER, "%%")
