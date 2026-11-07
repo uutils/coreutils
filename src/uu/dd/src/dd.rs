@@ -32,7 +32,7 @@ use std::ffi::OsString;
 use std::fs::Metadata;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
 use std::os::unix::{
@@ -398,6 +398,15 @@ impl<'a> Input<'a> {
             ));
         }
 
+        #[cfg(unix)]
+        if settings.iflags.nonblock {
+            use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
+
+            let stdin = io::stdin();
+            let flags = fcntl_getfl(&stdin).map_err(io::Error::from)?;
+            fcntl_setfl(&stdin, flags | OFlags::NONBLOCK).map_err(io::Error::from)?;
+        }
+
         if settings.skip > 0 {
             src.skip(settings.skip, settings.ibs)?;
         }
@@ -410,8 +419,8 @@ impl<'a> Input<'a> {
             let mut opts = OpenOptions::new();
             opts.read(true);
 
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            if let Some(libc_flags) = make_linux_iflags(&settings.iflags) {
+            #[cfg(unix)]
+            if let Some(libc_flags) = make_unix_iflags(&settings.iflags) {
                 opts.custom_flags(libc_flags);
             }
 
@@ -432,8 +441,7 @@ impl<'a> Input<'a> {
     fn new_fifo(filename: &Path, settings: &'a Settings) -> UResult<Self> {
         let mut opts = OpenOptions::new();
         opts.read(true);
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        opts.custom_flags(make_linux_iflags(&settings.iflags).unwrap_or(0));
+        opts.custom_flags(make_unix_iflags(&settings.iflags).unwrap_or(0));
         let mut src = Source::Fifo(opts.open(filename)?);
         if settings.skip > 0 {
             src.skip(settings.skip, settings.ibs)?;
@@ -442,33 +450,36 @@ impl<'a> Input<'a> {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn make_linux_iflags(iflags: &IFlags) -> Option<core::ffi::c_int> {
+#[cfg(unix)]
+fn make_unix_iflags(iflags: &IFlags) -> Option<core::ffi::c_int> {
     let mut flag = 0;
 
-    if iflags.direct {
-        flag |= libc::O_DIRECT;
-    }
-    if iflags.directory {
-        flag |= libc::O_DIRECTORY;
-    }
-    if iflags.dsync {
-        flag |= libc::O_DSYNC;
-    }
-    if iflags.noatime {
-        flag |= libc::O_NOATIME;
-    }
-    if iflags.noctty {
-        flag |= libc::O_NOCTTY;
-    }
-    if iflags.nofollow {
-        flag |= libc::O_NOFOLLOW;
-    }
     if iflags.nonblock {
         flag |= libc::O_NONBLOCK;
     }
-    if iflags.sync {
-        flag |= libc::O_SYNC;
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        if iflags.direct {
+            flag |= libc::O_DIRECT;
+        }
+        if iflags.directory {
+            flag |= libc::O_DIRECTORY;
+        }
+        if iflags.dsync {
+            flag |= libc::O_DSYNC;
+        }
+        if iflags.noatime {
+            flag |= libc::O_NOATIME;
+        }
+        if iflags.noctty {
+            flag |= libc::O_NOCTTY;
+        }
+        if iflags.nofollow {
+            flag |= libc::O_NOFOLLOW;
+        }
+        if iflags.sync {
+            flag |= libc::O_SYNC;
+        }
     }
 
     if flag == 0 { None } else { Some(flag) }

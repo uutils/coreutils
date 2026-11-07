@@ -32,7 +32,7 @@ impl Parser {
 fn unimplemented_flags_should_error_non_linux() {
     let mut succeeded = Vec::new();
 
-    // The following flags are only implemented in linux
+    // These flags are Linux-only, except iflag=nonblock on other Unix targets.
     for flag in [
         "direct",
         "directory",
@@ -44,7 +44,7 @@ fn unimplemented_flags_should_error_non_linux() {
         "nofollow",
     ] {
         let arg = format!("iflag={flag}");
-        if Parser::new().parse([&arg]).is_ok() {
+        if !(flag == "nonblock" && cfg!(unix)) && Parser::new().parse([&arg]).is_ok() {
             succeeded.push(arg);
         }
 
@@ -58,6 +58,13 @@ fn unimplemented_flags_should_error_non_linux() {
         succeeded.is_empty(),
         "The following flags did not panic as expected: {succeeded:?}",
     );
+}
+
+#[test]
+#[cfg(unix)]
+fn parse_iflag_nonblock() {
+    let settings = Parser::new().parse(["iflag=nonblock"]).unwrap();
+    assert!(settings.iflags.nonblock);
 }
 
 #[test]

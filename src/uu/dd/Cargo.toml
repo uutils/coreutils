@@ -29,7 +29,7 @@ uucore = { workspace = true, features = [
   "signals",
 ] }
 
-[target.'cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))'.dependencies]
+[target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["fs"] }
 
 [[bin]]
