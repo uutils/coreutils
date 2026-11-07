@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel Secho sighandler putenv
+// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel Secho Sprintf Cdata iCdata uFOOa sighandler putenv
 
 #![allow(clippy::missing_errors_doc)]
 
@@ -727,6 +727,59 @@ fn test_split_string_unset_variable_does_not_start_a_word() {
         .arg("-Sprintf [%s] a ${UU_EMPTY}")
         .succeeds()
         .stdout_is("[a][]");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_option_value_starting_with_split_string_is_not_split() {
+    let scene = TestScenario::new(util_name!());
+    let dir = "-Sprintf X";
+    scene.fixtures.mkdir(dir);
+
+    // GNU env takes the value of a detached -C, -u or -a as is
+    for args in [
+        ["-C", dir, "pwd"],
+        ["--chdir", dir, "pwd"],
+        ["--ch", dir, "pwd"],
+        ["-iC", dir, "pwd"],
+    ] {
+        scene
+            .ucmd()
+            .args(&args)
+            .succeeds()
+            .stdout_contains("/-Sprintf X\n");
+    }
+
+    for opt in ["-u", "--unset", "--un", "-a", "--argv0"] {
+        scene
+            .ucmd()
+            .args(&[opt, dir, "printf", "ok"])
+            .succeeds()
+            .stdout_is("ok");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn test_attached_option_value_does_not_consume_command() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("data");
+
+    // `-Cdata` and `-uFOOa` carry their value: `printf` is the command and
+    // its `-S...` argument is passed through unchanged.
+    for opt in ["-Cdata", "-uFOOa", "-iCdata", "--chdir=data"] {
+        scene
+            .ucmd()
+            .args(&[opt, "printf", "%s", "-Sx y"])
+            .succeeds()
+            .stdout_is("-Sx y");
+    }
+
+    scene
+        .ucmd()
+        .args(&["-u", "-uX=1", "true"])
+        .fails_with_code(125)
+        .stderr_contains("cannot unset '-uX=1'");
 }
 
 #[test]
