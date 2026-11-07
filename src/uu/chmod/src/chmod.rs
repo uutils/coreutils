@@ -326,6 +326,7 @@ impl Chmoder {
             Ok((mode, mode))
         } else {
             let cmode_unwrapped = self.cmode.clone().unwrap();
+            let has_comma = cmode_unwrapped.contains(',');
             let mut new_mode = current_mode;
             let mut naively_expected_new_mode = current_mode;
 
@@ -336,7 +337,7 @@ impl Chmoder {
                 let clause_start = offset;
                 offset += mode.len() + 1; // past the clause and its comma
 
-                let result = if mode.chars().any(|c| c.is_ascii_digit()) {
+                let result = if mode::is_numeric_clause(mode, has_comma) {
                     mode::parse_numeric(new_mode, mode, is_dir).map(|v| (v, v))
                 } else {
                     mode::parse_symbolic(new_mode, mode, mode::get_umask(), is_dir).map(|m| {
