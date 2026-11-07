@@ -16,6 +16,27 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
+fn matched_utility<T>(name: &str, utils: &UtilityMap<T>) -> Option<&'static str> {
+    if name.ends_with("utils") {
+        return None;
+    }
+    // Prefer stty over tty, and never treat *utils as ls.
+    utils
+        .keys()
+        .filter(|&&util| name.ends_with(util))
+        .max_by_key(|util| util.len())
+        .copied()
+}
+
+fn utility_from_symlink<T>(
+    binary: &std::path::Path,
+    utils: &UtilityMap<T>,
+) -> Option<&'static str> {
+    let target = std::fs::read_link(binary).ok()?;
+    let name = validation::name(&target)?;
+    matched_utility(name, utils)
+}
+
 fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     let display_list = utils.keys().copied().join(", ");
     let width = cmp::min(textwrap::termwidth(), 100) - 8; // (opinion/heuristic) max 100 chars wide with 4 character side indentions
@@ -62,17 +83,16 @@ fn main() -> ExitCode {
 
     // binary name ends with util name?
     let is_coreutils = binary_as_util.ends_with("utils");
-    let matched_util = utils
-        .keys()
-        .filter(|&&u| binary_as_util.ends_with(u) && !is_coreutils)
-        .max_by_key(|u| u.len()); //Prefer stty more than tty. *utils is not ls
-
-    let util_name = if let Some(&util) = matched_util {
+    let util_name = if let Some(util) = matched_utility(binary_as_util, &utils) {
         Some(OsString::from(util))
     } else if is_coreutils || binary_as_util.ends_with("box") {
         // todo: Remove support of "*box" from binary
         uucore::set_utility_is_second_arg();
         args.next()
+    } else if cfg!(all(target_os = "linux", target_env = "gnu"))
+        && let Some(util) = utility_from_symlink(&binary, &utils)
+    {
+        Some(OsString::from(util))
     } else {
         return validation::not_found(&OsString::from(binary_as_util));
     };
