@@ -317,6 +317,9 @@ fn tail_stdin(
                 );
             }
         } else {
+            #[cfg(target_os = "wasi")]
+            let mut reader = BufReader::new(NormalizeReadErrors(stdin()));
+            #[cfg(not(target_os = "wasi"))]
             let mut reader = BufReader::new(stdin());
             unbounded_tail(&mut reader, settings)?;
         }
@@ -503,7 +506,58 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
     Ok(())
 }
 
+/// Reader that reports a directory read on WASI as `ErrorKind::IsADirectory`.
+#[cfg(target_os = "wasi")]
+struct NormalizeReadErrors<R>(R);
+
+#[cfg(target_os = "wasi")]
+impl<R: Read> Read for NormalizeReadErrors<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.0
+            .read(buf)
+            .map_err(uucore::error::wasi_normalize_read_error)
+    }
+}
+
+/// Writer that ends the process silently once the reader of stdout has gone away.
+///
+/// Unix signals this case with SIGPIPE. WASI has no signals, so the process exits
+/// with the status that a SIGPIPE death reports.
+#[cfg(target_os = "wasi")]
+struct ExitOnClosedPipe<W>(W);
+
+#[cfg(target_os = "wasi")]
+impl<W: Write> ExitOnClosedPipe<W> {
+    fn check<T>(result: io::Result<T>) -> io::Result<T> {
+        // Preview 1 reports a closed pipe as a generic EIO instead of BrokenPipe.
+        #[cfg(target_env = "p1")]
+        const EIO: Option<i32> = Some(29);
+        #[cfg(not(target_env = "p1"))]
+        const EIO: Option<i32> = None;
+        if let Err(err) = &result
+            && (err.kind() == ErrorKind::BrokenPipe || (EIO.is_some() && err.raw_os_error() == EIO))
+        {
+            std::process::exit(13);
+        }
+        result
+    }
+}
+
+#[cfg(target_os = "wasi")]
+impl<W: Write> Write for ExitOnClosedPipe<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        Self::check(self.0.write(buf))
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Self::check(self.0.flush())
+    }
+}
+
 fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
+    #[cfg(target_os = "wasi")]
+    let mut writer = BufWriter::new(ExitOnClosedPipe(stdout().lock()));
+    #[cfg(not(target_os = "wasi"))]
     let mut writer = BufWriter::new(stdout().lock());
     match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), sep) => {
@@ -588,7 +642,11 @@ fn print_target_section<
     limit: Option<u64>,
 ) -> UResult<()> {
     let stdout = stdout();
-    let mut stdout = stdout.lock();
+    let stdout = stdout.lock();
+    #[cfg(target_os = "wasi")]
+    let mut stdout = ExitOnClosedPipe(stdout);
+    #[cfg(not(target_os = "wasi"))]
+    let mut stdout = stdout;
     if let Some(limit) = limit {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         uucore::pipes::send_n_bytes(file, &mut stdout, limit)?;

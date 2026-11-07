@@ -13,7 +13,7 @@
 )]
 
 use regex::Regex;
-#[cfg(unix)]
+#[cfg(all(unix, not(wasi_runner)))]
 use rlimit::Resource;
 #[cfg(not(target_os = "openbsd"))]
 use std::collections::HashMap;
@@ -247,6 +247,7 @@ fn get_filesystem_type(scene: &TestScenario, path: &Path) -> String {
 }
 
 #[cfg(all(feature = "truncate", feature = "dd"))]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test] // FIXME: fix this test for FreeBSD and OpenBSD
 #[cfg(not(target_os = "openbsd"))]
 fn test_ls_allocation_size() {
@@ -489,6 +490,7 @@ fn test_ls_allocation_size() {
     }
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_ls_devices() {
     let scene = TestScenario::new(util_name!());
@@ -1271,6 +1273,7 @@ fn test_ls_long_padding_of_size_column_with_multiple_files() {
 /// and `.` and `..` being present in `-a` all need to work for the test to pass.
 /// This test does not really test anything provided by `-l` but the file names and symlinks.
 #[cfg(all(feature = "ln", feature = "mkdir", feature = "touch"))]
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(all(feature = "ln", feature = "mkdir", feature = "touch"))]
 #[allow(clippy::items_after_statements)]
@@ -1535,7 +1538,7 @@ fn test_ls_long_dangling_symlink_color() {
     // Ensure dangling link name uses `or=` and target uses `mi=`.
     let name_regex =
         Regex::new(r"(?:\x1b\[[0-9;]*m)*\x1b\[([0-9;]*)mdir1/dangling_symlink\x1b\[0m").unwrap();
-    let target_path = regex::escape(&at.plus_as_string("foo"));
+    let target_path = regex::escape(&format!("..{}foo", std::path::MAIN_SEPARATOR));
     let target_pattern = format!(r"(?:\x1b\[[0-9;]*m)*\x1b\[([0-9;]*)m{target_path}\x1b\[0m");
     let target_regex = Regex::new(&target_pattern).unwrap();
 
@@ -1766,6 +1769,7 @@ fn test_ls_directory_dangling_symlink_uses_ln_when_or_blank() {
     );
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_ls_long_total_size() {
@@ -2244,6 +2248,7 @@ fn test_ls_order_size() {
     result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
 }
 
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
 fn test_ls_long_ctime() {
     let scene = TestScenario::new(util_name!());
@@ -2287,6 +2292,7 @@ fn test_ls_order_birthtime() {
     assert_eq!(result.stdout_str(), "test-birthtime-2  test-birthtime-1\n");
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
 fn test_ls_time_styles() {
     let scene = TestScenario::new(util_name!());
@@ -2653,6 +2659,7 @@ fn test_ls_order_time_breaks_ties_by_name() {
     }
 }
 
+#[uutests::wasi_ignore(HostSystemStateDiffers)]
 #[test]
 fn test_ls_order_time() {
     let scene = TestScenario::new(util_name!());
@@ -2954,6 +2961,7 @@ mod quoting {
     // locale/clocale quoting styles use Unicode quotation marks U+2018/U+2019
     // and must not escape embedded apostrophes or double quotes; in the C
     // locale they fall back to ASCII single/double quotes.
+    #[uutests::wasi_ignore(NoLocaleData)]
     #[test]
     fn test_ls_quoting_locale_utf8() {
         if !is_locale_available("en_US.UTF-8") {
@@ -3448,6 +3456,7 @@ mod quoting {
     /// This test creates files with an UTF-8 encoded name and verify that it
     /// gets escaped depending on the used locale.
     #[cfg(not(any(target_vendor = "apple", windows, target_os = "openbsd")))]
+    #[uutests::wasi_ignore(NoLocaleData)]
     #[test]
     fn test_locale_aware_quoting() {
         let cases: &[(&[u8], _, _, &[&str])] = &[
@@ -3510,6 +3519,7 @@ mod quoting {
         }
     }
 
+    #[uutests::wasi_ignore(NoLocaleData)]
     #[test]
     fn test_c_dot_utf8_renders_utf8() {
         let scene = TestScenario::new(util_name!());
@@ -3596,6 +3606,7 @@ fn test_ls_color() {
 }
 
 #[cfg(unix)]
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
 #[cfg(not(feature = "selinux"))]
 // Disabled on the SELinux runner for now
@@ -3639,6 +3650,7 @@ fn test_ls_inode() {
     assert_eq!(inode_short, inode_long);
 }
 
+#[uutests::wasi_ignore(NoFifo)]
 #[test]
 #[cfg(not(windows))]
 fn test_ls_indicator_style() {
@@ -3756,7 +3768,7 @@ fn test_ls_indicator_style_symlink_target_long() {
         .succeeds()
         .stdout_contains("dir_link -> ")
         .stdout_does_not_contain("dir_link@ -> ")
-        .stdout_contains("/dir/");
+        .stdout_contains(" dir/");
 }
 
 #[test]
@@ -5128,6 +5140,7 @@ fn test_ls_sort_extension() {
     );
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_ls_path() {
     let scene = TestScenario::new(util_name!());
@@ -5170,6 +5183,7 @@ fn test_ls_path() {
         .stdout_is(expected_stdout);
 }
 
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
 fn test_ls_dangling_symlinks() {
     let scene = TestScenario::new(util_name!());
@@ -5713,6 +5727,7 @@ fn test_tabsize_formatting() {
 }
 
 #[cfg(all(unix, not(target_os = "android")))]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_device_number() {
     use std::fs::{metadata, read_dir};
@@ -5743,6 +5758,7 @@ fn test_device_number() {
         .stdout_contains(major_minor_str);
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_invalid_utf8() {
@@ -5824,6 +5840,7 @@ fn test_ls_dired_quoting_style_name() {
     }
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 fn test_ls_dired_hyperlink() {
     // we will have link but not the DIRED output
@@ -6485,6 +6502,7 @@ fn test_ls_cf_output_should_be_delimited_by_tab() {
 }
 
 #[cfg(all(unix, feature = "dd"))]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_posixly_correct_and_block_size_env_vars() {
@@ -6539,6 +6557,7 @@ fn test_posixly_correct_and_block_size_env_vars() {
 }
 
 #[cfg(all(unix, feature = "dd"))]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_posixly_correct_and_block_size_env_vars_with_k() {
@@ -6643,6 +6662,7 @@ fn test_ls_invalid_block_size() {
 }
 
 #[cfg(all(unix, feature = "dd"))]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_ls_invalid_block_size_in_env_var() {
@@ -6690,6 +6710,7 @@ fn test_ls_invalid_block_size_in_env_var() {
 }
 
 #[cfg(all(unix, feature = "dd"))]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_ls_block_size_override() {
@@ -6802,6 +6823,7 @@ fn test_ls_block_size_override_self() {
     new_ucmd!().arg("--si").arg("--si").succeeds();
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 fn test_ls_hyperlink() {
     let scene = TestScenario::new(util_name!());
@@ -6879,6 +6901,7 @@ fn test_ls_hyperlink_encode_link() {
 }
 // spell-checker:enable
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 fn test_ls_hyperlink_dirs() {
     let scene = TestScenario::new(util_name!());
@@ -6923,6 +6946,7 @@ fn test_ls_hyperlink_dirs() {
     );
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 fn test_ls_hyperlink_recursive_dirs() {
     let scene = TestScenario::new(util_name!());
@@ -7120,6 +7144,7 @@ fn test_term_colorterm() {
 }
 
 #[cfg(all(unix, not(target_vendor = "apple")))]
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 fn test_acl_display() {
     use std::process::Command;
@@ -7204,6 +7229,7 @@ fn test_acl_display_macos() {
 // Regression test for https://github.com/uutils/coreutils/issues/10980
 // Each file with an ACL must not inflate the link-count column width.
 #[cfg(all(unix, not(target_vendor = "apple")))]
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 fn test_acl_padding_not_inflated() {
     use std::process::Command;
@@ -7256,6 +7282,7 @@ fn test_acl_padding_not_inflated() {
 // output and file names that don't have a designated color (unless the FILE
 // setting is also configured).
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(not(feature = "selinux"))]
 // Disabled on the SELinux runner for now
@@ -7671,6 +7698,7 @@ fn test_unknown_format_specifier() {
 }
 
 #[cfg(all(unix, not(target_vendor = "apple")))]
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 fn test_acl_display_symlink() {
     use std::process::Command;
@@ -7842,6 +7870,7 @@ fn test_ls_time_style_iso_recent_and_older() {
     );
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
 fn test_ls_time_style_posix_locale_override() {
     let scene = TestScenario::new(util_name!());
@@ -8233,6 +8262,7 @@ fn test_f_flag_combined_behavior() {
     assert!(!result.contains("\x1b["));
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 fn test_f_with_long_format() {
     // Test that -f works with long format (-l)
@@ -8255,6 +8285,7 @@ fn test_f_with_long_format() {
     assert!(result.contains("-rw"));
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_ls_proc_self_fd_no_errors() {
@@ -8271,7 +8302,7 @@ fn test_ls_proc_self_fd_no_errors() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(wasi_runner)))]
 fn test_ls_recursive_no_fd_leak() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -8291,6 +8322,7 @@ fn test_ls_recursive_no_fd_leak() {
         .no_stderr();
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_ls_non_utf8_hidden() {

@@ -200,6 +200,7 @@ fn test_piped_to_dev_null() {
     }
 }
 
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn test_piped_to_dev_full() {
@@ -653,7 +654,11 @@ fn test_domain_socket() {
     s.ucmd()
         .args(&[socket_path])
         .fails()
-        .stderr_contains("No such device or address");
+        .stderr_contains(if cfg!(wasi_runner) {
+            "No such file or directory"
+        } else {
+            "No such device or address"
+        });
 }
 
 #[test]
@@ -788,7 +793,6 @@ fn test_u_ignored() {
     }
 }
 
-#[uutests::wasi_ignore(ErrnoMessageMismatch)]
 #[test]
 #[cfg(unix)]
 fn test_write_fast_read_error() {
@@ -923,6 +927,7 @@ fn test_write_error_handling() {
         .stderr_contains("No space left on device");
 }
 
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_version_help_dev_full() {

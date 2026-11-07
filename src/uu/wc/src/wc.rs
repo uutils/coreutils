@@ -700,7 +700,10 @@ fn word_count_from_input(input: &Input<'_>, settings: &Settings) -> CountResult 
     };
     match maybe_err {
         None => CountResult::Success(total),
-        Some(err) => CountResult::Interrupted(total, err),
+        Some(err) => {
+            let err = uucore::error::wasi_normalize_open_error(err);
+            CountResult::Interrupted(total, err)
+        }
     }
 }
 
@@ -812,7 +815,7 @@ fn files0_iter<'a>(
                         Ok(Input::Path(PathBuf::from(s).into()))
                     }
                 }
-                Err(e) => Err(e.map_err_context(
+                Err(e) => Err(uucore::error::wasi_normalize_read_error(e).map_err_context(
                     || translate!("wc-error-read-error", "path" => locale_aware_shell_escape(&err_path)),
                 ) as Box<dyn UError>),
             }),

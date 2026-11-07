@@ -24,14 +24,16 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { target: wasm32-wasip1, rust-flags: "--cfg wasi_runner" }
-          - { target: wasm32-wasip2, rust-flags: "--cfg wasi_runner --cfg wasip2_runner"  }
+          - { target: wasm32-wasip1, rust-flags: "--cfg wasi_runner", toolchain: stable }
+          # wasm32-wasip2 needs nightly, where `std::process::exit` keeps the exit code.
+          - { target: wasm32-wasip2, rust-flags: "--cfg wasi_runner --cfg wasip2_runner", toolchain: nightly }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
+    - uses: dtolnay/rust-toolchain@master
       with:
+        toolchain: ${{ matrix.job.toolchain }}
         targets: ${{ matrix.job.target }}
     - uses: Swatinem/rust-cache@v2
       with:
@@ -59,7 +61,6 @@ jobs:
       run: |
         cargo test --target ${{ matrix.job.target }} --no-default-features --features fs -p uucore fs::tests
     - name: Run integration tests via wasmtime
-      if:  matrix.job.target == 'wasm32-wasip1'
       env:
         RUSTFLAGS: ${{ matrix.job.rust-flags }}
       run: |
@@ -68,8 +69,10 @@ jobs:
         # Run host-compiled integration tests against the WASI binary.
         # Tests incompatible with WASI are annotated with
         # #[uutests::wasi_ignore(ReasonKey)] in the test source files, which
-        # expands to #[cfg_attr(wasi_runner, ignore = "...")]; the reason keys
-        # live in tests/uutests_procs/src/lib.rs.
+        # expands to #[cfg_attr(wasi_runner, ignore = "...")]. Tests that fail
+        # only on wasm32-wasip2 use #[uutests::wasip2_ignore(ReasonKey)], which
+        # expands to the same attribute for wasip2_runner. The reason keys live
+        # in tests/uutests_procs/src/lib.rs.
         # The binary above is built without default features, so it has no
         # caret diagnostics; the host test crate does have them, hence the
         # not(wasi_runner) in the cfg guarding every `mod diagnostics`.

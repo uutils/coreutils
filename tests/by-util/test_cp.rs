@@ -100,6 +100,7 @@ fn test_cp_stream_to_full() {
         .stderr_contains("No space");
 }
 
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_cp_verbose_write_error_is_reported() {
@@ -450,7 +451,6 @@ fn test_cp_multiple_files_with_nonexistent_file() {
     assert_eq!(at.read(TEST_HOW_ARE_YOU_DEST), "How are you?\n");
 }
 
-#[uutests::wasi_ignore(EmptyPathResolvesToDirectory)]
 #[test]
 fn test_cp_multiple_files_with_empty_file_name() {
     #[cfg(windows)]
@@ -3240,6 +3240,7 @@ fn test_cp_conflicting_update() {
         .stderr_contains("--backup is mutually exclusive with -n or --update=none-fail");
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_reflink_insufficient_permission() {
@@ -3258,6 +3259,7 @@ fn test_cp_reflink_insufficient_permission() {
 }
 
 #[cfg(target_os = "linux")]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_closes_file_descriptors() {
     use rlimit::Resource;
@@ -9485,9 +9487,9 @@ fn test_cp_p_preserves_posix_acls() {
 // `cp -r` without -p only copies the mode bits of the directories it
 // creates, like GNU; it must not copy their access or default ACLs.
 // `cp -rp` preserves them, as ACLs are part of the mode.
+#[uutests::wasi_ignore(AclXattrPreservationFails)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: ACL/xattr syscalls are not implemented")]
 fn test_cp_r_copies_dir_posix_acls_only_with_p() {
     use std::process::Command;
 

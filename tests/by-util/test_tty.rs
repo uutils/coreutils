@@ -69,6 +69,7 @@ fn test_help() {
     new_ucmd!().args(&["--help"]).succeeds();
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 // FixME: freebsd panic
 #[cfg(all(unix, not(target_os = "freebsd")))]

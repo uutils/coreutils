@@ -403,6 +403,7 @@ fn fails_on_invalid_number() {
         .stdout_contains("12: 2 2 3");
 }
 
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn short_circuit_write_error() {

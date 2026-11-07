@@ -1615,6 +1615,11 @@ fn copy_source(
     created_parent_dirs: &mut HashSet<PathBuf>,
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
+    // WASI resolves an empty path to the preopened directory instead of
+    // failing with ENOENT, so report the failed stat here.
+    if source_path.as_os_str().is_empty() {
+        return Err(translate!("cp-error-cannot-stat", "source" => source.quote()).into());
+    }
     if source_path.is_dir() && (options.dereference || !source_path.is_symlink()) {
         // Copy as directory
         copy_directory(

@@ -387,6 +387,7 @@ impl InputSource {
         let us = match self {
             Self::File(bu, name) => bu
                 .read(buf)
+                .map_err(uucore::error::wasi_normalize_read_error)
                 .map_err_context(|| name.maybe_quote().to_string())?,
             Self::StandardInput(rc) => rc
                 .try_borrow()
@@ -404,6 +405,7 @@ impl InputSource {
         let us = match self {
             Self::File(bu, name) => bu
                 .read_until(byte, buf)
+                .map_err(uucore::error::wasi_normalize_read_error)
                 .map_err_context(|| name.maybe_quote().to_string())?,
             Self::StandardInput(rc) => rc
                 .try_borrow()

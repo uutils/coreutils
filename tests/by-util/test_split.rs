@@ -7,7 +7,7 @@
 
 use rand::{RngExt as _, SeedableRng, rng};
 use regex::Regex;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
 use rlimit::Resource;
 use rstest::rstest;
 #[cfg(target_os = "linux")]
@@ -132,6 +132,7 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
 fn test_split_to_non_seekable() {
@@ -309,6 +310,7 @@ fn test_split_additional_suffix_hyphen_value() {
 // the `cmd` call right
 // see https://github.com/rust-lang/rust/issues/29494
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 #[cfg(unix)]
 fn test_filter() {
@@ -352,6 +354,7 @@ fn test_filter_with_env_var_set() {
     assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 #[cfg(unix)]
 fn test_filter_command_fails() {
@@ -977,6 +980,7 @@ creating file 'xaf'
         );
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_number_n() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -993,6 +997,7 @@ fn test_number_n() {
         .stdout_only("");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_number_kth_of_n() {
     new_ucmd!()
@@ -1038,6 +1043,7 @@ fn test_number_kth_of_n() {
         .stderr_contains("split: invalid number of chunks: '18446744073709551616'");
 }
 
+#[uutests::wasi_ignore(Usize32BitOverflow)]
 #[test]
 fn test_number_kth_of_n_round_robin() {
     new_ucmd!()
@@ -1249,6 +1255,7 @@ fn test_elide_empty_files_n_chunks() {
     assert!(!at.plus("xad").exists());
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(unix)]
 fn test_elide_dev_null_n_chunks() {
@@ -1261,6 +1268,7 @@ fn test_elide_dev_null_n_chunks() {
     assert!(!at.plus("xac").exists());
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(unix)]
 fn test_dev_zero() {
@@ -1288,6 +1296,7 @@ fn test_elide_empty_files_l_chunks() {
     assert!(!at.plus("xag").exists());
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(unix)]
 fn test_elide_dev_null_l_chunks() {
@@ -1316,6 +1325,7 @@ fn test_elide_empty_files_preserves_line_chunks() {
     assert!(!at.plus("xaf").exists());
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(unix)]
 fn test_number_by_bytes_dev_zero() {
@@ -1375,6 +1385,7 @@ fn test_number_by_lines_kth_huge_number_of_chunks() {
         .stdout_only("a");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(unix)]
 fn test_number_by_lines_kth_dev_null() {
@@ -1766,7 +1777,7 @@ fn test_round_robin() {
 
 #[test]
 // TODO(#7542): Re-enable on Android once we figure out why rlimit is broken.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
 fn test_round_robin_limited_file_descriptors() {
     new_ucmd!()
         .args(&["-n", "r/40", "onehundredlines.txt"])
@@ -1809,6 +1820,7 @@ fn test_split_invalid_input() {
 
 /// Test if there are invalid (non UTF-8) in the arguments - unix
 /// clap is expected to fail/panic
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_split_non_utf8_argument_unix() {
@@ -2104,6 +2116,7 @@ fn test_long_lines() {
     assert!(!at.plus("xad").exists());
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_split_non_utf8_paths() {
@@ -2118,6 +2131,7 @@ fn test_split_non_utf8_paths() {
     assert!(at.plus("xaa").exists());
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_split_non_utf8_prefix_is_byte_preserving() {
@@ -2157,6 +2171,7 @@ fn test_split_non_utf8_prefix_is_byte_preserving() {
     assert_eq!(at.read("p�ab"), "keep-ab");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_split_non_utf8_additional_suffix_is_byte_preserving() {
@@ -2258,6 +2273,7 @@ fn test_split_directory_already_exists() {
     }
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 fn test_io_error() {
@@ -2270,6 +2286,7 @@ fn test_io_error() {
 }
 
 /// Writing a chunk to a full device must be reported and must stop the split.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_write_error_on_full_device() {

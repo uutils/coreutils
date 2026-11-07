@@ -256,6 +256,7 @@ fn test_nonexistent_file_error_includes_filename() {
         .stderr_only("tsort: nosuchfile.txt: No such file or directory\n");
 }
 
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn test_write_error() {

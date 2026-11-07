@@ -1052,6 +1052,7 @@ fn non_utf_8_input() {
 }
 
 #[cfg(target_os = "linux")]
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 fn test_write_error_omits_errno() {
     let dev_full = std::fs::File::create("/dev/full").expect("failed to open /dev/full");
@@ -1146,6 +1147,7 @@ fn test_q_string_c1_control_char_with_quote() {
 
 // Output with no trailing newline stays in the buffer until the process exits,
 // so the failure is only visible when it is flushed.
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_unterminated_write_error_is_reported() {

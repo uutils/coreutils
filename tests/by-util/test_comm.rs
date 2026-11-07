@@ -805,6 +805,7 @@ fn test_c_locale_still_orders_by_bytes() {
         .stdout_only("a-b\n");
 }
 
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_comm_write_error_dev_full() {
