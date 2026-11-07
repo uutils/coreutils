@@ -2766,6 +2766,48 @@ fn test_date_strftime_plus_flag_on_iso_date_width(
         .stdout_is(expected);
 }
 
+#[rstest]
+#[case::month_width_3("2020-01-05", "+%+3m", "001\n")]
+#[case::day_width_4("2020-01-05", "+%+4d", "0005\n")]
+#[case::hour_width_2("2020-01-05 03:00", "+%+2H", "03\n")]
+#[case::day_of_year_width_3("2020-01-05", "+%+3j", "005\n")]
+#[case::space_padded_day_width_3("2020-01-05", "+%+3e", "005\n")]
+#[case::weekday_width_2("2020-01-05", "+%+2u", "07\n")]
+#[case::year_natural_width("2020-01-05", "+%+4Y", "2020\n")]
+#[case::year_narrow_width("2020-01-05", "+%+3Y", "2020\n")]
+#[case::year_wider_width("2020-01-05", "+%+5Y", "+2020\n")]
+#[case::small_year_narrow_width("0099-01-05", "+%+3Y", "099\n")]
+#[case::iso_year_natural_width("2020-01-05", "+%+4G", "2020\n")]
+#[case::century_natural_width("2020-01-05", "+%+2C", "20\n")]
+#[case::century_wider_width("2020-01-05", "+%+3C", "+20\n")]
+#[case::short_year_natural_width("2020-01-05", "+%+2y", "20\n")]
+#[case::short_year_wider_width("2020-01-05", "+%+3y", "+20\n")]
+#[case::zero_after_plus("2020-01-05", "+%+05Y", "02020\n")]
+#[case::underscore_after_plus("2020-01-05", "+%+_5Y", " 2020\n")]
+#[case::plus_after_underscore("2020-01-05", "+%_+5Y", "+2020\n")]
+#[case::underscore_after_plus_on_iso_date("2020-01-05", "+%+_11F", " 2020-01-05\n")]
+#[case::extended_year_hyphen_after_plus("12020-01-05", "+%+-Y", "12020\n")]
+#[case::extended_year_zero_after_plus("12020-01-05", "+%+05Y", "12020\n")]
+#[case::extended_year_plus("12020-01-05", "+%+Y", "+12020\n")]
+#[case::extended_century_zero_after_plus("12020-01-05", "+%+03C", "120\n")]
+fn test_date_strftime_plus_flag_signs_only_years(
+    #[case] date: &str,
+    #[case] format: &str,
+    #[case] expected: &str,
+) {
+    // GNU only gives a `+` sign to year conversions wider than their natural
+    // width, and only when `+` is the last padding flag. Elsewhere `+` acts
+    // like `0`.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg(date)
+        .arg(format)
+        .succeeds()
+        .stdout_is(expected);
+}
+
 #[test]
 fn test_date_strftime_timezone_flag_precedence() {
     for (format, expected) in [
