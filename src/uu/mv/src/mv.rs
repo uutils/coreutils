@@ -59,6 +59,8 @@ use uucore::fs::{
     target_os = "netbsd"
 ))]
 use uucore::fsxattr;
+#[cfg(has_safe_traversal)]
+use uucore::safe_traversal::{DirAnchor, SymlinkBehavior};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::set_selinux_security_context;
 use uucore::translate;
@@ -930,13 +932,17 @@ fn is_directory_not_empty_error(err: &io::Error) -> bool {
     err.kind() == io::ErrorKind::DirectoryNotEmpty
 }
 
+/// Fifos, sockets and device nodes are recreated rather than copied.
 #[cfg(unix)]
-fn is_fifo(filetype: fs::FileType) -> bool {
+fn is_special_file(filetype: fs::FileType) -> bool {
     filetype.is_fifo()
+        || filetype.is_socket()
+        || filetype.is_block_device()
+        || filetype.is_char_device()
 }
 
 #[cfg(not(unix))]
-fn is_fifo(_filetype: fs::FileType) -> bool {
+fn is_special_file(_filetype: fs::FileType) -> bool {
     false
 }
 
@@ -1009,8 +1015,8 @@ fn rename_with_fallback(
             {
                 rename_dir_fallback(from, to, display_manager, verbose)
             }
-        } else if is_fifo(file_type) {
-            rename_fifo_fallback(from, to)
+        } else if is_special_file(file_type) {
+            rename_special_fallback(from, to, &metadata)
         } else {
             #[cfg(unix)]
             {
@@ -1028,15 +1034,113 @@ fn rename_with_fallback(
     })
 }
 
-/// Replace the destination with a new pipe with the same name as the source.
+/// Replace the destination with a new special file like the source.
 #[cfg(unix)]
-fn rename_fifo_fallback(from: &Path, to: &Path) -> io::Result<()> {
-    if to.try_exists()? {
+fn rename_special_fallback(from: &Path, to: &Path, metadata: &fs::Metadata) -> io::Result<()> {
+    copy_special_file(to, metadata)?;
+    fs::remove_file(from)
+}
+
+/// The mode for `node`, a new special file like `metadata`, after a best-effort
+/// `chown` to its owner: setuid and setgid are dropped if that did not take.
+#[cfg(unix)]
+fn special_file_mode(
+    metadata: &fs::Metadata,
+    node: &impl unix::fs::MetadataExt,
+    chown: impl FnOnce(u32, u32) -> io::Result<()>,
+) -> u32 {
+    use std::os::unix::fs::MetadataExt;
+
+    let (uid, gid) = (metadata.uid(), metadata.gid());
+    let owned = (node.uid(), node.gid()) == (uid, gid) || chown(uid, gid).is_ok();
+    metadata.mode() & if owned { 0o7777 } else { 0o1777 }
+}
+
+/// Create the special file `metadata` describes at `to`, with its owner and
+/// mode. An entry at `to` is replaced atomically, so it is kept on failure.
+#[cfg(has_safe_traversal)]
+fn copy_special_file(to: &Path, metadata: &fs::Metadata) -> io::Result<()> {
+    let parent = to
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let name = to.file_name().ok_or(io::ErrorKind::InvalidInput)?;
+    // Follows symlinks in `parent`, as creating the node by path would.
+    let dir = DirAnchor::open(parent)?;
+    create_special_file_at(&dir, name, metadata)
+}
+
+/// Create the special file `metadata` describes as `name` in `dir`. It gets its
+/// owner and mode in a private directory, where no one can swap it, then moves.
+#[cfg(has_safe_traversal)]
+fn create_special_file_at(
+    dir: &DirAnchor,
+    name: &std::ffi::OsStr,
+    metadata: &fs::Metadata,
+) -> io::Result<()> {
+    use rustix::process::geteuid;
+    use std::os::unix::fs::MetadataExt;
+
+    let (staging, staging_name) = dir.create_at_temp_name(|dir, tmp| {
+        dir.mkdir_at(tmp, 0o700)?;
+        // Whatever the umask, the owner must be able to create entries inside.
+        dir.chmod_at(tmp, 0o700, SymlinkBehavior::NoFollow)
+            .and_then(|()| dir.open_subdir(tmp, SymlinkBehavior::NoFollow))
+            .and_then(|staging| {
+                // Another directory moved to `tmp` since, or a file system that hands
+                // new directories to another owner (NFS root_squash): fail, don't retry.
+                let stat = staging.metadata()?;
+                if stat.uid() == geteuid().as_raw() && stat.mode() & 0o777 == 0o700 {
+                    Ok(staging)
+                } else {
+                    Err(io::Error::other(translate!("mv-error-staging-not-private")))
+                }
+            })
+            .inspect_err(|_| {
+                // Removes only an empty directory: the one made above, or at
+                // worst an empty one moved to `tmp` since.
+                let _ = dir.unlink_at(tmp, true);
+            })
+    })?;
+
+    let created = staging
+        .mknod_at(name, metadata.mode(), metadata.rdev())
+        .and_then(|()| {
+            let node = staging.metadata_at(name, SymlinkBehavior::NoFollow)?;
+            let mode = special_file_mode(metadata, &node, |uid, gid| {
+                staging.chown_at(name, Some(uid), Some(gid), SymlinkBehavior::NoFollow)
+            });
+            staging.chmod_at(name, mode, SymlinkBehavior::NoFollow)
+        })
+        .and_then(|()| dir.rename_from(&staging, name, name))
+        .inspect_err(|_| {
+            let _ = staging.unlink_at(name, false);
+        });
+    let _ = dir.unlink_at(&staging_name, true);
+    created
+}
+
+/// Without `safe_traversal`, the node is created by path after removing the
+/// destination, as `uucore::fs::replace_link` does on Redox.
+#[cfg(target_os = "redox")]
+fn copy_special_file(to: &Path, metadata: &fs::Metadata) -> io::Result<()> {
+    use nix::sys::stat::{Mode, SFlag, mknod};
+    use std::os::unix::fs::MetadataExt;
+
+    if to.symlink_metadata().is_ok() {
         fs::remove_file(to)?;
     }
-    // rustix::fs::mkfifoat is linux only
-    nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666))?;
-    fs::remove_file(from)
+    let mode = metadata.mode() as nix::libc::mode_t;
+    mknod(
+        to,
+        SFlag::from_bits_truncate(mode & nix::libc::S_IFMT),
+        Mode::from_bits_truncate(mode),
+        metadata.rdev() as nix::libc::dev_t,
+    )?;
+    let mode = special_file_mode(metadata, &to.symlink_metadata()?, |uid, gid| {
+        unix::fs::lchown(to, Some(uid), Some(gid))
+    });
+    fs::set_permissions(to, fs::Permissions::from_mode(mode))
 }
 
 #[cfg(not(unix))]
@@ -1044,7 +1148,7 @@ fn rename_fifo_fallback(from: &Path, to: &Path) -> io::Result<()> {
     clippy::unnecessary_wraps,
     reason = "fn sig must match on all platforms"
 )]
-fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
+fn rename_special_fallback(_from: &Path, _to: &Path, _metadata: &fs::Metadata) -> io::Result<()> {
     Ok(())
 }
 
@@ -1395,7 +1499,7 @@ fn copy_file_with_hardlinks_helper(
         // Copy a symlink file (no-follow).
         // rename_symlink_fallback already preserves ownership and removes the source.
         rename_symlink_fallback(from, to)?;
-    } else if is_fifo(from.symlink_metadata()?.file_type()) {
+    } else if from.symlink_metadata()?.file_type().is_fifo() {
         // rustix::fs::mkfifoat is linux only
         nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666))?;
         // Preserve ownership (uid/gid) from the source
