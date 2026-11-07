@@ -3,7 +3,7 @@ name: make
 # spell-checker:ignore (env/flags) CHERE RUSTDOCFLAGS RUSTFLAGS CARGOFLAGS CLEVEL relocs EAGAIN
 # spell-checker:ignore (jargon) deps softprops toolchain
 # spell-checker:ignore (people) dawidd
-# spell-checker:ignore (shell/tools) bsdtar nextest pacman sccache zstd
+# spell-checker:ignore (shell/tools) bsdtar nextest pacman zstd
 # spell-checker:ignore (misc) bindir busytest defconfig dynamicbase DESTDIR libopenssl manpages multisize noconfirm runtest testsuite toybox uutils
 
 env:

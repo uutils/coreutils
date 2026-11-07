@@ -306,6 +306,7 @@ fn test_invalid_regexp(#[case] option: &str, #[case] pattern: &str) {
     new_ucmd!()
         .args(&[option, pattern])
         .pipe_in("ab\n")
+        .ignore_stdin_write_error()
         .fails_with_code(1)
         .no_stdout()
         .stderr_is(format!(
