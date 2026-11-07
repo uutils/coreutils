@@ -20,21 +20,13 @@ fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     let display_list = utils.keys().copied().join(", ");
     let width = cmp::min(textwrap::termwidth(), 100) - 8; // (opinion/heuristic) max 100 chars wide with 4 character side indentions
     let indent_list = textwrap::indent(&textwrap::fill(&display_list, width), "    ");
-    #[cfg(feature = "feat_common_core")]
-    let common_core_string = "
-Functions:
-      '<uutils>' [arguments...]
-
-";
-    #[cfg(not(feature = "feat_common_core"))]
-    let common_core_string = "";
     let s = format!(
         "{name} {VERSION} (multi-call binary)
 
 Usage: {name} [function [arguments...]]
        {name} --list
 
-{common_core_string}Options:
+Options:
       --list    lists all defined functions, one per row
 
 Currently defined functions:
