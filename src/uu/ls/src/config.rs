@@ -13,9 +13,12 @@ use std::{
     num::IntErrorKind,
 };
 
+#[cfg(not(all(unix, not(target_os = "redox"))))]
 use glob::Pattern;
 use lscolors::LsColors;
 use term_grid::SPACES_IN_TAB;
+#[cfg(not(all(unix, not(target_os = "redox"))))]
+use uucore::parser::parse_glob;
 
 use uucore::{
     diagnostics::OptionValue,
@@ -24,7 +27,7 @@ use uucore::{
     format::human::SizeFormat,
     fsext::MetadataTimeField,
     line_ending::LineEnding,
-    parser::{parse_block_size, parse_glob, parse_size::parse_size_non_zero_u64},
+    parser::{parse_block_size, parse_size::parse_size_non_zero_u64},
     quoting_style::{QuotingStyle, quoting_style_from_env},
     show_error, show_warning,
     time::format,
@@ -37,6 +40,66 @@ use crate::{
     display::{Format, IndicatorStyle, LongFormat},
     options::QUOTING_STYLE,
 };
+
+#[derive(Debug, Clone)]
+pub(crate) struct IgnorePattern {
+    #[cfg(not(all(unix, not(target_os = "redox"))))]
+    pattern: Pattern,
+    #[cfg(all(unix, not(target_os = "redox")))]
+    bytes: std::ffi::CString,
+}
+
+impl IgnorePattern {
+    #[allow(
+        clippy::unnecessary_wraps,
+        reason = "glob validation is fallible on other platforms"
+    )]
+    fn new(pattern: &OsStr) -> Result<Self, glob::PatternError> {
+        Ok(Self {
+            #[cfg(not(all(unix, not(target_os = "redox"))))]
+            pattern: parse_glob::from_str(&pattern.to_string_lossy())?,
+            #[cfg(all(unix, not(target_os = "redox")))]
+            // Patterns come from argv or fixed strings, so they cannot contain NUL.
+            bytes: std::ffi::CString::new(pattern.as_encoded_bytes())
+                .expect("command-line patterns cannot contain NUL"),
+        })
+    }
+
+    pub(crate) fn matches_any(patterns: &[Self], name: &OsStr) -> bool {
+        if patterns.is_empty() {
+            return false;
+        }
+        #[cfg(all(unix, not(target_os = "redox")))]
+        {
+            let Ok(name) = std::ffi::CString::new(name.as_encoded_bytes()) else {
+                return false;
+            };
+            patterns.iter().any(|pattern| {
+                // SAFETY: both arguments are NUL-terminated. FNM_PERIOD
+                // prevents wildcards from matching a leading dot.
+                unsafe {
+                    uucore::libc::fnmatch(
+                        pattern.bytes.as_ptr(),
+                        name.as_ptr(),
+                        uucore::libc::FNM_PERIOD,
+                    ) == 0
+                }
+            })
+        }
+        #[cfg(not(all(unix, not(target_os = "redox"))))]
+        {
+            let options = glob::MatchOptions {
+                require_literal_leading_dot: true,
+                require_literal_separator: false,
+                case_sensitive: true,
+            };
+            let name = name.to_string_lossy();
+            patterns
+                .iter()
+                .any(|p| p.pattern.matches_with(&name, options))
+        }
+    }
+}
 
 pub mod options {
     pub mod format {
@@ -217,7 +280,7 @@ pub struct Config {
     pub(crate) recursive: bool,
     pub(crate) reverse: bool,
     pub(crate) dereference: Dereference,
-    pub(crate) ignore_patterns: Vec<Pattern>,
+    pub(crate) ignore_patterns: Vec<IgnorePattern>,
     pub(crate) size_format: SizeFormat,
     pub(crate) directory: bool,
     pub(crate) time: MetadataTimeField,
@@ -795,19 +858,19 @@ impl Config {
         let mut quoting_style = extract_quoting_style(options, show_control, mode);
         let indicator_style = extract_indicator_style(options);
 
-        let mut ignore_patterns: Vec<Pattern> = Vec::new();
+        let mut ignore_patterns: Vec<IgnorePattern> = Vec::new();
 
         if options.get_flag(options::IGNORE_BACKUPS) {
-            ignore_patterns.push(Pattern::new("*~").unwrap());
-            ignore_patterns.push(Pattern::new(".*~").unwrap());
+            ignore_patterns.push(IgnorePattern::new(OsStr::new("*~")).unwrap());
+            ignore_patterns.push(IgnorePattern::new(OsStr::new(".*~")).unwrap());
         }
 
         for pattern in options
-            .get_many::<String>(options::IGNORE)
+            .get_many::<OsString>(options::IGNORE)
             .into_iter()
             .flatten()
         {
-            if let Ok(p) = parse_glob::from_str(pattern) {
+            if let Ok(p) = IgnorePattern::new(pattern) {
                 ignore_patterns.push(p);
             } else {
                 show_warning!(
@@ -819,11 +882,11 @@ impl Config {
 
         if files == Files::Normal {
             for pattern in options
-                .get_many::<String>(options::HIDE)
+                .get_many::<OsString>(options::HIDE)
                 .into_iter()
                 .flatten()
             {
-                if let Ok(p) = parse_glob::from_str(pattern) {
+                if let Ok(p) = IgnorePattern::new(pattern) {
                     ignore_patterns.push(p);
                 } else {
                     show_warning!(
