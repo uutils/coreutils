@@ -458,6 +458,9 @@ fn generate_dircolors_config() -> String {
         "\
          # Configuration file for dircolors, a utility to help you set the\n\
          # LS_COLORS environment variable used by GNU ls with the --color option.\n\
+         # Copyright (C) 1996-2022 Free Software Foundation, Inc.\n\
+         # Copying and distribution of this file, with or without modification,\n\
+         # are permitted provided the copyright notice and this notice are preserved.\n\
          # The keywords COLOR, OPTIONS, and EIGHTBIT (honored by the\n\
          # slackware version of dircolors) are recognized but ignored.\n\
          # Global config options can be specified before TERM or COLORTERM entries\n\
