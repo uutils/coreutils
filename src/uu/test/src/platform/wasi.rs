@@ -7,13 +7,13 @@ use std::ffi::{CString, OsStr};
 use std::fs;
 
 use crate::{PathCondition, modified_since_read};
+use uucore::fs::{AccessMode, effective_access};
 
 /// WASI has no uid/gid and no permission bits, so the conditions that depend
-/// on them (`-u`, `-g`, `-k`, `-O`, `-G`, `-x`) are always false, and a file
-/// that can be stat'ed counts as readable. The special file types are only
-/// reachable through the unstable `wasi_ext` feature, so they are false too.
-/// Everything the platform does report - file type, size, timestamps -
-/// behaves as it does elsewhere.
+/// on them (`-u`, `-g`, `-k`, `-O`, `-G`, `-x`) are always false. The special
+/// file types are only reachable through the unstable `wasi_ext` feature, so
+/// they are false too. Everything the platform does report - file type, size,
+/// timestamps, and read/write capability - behaves as it does elsewhere.
 pub fn path(path: &OsStr, condition: &PathCondition) -> bool {
     let metadata = if condition == &PathCondition::SymLink {
         fs::symlink_metadata(path)
@@ -29,12 +29,13 @@ pub fn path(path: &OsStr, condition: &PathCondition) -> bool {
 
     match condition {
         PathCondition::Directory => file_type.is_dir(),
-        PathCondition::Exists | PathCondition::Readable => true,
+        PathCondition::Exists => true,
+        PathCondition::Readable => effective_access(path, AccessMode::Read),
         PathCondition::ExistsModifiedLastRead => modified_since_read(&metadata),
         PathCondition::Regular => file_type.is_file(),
         PathCondition::SymLink => file_type.is_symlink(),
         PathCondition::NonEmpty => metadata.len() > 0,
-        PathCondition::Writable => !metadata.permissions().readonly(),
+        PathCondition::Writable => effective_access(path, AccessMode::Write),
         PathCondition::BlockSpecial
         | PathCondition::CharacterSpecial
         | PathCondition::Fifo

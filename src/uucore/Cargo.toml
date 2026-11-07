@@ -124,6 +124,7 @@ wild = { workspace = true }
 windows-sys = { workspace = true, optional = true, default-features = false, features = [
   "Wdk_System_SystemInformation",
   "Win32_Security",
+  "Win32_Security_Authorization",
   "Win32_Storage_FileSystem",
   "Win32_Foundation",
   "Win32_Globalization",
@@ -159,7 +160,14 @@ encoding = ["data-encoding", "data-encoding-macro", "z85", "base64-simd"]
 entries = ["libc", "rustix/fs", "rustix/process"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
 fast-inc = []
-fs = ["dunce", "libc", "rustix/fs", "rustix/std", "windows-sys"]
+fs = [
+  "dunce",
+  "libc",
+  "rustix/fs",
+  "rustix/process",
+  "rustix/std",
+  "windows-sys",
+]
 fsext = ["libc", "windows-sys", "bstr", "wide"]
 fsxattr = ["xattr", "itertools", "libc"]
 hardware = []
