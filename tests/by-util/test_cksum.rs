@@ -2261,11 +2261,8 @@ mod check_encoding {
 
     // This test should pass on linux and macos.
     #[cfg(not(windows))]
+    #[uutests::wasip2_ignore(OsStringRequiresUtf8)]
     #[test]
-    #[cfg_attr(
-        wasip2_runner,
-        ignore = "WASI preview2: OsString requires valid UTF-8, unlike unix/wasip1"
-    )]
     fn test_check_non_utf8_comment() {
         use super::*;
         let hashes =
