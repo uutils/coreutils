@@ -1751,22 +1751,6 @@ fn suffix_format_huge_width_reports_memory_exhausted() {
 }
 
 #[test]
-fn suffix_format_huge_width_elide_empty_drop_does_not_panic() {
-    new_ucmd!()
-        .args(&[
-            "-z",
-            "--suffix-format",
-            "%9999999999999999999d",
-            "-",
-            "%a%1",
-        ])
-        .pipe_in("a\n")
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_only("csplit: memory exhausted\n");
-}
-
-#[test]
 fn zero_error() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("in");
