@@ -247,6 +247,10 @@ const SEARCH_ONLY: Option<OFlag> = Some(OFlag::O_SEARCH);
 #[cfg(not(any(has_o_path, has_o_search)))]
 const SEARCH_ONLY: Option<OFlag> = None;
 
+/// How many directory descriptors a recursive walk keeps open; directories
+/// further up get theirs back through [`DirFd::reopen_parent`].
+pub const OPEN_DIR_FDS: usize = 16;
+
 impl DirFd {
     /// Open a directory and return a file descriptor
     ///
@@ -324,6 +328,14 @@ impl DirFd {
             }
         })?;
         Ok(Self { fd })
+    }
+
+    /// Reopen this directory's parent through "..": `None` if it is not the
+    /// directory `parent` identifies, but one swapped in since.
+    pub fn reopen_parent(&self, parent: &FileInfo) -> io::Result<Option<Self>> {
+        let fd = self.open_subdir(OsStr::new(".."), SymlinkBehavior::NoFollow)?;
+        let same = fd.metadata()?.file_info() == *parent;
+        Ok(same.then_some(fd))
     }
 
     /// Hold the file `name` relative to this directory, see [`PinnedFile`]
@@ -1736,6 +1748,28 @@ mod tests {
 
         // subdir should have been created inside the real target directory
         assert!(target.join("subdir").exists());
+    }
+
+    /// A walk that reopens a parent through ".." must notice that the directory
+    /// it descended into was moved elsewhere meanwhile.
+    #[test]
+    fn test_reopen_parent_refuses_moved_child() {
+        let temp_dir = TempDir::new().unwrap();
+        let (parent, other) = (
+            temp_dir.path().join("parent"),
+            temp_dir.path().join("other"),
+        );
+        fs::create_dir_all(parent.join("child")).unwrap();
+        fs::create_dir(&other).unwrap();
+        let info = DirFd::open(&parent, SymlinkBehavior::NoFollow)
+            .and_then(|dir| dir.metadata())
+            .unwrap()
+            .file_info();
+        let child = DirFd::open(&parent.join("child"), SymlinkBehavior::NoFollow).unwrap();
+        assert!(child.reopen_parent(&info).unwrap().is_some());
+
+        fs::rename(parent.join("child"), other.join("child")).unwrap();
+        assert!(child.reopen_parent(&info).unwrap().is_none());
     }
 
     #[test]
