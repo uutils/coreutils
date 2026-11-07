@@ -24,11 +24,8 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "spawns the binary directly via std::process::Command, bypassing the wasmtime runner"
-)]
 fn test_version_no_path() {
     use std::process::Command;
     use uutests::get_tests_binary;
@@ -150,11 +147,8 @@ fn test_mkdir_dup_dir_parent() {
 }
 
 #[cfg(not(windows))]
+#[uutests::wasi_ignore(HostSystemStateDiffers)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: umask() only affects the wasmtime host process, not the guest sandbox"
-)]
 fn test_mkdir_parent_mode() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -181,11 +175,8 @@ fn test_mkdir_parent_mode() {
 }
 
 #[cfg(not(windows))]
+#[uutests::wasi_ignore(HostSystemStateDiffers)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: umask() only affects the wasmtime host process, not the guest sandbox"
-)]
 fn test_mkdir_parent_mode_check_existing_parent() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -248,9 +239,9 @@ fn test_mkdir_dup_file() {
     scene.ucmd().arg("-p").arg(test_file).fails();
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(not(windows))]
-#[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
 fn test_symbolic_mode() {
     let (at, mut ucmd) = at_and_ucmd!();
     let test_dir = "test_dir";
@@ -260,9 +251,9 @@ fn test_symbolic_mode() {
     assert_eq!(perms, 0o40777);
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(not(windows))]
-#[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
 fn test_symbolic_alteration() {
     let (at, mut ucmd) = at_and_ucmd!();
     let test_dir = "test_dir";
@@ -278,9 +269,9 @@ fn test_symbolic_alteration() {
     assert_eq!(perms, 0o40577);
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(not(windows))]
-#[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
 fn test_multi_symbolic() {
     let (at, mut ucmd) = at_and_ucmd!();
     let test_dir = "test_dir";
@@ -436,9 +427,9 @@ fn test_mkdir_p_respects_umask_without_acl() {
     assert_eq!(perms & 0o777, 0o755);
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
 fn test_mkdir_explicit_mode_zero() {
     use std::os::unix::fs::PermissionsExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -447,12 +438,9 @@ fn test_mkdir_explicit_mode_zero() {
     assert_eq!(perms & 0o777, 0o000);
 }
 
+#[uutests::wasi_ignore(HostSystemStateDiffers)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: umask() only affects the wasmtime host process, not the guest sandbox"
-)]
 fn test_mkdir_explicit_mode_with_umask() {
     // -m must win over umask: requesting 0o777 with a restrictive umask must
     // still yield 0o777, since the umask is shaped to not block requested bits.
@@ -565,7 +553,7 @@ fn test_selinux() {
         new_ucmd!()
             .arg(arg)
             .arg("-v")
-            .arg(at.plus_as_string(dest))
+            .arg(at.plus(dest))
             .succeeds()
             .stdout_contains("created directory");
 
@@ -586,12 +574,68 @@ fn test_selinux_invalid() {
     let dest = "test_dir_a";
     new_ucmd!()
         .arg("--context=testtest")
-        .arg(at.plus_as_string(dest))
+        .arg(at.plus(dest))
         .fails()
         .no_stdout()
         .stderr_contains("failed to set default file creation context to 'testtest':");
     // invalid context, so, no directory
     assert!(!at.dir_exists(dest));
+}
+
+// -Z looks the name up in the policy, which lists absolute names only: a relative
+// name must get the same label as the absolute one.
+#[test]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+fn test_selinux_default_context_relative_name() {
+    use uucore::selinux::{
+        get_selinux_security_context, is_selinux_enabled, set_selinux_security_context,
+    };
+    use uutests::util::AtPath;
+
+    if !is_selinux_enabled() {
+        println!("Skipping SELinux test: SELinux is not enabled");
+        return;
+    }
+    // The policy has no default under /tmp, so both names would inherit there;
+    // target/tmp is usually under $HOME, which has one.
+    let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let at = AtPath::new(dir.path());
+    let scene = TestScenario::new(util_name!());
+    // A type the policy won't hand out here, so a missed lookup shows as inheritance.
+    at.mkdir("parent");
+    let ctx = String::from("root:object_r:etc_t:s0");
+    if set_selinux_security_context(&at.plus("parent"), Some(&ctx)).is_err() {
+        println!("Skipping SELinux test: cannot set a context on the fixture");
+        return;
+    }
+    let type_of = |p: &str| {
+        let ctx = get_selinux_security_context(&at.plus(p), false).unwrap();
+        ctx.split(':').nth(2).unwrap().to_owned()
+    };
+
+    scene
+        .ucmd()
+        .args(&["-Z", &at.plus_as_string("parent/absolute")])
+        .succeeds();
+    let expected = type_of("parent/absolute");
+    if expected == "etc_t" {
+        println!("Skipping SELinux test: the policy has no default for {dir:?}");
+        return;
+    }
+    scene
+        .ucmd()
+        .current_dir(dir.path())
+        .args(&["-Z", "parent/relative"])
+        .succeeds();
+    scene
+        .ucmd()
+        .current_dir(dir.path())
+        .args(&["-p", "-Z", "parent/new/relative"])
+        .succeeds();
+
+    for name in ["parent/relative", "parent/new", "parent/new/relative"] {
+        assert_eq!(type_of(name), expected, "{name}");
+    }
 }
 
 #[test]
@@ -834,11 +878,8 @@ fn test_mkdir_case_sensitivity() {
     scene.ucmd().arg("-p").arg("caseTEST").succeeds();
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: UNC-style path resolves differently inside the guest root than on the host"
-)]
 fn test_mkdir_network_paths() {
     // Test network path formats (UNC paths on Windows)
     let scene = TestScenario::new(util_name!());
@@ -900,11 +941,8 @@ fn test_mkdir_environment_expansion() {
 /// and then chmod afterward, leaving a brief window with wrong permissions.
 /// Now it temporarily sets umask to 0 and creates with the exact mode.
 #[cfg(not(windows))]
+#[uutests::wasi_ignore(HostSystemStateDiffers)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: umask() only affects the wasmtime host process, not the guest sandbox"
-)]
 fn test_mkdir_mode_ignores_umask() {
     // Test that -m 0700 with restrictive umask still creates 0700
     {
@@ -977,11 +1015,8 @@ fn test_mkdir_mode_ignores_umask() {
 /// - Parent directories use umask-derived permissions (with u+wx)
 /// - Final directory uses the exact requested mode (ignoring umask)
 #[cfg(not(windows))]
+#[uutests::wasi_ignore(HostSystemStateDiffers)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: umask() only affects the wasmtime host process, not the guest sandbox"
-)]
 fn test_mkdir_parent_mode_with_explicit_mode() {
     let (at, mut ucmd) = at_and_ucmd!();
     let umask: mode_t = 0o022;
@@ -1047,11 +1082,8 @@ fn test_mkdir_parent_inherits_setgid() {
     );
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "spawns the binary directly via std::process::Command, bypassing the wasmtime runner"
-)]
 fn test_mkdir_concurrent_creation() {
     // Test concurrent mkdir -p operations: 10 iterations, 8 threads, 40 levels nesting
     use std::thread;
@@ -1115,6 +1147,53 @@ fn test_mkdir_inside_inexistent_dir() {
         .arg("a/b")
         .fails_with_code(1)
         .stderr_is("mkdir: cannot create directory 'a/b': No such file or directory\n");
+}
+
+#[test]
+fn test_mkdir_numeric_looking_name_in_error() {
+    let scene = TestScenario::new(util_name!());
+    for name in ["0042", "-0042", "7e2"] {
+        scene.fixtures.mkdir(name);
+    }
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .args(&["--", "0042", "-0042", "7e2"])
+        .fails_with_code(1)
+        .stderr_is(concat!(
+            "mkdir: cannot create directory '0042': File exists\n",
+            "mkdir: cannot create directory '-0042': File exists\n",
+            "mkdir: cannot create directory '7e2': File exists\n",
+        ));
+}
+
+#[test]
+fn test_mkdir_parents_over_existing_file() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("0077");
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .args(&["-p", "0077"])
+        .fails_with_code(1)
+        .stderr_is("mkdir: cannot create directory '0077': File exists\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_mkdir_error_escapes_special_chars() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("don't");
+    scene.fixtures.mkdir("tab\there");
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .args(&["don't", "tab\there"])
+        .fails_with_code(1)
+        .stderr_is(concat!(
+            "mkdir: cannot create directory 'don\\'t': File exists\n",
+            "mkdir: cannot create directory 'tab\\there': File exists\n",
+        ));
 }
 
 // The mode is only parsed where a mode means something.
@@ -1208,11 +1287,8 @@ mod diagnostics {
     }
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "spawns the binary directly via std::process::Command, bypassing the wasmtime runner"
-)]
 fn test_mkdir_concurrent_non_recursive() {
     // Test concurrent mkdir operations without -p: exactly one process must succeed per round
     use std::sync::Arc;

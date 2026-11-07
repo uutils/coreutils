@@ -11,8 +11,11 @@ use std::fs::OpenOptions;
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 #[cfg(windows)]
 use std::{ffi::OsString, os::windows::ffi::OsStringExt};
+use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util::is_locale_available;
 use uutests::util_name;
 
 #[test]
@@ -199,6 +202,124 @@ fn case_insensitive() {
         .arg("-i")
         .succeeds()
         .stdout_only_fixture("case_insensitive.expected");
+}
+
+#[test]
+fn case_insensitive_prints_each_lines_own_key() {
+    // Keys that differ only in case form one group with -i, but each output
+    // line still shows the key from its own file1 line.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "b z\n");
+    ucmd.args(&["-i", "-", "f"])
+        .pipe_in("B x\nb y\n")
+        .succeeds()
+        .stdout_only("B x z\nb y z\n");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "B\n");
+    ucmd.args(&["-i", "-o", "0", "-", "f"])
+        .pipe_in("B\nb\n")
+        .succeeds()
+        .stdout_only("B\nb\n");
+}
+
+#[test]
+fn case_insensitive_matches_sort_f_order() {
+    // `sort -f` folds to upper case, so `_` sorts after letters.
+    let scene = TestScenario::new(util_name!());
+    scene
+        .fixtures
+        .write("requested", "svcabc mallory\nsvc_backup mallory\n");
+    scene.fixtures.write("reserved", "SVC_BACKUP\n");
+    scene
+        .ucmd()
+        .args(&["-i", "-v", "1", "requested", "reserved"])
+        .succeeds()
+        .stdout_only("svcabc mallory\n");
+    scene
+        .ucmd()
+        .args(&["-i", "requested", "reserved"])
+        .succeeds()
+        .stdout_only("svc_backup mallory\n");
+}
+
+#[test]
+fn numeric_sort() {
+    // Input sorted with `sort -n`: keys are compared by value, so `01` pairs with `1`.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "-3.5 w\n01 x\n2 y\n10 z\n");
+    ucmd.args(&["--numeric-sort", "--check-order", "-", "f"])
+        .pipe_in("-3.50 v\n1 a\n2 b\n9 c\n10 d\n")
+        .succeeds()
+        .stdout_only("-3.50 v w\n1 a x\n2 b y\n10 d z\n");
+}
+
+#[test]
+fn numeric_sort_missing_and_empty_fields_are_zero() {
+    // `sort -n -k2` puts a missing or empty key between -1 and 1, like 0.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "x -1\ny 0\nz 1\n");
+    ucmd.args(&["-n", "-1", "2", "-2", "2", "--check-order", "-", "f"])
+        .pipe_in("a -1\nb\nc 1\n")
+        .succeeds()
+        .stdout_only("-1 a x\n b y\n1 c z\n");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "x,-1\ny,0\nz,1\n");
+    ucmd.args(&[
+        "-n",
+        "-t",
+        ",",
+        "-1",
+        "2",
+        "-2",
+        "2",
+        "--check-order",
+        "-",
+        "f",
+    ])
+    .pipe_in("a,-1\nb,\nc\nd,1\n")
+    .succeeds()
+    .stdout_only("-1,a,x\n,b,y\n,c,y\n1,d,z\n");
+}
+
+#[test]
+fn numeric_sort_non_numeric_keys_are_zero() {
+    // Like `sort -n`, keys that are not numbers compare equal to each other and to 0.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "0 p\nfoo q\n");
+    ucmd.args(&["-n", "-", "f"])
+        .pipe_in("abc x\n")
+        .succeeds()
+        .stdout_only("abc x p\nabc x q\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn numeric_sort_locale_decimal_point() {
+    let locale = "fr_FR.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // With ',' as the decimal point, 1,5 and 1,7 differ; in the C locale both would be 1.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "1,7 x\n2,50 y\n");
+    ucmd.env("LC_ALL", locale)
+        .args(&["-n", "--check-order", "-", "f"])
+        .pipe_in("1,5 a\n2,5 b\n")
+        .succeeds()
+        .stdout_only("2,5 b y\n");
+}
+
+#[test]
+fn numeric_sort_lexicographic_input_is_unsorted() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "1\n10\n2\n");
+    ucmd.args(&["-n", "--check-order", "-", "f"])
+        .pipe_in("1\n2\n10\n")
+        .fails_with_code(1)
+        .stdout_is("1\n")
+        .stderr_is("join: f:3: is not sorted: 2\n");
 }
 
 #[test]
@@ -591,8 +712,8 @@ fn non_line_feeds() {
         .stdout_only_fixture("non-line_feeds.expected");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn non_unicode() {
     new_ucmd!()
         .arg("non-unicode_1.bin")
@@ -679,9 +800,9 @@ fn test_full() {
         .stderr_contains("No space left on device");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_join_non_utf8_paths() {
     use std::fs::File;
     use std::io::Write;
@@ -727,9 +848,9 @@ fn join_emoji_delim_inner_key() {
         .stdout_only("b🗿a🗿u\n");
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[cfg(unix)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: locale database not visible")]
 fn test_locale_collation() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -747,12 +868,8 @@ fn test_locale_collation() {
         .stdout_contains("ab:d 1 x");
 }
 
+#[uutests::wasi_ignore(Usize32BitOverflow)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: usize::MAX is computed for the 64-bit host test binary, \
-              but the wasm32 target binary saturates at the 32-bit usize::MAX"
-)]
 fn test_incompatible_fields_reports_exact_field_number() {
     // An out-of-range field clamps to usize::MAX, which used to overflow the
     // one-based increment. Field numbers past 2^53 also used to be rounded on
@@ -890,4 +1007,48 @@ fn test_operand_count() {
         .fails_with_code(1)
         .stderr_contains("join: extra operand 'fields_3.txt'\n")
         .stderr_contains("--help");
+}
+
+#[test]
+fn test_missing_key_is_empty_key() {
+    // Like `sort -k`, a line too short to have the join field has an empty key.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("short", "x,\ny\nbob,1002\n");
+    at.write("keys", "1002\n");
+    ts.ucmd()
+        .args(&["-t", ",", "-1", "2", "--check-order", "short", "keys"])
+        .succeeds()
+        .stdout_only("1002,bob\n");
+
+    // ...and pairs with lines whose join field is empty.
+    ts.ucmd()
+        .args(&["-t", ",", "-j", "2", "short", "short"])
+        .succeeds()
+        .stdout_only(",x,x\n,x,y\n,y,x\n,y,y\n1002,bob,bob\n");
+
+    // Same with the default blank separator and a trailing blank.
+    at.write("blank", "a \nb\nbob 1002\n");
+    ts.ucmd()
+        .args(&["-1", "2", "--check-order", "blank", "keys"])
+        .succeeds()
+        .stdout_only("1002 bob\n");
+}
+
+#[test]
+fn test_last_of_check_order_nocheck_order_wins() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("a.txt", "b\na\n");
+    scene
+        .ucmd()
+        .args(&["--check-order", "--nocheck-order", "a.txt", "a.txt"])
+        .succeeds()
+        .stdout_is("b\na\n");
+
+    // The other order: --check-order wins and the unsorted input is reported.
+    scene
+        .ucmd()
+        .args(&["--nocheck-order", "--check-order", "a.txt", "a.txt"])
+        .fails_with_code(1)
+        .stderr_is("join: a.txt:2: is not sorted: a\n");
 }

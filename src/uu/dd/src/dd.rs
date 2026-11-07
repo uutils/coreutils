@@ -53,7 +53,6 @@ use uucore::display::Quotable;
 #[cfg(unix)]
 use uucore::error::USimpleError;
 use uucore::error::{FromIo, UResult, set_exit_code};
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 use uucore::show_if_err;
 use uucore::{format_usage, show_error};
 
@@ -330,6 +329,14 @@ impl Source {
             _ => Err(rustix::io::Errno::SPIPE.into()),
         }
     }
+
+    // Not reached today: the parser accepts `nocache` only on Linux and
+    // Android, and FreeBSD builds the fadvise variant above. Kept so that
+    // every caller sees one signature.
+    #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "freebsd")))]
+    fn discard_cache(&self, _offset: u64, _len: u64) -> io::Result<()> {
+        Err(io::ErrorKind::Unsupported.into())
+    }
 }
 
 impl Read for Source {
@@ -495,28 +502,10 @@ impl Input<'_> {
     ///
     /// `offset` and `len` specify a contiguous portion of the input.
     /// This function informs the kernel that the specified portion of
-    /// the input file is no longer needed. If not possible, then this
-    /// function prints an error message to stderr and sets the exit
-    /// status code to 1.
-    #[cfg_attr(
-        not(any(target_os = "linux", target_os = "android", target_os = "freebsd")),
-        allow(clippy::unused_self, unused_variables)
-    )]
-    fn discard_cache(&self, offset: u64, len: u64) {
-        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
-        {
-            let file = self
-                .settings
-                .infile
-                .clone()
-                .unwrap_or_else(|| translate!("dd-standard-input"));
-            show_if_err!(
-                self.src.discard_cache(offset, len).map_err_context(
-                    || translate!("dd-error-failed-discard-cache", "file" => file)
-                )
-            );
-        }
-        // TODO: Is there a way to discard filesystem cache on other targets?
+    /// the input file is no longer needed. If not possible, the error is
+    /// returned; the caller decides whether to report it.
+    fn discard_cache(&self, offset: u64, len: u64) -> io::Result<()> {
+        self.src.discard_cache(offset, len)
     }
 
     /// Fills a given buffer.
@@ -726,6 +715,14 @@ impl Dest {
             _ => Err(rustix::io::Errno::SPIPE.into()),
         }
     }
+
+    // Not reached today: the parser accepts `nocache` only on Linux and
+    // Android, and FreeBSD builds the fadvise variant above. Kept so that
+    // every caller sees one signature.
+    #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "freebsd")))]
+    fn discard_cache(&self, _offset: u64, _len: u64) -> io::Result<()> {
+        Err(io::ErrorKind::Unsupported.into())
+    }
 }
 
 /// Decide whether the given buffer is all zeros.
@@ -733,8 +730,8 @@ fn is_sparse(buf: &[u8]) -> bool {
     buf.iter().all(|&e| e == 0u8)
 }
 
-/// Handle O_DIRECT write errors by temporarily removing the flag and retrying.
-/// This follows GNU dd behavior for partial block writes with O_DIRECT.
+/// Handle `O_DIRECT` write errors by temporarily removing the flag and retrying.
+/// This follows GNU dd behavior for partial block writes with `O_DIRECT`.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) -> io::Result<usize> {
     use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
@@ -911,11 +908,15 @@ impl<'a> Output<'a> {
         let fx = OwnedFileDescriptorOrHandle::from(io::stdout())?;
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
-            rustix::fs::fcntl_setfl(
+            use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
+            // `F_SETFL` replaces the status flags, so add to the current ones
+            // to keep e.g. the `O_APPEND` set by a `>>` shell redirection.
+            let current = fcntl_getfl(fx.as_raw()).map_err(io::Error::from)?;
+            fcntl_setfl(
                 fx.as_raw(),
-                rustix::fs::OFlags::from_bits_retain(libc_flags as _),
+                current | OFlags::from_bits_retain(libc_flags as _),
             )
-            .map_err(|e| uucore::error::UIoError::from(io::Error::from(e)))?;
+            .map_err(io::Error::from)?;
         }
 
         Self::prepare_file(fx.into_file(), settings)
@@ -954,28 +955,10 @@ impl<'a> Output<'a> {
     ///
     /// `offset` and `len` specify a contiguous portion of the output.
     /// This function informs the kernel that the specified portion of
-    /// the output file is no longer needed. If not possible, then
-    /// this function prints an error message to stderr and sets the
-    /// exit status code to 1.
-    #[cfg_attr(
-        not(any(target_os = "linux", target_os = "android", target_os = "freebsd")),
-        allow(clippy::unused_self, unused_variables)
-    )]
-    fn discard_cache(&self, offset: u64, len: u64) {
-        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
-        {
-            let file = self
-                .settings
-                .outfile
-                .clone()
-                .unwrap_or_else(|| translate!("dd-standard-output"));
-            show_if_err!(
-                self.dst.discard_cache(offset, len).map_err_context(
-                    || translate!("dd-error-failed-discard-cache", "file" => file)
-                )
-            );
-        }
-        // TODO Is there a way to discard filesystem cache on other targets?
+    /// the output file is no longer needed. If not possible, the error is
+    /// returned; the caller decides whether to report it.
+    fn discard_cache(&self, offset: u64, len: u64) -> io::Result<()> {
+        self.dst.discard_cache(offset, len)
     }
 
     /// writes a block of data. optionally retries when first try didn't complete
@@ -1063,7 +1046,7 @@ enum BlockWriter<'a> {
 }
 
 impl BlockWriter<'_> {
-    fn discard_cache(&self, offset: u64, len: u64) {
+    fn discard_cache(&self, offset: u64, len: u64) -> io::Result<()> {
         match self {
             Self::Unbuffered(o) => o.discard_cache(offset, len),
             Self::Buffered(o) => o.discard_cache(offset, len),
@@ -1111,10 +1094,26 @@ impl BlockWriter<'_> {
 fn flush_caches_full_length(i: &Input, o: &Output) {
     // Using len=0 in posix_fadvise means "to end of file"
     if i.settings.iflags.nocache {
-        i.discard_cache(0, 0);
+        let file = i
+            .settings
+            .infile
+            .clone()
+            .unwrap_or_else(|| translate!("dd-standard-input"));
+        show_if_err!(
+            i.discard_cache(0, 0)
+                .map_err_context(|| translate!("dd-error-failed-discard-cache", "file" => file))
+        );
     }
     if i.settings.oflags.nocache {
-        o.discard_cache(0, 0);
+        let file = o
+            .settings
+            .outfile
+            .clone()
+            .unwrap_or_else(|| translate!("dd-standard-output"));
+        show_if_err!(
+            o.discard_cache(0, 0)
+                .map_err_context(|| translate!("dd-error-failed-discard-cache", "file" => file))
+        );
     }
 }
 
@@ -1253,11 +1252,14 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             break;
         };
         if rstat_update.is_empty() {
+            // Dropping the cache is best-effort: a failure (a pipe cannot
+            // drop its cache at all) must not fail or diagnose a copy that
+            // succeeded. Only the `count=0` path reports it.
             if input_nocache {
-                i.discard_cache(read_offset, 0);
+                let _ = i.discard_cache(read_offset, 0);
             }
             if output_nocache || output_direct {
-                o.discard_cache(write_offset.try_into().unwrap(), 0);
+                let _ = o.discard_cache(write_offset.try_into().unwrap(), 0);
             }
             break;
         }
@@ -1277,7 +1279,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         if input_nocache {
             let offset = read_offset;
             let len = read_len;
-            i.discard_cache(offset, len);
+            let _ = i.discard_cache(offset, len);
         }
         read_offset += read_len;
 
@@ -1289,7 +1291,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         if output_nocache {
             let offset = write_offset.try_into().unwrap();
             let len = write_len.try_into().unwrap();
-            o.discard_cache(offset, len);
+            let _ = o.discard_cache(offset, len);
         }
         write_offset += write_len;
 

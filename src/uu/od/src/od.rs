@@ -33,10 +33,11 @@ use crate::multifile_reader::{HasError, InputSource, MultifileReader};
 use crate::output_info::OutputInfo;
 use crate::parse_formats::{ParsedFormatterItemInfo, parse_format_flags};
 use crate::parse_inputs::{CommandLineInputs, parse_inputs};
-use crate::parse_nrofbytes::parse_number_of_bytes;
+use crate::parse_nrofbytes::{parse_number_of_bytes, parse_width};
 use crate::partial_reader::PartialReader;
 use crate::peek_reader::{PeekRead, PeekReader};
 use crate::prn_char::format_ascii_dump;
+use crate::prn_int::FORMAT_ITEM_OCT16;
 use clap::ArgAction;
 use clap::{Arg, ArgMatches, Command, parser::ValueSource};
 use std::ffi::OsString;
@@ -138,14 +139,18 @@ impl OdOptions {
             }
         };
 
-        let formats = parse_format_flags(args).map_err(|e| USimpleError::new(1, e))?;
+        let mut formats = parse_format_flags(args).map_err(|e| USimpleError::new(1, e))?;
+        let has_type_option = !formats.is_empty();
+        if formats.is_empty() {
+            formats.push(ParsedFormatterItemInfo::new(FORMAT_ITEM_OCT16, false)); // 2 byte octal is the default
+        }
 
         let mut line_bytes = if let (Some(s), Some(ValueSource::CommandLine)) = (
             matches.get_one::<String>(options::WIDTH),
             matches.value_source(options::WIDTH),
         ) {
             let width_display = option_display_name(args, options::WIDTH, 'w');
-            let parsed = parse_number_of_bytes(s).map_err(|e| {
+            let parsed = parse_width(s).map_err(|e| {
                 let message = format_error_message(&e, s, &width_display);
                 e.size_value_error(
                     diag_args,
@@ -195,6 +200,13 @@ impl OdOptions {
         let read_bytes = parse_bytes_option(matches, args, diag_args, options::READ_BYTES, 'N')?;
 
         let strings = parse_bytes_option(matches, args, diag_args, options::STRINGS, 'S')?;
+        if strings.is_some() && has_type_option {
+            return Err(USimpleError::new(
+                1,
+                translate!("od-error-no-type-with-strings"),
+            ));
+        }
+
         let string_min_length = match strings {
             None => None,
             Some(n) => Some(usize::try_from(n).map_err(|_| {
@@ -223,7 +235,7 @@ impl OdOptions {
                         _ => {
                             return Err(USimpleError::new(
                                 1,
-                                translate!("od-error-radix-invalid", "radix" => s),
+                                translate!("od-error-radix-invalid", "radix" => s.chars().next().unwrap_or_default()),
                             ));
                         }
                     }
@@ -622,16 +634,17 @@ fn extract_strings_from_input(
     // Helper function to format and print a string
     let mut print_string = |offset: u64, string: &[u8]| -> std::io::Result<()> {
         let string_content = String::from_utf8_lossy(string);
-        match radix {
-            Radix::NoPrefix => writeln!(writer, "{string_content}"),
-            Radix::Decimal => writeln!(writer, "{offset:07} {string_content}"),
-            Radix::Hexadecimal => writeln!(writer, "{offset:07x} {string_content}"),
-            Radix::Octal => writeln!(writer, "{offset:07o} {string_content}"),
+        if radix == Radix::NoPrefix {
+            writeln!(writer, "{string_content}")
+        } else {
+            // Same offset format as the normal dump
+            let offset = InputOffset::new(radix, offset, None);
+            writeln!(writer, "{offset} {string_content}")
         }
     };
 
     let mut current_string = Vec::new();
-    let mut string_start_offset = 0u64;
+    let mut string_start_offset = skip_bytes;
     let mut current_offset = skip_bytes;
     let mut bytes_read = 0u64;
     let mut buf = [0u8; 1];
@@ -664,7 +677,12 @@ fn extract_strings_from_input(
                     // Either null terminator or non-printable character
                     if byte == 0 && current_string.len() >= min_length {
                         // Null terminator found with valid string
-                        print_string(string_start_offset, &current_string)?;
+                        let offset = if current_string.is_empty() {
+                            current_offset
+                        } else {
+                            string_start_offset
+                        };
+                        print_string(offset, &current_string)?;
                     }
                     current_string.clear();
                 }
@@ -788,7 +806,7 @@ fn write_bytes(
     Ok(())
 }
 
-/// Helper function to convert input strings to InputSource
+/// Helper function to convert input strings to [`InputSource`]
 fn map_input_strings(input_strings: &[OsString]) -> Vec<InputSource<'_>> {
     input_strings
         .iter()

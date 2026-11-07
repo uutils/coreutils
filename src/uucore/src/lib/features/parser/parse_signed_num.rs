@@ -72,7 +72,7 @@ impl SignedNum {
     }
 }
 
-/// Parse a signed numeric argument, clamping to u64::MAX on overflow.
+/// Parse a signed numeric argument, clamping to [`u64::MAX`] on overflow.
 ///
 /// This function parses strings like "10", "+5K", "-100M" where:
 /// - The optional leading `+` or `-` indicates direction/behavior

@@ -155,7 +155,7 @@ pub fn copy_acls<P: AsRef<Path>>(source: P, dest: P) {
 ///
 /// # Returns
 ///
-/// A result containing a HashMap of attributes names and values, or an error.
+/// A result containing a `HashMap` of attributes names and values, or an error.
 pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<FxHashMap<OsString, Vec<u8>>> {
     let mut attrs = FxHashMap::default();
     for attr_name in xattr::list(&source)? {
@@ -195,7 +195,7 @@ pub fn retrieve_xattrs_fd(source: &std::fs::File) -> std::io::Result<FxHashMap<O
 /// # Arguments
 ///
 /// * `dest` - A reference to the path of the file or directory.
-/// * `xattrs` - A HashMap containing attribute names and their corresponding values.
+/// * `xattrs` - A `HashMap` containing attribute names and their corresponding values.
 ///
 /// # Returns
 ///
@@ -362,7 +362,7 @@ pub fn has_security_cap_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool 
 ///
 /// # Returns
 ///
-/// `u32`  the perm bits of a file having extended attributes of type 'system.posix_acl_default' with permissions
+/// `u32`  the perm bits of a file having extended attributes of type `system.posix_acl_default` with permissions
 /// otherwise returns a 0 if perm bits are 0 or the file has no extended attributes
 pub fn get_acl_perm_bits_from_xattr<P: AsRef<Path>>(source: P) -> u32 {
     // TODO: Modify this to work on non linux unix systems.

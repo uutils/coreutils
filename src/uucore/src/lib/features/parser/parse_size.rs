@@ -69,8 +69,6 @@ pub const IEC_BASES: [u128; 11] = [
     1_267_650_600_228_229_401_496_703_205_376,
 ];
 
-use std::error::Error;
-use std::fmt;
 use std::num::{IntErrorKind, ParseIntError};
 use std::ops::Range;
 
@@ -207,25 +205,25 @@ fn numeric_prefix(size: &str, number_system: NumberSystem) -> &str {
 }
 
 impl<'parser> Parser<'parser> {
-    /// Change allow_list of the parser - whitelist for the suffix
+    /// Change `allow_list` of the parser - whitelist for the suffix
     pub fn with_allow_list(&mut self, allow_list: &'parser [&str]) -> &mut Self {
         self.allow_list = Some(allow_list);
         self
     }
 
-    /// Change default_unit of the parser - when no suffix is provided
+    /// Change `default_unit` of the parser - when no suffix is provided
     pub fn with_default_unit(&mut self, default_unit: &'parser str) -> &mut Self {
         self.default_unit = Some(default_unit);
         self
     }
 
-    /// Change b_byte_count of the parser - to treat "b" as a "byte count" instead of "block"
+    /// Change `b_byte_count` of the parser - to treat "b" as a "byte count" instead of "block"
     pub fn with_b_byte_count(&mut self, value: bool) -> &mut Self {
         self.b_byte_count = value;
         self
     }
 
-    /// Change no_empty_numeric of the parser - to allow empty numeric strings
+    /// Change `no_empty_numeric` of the parser - to allow empty numeric strings
     pub fn with_allow_empty_numeric(&mut self, value: bool) -> &mut Self {
         self.no_empty_numeric = value;
         self
@@ -533,43 +531,24 @@ pub fn parse_size_u128_max(size: &str) -> Result<u128, ParseSizeError> {
     Parser::default().parse_u128_max(size)
 }
 
-/// Error type for parse_size
-#[derive(Debug, PartialEq, Eq)]
+/// Error type for [`parse_size`]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ParseSizeError {
     /// Suffix
+    #[error("{0}")]
     InvalidSuffix(String),
 
     /// Syntax
+    #[error("{0}")]
     ParseFailure(String),
 
     /// Overflow
+    #[error("{0}")]
     SizeTooBig(String),
 
     /// Could not determine total physical memory size.
+    #[error("{0}")]
     PhysicalMem(String),
-}
-
-impl Error for ParseSizeError {
-    fn description(&self) -> &str {
-        match *self {
-            Self::InvalidSuffix(ref s)
-            | Self::ParseFailure(ref s)
-            | Self::SizeTooBig(ref s)
-            | Self::PhysicalMem(ref s) => s,
-        }
-    }
-}
-
-impl fmt::Display for ParseSizeError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        let s = match self {
-            Self::InvalidSuffix(s)
-            | Self::ParseFailure(s)
-            | Self::SizeTooBig(s)
-            | Self::PhysicalMem(s) => s,
-        };
-        write!(f, "{s}")
-    }
 }
 
 // FIXME: It's more idiomatic to move the formatting into the Display impl,

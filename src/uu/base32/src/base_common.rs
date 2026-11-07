@@ -31,6 +31,9 @@ pub const WRAP_DEFAULT: usize = 76;
 
 pub const DEFAULT_BUF_SIZE: usize = 32 * 1024;
 
+/// Largest "-w" value that is honored; anything larger turns wrapping off like GNU
+const MAX_WRAP: usize = isize::MAX as usize;
+
 pub struct Config {
     pub decode: bool,
     pub ignore_garbage: bool,
@@ -69,13 +72,15 @@ impl Config {
 
         let wrap_cols = options
             .get_one::<String>(options::WRAP)
-            .map(|num| {
-                num.parse::<usize>().map_err(|_| {
-                    USimpleError::new(
-                        BASE_CMD_PARSE_ERROR,
-                        translate!("base-common-invalid-wrap-size", "size" => num.quote()),
-                    )
-                })
+            .map(|num| match num.parse::<usize>() {
+                // A size too large to represent turns wrapping off.
+                Ok(cols @ ..=MAX_WRAP) => Ok(cols),
+                Ok(_) => Ok(0),
+                Err(e) if *e.kind() == std::num::IntErrorKind::PosOverflow => Ok(0),
+                Err(_) => Err(USimpleError::new(
+                    BASE_CMD_PARSE_ERROR,
+                    translate!("base-common-invalid-wrap-size", "size" => num.quote()),
+                )),
             })
             .transpose()?;
 
@@ -643,6 +648,7 @@ pub mod fast_decode {
     use uucore::{
         encoding::SupportsFastDecodeAndEncode,
         error::{UResult, USimpleError},
+        translate,
     };
 
     // Start of helper functions
@@ -745,9 +751,14 @@ pub mod fast_decode {
             } else if ignore_garbage {
                 continue;
             } else {
-                return Err(USimpleError::new(1, "error: invalid input"));
+                return Err(USimpleError::new(
+                    1,
+                    translate!("base-common-invalid-input"),
+                ));
             }
 
+            // Encodings without partial decode (base58) are one big number, so
+            // they are decoded in one go after the loop, never in chunks.
             if supports_partial_decode {
                 flush_ready_chunks(
                     &mut buffer,
@@ -757,14 +768,6 @@ pub mod fast_decode {
                     &mut decoded_buffer,
                     output,
                 )?;
-            } else if buffer.len() == decode_in_chunks_of_size {
-                decode_in_chunks_to_buffer(
-                    supports_fast_decode_and_encode,
-                    &buffer,
-                    &mut decoded_buffer,
-                )?;
-                write_to_output(&mut decoded_buffer, output)?;
-                buffer.clear();
             }
         }
 
@@ -794,7 +797,10 @@ pub mod fast_decode {
             write_to_output(&mut decoded_buffer, output)?;
 
             if had_invalid_tail {
-                return Err(USimpleError::new(1, "error: invalid input"));
+                return Err(USimpleError::new(
+                    1,
+                    translate!("base-common-invalid-input"),
+                ));
             }
         }
 
@@ -857,7 +863,10 @@ pub mod fast_decode {
                             buffer.drain(..decode_in_chunks_of_size);
                         }
                     }
-                    return Err(USimpleError::new(1, "error: invalid input"));
+                    return Err(USimpleError::new(
+                        1,
+                        translate!("base-common-invalid-input"),
+                    ));
                 }
 
                 if supports_partial_decode {
@@ -909,7 +918,10 @@ pub mod fast_decode {
             write_to_output(&mut decoded_buffer, output)?;
 
             if had_invalid_tail {
-                return Err(USimpleError::new(1, "error: invalid input"));
+                return Err(USimpleError::new(
+                    1,
+                    translate!("base-common-invalid-input"),
+                ));
             }
         }
 

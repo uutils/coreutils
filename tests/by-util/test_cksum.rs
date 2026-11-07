@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont checkfile
+// spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont checkfile unopenable
 
 use rstest::rstest;
 use rstest_reuse::{apply, template};
@@ -1000,6 +1000,24 @@ fn test_raw_multiple_files() {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_write_error() {
+    // A normal line fails at its newline. The raw digest has no newline, so
+    // only a flush reports its write error.
+    for args in [&["lorem_ipsum.txt"][..], &["--raw", "lorem_ipsum.txt"]] {
+        let dev_full = std::fs::OpenOptions::new()
+            .write(true)
+            .open("/dev/full")
+            .unwrap();
+        new_ucmd!()
+            .args(args)
+            .set_stdout(dev_full)
+            .fails_with_code(1)
+            .stderr_is("cksum: write error: No space left on device\n");
+    }
+}
+
+#[test]
 fn test_base64_raw_conflicts() {
     new_ucmd!()
         .arg("--base64")
@@ -1082,11 +1100,8 @@ fn test_check_error_incorrect_format() {
 }
 
 #[cfg(unix)]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: host paths (/dev/null) not visible"
-)]
 fn test_dev_null() {
     let scene = TestScenario::new(util_name!());
 
@@ -1713,12 +1728,9 @@ fn test_check_untagged_flag_without_file_name() {
         .stderr_contains("WARNING: 2 lines are improperly formatted");
 }
 
+#[uutests::wasi_ignore(EmptyPathResolvesToDirectory)]
 #[test]
 #[cfg(all(not(windows), feature = "b2sum"))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: empty filename resolves to the preopened directory (EISDIR) instead of ENOENT, see #15357"
-)]
 fn test_check_untagged_without_file_name() {
     let scene = TestScenario::new(util_name!());
     let digest = "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce";
@@ -2138,6 +2150,36 @@ fn test_check_failed_to_read() {
 }
 
 #[test]
+#[cfg(not(windows))]
+fn test_check_ignore_missing_unopenable_file() {
+    // `--ignore-missing` excuses a file that is absent, not one that is
+    // present but cannot be opened. The latter is still a failed read.
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("f", "data\n");
+    at.write(
+        "CHECKSUM",
+        "SHA1 (f) = c5d84736ba451747dd5f0eb9d17e104f3697ef47\n\
+        SHA1 (f/sub) = ffffffffffffffffffffffffffffffffffffffff\n\
+        SHA1 (not-file) = ffffffffffffffffffffffffffffffffffffffff\n",
+    );
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("--ignore-missing")
+        .arg("CHECKSUM")
+        .fails()
+        .stdout_is(
+            "f: OK\n\
+            f/sub: FAILED open or read\n",
+        )
+        .stderr_contains("cksum: WARNING: 1 listed file could not be read");
+}
+
+#[test]
 fn test_zero_multiple_file() {
     new_ucmd!()
         .arg("-z")
@@ -2216,11 +2258,8 @@ mod check_encoding {
     // This test should pass on linux. Windows and macos will fail to
     // create a file which name contains '\xff'.
     #[cfg(target_os = "linux")]
+    #[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
     #[test]
-    #[cfg_attr(
-        wasi_runner,
-        ignore = "WASI: preopened directories reject non-UTF-8 filenames"
-    )]
     fn test_check_non_utf8_filename() {
         use super::*;
         use std::{ffi::OsString, os::unix::ffi::OsStringExt};
@@ -2265,11 +2304,8 @@ mod check_encoding {
     }
 
     #[cfg(target_os = "linux")]
+    #[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
     #[test]
-    #[cfg_attr(
-        wasi_runner,
-        ignore = "WASI: preopened directories reject non-UTF-8 filenames"
-    )]
     fn test_quoting_in_stderr() {
         use super::*;
         use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
@@ -2785,12 +2821,9 @@ mod cksum_check_mode {
             .stderr_contains("sha2-bad-length.sum: no properly formatted checksum lines found");
     }
 
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     #[cfg_attr(not(unix), ignore = "/dev/null is only available on UNIX")]
-    #[cfg_attr(
-        wasi_runner,
-        ignore = "WASI sandbox: host paths (/dev/null) not visible"
-    )]
     fn test_untagged_base64_matching_tag() {
         let (at, mut ucmd) = at_and_ucmd!();
 
@@ -3324,12 +3357,9 @@ mod format_mix {
 mod debug_flag {
     use super::*;
 
+    #[uutests::wasi_ignore(HostSystemStateDiffers)]
     #[test]
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    #[cfg_attr(
-        wasi_runner,
-        ignore = "WASI: wasm32 guest has no x86 hardware path, so host-CPU debug output differs"
-    )]
     fn test_debug_flag() {
         // Test with default CRC algorithm - should output CPU feature detection
         new_ucmd!()
@@ -3385,12 +3415,9 @@ mod debug_flag {
             });
     }
 
+    #[uutests::wasi_ignore(HostSystemStateDiffers)]
     #[test]
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    #[cfg_attr(
-        wasi_runner,
-        ignore = "WASI: wasm32 guest has no x86 hardware path, so host-CPU debug output differs"
-    )]
     fn test_debug_with_algorithms() {
         // Test with SHA256 - CPU detection should be same regardless of algorithm
         new_ucmd!()
@@ -3440,11 +3467,8 @@ mod debug_flag {
     }
 
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[uutests::wasi_ignore(HostSystemStateDiffers)]
     #[test]
-    #[cfg_attr(
-        wasi_runner,
-        ignore = "WASI: wasm32 guest has no x86 hardware path, so host-CPU debug output differs"
-    )]
     fn test_debug_with_glibc_tunables() {
         if is_x86_feature_detected!("avx2") {
             for (tunables, expected) in [
@@ -3472,12 +3496,9 @@ mod debug_flag {
         }
     }
 
+    #[uutests::wasi_ignore(HostSystemStateDiffers)]
     #[test]
     #[cfg(target_arch = "aarch64")]
-    #[cfg_attr(
-        wasi_runner,
-        ignore = "WASI: wasm32 guest has no aarch64 hardware path, so host-CPU debug output differs"
-    )]
     fn test_debug_flag_aarch64() {
         // The vmull path needs PMULL. ASIMD alone is not enough.
         let expected = if std::arch::is_aarch64_feature_detected!("pmull") {
@@ -3505,9 +3526,9 @@ mod debug_flag {
     }
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_check_file_with_io_error() {
     // /proc/self/mem causes EIO when read without proper seeking
     new_ucmd!()
@@ -3520,9 +3541,9 @@ fn test_check_file_with_io_error() {
         .stdout_contains("FAILED open or read");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_check_checkfile_with_io_error() {
     // /proc/self/mem causes EIO when read without proper seeking
     new_ucmd!()
@@ -3888,4 +3909,60 @@ fn test_locale_aware_error_filename_escaping() {
             .fails_with_code(1)
             .stderr_is("cksum: 'file_x(y': No such file or directory\n");
     }
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_numeric_looking_directory_names_are_kept_verbatim() {
+    // Names such as "007" or "1e3" must not be reformatted as numbers
+    // in error messages.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("007");
+    at.mkdir("1e3");
+    ucmd.args(&["007", "1e3"])
+        .fails_with_code(1)
+        .stderr_is("cksum: 007: Is a directory\ncksum: 1e3: Is a directory\n");
+}
+
+#[test]
+fn test_check_improperly_formatted_line_does_not_select_format() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // The listed files were replaced, their genuine content is kept under the
+    // same names with a leading space.
+    for f in ["a", "c"] {
+        at.write(f, "tampered\n");
+        at.write(format!(" {f}"), &format!("{f}\n"));
+    }
+    at.write(
+        "check.md5sum",
+        "2024 release\n\
+        60b725f10c9c85c70d97880dfe8191b3  a\n\
+        2cd6ee2c70b0bde53fbe6cac3c8b8bb1  c\n",
+    );
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("--algorithm=md5")
+        .arg("check.md5sum")
+        .fails_with_code(1)
+        .stdout_is("a: FAILED\nc: FAILED\n")
+        .stderr_contains("1 line is improperly formatted")
+        .stderr_contains("2 computed checksums did NOT match");
+
+    at.write("a", "a\n");
+    at.write(
+        "check_single_space.md5sum",
+        "Checksums  for release\n\
+        60b725f10c9c85c70d97880dfe8191b3 a\n",
+    );
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("--algorithm=md5")
+        .arg("check_single_space.md5sum")
+        .succeeds()
+        .stdout_is("a: OK\n")
+        .stderr_contains("1 line is improperly formatted");
 }

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore nopipe Fsize Nofile sigxfsz
+// spell-checker:ignore nopipe FSIZE NOFILE sigxfsz
 
 #![allow(clippy::borrow_as_ptr)]
 
@@ -24,6 +24,21 @@ fn test_error_stdin_directory() {
         .set_stdin(std::fs::File::open(".").unwrap())
         .fails_with_code(1)
         .stderr_is("tee: read error: Is a directory\n");
+}
+
+#[test]
+#[cfg(all(unix, not(wasi_runner)))]
+fn test_closed_stdin() {
+    // Reading a closed stdin fails with EBADF. Run through a shell so the
+    // process really starts with fd 0 closed.
+    let (at, ts) = ::uutests::at_and_ts!();
+    ts.cmd("sh")
+        .args(&["-c", "exec <&-; \"$0\" tee file"])
+        .arg(&ts.bin_path)
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("tee: read error: Bad file descriptor\n");
+    assert_eq!(at.read("file"), "");
 }
 
 #[test]
@@ -125,8 +140,8 @@ fn test_tee_multiple_append_flags() {
     assert_eq!(at.read(file2), format!("existing2\n{content}"));
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_readonly() {
     let (at, mut ucmd) = at_and_ucmd!();
     let content_tee = "hello";
@@ -147,8 +162,8 @@ fn test_readonly() {
     assert_eq!(at.read(writable_file), content_tee);
 }
 
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no pipe/signal support")]
 fn test_tee_output_not_buffered() {
     // POSIX says: The tee utility shall not buffer output
 
@@ -252,7 +267,8 @@ fn test_tee_continues_after_short_read() {
     handle.join().unwrap();
 }
 
-#[cfg(all(target_os = "linux", not(wasi_runner)))]
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
+#[cfg(target_os = "linux")]
 mod linux_only {
     use uutests::util::{AtPath, CmdResult, UCommand};
 
@@ -702,7 +718,7 @@ mod linux_only {
     /// Runs tee with 2 outputs that fail part-way, and checks that the bytes they did
     /// not take do not end up in the other outputs.
     fn check_failed_outputs_do_not_spill(open_file_limit: Option<u64>) {
-        use rustix::process::Resource;
+        use rlimit::Resource;
 
         const CAP: u64 = 100 * 1024;
         let (at, mut ucmd) = at_and_ucmd!();
@@ -713,10 +729,10 @@ mod linux_only {
         // through tee's 2nd pipe, which stdout and /dev/null keep using after it fails;
         // "capped2", the last output, through its 1st.
         ucmd.args(&["capped", "/dev/null", "capped2"])
-            .limit(Resource::Fsize, CAP, CAP)
+            .limit(Resource::FSIZE, CAP, CAP)
             .ignore_sigxfsz();
         if let Some(limit) = open_file_limit {
-            ucmd.limit(Resource::Nofile, limit, limit);
+            ucmd.limit(Resource::NOFILE, limit, limit);
         }
         let mut child = ucmd
             .set_stdin(std::fs::File::open(at.plus("in")).unwrap())

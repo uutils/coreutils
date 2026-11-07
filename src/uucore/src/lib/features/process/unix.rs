@@ -119,7 +119,7 @@ pub fn unblock_signal(signal: RixSignal) -> io::Result<()> {
     set.thread_unblock().map_err(Into::into)
 }
 
-/// Ensures there is no overflow on time_t operations. Some BSDs (notably XNU)
+/// Ensures there is no overflow on `time_t` operations. Some BSDs (notably XNU)
 /// will return EINVAL otherwise; POSIX only defines it up to 10e8, so we cap
 /// it on all targets we do not trust to support the full integer range.
 #[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
@@ -134,6 +134,7 @@ const MAX_KTIME_T: Duration = if cfg!(target_os = "linux") {
 /// fallback since it was removed in that same spec.
 #[cfg(not(any(
     target_vendor = "apple",
+    target_os = "dragonfly",
     target_os = "fuchsia",
     target_os = "haiku",
     target_os = "openbsd",
@@ -260,8 +261,13 @@ mod timer {
 }
 
 /// Sets up a timer on SIGALRM for platforms that do not support POSIX.1-2008
-/// realtime clock extensions. Notably, Darwin, OpenBSD, and Windows.
-#[cfg(any(target_vendor = "apple", target_os = "openbsd", windows))]
+/// realtime clock extensions.
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "dragonfly",
+    target_os = "openbsd",
+    windows
+))]
 mod timer {
     use super::MAX_KTIME_T;
     use nix::errno::Errno;

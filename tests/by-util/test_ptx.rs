@@ -6,6 +6,7 @@
 // spell-checker:ignore roff
 // spell-checker:ignore funnnnnnnnnnnnnnnnn
 
+use rstest::rstest;
 use uutests::new_ucmd;
 
 #[test]
@@ -298,12 +299,18 @@ fn test_sentence_regexp_newlines_are_spaces() {
         .stdout_contains("Start of sentence");
 }
 
-#[test]
-fn test_sentence_regexp_invalid_syntax_failure() {
+#[rstest]
+#[case::sentence("-S", "ab[c")]
+#[case::word("-W", "(wrong")]
+fn test_invalid_regexp(#[case] option: &str, #[case] pattern: &str) {
     new_ucmd!()
-        .args(&["-S", "^["])
-        .fails()
-        .stderr_contains("Invalid regexp");
+        .args(&[option, pattern])
+        .pipe_in("ab\n")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is(format!(
+            "ptx: Invalid regular expression (for regexp '{pattern}')\n"
+        ));
 }
 
 #[test]
@@ -453,11 +460,6 @@ fn test_invalid_regex_word_trailing_backslash() {
 }
 
 #[test]
-fn test_invalid_regex_word_unclosed_group() {
-    new_ucmd!().args(&["-W", "(wrong"]).succeeds().no_stderr();
-}
-
-#[test]
 fn test_missing_file_error_contains_filename() {
     new_ucmd!()
         .arg("zxc")
@@ -499,4 +501,24 @@ fn test_nullable_word_regexp_no_empty_matches() {
         .pipe_in("aa bb cc\n")
         .succeeds()
         .stdout_only(expected);
+}
+
+#[test]
+fn test_repeated_flags_are_accepted() {
+    new_ucmd!()
+        .args(&["-G", "-A", "-A"])
+        .pipe_in("hello world\n")
+        .succeeds()
+        .stdout_only(concat!(
+            ".xx \"\" \"\" \"hello world\" \"\" \":1\"\n",
+            ".xx \"\" \"hello\" \"world\" \"\" \":1\"\n"
+        ));
+    new_ucmd!()
+        .args(&["-f", "-f"])
+        .pipe_in("hello world\n")
+        .succeeds()
+        .stdout_only(concat!(
+            "                                       hello world\n",
+            "                               hello   world\n"
+        ));
 }

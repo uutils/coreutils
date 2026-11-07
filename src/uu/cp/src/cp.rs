@@ -58,6 +58,10 @@ mod platform;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CpError {
+    /// Permission denied.
+    #[error("{}", translate!("cp-error-cannot-open-for-reading", "source" => .0.quote()))]
+    CannotOpenForReading(PathBuf),
+
     /// Simple [`io::Error`] wrapper
     #[error("{0}")]
     IoErr(#[from] io::Error),
@@ -1028,7 +1032,7 @@ impl Attributes {
 
 /// Flags in the mutual-exclusion group for symlink handling.
 /// The last one on the command line determines dereference behavior.
-/// Note: CLI_SYMBOLIC_LINKS (-H) is excluded here — it only affects
+/// Note: `CLI_SYMBOLIC_LINKS` (-H) is excluded here — it only affects
 /// CLI-level symlinks, not recursive traversal.
 const DEREF_FLAGS: &[&str] = &[
     options::DEREFERENCE,
@@ -1984,7 +1988,9 @@ pub(crate) fn copy_attributes(
             // so we keep ACL parity with GNU without preserving user xattrs
             // (which are intentionally excluded from the default -p set per
             // issue #9704). Best-effort: ignore failures on filesystems that
-            // do not support ACL xattrs.
+            // do not support ACL xattrs. A directory created without an
+            // explicit preserve only gets the source mode bits; GNU `cp -r`
+            // does not copy its ACLs.
             #[cfg(any(
                 target_os = "freebsd",
                 target_os = "hurd",
@@ -1992,7 +1998,9 @@ pub(crate) fn copy_attributes(
                 target_os = "macos",
                 target_os = "netbsd"
             ))]
-            copy_acls(source, dest);
+            if matches!(attributes.mode, Preserve::Yes { .. }) {
+                copy_acls(source, dest);
+            }
         }
 
         Ok(())
@@ -2212,6 +2220,41 @@ fn is_forbidden_to_copy_to_same_file(
         && source_is_symlink
         && source.file_name() != dest.file_name()
         && !options.dereference)
+}
+
+/// Whether `dest` is directly inside the current directory,
+/// it compares the parent with "." by name first, then by device and inode, so
+/// `../<cwd>/b2` or a symlink to the cwd also count.
+fn dest_is_in_cwd(dest: &Path) -> bool {
+    let parent = match dest.parent() {
+        None => return true,
+        Some(p) if p.as_os_str().is_empty() || p == Path::new(".") => return true,
+        Some(p) => p,
+    };
+    match (
+        FileInformation::from_path(Path::new("."), true),
+        FileInformation::from_path(parent, true),
+    ) {
+        (Ok(cwd), Ok(parent)) => cwd == parent,
+        _ => false,
+    }
+}
+
+/// Refuse `cp -s` with a relative source unless the destination is in
+/// the current directory, because a relative symlink target is resolved from
+/// the link's own directory.
+fn verify_relative_symlink_in_cwd(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
+    if options.copy_mode != CopyMode::SymLink || source.is_absolute() {
+        return Ok(());
+    }
+    if dest_is_in_cwd(dest) {
+        Ok(())
+    } else {
+        Err(CpError::Error(translate!(
+            "cp-error-relative-symlink-not-in-cwd",
+            "dest" => dest.maybe_quote()
+        )))
+    }
 }
 
 /// Back up, remove, or leave intact the destination file, depending on the options.
@@ -2748,6 +2791,9 @@ fn copy_file(
     created_parent_dirs: &mut HashSet<PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
+    // Must run before anything below can remove or back up `dest`.
+    verify_relative_symlink_in_cwd(source, dest, options)?;
+
     let source_is_symlink = source.is_symlink();
     let initial_dest_metadata = dest.symlink_metadata().ok();
     let dest_is_symlink = initial_dest_metadata

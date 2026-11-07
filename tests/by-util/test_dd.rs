@@ -3,8 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED Fsize SIGXFSZ rusage maxrss cdefg ncdefg cdefh memfd ftruncate
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED FSIZE SIGXFSZ rusage maxrss cdefg ncdefg cdefh
 
+use rstest::rstest;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -849,67 +850,34 @@ fn test_block_keeps_trailing_record_of_spaces() {
         .stdout_is("ab      ");
 }
 
-#[test]
-fn test_block_cbs16() {
+#[rstest]
+#[case::block_cbs16(&["conv=block", "cbs=16"], "dd-block-cbs16.test", "dd-block-cbs16.spec")]
+#[case::block_cbs16_as_cbs8(&["conv=block", "cbs=8"], "dd-block-cbs16.test", "dd-block-cbs8.spec")]
+#[case::block_consecutive_nl(&["conv=block", "cbs=16"], "dd-block-consecutive-nl.test", "dd-block-consecutive-nl-cbs16.spec")]
+#[case::unblock_multi_16(&["conv=unblock", "cbs=16"], "dd-unblock-cbs16.test", "dd-unblock-cbs16.spec")]
+#[case::unblock_multi_16_as_8(&["conv=unblock", "cbs=8"], "dd-unblock-cbs16.test", "dd-unblock-cbs8.spec")]
+#[case::atoe_conv_spec_test(&["conv=ebcdic"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "gnudd-conv-atoe-seq-byte-values.spec")]
+#[case::etoa_conv_spec_test(&["conv=ascii"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "gnudd-conv-etoa-seq-byte-values.spec")]
+#[case::atoibm_conv_spec_test(&["conv=ibm"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "gnudd-conv-atoibm-seq-byte-values.spec")]
+#[case::lcase_ascii_to_ucase_ascii(&["conv=ucase"], "lcase-ascii.test", "ucase-ascii.test")]
+#[case::ucase_ascii_to_lcase_ascii(&["conv=lcase"], "ucase-ascii.test", "lcase-ascii.test")]
+#[case::atoe_and_ucase_conv_spec_test(&["conv=ebcdic,ucase"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "ucase-ebcdic.test")]
+#[case::atoe_and_lcase_conv_spec_test(&["conv=ebcdic,lcase"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "lcase-ebcdic.test")]
+#[case::atoibm_and_ucase_conv_spec_test(&["conv=ibm,ucase"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "ucase-ibm.test")]
+#[case::atoibm_and_lcase_conv_spec_test(&["conv=ibm,lcase"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "lcase-ibm.test")]
+#[case::swab_256_test(&["conv=swab"], "seq-byte-values.test", "seq-byte-values-swapped.test")]
+#[case::swab_257_test(&["conv=swab"], "seq-byte-values-odd.test", "seq-byte-values-odd.spec")]
+#[case::block_lower(&["conv=block,lcase", "cbs=8"], "dd-block8-lowercase.test", "dd-block8-lowercase.spec")]
+#[case::lower_block(&["conv=lcase,block", "cbs=8"], "dd-block8-lowercase.test", "dd-block8-lowercase.spec")]
+#[case::unblock_lower(&["conv=unblock,lcase", "cbs=8"], "dd-unblock8-lowercase.test", "dd-unblock8-lowercase.spec")]
+#[case::zeros_4k_conv_sync_obs_gt_ibs(&["conv=sync", "ibs=521", "obs=1031"], "zeros-620f0b67a91f7f74151bc5be745b7110.test", "gnudd-conv-sync-ibs-521-obs-1031-zeros.spec")]
+#[case::zeros_4k_conv_sync_ibs_gt_obs(&["conv=sync", "ibs=1031", "obs=521"], "zeros-620f0b67a91f7f74151bc5be745b7110.test", "gnudd-conv-sync-ibs-1031-obs-521-zeros.spec")]
+fn test_dd_conv_fixtures(#[case] args: &[&str], #[case] input: &str, #[case] expected: &str) {
     new_ucmd!()
-        .args(&["conv=block", "cbs=16"])
-        .pipe_in_fixture("dd-block-cbs16.test")
+        .args(args)
+        .pipe_in_fixture(input)
         .succeeds()
-        .stdout_is_fixture_bytes("dd-block-cbs16.spec");
-}
-
-#[test]
-fn test_block_cbs16_as_cbs8() {
-    new_ucmd!()
-        .args(&["conv=block", "cbs=8"])
-        .pipe_in_fixture("dd-block-cbs16.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("dd-block-cbs8.spec");
-}
-
-#[test]
-fn test_block_consecutive_nl() {
-    new_ucmd!()
-        .args(&["conv=block", "cbs=16"])
-        .pipe_in_fixture("dd-block-consecutive-nl.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("dd-block-consecutive-nl-cbs16.spec");
-}
-
-#[test]
-fn test_unblock_multi_16() {
-    new_ucmd!()
-        .args(&["conv=unblock", "cbs=16"])
-        .pipe_in_fixture("dd-unblock-cbs16.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("dd-unblock-cbs16.spec");
-}
-
-#[test]
-fn test_unblock_multi_16_as_8() {
-    new_ucmd!()
-        .args(&["conv=unblock", "cbs=8"])
-        .pipe_in_fixture("dd-unblock-cbs16.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("dd-unblock-cbs8.spec");
-}
-
-#[test]
-fn test_atoe_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ebcdic"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("gnudd-conv-atoe-seq-byte-values.spec");
-}
-
-#[test]
-fn test_etoa_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ascii"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("gnudd-conv-etoa-seq-byte-values.spec");
+        .stdout_is_fixture_bytes(expected);
 }
 
 #[test]
@@ -929,132 +897,6 @@ fn test_etoa_and_ucase() {
         .pipe_in(b"\xc8\x85\x93\x93\x96\x6b\x40\xe6\x96\x99\x93\x84\x5a".to_vec())
         .succeeds()
         .stdout_only_bytes(b"HELLO, WORLD!");
-}
-
-#[test]
-fn test_atoibm_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ibm"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("gnudd-conv-atoibm-seq-byte-values.spec");
-}
-
-#[test]
-fn test_lcase_ascii_to_ucase_ascii() {
-    new_ucmd!()
-        .args(&["conv=ucase"])
-        .pipe_in_fixture("lcase-ascii.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("ucase-ascii.test");
-}
-
-#[test]
-fn test_ucase_ascii_to_lcase_ascii() {
-    new_ucmd!()
-        .args(&["conv=lcase"])
-        .pipe_in_fixture("ucase-ascii.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("lcase-ascii.test");
-}
-
-#[test]
-fn test_atoe_and_ucase_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ebcdic,ucase"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("ucase-ebcdic.test");
-}
-
-#[test]
-fn test_atoe_and_lcase_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ebcdic,lcase"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("lcase-ebcdic.test");
-}
-
-#[test]
-fn test_atoibm_and_ucase_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ibm,ucase"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("ucase-ibm.test");
-}
-
-#[test]
-fn test_atoibm_and_lcase_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ibm,lcase"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("lcase-ibm.test");
-}
-
-#[test]
-fn test_swab_256_test() {
-    new_ucmd!()
-        .args(&["conv=swab"])
-        .pipe_in_fixture("seq-byte-values.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("seq-byte-values-swapped.test");
-}
-
-#[test]
-fn test_swab_257_test() {
-    new_ucmd!()
-        .args(&["conv=swab"])
-        .pipe_in_fixture("seq-byte-values-odd.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("seq-byte-values-odd.spec");
-}
-
-#[test]
-fn test_block_lower() {
-    new_ucmd!()
-        .args(&["conv=block,lcase", "cbs=8"])
-        .pipe_in_fixture("dd-block8-lowercase.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("dd-block8-lowercase.spec");
-}
-
-#[test]
-fn test_lower_block() {
-    new_ucmd!()
-        .args(&["conv=lcase,block", "cbs=8"])
-        .pipe_in_fixture("dd-block8-lowercase.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("dd-block8-lowercase.spec");
-}
-
-#[test]
-fn test_unblock_lower() {
-    new_ucmd!()
-        .args(&["conv=unblock,lcase", "cbs=8"])
-        .pipe_in_fixture("dd-unblock8-lowercase.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("dd-unblock8-lowercase.spec");
-}
-
-#[test]
-fn test_zeros_4k_conv_sync_obs_gt_ibs() {
-    new_ucmd!()
-        .args(&["conv=sync", "ibs=521", "obs=1031"])
-        .pipe_in_fixture("zeros-620f0b67a91f7f74151bc5be745b7110.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("gnudd-conv-sync-ibs-521-obs-1031-zeros.spec");
-}
-
-#[test]
-fn test_zeros_4k_conv_sync_ibs_gt_obs() {
-    new_ucmd!()
-        .args(&["conv=sync", "ibs=1031", "obs=521"])
-        .pipe_in_fixture("zeros-620f0b67a91f7f74151bc5be745b7110.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("gnudd-conv-sync-ibs-1031-obs-521-zeros.spec");
 }
 
 #[test]
@@ -1492,6 +1334,25 @@ fn test_invalid_flag_arg_gnu_compatibility() {
 }
 
 #[test]
+fn test_numeric_looking_values_are_kept_verbatim_in_errors() {
+    // Values such as "007" or "1e3" must not be reformatted as numbers.
+    for (arg, msg) in [
+        ("007", "unrecognized operand '007'"),
+        ("iflag=007", "invalid input flag: '007'"),
+        ("oflag=1e3", "invalid output flag: '1e3'"),
+        ("conv=007", "invalid conversion: '007'"),
+        ("status=007", "invalid status level: '007'"),
+        ("count=1.50", "invalid number: '1.50'"),
+        ("bs=1e3", "invalid number: '1e3'"),
+    ] {
+        new_ucmd!()
+            .arg(arg)
+            .fails_with_code(1)
+            .stderr_contains(format!("dd: {msg}\n"));
+    }
+}
+
+#[test]
 fn test_invalid_file_arg_gnu_compatibility() {
     new_ucmd!()
         .args(&["if="])
@@ -1705,23 +1566,52 @@ fn test_seekable_stdout_without_of_is_not_truncated() {
     assert!(out[1024..].iter().all(|&b| b == b'x'));
 }
 
+/// An `oflag=` on a seekable stdout must keep the flags it was opened with,
+/// so output redirected with `>>` is still appended, with or without
+/// `conv=notrunc`.
+#[rstest]
+#[cfg(target_os = "linux")]
+fn test_oflag_keeps_append_mode_of_stdout(
+    #[values("oflag=dsync", "oflag=sync", "oflag=nonblock")] oflag: &str,
+    #[values(&[][..], &["conv=notrunc"][..])] conv: &[&str],
+) {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("out", "old\n");
+    let stdout = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().append(true),
+        at.plus("out").as_path(),
+    )
+    .unwrap();
+
+    ts.ucmd()
+        .args(&[oflag, "status=none"])
+        .args(conv)
+        .pipe_in("new\n")
+        .set_stdout(Stdio::from(stdout))
+        .succeeds();
+
+    assert_eq!(at.read("out"), "old\nnew\n");
+}
+
 /// A failed truncate of the output names the file and the size, the copy
 /// still runs and prints its statistics, and the exit status is 1.
 #[test]
 #[cfg(target_os = "linux")]
 fn test_failed_truncate_is_reported_and_copy_goes_on() {
-    use rustix::fs::{MemfdFlags, SealFlags, fcntl_add_seals, ftruncate, memfd_create};
+    use rustix::fs::{MemfdFlags, SealFlags, fcntl_add_seals, memfd_create};
 
-    // A memfd sealed against shrinking: `ftruncate` to a smaller size fails
+    // A memfd sealed against shrinking: truncating it to a smaller size fails
     // with EPERM, while writes inside the existing size still work.
     let fd = memfd_create("out", MemfdFlags::ALLOW_SEALING).unwrap();
-    ftruncate(&fd, 2048).unwrap();
-    fcntl_add_seals(&fd, SealFlags::SHRINK).unwrap();
+    let memfd = File::from(fd);
+    memfd.set_len(2048).unwrap();
+    fcntl_add_seals(&memfd, SealFlags::SHRINK).unwrap();
 
     new_ucmd!()
         .args(&["bs=512", "count=1", "seek=1", "of=/dev/stdout"])
         .pipe_in(vec![b'a'; 512])
-        .set_stdout(Stdio::from(File::from(fd)))
+        .set_stdout(Stdio::from(memfd))
         .fails_with_code(1)
         .stderr_contains(
             "dd: failed to truncate to 512 bytes in output file '/dev/stdout': Operation not permitted\n",
@@ -1801,6 +1691,23 @@ fn test_nocache_stdin_error() {
         .stderr_only(format!("dd: failed to discard cache for: 'standard input': {detail}\n0+0 records in\n0+0 records out\n"));
 }
 
+/// Test that discarding system file cache fails for an output FIFO.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_nocache_output_fifo_error() {
+    #[cfg(not(target_env = "musl"))]
+    let detail = "Illegal seek";
+    #[cfg(target_env = "musl")]
+    let detail = "Invalid seek";
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    ucmd.args(&["oflag=nocache", "count=0", "of=fifo", "status=noxfer"])
+        .fails_with_code(1)
+        .stderr_only(format!(
+            "dd: failed to discard cache for: fifo: {detail}\n0+0 records in\n0+0 records out\n"
+        ));
+}
+
 /// Test that dd fails when no number in count.
 #[test]
 fn test_empty_count_number() {
@@ -1877,13 +1784,14 @@ fn test_reading_partial_blocks_from_fifo() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkfifo("fifo");
-    let fifoname = at.plus_as_string("fifo");
+    let fifoname = at.plus("fifo");
+    let fifo_disp = fifoname.display();
 
     // Start a `dd` process that reads from the fifo (so it will wait
     // until the writer process starts).
     let mut reader_command = Command::new(get_tests_binary());
     let child = reader_command
-        .args(["dd", "ibs=3", "obs=3", &format!("if={fifoname}")])
+        .args(["dd", "ibs=3", "obs=3", &format!("if={fifo_disp}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
@@ -1898,7 +1806,7 @@ fn test_reading_partial_blocks_from_fifo() {
     let _ = writer_command
         .args([
             "-c",
-            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifoname}"),
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifo_disp}"),
         ])
         .spawn()
         .unwrap()
@@ -1917,7 +1825,8 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkfifo("fifo");
-    let fifoname = at.plus_as_string("fifo");
+    let fifoname = at.plus("fifo");
+    let fifo_disp = fifoname.display();
 
     // Start a `dd` process that reads from the fifo (so it will wait
     // until the writer process starts).
@@ -1925,7 +1834,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     // `bs=N` takes precedence over `ibs=N` and `obs=N`.
     let mut reader_command = Command::new(get_tests_binary());
     let child = reader_command
-        .args(["dd", "bs=3", "ibs=1", "obs=1", &format!("if={fifoname}")])
+        .args(["dd", "bs=3", "ibs=1", "obs=1", &format!("if={fifo_disp}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
@@ -1940,7 +1849,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     let _ = writer_command
         .args([
             "-c",
-            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifoname}"),
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifo_disp}"),
         ])
         .spawn()
         .unwrap()
@@ -1966,13 +1875,14 @@ fn test_reading_partial_blocks_from_fifo_gathered_into_larger_obs() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkfifo("fifo");
-    let fifoname = at.plus_as_string("fifo");
+    let fifoname = at.plus("fifo");
+    let fifo_disp = fifoname.display();
 
     // Start a `dd` process that reads from the fifo (so it will wait
     // until the writer process starts).
     let mut reader_command = Command::new(get_tests_binary());
     let child = reader_command
-        .args(["dd", "ibs=3", "obs=6", &format!("if={fifoname}")])
+        .args(["dd", "ibs=3", "obs=6", &format!("if={fifo_disp}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
@@ -1987,7 +1897,7 @@ fn test_reading_partial_blocks_from_fifo_gathered_into_larger_obs() {
     let _ = writer_command
         .args([
             "-c",
-            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifoname}"),
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifo_disp}"),
         ])
         .spawn()
         .unwrap()
@@ -2075,11 +1985,10 @@ fn test_large_bs_does_not_fault_in_copy_buffer() {
 fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    at.make_file("input");
-    let filename = at.plus_as_string("input");
+    let file = at.make_file("input");
     new_ucmd!()
         .args(&["iflag=directory", "count=0"])
-        .set_stdin(Stdio::from(File::open(filename).unwrap()))
+        .set_stdin(Stdio::from(file))
         .fails()
         .stderr_only("dd: setting flags for 'standard input': Not a directory\n");
 }
@@ -2101,6 +2010,20 @@ fn test_iflag_directory_fails_when_file_is_piped_via_std_in() {
         .pipe_in("")
         .fails()
         .stderr_only("dd: setting flags for 'standard input': Not a directory\n");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_nocache_on_a_pipe_is_silent() {
+    // "" ends the copy on the first read, "abc" goes through the per-block
+    // path; neither may diagnose the failed cache drop on a pipe
+    for input in ["", "abc"] {
+        new_ucmd!()
+            .args(&["iflag=nocache", "oflag=nocache", "status=none"])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(input);
+    }
 }
 
 #[test]
@@ -2140,10 +2063,10 @@ fn test_stdin_stdout_not_rewound_even_when_connected_to_seekable_file() {
         .set_stderr(stderr)
         .succeeds();
 
-    let err_file_content = std::fs::read_to_string(at.plus_as_string("err")).unwrap();
+    let err_file_content = at.read("err");
     println!("stderr:\n{err_file_content}");
 
-    let out_file_content = std::fs::read_to_string(at.plus_as_string("out")).unwrap();
+    let out_file_content = at.read("out");
     println!("stdout:\n{out_file_content}");
     assert_eq!(out_file_content, "bde");
 }
@@ -2508,14 +2431,14 @@ fn test_count_bytes_with_expanding_block_conv() {
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_stats_are_reported_when_a_write_fails() {
-    use rustix::process::Resource;
+    use rlimit::Resource;
 
     const CAP: u64 = 768 * 1024;
 
     let (at, mut ucmd) = at_and_ucmd!();
     let result = ucmd
         .args(&["if=/dev/zero", "of=capped.bin", "bs=512K", "count=3"])
-        .limit(Resource::Fsize, CAP, CAP)
+        .limit(Resource::FSIZE, CAP, CAP)
         .ignore_sigxfsz()
         .fails();
 
@@ -2531,7 +2454,7 @@ fn test_stats_are_reported_when_a_write_fails() {
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_block_stats_are_reported_when_a_write_fails() {
-    use rustix::process::Resource;
+    use rlimit::Resource;
 
     const CAP: u64 = 200 * 1024;
 
@@ -2539,7 +2462,7 @@ fn test_block_stats_are_reported_when_a_write_fails() {
     let result = ucmd
         .args(&["conv=block", "cbs=1M", "obs=64K", "of=capped.bin"])
         .pipe_in("x\n")
-        .limit(Resource::Fsize, CAP, CAP)
+        .limit(Resource::FSIZE, CAP, CAP)
         .ignore_sigxfsz()
         .fails();
 

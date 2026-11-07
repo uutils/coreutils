@@ -8,6 +8,7 @@
 use crate::errors::NumfmtError;
 use crate::format::{
     WriteError, escape_line, write_formatted_with_delimiter, write_formatted_with_whitespace,
+    write_unconverted_with_whitespace,
 };
 use crate::options::{
     DEBUG, DELIMITER, FIELD, FIELD_DEFAULT, FORMAT, FROM, FROM_DEFAULT, FROM_UNIT,
@@ -53,19 +54,15 @@ fn format_and_write(
         None => input_line,
     };
 
-    // In non-abort modes we buffer the formatted output so that on error we
-    // can emit the original line instead.
-    let buffer_output = !matches!(options.invalid, InvalidModes::Abort);
-    let mut buf = Vec::new();
-    let dest: &mut dyn Write = if buffer_output { &mut buf } else { writer };
-
+    // A field that cannot be converted is reported and written unchanged by
+    // the writers below, unless --invalid=abort, where it fails the line.
     let result = if options.delimiter.is_some() {
-        write_formatted_with_delimiter(dest, line, options, eol)
+        write_formatted_with_delimiter(writer, line, options, eol)
     } else {
         match std::str::from_utf8(line) {
             // Scientific notation is rejected per field when the number is
             // parsed, so a token in a field that is not converted is left alone.
-            Ok(s) => write_formatted_with_whitespace(dest, s, options, eol),
+            Ok(s) => write_formatted_with_whitespace(writer, s, options, eol),
             Err(_) => Err(translate!(
                 "numfmt-error-invalid-number",
                 "input" => escape_line(line).quote()
@@ -75,45 +72,42 @@ fn format_and_write(
     };
 
     // A failure to write is fatal, whatever --invalid says.
-    let result = match result {
-        Ok(()) => Ok(()),
+    let msg = match result {
+        Ok(saw_invalid) => return Ok(saw_invalid),
         Err(WriteError::Io(error)) => {
             return Err::<bool, _>(error).map_err_context(|| translate!("numfmt-error-write"));
         }
-        Err(WriteError::Invalid(message)) => Err(message),
+        Err(WriteError::Invalid(message)) => message,
     };
 
-    if let Err(msg) = result {
-        match options.invalid {
-            InvalidModes::Abort => {
-                return Err(Box::new(NumfmtError::FormattingError(msg)));
-            }
-            InvalidModes::Fail => {
-                show!(NumfmtError::FormattingError(msg));
-            }
-            InvalidModes::Warn => {
-                let _ = writeln!(stderr(), "numfmt: {msg}");
-            }
-            InvalidModes::Ignore => {}
+    // Only --invalid=abort, or a line that is not valid UTF-8, gets here.
+    match options.invalid {
+        InvalidModes::Abort => {
+            return Err(Box::new(NumfmtError::FormattingError(msg)));
         }
-        // On error, echo the original line unchanged.
-        writer
-            .write_all(input_line)
-            .map_err_context(|| translate!("numfmt-error-write"))?;
-        if let Some(eol) = eol {
-            writer
-                .write_all(&[eol])
-                .map_err_context(|| translate!("numfmt-error-write"))?;
+        InvalidModes::Fail => {
+            show!(NumfmtError::FormattingError(msg));
         }
-        return Ok(true);
+        InvalidModes::Warn => {
+            let _ = writeln!(stderr(), "numfmt: {msg}");
+        }
+        InvalidModes::Ignore => {}
     }
-
-    if buffer_output {
+    // Echo the original line, with the blanks between fields written as
+    // usual unless an explicit delimiter is set.
+    match std::str::from_utf8(input_line) {
+        Ok(s) if options.delimiter.is_none() => {
+            write_unconverted_with_whitespace(writer, s, options)
+        }
+        _ => writer.write_all(input_line),
+    }
+    .map_err_context(|| translate!("numfmt-error-write"))?;
+    if let Some(eol) = eol {
         writer
-            .write_all(&buf)
+            .write_all(&[eol])
             .map_err_context(|| translate!("numfmt-error-write"))?;
     }
-    Ok(false)
+    Ok(true)
 }
 
 /// Run `body` with stdout buffered the way stdio buffers it: a block at a time
@@ -373,6 +367,13 @@ fn parse_options(args: &ArgMatches) -> std::result::Result<NumfmtOptions, ParseE
         Ok(0)
     }?;
 
+    // --field still conflicts with itself, like in GNU numfmt.
+    if args
+        .get_many::<String>(FIELD)
+        .is_some_and(|fields| fields.len() > 1)
+    {
+        return Err(translate!("numfmt-error-multiple-field-specifications").into());
+    }
     let fields = args.get_one::<String>(FIELD).unwrap().as_str();
     // a lone "-" means "all fields", even as part of a list of fields
     let fields = if fields.split(&[',', ' ']).any(|x| x == "-") {
@@ -563,6 +564,7 @@ pub fn uu_app() -> Command {
         .after_help(translate!("numfmt-after-help"))
         .override_usage(format_usage(&translate!("numfmt-usage")))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(DEBUG)
                 .long(DEBUG)
@@ -589,6 +591,7 @@ pub fn uu_app() -> Command {
                 .long(FIELD)
                 .help(translate!("numfmt-help-field"))
                 .value_name("FIELDS")
+                .action(ArgAction::Append)
                 .allow_hyphen_values(true)
                 .default_value(FIELD_DEFAULT),
         )

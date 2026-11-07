@@ -23,6 +23,7 @@ use crate::quoting_style::locale_aware_shell_escape;
 use crate::sum::{self, Blake2b, Blake3, DigestOutput};
 use crate::{
     os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_warning_caps, translate,
+    translate_text,
 };
 
 /// To what level should checksum validation print logging info.
@@ -102,7 +103,7 @@ impl ChecksumResult {
 /// Represents a reason for which the processing of a checksum line
 /// could not proceed to digest comparison.
 enum LineCheckError {
-    /// a generic UError was encountered in sub-functions
+    /// a generic `UError` was encountered in sub-functions
     UError(Box<dyn UError>),
     /// the computed checksum digest differs from the expected one
     DigestMismatch,
@@ -132,7 +133,7 @@ impl From<ChecksumError> for LineCheckError {
 
 /// Represents an error that was encountered when processing a checksum file.
 enum FileCheckError {
-    /// a generic UError was encountered in sub-functions
+    /// a generic `UError` was encountered in sub-functions
     UError(Box<dyn UError>),
     /// reading of the checksum file failed
     CantOpenChecksumFile,
@@ -184,7 +185,7 @@ fn log_no_properly_formatted(filename: impl Display) {
         stderr(),
         "{}: {}",
         util_name(),
-        translate!("checksum-no-properly-formatted", "checksum_file" => filename)
+        translate_text!("checksum-no-properly-formatted", "checksum_file" => filename)
     );
 }
 
@@ -195,7 +196,7 @@ fn log_no_file_verified(filename: impl Display) {
         stderr(),
         "{}: {}",
         util_name(),
-        translate!("checksum-no-file-verified", "checksum_file" => filename)
+        translate_text!("checksum-no-file-verified", "checksum_file" => filename)
     );
 }
 
@@ -276,9 +277,7 @@ impl LineFormat {
         //   r"\MD5 (a\\ b) = abc123",
         //   BLAKE2b(44)= a45a4c4883cce4b50d844fab460414cc2080ca83690e74d850a9253e757384366382625b218c8585daee80f34dc9eb2f2fde5fb959db81cd48837f9216e7b0fa
         // Other whitespace before the algorithm name makes a tagged line malformed.
-        let trimmed = line.trim_blanks_start();
-        let algo_start = usize::from(trimmed.starts_with(b"\\"));
-        let rest = &trimmed[algo_start..];
+        let (rest, escaped) = Self::strip_escape_marker(line);
 
         // find the next parenthesis  using byte search (not next whitespace) because openssl's
         // tagged format does not put a space before (filename)
@@ -347,6 +346,7 @@ impl LineFormat {
             algo_bit_len: algo_bits,
             checksum: checksum_utf8,
             filename: filename.to_vec(),
+            escaped,
             format: Self::AlgoBased,
         })
     }
@@ -358,7 +358,8 @@ impl LineFormat {
     ///
     /// [untagged output format]: https://www.gnu.org/software/coreutils/manual/html_node/cksum-output-modes.html#cksum-output-modes-1
     fn parse_untagged(line: &[u8]) -> Option<LineInfo> {
-        let line = line.trim_blanks_start();
+        // A leading backslash means the file name is escaped.
+        let (line, escaped) = Self::strip_escape_marker(line);
         let blank_idx = line.iter().position(|&b| b == b' ' || b == b'\t')?;
         let checksum = &line[..blank_idx];
 
@@ -377,6 +378,7 @@ impl LineFormat {
             algo_bit_len: None,
             checksum: checksum_utf8,
             filename: filename.to_vec(),
+            escaped,
             format: Self::Untagged,
         })
     }
@@ -392,7 +394,7 @@ impl LineFormat {
     ///
     /// [untagged output format]: https://www.gnu.org/software/coreutils/manual/html_node/cksum-output-modes.html#cksum-output-modes-1
     fn parse_single_blank(line: &[u8]) -> Option<LineInfo> {
-        let line = line.trim_blanks_start();
+        let (line, escaped) = Self::strip_escape_marker(line);
         let blank_idx = line.iter().position(|&b| b == b' ' || b == b'\t')?;
         let checksum = &line[..blank_idx];
         if !checksum.iter().all(|&b| b.is_ascii_hexdigit()) || checksum.is_empty() {
@@ -409,8 +411,19 @@ impl LineFormat {
             algo_bit_len: None,
             checksum: checksum_utf8,
             filename: filename.to_vec(),
+            escaped,
             format: Self::SingleSpace,
         })
+    }
+
+    /// Skip leading blanks and the optional backslash that marks an escaped
+    /// file name, telling whether it was there.
+    fn strip_escape_marker(line: &[u8]) -> (&[u8], bool) {
+        let line = line.trim_blanks_start();
+        match line.strip_prefix(b"\\") {
+            Some(rest) => (rest, true),
+            None => (line, false),
+        }
     }
 
     /// Ensure that the given checksum is syntactically valid (that it is either
@@ -491,6 +504,8 @@ struct LineInfo {
     algo_bit_len: Option<usize>,
     checksum: String,
     filename: Vec<u8>,
+    /// The line started with a backslash: the file name must be unescaped.
+    escaped: bool,
     format: LineFormat,
 }
 
@@ -612,7 +627,7 @@ fn get_file_to_check(
                     Ok(Box::new(f))
                 }
             }
-            Err(err) => {
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 if !opts.ignore_missing {
                     // yes, we have both stderr and stdout here
                     print_error(err);
@@ -620,6 +635,13 @@ fn get_file_to_check(
                 }
                 // we could not open the file but we want to continue
                 Err(LineCheckError::FileNotFound)
+            }
+            Err(err) => {
+                // The file exists but cannot be opened. `--ignore-missing` does
+                // not cover this, so report it whether or not it is set.
+                print_error(err);
+                failed_open();
+                Err(LineCheckError::CantOpenFile)
             }
         }
     }
@@ -640,7 +662,7 @@ fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
     #[cfg(any(target_os = "wasi", windows))]
     if file.metadata().is_ok_and(|m| m.is_dir()) {
         return Err(io::Error::other(
-            translate!("error-is-a-directory", "file" => filename.maybe_quote()),
+            translate_text!("error-is-a-directory", "file" => filename.maybe_quote()),
         )
         .into());
     }
@@ -713,11 +735,17 @@ fn identify_algo_name_and_length(
 /// the expected one.
 fn compute_and_check_digest_from_file(
     filename: &[u8],
+    escaped: bool,
     expected_checksum: &[u8],
     algo: SizedAlgoKind,
     opts: ChecksumValidateOptions,
 ) -> Result<(), LineCheckError> {
-    let (filename_to_check_unescaped, _prefix) = unescape_filename(filename);
+    // Only names on lines starting with a backslash are escaped.
+    let filename_to_check_unescaped = if escaped {
+        unescape_filename(filename).0
+    } else {
+        filename.to_vec()
+    };
     let real_filename_to_check = os_str_from_bytes(&filename_to_check_unescaped)?;
 
     // Open the input file
@@ -796,7 +824,13 @@ fn process_algo_based_line(
     let algo = SizedAlgoKind::from_unsized(algo_kind, algo_len)
         .map_err(|_| LineCheckError::ImproperlyFormatted)?;
 
-    compute_and_check_digest_from_file(filename_to_check, &expected_checksum, algo, opts)
+    compute_and_check_digest_from_file(
+        filename_to_check,
+        line_info.escaped,
+        &expected_checksum,
+        algo,
+        opts,
+    )
 }
 
 /// Check a digest checksum with non-algo based pre-treatment.
@@ -835,7 +869,13 @@ fn process_non_algo_based_line(
 
     let algo = SizedAlgoKind::from_unsized(cli_algo_kind, algo_len)?;
 
-    compute_and_check_digest_from_file(&line_info.filename, &expected_checksum, algo, opts)
+    compute_and_check_digest_from_file(
+        &line_info.filename,
+        line_info.escaped,
+        &expected_checksum,
+        algo,
+        opts,
+    )
 }
 
 /// Parses a checksum line, detect the algorithm to use, read the file and produce
@@ -861,10 +901,13 @@ fn process_checksum_line(
 
     // Use `LineInfo` to extract the data of a line.
     // Then, depending on its format, apply a different pre-treatment.
-    let line_info = LineInfo::parse(line, cached_line_format, opts.allow_empty_filename)
+    // The detected format is kept only if the line turns out to be properly
+    // formatted: an improper line must not decide how the next ones are read.
+    let mut line_format = *cached_line_format;
+    let line_info = LineInfo::parse(line, &mut line_format, opts.allow_empty_filename)
         .ok_or(LineCheckError::ImproperlyFormatted)?;
 
-    if line_info.format == LineFormat::AlgoBased {
+    let result = if line_info.format == LineFormat::AlgoBased {
         process_algo_based_line(&line_info, cli_algo_name, opts, last_algo)
     } else if let Some(cli_algo) = cli_algo_name {
         // If we match a non-algo based parser, we expect a cli argument
@@ -873,7 +916,12 @@ fn process_checksum_line(
     } else {
         // We have no clue of what algorithm to use
         Err(LineCheckError::ImproperlyFormatted)
+    };
+
+    if !matches!(result, Err(LineCheckError::ImproperlyFormatted)) {
+        *cached_line_format = line_format;
     }
+    result
 }
 
 fn process_checksum_file(
@@ -956,7 +1004,7 @@ fn process_checksum_file(
                         stderr(),
                         "{}: {}",
                         util_name(),
-                        translate!("checksum-error-algo-bad-format", "file" => filename_input.maybe_quote(), "line" => i + 1, "algo" => algo)
+                        translate_text!("checksum-error-algo-bad-format", "file" => filename_input.maybe_quote(), "line" => i + 1, "algo" => algo)
                     );
                 }
             }
@@ -1000,8 +1048,9 @@ fn process_checksum_file(
         return Err(FileCheckError::Failed);
     }
 
-    // If a file was missing, return an error unless we explicitly ignore it.
-    if res.failed_open_file > 0 && !opts.ignore_missing {
+    // Files we could not read are a failure. Missing files are only counted
+    // when they are not ignored, so this needs no further guard.
+    if res.failed_open_file > 0 {
         return Err(FileCheckError::Failed);
     }
 
@@ -1331,6 +1380,82 @@ mod tests {
         );
         assert!(res.is_none());
         assert!(cached_line_format.is_none());
+    }
+
+    fn check_md5_line(
+        line: &str,
+        cached_line_format: &mut Option<LineFormat>,
+    ) -> Result<(), LineCheckError> {
+        let opts = ChecksumValidateOptions {
+            ignore_missing: true,
+            ..Default::default()
+        };
+        process_checksum_line(
+            OsStr::new(line),
+            Some(AlgoKind::Md5),
+            None,
+            opts,
+            cached_line_format,
+            &mut None,
+        )
+    }
+
+    #[test]
+    fn test_improperly_formatted_line_does_not_select_single_space_format() {
+        let mut cached_line_format = None;
+
+        let res = check_md5_line("2024 release", &mut cached_line_format);
+        assert!(matches!(res, Err(LineCheckError::ImproperlyFormatted)));
+        assert_eq!(cached_line_format, None);
+
+        let res = check_md5_line(
+            "d41d8cd98f00b204e9800998ecf8427e  missing",
+            &mut cached_line_format,
+        );
+        assert!(matches!(res, Err(LineCheckError::FileNotFound)));
+        assert_eq!(cached_line_format, Some(LineFormat::Untagged));
+    }
+
+    #[test]
+    fn test_improperly_formatted_line_does_not_select_untagged_format() {
+        let mut cached_line_format = None;
+
+        let res = check_md5_line("Checksums  for release", &mut cached_line_format);
+        assert!(matches!(res, Err(LineCheckError::ImproperlyFormatted)));
+        assert_eq!(cached_line_format, None);
+
+        let res = check_md5_line(
+            "d41d8cd98f00b204e9800998ecf8427e missing",
+            &mut cached_line_format,
+        );
+        assert!(matches!(res, Err(LineCheckError::FileNotFound)));
+        assert_eq!(cached_line_format, Some(LineFormat::SingleSpace));
+    }
+
+    #[test]
+    fn test_properly_formatted_line_selects_format_whatever_the_digest_check_outcome() {
+        let mut cached_line_format = None;
+        let res = check_md5_line(
+            "d41d8cd98f00b204e9800998ecf8427e  missing",
+            &mut cached_line_format,
+        );
+        assert!(matches!(res, Err(LineCheckError::FileNotFound)));
+        assert_eq!(cached_line_format, Some(LineFormat::Untagged));
+
+        let mut cached_line_format = None;
+        let res = check_md5_line(
+            "d41d8cd98f00b204e9800998ecf8427e Cargo.toml",
+            &mut cached_line_format,
+        );
+        assert!(matches!(res, Err(LineCheckError::DigestMismatch)));
+        assert_eq!(cached_line_format, Some(LineFormat::SingleSpace));
+
+        let res = check_md5_line(
+            "d41d8cd98f00b204e9800998ecf8427e  missing",
+            &mut cached_line_format,
+        );
+        assert!(matches!(res, Err(LineCheckError::FileNotFound)));
+        assert_eq!(cached_line_format, Some(LineFormat::SingleSpace));
     }
 
     #[test]

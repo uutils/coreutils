@@ -5,10 +5,8 @@
 
 //! Set of functions to parsing TTY
 
-use std::{
-    fmt::{self, Display, Formatter},
-    path::PathBuf,
-};
+use std::fmt::{self, Display, Formatter};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Teletype {

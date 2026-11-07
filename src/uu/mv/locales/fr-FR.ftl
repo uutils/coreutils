@@ -21,7 +21,7 @@ mv-error-no-such-file = impossible de lire {$path} : Aucun fichier ou répertoir
 mv-error-cannot-stat-not-directory = impossible de lire {$path} : N'est pas un répertoire
 mv-error-same-file = {$source} et {$target} sont le même fichier
 mv-error-self-target-subdirectory = impossible de déplacer {$source} vers un sous-répertoire de lui-même, {$target}
-mv-error-directory-to-non-directory = impossible d'écraser le répertoire {$path} avec un non-répertoire
+mv-error-directory-to-non-directory = impossible d'écraser le répertoire {$path} avec le non-répertoire {$source}
 mv-error-non-directory-to-directory = impossible d'écraser le non-répertoire {$target} avec le répertoire {$source}
 mv-error-not-directory = cible {$path} : N'est pas un répertoire
 mv-error-target-not-directory = répertoire cible {$path} : N'est pas un répertoire
@@ -69,3 +69,9 @@ mv-prompt-overwrite = écraser {$target} ?
 # Messages de progression
 mv-progress-moving = déplacement
 mv-error-dest-appeared = la destination { $path } a été remplacée pendant le déplacement ; refus de la suivre
+
+# Erreurs de préservation des liens physiques
+mv-error-hardlink-io = erreur d'E/S lors de l'opération sur le lien physique : { $error }
+mv-error-hardlink-scan = échec de l'analyse des fichiers pour les liens physiques : { $error }
+mv-error-hardlink-preserve = échec de la préservation du lien physique : { $source } -> { $target }
+mv-error-hardlink-metadata = erreur d'accès aux métadonnées de { $path } : { $error }

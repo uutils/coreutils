@@ -383,10 +383,8 @@ pub fn locale_aware_escape_dir_name(name: &OsStr, style: QuotingStyle) -> OsStri
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        i18n::UEncoding,
-        quoting_style::{QuotingStyle, escape_control_chars, escape_name_inner},
-    };
+    use crate::i18n::UEncoding;
+    use crate::quoting_style::{QuotingStyle, escape_control_chars, escape_name_inner};
 
     // spell-checker:ignore (tests/words) one\'two one'two
 
@@ -445,6 +443,25 @@ mod tests {
             b"missing-'\xff",
             &[(b"'missing-'\\'''$'\\377'", "shell-escape-always")],
         );
+    }
+
+    #[test]
+    fn test_c1_control_chars_with_single_quote() {
+        for (name, expected) in [
+            ("it's\u{9b}here", "'it'\\''s'$'\\302\\233''here'"),
+            ("\u{9b}it's", "''$'\\302\\233''it'\\''s'"),
+            ("it's\u{9b}", "'it'\\''s'$'\\302\\233'"),
+            ("it's\u{e9}", "\"it's\u{e9}\""),
+        ] {
+            check_names_encoding(
+                UEncoding::Utf8,
+                name,
+                &[
+                    (expected, "shell-escape"),
+                    (expected, "shell-escape-always"),
+                ],
+            );
+        }
     }
 
     #[test]
@@ -1187,6 +1204,14 @@ mod tests {
     }
 
     #[test]
+    fn test_lone_brace() {
+        check_names_both("{", &[("'{'", "shell"), ("'{'", "shell-escape")]);
+        check_names_both("}", &[("'}'", "shell"), ("'}'", "shell-escape")]);
+        check_names_both("{}", &[("{}", "shell"), ("{}", "shell-escape")]);
+        check_names_both("{a,b}", &[("{a,b}", "shell"), ("{a,b}", "shell-escape")]);
+    }
+
+    #[test]
     fn test_special_chars_in_double_quotes() {
         check_names_both(
             "can'$t",
@@ -1215,6 +1240,16 @@ mod tests {
                 ("'can'\\''\\t'", "shell-always"),
                 ("'can'\\''\\t'", "shell-escape"),
                 ("'can'\\''\\t'", "shell-escape-always"),
+            ],
+        );
+
+        check_names_both(
+            "can'!t",
+            &[
+                ("'can'\\''!t'", "shell"),
+                ("'can'\\''!t'", "shell-always"),
+                ("'can'\\''!t'", "shell-escape"),
+                ("'can'\\''!t'", "shell-escape-always"),
             ],
         );
     }

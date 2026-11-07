@@ -58,6 +58,20 @@ fn test_mknod_version() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_mknod_non_utf8_file_name() {
+    use std::os::unix::ffi::OsStrExt;
+    use uutests::at_and_ucmd;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file_name = std::ffi::OsStr::from_bytes(b"fifo_\xFF\xFE");
+
+    ucmd.arg(file_name).arg("p").succeeds().no_output();
+    assert!(std::path::Path::new(&at.plus(file_name)).exists());
+}
+
+#[test]
 fn test_mknod_fifo_default_writable() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd().arg("test_file").arg("p").succeeds();
@@ -215,6 +229,20 @@ fn test_mknod_mode_comma_separated() {
 }
 
 #[test]
+fn test_mknod_mode_capital_x_adds_no_execute() {
+    for mode in ["a+X", "u+X", "go+rX", "a-x+X", "a+rwX", "u=rwX"] {
+        let ts = TestScenario::new(util_name!());
+        ts.ucmd().args(&["-m", mode, "test_fifo", "p"]).succeeds();
+        assert!(ts.fixtures.is_fifo("test_fifo"));
+        assert_eq!(
+            ts.fixtures.metadata("test_fifo").permissions().mode() & 0o777,
+            0o666,
+            "mode {mode}"
+        );
+    }
+}
+
+#[test]
 fn test_mknod_fifo_with_mode_and_umask() {
     use uucore::fs::display_permissions;
     let ts = TestScenario::new(util_name!());
@@ -289,7 +317,7 @@ fn test_mknod_selinux() {
             context_value.contains("unconfined_u"),
             "Expected 'unconfined_u' not found in getfattr output:\n{context_value}"
         );
-        at.remove(&at.plus_as_string(dest));
+        at.remove(at.plus(dest));
     }
 }
 
@@ -339,7 +367,7 @@ fn test_mknod_selinux_invalid_cleanup() {
 
     new_ucmd!()
         .arg("--context=invalid_context_t")
-        .arg(at.plus_as_string(dest))
+        .arg(at.plus(dest))
         .arg("p")
         .fails()
         .no_stdout();

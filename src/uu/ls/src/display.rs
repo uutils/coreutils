@@ -674,7 +674,7 @@ fn display_date(
 }
 
 fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "illumos")))]
     {
         let ft = metadata.file_type();
         if ft.is_char_device() || ft.is_block_device() {

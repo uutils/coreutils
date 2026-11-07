@@ -72,6 +72,12 @@ number of spaces representing a tab when determining the line length.
 
 `install` offers FreeBSD's `-U` unprivileged option to not change the owner, the group, or the file flags of the destination.
 
+## `join`
+
+`join` accepts `-n`/`--numeric-sort` to compare join fields by numerical value,
+the same way `sort -n` orders them. This lets it join files sorted with `sort -n`,
+and keys such as `1` and `01` are considered equal.
+
 ## `ls`
 
 GNU `ls` provides two ways to use a long listing format: `-l` and `--format=long`. We support a

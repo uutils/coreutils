@@ -446,23 +446,13 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
                     hardlink_params.0,
                     hardlink_params.1,
                 )
-                .map_err(|e| -> Box<dyn UError> {
-                    let message = if is_directory_not_empty_error(&e) {
-                        translate!(
-                            "mv-error-cannot-overwrite-non-empty-directory",
-                            "target" => target.quote()
-                        )
-                    } else {
-                        translate!(
-                            "mv-error-cannot-move",
-                            "source" => source.quote(),
-                            "target" => target.quote()
-                        )
-                    };
-                    e.map_err_context(|| message)
-                })
+                .map_err(|e| cannot_move_error(e, source, target))
             } else {
-                Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
+                Err(MvError::DirectoryToNonDirectory(
+                    target.quote().to_string(),
+                    source.quote().to_string(),
+                )
+                .into())
             }
         } else {
             move_files_into_dir(&[source.to_path_buf()], target, opts)
@@ -500,7 +490,15 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
             hardlink_params.0,
             hardlink_params.1,
         )
-        .map_err(|e| USimpleError::new(1, format!("{e}")))
+        .map_err(|e| -> Box<dyn UError> {
+            // OS errors get the same "cannot move" context as GNU; our own
+            // messages (e.g. "not replacing") are already complete.
+            if e.raw_os_error().is_some() {
+                cannot_move_error(e, source, target)
+            } else {
+                USimpleError::new(1, format!("{e}"))
+            }
+        })
     }
 }
 
@@ -575,6 +573,13 @@ fn assert_not_same_file(
             || source.ends_with("/.")
             || source.is_file())
     {
+        // GNU mv skips the same-file check when it would not replace the
+        // target anyway (-n, --update=none), so this is a silent no-op.
+        if (opts.overwrite == OverwriteMode::NoClobber || opts.update == UpdateMode::None)
+            && source.file_name().is_some()
+        {
+            return Ok(());
+        }
         return Err(MvError::SameFile(source.quote().to_string(), target_display()).into());
     } else if (same_file || canonicalized_target.starts_with(canonicalized_source))
         // don't error if we're moving a symlink of a directory into itself
@@ -779,19 +784,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         ) {
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
-                let message = if is_directory_not_empty_error(&e) {
-                    translate!(
-                        "mv-error-cannot-overwrite-non-empty-directory",
-                        "target" => targetpath.quote()
-                    )
-                } else {
-                    translate!(
-                        "mv-error-cannot-move",
-                        "source" => sourcepath.quote(),
-                        "target" => targetpath.quote()
-                    )
-                };
-                let e = e.map_err_context(|| message);
+                let e = cannot_move_error(e, sourcepath, &targetpath);
                 if let Some(ref pb) = display_manager {
                     pb.suspend(|| show!(e));
                 } else {
@@ -874,7 +867,15 @@ fn rename(
         .is_ok_and(|metadata| metadata.is_dir())
     {
         // normalize behavior between *nix and windows
-        if from.is_dir() {
+        // A symlink to a directory is not a directory: like any other
+        // non-directory, it must not replace the empty directory. Drop
+        // trailing slashes first, as they make lstat follow the symlink.
+        if from
+            .components()
+            .as_path()
+            .symlink_metadata()
+            .is_ok_and(|metadata| metadata.is_dir())
+        {
             if is_empty_dir(to) {
                 fs::remove_dir(to)?;
             } else {
@@ -941,6 +942,24 @@ fn is_fifo(_filetype: fs::FileType) -> bool {
 
 /// A wrapper around `fs::rename`, so that if it fails, we try falling back on
 /// copying and removing.
+/// Add GNU's "cannot move" (or "cannot overwrite" for a non-empty
+/// directory) context to an error from `rename`.
+fn cannot_move_error(e: io::Error, source: &Path, target: &Path) -> Box<dyn UError> {
+    let message = if is_directory_not_empty_error(&e) {
+        translate!(
+            "mv-error-cannot-overwrite-non-empty-directory",
+            "target" => target.quote()
+        )
+    } else {
+        translate!(
+            "mv-error-cannot-move",
+            "source" => source.quote(),
+            "target" => target.quote()
+        )
+    };
+    e.map_err_context(|| message)
+}
+
 fn rename_with_fallback(
     from: &Path,
     to: &Path,
@@ -957,7 +976,9 @@ fn rename_with_fallback(
         // 2. On Windows, if the target file exists and source file is opened by another process
         //    (MoveFileExW fails with "Access Denied" even if the source file has FILE_SHARE_DELETE permission)
         let should_fallback = err.kind() == io::ErrorKind::CrossesDevices
-            || (from.is_file() && can_delete_file(from));
+            || (err.kind() == io::ErrorKind::PermissionDenied
+                && from.is_file()
+                && can_delete_file(from));
         if !should_fallback {
             return Err(err);
         }

@@ -3,12 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore execveat fexecve memfd prefixcat rsplit testcat atexit profraw Cprofile
+// spell-checker:ignore prefixcat rsplit testcat atexit profraw Cprofile
 
 use std::ffi::{OsStr, OsString};
 use std::io::{Write, stderr};
 use std::path::{Path, PathBuf};
-use std::process;
+use std::process::{self, ExitCode};
 
 use uucore::Args;
 use uucore::display::Quotable;
@@ -49,24 +49,24 @@ pub fn get_all_utilities<T: Args>(
         .collect()
 }
 
-/// Prints a "utility not found" error and exits
-pub fn not_found(util: &OsStr) -> ! {
+/// Prints a "utility not found" error
+pub fn not_found(util: &OsStr) -> ExitCode {
     let _ = writeln!(
         stderr(),
         "coreutils: unknown program '{}'",
         util.maybe_quote()
     );
-    exit(1);
+    ExitCode::FAILURE
 }
 
-/// Prints an "unrecognized option" error and exits
-pub fn unrecognized_option(binary_name: &str, option: &OsStr) -> ! {
+/// Prints an "unrecognized option" error
+pub fn unrecognized_option(binary_name: &str, option: &OsStr) -> ExitCode {
     let _ = writeln!(
         stderr(),
         "{binary_name}: unrecognized option '{}'",
         option.to_string_lossy()
     );
-    exit(1);
+    ExitCode::FAILURE
 }
 
 /// Sets up localization for a utility with proper error handling

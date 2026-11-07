@@ -169,6 +169,25 @@ fn test_kill_signal_reports_signal_exit_code() {
         .no_output();
 }
 
+/// When the child dumps core, timeout re-raises its signal without dumping
+/// core itself.
+// Linux only: on macOS the child would write a real core file into /cores.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_child_core_dump_not_repeated() {
+    use std::os::unix::process::ExitStatusExt;
+    let ts = TestScenario::new(util_name!());
+    let script = r#"ulimit -c unlimited 2>/dev/null; exec "$0" timeout 5 sh -c 'kill -SEGV $$'"#;
+    let status = std::process::Command::new("sh")
+        .args(["-c", script])
+        .arg(&ts.bin_path)
+        .current_dir(ts.fixtures.as_string())
+        .status()
+        .unwrap();
+    assert_eq!(status.signal(), Some(libc::SIGSEGV));
+    assert!(!status.core_dumped());
+}
+
 #[test]
 fn test_preserve_status_even_when_send_signal() {
     let (ts, bin) = scenario_with_bin();
@@ -491,7 +510,7 @@ fn test_windows_kills_process_tree() {
     );
 }
 
-/// `-s INT` is delivered as a CTRL_BREAK to the child's group (or termination
+/// `-s INT` is delivered as a `CTRL_BREAK` to the child's group (or termination
 /// without a console); either way the child dies and timeout reports 124.
 #[test]
 #[cfg(windows)]

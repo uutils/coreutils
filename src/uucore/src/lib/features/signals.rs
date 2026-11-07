@@ -734,10 +734,10 @@ static SIGPIPE_WAS_IGNORED: AtomicBool = AtomicBool::new(false);
 #[cfg(unix)]
 static STARTUP_STATE_WAS_CAPTURED: AtomicBool = AtomicBool::new(false);
 
-/// Captures stdio and SIGPIPE state at process initialization, before main() runs.
+/// Captures stdio and SIGPIPE state at process initialization, before `main()` runs.
 ///
 /// # Safety
-/// Called from `.init_array` before main(). Only reads current state.
+/// Called from `.init_array` before `main()`. Only reads current state.
 #[cfg(unix)]
 #[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn capture_startup_state() {
@@ -844,10 +844,8 @@ pub const fn sigpipe_was_ignored() -> bool {
 
 #[cfg(target_os = "linux")]
 pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
-    use nix::{
-        poll::{PollFd, PollFlags, PollTimeout, poll},
-        sys::stat::{SFlag, fstat},
-    };
+    use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
+    use nix::sys::stat::{SFlag, fstat};
     use std::io::stdout;
     use std::os::fd::AsFd;
 
