@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# This script was deprecated. Thus, new scripts should not use this.
 
 set -eo pipefail
 
@@ -9,6 +10,8 @@ if test "$*";then
 else
   CARGO_BUILD_TARGET="${CARGO_BUILD_TARGET:-$(rustc --print host-tuple)}"
   case "$CARGO_BUILD_TARGET" in
+    *openbsd*) _args=("--features=feat_Tier1,feat_require_unix");;
+    *redox*) _args=("--features=feat_os_unix_redox");;
     *windows*) _args=("--features=windows");;
     *wasip*) _args=("--features=feat_wasm");;
     *android*) _args=("--features=feat_os_unix_android,feat_require_selinux");;
