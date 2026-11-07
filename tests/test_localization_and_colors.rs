@@ -4,12 +4,14 @@
 // file that was distributed with this source code.
 
 use std::collections::HashSet;
-use std::env;
 use std::process::Command;
 use std::str;
 
-// Use the same binary path as other tests
-pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
+// Use the same binary as other tests
+#[ctor::ctor(unsafe)]
+fn init() {
+    uutests::util::set_default_tests_binary("coreutils");
+}
 
 /// Get list of all enabled utilities from the build-time generated map.
 /// Uses `include_str!` to read the generated `uutils_map.rs` at compile time,
@@ -67,11 +69,11 @@ fn get_utilities_to_skip() -> HashSet<&'static str> {
 }
 
 /// Helper function to create a Command for a utility.
-/// Uses the multicall binary (`TESTS_BINARY`) and passes the utility name as an argument.
+/// Uses the multicall binary of the tests and passes the utility name as an argument.
 fn create_utility_command(utility_name: &str) -> Command {
     let uu_name = format!("uu_{utility_name}");
     let canonical_name = uucore::get_canonical_util_name(&uu_name);
-    let mut cmd = Command::new(TESTS_BINARY);
+    let mut cmd = Command::new(uutests::util::get_tests_binary());
     cmd.arg(canonical_name);
     cmd
 }
