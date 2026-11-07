@@ -111,6 +111,7 @@ markdownlint
 rerast
 rollup
 samply
+sccache
 sed
 selinuxenabled
 sestatus
