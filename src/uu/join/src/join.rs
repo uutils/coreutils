@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) autoformat FILENUM whitespaces nocheck memmem
+// spell-checker:ignore (ToDO) autoformat FILENUM whitespaces nocheck memmem aejotv
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
@@ -885,9 +885,41 @@ fn looks_like_o_field(arg: &OsStr) -> bool {
         .all(|part| part == "auto" || Spec::parse(part).is_ok())
 }
 
+/// Count the file operands on the command line (program name excluded), so
+/// that absorbing `-o` fields never steals FILE1 or FILE2.
+fn count_operands(args: &[OsString]) -> usize {
+    // Short options taking a value as the next argument when not attached.
+    const SHORT_WITH_VALUE: &[u8] = b"aejotv12";
+    let mut count = 0;
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        let bytes = arg.as_encoded_bytes();
+        if bytes == b"--" {
+            count += iter.len();
+            break;
+        }
+        match bytes {
+            [b'-', b'-', ..] | [b'-'] | [] => count += usize::from(!bytes.starts_with(b"--")),
+            [b'-', flags @ ..] => {
+                // In a cluster like `-it`, the first value-taking option eats
+                // the rest of the argument, or the next one if nothing is left.
+                if let Some(pos) = flags.iter().position(|f| SHORT_WITH_VALUE.contains(f))
+                    && pos + 1 == flags.len()
+                {
+                    iter.next();
+                }
+            }
+            _ => count += 1,
+        }
+    }
+    count
+}
+
 /// Merge separate `-o` field operands into one value so clap does not treat
-/// them as file operands (`join -o 1.1 1.2 2.2 f1 f2`).
+/// them as file operands (`join -o 1.1 1.2 2.2 f1 f2`). As many are taken as
+/// can be while still leaving two file operands.
 fn coalesce_o_fields(args: Vec<OsString>) -> Vec<OsString> {
+    let mut spare = count_operands(args.get(1..).unwrap_or_default()).saturating_sub(2);
     let mut out = Vec::with_capacity(args.len());
     let mut iter = args.into_iter().peekable();
 
@@ -901,7 +933,10 @@ fn coalesce_o_fields(args: Vec<OsString>) -> Vec<OsString> {
 
         // if there is at least one o-field, consume and join them
         if let Some(mut joined) = iter.next_if(|f| looks_like_o_field(f)) {
-            while let Some(field) = iter.next_if(|f| looks_like_o_field(f)) {
+            while spare > 0
+                && let Some(field) = iter.next_if(|f| looks_like_o_field(f))
+            {
+                spare -= 1;
                 joined.push(" ");
                 joined.push(field);
             }
