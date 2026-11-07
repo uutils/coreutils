@@ -44,6 +44,32 @@ fn test_create_one_fifo_with_invalid_mode() {
 }
 
 #[test]
+fn test_create_fifo_with_empty_clause_or_bare_octal() {
+    let scene = TestScenario::new(util_name!());
+
+    for mode in [
+        "", ",", "u+x,", ",u+x", "u+x,,g+w", "644,u+x", "u+x,644", "+644,644", " 644,u+x",
+    ] {
+        scene
+            .ucmd()
+            .arg("-m")
+            .arg(mode)
+            .arg("abcd")
+            .fails_with_code(1)
+            .stderr_is(format!("mkfifo: invalid mode: invalid mode ({mode})\n"));
+        assert!(!scene.fixtures.file_exists("abcd"), "{mode:?}");
+    }
+
+    scene
+        .ucmd()
+        .arg("-m")
+        .arg("=644,u+x")
+        .arg("abcd")
+        .succeeds();
+    assert!(scene.fixtures.is_fifo("abcd"));
+}
+
+#[test]
 fn test_create_one_fifo_with_non_file_permission_mode() {
     new_ucmd!()
         .arg("abcd")
