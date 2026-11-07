@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) Sdivide ading tfre
+// spell-checker:ignore (ToDO) Sdivide ading tfre xfeab xffe
 
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
@@ -1227,7 +1227,7 @@ fn test_invalid_expand_tab_arguments() {
         new_ucmd!()
             .args(&[arg, test_file_path])
             .fails()
-            .stderr_contains(format!("pr: '-e' extra characters or invalid number in the argument: ‘{error_msg_field}’\nTry 'pr --help' for more information."));
+            .stderr_contains(format!("pr: '-e' extra characters or invalid number in the argument: '{error_msg_field}'\nTry 'pr --help' for more information."));
     }
 }
 // spell-checker:enable
@@ -1310,7 +1310,7 @@ fn test_double_dash_shields_filename_ending_with_dash_zero() {
 
 #[test]
 fn test_zero_expand_tab_width() {
-    let expected = "pr: '-e' extra characters or invalid number in the argument: ‘0’\nTry 'pr --help' for more information.\n";
+    let expected = "pr: '-e' extra characters or invalid number in the argument: '0'\nTry 'pr --help' for more information.\n";
     new_ucmd!()
         .arg("-e0")
         .fails_with_code(1)
@@ -1614,4 +1614,38 @@ fn test_plus_operand_that_is_not_a_page_range_names_a_file() {
             .fails()
             .stderr_contains(format!("pr: {operand}: "));
     }
+}
+
+#[test]
+fn test_expand_tabs_equals_is_the_char() {
+    new_ucmd!()
+        .args(&["-t", "-e=4"])
+        .pipe_in("x=y\tz\n")
+        .succeeds()
+        .stdout_is("x   y   z\n");
+
+    // Same when -e is grouped with other flags.
+    new_ucmd!()
+        .arg("-te=4")
+        .pipe_in("x=y\tz\n")
+        .succeeds()
+        .stdout_is("x   y   z\n");
+
+    new_ucmd!()
+        .args(&["-t", "-e=-7"])
+        .fails_with_code(1)
+        .stderr_is(
+            "pr: '-e' extra characters or invalid number in the argument: '-7'\n\
+             Try 'pr --help' for more information.\n",
+        );
+}
+
+#[test]
+fn test_expand_tabs_line_too_long() {
+    new_ucmd!()
+        .args(&["-t", "-e4000"])
+        .pipe_in(vec![b'\t'; 600_000])
+        .fails_with_code(1)
+        .stdout_is("")
+        .stderr_is("pr: integer overflow\n");
 }

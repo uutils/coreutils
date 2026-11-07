@@ -101,8 +101,20 @@ impl FileLine {
         line_number: usize,
         buf: &[u8],
         options: &OutputOptions,
-    ) -> Self {
+    ) -> Result<Self, PrError> {
         let line_content = if let Some(expand_tabs) = &options.expand_tabs {
+            // Expanding tabs can make a line far longer than the input, so
+            // bound it like GNU does. The exact length is only worth measuring
+            // when every byte growing to a full tab stop could pass the limit.
+            let widest_stop = (expand_tabs.width as usize).max(8);
+            if buf.len().saturating_mul(widest_stop) > i32::MAX as usize {
+                let expanded = buf
+                    .iter()
+                    .fold(0, |len, b| len + expanded_byte_width(len, *b, expand_tabs));
+                if expanded > i32::MAX as usize {
+                    return Err(PrError::IntegerOverflow);
+                }
+            }
             let mut result =
                 Vec::with_capacity(buf.len() + buf.len() / 20 * expand_tabs.width as usize);
             for b in buf {
@@ -113,12 +125,12 @@ impl FileLine {
             buf.to_vec()
         };
 
-        Self {
+        Ok(Self {
             file_id,
             page_number,
             line_number,
             line_content,
-        }
+        })
     }
 }
 
@@ -174,6 +186,9 @@ enum PrError {
 
     #[error("pr: {path}: {}", strip_errno(error))]
     ReadPath { path: PathBuf, error: io::Error },
+
+    #[error("pr: {}", translate!("pr-error-integer-overflow"))]
+    IntegerOverflow,
 }
 
 impl From<FromUtf8Error> for PrError {
@@ -455,15 +470,25 @@ fn recreate_arguments(args: &[OsString], cmd: &Command) -> (Vec<OsString>, Colum
 
     // `-e` takes an optional attached argument, which clap cannot express, so it is filled in
     // here. Without it clap would report a missing value for `-tre`, or swallow the following
-    // argument, usually a file name, for a bare `-e`.
+    // argument, usually a file name, for a bare `-e`. clap also drops the `=` of `-e=VALUE`,
+    // yet for `-e` it is the CHAR to expand, so that value is handed over as its own argument.
     let expand_tabs_option = arguments
         .iter()
         .take_while(|arg| *arg != "--")
         .enumerate()
-        .filter_map(|(pos, value)| value.to_str().map(|value| (pos, value)))
-        .find(|(_, value)| e_regex.is_match(value.trim()));
-    if let Some((pos, value)) = expand_tabs_option {
-        arguments[pos] = format!("{}\t8", value.trim()).into();
+        .find_map(|(pos, value)| {
+            let value = value.to_str()?;
+            if e_regex.is_match(value.trim()) {
+                return Some((pos, vec![format!("{}\t8", value.trim())]));
+            }
+            let split = value.find("e=")? + 1;
+            let (flags, char_value) = value.split_at(split);
+            e_regex
+                .is_match(flags)
+                .then(|| (pos, vec![flags.to_string(), char_value.to_string()]))
+        });
+    if let Some((pos, replacement)) = expand_tabs_option {
+        arguments.splice(pos..=pos, replacement.into_iter().map(OsString::from));
     }
 
     // Take out the whole-token legacy operands before `--`, keeping the first
@@ -782,7 +807,7 @@ fn build_options(
             let invalid = |arg: &str| PrError::EncounteredErrors {
                 msg: format!(
                     "{}\n{}",
-                    translate!("pr-error-invalid-number-argument", "arg" => arg),
+                    translate!("pr-error-invalid-number-argument", "arg" => arg.quote()),
                     translate!("pr-try-help-message")
                 ),
             };
@@ -856,7 +881,7 @@ fn build_options(
                     let invalid = |arg: &str| PrError::EncounteredErrors {
                         msg: format!(
                             "{}\n{}",
-                            translate!("pr-error-invalid-expand-tab-argument", "arg" => arg),
+                            translate!("pr-error-invalid-expand-tab-argument", "arg" => arg.quote()),
                             translate!("pr-try-help-message")
                         ),
                     };
@@ -1106,23 +1131,28 @@ fn read_to_end(name: &OsStr) -> Result<Vec<u8>, PrError> {
     }
 }
 
-fn apply_expand_tab(chunk: &mut Vec<u8>, byte: u8, expand_options: &ExpandTabsOptions) {
+/// How many bytes `byte` takes once expanded, written at column `len`.
+fn expanded_byte_width(len: usize, byte: u8, expand_options: &ExpandTabsOptions) -> usize {
     if byte == expand_options.input_char as u8 {
         // If the byte encountered is the input char we use width to calculate
         // the amount of spaces needed (if no input char given we stored '\t'
         // in our struct)
-        let spaces_needed =
-            expand_options.width as usize - (chunk.len() % expand_options.width as usize);
-        chunk.extend(std::iter::repeat_n(b' ', spaces_needed));
+        expand_options.width as usize - (len % expand_options.width as usize)
     } else if byte == TAB as u8 {
         // If a byte got passed to the -e flag (eg -ea1)  which is not '\t' GNU
         // still expands it but does not use an optionally given width parameter
         // but does the '\t' expansion with the default value (8)
-        let spaces_needed = 8 - (chunk.len() % 8);
+        8 - (len % 8)
+    } else {
+        1
+    }
+}
+
+fn apply_expand_tab(chunk: &mut Vec<u8>, byte: u8, expand_options: &ExpandTabsOptions) {
+    if byte == expand_options.input_char as u8 || byte == TAB as u8 {
+        let spaces_needed = expanded_byte_width(chunk.len(), byte, expand_options);
         chunk.extend(std::iter::repeat_n(b' ', spaces_needed));
     } else {
-        // This arm means the byte is neither '\t' nor the bytes to be
-        // expanded
         chunk.push(byte);
     }
 }
@@ -1134,7 +1164,7 @@ fn pr(name: &OsStr, options: &OutputOptions) -> Result<i32, PrError> {
     let buf = read_to_end(name)?;
 
     let mut writer = stdout().lock();
-    let (pages, page_count) = get_pages(options, 0, &buf);
+    let (pages, page_count) = get_pages(options, 0, &buf)?;
     if options.start_page > page_count {
         show_error!(
             "{}",
@@ -1157,15 +1187,17 @@ fn pr(name: &OsStr, options: &OutputOptions) -> Result<i32, PrError> {
     Ok(0)
 }
 
+/// A page of lines, along with its page number.
+type NumberedPage = (usize, Vec<FileLine>);
+
 /// Group lines of a file into pages.
 ///
 /// Returns a list of the form `(page_num, lines)` and the total page count.
-///
 fn get_pages(
     options: &OutputOptions,
     file_id: usize,
     buf: &[u8],
-) -> (Vec<(usize, Vec<FileLine>)>, usize) {
+) -> Result<(Vec<NumberedPage>, usize), PrError> {
     let start_page = options.start_page;
     let end_page = options.end_page;
     let lines_needed_per_page = lines_to_read_for_page(options);
@@ -1201,7 +1233,7 @@ fn get_pages(
                 // `\f` as its own line; instead ignore the empty line.
             } else {
                 let file_line =
-                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options);
+                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options)?;
                 page.push(file_line);
                 line_num += 1;
             }
@@ -1228,7 +1260,7 @@ fn get_pages(
                 // `\n` as its own line; instead ignore the empty line.
             } else {
                 let file_line =
-                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options);
+                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options)?;
                 page.push(file_line);
                 line_num += 1;
             }
@@ -1250,7 +1282,7 @@ fn get_pages(
 
     // Consider all trailing bytes as the last line.
     if prev < buf.len() {
-        let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..], options);
+        let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..], options)?;
         page.push(file_line);
     }
 
@@ -1259,7 +1291,7 @@ fn get_pages(
         pages.push((page_num, std::mem::take(&mut page)));
     }
 
-    (pages, page_num + 1)
+    Ok((pages, page_num + 1))
 }
 
 /// Key used to group lines together according to their file and page number.
@@ -1315,7 +1347,7 @@ fn get_file_line_groups(
 
         // Split the text into pages and collect each line for
         // subsequent grouping.
-        let (pages, _) = get_pages(options, file_id, &buf);
+        let (pages, _) = get_pages(options, file_id, &buf)?;
         for (_, mut page) in pages {
             all_lines.append(&mut page);
         }
