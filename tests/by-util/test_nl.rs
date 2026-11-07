@@ -538,6 +538,47 @@ fn test_body_numbering_matched_lines_without_delimiter() {
 }
 
 #[test]
+fn test_numbering_all_lines_when_coalescing_empties() {
+    let delimiters_and_args = [
+        ("\\:\\:\\:\n", ["-ha", "--header-numbering=a"]),
+        ("\\:\\:\n", ["-ba", "--body-numbering=a"]),
+        ("\\:\n", ["-fa", "--footer-numbering=a"]),
+    ];
+
+    for (delimiter, args) in delimiters_and_args {
+        for arg in args {
+            new_ucmd!()
+                .args(&["-w1", "-s:", "-l2", arg])
+                .pipe_in(format!("{delimiter}a\n\nb\n\n{delimiter}\n\n"))
+                .succeeds()
+                .stdout_is("\n1:a\n  \n2:b\n  \n\n1:\n  \n");
+        }
+    }
+}
+
+#[test]
+fn test_numbering_all_body_lines_skipping_header_footer_empties() {
+    let delimiters_and_args = [
+        ("\\:\\:\\:\n", ["-hn", "--header-numbering=n"]),
+        ("\\:\n", ["-fn", "--footer-numbering=n"]),
+    ];
+
+    let body_delimiter = "\\:\\:\n";
+
+    for (delimiter, args) in delimiters_and_args {
+        for arg in args {
+            new_ucmd!()
+                .args(&["-ba", "-w1", "-s:", "-l2", arg])
+                .pipe_in(format!(
+                    "{body_delimiter}a\n\n{delimiter}S\n{body_delimiter}b\n"
+                ))
+                .succeeds()
+                .stdout_is("\n1:a\n  \n\n  S\n\n1:b\n");
+        }
+    }
+}
+
+#[test]
 fn test_numbering_all_lines() {
     let delimiters_and_args = [
         ("\\:\\:\\:\n", ["-ha", "--header-numbering=a"]),
