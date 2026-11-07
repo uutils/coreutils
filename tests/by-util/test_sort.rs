@@ -3939,6 +3939,18 @@ fn test_merge_locale_collation() {
 }
 
 #[test]
+fn test_sort_locale_symbols() {
+    // glibc ignores symbols like `+` and `|` at the first level, as it does punctuation
+    for (input, expected) in [("+5\n10\n", "10\n+5\n"), ("|b|\na\n", "a\n|b|\n")] {
+        new_ucmd!()
+            .env("LC_ALL", "en_US.UTF-8")
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
 fn test_sort_locale_punctuation() {
     // Punctuation gets a distinguishing collation weight, so lines differing
     // only by punctuation sort in a stable order (issue #12542) and are never
