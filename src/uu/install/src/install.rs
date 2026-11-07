@@ -1465,34 +1465,22 @@ fn get_default_context_for_path(path: &Path) -> Result<Option<String>, SeLinuxEr
         return Err(SeLinuxError::SELinuxNotEnabled);
     }
 
-    // Find the first existing parent directory to get its context
-    let mut current_path = path;
-    loop {
-        if current_path.exists()
-            && let Ok(parent_context) = get_selinux_security_context(current_path, false)
-            && !parent_context.is_empty()
-        {
-            // Found a context - derive the appropriate context for our target
-            return Ok(Some(derive_context_from_parent(&parent_context)));
-        }
-
-        // Move up to parent
-        if let Some(parent) = current_path.parent() {
-            if parent == current_path {
-                break; // Reached root
-            }
-            current_path = parent;
-        } else {
-            break;
-        }
-
-        if current_path == Path::new("/") || current_path.as_os_str().is_empty() {
-            break;
-        }
-    }
-
-    // If we can't determine from any parent, return None to fall back to default behavior
-    Ok(None)
+    // Take the context of `path` or of its nearest ancestor that has one, stopping
+    // before `/` or the empty parent of a relative path. With none, return None to
+    // fall back to the default behavior.
+    let parents = path
+        .ancestors()
+        .skip(1)
+        .take_while(|parent| *parent != Path::new("/") && !parent.as_os_str().is_empty());
+    let context = std::iter::once(path)
+        .chain(parents)
+        .filter(|candidate| candidate.exists())
+        .find_map(|candidate| {
+            get_selinux_security_context(candidate, false)
+                .ok()
+                .filter(|context| !context.is_empty())
+        });
+    Ok(context.map(|context| derive_context_from_parent(&context)))
 }
 
 /// Derives an appropriate `SELinux` context based on a parent directory context.
