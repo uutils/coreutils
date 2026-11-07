@@ -6,8 +6,7 @@ ifneq (,$(filter install, $(MAKECMDGOALS)))
 endif
 PROFILE         ?= debug
 MULTICALL       ?= n
-COMPLETIONS     ?= y
-MANPAGES        ?= y
+UUDOC           ?= y
 LOCALES         ?= y
 # allow bootstrapping by our install. mkdir, chmod and cp should be avoided
 INSTALL         ?= install
@@ -127,6 +126,10 @@ ifeq (${MULTICALL}, y)
 INSTALLEES  := ${INSTALLEES} coreutils
 endif
 
+# uudoc also documents the multicall command and the test alias.
+DOC_UTILS := $(sort $(EXES) coreutils $(if $(filter test,$(EXES)),[))
+BUILDDIR_DOCS := $(BUILDDIR_UUDOC)/docs
+
 all: build
 
 build-pkgs:
@@ -199,33 +202,22 @@ clean:
 distclean: clean
 	$(CARGO) clean $(CARGOFLAGS) && $(CARGO) update $(CARGOFLAGS)
 
-ifeq ($(MANPAGES),y)
 # Do not cross-build uudoc
 build-uudoc:
 	@unset CARGO_BUILD_TARGET && ${CARGO} build ${CARGOFLAGS} --bin uudoc --features "uudoc ${EXES}" ${PROFILE_CMD} --no-default-features
 
-install-manpages: build-uudoc
-	$(INSTALL) -d $(DESTDIR)$(DATAROOTDIR)/man/man1
-	$(foreach prog, $(INSTALLEES), \
-		$(BUILDDIR_UUDOC)/uudoc manpage $(prog) > $(DESTDIR)$(DATAROOTDIR)/man/man1/$(PROG_PREFIX)$(prog).1 $(newline) \
-	)
+ifeq ($(UUDOC),y)
+install-docs: build-uudoc
+	PROG_PREFIX="$(PROG_PREFIX)" $(BUILDDIR_UUDOC)/uudoc manpages completions --usr "$(BUILDDIR_DOCS)"
+	$(INSTALL) -d $(addprefix $(DESTDIR)$(DATAROOTDIR)/,man/man1 bash-completion/completions elvish/lib fish/vendor_completions.d powershell zsh/site-functions)
+	$(INSTALL) -m 644 $(addprefix $(BUILDDIR_DOCS)/share/man/man1/$(PROG_PREFIX),$(addsuffix .1,$(DOC_UTILS))) $(DESTDIR)$(DATAROOTDIR)/man/man1
+	$(INSTALL) -m 644 $(addprefix $(BUILDDIR_DOCS)/share/bash-completion/completions/$(PROG_PREFIX),$(addsuffix .bash,$(DOC_UTILS))) $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions
+	$(INSTALL) -m 644 $(addprefix $(BUILDDIR_DOCS)/share/elvish/lib/$(PROG_PREFIX),$(addsuffix .elv,$(DOC_UTILS))) $(DESTDIR)$(DATAROOTDIR)/elvish/lib
+	$(INSTALL) -m 644 $(addprefix $(BUILDDIR_DOCS)/share/fish/vendor_completions.d/$(PROG_PREFIX),$(addsuffix .fish,$(DOC_UTILS))) $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d
+	$(INSTALL) -m 644 $(addprefix $(BUILDDIR_DOCS)/share/powershell/_$(PROG_PREFIX),$(addsuffix .ps1,$(DOC_UTILS))) $(DESTDIR)$(DATAROOTDIR)/powershell
+	$(INSTALL) -m 644 $(addprefix $(BUILDDIR_DOCS)/share/zsh/site-functions/_$(PROG_PREFIX),$(filter-out [,$(DOC_UTILS))) $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions
 else
-install-manpages:
-endif
-
-ifeq ($(COMPLETIONS),y)
-
-install-completions: build-uudoc
-	$(INSTALL) -d $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions
-	$(INSTALL) -d $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions
-	$(INSTALL) -d $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d
-	$(foreach prog, $(INSTALLEES), \
-		$(BUILDDIR_UUDOC)/uudoc completion $(prog) zsh > $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX)$(prog) $(newline) \
-		$(BUILDDIR_UUDOC)/uudoc completion $(prog) bash > $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX)$(prog).bash $(newline) \
-		$(BUILDDIR_UUDOC)/uudoc completion $(prog) fish > $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX)$(prog).fish $(newline) \
-	)
-else
-install-completions:
+install-docs:
 endif
 
 ifeq ($(LOCALES),y)
@@ -294,7 +286,7 @@ locales:
 install-locales:
 endif
 
-install: build install-manpages install-completions install-locales
+install: build install-docs install-locales
 	$(INSTALL) -d $(INSTALLDIR_BIN)
 ifneq (,$(and $(findstring stdbuf,$(UTILS)),$(findstring feat_external_libstdbuf,$(CARGOFLAGS))))
 ifneq (,$(findstring cygwin,$(OS)))
@@ -330,9 +322,11 @@ ifeq (${MULTICALL}, y)
 endif
 	rm -f $(addprefix $(INSTALLDIR_BIN)/$(PROG_PREFIX),$(PROGS))
 	rm -f $(INSTALLDIR_BIN)/$(PROG_PREFIX)[
-	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX),$(PROGS))
-	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX),$(PROGS).bash)
-	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX),$(addsuffix .fish,$(PROGS)))
-	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/man/man1/$(PROG_PREFIX),$(addsuffix .1,$(PROGS)))
+	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX),$(filter-out [,$(DOC_UTILS)))
+	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX),$(addsuffix .bash,$(DOC_UTILS)))
+	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX),$(addsuffix .fish,$(DOC_UTILS)))
+	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/elvish/lib/$(PROG_PREFIX),$(addsuffix .elv,$(DOC_UTILS)))
+	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/powershell/_$(PROG_PREFIX),$(addsuffix .ps1,$(DOC_UTILS)))
+	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/man/man1/$(PROG_PREFIX),$(addsuffix .1,$(DOC_UTILS)))
 
-.PHONY: all build build-coreutils build-pkgs build-uudoc test distclean clean busytest install uninstall
+.PHONY: all build build-coreutils build-pkgs build-uudoc test distclean clean busytest install install-docs uninstall

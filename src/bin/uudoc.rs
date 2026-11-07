@@ -8,13 +8,14 @@
 use std::{
     collections::HashMap,
     ffi::OsString,
-    fs::File,
+    fs::{self, File},
     io::{self, Read, Seek, Write},
+    path::{Path, PathBuf},
     process,
 };
 
-use clap::{Arg, Command};
-use clap_complete::Shell;
+use clap::{Arg, Command, ValueEnum};
+use clap_complete::{Generator, Shell};
 use clap_mangen::Man;
 use fluent_syntax::{
     ast::{
@@ -101,14 +102,18 @@ fn usage<T: Args>(utils: &UtilityMap<T>) {
     println!();
     println!("Commands:");
     println!("  (no command)                   Generate mdbook documentation (default)");
-    println!("  manpage <utility>              Generate manpage for a utility");
-    println!("  completion <utility> <shell>   Generate shell completions for a utility");
+    println!("  manpages md completions --usr DIR    Generate the selected documentation formats");
     println!();
     println!("Available utilities:");
     let all_utilities = validation::get_all_utilities(utils);
     let display_list = all_utilities.join(", ");
     let width = std::cmp::min(termwidth(), 100) - 4 * 2;
     println!("{}", indent(&fill(&display_list, width), "    "));
+}
+
+fn write_output(directory: &Path, filename: &str, contents: &[u8]) -> io::Result<()> {
+    fs::create_dir_all(directory)?;
+    fs::write(directory.join(filename), contents)
 }
 
 /// Generates the coreutils app for the utility map
@@ -127,32 +132,20 @@ fn gen_coreutils_app<T: Args>(util_map: &UtilityMap<T>) -> Command {
     command
 }
 
-/// Generate the manpage for the utility in the first parameter
-fn gen_manpage<T: Args>(
+fn write_manpage<T: Args>(
     tldr: &mut Option<ZipArchive<File>>,
-    args: impl Iterator<Item = OsString>,
+    utility: &str,
     util_map: &UtilityMap<T>,
-) -> ! {
+    directory: &Path,
+) -> io::Result<()> {
     uucore::set_utility_is_second_arg();
-    let all_utilities = validation::get_all_utilities(util_map);
-
-    let matches = Command::new("manpage")
-        .about("Prints manpage to stdout")
-        .arg(
-            Arg::new("utility")
-                .value_parser(clap::builder::PossibleValuesParser::new(&all_utilities))
-                .required(true),
-        )
-        .get_matches_from(std::iter::once(OsString::from("manpage")).chain(args));
-
-    let utility = matches.get_one::<String>("utility").unwrap();
     let command = if utility == "coreutils" {
         gen_coreutils_app(util_map)
     } else {
         validation::setup_localization_or_exit(utility);
         let mut cmd = util_map.get(utility).unwrap().1();
-        cmd.set_bin_name(utility.clone());
-        let mut cmd = cmd.display_name(utility);
+        cmd.set_bin_name(utility);
+        let mut cmd = cmd.display_name(utility.to_owned());
         if let Some(zip) = tldr
             && let Ok(examples) = write_zip_examples(zip, utility, false)
         {
@@ -180,36 +173,20 @@ fn gen_manpage<T: Args>(
     let date = now.strftime("%Y-%m-%d").to_string();
     let processed_manpage = post_process_manpage(manpage, &date);
 
-    // Write the processed manpage to stdout
-    io::stdout()
-        .write_all(processed_manpage.as_bytes())
-        .unwrap();
-    io::stdout().flush().unwrap();
-    process::exit(0);
+    let prefix = std::env::var("PROG_PREFIX").unwrap_or_default();
+    write_output(
+        directory,
+        &format!("{prefix}{utility}.1"),
+        processed_manpage.as_bytes(),
+    )
 }
 
-/// Generate shell completions for the utility in the first parameter
-fn gen_completions<T: Args>(args: impl Iterator<Item = OsString>, util_map: &UtilityMap<T>) -> ! {
-    let all_utilities = validation::get_all_utilities(util_map);
-
-    let matches = Command::new("completion")
-        .about("Prints completions to stdout")
-        .arg(
-            Arg::new("utility")
-                .value_parser(clap::builder::PossibleValuesParser::new(&all_utilities))
-                .required(true),
-        )
-        .arg(
-            Arg::new("shell")
-                .value_parser(clap::builder::EnumValueParser::<Shell>::new())
-                .required(true),
-        )
-        .get_matches_from(std::iter::once(OsString::from("completion")).chain(args));
-
-    let utility = matches.get_one::<String>("utility").unwrap();
-    let shell = *matches.get_one::<Shell>("shell").unwrap();
-
-    let mut command = if utility == "coreutils" {
+fn write_completions<T: Args>(
+    utility: &str,
+    util_map: &UtilityMap<T>,
+    directory: &Path,
+) -> io::Result<()> {
+    let command = if utility == "coreutils" {
         gen_coreutils_app(util_map)
     } else {
         validation::setup_localization_or_exit(utility);
@@ -217,9 +194,95 @@ fn gen_completions<T: Args>(args: impl Iterator<Item = OsString>, util_map: &Uti
     };
     let bin_name = std::env::var("PROG_PREFIX").unwrap_or_default() + utility;
 
-    clap_complete::generate(shell, &mut command, bin_name, &mut io::stdout());
-    io::stdout().flush().unwrap();
-    process::exit(0);
+    for &shell in Shell::value_variants() {
+        // The completion for '[' is not supported by zsh.
+        if utility == "[" && shell == Shell::Zsh {
+            continue;
+        }
+        let subdirectory = match shell {
+            Shell::Bash => "bash-completion/completions",
+            Shell::Elvish => "elvish/lib",
+            Shell::Fish => "fish/vendor_completions.d",
+            Shell::PowerShell => "powershell",
+            Shell::Zsh => "zsh/site-functions",
+            _ => unreachable!(),
+        };
+        let output_directory = directory.join(subdirectory);
+        let mut shell_command = command.clone();
+        let mut buffer = Vec::new();
+        clap_complete::generate(shell, &mut shell_command, &bin_name, &mut buffer);
+        write_output(&output_directory, &shell.file_name(&bin_name), &buffer)?;
+    }
+    Ok(())
+}
+
+fn write_markdown<T: Args>(
+    tldr: &mut Option<ZipArchive<File>>,
+    utility: &str,
+    util_map: &UtilityMap<T>,
+    directory: &Path,
+) -> io::Result<()> {
+    let command = if utility == "coreutils" {
+        gen_coreutils_app(util_map).version(uucore::crate_version!())
+    } else {
+        validation::setup_localization_or_exit(utility);
+        util_map.get(utility).unwrap().1()
+    };
+    let prefix = std::env::var("PROG_PREFIX").unwrap_or_default();
+    fs::create_dir_all(directory)?;
+    let file = File::create(directory.join(format!("{prefix}{utility}.md")))?;
+    MDWriter {
+        w: Box::new(file),
+        command,
+        name: utility,
+        tldr_zip: tldr,
+        utils_per_platform: None,
+        fluent: None,
+        fluent_key: utility.to_string(),
+    }
+    .markdown()
+}
+
+/// Generate the requested formats beneath an installation prefix.
+fn gen_documentation<T: Args>(
+    tldr: &mut Option<ZipArchive<File>>,
+    args: impl Iterator<Item = OsString>,
+    util_map: &UtilityMap<T>,
+) -> io::Result<()> {
+    let matches = Command::new("uudoc")
+        .about("Generate manpages, Markdown documentation, and shell completions")
+        .arg(
+            Arg::new("formats")
+                .value_parser(["manpages", "md", "completions"])
+                .num_args(1..)
+                .required(true)
+                .help("Documentation formats to generate"),
+        )
+        .arg(
+            Arg::new("usr")
+                .long("usr")
+                .value_name("DIR")
+                .value_parser(clap::value_parser!(PathBuf))
+                .required(true)
+                .help("Install documentation beneath DIR/share"),
+        )
+        .get_matches_from(std::iter::once(OsString::from("uudoc")).chain(args));
+
+    let directory = matches.get_one::<PathBuf>("usr").unwrap().join("share");
+    let man_directory = directory.join("man/man1");
+    let md_directory = directory.join("docs/coreutils");
+    let formats: Vec<_> = matches.get_many::<String>("formats").unwrap().collect();
+    for utility in validation::get_all_utilities(util_map) {
+        for format in &formats {
+            match format.as_str() {
+                "manpages" => write_manpage(tldr, utility, util_map, &man_directory)?,
+                "md" => write_markdown(tldr, utility, util_map, &md_directory)?,
+                "completions" => write_completions(utility, util_map, &directory)?,
+                _ => unreachable!(),
+            }
+        }
+    }
+    Ok(())
 }
 
 /// # Errors
@@ -232,37 +295,27 @@ fn main() -> io::Result<()> {
         .ok()
         .and_then(|f| ZipArchive::new(f).ok());
 
-    // Check for manpage/completion commands first
+    // Check for installation formats before the default mdbook output.
     if args.len() > 1 {
         let command = args.get(1).and_then(|s| s.to_str()).unwrap_or_default();
         match command {
-            "manpage" => {
-                let args_iter = args.into_iter().skip(2);
-                gen_manpage(
-                    &mut tldr_zip,
-                    args_iter,
-                    &util_map::<Box<dyn Iterator<Item = OsString>>>(),
-                );
-            }
-            "completion" => {
-                let args_iter = args.into_iter().skip(2);
-                gen_completions(args_iter, &util_map::<Box<dyn Iterator<Item = OsString>>>());
-            }
             "--help" | "-h" => {
                 usage(&util_map::<Box<dyn Iterator<Item = OsString>>>());
                 process::exit(0);
             }
             _ => {
-                eprintln!("Unknown command: {command}");
-                eprintln!("Use 'uudoc --help' for usage information.");
-                process::exit(1);
+                return gen_documentation(
+                    &mut tldr_zip,
+                    args.into_iter().skip(1),
+                    &util_map::<Box<dyn Iterator<Item = OsString>>>(),
+                );
             }
         }
     }
     let utils = util_map::<Box<dyn Iterator<Item = OsString>>>();
     // Initialize localization for uucore common strings (used by tldr example attribution)
     let _ = uucore::locale::setup_localization("uudoc");
-    match std::fs::create_dir("docs/src/utils/") {
+    match fs::create_dir("docs/src/utils/") {
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(()),
         x => x,
     }?;
@@ -393,7 +446,7 @@ fn main() -> io::Result<()> {
                 command: command(),
                 name: usage_name,
                 tldr_zip: &mut tldr_zip,
-                utils_per_platform: &utils_per_platform,
+                utils_per_platform: Some(&utils_per_platform),
                 fluent,
                 fluent_key: utils_name.to_string(),
             }
@@ -433,7 +486,7 @@ struct MDWriter<'a, 'b> {
     command: Command,
     name: &'a str,
     tldr_zip: &'b mut Option<ZipArchive<File>>,
-    utils_per_platform: &'b HashMap<&'b str, Vec<String>>,
+    utils_per_platform: Option<&'b HashMap<&'b str, Vec<String>>>,
     fluent: Option<String>,
     fluent_key: String,
 }
@@ -451,9 +504,12 @@ impl MDWriter<'_, '_> {
         self.examples()
     }
 
-    /// Extract value for a Fluent key from the .ftl content
+    /// Resolve a Fluent key from source content or the embedded localization.
     fn extract_fluent_value(&self, key: &str) -> Option<String> {
-        let content = self.fluent.as_ref()?;
+        let Some(content) = self.fluent.as_ref() else {
+            let message = get_message(key);
+            return (message != key).then_some(message);
+        };
         let resource = parser::parse(content.clone()).ok()?;
 
         for entry in resource.body {
@@ -496,6 +552,9 @@ impl MDWriter<'_, '_> {
     /// # Errors
     /// Returns an error if the writer fails.
     fn platforms(&mut self) -> io::Result<()> {
+        let Some(utils_per_platform) = self.utils_per_platform else {
+            return Ok(());
+        };
         writeln!(self.w, "<div class=\"platforms\">")?;
         for (feature, icon) in [
             ("linux", "linux"),
@@ -506,9 +565,7 @@ impl MDWriter<'_, '_> {
             ("windows", "windows"),
         ] {
             if self.name.contains("sum")
-                || self.utils_per_platform[feature]
-                    .iter()
-                    .any(|u| u == self.name)
+                || utils_per_platform[feature].iter().any(|u| u == self.name)
             {
                 writeln!(self.w, "<i class=\"fa-brands fa-{icon}\"></i>")?;
             }
@@ -527,14 +584,13 @@ impl MDWriter<'_, '_> {
     /// # Errors
     /// Returns an error if the writer fails.
     fn usage(&mut self) -> io::Result<()> {
-        if let Some(usage) = self.extract_fluent_value(&format!("{}-usage", self.fluent_key)) {
-            let usage = fix_usage(self.name, usage);
-            writeln!(self.w, "\n```")?;
-            writeln!(self.w, "{usage}")?;
-            writeln!(self.w, "```")
-        } else {
-            Ok(())
-        }
+        let usage = self
+            .extract_fluent_value(&format!("{}-usage", self.fluent_key))
+            .unwrap_or_else(|| self.command.render_usage().to_string());
+        let usage = fix_usage(self.name, usage);
+        writeln!(self.w, "\n```")?;
+        writeln!(self.w, "{usage}")?;
+        writeln!(self.w, "```")
     }
 
     /// # Errors
