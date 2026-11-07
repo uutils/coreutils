@@ -3849,6 +3849,24 @@ fn test_copy_through_dangling_symlink() {
 
 #[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
+#[cfg(not(windows))]
+fn test_copy_through_dangling_symlink_with_relative_target() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    // A loop in the current directory with the same name as the target of
+    // the dangling link must not make the link look like a loop.
+    at.relative_symlink_file("decoy", "decoy");
+    at.relative_symlink_file("decoy", "d/target");
+    at.touch("file");
+    ucmd.arg("file")
+        .arg("d/target")
+        .fails()
+        .stderr_only("cp: not writing through dangling symlink 'd/target'\n");
+    assert!(!at.file_exists("d/decoy"));
+}
+
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
+#[test]
 fn test_copy_through_dangling_symlink_posixly_correct() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
@@ -4693,6 +4711,39 @@ fn test_cp_symbolic_link_loop() {
     at.touch("f");
     ucmd.args(&["-f", "f", "loop"]).succeeds().no_output();
     assert!(at.file_exists("loop"));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_cp_force_relative_symbolic_link_loop_in_subdir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    // The relative target is resolved from the link's directory, so this is
+    // a loop even though there's no `loop` in the current directory.
+    at.relative_symlink_file("loop", "d/loop");
+    at.touch("f");
+    ucmd.args(&["-f", "f", "d/loop"]).succeeds().no_output();
+    assert!(at.file_exists("d/loop"));
+}
+
+#[rstest]
+#[case::no_dereference(&["-P", "-n"])]
+#[case::archive(&["-a", "-n"])]
+#[case::hard_link(&["-l", "-n"])]
+#[case::symbolic_link(&["-s", "-n"])]
+#[case::remove_destination(&["--remove-destination", "-n"])]
+#[cfg(not(windows))]
+fn test_cp_no_clobber_symbolic_link_loop_without_dereferencing(#[case] args: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.relative_symlink_file("loop", "loop");
+    at.write("file", "contents");
+    at.relative_symlink_file("file", "source");
+    ucmd.args(args)
+        .args(&["source", "loop"])
+        .succeeds()
+        .no_output();
+    assert!(at.is_symlink("loop"));
+    assert_eq!(at.read("source"), "contents");
 }
 
 /// Test that copying a directory to itself is disallowed.
