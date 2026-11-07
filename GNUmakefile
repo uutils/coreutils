@@ -65,7 +65,6 @@ TOYBOX_SRC  := $(TOYBOX_ROOT)/toybox-$(TOYBOX_VER)
 
 # Detect the target system
 # See https://doc.rust-lang.org/beta/rustc/platform-support.html
-# todo: support building wasm
 OS := $(or $(CARGO_BUILD_TARGET),$(shell rustc --print host-tuple))
 
 # hardlinks are better default since
@@ -79,11 +78,18 @@ SELINUX_PROGS := \
 
 $(info Detected OS = $(OS))
 
-ifeq (,$(findstring windows,$(OS)))
-	FEATURE_EXTRACT_UTILS := feat_os_unix
-else
+ifneq (,$(findstring windows,$(OS)))
 	FEATURE_EXTRACT_UTILS := windows
+else ifneq (,$(findstring openbsd,$(OS)))
+	FEATURE_EXTRACT_UTILS := feat_Tier1,feat_require_unix
+else ifneq (,$(findstring redox,$(OS)))
+	FEATURE_EXTRACT_UTILS := feat_os_unix_redox
+else ifneq (,$(findstring wasip,$(OS)))
+	FEATURE_EXTRACT_UTILS := feat_wasm
+else
+	FEATURE_EXTRACT_UTILS := feat_os_unix
 endif
+
 PROGS := $(shell cargo tree --depth 1 --features $(FEATURE_EXTRACT_UTILS) --format "{lib}" --prefix none | sed -n 's/^uu_//p')
 
 ifeq ($(SELINUX_ENABLED),1)
