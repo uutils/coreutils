@@ -98,16 +98,34 @@ fn get_canonical_util_name(util_name: &str) -> &str {
 
 /// Gets the binary path from command line arguments
 /// Panics if the binary path cannot be determined
-#[cfg(any(
-    not(any(
-        target_os = "linux",
-        all(target_os = "android", target_pointer_width = "64")
-    )),
-    target_env = "musl"
+#[cfg(all(
+    not(windows),
+    any(
+        not(any(
+            target_os = "linux",
+            all(target_os = "android", target_pointer_width = "64")
+        )),
+        target_env = "musl"
+    )
 ))]
 pub fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
     PathBuf::from(args.next().unwrap())
     // no fallback for empty args. current_exe() (/proc/self/exe) is valid only for hardlinks
+}
+
+/// Gets the path of the running executable instead of `argv[0]`.
+///
+/// cmd.exe passes `argv[0]` the way it was typed, so `False` would not match
+/// `false.exe`, while this function has the name as found on disk without resolving symlink,
+/// so links named after a utility keep working. A path given explicitly in another case
+/// keeps that spelling.
+/// Panics if the binary path cannot be determined
+#[cfg(windows)]
+pub fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
+    // argv[0] is always skipped, the caller reads the arguments after it.
+    let argv0 = args.next();
+    // Backend is `GetModuleFileNameW` which does not resolve symlink.
+    std::env::current_exe().unwrap_or_else(|_| argv0.unwrap().into())
 }
 /// Get actual binary path from kernel, not argv0, to prevent `env -a` from bypassing
 /// AppArmor, SELinux policies on hard-linked binaries

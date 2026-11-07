@@ -198,6 +198,49 @@ fn util_name_single() {
     )));
 }
 
+#[rstest::rstest]
+#[case::util("basename.exe", &["BASENAME", "a/b"], false)]
+#[case::multicall("coreutils.exe", &["COREUTILS", "basename", "a/b"], false)]
+// Fails if `current_exe()` starts resolving symlinks and returns coreutils.exe.
+#[case::symlink("basename.exe", &["BASENAME", "a/b"], true)]
+#[cfg(all(windows, feature = "basename"))]
+fn util_name_is_the_name_on_disk_on_windows(
+    #[case] name: &str,
+    #[case] typed: &[&str],
+    #[case] symlink: bool,
+) {
+    use std::process::Command;
+
+    let scenario = TestScenario::new("basename");
+    let path = scenario.fixtures.plus(name);
+    if symlink {
+        // Needs Developer Mode or admin rights locally. CI has them, so it must not skip there.
+        if let Err(e) = std::os::windows::fs::symlink_file(&scenario.bin_path, path) {
+            assert!(!uutests::util::is_ci(), "cannot create a symlink: {e}");
+            print!("Test skipped; cannot create a symlink: {e}");
+            return;
+        }
+    } else {
+        // A copy, since hard links can't cross drives.
+        std::fs::copy(&scenario.bin_path, path).unwrap();
+    }
+    // cmd.exe finds `basename.exe` for `BASENAME`, but passes argv[0] as typed.
+    // Its PATH only holds that file, so it can't run a standalone `basename.exe`.
+    let cmd = env::var_os("ComSpec").unwrap_or_else(|| "cmd.exe".into());
+    let output = Command::new(cmd)
+        .arg("/C")
+        .args(typed)
+        .env("PATH", &scenario.fixtures.subdir)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"b\n");
+}
+
 #[test]
 #[cfg(unix)]
 fn util_invalid_name_help() {
