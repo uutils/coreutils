@@ -6,6 +6,7 @@ bstr
 bytecount
 byteorder
 clap_mangen
+filedescriptor
 foldhash
 hashbrown
 icu_datetime
