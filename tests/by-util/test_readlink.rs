@@ -548,3 +548,35 @@ fn test_verbose_or_silent() {
         )
         .no_stdout();
 }
+
+/// `readlink -f` on Windows must not leak the `\\?\` verbatim prefix that
+/// canonicalization produces. Feeding it an already-verbatim path exercises the
+/// normalization the same way a UNC path would.
+#[cfg(windows)]
+#[test]
+fn test_canonicalize_no_verbatim_prefix() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("foo");
+
+    // canonicalize() yields a verbatim path (\\?\D:\...) on Windows; passing it
+    // through `readlink -f` must print the simplified drive path.
+    let file = at.plus("foo").canonicalize().unwrap();
+
+    ucmd.arg("-f")
+        .arg(&file)
+        .succeeds()
+        .stdout_does_not_contain(r"\\?\")
+        .stdout_is(format!("{}\n", dunce::simplified(&file).display()));
+}
+
+/// Without `-f`, `readlink` prints the raw link target and must not apply the
+/// verbatim-prefix normalization.
+#[cfg(windows)]
+#[test]
+fn test_raw_symlink_untouched() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("foo");
+    at.relative_symlink_file("foo", "bar");
+
+    ucmd.arg("bar").succeeds().stdout_is("foo\n");
+}
