@@ -19,6 +19,8 @@ mktemp-error-suffix-contains-separator = invalid suffix { $suffix }, contains di
 mktemp-error-invalid-template = invalid template, { $template }; with --tmpdir, it may not be absolute
 mktemp-error-too-many-templates = too many templates
 mktemp-error-not-found = failed to create { $template_type } via template { $template }: No such file or directory
+mktemp-error-failed-print = failed to print directory name
+mktemp-error-failed-to-create-file-via-template = failed to create file via template { $path }: { $error }
 
 # Template types
 mktemp-template-type-directory = directory
