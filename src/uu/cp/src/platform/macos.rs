@@ -6,21 +6,18 @@
 // spell-checker:ignore reflink
 
 use std::ffi::CString;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 
 use uucore::buf_copy;
 use uucore::display::Quotable;
-use uucore::safe_copy::{create_dest_restrictive, open_source};
+use uucore::safe_copy::open_source;
 use uucore::translate;
 
-use uucore::mode::get_umask;
-
 use crate::{
-    CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode,
-    is_stream,
+    CopyDebug, CopyFlags, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug,
+    SparseMode, create_dest, is_stream,
 };
 
 /// Copies `source` to `dest` using copy-on-write if possible.
@@ -30,9 +27,13 @@ pub(crate) fn copy_on_write(
     reflink_mode: ReflinkMode,
     sparse_mode: SparseMode,
     context: &str,
-    source_is_stream: bool,
-    nofollow: bool,
+    flags: CopyFlags,
 ) -> CopyResult<CopyDebug> {
+    let CopyFlags {
+        source_is_stream,
+        nofollow,
+        mut exclusive,
+    } = flags;
     if sparse_mode != SparseMode::Auto {
         return Err(translate!("cp-error-sparse-not-supported").into());
     }
@@ -70,6 +71,9 @@ pub(crate) fn copy_on_write(
             ) -> core::ffi::c_int = std::mem::transmute(raw_pfn);
             error = pfn(src.as_ptr(), dst.as_ptr(), 0);
             if std::io::Error::last_os_error().kind() == std::io::ErrorKind::AlreadyExists
+                // Something appeared at a `dest` that was free: leave it alone
+                // and let the exclusive create below report it.
+                && !exclusive
                 // Only remove the `dest` if the `source` and `dest` are not the same
                 && source != dest
             {
@@ -92,7 +96,9 @@ pub(crate) fn copy_on_write(
                     // TODO: rewrite this to better match linux behavior
                     // linux first opens the source file and destination file then uses the file
                     // descriptors to do the clone.
-                    let _ = fs::remove_file(dest);
+                    if fs::remove_file(dest).is_ok() {
+                        exclusive = true;
+                    }
                     error = pfn(src.as_ptr(), dst.as_ptr(), 0);
                 }
             }
@@ -110,18 +116,7 @@ pub(crate) fn copy_on_write(
         if source_is_stream {
             let mut src_file =
                 File::open(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-            let mode = 0o622 & !get_umask();
-            let mut dst_file = OpenOptions::new()
-                .create(true)
-                .write(true)
-                .mode(mode)
-                .open(dest)
-                .map_err(|e| {
-                    CpError::IoErrContext(
-                        e,
-                        translate!("cp-error-cannot-create-regular-file", "path" => dest.quote()),
-                    )
-                })?;
+            let mut dst_file = create_dest(dest, exclusive)?;
 
             let dest_is_stream = is_stream(
                 &dst_file
@@ -141,12 +136,7 @@ pub(crate) fn copy_on_write(
         } else {
             let mut src_file = open_source(source, nofollow)
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-            let mut dst_file = create_dest_restrictive(dest, false).map_err(|e| {
-                CpError::IoErrContext(
-                    e,
-                    translate!("cp-error-cannot-create-regular-file", "path" => dest.quote()),
-                )
-            })?;
+            let mut dst_file = create_dest(dest, exclusive)?;
             std::io::copy(&mut src_file, &mut dst_file)
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
         }
