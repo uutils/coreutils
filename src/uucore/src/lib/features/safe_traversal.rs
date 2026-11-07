@@ -6,7 +6,7 @@
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
 // spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot EOVERFLOW chowned chmoded
-// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat
+// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat FDCWD
 
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
@@ -247,6 +247,10 @@ const SEARCH_ONLY: Option<OFlag> = Some(OFlag::O_SEARCH);
 #[cfg(not(any(has_o_path, has_o_search)))]
 const SEARCH_ONLY: Option<OFlag> = None;
 
+/// How many directory descriptors a recursive walk keeps open; directories
+/// further up get theirs back through [`DirFd::reopen_parent`].
+pub const OPEN_DIR_FDS: usize = 16;
+
 impl DirFd {
     /// Open a directory and return a file descriptor
     ///
@@ -324,6 +328,24 @@ impl DirFd {
             }
         })?;
         Ok(Self { fd })
+    }
+
+    /// Reopen this directory's parent through "..": `None` if it is not the
+    /// directory `parent` identifies, but one swapped in since.
+    pub fn reopen_parent(&self, parent: &FileInfo) -> io::Result<Option<Self>> {
+        let fd = self.open_subdir(OsStr::new(".."), SymlinkBehavior::NoFollow)?;
+        let same = fd.metadata()?.file_info() == *parent;
+        Ok(same.then_some(fd))
+    }
+
+    /// Hold the file `name` relative to this directory, see [`PinnedFile`]
+    #[cfg(target_os = "linux")]
+    pub fn pin_at(
+        &self,
+        name: &OsStr,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<PinnedFile> {
+        PinnedFile::open_at(&self.fd, name, symlink_behavior)
     }
 
     /// Get raw stat data for a file relative to this directory
@@ -556,17 +578,11 @@ impl DirFd {
         // these raw syscalls, invisible to LD_PRELOAD wrappers.
         use std::os::unix::fs::PermissionsExt;
 
-        let fd = openat(
-            &self.fd,
-            name,
-            OFlag::O_PATH | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
-            Mode::empty(),
-        )
-        .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        let file = PinnedFile::open_at(&self.fd, name, SymlinkBehavior::NoFollow)?;
 
         // set_permissions goes through the libc chmod() symbol.
         fs::set_permissions(
-            format!("/proc/self/fd/{}", fd.as_raw_fd()),
+            format!("/proc/self/fd/{}", file.fd.as_raw_fd()),
             fs::Permissions::from_mode(mode),
         )
     }
@@ -802,6 +818,56 @@ impl AsRawFd for DirFd {
 impl AsFd for DirFd {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
+    }
+}
+
+/// A file of any type held without opening it (`O_PATH`), so that what is learned
+/// about it and done to it concern the same file, whatever its name points to.
+#[cfg(target_os = "linux")]
+pub struct PinnedFile {
+    fd: OwnedFd,
+}
+
+#[cfg(target_os = "linux")]
+impl PinnedFile {
+    /// Hold the file at `path`
+    pub fn open(path: &Path, symlink_behavior: SymlinkBehavior) -> io::Result<Self> {
+        Self::open_at(nix::fcntl::AT_FDCWD, path, symlink_behavior)
+    }
+
+    fn open_at<P: ?Sized + nix::NixPath>(
+        dir: impl AsFd,
+        path: &P,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<Self> {
+        let mut flags = OFlag::O_PATH | OFlag::O_CLOEXEC;
+        if !symlink_behavior.should_follow() {
+            // With O_PATH, this holds a symlink itself.
+            flags |= OFlag::O_NOFOLLOW;
+        }
+        let fd = openat(dir, path, flags, Mode::empty())
+            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        Ok(Self { fd })
+    }
+
+    /// Get metadata for the held file
+    pub fn metadata(&self) -> io::Result<Metadata> {
+        fstat_fd(&self.fd).map(Metadata::from_stat)
+    }
+
+    /// Change ownership of the held file
+    /// Use uid/gid of None to keep the current value
+    pub fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> io::Result<()> {
+        // fchown refuses an O_PATH descriptor; an empty path names the
+        // descriptor itself.
+        fchownat(
+            &self.fd,
+            c"",
+            uid.map(Uid::from_raw),
+            gid.map(Gid::from_raw),
+            nix::fcntl::AtFlags::AT_EMPTY_PATH,
+        )
+        .map_err(|e| io::Error::from_raw_os_error(e as i32))
     }
 }
 
@@ -1682,6 +1748,28 @@ mod tests {
 
         // subdir should have been created inside the real target directory
         assert!(target.join("subdir").exists());
+    }
+
+    /// A walk that reopens a parent through ".." must notice that the directory
+    /// it descended into was moved elsewhere meanwhile.
+    #[test]
+    fn test_reopen_parent_refuses_moved_child() {
+        let temp_dir = TempDir::new().unwrap();
+        let (parent, other) = (
+            temp_dir.path().join("parent"),
+            temp_dir.path().join("other"),
+        );
+        fs::create_dir_all(parent.join("child")).unwrap();
+        fs::create_dir(&other).unwrap();
+        let info = DirFd::open(&parent, SymlinkBehavior::NoFollow)
+            .and_then(|dir| dir.metadata())
+            .unwrap()
+            .file_info();
+        let child = DirFd::open(&parent.join("child"), SymlinkBehavior::NoFollow).unwrap();
+        assert!(child.reopen_parent(&info).unwrap().is_some());
+
+        fs::rename(parent.join("child"), other.join("child")).unwrap();
+        assert!(child.reopen_parent(&info).unwrap().is_none());
     }
 
     #[test]
