@@ -303,7 +303,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let groups = if state.user_specified {
             possible_pw.as_ref().map(Passwd::belongs_to).unwrap()
         } else if state.gsflag {
-            group_list_real_gid_first()?
+            entries::get_groups_real_gid_first()?
         } else {
             entries::get_groups_gnu(Some(getegid().as_raw()))?
         };
@@ -614,29 +614,6 @@ fn auditid() -> io::Result<()> {
     writeln!(lock, "termid.port=0x{:x}", auditinfo.ai_termid.port)?;
     writeln!(lock, "asid={}", auditinfo.ai_asid)?;
     Ok(())
-}
-
-/// The group list as `id -G` prints it. `-r` does not affect it, matching GNU.
-fn group_list_real_gid_first() -> io::Result<Vec<u32>> {
-    Ok(sort_real_gid_first(
-        getgid().as_raw(),
-        getegid().as_raw(),
-        entries::get_groups_gnu(None)?,
-    ))
-}
-
-/// Real gid, then effective gid when it differs, then `getgroups()` minus those.
-fn sort_real_gid_first(rgid: u32, egid: u32, supplementary: Vec<u32>) -> Vec<u32> {
-    let mut ordered = vec![rgid];
-    if egid != rgid {
-        ordered.push(egid);
-    }
-    for group in supplementary {
-        if !ordered.contains(&group) {
-            ordered.push(group);
-        }
-    }
-    ordered
 }
 
 fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
