@@ -155,6 +155,23 @@ fn test_df_follows_symlinks() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn test_df_operand_is_not_matched_by_a_file_named_like_a_mount_source() {
+    // Mount sources such as "tmpfs" are labels. A file of that name in the
+    // working directory must not stand in for the operand.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_dir("/", "tmpfs");
+
+    let output = ucmd
+        .arg("--output=target")
+        .arg("/")
+        .succeeds()
+        .stdout_str_lossy();
+
+    assert_eq!(output.lines().nth(1).expect("df printed no row"), "/");
+}
+
 #[test]
 fn test_df_trailing_zeros() {
     use regex::Regex;
