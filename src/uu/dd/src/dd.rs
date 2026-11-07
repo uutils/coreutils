@@ -655,19 +655,10 @@ impl Dest {
             Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
             Self::File(f, _) => {
                 #[cfg(unix)]
-                if let Ok(Some(len)) = try_get_len_of_block_device(f)
-                    && len < n
-                {
-                    // GNU compatibility:
-                    // this case prints the stats but sets the exit code to 1
-                    show_error!(
-                        "{}",
-                        translate!("dd-error-cannot-seek-invalid", "output" => "standard output")
-                    );
-                    set_exit_code(1);
-                    return Ok(len);
-                }
-                f.seek(SeekFrom::Current(n.try_into().unwrap()))
+                let dev_len = try_get_len_of_block_device(f).ok().flatten();
+                #[cfg(not(unix))]
+                let dev_len = None;
+                self.seek_file(n, dev_len)
             }
             #[cfg(unix)]
             Self::Fifo(f) => {
@@ -677,6 +668,33 @@ impl Dest {
             #[cfg(unix)]
             Self::Sink => Ok(0),
         }
+    }
+
+    /// Seek a [`Dest::File`] forward by `n` bytes.
+    ///
+    /// `dev_len` is the size of the file if it is a block device. Seeking
+    /// past the end of a block device is an error that is reported but,
+    /// for GNU compatibility, still lets `dd` print its statistics. Nothing
+    /// may be written in that case, so the destination becomes a sink.
+    fn seek_file(&mut self, n: u64, dev_len: Option<u64>) -> io::Result<u64> {
+        let Self::File(f, _) = self else {
+            unreachable!("seek_file is only called on Dest::File");
+        };
+        #[cfg(unix)]
+        if let Some(len) = dev_len
+            && len < n
+        {
+            show_error!(
+                "{}",
+                translate!("dd-error-cannot-seek-invalid", "output" => "standard output")
+            );
+            set_exit_code(1);
+            *self = Self::Sink;
+            return Ok(len);
+        }
+        #[cfg(not(unix))]
+        let _ = dev_len;
+        f.seek(SeekFrom::Current(n.try_into().unwrap()))
     }
 
     /// Grow a sparse output file up to the current stream position, since
@@ -1175,7 +1193,11 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
 
     // Optimization: if no blocks are to be written, then don't
     // bother allocating any buffers.
-    if let Some(Num::Blocks(0) | Num::Bytes(0)) = i.settings.count {
+    #[cfg(unix)]
+    let sink = matches!(o.dst, Dest::Sink);
+    #[cfg(not(unix))]
+    let sink = false;
+    if sink || matches!(i.settings.count, Some(Num::Blocks(0) | Num::Bytes(0))) {
         // Even though we are not reading anything from the input
         // file, we still need to honor the `nocache` flag, which
         // requests that we inform the system that we no longer
@@ -1663,9 +1685,28 @@ pub fn uu_app() -> Command {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Output, Parser, calc_bsize};
+    use crate::{Density, Dest, Output, Parser, calc_bsize};
 
     use std::path::Path;
+
+    #[test]
+    #[cfg(unix)]
+    fn seek_past_end_of_block_device_drops_output() {
+        let f = std::fs::File::open("/dev/null").unwrap();
+        let mut dst = Dest::File(f, Density::Dense);
+        // pretend the file is a 10 byte block device
+        assert_eq!(dst.seek_file(100, Some(10)).unwrap(), 10);
+        assert!(matches!(dst, Dest::Sink));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn seek_inside_block_device_keeps_file() {
+        let f = std::fs::File::open("/dev/null").unwrap();
+        let mut dst = Dest::File(f, Density::Dense);
+        assert!(dst.seek_file(5, Some(10)).is_ok());
+        assert!(matches!(dst, Dest::File(..)));
+    }
 
     #[test]
     fn bsize_test_primes() {
