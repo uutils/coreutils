@@ -181,20 +181,20 @@ impl Passwd {
     /// updated by `getgrouplist`, `ngroups` needs to be increased in a
     /// loop until `getgrouplist` stops returning -1.
     pub fn belongs_to(&self) -> Vec<gid_t> {
+        self.belongs_to_with_gid(self.gid)
+    }
+
+    /// Like [`Passwd::belongs_to`], but with `gid` as the user's primary
+    /// group instead of the one from the password database.
+    pub fn belongs_to_with_gid(&self, gid: gid_t) -> Vec<gid_t> {
         let mut ngroups: c_int = 8;
         let mut ngroups_old: c_int;
         let mut groups = vec![0; ngroups.try_into().unwrap()];
         let name = CString::new(self.name.as_bytes()).unwrap();
         loop {
             ngroups_old = ngroups;
-            if unsafe {
-                getgrouplist(
-                    name.as_ptr(),
-                    self.gid,
-                    groups.as_mut_ptr(),
-                    &raw mut ngroups,
-                )
-            } == -1
+            if unsafe { getgrouplist(name.as_ptr(), gid, groups.as_mut_ptr(), &raw mut ngroups) }
+                == -1
             {
                 if ngroups == ngroups_old {
                     ngroups *= 2;
@@ -359,5 +359,26 @@ mod test {
             groups.insert(0, last);
             assert_eq!(get_groups_gnu(Some(last)).unwrap(), groups);
         }
+    }
+
+    #[test]
+    #[cfg(all(unix, not(target_os = "redox")))]
+    fn test_belongs_to_with_gid() {
+        use super::{Locate, Passwd};
+
+        let Ok(passwd) = Passwd::locate(0) else {
+            return;
+        };
+        let groups = passwd.belongs_to();
+        // The user is not listed in this group, so it only shows up as the seed.
+        let gid = groups.iter().max().unwrap_or(&0) + 1;
+        let seeded = passwd.belongs_to_with_gid(gid);
+        assert!(seeded.contains(&gid));
+        assert!(seeded.iter().all(|g| *g == gid || groups.contains(g)));
+        assert!(
+            groups
+                .iter()
+                .all(|g| *g == passwd.gid || seeded.contains(g))
+        );
     }
 }
