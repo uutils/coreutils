@@ -43,6 +43,9 @@ action-creating = création
 action-reading = lecture
 action-writing = écriture
 
+# Messages d'erreur fsext
+fsext-error-mount-info-retrieval-failed = échec de la récupération des informations de montage
+
 # Messages d'erreur SELinux
 selinux-error-not-enabled = SELinux n'est pas activé sur ce système
 selinux-error-file-open-failure = échec de l'ouverture du fichier : { $error }
