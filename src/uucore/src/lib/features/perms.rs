@@ -1066,6 +1066,7 @@ pub fn common_args() -> Vec<Arg> {
             .action(clap::ArgAction::SetTrue),
         Arg::new(options::dereference::DEREFERENCE)
             .long(options::dereference::DEREFERENCE)
+            .overrides_with(options::dereference::NO_DEREFERENCE)
             .help(
                 "affect the referent of each symbolic link (this is the default), \
     rather than the symbolic link itself",

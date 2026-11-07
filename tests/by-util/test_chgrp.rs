@@ -11,7 +11,6 @@ use rustix::process::getgroups;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use uutests::{at_and_ucmd, new_ucmd};
-#[cfg(not(target_vendor = "apple"))]
 use uutests::{util::TestScenario, util_name};
 
 #[test]
@@ -428,6 +427,28 @@ fn test_traverse_symlinks() {
             }
         );
     }
+}
+
+#[test]
+fn test_chgrp_dereference_then_no_dereference() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.symlink_file("missing", "link");
+
+    scene
+        .ucmd()
+        .args(&["--dereference", "-h"])
+        .arg(getegid().to_string())
+        .arg("link")
+        .succeeds()
+        .no_output();
+    scene
+        .ucmd()
+        .args(&["-h", "--dereference"])
+        .arg(getegid().to_string())
+        .arg("link")
+        .fails_with_code(1)
+        .stderr_only("chgrp: cannot dereference 'link': No such file or directory\n");
 }
 
 #[test]

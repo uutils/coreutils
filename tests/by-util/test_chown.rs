@@ -958,6 +958,30 @@ fn test_chown_no_change_to_user_group() {
 }
 
 #[test]
+fn test_chown_dereference_then_no_dereference() {
+    use rustix::process::geteuid;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.symlink_file("missing", "link");
+
+    scene
+        .ucmd()
+        .args(&["--dereference", "-h"])
+        .arg(geteuid().to_string())
+        .arg("link")
+        .succeeds()
+        .no_output();
+    scene
+        .ucmd()
+        .args(&["-h", "--dereference"])
+        .arg(geteuid().to_string())
+        .arg("link")
+        .fails_with_code(1)
+        .stderr_only("chown: cannot dereference 'link': No such file or directory\n");
+}
+
+#[test]
 fn test_chown_reference_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
