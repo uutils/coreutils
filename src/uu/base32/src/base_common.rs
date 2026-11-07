@@ -707,6 +707,105 @@ pub mod fast_decode {
 
         Ok(())
     }
+
+    /// Decode whatever is still buffered and write it.
+    ///
+    /// Used at end of input, and again when a non-alphabet byte (such as CR)
+    /// stops the decode. Callers that hit garbage still report invalid input
+    /// afterwards, but the bytes accepted before that point stay on stdout.
+    fn write_tail(
+        buffer: &[u8],
+        supports_fast_decode_and_encode: &dyn SupportsFastDecodeAndEncode,
+        decoded_buffer: &mut Vec<u8>,
+        output: &mut dyn Write,
+        lenient: bool,
+    ) -> UResult<()> {
+        if buffer.is_empty() {
+            return Ok(());
+        }
+
+        // An invalid byte already fails the decode. Still write every complete
+        // byte from the alphabet characters seen before it, including a short
+        // quantum whose padding bits are not zero.
+        if lenient {
+            supports_fast_decode_and_encode.decode_lenient_into_vec(buffer, decoded_buffer)?;
+            write_to_output(decoded_buffer, output)?;
+            return Ok(());
+        }
+
+        let mut owned_chunk: Option<Vec<u8>> = None;
+        let mut had_invalid_tail = false;
+
+        if let Some(pad_result) = supports_fast_decode_and_encode.pad_remainder(buffer) {
+            had_invalid_tail = pad_result.had_invalid_tail;
+            owned_chunk = Some(pad_result.chunk);
+        }
+
+        let final_chunk = owned_chunk.as_deref().unwrap_or(buffer);
+
+        supports_fast_decode_and_encode.decode_into_vec(final_chunk, decoded_buffer)?;
+        write_to_output(decoded_buffer, output)?;
+
+        if had_invalid_tail {
+            return Err(USimpleError::new(
+                1,
+                translate!("base-common-invalid-input"),
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Write output for the alphabet bytes already buffered, then let the
+    /// caller fail. Base58 is one integer, so a decoded prefix is not emitted.
+    fn emit_decoded_prefix(
+        buffer: &mut Vec<u8>,
+        decode_in_chunks_of_size: usize,
+        valid_multiple: usize,
+        supports_partial_decode: bool,
+        supports_fast_decode_and_encode: &dyn SupportsFastDecodeAndEncode,
+        decoded_buffer: &mut Vec<u8>,
+        output: &mut dyn Write,
+    ) -> UResult<()> {
+        // Base58 (multiple of 1, no partial decode) is one integer. A decoded
+        // prefix is not a prefix of the output, so leave it unwritten.
+        if supports_partial_decode {
+            flush_ready_chunks(
+                buffer,
+                decode_in_chunks_of_size,
+                valid_multiple,
+                supports_fast_decode_and_encode,
+                decoded_buffer,
+                output,
+            )?;
+            write_tail(
+                buffer,
+                supports_fast_decode_and_encode,
+                decoded_buffer,
+                output,
+                true,
+            )?;
+        } else if valid_multiple != 1 {
+            while buffer.len() >= decode_in_chunks_of_size {
+                decode_in_chunks_to_buffer(
+                    supports_fast_decode_and_encode,
+                    &buffer[..decode_in_chunks_of_size],
+                    decoded_buffer,
+                )?;
+                write_to_output(decoded_buffer, output)?;
+                buffer.drain(..decode_in_chunks_of_size);
+            }
+            write_tail(
+                buffer,
+                supports_fast_decode_and_encode,
+                decoded_buffer,
+                output,
+                true,
+            )?;
+        }
+
+        Ok(())
+    }
     // End of helper functions
 
     pub fn fast_decode_buffer(
@@ -747,6 +846,15 @@ pub mod fast_decode {
             } else if ignore_garbage {
                 continue;
             } else {
+                emit_decoded_prefix(
+                    &mut buffer,
+                    decode_in_chunks_of_size,
+                    valid_multiple,
+                    supports_partial_decode,
+                    supports_fast_decode_and_encode,
+                    &mut decoded_buffer,
+                    output,
+                )?;
                 return Err(USimpleError::new(
                     1,
                     translate!("base-common-invalid-input"),
@@ -778,27 +886,13 @@ pub mod fast_decode {
             )?;
         }
 
-        if !buffer.is_empty() {
-            let mut owned_chunk: Option<Vec<u8>> = None;
-            let mut had_invalid_tail = false;
-
-            if let Some(pad_result) = supports_fast_decode_and_encode.pad_remainder(&buffer) {
-                had_invalid_tail = pad_result.had_invalid_tail;
-                owned_chunk = Some(pad_result.chunk);
-            }
-
-            let final_chunk = owned_chunk.as_deref().unwrap_or(&buffer);
-
-            supports_fast_decode_and_encode.decode_into_vec(final_chunk, &mut decoded_buffer)?;
-            write_to_output(&mut decoded_buffer, output)?;
-
-            if had_invalid_tail {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("base-common-invalid-input"),
-                ));
-            }
-        }
+        write_tail(
+            &buffer,
+            supports_fast_decode_and_encode,
+            &mut decoded_buffer,
+            output,
+            false,
+        )?;
 
         Ok(())
     }
@@ -840,26 +934,15 @@ pub mod fast_decode {
                 } else if ignore_garbage {
                     continue;
                 } else {
-                    if supports_partial_decode {
-                        flush_ready_chunks(
-                            &mut buffer,
-                            decode_in_chunks_of_size,
-                            valid_multiple,
-                            supports_fast_decode_and_encode,
-                            &mut decoded_buffer,
-                            output,
-                        )?;
-                    } else {
-                        while buffer.len() >= decode_in_chunks_of_size {
-                            decode_in_chunks_to_buffer(
-                                supports_fast_decode_and_encode,
-                                &buffer[..decode_in_chunks_of_size],
-                                &mut decoded_buffer,
-                            )?;
-                            write_to_output(&mut decoded_buffer, output)?;
-                            buffer.drain(..decode_in_chunks_of_size);
-                        }
-                    }
+                    emit_decoded_prefix(
+                        &mut buffer,
+                        decode_in_chunks_of_size,
+                        valid_multiple,
+                        supports_partial_decode,
+                        supports_fast_decode_and_encode,
+                        &mut decoded_buffer,
+                        output,
+                    )?;
                     return Err(USimpleError::new(
                         1,
                         translate!("base-common-invalid-input"),
@@ -900,27 +983,13 @@ pub mod fast_decode {
             )?;
         }
 
-        if !buffer.is_empty() {
-            let mut owned_chunk: Option<Vec<u8>> = None;
-            let mut had_invalid_tail = false;
-
-            if let Some(pad_result) = supports_fast_decode_and_encode.pad_remainder(&buffer) {
-                had_invalid_tail = pad_result.had_invalid_tail;
-                owned_chunk = Some(pad_result.chunk);
-            }
-
-            let final_chunk = owned_chunk.as_deref().unwrap_or(&buffer);
-
-            supports_fast_decode_and_encode.decode_into_vec(final_chunk, &mut decoded_buffer)?;
-            write_to_output(&mut decoded_buffer, output)?;
-
-            if had_invalid_tail {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("base-common-invalid-input"),
-                ));
-            }
-        }
+        write_tail(
+            &buffer,
+            supports_fast_decode_and_encode,
+            &mut decoded_buffer,
+            output,
+            false,
+        )?;
 
         Ok(())
     }
