@@ -34,7 +34,8 @@ fn print_cpu_debug_info() {
     // x86/x86_64
     if cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
         print_feature("avx512", features.has_avx512());
-        print_feature("avx2", features.has_avx2());
+        // GNU reports avx2 only when VPCLMULQDQ is present too.
+        print_feature("avx2", features.has_avx2() && features.has_vpclmulqdq());
         print_feature("pclmul", features.has_pclmulqdq());
     }
 

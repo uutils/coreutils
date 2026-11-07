@@ -253,6 +253,8 @@ TUNABLES
 tunables
 VMULL
 vmull
+VPCLMULQDQ
+vpclmulqdq
 ENOTSUP
 enotsup
 SETFL
