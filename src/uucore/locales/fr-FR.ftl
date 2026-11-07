@@ -25,6 +25,8 @@ common-help-suggestion = Pour plus d'informations, essayez '--help'.
 help-flag-help = Afficher les informations d'aide
 help-flag-version = Afficher les informations de version
 
+ls-help-set-quoting-style = Définir le style de citation.
+
 # Contextes d'erreur communs
 error-io = Erreur E/S
 error-permission-denied = Permission refusée

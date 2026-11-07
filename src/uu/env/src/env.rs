@@ -33,7 +33,6 @@ use std::env;
 #[cfg(unix)]
 use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
-#[cfg(not(unix))]
 use std::io;
 use std::io::Write as _;
 use std::io::stderr;
@@ -825,8 +824,7 @@ impl EnvAppData {
 
         apply_change_directory(&opts)?;
         if opts.program.is_empty() {
-            // no program provided, so just dump all env vars to stdout
-            print_all_env_vars(opts.line_ending)?;
+            print_all_env_vars(io::stdout(), opts.line_ending)?;
         } else {
             return self.run_program(&opts, self.do_debug_printing);
         }
