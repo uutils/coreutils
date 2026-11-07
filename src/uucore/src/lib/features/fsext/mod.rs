@@ -683,6 +683,7 @@ impl FsMeta for StatFs {
         target_os = "android",
         target_os = "netbsd"
     )))]
+    #[allow(clippy::unnecessary_cast)]
     fn io_size(&self) -> u64 {
         self.f_bsize as u64
     }
@@ -747,6 +748,7 @@ impl FsMeta for StatFs {
         target_os = "netbsd",
         target_os = "openbsd"
     )))]
+    #[allow(clippy::unnecessary_cast)]
     fn namelen(&self) -> u64 {
         self.f_namemax as u64 // spell-checker:disable-line
     }
