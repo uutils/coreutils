@@ -823,27 +823,18 @@ fn test_chmod_preserve_root_symlink_during_recursion() {
         );
 }
 
-/// The guard must also see a symlink to `/` whose path is longer than
-/// `PATH_MAX`, which can't be looked up by name. `u+r` is harmless if it fails.
-#[test]
+/// The guard must also see a symlink to `/` whose path can't be looked up by
+/// name: longer than `PATH_MAX`, or crossing more symlinks than the kernel
+/// follows. `u+r` is harmless if it fails.
 #[cfg(target_os = "linux")]
-fn test_chmod_preserve_root_symlink_beyond_path_max() {
-    use rustix::fs::{CWD, Mode, OFlags, mkdirat, openat, symlinkat};
-
+#[rstest::rstest]
+#[case::beyond_path_max(AtPath::symlink_to_root_beyond_path_max)]
+#[case::symlink_chain(AtPath::symlink_chain_to_root)]
+fn test_chmod_preserve_root_symlink_not_found_by_name(#[case] make_tree: fn(&AtPath, &str)) {
     let (at, mut ucmd) = at_and_ucmd!();
-    // 17 nested 250-byte names put `r` more than `PATH_MAX` bytes deep, so
-    // the tree has to be built one level at a time with openat/mkdirat.
-    at.mkdir("deep");
-    let flags = OFlags::RDONLY | OFlags::DIRECTORY;
-    let mut fd = openat(CWD, at.plus("deep"), flags, Mode::empty()).unwrap();
-    let name = "a".repeat(250);
-    for _ in 0..17 {
-        mkdirat(&fd, &name, Mode::from_bits_truncate(0o755)).unwrap();
-        fd = openat(&fd, &name, flags, Mode::empty()).unwrap();
-    }
-    symlinkat("/", &fd, "r").unwrap();
+    make_tree(&at, "tree");
 
-    ucmd.args(&["-R", "-L", "--preserve-root", "u+r", "deep"])
+    ucmd.args(&["-R", "-L", "--preserve-root", "u+r", "tree"])
         .fails_with_code(1)
         .stderr_contains("(same as '/')");
 }

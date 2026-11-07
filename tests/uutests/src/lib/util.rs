@@ -1350,6 +1350,43 @@ impl AtPath {
         self.symlink_dir_inner(original.as_ref(), self.plus(link).as_ref());
     }
 
+    /// Creates `dir` with a symlink `r` to `/` under 17 nested 250-byte
+    /// names, so that the path of the link is longer than `PATH_MAX`. That path
+    /// is too long to use, so the tree is built one level at a time.
+    #[cfg(unix)]
+    pub fn symlink_to_root_beyond_path_max(&self, dir: &str) {
+        use rustix::fs::{CWD, Mode, OFlags, mkdirat, openat, symlinkat};
+
+        self.mkdir(dir);
+        let flags = OFlags::RDONLY | OFlags::DIRECTORY;
+        let mut fd = openat(CWD, self.plus(dir), flags, Mode::empty()).unwrap();
+        let name = "a".repeat(250);
+        for _ in 0..17 {
+            mkdirat(&fd, &name, Mode::from_bits_truncate(0o755)).unwrap();
+            fd = openat(&fd, &name, flags, Mode::empty()).unwrap();
+        }
+        symlinkat("/", &fd, "r").unwrap();
+    }
+
+    /// Creates `dir/next`, the first of a chain of 41 symlinks that ends at
+    /// `/`: `dir/next -> ../dir.hops/1`, `dir.hops/1/next -> ../2`, ...,
+    /// `dir.hops/40/next -> /`. So `dir/next/.../next` crosses one more symlink
+    /// than the kernel follows in a single lookup.
+    #[cfg(unix)]
+    pub fn symlink_chain_to_root(&self, dir: &str) {
+        self.mkdir(dir);
+        self.relative_symlink_dir(format!("../{dir}.hops/1"), format!("{dir}/next"));
+        for i in 1..=40 {
+            self.mkdir_all(format!("{dir}.hops/{i}"));
+            let target = if i == 40 {
+                "/".to_owned()
+            } else {
+                format!("../{}", i + 1)
+            };
+            self.relative_symlink_dir(target, format!("{dir}.hops/{i}/next"));
+        }
+    }
+
     pub fn is_symlink<P: AsRef<Path>>(&self, path: P) -> bool {
         let path = self.plus(path);
         log_info("is_symlink", path.display());
