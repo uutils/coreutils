@@ -375,6 +375,24 @@ fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
     }
 }
 
+#[cfg(unix)]
+fn scan_hardlinks(
+    files: &[PathBuf],
+    options: &Options,
+) -> (HardlinkTracker, HardlinkGroupScanner) {
+    // Use hardlink options
+    let hardlink_options = HardlinkOptions {
+        verbose: options.verbose || options.debug,
+    };
+
+    let (tracker, mut scanner) = create_hardlink_context();
+
+    // Pre-scan files if needed
+    scanner.scan_files(files, &hardlink_options);
+
+    (tracker, scanner)
+}
+
 fn parse_paths(files: &[OsString], opts: &Options) -> Vec<PathBuf> {
     let paths = files.iter().map(Path::new);
 
@@ -431,20 +449,13 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
     if target_is_dir {
         if opts.no_target_dir {
             if source.is_dir() {
-                #[cfg(unix)]
-                let (mut hardlink_tracker, hardlink_scanner) = create_hardlink_context();
-                #[cfg(unix)]
-                let hardlink_params = (Some(&mut hardlink_tracker), Some(&hardlink_scanner));
-                #[cfg(not(unix))]
-                let hardlink_params = (None, None);
-
                 rename(
                     source,
                     target,
                     opts,
                     None,
-                    hardlink_params.0,
-                    hardlink_params.1,
+                    None,
+                    None
                 )
                 .map_err(|e| cannot_move_error(e, source, target))
             } else {
@@ -475,20 +486,13 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         )
         .into())
     } else {
-        #[cfg(unix)]
-        let (mut hardlink_tracker, hardlink_scanner) = create_hardlink_context();
-        #[cfg(unix)]
-        let hardlink_params = (Some(&mut hardlink_tracker), Some(&hardlink_scanner));
-        #[cfg(not(unix))]
-        let hardlink_params = (None, None);
-
         rename(
             source,
             target,
             opts,
             None,
-            hardlink_params.0,
-            hardlink_params.1,
+            None,
+            None
         )
         .map_err(|e| -> Box<dyn UError> {
             // OS errors get the same "cannot move" context as GNU; our own
@@ -695,19 +699,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         FxHashSet::with_capacity_and_hasher(files.len(), rustc_hash::FxBuildHasher);
     // Create hardlink tracking context
     #[cfg(unix)]
-    let (mut hardlink_tracker, hardlink_scanner) = {
-        let (tracker, mut scanner) = create_hardlink_context();
-
-        // Use hardlink options
-        let hardlink_options = HardlinkOptions {
-            verbose: options.verbose || options.debug,
-        };
-
-        // Pre-scan files if needed
-        scanner.scan_files(files, &hardlink_options);
-
-        (tracker, scanner)
-    };
+    let (mut hardlink_tracker, hardlink_scanner) = scan_hardlinks(files, options);
 
     if !target_dir.is_dir() {
         return Err(MvError::NotADirectory(target_dir.quote().to_string()).into());
@@ -993,6 +985,8 @@ fn rename_with_fallback(
                 with_optional_hardlink_context(
                     hardlink_tracker,
                     hardlink_scanner,
+                    from,
+                    &HardlinkOptions { verbose },
                     |tracker, scanner| {
                         rename_dir_fallback(
                             from,
@@ -1017,6 +1011,8 @@ fn rename_with_fallback(
                 with_optional_hardlink_context(
                     hardlink_tracker,
                     hardlink_scanner,
+                    from,
+                    &HardlinkOptions { verbose },
                     |tracker, scanner| rename_file_fallback(from, to, Some(tracker), Some(scanner)),
                 )
             }
