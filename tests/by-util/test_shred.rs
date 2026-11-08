@@ -718,6 +718,7 @@ fn test_shred_socket() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "strace cannot run a wasm binary")]
 fn test_stat_failure_reports_open_error() {
     // Make stat and open fail with different errors on the same path: the
     // one shown must come from open.
