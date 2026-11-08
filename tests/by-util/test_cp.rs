@@ -4427,8 +4427,8 @@ fn test_cp_recursive_drive_root() {
         // The bug only shows when the destination directory already exists.
         at.mkdir(dest);
         scene.ucmd().args(&["-r", &source, dest]).succeeds();
-        assert_eq!(at.read(&format!("{dest}/id.dat")), "root file");
-        assert_eq!(at.read(&format!("{dest}/sub/x.txt")), "nested file");
+        assert_eq!(at.read(format!("{dest}/id.dat")), "root file");
+        assert_eq!(at.read(format!("{dest}/sub/x.txt")), "nested file");
     }
 }
 
