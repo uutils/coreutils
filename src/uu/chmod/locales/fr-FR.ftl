@@ -32,6 +32,6 @@ chmod-error-reference-stat = impossible d'obtenir les attributs de { $file } : {
 # Messages verbeux/de statut
 chmod-verbose-neither-changed = ni le lien symbolique {$file} ni la référence n'ont été changés
 chmod-verbose-mode-retained = mode de {$file} conservé comme {$mode_octal} ({$mode_display})
-chmod-verbose-failed-change = échec du changement de mode du fichier {$file} de {$old_mode} ({$old_mode_display}) vers {$new_mode} ({$new_mode_display})
+chmod-verbose-failed-change = échec du changement de mode de {$file} de {$old_mode} ({$old_mode_display}) vers {$new_mode} ({$new_mode_display})
 chmod-verbose-mode-changed = mode de {$file} changé de {$old_mode} ({$old_mode_display}) vers {$new_mode} ({$new_mode_display})
 chmod-verbose-could-not-be-accessed = {$file} n'a pas pu être consulté

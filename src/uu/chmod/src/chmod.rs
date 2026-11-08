@@ -25,7 +25,7 @@ use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
 use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 use uucore::{format_usage, show, show_error};
 
-use uucore::translate;
+use uucore::{translate, translate_text};
 
 #[derive(Debug, thiserror::Error)]
 enum ChmodError {
@@ -925,10 +925,13 @@ impl Chmoder {
         self.report_failure(ChmodError::ChangingPermissions(file.into(), err).into());
         if self.verbose {
             println!(
-                "failed to change mode of {} from {old_mode:04o} ({}) to {new_mode:04o} ({})",
-                file.quote(),
-                display_permissions_unix(old_mode, false),
-                display_permissions_unix(new_mode, false)
+                "{}",
+                translate_text!("chmod-verbose-failed-change",
+                    "file" => file.quote(),
+                    "old_mode" => format!("{old_mode:04o}"),
+                    "old_mode_display" => display_permissions_unix(old_mode, false),
+                    "new_mode" => format!("{new_mode:04o}"),
+                    "new_mode_display" => display_permissions_unix(new_mode, false))
             );
         }
     }
