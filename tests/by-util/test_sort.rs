@@ -4271,3 +4271,16 @@ fn test_debug_incompatible_with_output() {
         .stderr_only("sort: options '-o --debug' are incompatible\n");
     assert!(!at.file_exists("out"));
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_version_write_error() {
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+    new_ucmd!()
+        .arg("--version")
+        .set_stdout(dev_full)
+        .fails_with_code(2);
+}

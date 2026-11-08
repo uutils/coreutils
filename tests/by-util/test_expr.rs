@@ -2280,3 +2280,19 @@ fn test_exit_with_3_write_error() {
         .fails_with_code(3)
         .stderr_is("expr: No space left on device\n");
 }
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_help_version_write_error() {
+    for flag in ["--help", "--version"] {
+        let dev_full = std::fs::OpenOptions::new()
+            .write(true)
+            .open("/dev/full")
+            .unwrap();
+        new_ucmd!()
+            .arg(flag)
+            .set_stdout(dev_full)
+            .fails_with_code(3)
+            .stderr_is("expr: No space left on device\n");
+    }
+}

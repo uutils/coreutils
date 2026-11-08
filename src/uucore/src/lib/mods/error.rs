@@ -758,12 +758,16 @@ impl UClapError<Result<clap::ArgMatches, ClapErrorWrapper>>
 
 impl UError for ClapErrorWrapper {
     fn code(&self) -> i32 {
-        // If the error is a DisplayHelp or DisplayVersion variant,
-        // check if printing failed. If it did, return 1, otherwise 0.
+        // Help and version succeed unless writing them failed, which is then
+        // reported with the utility's own failure code.
         if let clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion =
             self.error.kind()
         {
-            i32::from(self.print_failed.get())
+            if self.print_failed.get() {
+                self.code
+            } else {
+                0
+            }
         } else {
             self.code
         }
@@ -784,9 +788,8 @@ impl Display for ClapErrorWrapper {
             // Try to display this error to stderr, but ignore if that fails too
             // since we're already in an error state.
             print_diagnostic("", format_args!("{print_fail}"));
-            // Mirror GNU behavior: when failing to print help or version, exit with error code.
-            // This avoids silent failures when stdout is full or closed.
-            set_exit_code(1);
+            // A failed write of help or version must not exit successfully.
+            set_exit_code(self.code);
         }
         // Always return Ok(()) to satisfy Display's contract and prevent panic
         Ok(())

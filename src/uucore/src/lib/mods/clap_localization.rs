@@ -12,7 +12,7 @@
 //! instead of parsing error strings, providing a more robust solution.
 //!
 
-use crate::error::{UResult, USimpleError};
+use crate::error::{UClapError, UResult, USimpleError};
 use crate::locale::{translate, translate_text};
 
 use clap::error::{ContextKind, ErrorKind};
@@ -474,7 +474,8 @@ where
 {
     cmd.try_get_matches_from(itr).map_err(|e| {
         if e.exit_code() == 0 {
-            e.into() // Preserve help/version
+            // Preserve help/version, failing with `exit_code` if it can't be written
+            e.with_exit_code(exit_code).into()
         } else {
             let formatter = ErrorFormatter::new(crate::util_name());
             let code = formatter.print_error(&e, exit_code);

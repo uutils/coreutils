@@ -135,6 +135,12 @@ fn evaluate(args: &[Vec<u8>]) -> Result<Vec<u8>, (ExprError, FailurePoint)> {
     Ok(value.eval_as_string())
 }
 
+/// Reports a failure to write the output, which exits with status 3.
+fn write_failure(e: &std::io::Error) -> UResult<()> {
+    show_error!("{}", strip_errno(e));
+    Err(3.into())
+}
+
 #[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // For expr utility we do not want getopts.
@@ -146,8 +152,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut args = &args[..];
     match args {
-        [a] if a == b"--help" => uu_app().print_help()?,
-        [a] if a == b"--version" => writeln!(stdout(), "expr {}", uucore::crate_version!())?,
+        [a] if a == b"--help" => uu_app().print_help().or_else(|e| write_failure(&e))?,
+        [a] if a == b"--version" => writeln!(stdout(), "expr {}", uucore::crate_version!())
+            .or_else(|e| write_failure(&e))?,
         _ => {
             // ignore -- as the 1st argument
             if let [a, rest @ ..] = args
@@ -161,10 +168,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 uucore::error::quiet_if_reported(reported, e)
             })?;
             stdout().write_all(&res)?;
-            if let Err(e) = stdout().write_all(b"\n") {
-                show_error!("{}", strip_errno(&e));
-                return Err(3.into());
-            }
+            stdout().write_all(b"\n").or_else(|e| write_failure(&e))?;
             if !is_truthy(&res.into()) {
                 return Err(1.into());
             }

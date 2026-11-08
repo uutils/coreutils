@@ -2387,3 +2387,16 @@ env: no terminating quote in -S string at position 18 for quote '''
             .stderr_is("env: no terminating quote in -S string at position 18 for quote '''\n");
     }
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_help_write_error() {
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+    new_ucmd!()
+        .arg("--help")
+        .set_stdout(dev_full)
+        .fails_with_code(125);
+}
