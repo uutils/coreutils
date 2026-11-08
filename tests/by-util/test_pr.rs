@@ -1646,6 +1646,5 @@ fn test_expand_tabs_line_too_long() {
         .args(&["-t", "-e4000"])
         .pipe_in(vec![b'\t'; 600_000])
         .fails_with_code(1)
-        .stdout_is("")
-        .stderr_is("pr: integer overflow\n");
+        .stderr_only("pr: integer overflow\n");
 }
