@@ -129,7 +129,7 @@ mod login {
     pub fn get_sessions(
         api: &ffi::SystemdLoginApi,
     ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-        let mut sessions_ptr: *mut *mut core::ffi::c_char = ptr::null_mut();
+        let mut sessions_ptr: *mut *mut c_char = ptr::null_mut();
 
         let result = unsafe { (api.sd_get_sessions)(&raw mut sessions_ptr) };
 
