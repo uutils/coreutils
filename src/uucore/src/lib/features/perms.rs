@@ -785,16 +785,14 @@ impl ChownExecutor {
                         && path
                             .symlink_metadata()
                             .is_ok_and(|m| m.file_type().is_symlink());
-                    show_error!(
-                        "cannot {} {}: {}",
-                        if dangling_symlink {
-                            "dereference"
-                        } else {
-                            "access"
-                        },
-                        path.quote(),
-                        strip_errno(e)
-                    );
+
+                    let err_msg = if dangling_symlink {
+                        translate!("perms-cannot-dereference", "file" => path.quote(), "error" => strip_errno(e))
+                    } else {
+                        translate!("perms-cannot-access", "file" => path.quote(), "error" => strip_errno(e))
+                    };
+                    show_error!("{}", err_msg);
+
                 }
             })
             .ok()
