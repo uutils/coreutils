@@ -14,8 +14,30 @@
 //! More specifically, exponent can be understood so that the original number is in `(1..10)*10^exponent`.
 //! From that follows the constraints of this algorithm: It is able to compare numbers in ±(1*10^[`i64::MIN`]..10*10^[`i64::MAX`]).
 
-use crate::custom_str_cmp::is_blank;
+use crate::i18n::{self, UEncoding, decimal};
 use std::{cmp::Ordering, ops::Range};
+
+const DECIMAL_PT: u8 = b'.';
+
+/// Returns whether `c` is a blank (space or tab).
+///
+/// Newlines also count, as they act as blanks inside NUL-terminated records.
+pub fn is_blank(c: u8) -> bool {
+    matches!(c, b' ' | b'\t' | b'\n')
+}
+
+/// Returns the decimal point of the numeric locale, falling back to `.` when it is
+/// not a single `.` or `,` byte.
+pub fn locale_decimal_pt() -> u8 {
+    match decimal::locale_decimal_separator()
+        .as_bytes()
+        .first()
+        .copied()
+    {
+        Some(b',') => b',',
+        _ => DECIMAL_PT,
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 enum Sign {
@@ -43,7 +65,37 @@ impl Default for NumInfoParseSettings {
             accept_si_units: false,
             fold_si_units: false,
             thousands_separator: None,
-            decimal_pt: Some(b'.'),
+            decimal_pt: Some(DECIMAL_PT),
+        }
+    }
+}
+
+impl NumInfoParseSettings {
+    /// Returns the parse settings matching the numeric locale (`LC_NUMERIC`), without SI units.
+    pub fn from_locale() -> Self {
+        let numeric_locale = i18n::get_numeric_locale();
+        let locale = &numeric_locale.0;
+        let encoding = numeric_locale.1;
+        let is_c_locale = encoding == UEncoding::Ascii && locale.to_string() == "und";
+
+        if is_c_locale {
+            return Self::default();
+        }
+
+        let grouping = decimal::locale_grouping_separator();
+        Self {
+            accept_si_units: false,
+            fold_si_units: false,
+            decimal_pt: Some(locale_decimal_pt()),
+            // Upstream GNU coreutils ignore multibyte thousands separators
+            // (FIXME in C source). We keep the same single-byte behavior.
+            thousands_separator: match grouping.as_bytes() {
+                [b] => Some(*b),
+                // ICU returns NBSP as UTF-8 (0xC2 0xA0). In non-UTF8 locales like ISO-8859-1,
+                // the input byte is 0xA0, so map it to a single-byte separator.
+                [0xC2, 0xA0] if encoding != UEncoding::Utf8 => Some(0xA0),
+                _ => None,
+            },
         }
     }
 }

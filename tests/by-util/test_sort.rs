@@ -575,6 +575,24 @@ fn test_non_printing_chars() {
 }
 
 #[test]
+fn test_dictionary_order_overrides_non_printing() {
+    // -i has no effect with -d, so the tab is kept as a blank
+    for args in [
+        &["-d", "-i"][..],
+        &["-i", "-d"],
+        &["-di"],
+        &["-id"],
+        &["-di", "-k1"],
+    ] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("\tK\n7\n")
+            .succeeds()
+            .stdout_only("\tK\n7\n");
+    }
+}
+
+#[test]
 fn test_exponents_positive_general() {
     new_ucmd!()
         .pipe_in("1\n2e3\n1e-5")
@@ -1076,6 +1094,34 @@ fn test_incompatible_options() {
         .stderr_only("sort: options '-nR' are incompatible\n");
 
     new_ucmd!()
+        .args(&["--sort=general-numeric", "--sort=human-numeric"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-gh' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["-h", "--sort=general-numeric", "--sort=human-numeric"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-gh' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["--sort=general-numeric", "--sort=general-numeric"])
+        .pipe_in("1e2\n20\n")
+        .succeeds()
+        .stdout_only("20\n1e2\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&[
+            "--debug",
+            "--sort=general-numeric",
+            "--sort=human-numeric",
+            "-k1,1n",
+        ])
+        .pipe_in("")
+        .succeeds()
+        .stderr_contains("sort: options '-gh' are ignored\n");
+
+    new_ucmd!()
         .args(&["-c", "-o", "out"])
         .fails_with_code(2)
         .stderr_only("sort: options '-co' are incompatible\n");
@@ -1399,9 +1445,9 @@ fn test_spill_write_error_does_not_panic() {
 
 // A read error must be reported with context and without the raw io::Error suffix.
 // It used to print `sort: Input/output error (os error 5)`.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore)]
 fn test_read_error_message() {
     // Reading /proc/self/mem from offset 0 fails with EIO.
     let result = new_ucmd!().arg("/proc/self/mem").fails_with_code(2);
@@ -1577,6 +1623,40 @@ fn test_check_silent() {
             .succeeds()
             .no_output();
     }
+}
+
+#[test]
+fn test_check_repeated_modes() {
+    for args in [
+        ["--check=silent", "--check=diagnose-first"],
+        ["-c=silent", "-c=diagnose-first"],
+        ["--check=diagnose-first", "--check=quiet"],
+        ["-c", "--check=quiet"],
+        ["--check=silent", "-c"],
+    ] {
+        new_ucmd!()
+            .args(&args)
+            .arg("check_fail.txt")
+            .fails_with_code(2)
+            .stderr_only("sort: options '-cC' are incompatible\n");
+    }
+
+    for args in [
+        ["--check=quiet", "-C"],
+        ["-C", "--check=silent"],
+        ["--check=quiet", "--check=silent"],
+    ] {
+        new_ucmd!()
+            .args(&args)
+            .arg("check_fail.txt")
+            .fails_with_code(1)
+            .no_output();
+    }
+
+    new_ucmd!()
+        .args(&["--check=diagnose-first", "-c", "check_fail.txt"])
+        .fails_with_code(1)
+        .stderr_only("sort: check_fail.txt:6: disorder: 5\n");
 }
 
 #[test]
@@ -2115,34 +2195,26 @@ fn test_separator_attached_equals_multi_char() {
         .stderr_contains("separator must be exactly one character long: '=a'");
 }
 
-#[test]
-fn test_error_on_incompatible_separators() {
-    let cases: [&[&str]; 3] = [
-        &["-t@", "-t!"],
-        &["-t", "@", "-t", "!"],
-        &["--field-separator=@", "-t", "!"],
-    ];
-    for args in cases {
-        new_ucmd!()
-            .args(args)
-            .fails_with_code(2)
-            .stderr_only("sort: incompatible tabs\n");
-    }
+#[rstest]
+#[case::attached(&["-t@", "-t!"])]
+#[case::separate(&["-t", "@", "-t", "!"])]
+#[case::long_and_short(&["--field-separator=@", "-t", "!"])]
+fn test_error_on_incompatible_separators(#[case] args: &[&str]) {
+    new_ucmd!()
+        .args(args)
+        .fails_with_code(2)
+        .stderr_only("sort: incompatible tabs\n");
 }
 
-#[test]
-fn test_same_separator_twice_ok() {
-    let cases: [&[&str]; 2] = [
-        &["-t:", "-t:", "-k2"],
-        &["--field-separator=:", "-t", ":", "-k2"],
-    ];
-    for args in cases {
-        new_ucmd!()
-            .args(args)
-            .pipe_in("a:2\nb:1\n")
-            .succeeds()
-            .stdout_only("b:1\na:2\n");
-    }
+#[rstest]
+#[case::short_twice(&["-t:", "-t:", "-k2"])]
+#[case::long_and_short(&["--field-separator=:", "-t", ":", "-k2"])]
+fn test_same_separator_twice_ok(#[case] args: &[&str]) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in("a:2\nb:1\n")
+        .succeeds()
+        .stdout_only("b:1\na:2\n");
 }
 
 #[test]
@@ -2446,6 +2518,24 @@ fn test_same_output_flag_twice_ok() {
         .pipe_in("")
         .succeeds()
         .no_stderr();
+}
+
+#[test]
+fn test_error_on_multiple_compress_programs() {
+    new_ucmd!()
+        .args(&["--compress-program", "pwd", "--compress-program", "python3"])
+        .fails_with_code(2)
+        .stderr_only("sort: multiple compress programs specified\n");
+}
+
+#[test]
+fn test_same_compress_program_twice_ok() {
+    // The input is far below the buffer size, so the program is never spawned.
+    new_ucmd!()
+        .args(&["--compress-program", "gzip", "--compress-program", "gzip"])
+        .pipe_in("b\na\n")
+        .succeeds()
+        .stdout_only("a\nb\n");
 }
 
 #[test]
@@ -4170,4 +4260,14 @@ fn test_numeric_looking_file_names_are_kept_verbatim(
     at.mkdir("007");
     at.touch("empty");
     ucmd.args(args).fails_with_code(2).stderr_is(expected);
+}
+
+#[test]
+fn test_debug_incompatible_with_output() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-o", "out", "--debug"])
+        .pipe_in("b\na\n")
+        .fails_with_code(2)
+        .stderr_only("sort: options '-o --debug' are incompatible\n");
+    assert!(!at.file_exists("out"));
 }

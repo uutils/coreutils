@@ -3,19 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::env;
-
-pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
-
 // Use the ctor attribute to run this function before any tests
 #[ctor::ctor(unsafe)]
 fn init() {
-    // Allow overriding the binary path (e.g. to test a WASI binary via wasmtime)
-    if env::var("UUTESTS_BINARY_PATH").is_err() {
-        unsafe {
-            env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
-        }
-    }
+    // UUTESTS_BINARY_PATH overrides the binary (e.g. a WASI one via wasmtime)
+    uutests::util::set_default_tests_binary("coreutils");
 }
 
 #[cfg(feature = "arch")]
@@ -453,3 +445,15 @@ mod test_whoami;
 #[cfg(feature = "yes")]
 #[path = "by-util/test_yes.rs"]
 mod test_yes;
+
+#[cfg(any(
+    feature = "b2sum",
+    feature = "md5sum",
+    feature = "sha1sum",
+    feature = "sha224sum",
+    feature = "sha256sum",
+    feature = "sha384sum",
+    feature = "sha512sum"
+))]
+#[path = "by-util/common_checksum_tests.rs"]
+pub(crate) mod common_checksum_tests;

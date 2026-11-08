@@ -34,13 +34,9 @@ mod tests {
     use std::fs::File;
     use tempfile::tempdir;
 
-    use {
-        std::fs::OpenOptions,
-        std::{
-            io::{Seek, SeekFrom},
-            thread,
-        },
-    };
+    use std::fs::OpenOptions;
+    use std::io::{Seek, SeekFrom};
+    use std::thread;
 
     use std::io::{Read, Write};
 

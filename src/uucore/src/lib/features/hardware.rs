@@ -298,7 +298,7 @@ fn detect_sse2() -> bool {
     false
 }
 
-#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
+#[cfg(target_arch = "aarch64")]
 fn detect_asimd() -> bool {
     if cfg!(target_os = "android") {
         false
@@ -307,7 +307,7 @@ fn detect_asimd() -> bool {
     }
 }
 
-#[cfg(not(all(target_arch = "aarch64", target_endian = "little")))]
+#[cfg(not(target_arch = "aarch64"))]
 fn detect_asimd() -> bool {
     false
 }

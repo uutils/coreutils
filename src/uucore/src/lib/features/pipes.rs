@@ -7,11 +7,9 @@
 
 use crate::io::{RawReader, RawWriter};
 use rustix::pipe::{SpliceFlags, fcntl_setpipe_size};
-use std::{
-    cell::Cell,
-    io::{PipeReader, PipeWriter, Read, Write},
-    os::fd::AsFd,
-};
+use std::cell::Cell;
+use std::io::{PipeReader, PipeWriter, Read, Write};
+use std::os::fd::AsFd;
 pub const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
 const KERNEL_DEFAULT_PIPE_SIZE: usize = 64 * 1024;
 

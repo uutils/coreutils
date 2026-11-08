@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore nopipe
+// spell-checker:ignore BADF nopipe
 
 use std::ffi::OsString;
 use std::fs::OpenOptions;
@@ -147,6 +147,14 @@ impl MultiWriter {
         #[cfg(not(any(unix, target_os = "wasi")))]
         use io::Read as _;
         const BUF_SIZE: usize = 32 * 1024;
+        #[cfg(all(unix, not(target_os = "fuchsia")))]
+        if uucore::signals::stdin_was_closed() {
+            show_error!(
+                "{}",
+                translate!("tee-error-stdin", "error" => strip_errno(&rustix::io::Errno::BADF.into()))
+            );
+            return Err(());
+        }
         #[cfg(any(unix, target_os = "wasi"))]
         let input = rustix::stdio::stdin();
         #[cfg(not(any(unix, target_os = "wasi")))]

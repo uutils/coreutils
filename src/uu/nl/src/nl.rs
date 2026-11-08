@@ -146,7 +146,7 @@ impl NumberFormat {
             }
             Self::RightZero if number < 0 => {
                 writer.write_all(b"-")?;
-                let num = buffer.format(number.abs());
+                let num = buffer.format(number.unsigned_abs());
                 for _ in num.len()..min_width.saturating_sub(1) {
                     writer.write_all(b"0")?;
                 }
@@ -353,6 +353,7 @@ pub fn uu_app() -> Command {
                 .long(options::LINE_INCREMENT)
                 .help(translate!("nl-help-line-increment"))
                 .value_name("NUMBER")
+                .allow_negative_numbers(true)
                 .value_parser(clap::value_parser!(i64)),
         )
         .arg(
@@ -392,6 +393,7 @@ pub fn uu_app() -> Command {
                 .long(options::STARTING_LINE_NUMBER)
                 .help(translate!("nl-help-starting-line-number"))
                 .value_name("NUMBER")
+                .allow_negative_numbers(true)
                 .value_parser(clap::value_parser!(i64)),
         )
         .arg(
@@ -416,7 +418,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
     let mut line = Vec::new();
     // Written before every unnumbered line. Capped to avoid OOM on 32-bit targets
     // when -w i32::MAX is passed (allocating 2 GiB would panic).
-    let blank_width = settings.number_width + 1;
+    let blank_width = settings.number_width + settings.number_separator.as_encoded_bytes().len();
     let space_buf = vec![b' '; blank_width.min(4096)];
 
     loop {

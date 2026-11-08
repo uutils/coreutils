@@ -17,8 +17,6 @@
 use std::os::unix::ffi::OsStringExt;
 
 use std::ffi::{CStr, CString, OsStr, OsString};
-use std::fs;
-use std::io;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::mem::MaybeUninit;
 use std::os::unix::ffi::OsStrExt;
@@ -26,6 +24,7 @@ use std::os::unix::fs::MetadataExt;
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
+use std::{fs, io};
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 use nix::dir::Dir;
@@ -652,58 +651,36 @@ fn find_existing_ancestor(path: &Path) -> io::Result<(PathBuf, Vec<OsString>)> {
         // Use metadata (follow symlinks) so that symlinks to directories are
         // treated as existing ancestors rather than components to create.
         match fs::metadata(&current) {
-            Ok(meta) => {
-                if meta.is_dir() {
-                    // Found a directory (real or via symlink)
-                    components.reverse();
-                    return Ok((current, components));
-                }
-                // It's a file or other non-directory - treat as needing creation
-                if let Some(file_name) = current.file_name() {
-                    components.push(file_name.to_os_string());
-                }
-                if let Some(parent) = current.parent() {
-                    if parent.as_os_str().is_empty() {
-                        // Reached empty parent (for relative paths), use "."
-                        components.reverse();
-                        return Ok((PathBuf::from("."), components));
-                    }
-                    current = parent.to_path_buf();
-                } else {
-                    // Reached filesystem root
-                    let root = if path.is_absolute() {
-                        PathBuf::from("/")
-                    } else {
-                        PathBuf::from(".")
-                    };
-                    components.reverse();
-                    return Ok((root, components));
-                }
+            Ok(meta) if meta.is_dir() => {
+                // Found a directory (real or via symlink)
+                components.reverse();
+                return Ok((current, components));
             }
-            Err(e) if e.kind() == io::ErrorKind::NotFound => {
-                // Doesn't exist, record component and move up to parent
-                if let Some(file_name) = current.file_name() {
-                    components.push(file_name.to_os_string());
-                }
-                if let Some(parent) = current.parent() {
-                    if parent.as_os_str().is_empty() {
-                        // Reached empty parent (for relative paths), use "."
-                        components.reverse();
-                        return Ok((PathBuf::from("."), components));
-                    }
-                    current = parent.to_path_buf();
-                } else {
-                    // Reached filesystem root
-                    let root = if path.is_absolute() {
-                        PathBuf::from("/")
-                    } else {
-                        PathBuf::from(".")
-                    };
-                    components.reverse();
-                    return Ok((root, components));
-                }
-            }
+            // A non-directory or a missing entry: record it as needing creation
+            Ok(_) => {}
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
             Err(e) => return Err(e),
+        }
+
+        if let Some(file_name) = current.file_name() {
+            components.push(file_name.to_os_string());
+        }
+        if let Some(parent) = current.parent() {
+            if parent.as_os_str().is_empty() {
+                // Reached empty parent (for relative paths), use "."
+                components.reverse();
+                return Ok((PathBuf::from("."), components));
+            }
+            current = parent.to_path_buf();
+        } else {
+            // Reached filesystem root
+            let root = if path.is_absolute() {
+                PathBuf::from("/")
+            } else {
+                PathBuf::from(".")
+            };
+            components.reverse();
+            return Ok((root, components));
         }
     }
 }
@@ -1102,8 +1079,7 @@ impl MetadataExt for Metadata {
 mod tests {
     use super::*;
     use std::fs;
-    use std::os::unix::fs::MetadataExt;
-    use std::os::unix::fs::symlink;
+    use std::os::unix::fs::{MetadataExt, symlink};
     use std::os::unix::io::IntoRawFd;
     use tempfile::TempDir;
 
@@ -1212,6 +1188,32 @@ mod tests {
 
         let result = parent_fd.open_subdir(OsStr::new("nonexistent"), SymlinkBehavior::Follow);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_find_existing_ancestor() {
+        let temp_dir = TempDir::new().unwrap();
+        let base = temp_dir.path();
+        fs::write(base.join("plain"), "").unwrap();
+        fs::create_dir(base.join("real")).unwrap();
+        symlink(base.join("real"), base.join("link")).unwrap();
+
+        let names = |list: &[&str]| list.iter().map(OsString::from).collect::<Vec<_>>();
+
+        // Missing entries are all left to create.
+        let (ancestor, missing) = find_existing_ancestor(&base.join("m1/m2/m3")).unwrap();
+        assert_eq!(ancestor, base);
+        assert_eq!(missing, names(&["m1", "m2", "m3"]));
+
+        // A non-directory is walked past like a missing entry.
+        let (ancestor, missing) = find_existing_ancestor(&base.join("plain")).unwrap();
+        assert_eq!(ancestor, base);
+        assert_eq!(missing, names(&["plain"]));
+
+        // A symlink to a directory is an existing ancestor.
+        let (ancestor, missing) = find_existing_ancestor(&base.join("link/inner")).unwrap();
+        assert_eq!(ancestor, base.join("link"));
+        assert_eq!(missing, names(&["inner"]));
     }
 
     #[test]

@@ -20,7 +20,7 @@
 FROM="0.12.0"
 TO="0.13.0"
 
-MANIFESTS=$(ls -1d Cargo.toml src/uu/*/Cargo.toml src/uu/stdbuf/src/libstdbuf/Cargo.toml src/uucore/Cargo.toml src/uucore_procs/Cargo.toml tests/uutests/Cargo.toml fuzz/uufuzz/Cargo.toml)
+MANIFESTS=$(ls -1d Cargo.toml src/uu/*/Cargo.toml src/uu/stdbuf/src/libstdbuf/Cargo.toml src/uucore/Cargo.toml src/uucore_procs/Cargo.toml tests/uutests_procs/Cargo.toml tests/uutests/Cargo.toml fuzz/uufuzz/Cargo.toml)
 
 # Only two kinds of lines are rewritten, so that third party crates which
 # happen to share our version number (md-5, sha1, sha2, sha3, ...) are left

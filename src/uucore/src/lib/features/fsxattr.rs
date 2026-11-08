@@ -17,7 +17,7 @@ use std::path::Path;
 /// True if the error is `ENOTSUP` / `EOPNOTSUPP` (same errno on Linux,
 /// distinct on the BSDs).
 #[cfg(unix)]
-fn is_xattr_unsupported(err: &std::io::Error) -> bool {
+pub fn is_xattr_unsupported(err: &std::io::Error) -> bool {
     matches!(
         err.raw_os_error(),
         Some(e) if e == libc::ENOTSUP || e == libc::EOPNOTSUPP
@@ -25,7 +25,7 @@ fn is_xattr_unsupported(err: &std::io::Error) -> bool {
 }
 
 #[cfg(not(unix))]
-fn is_xattr_unsupported(_err: &std::io::Error) -> bool {
+pub fn is_xattr_unsupported(_err: &std::io::Error) -> bool {
     false
 }
 
@@ -103,15 +103,6 @@ pub fn copy_xattrs_fd(source: &std::fs::File, dest: &std::fs::File) -> XattrCopy
         |name| source.get_xattr(name),
         |name, value| dest.set_xattr(name, value),
     ))
-}
-
-/// Like [`copy_xattrs_fd`], but leaves out `ENOTSUP` / `EOPNOTSUPP`.
-#[cfg(unix)]
-pub fn copy_xattrs_fd_ignore_unsupported(
-    source: &std::fs::File,
-    dest: &std::fs::File,
-) -> XattrCopyResult {
-    without_unsupported(copy_xattrs_fd(source, dest))
 }
 
 /// Like `copy_xattrs`, but skips the security.selinux attribute.

@@ -12,6 +12,7 @@ use std::io::{BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::show;
 use uucore::translate;
 
 use uucore::format_usage;
@@ -36,8 +37,6 @@ enum FmtError {
     InvalidTabWidth(String),
     #[error("{}", translate!("fmt-error-first-option-width", "option" => .0))]
     FirstOptionWidth(char),
-    #[error("{}", translate!("fmt-error-read"))]
-    ReadError,
     #[error("{}", translate!("fmt-error-invalid-width-malformed", "width" => .0.quote()))]
     InvalidWidthMalformed(String),
 }
@@ -71,6 +70,7 @@ mod options {
     pub const QUICK: &str = "quick";
     pub const TAB_WIDTH: &str = "tab-width";
     pub const FILES_OR_WIDTH: &str = "files";
+    pub const FILES_AFTER_DASHES: &str = "files-after-dashes";
 }
 
 pub type FileOrStdReader = BufReader<Box<dyn Read + 'static>>;
@@ -209,16 +209,31 @@ fn process_file(
         Box::new(stdin()) as Box<dyn Read + 'static>
     } else {
         let path = Path::new(file_name);
-        let f = File::open(path).map_err_context(
-            || translate!("fmt-error-cannot-open-for-reading", "file" => path.quote()),
-        )?;
-        if f.metadata()
-            .map_err_context(
-                || translate!("fmt-error-cannot-get-metadata", "file" => path.quote()),
-            )?
-            .is_dir()
-        {
-            return Err(FmtError::ReadError.into());
+        // Like GNU fmt, report a file that can't be read and go on with the next one.
+        let f = match File::open(path) {
+            Ok(f) => f,
+            Err(e) => {
+                show!(e.map_err_context(
+                    || translate!("fmt-error-cannot-open-for-reading", "file" => path.quote())
+                ));
+                return Ok(());
+            }
+        };
+        match f.metadata() {
+            Ok(m) if m.is_dir() => {
+                show!(USimpleError::new(
+                    1,
+                    translate!("fmt-error-reading-is-directory", "file" => path.quote())
+                ));
+                return Ok(());
+            }
+            Ok(_) => {}
+            Err(e) => {
+                show!(e.map_err_context(
+                    || translate!("fmt-error-cannot-get-metadata", "file" => path.quote())
+                ));
+                return Ok(());
+            }
         }
 
         Box::new(f) as Box<dyn Read + 'static>
@@ -283,6 +298,13 @@ fn extract_files(matches: &ArgMatches) -> UResult<Vec<OsString>> {
                 Some(Ok(x.clone()))
             }
         })
+        .chain(
+            matches
+                .get_many::<OsString>(options::FILES_AFTER_DASHES)
+                .into_iter()
+                .flatten()
+                .map(|x| Ok(x.clone())),
+        )
         .collect();
 
     if files.as_ref().is_ok_and(Vec::is_empty) {
@@ -500,6 +522,13 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::FilePath)
                 .value_parser(clap::value_parser!(OsString))
                 .allow_negative_numbers(true),
+        )
+        .arg(
+            Arg::new(options::FILES_AFTER_DASHES)
+                .action(ArgAction::Append)
+                .value_parser(clap::value_parser!(OsString))
+                .last(true)
+                .hide(true),
         )
 }
 

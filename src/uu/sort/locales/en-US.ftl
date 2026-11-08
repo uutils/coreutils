@@ -24,6 +24,7 @@ sort-file-operands-combined = extra operand {$file}
     file operands cannot be combined with --files0-from
     Try '{$help} --help' for more information.
 sort-multiple-output-files = multiple output files specified
+sort-multiple-compress-programs = multiple compress programs specified
 sort-incompatible-tabs = incompatible tabs
 sort-minus-in-stdin = when reading file names from standard input, no file name of '-' allowed
 sort-no-input-from = no input from {$file}

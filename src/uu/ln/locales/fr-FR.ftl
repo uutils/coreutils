@@ -31,6 +31,7 @@ ln-error-extra-operand = opérande supplémentaire {$operand}
   Essayez « {$program} --help » pour plus d'informations.
 ln-error-could-not-update = Impossible de mettre à jour {$target} : {$error}
 ln-error-will-not-overwrite = ne remplacera pas le fichier {$target} qui vient d'être créé par {$source}
+ln-error-cannot-overwrite-directory = {$dest} : impossible d'écraser le répertoire
 ln-prompt-replace = remplacer {$file} ?
 ln-cannot-backup = impossible de sauvegarder {$file}
 ln-failed-to-access = échec d'accès à {$file}

@@ -134,11 +134,16 @@ impl<'a> EscapedShellQuoter<'a> {
         let (mut quotes, must_quote) = initial_quoting(reference, dirname, always_quote, true);
         // Dollar-quoted byte escapes cannot be nested in double quotes.
         if quotes == ShellQuotes::Double {
-            let invalid = match encoding {
+            let needs_dollar = match encoding {
                 UEncoding::Ascii => !reference.is_ascii(),
-                UEncoding::Utf8 => std::str::from_utf8(reference).is_err(),
+                UEncoding::Utf8 => std::str::from_utf8(reference).map_or(true, |name| {
+                    name.chars().any(|c| {
+                        let escaped = EscapedChar::new_shell(c, true, ShellQuotes::Double);
+                        matches!(escaped.state, EscapeState::Octal(_))
+                    })
+                }),
             };
-            if invalid {
+            if needs_dollar {
                 quotes = ShellQuotes::Single;
             }
         }
@@ -247,7 +252,7 @@ fn bytes_start_with(bytes: &[u8], pattern: &[u8]) -> bool {
 /// Return a set of characters that implies quoting of the word in
 /// shell-quoting mode.
 fn shell_escaped_char_set(is_dirname: bool) -> &'static [u8] {
-    const ESCAPED_CHARS: &[u8] = b":\"`$\\^\n\t\r=";
+    const ESCAPED_CHARS: &[u8] = b":\"`$\\^\n\t\r=!";
     // the ':' colon character only induce quoting in the
     // context of ls displaying a directory name before listing its content.
     // (e.g. with the recursive flag -R)
@@ -261,9 +266,13 @@ fn finalize_shell_quoter(
     must_quote: bool,
     quotes: ShellQuotes,
 ) -> Vec<u8> {
-    let contains_quote_chars = must_quote || bytes_start_with(reference, SPECIAL_SHELL_CHARS_START);
+    // A lone brace is quoted, but braces inside a longer name are not.
+    let needs_quotes = must_quote
+        || bytes_start_with(reference, SPECIAL_SHELL_CHARS_START)
+        || reference == b"{"
+        || reference == b"}";
 
-    if must_quote | contains_quote_chars {
+    if needs_quotes {
         let mut quoted = Vec::<u8>::with_capacity(buffer.len() + 2);
         let quote = quotes.as_u8();
         quoted.push(quote);

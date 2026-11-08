@@ -157,8 +157,8 @@ impl QuotingStyle {
     ///
     /// Used for e.g., the `QUOTING_STYLE` environment variable and the
     /// `--quoting-style` option of `ls`.
-    pub fn parse(s: &str) -> Option<Self> {
-        Some(match s {
+    pub fn parse(s: impl AsRef<str>) -> Option<Self> {
+        Some(match s.as_ref() {
             "literal" => Self::LITERAL,
             "shell" => Self::SHELL,
             "shell-always" => Self::SHELL_ALWAYS,
@@ -381,12 +381,39 @@ pub fn locale_aware_escape_dir_name(name: &OsStr, style: QuotingStyle) -> OsStri
     escape_dir_name(name, style, i18n::get_ctype_encoding())
 }
 
+#[cfg(any(feature = "parser", feature = "parser-num"))]
+pub mod parser {
+    use clap::Arg;
+    use clap::builder::PossibleValue;
+
+    use crate::parser::shortcut_value_parser::ShortcutValueParser;
+    use crate::translate;
+
+    pub const QUOTING_STYLE: &str = "quoting-style";
+
+    pub fn clap_quoting_argument() -> Arg {
+        Arg::new(QUOTING_STYLE)
+            .long(QUOTING_STYLE)
+            .help(translate!("help-set-quoting-style"))
+            .value_parser(ShortcutValueParser::new([
+                PossibleValue::new("literal"),
+                PossibleValue::new("locale"),
+                PossibleValue::new("shell"),
+                PossibleValue::new("shell-escape"),
+                PossibleValue::new("shell-always"),
+                PossibleValue::new("shell-escape-always"),
+                PossibleValue::new("clocale"),
+                PossibleValue::new("c"),
+                PossibleValue::new("c-maybe"),
+                PossibleValue::new("escape"),
+            ]))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::{
-        i18n::UEncoding,
-        quoting_style::{QuotingStyle, escape_control_chars, escape_name_inner},
-    };
+    use crate::i18n::UEncoding;
+    use crate::quoting_style::{QuotingStyle, escape_control_chars, escape_name_inner};
 
     // spell-checker:ignore (tests/words) one\'two one'two
 
@@ -445,6 +472,25 @@ mod tests {
             b"missing-'\xff",
             &[(b"'missing-'\\'''$'\\377'", "shell-escape-always")],
         );
+    }
+
+    #[test]
+    fn test_c1_control_chars_with_single_quote() {
+        for (name, expected) in [
+            ("it's\u{9b}here", "'it'\\''s'$'\\302\\233''here'"),
+            ("\u{9b}it's", "''$'\\302\\233''it'\\''s'"),
+            ("it's\u{9b}", "'it'\\''s'$'\\302\\233'"),
+            ("it's\u{e9}", "\"it's\u{e9}\""),
+        ] {
+            check_names_encoding(
+                UEncoding::Utf8,
+                name,
+                &[
+                    (expected, "shell-escape"),
+                    (expected, "shell-escape-always"),
+                ],
+            );
+        }
     }
 
     #[test]
@@ -1187,6 +1233,14 @@ mod tests {
     }
 
     #[test]
+    fn test_lone_brace() {
+        check_names_both("{", &[("'{'", "shell"), ("'{'", "shell-escape")]);
+        check_names_both("}", &[("'}'", "shell"), ("'}'", "shell-escape")]);
+        check_names_both("{}", &[("{}", "shell"), ("{}", "shell-escape")]);
+        check_names_both("{a,b}", &[("{a,b}", "shell"), ("{a,b}", "shell-escape")]);
+    }
+
+    #[test]
     fn test_special_chars_in_double_quotes() {
         check_names_both(
             "can'$t",
@@ -1215,6 +1269,16 @@ mod tests {
                 ("'can'\\''\\t'", "shell-always"),
                 ("'can'\\''\\t'", "shell-escape"),
                 ("'can'\\''\\t'", "shell-escape-always"),
+            ],
+        );
+
+        check_names_both(
+            "can'!t",
+            &[
+                ("'can'\\''!t'", "shell"),
+                ("'can'\\''!t'", "shell-always"),
+                ("'can'\\''!t'", "shell-escape"),
+                ("'can'\\''!t'", "shell-escape-always"),
             ],
         );
     }

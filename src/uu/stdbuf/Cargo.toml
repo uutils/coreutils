@@ -1,4 +1,4 @@
-# spell-checker:ignore dpkg
+
 
 [package]
 name = "uu_stdbuf"

@@ -31,8 +31,7 @@ use crate::features::safe_traversal::{DirFd, FileInfo, SymlinkBehavior};
 
 use std::ffi::CString;
 use std::fs::Metadata;
-use std::io::Error as IOError;
-use std::io::Result as IOResult;
+use std::io::{Error as IOError, Result as IOResult};
 use std::os::unix::fs::MetadataExt;
 
 use std::os::unix::ffi::OsStrExt;
@@ -748,9 +747,19 @@ impl ChownExecutor {
         get_metadata(path, follow)
             .inspect_err(|e| {
                 if self.verbosity.level != VerbosityLevel::Silent {
+                    // Like GNU, only say "dereference" when the operand itself
+                    // exists and is a symlink whose target can't be reached.
+                    let dangling_symlink = follow
+                        && path
+                            .symlink_metadata()
+                            .is_ok_and(|m| m.file_type().is_symlink());
                     show_error!(
                         "cannot {} {}: {}",
-                        if follow { "dereference" } else { "access" },
+                        if dangling_symlink {
+                            "dereference"
+                        } else {
+                            "access"
+                        },
                         path.quote(),
                         strip_errno(e)
                     );

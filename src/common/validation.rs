@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore execveat fexecve memfd prefixcat rsplit testcat atexit profraw Cprofile
+// spell-checker:ignore prefixcat rsplit testcat atexit profraw Cprofile
 
 use std::ffi::{OsStr, OsString};
 use std::io::{Write, stderr};

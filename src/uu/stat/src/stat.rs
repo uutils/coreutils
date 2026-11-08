@@ -1541,13 +1541,15 @@ pub fn uu_app() -> Command {
                 .long(options::FORMAT)
                 .help(translate!("stat-help-format"))
                 .value_name("FORMAT")
-                .allow_hyphen_values(true),
+                .allow_hyphen_values(true)
+                .overrides_with(options::PRINTF),
         )
         .arg(
             Arg::new(options::PRINTF)
                 .long(options::PRINTF)
                 .value_name("FORMAT")
                 .allow_hyphen_values(true)
+                .overrides_with(options::FORMAT)
                 .help(translate!("stat-help-printf")),
         )
         .arg(
