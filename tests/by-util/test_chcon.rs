@@ -350,6 +350,59 @@ fn valid_context_directory_recursive_follow_all_symlinks() {
 }
 
 #[test]
+fn recursive_follow_all_symlinks_to_ancestor() {
+    let (dir, mut cmd) = at_and_ucmd!();
+    dir.mkdir("a");
+    dir.touch("a/b.txt");
+    dir.symlink_dir("a", "a/up");
+
+    let new_context = "guest_u:object_r:etc_t:s0:c42";
+
+    // -L must not walk back into a directory it is already inside.
+    let result = cmd
+        .args(&["--verbose", "--recursive", "-L", new_context, "a"])
+        .succeeds();
+    assert_eq!(result.stdout_str().matches("'a/up'").count(), 1);
+    assert!(!result.stdout_str().contains("a/up/"));
+    assert_eq!(
+        get_file_context(dir.plus("a/b.txt")).unwrap().as_deref(),
+        Some(new_context)
+    );
+}
+
+#[test]
+fn recursive_follow_args_dir_symlinks_not_nested() {
+    let (dir, mut cmd) = at_and_ucmd!();
+    dir.mkdir("a");
+    dir.mkdir("b");
+    dir.touch("b/c.txt");
+    dir.symlink_dir("b", "a/lb");
+
+    let c_context = get_file_context(dir.plus("b/c.txt")).unwrap();
+    let lb_context = get_file_context(dir.plus("a/lb")).unwrap();
+    let new_context = "guest_u:object_r:etc_t:s0:c42";
+
+    // -H: a symbolic link found below an operand is not walked, but the
+    // directory it points to is relabeled, not the link.
+    cmd.args(&["--recursive", "-H", new_context, "a"])
+        .succeeds();
+    assert_eq!(
+        get_file_context(dir.plus("b")).unwrap().as_deref(),
+        Some(new_context)
+    );
+    assert_eq!(get_file_context(dir.plus("b/c.txt")).unwrap(), c_context);
+    assert_eq!(get_file_context(dir.plus("a/lb")).unwrap(), lb_context);
+}
+
+#[test]
+fn recursive_preserve_root() {
+    new_ucmd!()
+        .args(&["--recursive", "--preserve-root", "--type=etc_t", "/"])
+        .fails_with_code(1)
+        .stderr_contains("dangerous to operate recursively on '/'");
+}
+
+#[test]
 fn user_role_range_type() {
     let (dir, mut cmd) = at_and_ucmd!();
 
