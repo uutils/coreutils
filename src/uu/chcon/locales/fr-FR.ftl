@@ -5,7 +5,6 @@ chcon-usage = chcon [OPTION]... CONTEXTE FICHIER...
   chcon [OPTION]... --reference=RFICHIER FICHIER...
 
 # Messages d'aide
-chcon-help-help = Afficher les informations d'aide.
 chcon-help-dereference = Affecter la cible de chaque lien symbolique (par défaut), plutôt que le lien symbolique lui-même.
 chcon-help-no-dereference = Affecter les liens symboliques au lieu de tout fichier référencé.
 chcon-help-preserve-root = Échouer lors de l'opération récursive sur '/'.
@@ -24,7 +23,6 @@ chcon-help-verbose = Afficher un diagnostic pour chaque fichier traité.
 # Messages d'erreur - validation de base
 chcon-error-no-context-specified = Aucun contexte n'est spécifié
 chcon-error-no-files-specified = Aucun fichier n'est spécifié
-chcon-error-data-out-of-range = Données hors limites
 chcon-error-operation-failed = { $operation } a échoué
 chcon-error-operation-failed-on = { $operation } a échoué sur { $operand }
 
@@ -35,15 +33,11 @@ chcon-error-recursive-dereference-require-h-or-l = '--recursive' avec '--derefer
 
 # Chaînes d'opération pour le contexte d'erreur
 chcon-op-getting-security-context = Obtention du contexte de sécurité
-chcon-op-file-name-validation = Validation du nom de fichier
 chcon-op-getting-meta-data = Obtention des métadonnées
-chcon-op-modifying-root-path = Modification du chemin racine
 chcon-op-accessing = Accès
 chcon-op-reading-directory = Lecture du répertoire
-chcon-op-reading-cyclic-directory = Lecture du répertoire cyclique
 chcon-op-applying-partial-context = Application d'un contexte de sécurité partiel à un fichier non étiqueté
 chcon-op-creating-security-context = Création du contexte de sécurité
-chcon-op-setting-security-context-user = Définition de l'utilisateur du contexte de sécurité
 chcon-op-setting-security-context = Définition du contexte de sécurité
 
 # Sortie détaillée
