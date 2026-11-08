@@ -945,6 +945,7 @@ fn test_suffix_start_too_large(#[case] args: &[&str], #[case] input: &str) {
     new_ucmd!()
         .args(args)
         .pipe_in(input)
+        .ignore_stdin_write_error()
         .fails()
         .usage_error("numerical suffix start value is too large for the suffix length");
 }
