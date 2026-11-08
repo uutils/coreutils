@@ -655,10 +655,21 @@ impl Dest {
             Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
             Self::File(f, _) => {
                 #[cfg(unix)]
-                let dev_len = try_get_len_of_block_device(f).ok().flatten();
-                #[cfg(not(unix))]
-                let dev_len = None;
-                self.seek_file(n, dev_len)
+                if let Ok(Some(len)) = try_get_len_of_block_device(f)
+                    && len < n
+                {
+                    // GNU compatibility:
+                    // this case prints the stats but sets the exit code to 1
+                    show_error!(
+                        "{}",
+                        translate!("dd-error-cannot-seek-invalid", "output" => "standard output")
+                    );
+                    set_exit_code(1);
+                    // Nothing may be written past the end of the device.
+                    *self = Self::Sink;
+                    return Ok(len);
+                }
+                f.seek(SeekFrom::Current(n.try_into().unwrap()))
             }
             #[cfg(unix)]
             Self::Fifo(f) => {
@@ -668,33 +679,6 @@ impl Dest {
             #[cfg(unix)]
             Self::Sink => Ok(0),
         }
-    }
-
-    /// Seek a [`Dest::File`] forward by `n` bytes.
-    ///
-    /// `dev_len` is the size of the file if it is a block device. Seeking
-    /// past the end of a block device is an error that is reported but,
-    /// for GNU compatibility, still lets `dd` print its statistics. Nothing
-    /// may be written in that case, so the destination becomes a sink.
-    fn seek_file(&mut self, n: u64, dev_len: Option<u64>) -> io::Result<u64> {
-        let Self::File(f, _) = self else {
-            unreachable!("seek_file is only called on Dest::File");
-        };
-        #[cfg(unix)]
-        if let Some(len) = dev_len
-            && len < n
-        {
-            show_error!(
-                "{}",
-                translate!("dd-error-cannot-seek-invalid", "output" => "standard output")
-            );
-            set_exit_code(1);
-            *self = Self::Sink;
-            return Ok(len);
-        }
-        #[cfg(not(unix))]
-        let _ = dev_len;
-        f.seek(SeekFrom::Current(n.try_into().unwrap()))
     }
 
     /// Grow a sparse output file up to the current stream position, since
@@ -1193,6 +1177,10 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
 
     // Optimization: if no blocks are to be written, then don't
     // bother allocating any buffers.
+    //
+    // `Dest::Sink` also gets here when seeking past the end of a block
+    // device failed (see `Dest::seek`): the error was already reported, so
+    // we only print the stats and neither read nor write anything.
     #[cfg(unix)]
     let sink = matches!(o.dst, Dest::Sink);
     #[cfg(not(unix))]
@@ -1685,27 +1673,41 @@ pub fn uu_app() -> Command {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Density, Dest, Output, Parser, calc_bsize};
+    #[cfg(unix)]
+    use crate::{Dest, Input, Source, dd_copy};
+    use crate::{Output, Parser, calc_bsize};
 
     use std::path::Path;
 
     #[test]
     #[cfg(unix)]
-    fn seek_past_end_of_block_device_drops_output() {
-        let f = std::fs::File::open("/dev/null").unwrap();
-        let mut dst = Dest::File(f, Density::Dense);
-        // pretend the file is a 10 byte block device
-        assert_eq!(dst.seek_file(100, Some(10)).unwrap(), 10);
-        assert!(matches!(dst, Dest::Sink));
-    }
+    fn sink_dest_reads_and_writes_nothing() {
+        // A `Dest::Sink` is what `seek` leaves behind after seeking past
+        // the end of a block device. Even with non-empty input, nothing
+        // may be read or written.
+        use std::io::{Read, Seek, Write};
 
-    #[test]
-    #[cfg(unix)]
-    fn seek_inside_block_device_keeps_file() {
-        let f = std::fs::File::open("/dev/null").unwrap();
-        let mut dst = Dest::File(f, Density::Dense);
-        assert!(dst.seek_file(5, Some(10)).is_ok());
-        assert!(matches!(dst, Dest::File(..)));
+        let settings = Parser::new()
+            .parse_with_diagnostics(["bs=1"], None)
+            .unwrap();
+        let mut file = tempfile::tempfile().unwrap();
+        file.write_all(b"hello").unwrap();
+        file.rewind().unwrap();
+        // shares the file offset with `file`
+        let src = Source::File(file.try_clone().unwrap());
+        let i = Input {
+            src,
+            settings: &settings,
+        };
+        let o = Output {
+            dst: Dest::Sink,
+            settings: &settings,
+        };
+        dd_copy(i, o).unwrap();
+
+        let mut rest = Vec::new();
+        file.read_to_end(&mut rest).unwrap();
+        assert_eq!(rest, b"hello");
     }
 
     #[test]
