@@ -370,8 +370,13 @@ mod test {
     fn test_passwd_keeps_the_name_bytes() {
         // ISO-8859-1 "jürgen": getgrouplist() must get these bytes, not U+FFFD.
         let name = c"j\xfcrgen";
+        // SAFETY: `passwd` holds only integers and pointers, so all zeroes
+        // (null pointers) is a valid value.
         let mut raw: passwd = unsafe { std::mem::zeroed() };
         raw.pw_name = name.as_ptr().cast_mut();
+        // SAFETY: `pw_name` points to a NUL-terminated string that outlives the
+        // call and the other pointers are null. The string is ours, not libc's
+        // static buffer, so `PW_LOCK` is not needed.
         let pw = unsafe { Passwd::from_raw(raw) };
         assert_eq!(pw.name, "j\u{FFFD}rgen");
         assert_eq!(pw.raw_name.as_c_str(), name);
