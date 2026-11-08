@@ -1609,6 +1609,33 @@ fn test_guard_input() {
     assert_eq!(at.read("xaa"), "1\n2\n3\n");
 }
 
+/// Reopening an existing output must retain `O_CREAT` so Linux's
+/// `fs.protected_regular` and `fs.protected_fifos` checks apply. A dangling
+/// symlink makes that flag observable without needing a multi-user test.
+#[test]
+#[cfg(unix)]
+fn test_existing_output_is_reopened_with_create() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("input", "AB");
+
+    // An existing caller-owned output must still be truncated.
+    at.write("xaa", "stale contents that are longer than the chunk\n");
+
+    at.symlink_file("xab_target", "xab");
+    assert!(!at.file_exists("xab_target"));
+
+    ucmd.args(&["-b", "1", "input"]).succeeds().no_output();
+
+    assert_eq!(at.read("xaa"), "A");
+    assert!(at.plus("xab").is_symlink());
+    assert_eq!(
+        fs::read_link(at.plus("xab")).unwrap(),
+        at.plus("xab_target")
+    );
+    assert_eq!(at.read("xab_target"), "B");
+}
+
 #[test]
 fn test_multiple_of_input_chunk() {
     let (at, mut ucmd) = at_and_ucmd!();
