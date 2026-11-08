@@ -810,7 +810,7 @@ pub fn proc_fd_path(fd: BorrowedFd<'_>) -> PathBuf {
 }
 
 /// File information for tracking inodes
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct FileInfo {
     pub dev: u64,
     pub ino: u64,
