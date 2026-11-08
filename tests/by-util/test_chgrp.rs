@@ -740,6 +740,27 @@ fn test_chgrp_cannot_access_vs_cannot_dereference() {
         .stderr_is("chgrp: cannot dereference 'dangling': No such file or directory\n");
 }
 
+/// Under -R -L -v, an entry that cannot be stat'd gets chgrp's failure line.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_chgrp_verbose_reports_dangling_symlink_under_big_l() {
+    use std::os::unix::fs::MetadataExt;
+    use uucore::entries::gid2grp;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.relative_symlink_file("../nowhere", "dir/dangling");
+    let group = gid2grp(at.plus("dir").metadata().unwrap().gid()).unwrap();
+
+    ucmd.args(&["-R", "-L", "-v", &group, "dir"])
+        .fails_with_code(1)
+        .stdout_is(format!(
+            "group of 'dir' retained as {group}\n\
+             failed to change group of 'dir/dangling' to {group}\n"
+        ))
+        .stderr_is("chgrp: cannot access 'dir/dangling': No such file or directory\n");
+}
+
 /// With -R -v, a failed change below the operand is reported as for the operand.
 #[cfg(not(target_os = "openbsd"))]
 #[test]
