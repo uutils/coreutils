@@ -11,7 +11,7 @@ use super::WordCountable;
 use std::io::{self, ErrorKind, Read};
 
 #[cfg(unix)]
-use std::io::{Seek, SeekFrom};
+use rustix::fs::SeekFrom;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 #[cfg(windows)]
@@ -85,47 +85,32 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
         // In such cases - attempt `seek()` almost to the end of the file
         // and then fall back on read to count the rest.
         //
-        // And finally a special case of input redirection in *nix shell:
-        // `( wc -c ; wc -c ) < file` should return
-        // ```
-        // size_of_file
-        // 0
-        // ```
-        // Similarly
-        // `( head -c1 ; wc -c ) < file` should return
-        // ```
-        // first_byte_of_file
-        // size_of_file - 1
-        // ```
-        // Since the input stream from file is treated as continuous across both commands inside ().
-        // In cases like this, due to `<` redirect, the `stat.st_mode` would report input as a regular file
-        // and `stat.st_size` would report the size of file on disk
-        // and NOT the remaining number of bytes in the input stream.
-        // However, the raw file descriptor in this situation would be equal to `0`
-        // for STDIN in both invocations.
-        // Therefore we cannot rely of `st_size` here and should fall back on full read.
-        if handle.as_raw_fd() > 0
-            && (stat.st_mode as libc::mode_t & libc::S_IFREG) != 0
+        // The descriptor may already be partway through a redirected file.
+        // Count only the unread suffix and advance it so a later `-` operand or
+        // another process sharing stdin sees EOF.
+        if (stat.st_mode as libc::mode_t & libc::S_IFREG) != 0
             && stat.st_size > 0
+            && let Ok(position) = rustix::fs::seek(&handle, SeekFrom::Current(0))
         {
-            let sys_page_size = rustix::param::page_size();
-            if !(stat.st_size as usize).is_multiple_of(sys_page_size) {
-                // regular file or file from /proc, /sys and similar pseudo-filesystems
-                // with size that is NOT a multiple of system page size
-                return (stat.st_size as usize, None);
-            } else if let Some(file) = handle.inner_file() {
-                // On some platforms `stat.st_blksize` and `stat.st_size`
-                // are of different types: i64 vs i32
-                // i.e. MacOS on Apple Silicon (aarch64-apple-darwin),
-                // Debian Linux on ARM (aarch64-unknown-linux-gnu),
-                // 32bit i686 targets, etc.
-                // While on the others they are of the same type.
+            let size = stat.st_size as u64;
+            if position >= size {
+                return (0, None);
+            }
+            let known_size = !(size as usize).is_multiple_of(rustix::param::page_size());
+            let offset = if known_size {
+                size
+            } else {
+                // Probe the final block of page-aligned files: pseudo-files can
+                // advertise a full page even when their contents are shorter.
+                // st_blksize has different integer types across supported targets.
                 #[allow(clippy::unnecessary_cast)]
-                let offset =
-                    stat.st_size as i64 - stat.st_size as i64 % (stat.st_blksize as i64 + 1);
-
-                if let Ok(n) = file.seek(SeekFrom::Start(offset as u64)) {
-                    byte_count = n as usize;
+                let block_size = stat.st_blksize as u64;
+                (size - size % (block_size + 1)).max(position)
+            };
+            if let Ok(offset) = rustix::fs::seek(&handle, SeekFrom::Start(offset)) {
+                byte_count = (offset - position) as usize;
+                if known_size {
+                    return (byte_count, None);
                 }
             }
         }

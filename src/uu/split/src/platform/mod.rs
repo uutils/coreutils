@@ -12,6 +12,9 @@ pub use self::windows::{instantiate_current_writer, paths_refer_to_same_file};
 #[cfg(target_os = "wasi")]
 pub use self::wasi::{instantiate_current_writer, paths_refer_to_same_file};
 
+#[cfg(any(unix, windows))]
+mod output_file;
+
 #[cfg(unix)]
 mod unix;
 
