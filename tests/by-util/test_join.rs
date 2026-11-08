@@ -1104,5 +1104,8 @@ fn test_o_separate_fields_leave_two_files() {
     new_ucmd!()
         .args(&["-o", "0", "1.2", "1.3", "9.9"])
         .fails_with_code(1)
-        .stderr_only("join: 1.3: No such file or directory\n");
+        .no_stdout()
+        // Windows quotes the name differently, so only check the operand is reported.
+        .stderr_contains("1.3")
+        .stderr_contains("No such file or directory");
 }
