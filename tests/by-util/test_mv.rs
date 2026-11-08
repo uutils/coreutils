@@ -1916,7 +1916,7 @@ fn test_mv_dir_with_symlink_cycles_terminates() {
 // must not be walked to look for hardlinks first. The scan reports what it
 // finds with -v, which shows whether it ran.
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_mv_dir_rename_does_not_scan_hardlinks() {
     use std::os::unix::fs::MetadataExt;
 
