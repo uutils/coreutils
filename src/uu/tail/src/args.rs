@@ -10,6 +10,7 @@ use crate::{Quotable, parse, platform};
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use std::ffi::OsString;
 use std::io::{IsTerminal, Write};
+use std::num::IntErrorKind;
 use std::time::Duration;
 use uucore::diagnostics::OptionValue;
 use uucore::error::{UResult, USimpleError, UUsageError};
@@ -262,6 +263,8 @@ impl Settings {
         if let Some(s) = matches.get_one::<String>(options::MAX_UNCHANGED_STATS) {
             settings.max_unchanged_stats = match s.parse::<u32>() {
                 Ok(s) => s,
+                // GNU clamps values that do not fit instead of rejecting them.
+                Err(e) if e.kind() == &IntErrorKind::PosOverflow => u32::MAX,
                 Err(_) => {
                     return Err(UUsageError::new(
                         1,

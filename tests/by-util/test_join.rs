@@ -71,7 +71,7 @@ fn only_whitespace_separators_merge() {
         .arg("-")
         .pipe_in(" a  ,c ")
         .succeeds()
-        .stdout_only("a ,,,b ,c \n");
+        .stdout_only("a ,,,b ,c\n");
 
     new_ucmd!()
         .arg("contiguous_separators.txt")
@@ -584,6 +584,35 @@ fn empty_fields_kept_without_empty_filler() {
 }
 
 #[test]
+fn trailing_blanks_do_not_end_a_field() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // Like leading blanks, trailing blanks are not followed by an empty field.
+    at.write("a", "1 a \n2 b\t\n");
+    at.write("b", "1 x\n2 y  \n");
+
+    ts.ucmd()
+        .args(&["a", "b"])
+        .succeeds()
+        .stdout_only("1 a x\n2 b y\n");
+
+    ts.ucmd()
+        .args(&["-o", "auto", "-e", "X", "a", "b"])
+        .succeeds()
+        .stdout_only("1 a x\n2 b y\n");
+
+    // With -z, newline is a blank too, so one at the end of a line is dropped.
+    at.write("z1", "1 a\n\x002 b\n");
+    at.write("z2", "1 x\x002 y\n");
+
+    ts.ucmd()
+        .args(&["-z", "-o", "auto", "-e", "X", "z1", "z2"])
+        .succeeds()
+        .stdout_only("1 a x\x002 b y\x00");
+}
+
+#[test]
 fn repeated_empty_filler() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -787,9 +816,9 @@ fn null_line_endings() {
         .stdout_only_fixture("z.expected");
 }
 
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
-#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_full() {
     let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
     new_ucmd!()
@@ -1051,4 +1080,13 @@ fn test_last_of_check_order_nocheck_order_wins() {
         .args(&["--nocheck-order", "--check-order", "a.txt", "a.txt"])
         .fails_with_code(1)
         .stderr_is("join: a.txt:2: is not sorted: a\n");
+}
+
+#[test]
+fn test_o_separate_field_operands() {
+    // GNU accepts -o fields as separate argv words when they follow -o.
+    new_ucmd!()
+        .args(&["-o", "1.1", "1.2", "2.2", "fields_1.txt", "fields_2.txt"])
+        .succeeds()
+        .stdout_only("1  a\n2  b\n3  c\n5  e\n8  h\n");
 }

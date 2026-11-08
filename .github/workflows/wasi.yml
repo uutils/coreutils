@@ -68,8 +68,10 @@ jobs:
         # Run host-compiled integration tests against the WASI binary.
         # Tests incompatible with WASI are annotated with
         # #[uutests::wasi_ignore(ReasonKey)] in the test source files, which
-        # expands to #[cfg_attr(wasi_runner, ignore = "...")]; the reason keys
-        # live in tests/uutests_procs/src/lib.rs.
+        # expands to #[cfg_attr(wasi_runner, ignore = "...")]. Tests that fail
+        # only on wasm32-wasip2 use #[uutests::wasip2_ignore(ReasonKey)], which
+        # expands to the same attribute for wasip2_runner. The reason keys live
+        # in tests/uutests_procs/src/lib.rs.
         # The binary above is built without default features, so it has no
         # caret diagnostics; the host test crate does have them, hence the
         # not(wasi_runner) in the cfg guarding every `mod diagnostics`.

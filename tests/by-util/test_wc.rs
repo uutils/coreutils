@@ -98,9 +98,44 @@ fn test_stdin_explicit() {
 fn test_wc_fixture(#[case] args: &[&str], #[case] fixture: &str, #[case] expected: &str) {
     new_ucmd!()
         .args(args)
+        .env("LC_ALL", "C.UTF-8")
         .pipe_in_fixture(fixture)
         .succeeds()
         .stdout_only(expected);
+}
+
+#[test]
+fn test_chars_in_c_locale_count_bytes() {
+    new_ucmd!()
+        .arg("-m")
+        .env("LC_ALL", "C")
+        .pipe_in("é")
+        .succeeds()
+        .stdout_is("2\n");
+
+    new_ucmd!()
+        .arg("-mw")
+        .env("LC_ALL", "C")
+        .pipe_in("é")
+        .succeeds()
+        .stdout_is("      1       2\n");
+
+    new_ucmd!()
+        .arg("-ml")
+        .env("LC_ALL", "C")
+        .pipe_in("é")
+        .succeeds()
+        .stdout_is("      0       2\n");
+}
+
+#[test]
+fn test_chars_invalid_byte_sequence_in_c_locale() {
+    new_ucmd!()
+        .arg("-mw")
+        .env("LC_ALL", "C")
+        .pipe_in([0xe9])
+        .succeeds()
+        .stdout_is("      1       1\n");
 }
 
 #[test]
@@ -774,4 +809,40 @@ fn test_posixly_correct_whitespace() {
         .pipe_in(input)
         .succeeds()
         .stdout_is("1\n");
+}
+
+#[cfg(unix)]
+#[rstest::rstest]
+#[case::partial(6, 1)]
+#[case::at_eof(6, 6)]
+#[case::page_aligned(4096, 0)]
+#[case::page_aligned_partial(4096, 4095)]
+fn test_count_bytes_from_partial_stdin_offset(#[case] size: u64, #[case] offset: u64) {
+    use std::io::{Seek, SeekFrom};
+    let (at, mut command) = at_and_ucmd!();
+    at.write("input", &"x".repeat(usize::try_from(size).unwrap()));
+    let mut input = std::fs::File::open(at.plus("input")).unwrap();
+    input.seek(SeekFrom::Start(offset)).unwrap();
+    let shared = input.try_clone().unwrap();
+    command
+        .arg("-c")
+        .set_stdin(shared)
+        .succeeds()
+        .stdout_only(format!("{}\n", size - offset));
+    assert_eq!(input.stream_position().unwrap(), size);
+}
+
+#[cfg(unix)]
+#[test]
+fn test_count_bytes_from_repeated_redirected_stdin() {
+    use std::io::Seek;
+    let (at, mut command) = at_and_ucmd!();
+    at.write("input", "abcdef");
+    let mut input = std::fs::File::open(at.plus("input")).unwrap();
+    command
+        .args(&["-c", "-", "-"])
+        .set_stdin(input.try_clone().unwrap())
+        .succeeds()
+        .stdout_only("      6 -\n      0 -\n      6 total\n");
+    assert_eq!(input.stream_position().unwrap(), 6);
 }

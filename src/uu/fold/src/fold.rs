@@ -425,9 +425,13 @@ fn maybe_flush_unbroken_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResul
     }
 
     // Write raw bytes without inserting a newline; folding will continue
-    // based on updated column tracking in the caller.
-    ctx.writer.write_all(ctx.output)?;
-    ctx.output.clear();
+    // based on updated column tracking in the caller. Keep the last byte
+    // buffered: callers take a non-empty buffer to mean that the current
+    // line has started, and decide whether a tab or wide character folds
+    // on that.
+    let keep = ctx.output.len() - 1;
+    ctx.writer.write_all(&ctx.output[..keep])?;
+    ctx.output.drain(..keep);
     Ok(())
 }
 
@@ -444,6 +448,18 @@ fn push_bytes<W: Write>(ctx: &mut FoldContext<'_, W>, bytes: &[u8]) -> UResult<(
     }
     ctx.output.extend_from_slice(bytes);
     maybe_flush_unbroken_output(ctx)
+}
+
+fn advance_tab<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
+    loop {
+        let next_stop = next_tab_stop(*ctx.col_count);
+        if next_stop > ctx.width && !ctx.output.is_empty() {
+            emit_output(ctx)?;
+            continue;
+        }
+        *ctx.col_count = next_stop;
+        return Ok(());
+    }
 }
 
 fn process_ascii_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UResult<()> {
@@ -468,15 +484,7 @@ fn process_ascii_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UR
                 idx += 1;
             }
             TAB => {
-                loop {
-                    let next_stop = next_tab_stop(*ctx.col_count);
-                    if next_stop > ctx.width && !ctx.output.is_empty() {
-                        emit_output(ctx)?;
-                        continue;
-                    }
-                    *ctx.col_count = next_stop;
-                    break;
-                }
+                advance_tab(ctx)?;
                 if ctx.spaces {
                     *ctx.last_space = Some(ctx.output.len());
                 } else {
@@ -609,15 +617,7 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
         }
 
         if ch == '\t' {
-            loop {
-                let next_stop = next_tab_stop(*ctx.col_count);
-                if next_stop > ctx.width && !ctx.output.is_empty() {
-                    emit_output(ctx)?;
-                    continue;
-                }
-                *ctx.col_count = next_stop;
-                break;
-            }
+            advance_tab(ctx)?;
             if ctx.spaces {
                 *ctx.last_space = Some(ctx.output.len());
             } else {
@@ -666,11 +666,7 @@ fn process_non_utf8_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) ->
         match byte {
             CR => *ctx.col_count = 0,
             TAB => {
-                let next_stop = next_tab_stop(*ctx.col_count);
-                if next_stop > ctx.width && !ctx.output.is_empty() {
-                    emit_output(ctx)?;
-                }
-                *ctx.col_count = next_stop;
+                advance_tab(ctx)?;
                 *ctx.last_space = if ctx.spaces {
                     Some(ctx.output.len())
                 } else {

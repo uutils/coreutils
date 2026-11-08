@@ -23,16 +23,25 @@ pub struct Base64SimdWrapper {
 }
 
 impl Base64SimdWrapper {
-    fn decode_with_standard(input: &[u8], output: &mut Vec<u8>) -> Result<(), ()> {
-        let decoded_bytes = base64_simd::STANDARD.decode_to_vec(input).map_err(|_| ())?;
+    fn engine(&self, padded: bool) -> base64_simd::Base64 {
+        // The URL safe alphabet is the only one with '-' in it.
+        let url_safe = self.alphabet.contains(&b'-');
+        match (url_safe, padded) {
+            (false, true) => base64_simd::STANDARD,
+            (false, false) => base64_simd::STANDARD_NO_PAD,
+            (true, true) => base64_simd::URL_SAFE,
+            (true, false) => base64_simd::URL_SAFE_NO_PAD,
+        }
+    }
+
+    fn decode_padded(&self, input: &[u8], output: &mut Vec<u8>) -> Result<(), ()> {
+        let decoded_bytes = self.engine(true).decode_to_vec(input).map_err(|_| ())?;
         output.extend_from_slice(&decoded_bytes);
         Ok(())
     }
 
-    fn decode_with_no_pad(input: &[u8], output: &mut Vec<u8>) -> Result<(), ()> {
-        let decoded_bytes = base64_simd::STANDARD_NO_PAD
-            .decode_to_vec(input)
-            .map_err(|_| ())?;
+    fn decode_unpadded(&self, input: &[u8], output: &mut Vec<u8>) -> Result<(), ()> {
+        let decoded_bytes = self.engine(false).decode_to_vec(input).map_err(|_| ())?;
         output.extend_from_slice(&decoded_bytes);
         Ok(())
     }
@@ -89,22 +98,23 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
                         ));
                     }
 
-                    Self::decode_with_standard(&remaining[..segment_len], output).map_err(
-                        |_| USimpleError::new(1, translate!("encoding-error-invalid-input")),
-                    )?;
+                    self.decode_padded(&remaining[..segment_len], output)
+                        .map_err(|_| {
+                            USimpleError::new(1, translate!("encoding-error-invalid-input"))
+                        })?;
 
                     start += segment_len;
                 } else {
                     // If there are no more '=' bytes the tail might still be padded
                     // (len % 4 == 0) or purposely unpadded (GNU --ignore-garbage or
                     // concatenated streams), so select the matching alphabet.
-                    let decoder = if remaining.len().is_multiple_of(4) {
-                        Self::decode_with_standard
+                    let decoded = if remaining.len().is_multiple_of(4) {
+                        self.decode_padded(remaining, output)
                     } else {
-                        Self::decode_with_no_pad
+                        self.decode_unpadded(remaining, output)
                     };
 
-                    decoder(remaining, output).map_err(|_| {
+                    decoded.map_err(|_| {
                         USimpleError::new(1, translate!("encoding-error-invalid-input"))
                     })?;
 
@@ -114,7 +124,7 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
 
             Ok(())
         } else {
-            Self::decode_with_no_pad(input, output)
+            self.decode_unpadded(input, output)
                 .map_err(|_| USimpleError::new(1, translate!("encoding-error-invalid-input")))
         };
 
@@ -127,11 +137,7 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
     }
 
     fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
-        let encoded = if self.use_padding {
-            base64_simd::STANDARD.encode_to_string(input)
-        } else {
-            base64_simd::STANDARD_NO_PAD.encode_to_string(input)
-        };
+        let encoded = self.engine(self.use_padding).encode_to_string(input);
 
         output.extend(encoded.as_bytes());
 
