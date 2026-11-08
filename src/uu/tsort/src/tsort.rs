@@ -17,7 +17,7 @@ use std::collections::hash_map::Entry;
 use std::ffi::OsString;
 use std::fs::File;
 use std::fs::OpenOptions;
-use std::io::{self, BufRead, BufReader, BufWriter, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::{format_usage, show, translate};
@@ -274,7 +274,7 @@ impl Graph {
             .make_contiguous()
             .sort_unstable_by(|a, b| self.get_node_name(*a).cmp(self.get_node_name(*b)));
 
-        let mut out = BufWriter::new(io::stdout().lock());
+        let mut out = uucore::output::StdoutBuffer::new(io::stdout().lock());
 
         while !self.nodes.is_empty() {
             let v = self.find_next_node(&mut independent_nodes_queue);

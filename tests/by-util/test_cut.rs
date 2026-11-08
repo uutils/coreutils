@@ -51,6 +51,16 @@ fn test_no_args() {
 }
 
 #[test]
+fn test_empty_stdbuf_mode() {
+    new_ucmd!()
+        .env("_STDBUF_O", "")
+        .args(&["-b", "1-3"])
+        .pipe_in("abcdef\n")
+        .succeeds()
+        .stdout_is("abc\n");
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }

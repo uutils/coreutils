@@ -12,7 +12,7 @@ use clap::{Arg, ArgAction, Command};
 use memchr::memchr2;
 use std::ffi::OsString;
 use std::fs::{File, metadata};
-use std::io::{self, BufWriter, ErrorKind, IsTerminal, Read, Write};
+use std::io::{self, ErrorKind, IsTerminal, Read, Write};
 #[cfg(any(unix, target_os = "wasi"))]
 use std::os::fd::AsFd;
 #[cfg(unix)]
@@ -542,7 +542,7 @@ fn print_lines<R: FdReadable>(
     let stdout = io::stdout();
     let stdout = stdout.lock();
     // Add a 32K buffer for stdout - this greatly improves performance.
-    let mut writer = BufWriter::with_capacity(32 * 1024, stdout);
+    let mut writer = uucore::output::StdoutBuffer::with_capacity(32 * 1024, stdout);
 
     loop {
         let n = match handle.reader.read(&mut in_buf) {

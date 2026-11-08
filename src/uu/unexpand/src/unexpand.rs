@@ -8,11 +8,12 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, Read, Stdin, Stdout, Write, stdin, stdout};
+use std::io::{self, BufRead, BufReader, Read, Stdin, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use uucore::char_width::char_info_at;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
+use uucore::output::StdoutBuffer;
 use uucore::translate;
 use uucore::{format_usage, show};
 
@@ -366,8 +367,8 @@ fn next_tabstop(tab_config: &TabConfig, col: usize) -> Option<usize> {
     }
 }
 
-fn write_tabs(
-    output: &mut BufWriter<Stdout>,
+fn write_tabs<W: Write>(
+    output: &mut W,
     tab_config: &TabConfig,
     print_state: &mut PrintState,
     amode: bool,
@@ -511,9 +512,9 @@ impl PrintState {
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn unexpand_buf(
+fn unexpand_buf<W: Write>(
     buf: &[u8],
-    output: &mut BufWriter<Stdout>,
+    output: &mut W,
     options: &Options,
     lastcol: usize,
     tab_config: &TabConfig,
@@ -668,9 +669,9 @@ fn unexpand_buf(
     Ok(())
 }
 
-fn unexpand_file(
+fn unexpand_file<W: Write>(
     file: &OsString,
-    output: &mut BufWriter<Stdout>,
+    output: &mut W,
     options: &Options,
     lastcol: usize,
     tab_config: &TabConfig,
@@ -701,8 +702,7 @@ fn unexpand_file(
     write_tabs(output, tab_config, &mut print_state, options.aflag)
 }
 
-fn unexpand(options: &Options) -> UResult<()> {
-    let mut output = BufWriter::new(stdout());
+fn unexpand_with_output<W: Write>(options: &Options, output: &mut W) -> UResult<()> {
     let tab_config = &options.tab_config;
     let lastcol = if tab_config.tabstops.len() > 1
         && tab_config.increment_size.is_none()
@@ -714,13 +714,27 @@ fn unexpand(options: &Options) -> UResult<()> {
     };
 
     for file in &options.files {
-        if let Err(e) = unexpand_file(file, &mut output, options, lastcol, tab_config) {
+        if let Err(e) = unexpand_file(file, output, options, lastcol, tab_config) {
             show!(e);
             set_exit_code(1);
         }
     }
     output.flush()?;
     Ok(())
+}
+
+fn unexpand(options: &Options) -> UResult<()> {
+    let output = StdoutBuffer::new(stdout());
+    match output {
+        StdoutBuffer::Block(mut output) => unexpand_with_output(options, &mut output),
+        #[cfg(unix)]
+        StdoutBuffer::Unbuffered(output) => {
+            let mut output = StdoutBuffer::into_unbuffered(output);
+            unexpand_with_output(options, &mut output)
+        }
+        #[cfg(unix)]
+        StdoutBuffer::Line(mut output) => unexpand_with_output(options, &mut output),
+    }
 }
 
 #[cfg(test)]

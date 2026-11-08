@@ -7,7 +7,7 @@
 
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{self, BufReader, BufWriter, Read, stdin, stdout};
 use std::num::IntErrorKind;
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
@@ -161,24 +161,39 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         _ => None,
     };
 
-    let mut output = open_output(options.output.as_deref())?;
-
-    match mode {
-        Mode::Echo(args) => {
-            let mut evec: Vec<&OsStr> = args.iter().map(AsRef::as_ref).collect();
-            shuf_exec(&mut evec, &options, &mut rng, &mut output)?;
+    match options.output.as_deref() {
+        Some(s) => {
+            let file = File::create(s).map_err_context(
+                || translate!("shuf-error-failed-to-open-for-writing", "file" => s.quote()),
+            )?;
+            let writer: Box<dyn OsWrite> = Box::new(file);
+            let mut output = BufWriter::with_capacity(BUF_SIZE, writer);
+            shuf_with_output(mode, fdata, &options, &mut rng, &mut output)
         }
-        Mode::InputRange(mut range) => {
-            shuf_exec(&mut range, &options, &mut rng, &mut output)?;
-        }
-        Mode::Default(_) => {
-            let fdata = fdata.unwrap_or_default();
-            let mut items = split_seps(&fdata, options.sep);
-            shuf_exec(&mut items, &options, &mut rng, &mut output)?;
+        None => {
+            if std::env::var_os("_STDBUF_O").is_none() {
+                let writer: Box<dyn OsWrite> = Box::new(stdout());
+                let mut output = BufWriter::with_capacity(BUF_SIZE, writer);
+                shuf_with_output(mode, fdata, &options, &mut rng, &mut output)
+            } else {
+                let output = uucore::output::StdoutBuffer::with_capacity(BUF_SIZE, stdout());
+                match output {
+                    uucore::output::StdoutBuffer::Block(mut output) => {
+                        shuf_with_output(mode, fdata, &options, &mut rng, &mut output)
+                    }
+                    #[cfg(unix)]
+                    uucore::output::StdoutBuffer::Unbuffered(output) => {
+                        let mut output = uucore::output::StdoutBuffer::into_unbuffered(output);
+                        shuf_with_output(mode, fdata, &options, &mut rng, &mut output)
+                    }
+                    #[cfg(unix)]
+                    uucore::output::StdoutBuffer::Line(mut output) => {
+                        shuf_with_output(mode, fdata, &options, &mut rng, &mut output)
+                    }
+                }
+            }
         }
     }
-
-    Ok(())
 }
 
 pub fn uu_app() -> Command {
@@ -264,17 +279,25 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn open_output(output: Option<&Path>) -> UResult<BufWriter<Box<dyn OsWrite>>> {
-    let writer: Box<dyn OsWrite> = match output {
-        None => Box::new(stdout()),
-        Some(s) => {
-            let file = File::create(s).map_err_context(
-                || translate!("shuf-error-failed-to-open-for-writing", "file" => s.quote()),
-            )?;
-            Box::new(file)
+fn shuf_with_output<W: OsWrite + ?Sized>(
+    mode: Mode,
+    fdata: Option<Vec<u8>>,
+    options: &Options,
+    rng: &mut WrappedRng,
+    output: &mut W,
+) -> UResult<()> {
+    match mode {
+        Mode::Echo(args) => {
+            let mut evec: Vec<&OsStr> = args.iter().map(AsRef::as_ref).collect();
+            shuf_exec(&mut evec, options, rng, output)
         }
-    };
-    Ok(BufWriter::with_capacity(BUF_SIZE, writer))
+        Mode::InputRange(mut range) => shuf_exec(&mut range, options, rng, output),
+        Mode::Default(_) => {
+            let fdata = fdata.unwrap_or_default();
+            let mut items = split_seps(&fdata, options.sep);
+            shuf_exec(&mut items, options, rng, output)
+        }
+    }
 }
 
 fn read_input_file(filename: &Path) -> UResult<Vec<u8>> {
@@ -385,23 +408,23 @@ impl Shufable for RangeInclusive<u64> {
 }
 
 trait Writable {
-    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), io::Error>;
+    fn write_all_to<W: OsWrite + ?Sized>(&self, output: &mut W) -> Result<(), io::Error>;
 }
 
 impl Writable for &[u8] {
-    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), io::Error> {
+    fn write_all_to<W: OsWrite + ?Sized>(&self, output: &mut W) -> Result<(), io::Error> {
         output.write_all(self)
     }
 }
 
 impl Writable for &OsStr {
-    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), io::Error> {
+    fn write_all_to<W: OsWrite + ?Sized>(&self, output: &mut W) -> Result<(), io::Error> {
         output.write_all_os(self)
     }
 }
 
 impl Writable for u64 {
-    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), io::Error> {
+    fn write_all_to<W: OsWrite + ?Sized>(&self, output: &mut W) -> Result<(), io::Error> {
         // The itoa crate is surprisingly much more efficient than a formatted write.
         // It speeds up `shuf -r -n1000000 -i1-1024` by 1.8×.
         let mut buf = itoa::Buffer::new();
@@ -417,11 +440,11 @@ fn handle_write_error(e: io::Error) -> Box<dyn uucore::error::UError> {
     e.map_err_context(move || ctx)
 }
 
-fn shuf_exec(
+fn shuf_exec<W: OsWrite + ?Sized>(
     input: &mut impl Shufable,
     opts: &Options,
     rng: &mut WrappedRng,
-    output: &mut BufWriter<Box<dyn OsWrite>>,
+    output: &mut W,
 ) -> UResult<()> {
     let sep = [opts.sep];
     if opts.repeat {
