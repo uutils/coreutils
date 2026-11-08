@@ -556,19 +556,10 @@ impl DirFd {
         // these raw syscalls, invisible to LD_PRELOAD wrappers.
         use std::os::unix::fs::PermissionsExt;
 
-        let fd = openat(
-            &self.fd,
-            name,
-            OFlag::O_PATH | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
-            Mode::empty(),
-        )
-        .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        let fd = open_path_at(&self.fd, name, SymlinkBehavior::NoFollow)?;
 
         // set_permissions goes through the libc chmod() symbol.
-        fs::set_permissions(
-            format!("/proc/self/fd/{}", fd.as_raw_fd()),
-            fs::Permissions::from_mode(mode),
-        )
+        fs::set_permissions(proc_fd_path(fd.as_fd()), fs::Permissions::from_mode(mode))
     }
 
     /// Change mode of this directory
@@ -789,6 +780,33 @@ impl AsFd for DirFd {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
     }
+}
+
+/// Open `name`, relative to `dir`, as an `O_PATH` handle.
+///
+/// The handle grants neither read nor write access, but it pins the object:
+/// operations done through it cannot be redirected by renaming or replacing
+/// the entry. With [`SymlinkBehavior::NoFollow`], a symlink is opened itself.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn open_path_at<P: ?Sized + nix::NixPath>(
+    dir: impl AsFd,
+    name: &P,
+    symlink_behavior: SymlinkBehavior,
+) -> io::Result<OwnedFd> {
+    let mut flags = OFlag::O_PATH | OFlag::O_CLOEXEC;
+    if !symlink_behavior.should_follow() {
+        flags |= OFlag::O_NOFOLLOW;
+    }
+    openat(dir, name, flags, Mode::empty()).map_err(|e| io::Error::from_raw_os_error(e as i32))
+}
+
+/// A path naming the object behind `fd`, for calls that only take a path.
+///
+/// Resolving it lands on the object the descriptor refers to, even when that
+/// object is a symlink opened by [`open_path_at`].
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn proc_fd_path(fd: BorrowedFd<'_>) -> PathBuf {
+    PathBuf::from(format!("/proc/self/fd/{}", fd.as_raw_fd()))
 }
 
 /// File information for tracking inodes
@@ -1331,6 +1349,23 @@ mod tests {
             dir_fd.read_dir().unwrap().into_iter().collect();
 
         assert_eq!(entries, expected);
+    }
+
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_open_path_at_symlink() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("target"), "x").unwrap();
+        symlink("target", temp_dir.path().join("link")).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+
+        let link = open_path_at(&dir_fd, OsStr::new("link"), SymlinkBehavior::NoFollow).unwrap();
+        let meta = fs::metadata(proc_fd_path(link.as_fd())).unwrap();
+        assert!(meta.file_type().is_symlink());
+
+        let target = open_path_at(&dir_fd, OsStr::new("link"), SymlinkBehavior::Follow).unwrap();
+        let meta = fs::metadata(proc_fd_path(target.as_fd())).unwrap();
+        assert!(meta.is_file());
     }
 
     #[test]
