@@ -86,6 +86,35 @@ fn test_posix_mode() {
 
 #[test]
 #[cfg(unix)]
+fn test_posix_mode_path_max() {
+    // _POSIX_PATH_MAX (256) includes the terminating null byte, so 255 bytes
+    // is the longest portable file name.
+    let path_of_len = |len: usize| {
+        let mut path = "abcdefgh/".repeat(len / 9 + 1);
+        path.truncate(len);
+        if path.ends_with('/') {
+            path.pop();
+            path.push('z');
+        }
+        path
+    };
+
+    new_ucmd!()
+        .args(&["-p", &path_of_len(255)])
+        .succeeds()
+        .no_output();
+
+    let path = path_of_len(256);
+    new_ucmd!()
+        .args(&["-p", &path])
+        .fails_with_code(1)
+        .stderr_only(format!(
+            "pathchk: limit 255 exceeded by length 256 of file name '{path}'\n"
+        ));
+}
+
+#[test]
+#[cfg(unix)]
 fn test_posix_special() {
     // accept some reasonable default
     new_ucmd!().args(&["-P", "dir/file"]).succeeds().no_stdout();
