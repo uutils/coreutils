@@ -397,8 +397,10 @@ fn recursive_follow_args_dir_symlinks_not_nested() {
 #[test]
 fn recursive_preserve_root() {
     // The type does not exist, so even if --preserve-root stopped working no
-    // file could be relabeled.
+    // file could be relabeled, and the timeout stops a walk of the whole
+    // file system early.
     new_ucmd!()
+        .timeout(std::time::Duration::from_secs(10))
         .args(&[
             "--recursive",
             "--preserve-root",
