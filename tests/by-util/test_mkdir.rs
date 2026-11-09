@@ -228,8 +228,8 @@ fn test_mkdir_parent_mode_skip_existing_last_component_chmod() {
 
 /// mkdir(2) drops setuid/setgid from its mode argument, so -m must reapply them.
 #[cfg(not(windows))]
-#[test]
 #[uutests::wasi_ignore(NoPermissionBits)]
+#[test]
 fn test_mkdir_mode_special_bits() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -268,8 +268,8 @@ fn test_mkdir_mode_special_bits() {
 
 /// setgid inherited from the parent survives -m unless the mode clears it.
 #[cfg(any(target_os = "linux", target_os = "android"))]
-#[test]
 #[uutests::wasi_ignore(NoPermissionBits)]
+#[test]
 fn test_mkdir_mode_inherited_setgid() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
