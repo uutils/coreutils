@@ -10,6 +10,7 @@
 use bigdecimal::BigDecimal;
 use bigdecimal::num_bigint::ToBigInt;
 use num_traits::{Signed, Zero};
+use std::borrow::Cow;
 use std::cmp::min;
 use std::io::Write;
 
@@ -457,15 +458,15 @@ fn format_float_decimal(
     }
     // `format!` panics past `u16::MAX` precision and `bigdecimal` stops padding
     // past 1000 zeros, so write the digits out ourselves.
-    let rounded;
-    let (bi, scale) = match i64::try_from(precision) {
+    let rounded = match i64::try_from(precision) {
         Ok(p) if bd.fractional_digit_count() > p => {
-            rounded = bd.with_scale_round(p, bigdecimal::RoundingMode::HalfEven);
-            rounded.as_bigint_and_scale()
+            Cow::Owned(bd.with_scale_round(p, bigdecimal::RoundingMode::HalfEven))
         }
-        _ => bd.as_bigint_and_scale(),
+        _ => Cow::Borrowed(bd),
     };
-    // At most `precision` once rounded.
+    let (bi, scale) = rounded.as_bigint_and_scale();
+    // The scale is at most `precision` once rounded, so the subtraction below
+    // cannot underflow.
     let written = usize::try_from(scale).unwrap_or(0);
     let mut s = if written > 0 {
         let mut s = zero_pad_to(&bi.to_str_radix(10), written + 1);
