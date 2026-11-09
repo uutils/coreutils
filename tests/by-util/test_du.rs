@@ -338,7 +338,13 @@ fn test_du_suffix_only_block_size_env(
         .stdout_only(format!("{expected}\tplum\n"));
 }
 
-#[cfg(target_os = "linux")]
+// The C library of these systems may use another separator than ICU does.
+#[cfg(not(any(
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "illumos",
+    target_os = "solaris"
+)))]
 #[rstest]
 #[case::unit("fr_FR.UTF-8", "UTF-8", "'KiB", "2\u{202f}442KiB".as_bytes())]
 #[case::number("fr_FR.UTF-8", "UTF-8", "'1KiB", "2\u{202f}442".as_bytes())]
@@ -350,15 +356,17 @@ fn test_du_block_size_locale_grouping(
     #[case] block_size: &str,
     #[case] expected: &[u8],
 ) {
-    let installed = std::process::Command::new("locale")
-        .env("LC_ALL", locale)
-        .arg("charmap")
-        .output()
-        .is_ok_and(|output| {
-            output.status.success()
-                && output.stderr.is_empty()
-                && String::from_utf8_lossy(&output.stdout).trim() == charmap
-        });
+    // glibc reads the separator from the installed locale, ICU needs none.
+    let installed = !cfg!(all(target_os = "linux", not(target_env = "musl")))
+        || std::process::Command::new("locale")
+            .env("LC_ALL", locale)
+            .arg("charmap")
+            .output()
+            .is_ok_and(|output| {
+                output.status.success()
+                    && output.stderr.is_empty()
+                    && String::from_utf8_lossy(&output.stdout).trim() == charmap
+            });
     if !installed {
         println!("test skipped: {locale} is not installed");
         return;
@@ -372,13 +380,13 @@ fn test_du_block_size_locale_grouping(
         .args(&["--apparent-size", "-B", block_size, "plum"])
         .env("LC_ALL", locale)
         .succeeds()
-        .stdout_is_bytes(&line);
+        .stdout_only_bytes(&line);
     ts.ucmd()
         .args(&["--apparent-size", "plum"])
         .env("LC_ALL", locale)
         .env("BLOCK_SIZE", block_size)
         .succeeds()
-        .stdout_is_bytes(&line);
+        .stdout_only_bytes(&line);
 }
 
 #[test]

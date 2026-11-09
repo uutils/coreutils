@@ -75,8 +75,8 @@ pub fn locale_grouping_separator() -> &'static str {
 /// locale's own encoding, so a Latin-1 French locale gets `0xA0` where
 /// [`locale_grouping_separator`] would give a UTF-8 `U+202F`.
 ///
-/// The C library provides it where it has `nl_langinfo_l`. Elsewhere (macOS,
-/// NetBSD, OpenBSD, Windows...) the separator comes from ICU, and in a
+/// The C library provides it where it has `nl_langinfo_l`. Elsewhere (musl,
+/// macOS, NetBSD, OpenBSD, Windows...) the separator comes from ICU, and in a
 /// non-UTF-8 locale a no-break space is written as the Latin-1 `0xA0`.
 pub fn locale_grouping_separator_bytes() -> &'static [u8] {
     static GROUPING_SEP: OnceLock<Vec<u8>> = OnceLock::new();
@@ -84,13 +84,7 @@ pub fn locale_grouping_separator_bytes() -> &'static [u8] {
     GROUPING_SEP.get_or_init(read_grouping_separator_bytes)
 }
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "illumos",
-    target_os = "solaris"
-))]
+#[cfg(libc_grouping_separator)]
 fn read_grouping_separator_bytes() -> Vec<u8> {
     // SAFETY: the locale name is a NUL-terminated literal. The locale object
     // returned by newlocale is checked for null and freed only after the
@@ -111,13 +105,7 @@ fn read_grouping_separator_bytes() -> Vec<u8> {
     }
 }
 
-#[cfg(not(any(
-    target_os = "linux",
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "illumos",
-    target_os = "solaris"
-)))]
+#[cfg(not(libc_grouping_separator))]
 fn read_grouping_separator_bytes() -> Vec<u8> {
     let separator = locale_grouping_separator();
     let is_no_break_space = matches!(separator, "\u{a0}" | "\u{202f}");

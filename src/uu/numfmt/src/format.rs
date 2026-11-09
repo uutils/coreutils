@@ -338,11 +338,9 @@ fn apply_grouping(s: &str) -> String {
 
     let mut grouped = String::with_capacity(s.len() + integer.len() / 3 * grouping_separator.len());
     grouped.push_str(sign);
+    let digits = group_digits(integer.as_bytes(), grouping_separator.as_bytes());
     // Both inputs are UTF-8, so the grouped digits are too.
-    grouped.push_str(&String::from_utf8_lossy(&group_digits(
-        integer.as_bytes(),
-        grouping_separator.as_bytes(),
-    )));
+    grouped.push_str(std::str::from_utf8(&digits).expect("grouped digits are UTF-8"));
 
     if !fraction.is_empty() {
         grouped.push_str(dec_sep);
