@@ -8,7 +8,7 @@
 use clap::builder::{TypedValueParser, ValueParserFactory};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use uucore::display::{Quotable, println_verbatim};
-use uucore::error::{FromIo, UError, UResult, UUsageError};
+use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
 use uucore::translate;
 use uucore::{format_usage, os_str_from_bytes};
 
@@ -67,6 +67,9 @@ enum MkTempError {
 
     #[error("{}", translate!("mktemp-error-not-found", "template_type" => .0, "template" => .1.quote()))]
     NotFound(String, PathBuf),
+
+    #[error("{}", translate!("mktemp-error-create-failed", "template_type" => .0, "template" => .1.quote(), "error" => .2))]
+    CreateFailed(String, PathBuf, String),
 }
 
 impl UError for MkTempError {
@@ -480,17 +483,19 @@ fn temp_path(dir: &Path, prefix: &OsStr, random: &str, suffix: &OsStr) -> PathBu
 /// The maximum number of names `make_temp` tries before giving up.
 const NUM_RETRIES: u32 = 1 << 16;
 
-/// A string of `rand` random ASCII letters and digits.
-fn random_name(rand: usize) -> String {
-    let mut bytes = vec![0; rand];
-    SmallRng::try_from_rng(&mut rngs::SysRng)
-        .unwrap_or_else(|_| {
-            //rand::rng panics if getrandom failed
-            SmallRng::seed_from_u64(bytes.as_ptr() as u64)
-        })
-        .fill(&mut bytes[..]);
-    bytes
-        .into_iter()
+/// A random number generator for temporary file names. `buf` is only used
+/// for the fallback seed.
+fn name_rng(buf: &[u8]) -> SmallRng {
+    SmallRng::try_from_rng(&mut rngs::SysRng).unwrap_or_else(|_| {
+        //rand::rng panics if getrandom failed
+        SmallRng::seed_from_u64(buf.as_ptr() as u64)
+    })
+}
+
+/// Fill `buf` with random bytes and map them to ASCII letters and digits.
+fn random_name(rng: &mut SmallRng, buf: &mut [u8]) -> String {
+    rng.fill(&mut buf[..]);
+    buf.iter()
         .map(|byte| {
             char::from(match byte % 62 {
                 v @ 0..=9 => v + b'0',
@@ -503,7 +508,9 @@ fn random_name(rand: usize) -> String {
 }
 
 fn dry_exec(tmpdir: &Path, prefix: &OsStr, rand: usize, suffix: &OsStr) -> PathBuf {
-    temp_path(tmpdir, prefix, &random_name(rand), suffix)
+    let mut buf = vec![0; rand];
+    let mut rng = name_rng(&buf);
+    temp_path(tmpdir, prefix, &random_name(&mut rng, &mut buf), suffix)
 }
 
 /// Create `dir` joined with a random name, retrying while the name is taken.
@@ -516,9 +523,11 @@ fn make_temp(
     suffix: &OsStr,
     create: impl Fn(&Path) -> std::io::Result<()>,
 ) -> std::io::Result<PathBuf> {
+    let mut buf = vec![0; rand];
+    let mut rng = name_rng(&buf);
     let mut last_err = None;
     for _ in 0..NUM_RETRIES {
-        let path = temp_path(dir, prefix, &random_name(rand), suffix);
+        let path = temp_path(dir, prefix, &random_name(&mut rng, &mut buf), suffix);
         match create(&path) {
             Ok(()) => return Ok(path),
             Err(e) if e.kind() == ErrorKind::AlreadyExists => last_err = Some(e),
@@ -526,6 +535,23 @@ fn make_temp(
         }
     }
     Err(last_err.unwrap_or_else(|| ErrorKind::AlreadyExists.into()))
+}
+
+/// The error for a failed `make_temp`, naming the template it was given.
+fn create_error(
+    e: &std::io::Error,
+    template_type: String,
+    dir: &Path,
+    prefix: &OsStr,
+    rand: usize,
+    suffix: &OsStr,
+) -> Box<dyn UError> {
+    let template = temp_path(dir, prefix, &"X".repeat(rand), suffix);
+    if e.kind() == ErrorKind::NotFound {
+        MkTempError::NotFound(template_type, template).into()
+    } else {
+        MkTempError::CreateFailed(template_type, template, strip_errno(e)).into()
+    }
 }
 
 /// Create a temporary directory with the given parameters.
@@ -552,14 +578,10 @@ fn make_temp_dir(dir: &Path, prefix: &OsStr, rand: usize, suffix: &OsStr) -> URe
     #[cfg(not(unix))]
     let builder = fs::DirBuilder::new();
 
-    match make_temp(dir, prefix, rand, suffix, |path| builder.create(path)) {
-        Ok(path) => Ok(path),
-        Err(e) if e.kind() == ErrorKind::NotFound => {
-            let path = temp_path(dir, prefix, &"X".repeat(rand), suffix);
-            Err(MkTempError::NotFound(translate!("mktemp-template-type-directory"), path).into())
-        }
-        Err(e) => Err(e.into()),
-    }
+    make_temp(dir, prefix, rand, suffix, |path| builder.create(path)).map_err(|e| {
+        let template_type = translate!("mktemp-template-type-directory");
+        create_error(&e, template_type, dir, prefix, rand, suffix)
+    })
 }
 
 /// Create a temporary file with the given parameters.
@@ -581,16 +603,13 @@ fn make_temp_file(dir: &Path, prefix: &OsStr, rand: usize, suffix: &OsStr) -> UR
     #[cfg(unix)]
     options.mode(0o600);
 
-    match make_temp(dir, prefix, rand, suffix, |path| {
+    make_temp(dir, prefix, rand, suffix, |path| {
         options.open(path).map(drop)
-    }) {
-        Ok(path) => Ok(path),
-        Err(e) if e.kind() == ErrorKind::NotFound => {
-            let path = temp_path(dir, prefix, &"X".repeat(rand), suffix);
-            Err(MkTempError::NotFound(translate!("mktemp-template-type-file"), path).into())
-        }
-        Err(e) => Err(e.into()),
-    }
+    })
+    .map_err(|e| {
+        let template_type = translate!("mktemp-template-type-file");
+        create_error(&e, template_type, dir, prefix, rand, suffix)
+    })
 }
 
 fn exec(

@@ -11,6 +11,8 @@ use uutests::util::TestScenario;
 use uutests::util_name;
 
 use uucore::display::Quotable;
+#[cfg(unix)]
+use uucore::error::strip_errno;
 
 #[cfg(not(windows))]
 use std::path::MAIN_SEPARATOR;
@@ -958,14 +960,6 @@ fn test_empty_tmpdir_env_var_with_template() {
     assert!(path.starts_with(&format!("{dir}/foo")), "{path}");
 }
 
-/// The message for `EILSEQ` without the "(os error N)" suffix, as uutils
-/// prints it.
-#[cfg(unix)]
-fn eilseq_message() -> String {
-    let msg = std::io::Error::from_raw_os_error(libc::EILSEQ).to_string();
-    msg.split(" (os error").next().unwrap_or(&msg).to_string()
-}
-
 /// Relative templates must not be resolved through `getcwd()`, see
 /// <https://github.com/uutils/coreutils/issues/15786>
 #[uutests::wasi_ignore(NoPermissionBits)]
@@ -1000,6 +994,26 @@ fn test_relative_template_does_not_resolve_path_of_current_directory() {
             assert_eq!(at.metadata(&path).permissions().mode() & 0o777, 0o600);
         }
     }
+}
+
+#[uutests::wasi_ignore(NoPermissionBits)]
+#[test]
+#[cfg(unix)]
+fn test_create_error_names_template() {
+    if rustix::process::geteuid().is_root() {
+        return; // root ignores the permissions this relies on
+    }
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("ro");
+    scene.fixtures.set_mode("ro", 0o555);
+    scene
+        .ucmd()
+        .arg("ro/XXX")
+        .fails()
+        .stderr_only("mktemp: failed to create file via template 'ro/XXX': Permission denied\n");
+    scene.ucmd().args(&["-d", "ro/XXX"]).fails().stderr_only(
+        "mktemp: failed to create directory via template 'ro/XXX': Permission denied\n",
+    );
 }
 
 #[test]
@@ -1217,7 +1231,11 @@ fn test_non_utf8_template(
     if cfg!(target_vendor = "apple") && !flags.contains(&"-u") {
         result
             .code_is(1)
-            .stderr_only(format!("mktemp: {}\n", eilseq_message()));
+            .no_stdout()
+            .stderr_contains("via template")
+            .stderr_contains(strip_errno(&std::io::Error::from_raw_os_error(
+                libc::EILSEQ,
+            )));
         return;
     }
     result.success().no_stderr();
@@ -1297,7 +1315,11 @@ fn test_invalid_utf8_suffix(#[values(false, true)] dry_run: bool) {
     if cfg!(target_vendor = "apple") && !dry_run {
         result
             .code_is(1)
-            .stderr_only(format!("mktemp: {}\n", eilseq_message()));
+            .no_stdout()
+            .stderr_contains("via template")
+            .stderr_contains(strip_errno(&std::io::Error::from_raw_os_error(
+                libc::EILSEQ,
+            )));
         return;
     }
     result.success().no_stderr();
