@@ -101,7 +101,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
                 Err(e) => {
                     return Err(fatal(Error::from_selinux(
-                        "SELinuxSecurityContext::to_c_string()",
+                        translate!("chcon-op-getting-security-context"),
                         e,
                     )));
                 }
@@ -564,12 +564,15 @@ impl Relabeler<'_> {
         if self.open_dirs.contains(&id) {
             // With -L, a link back to a directory that is being walked is
             // expected and is simply not descended. Reaching one without a
-            // link means the file system itself loops.
-            if !through_link {
+            // link means the file system itself loops: report it and leave
+            // the directory alone.
+            if through_link {
+                self.label(object.as_fd(), display);
+            } else {
                 warn_directory_cycle(display);
                 self.status.failed = true;
             }
-            return self.label(object.as_fd(), display);
+            return;
         }
 
         // Reopen the very same directory for reading, through its handle.
@@ -583,9 +586,13 @@ impl Relabeler<'_> {
                 }
                 self.open_dirs.pop();
             }
-            Err(e) => self
-                .status
-                .fail(translate!("chcon-op-reading-directory"), display, e),
+            // A directory that cannot be read is reported, not relabeled: its
+            // context would otherwise change while its contents were left as is.
+            Err(e) => {
+                return self
+                    .status
+                    .fail(translate!("chcon-op-reading-directory"), display, e);
+            }
         }
 
         self.label(object.as_fd(), display);
@@ -641,7 +648,9 @@ impl Relabeler<'_> {
         let context: Cow<'_, CStr> = match &self.target {
             Target::Whole(text) => Cow::Borrowed(text),
             Target::Fields(fields) => match with_fields(&path, display, fields) {
-                Ok(text) => Cow::Owned(text),
+                Ok(Some(text)) => Cow::Owned(text),
+                // The fields already have the requested values.
+                Ok(None) => return,
                 Err(e) => return self.status.report(&e),
             },
         };
@@ -655,8 +664,13 @@ impl Relabeler<'_> {
     }
 }
 
-/// The current context of the file at `path`, with `fields` replaced.
-fn with_fields(path: &Path, display: &Path, fields: &[(Setter, CString)]) -> Result<CString> {
+/// The current context of the file at `path`, with `fields` replaced, or `None`
+/// if that leaves it unchanged.
+fn with_fields(
+    path: &Path,
+    display: &Path,
+    fields: &[(Setter, CString)],
+) -> Result<Option<CString>> {
     let building = |e| {
         Error::from_io1(
             translate!("chcon-op-creating-security-context"),
@@ -690,7 +704,8 @@ fn with_fields(path: &Path, display: &Path, fields: &[(Setter, CString)]) -> Res
     for (set, value) in fields {
         set(&parts, value).map_err(building)?;
     }
-    parts.to_c_string().map_err(building)
+    let wanted = parts.to_c_string().map_err(building)?;
+    Ok((wanted.as_c_str() != current.as_ref()).then_some(wanted))
 }
 
 #[cfg(unix)]
@@ -705,7 +720,7 @@ pub(crate) fn os_str_to_c_string(s: &OsStr) -> Result<CString> {
 fn root_identity() -> Result<FileInfo> {
     rustix::fs::lstat("/")
         .map(|st| FileInfo::from_stat(&st))
-        .map_err(|e| Error::from_io1("std::fs::symlink_metadata", "/", e.into()))
+        .map_err(|e| Error::from_io1(translate!("chcon-op-getting-meta-data"), "/", e.into()))
 }
 
 fn warn_recursive_root(dir_name: &Path) {
