@@ -1189,6 +1189,22 @@ fn test_split_number_with_io_blksize() {
     assert_eq!(at.read("xae"), "wxyz\n");
 }
 
+/// A small `--io-blksize` forces reads that split lines across buffers and
+/// chunk boundaries that fall in the middle of a read, rather than aligning
+/// with it.
+#[test]
+fn test_split_lines_with_small_io_blksize() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-l", "2", "---io-blksize", "5"])
+        .pipe_in("1\n2\n3\n4\n5\n6\n")
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("xaa"), "1\n2\n");
+    assert_eq!(at.read("xab"), "3\n4\n");
+    assert_eq!(at.read("xac"), "5\n6\n");
+    assert!(!at.plus("xad").exists());
+}
+
 #[test]
 fn test_split_default_with_io_blksize() {
     let (at, mut ucmd) = at_and_ucmd!();
