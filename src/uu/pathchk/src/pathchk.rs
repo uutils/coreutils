@@ -145,8 +145,8 @@ fn check_path(mode: &Mode, path: &[String]) -> bool {
 fn check_basic(path: &[String]) -> bool {
     let joined_path = path.join("/");
     let total_len = joined_path.len();
-    // path length: _POSIX_PATH_MAX counts the terminating null byte, so the
-    // longest portable file name is one byte shorter, as in GNU pathchk
+    // _POSIX_PATH_MAX counts the terminating null byte, so the
+    // longest portable file name is one byte shorter
     if total_len >= POSIX_PATH_MAX {
         show_error!(
             "{}",
