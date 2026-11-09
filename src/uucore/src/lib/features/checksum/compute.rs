@@ -170,9 +170,9 @@ fn write_legacy_checksum(
         (algo, output) => unreachable!("Bug: Invalid legacy checksum ({algo:?}, {output:?})"),
     }
 
-    // Print the filename after a space if not stdin, unless a file operand
-    // was given explicitly.
-    if escaped_filename != "-" || options.has_file_operands {
+    // Print the filename after a space if a file operand was given explicitly
+    // (GNU prints "-" for an explicit "-", but omits it for implicit stdin).
+    if options.has_file_operands {
         write!(w, " ")?;
         w.write_all(escaped_filename.as_bytes())?;
     }
