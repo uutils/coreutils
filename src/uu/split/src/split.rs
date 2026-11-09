@@ -767,46 +767,55 @@ impl<'a> LineChunkWriter<'a> {
         settings.instantiate_current_writer(&filename, true)
     }
     /// Implements `--lines=NUMBER`. GNU is unbuffered.
+    ///
+    /// Like GNU, all the lines of `buf` that belong to the same chunk are
+    /// written with a single call instead of one write per line.
     fn copy(&mut self, mut reader: impl Read, io_blksize: usize) -> io::Result<()> {
         // If the number of lines in `buf` exceeds the number of lines
         // remaining in the current chunk, we will need to write to
         // multiple different underlying writers. In that case, each
-        // iteration of this loop writes to the underlying writer that
-        // corresponds to the current chunk number.
+        // run of lines is written to the underlying writer that
+        // corresponds to its chunk number.
         let mut io_blk = vec![0u8; io_blksize];
         while let buf = reader.read(&mut io_blk).map(|n| &io_blk[..n])?
             && !buf.is_empty()
         {
+            // Start of the bytes not yet written to the current chunk.
+            let mut start = 0;
+            // Position right *after* the last separator seen.
             let mut prev = 0;
             let sep = self.settings.separator;
             for i in memchr::memchr_iter(sep, buf) {
                 // If we have exceeded the number of lines to write in the
-                // current chunk, then start a new chunk and its
-                // corresponding writer.
+                // current chunk, then write the pending lines and start a
+                // new chunk and its corresponding writer.
                 if self.num_lines_remaining_in_current_chunk == 0 {
+                    if start < prev {
+                        custom_write_all(&buf[start..prev], &mut self.inner, self.settings)?;
+                    }
+                    start = prev;
                     self.num_chunks_written += 1;
                     self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
                     self.num_lines_remaining_in_current_chunk = self.chunk_size;
                 }
 
-                // Write the line, starting from *after* the previous
-                // separator character and ending *after* the current
-                // separator character.
-                custom_write_all(&buf[prev..=i], &mut self.inner, self.settings)?;
                 prev = i + 1;
                 self.num_lines_remaining_in_current_chunk -= 1;
             }
 
-            // There might be bytes remaining in the buffer, and we write
-            // them to the current chunk. But first, we may need to rotate
-            // the current chunk in case it has already reached its line
-            // limit.
-            if prev < buf.len() {
-                if self.num_lines_remaining_in_current_chunk == 0 {
-                    self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
-                    self.num_lines_remaining_in_current_chunk = self.chunk_size;
+            // There might be bytes remaining in the buffer after the last
+            // separator. They go to the current chunk, unless it has
+            // already reached its line limit, in which case we rotate.
+            if prev < buf.len() && self.num_lines_remaining_in_current_chunk == 0 {
+                if start < prev {
+                    custom_write_all(&buf[start..prev], &mut self.inner, self.settings)?;
                 }
-                custom_write_all(&buf[prev..], &mut self.inner, self.settings)?;
+                start = prev;
+                self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
+                self.num_lines_remaining_in_current_chunk = self.chunk_size;
+            }
+            if start < buf.len() {
+                custom_write_all(&buf[start..], &mut self.inner, self.settings)?;
             }
         }
         Ok(())
