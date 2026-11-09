@@ -1969,13 +1969,10 @@ pub(crate) fn copy_attributes(
             let source_perms = {
                 use std::os::unix::fs::PermissionsExt;
                 let mut perms = source_metadata.permissions();
-                if !ownership_preserved.get() {
-                    // GNU cp strips setuid (04000) and setgid (02000) when
-                    // ownership could not be preserved. Keep the sticky bit
-                    // (01000) and all rwx bits.
-                    let mode = perms.mode() & !0o6000;
-                    perms.set_mode(mode);
-                }
+                perms.set_mode(uucore::safe_copy::preserved_mode(
+                    perms.mode(),
+                    ownership_preserved.get(),
+                ));
                 if apply_umask_to_mode {
                     // The umask never covers setuid/setgid, so clear them
                     // explicitly: a non-preserving copy must not carry the
