@@ -34,7 +34,7 @@ jobs:
       group: rerun-trigger-${{ github.event.issue.number }}
     permissions:
       actions: write #  to list and re-run workflow runs
-      pull-requests: write #  to read PR head sha/author, and comment as a fallback
+      pull-requests: write #  to read PR head sha/author
       issues: write #  to react to the triggering comment
     steps:
       - name: "Re-run failed CI for this PR"
@@ -42,7 +42,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const react = async (content, fallbackMessage) => {
+            const react = async (content) => {
               try {
                 await github.rest.reactions.createForIssueComment({
                   ...context.repo,
@@ -51,15 +51,6 @@ jobs:
                 });
               } catch (error) {
                 core.warning(`Failed to react with '${content}' on the comment: ${error.message}`);
-                try {
-                  await github.rest.issues.createComment({
-                    ...context.repo,
-                    issue_number: context.issue.number,
-                    body: fallbackMessage,
-                  });
-                } catch (commentError) {
-                  core.warning(`Failed to post fallback comment too: ${commentError.message}`);
-                }
               }
             };
 
@@ -67,18 +58,11 @@ jobs:
               await run();
             } catch (error) {
               const message = `Rerun request failed: ${error.message}`;
-              await react('-1', message);
+              await react('-1');
               core.setFailed(message);
             }
 
             async function run() {
-              // A locked conversation can't take new commands anyway, but
-              // check up front since it's free (already in the webhook payload).
-              if (context.payload.issue.locked) {
-                core.info('Issue is locked; ignoring the rerun request.');
-                return;
-              }
-
               // Every non-empty line must itself be a /rerun command, so a
               // comment that merely mentions "/rerun" in passing is ignored.
               const rerunLine = /^\/rerun(?:\s+(.+))?$/;
@@ -122,9 +106,8 @@ jobs:
               const isPrAuthor = commenter === pr.user.login;
 
               if (!isMaintainer && !isPrAuthor) {
-                const message = `@${commenter} is not authorized to trigger a rerun on this PR.`;
-                await react('-1', message);
-                core.setFailed(message);
+                await react('-1');
+                core.info(`@${commenter} is not authorized to trigger a rerun on this PR.`);
                 return;
               }
 
@@ -136,36 +119,34 @@ jobs:
                 run.head_sha === pr.head.sha &&
                 (!run.pull_requests?.length || run.pull_requests.some(p => p.number === pr.number));
 
-              // Never rerun this very workflow: a matching run of it would
-              // otherwise be a candidate, and rerunning it from inside itself
-              // risks a recursive loop.
-              const isNotThisWorkflow = run => run.name !== context.workflow;
-
               const rerunNames = [];
               const problems = [];
 
-              // Runs that are queued, in progress, or waiting on approval
-              // (action_required, e.g. a first-time contributor's PR) can't
-              // be rerun; the latter especially must not be force-started by
+              // A run is only safe to rerun once it has actually finished.
+              // 'action_required' (e.g. a first-time contributor's PR waiting
+              // for approval) also reports status 'completed', so it must be
+              // excluded explicitly; it must not be force-started by
               // '/rerun <name>', since that would bypass the approval gate.
-              const isRerunEligible = run => !['queued', 'in_progress', 'action_required'].includes(run.status);
+              const isRerunEligible = run => run.status === 'completed' && run.conclusion !== 'action_required';
+
+              // Fetch every run on the PR's head commit once, up front, and
+              // filter it in memory below instead of re-fetching per command.
+              const { data: runsOnHead } = await github.rest.actions.listWorkflowRunsForRepo({
+                ...context.repo,
+                head_sha: pr.head.sha,
+                per_page: 100,
+              });
+              const runsForThisPr = runsOnHead.workflow_runs.filter(belongsToThisPr);
 
               for (const workflowName of workflowNames) {
                 if (workflowName) {
                   // A named rerun targets only that workflow's latest run on
                   // the PR's head commit, regardless of its conclusion, since
                   // the whole point of naming it is to force a fresh run.
-                  const { data: runs } = await github.rest.actions.listWorkflowRunsForRepo({
-                    ...context.repo,
-                    head_sha: pr.head.sha,
-                    per_page: 100,
-                  });
-
-                  const allMatchingRuns = runs.workflow_runs
-                    .filter(belongsToThisPr)
-                    .filter(isNotThisWorkflow)
-                    .filter(run => run.name.toLowerCase() === workflowName.toLowerCase())
-                    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                  // The API already returns runs newest-first, so the first
+                  // match is the latest one.
+                  const allMatchingRuns = runsForThisPr
+                    .filter(run => run.name.toLowerCase() === workflowName.toLowerCase());
 
                   if (allMatchingRuns.length === 0) {
                     problems.push(`No "${workflowName}" workflow run found for the PR head commit.`);
@@ -189,26 +170,8 @@ jobs:
                   // A plain '/rerun' only targets runs that are actually broken:
                   // failed runs get their failed jobs rerun, and cancelled runs
                   // get a full rerun.
-                  const [{ data: failedRuns }, { data: cancelledRuns }] = await Promise.all([
-                    github.rest.actions.listWorkflowRunsForRepo({
-                      ...context.repo,
-                      head_sha: pr.head.sha,
-                      status: 'failure',
-                      per_page: 100,
-                    }),
-                    github.rest.actions.listWorkflowRunsForRepo({
-                      ...context.repo,
-                      head_sha: pr.head.sha,
-                      status: 'cancelled',
-                      per_page: 100,
-                    }),
-                  ]);
-
-                  const matchRuns = runs =>
-                    runs.filter(belongsToThisPr).filter(isNotThisWorkflow);
-
-                  const matchingFailedRuns = matchRuns(failedRuns.workflow_runs);
-                  const matchingCancelledRuns = matchRuns(cancelledRuns.workflow_runs);
+                  const matchingFailedRuns = runsForThisPr.filter(run => run.conclusion === 'failure');
+                  const matchingCancelledRuns = runsForThisPr.filter(run => run.conclusion === 'cancelled');
 
                   if (matchingFailedRuns.length === 0 && matchingCancelledRuns.length === 0) {
                     problems.push('No failed or cancelled workflow runs found for the PR head commit.');
@@ -236,16 +199,13 @@ jobs:
               }
 
               if (rerunNames.length === 0) {
-                const message = problems.join(' ');
-                await react('confused', message);
-                core.info(message);
+                await react('confused');
+                core.info(problems.join(' '));
                 return;
               }
 
-              const message = problems.length
-                ? `Reran: ${rerunNames.join(', ')}. ${problems.join(' ')}`
-                : `Reran: ${rerunNames.join(', ')}`;
-              await react('+1', message);
+              await react('+1');
+              core.info(`Reran: ${rerunNames.join(', ')}`);
               if (problems.length) {
                 core.warning(problems.join(' '));
               }
