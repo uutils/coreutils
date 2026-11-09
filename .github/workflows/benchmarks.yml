@@ -11,6 +11,7 @@ on:
       - 'src/uucore_procs/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.github/actions/rust-cache/action.yml'
   push:
     branches:
       - main
@@ -22,7 +23,7 @@ permissions:
 # End the current execution if there is a new changeset in the PR.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
 
 jobs:
   detects-benchmarks:
@@ -66,15 +67,15 @@ jobs:
   benchmarks:
     needs: detects-benchmarks
     if: needs.detects-benchmarks.outputs.package != '[]'
-    name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package }} (CodSpeed)
+    # GitHub appends matrix values to expanded jobs but leaves skipped job
+    # names unevaluated, so keep the base name free of matrix expressions.
+    name: Run CodSpeed benchmarks
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
       CARGO_INCREMENTAL: 0
     strategy:
-      # Stagger the jobs: 70 concurrent runners hitting the GitHub cache API
-      # (rust-cache + sccache + CodSpeed) at once triggers HTTP 429s.
-      max-parallel: 12
+      max-parallel: 8
       matrix:
         type: [simulation, memory]
         package: ${{ fromJson(needs.detects-benchmarks.outputs.package) }}
@@ -83,17 +84,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Run sccache-cache
-        id: sccache-setup
-        uses: mozilla-actions/sccache-action@v0.0.11
-        continue-on-error: true
-      - name: Export sccache
-        if: steps.sccache-setup.outcome == 'success'
-        run: |
-          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+      - uses: ./.github/actions/rust-cache
+        with:
+          key: bench-${{ matrix.package }}-${{ matrix.type }}
 
       - name: Install locales
         shell: bash

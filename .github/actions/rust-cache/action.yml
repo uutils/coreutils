@@ -1,0 +1,57 @@
+# spell-checker:ignore Swatinem sccache
+name: Rust cache
+description: Cache Rust dependencies and enable sccache.
+
+inputs:
+  key:
+    description: Cache namespace for compatible jobs and target layouts.
+    required: false
+    default: ""
+  workspaces:
+    description: Cargo workspaces.
+    required: false
+    default: ". -> target"
+  cache-targets:
+    description: Cache target directories.
+    required: false
+    default: "true"
+  save-if:
+    description: Save the cache.
+    required: false
+    default: "true"
+  sccache:
+    description: Enable sccache.
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Cache Rust
+      uses: Swatinem/rust-cache@v2
+      with:
+        # The workflow supplies an explicit namespace so compatible jobs can
+        # share a cache without accidentally mixing target directory layouts.
+        shared-key: ${{ inputs.key }}
+        workspaces: ${{ inputs.workspaces }}
+        cache-targets: ${{ inputs.cache-targets }}
+        save-if: ${{ inputs.save-if == 'true' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+
+    - name: Setup sccache
+      id: sccache-setup
+      if: inputs.sccache == 'true'
+      uses: mozilla-actions/sccache-action@v0.0.11
+      with:
+        # sccache v0.17+ expands Rust response files on Windows and can exceed
+        # Windows' command-line limit. Keep the known-working version until
+        # https://github.com/mozilla/sccache/issues/2789 is fixed.
+        version: ${{ runner.os == 'Windows' && 'v0.16.0' || '' }}
+      continue-on-error: true
+
+    - name: Export sccache
+      if: inputs.sccache == 'true' && steps.sccache-setup.outcome == 'success'
+      shell: bash
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+        echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+        echo "SCCACHE_GHA_RW_MODE=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && 'READ_WRITE' || 'READ_ONLY' }}" >> "$GITHUB_ENV"
