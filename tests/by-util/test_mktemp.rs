@@ -967,7 +967,7 @@ fn eilseq_message() -> String {
 }
 
 /// Relative templates must not be resolved through `getcwd()`, see
-/// https://github.com/uutils/coreutils/issues/15786
+/// <https://github.com/uutils/coreutils/issues/15786>
 #[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(unix)]
