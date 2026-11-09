@@ -1401,7 +1401,7 @@ fn copy_subdir_xattrs_and_mode(from: &Path, to: &Path) {
     ))]
     {
         if let Ok(failed) = fsxattr::copy_xattrs_fd_ignore_unsupported(&src, &dst) {
-            show_xattr_failures(failed);
+            show_xattr_failures(None, failed);
         }
     }
     copy_dir_mode(&src, &dst);

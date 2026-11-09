@@ -105,6 +105,15 @@ pub fn copy_xattrs_fd(source: &std::fs::File, dest: &std::fs::File) -> XattrCopy
     ))
 }
 
+/// Like [`copy_xattrs_fd`], but leaves out `ENOTSUP` / `EOPNOTSUPP` for callers
+/// where xattr preservation is best-effort.
+pub fn copy_xattrs_fd_ignore_unsupported(
+    source: &std::fs::File,
+    dest: &std::fs::File,
+) -> XattrCopyResult {
+    without_unsupported(copy_xattrs_fd(source, dest))
+}
+
 /// Like `copy_xattrs`, but skips the security.selinux attribute.
 #[cfg(unix)]
 pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> XattrCopyResult {
