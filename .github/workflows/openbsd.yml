@@ -76,7 +76,7 @@ jobs:
         sudo rsync -a --delete /tmp/empty/ /usr/lib/jvm/
         sudo rsync -a --delete /tmp/empty/ /usr/share/dotnet/
         sudo rsync -a --delete /tmp/empty/ /usr/local/lib/android/
-    - name: Prepare, build and test
+    - name: Prepare and test
       uses: vmactions/openbsd-vm@v1
       with:
         usesh: true
@@ -97,7 +97,7 @@ jobs:
           pkg_delete -a
           df -h
         run: |
-          ## Prepare, build, and test
+          ## Prepare and test
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
           # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
           set -e
@@ -140,7 +140,6 @@ jobs:
           set +e
           cd "${WORKSPACE}"
           unset FAULT
-          # openbsd is very slow. Omit duplicated cargo build and do test only
           export RUST_BACKTRACE=1
           export CARGO_TERM_COLOR=always
           # Avoid filling disk space

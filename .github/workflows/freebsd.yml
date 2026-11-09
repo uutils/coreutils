@@ -65,7 +65,7 @@ jobs:
     - name: Avoid no space left on device (Ubuntu runner)
       shell: bash
       run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
-    - name: Prepare, build and test
+    - name: Prepare and test
       uses: vmactions/freebsd-vm@v1.3.9
       with:
         usesh: true
@@ -73,7 +73,7 @@ jobs:
         copyback: false
         prepare: pkg install -y gmake nextest rust sudo
         run: |
-          ## Prepare, build, and test
+          ## Prepare and test
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
           # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
           set -e
@@ -117,7 +117,6 @@ jobs:
           export RUSTFLAGS="-C strip=symbols" # for disk space
           # vendored OpenSSL takes many times to build. Use system one (LibreSSL is supported).
           export OPENSSL_NO_VENDOR=1 OPENSSL_DIR=/usr
-          cargo build || FAULT=1
           export PATH=~/.cargo/bin:${PATH}
           export RUST_BACKTRACE=1
           export CARGO_TERM_COLOR=always
