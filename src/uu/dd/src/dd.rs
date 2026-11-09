@@ -1867,12 +1867,13 @@ mod tests {
         let i = Input {
             src,
             settings: &settings,
+            previous_partial: None,
         };
         let o = Output {
             dst: Dest::Sink,
             settings: &settings,
         };
-        dd_copy(i, o).unwrap();
+        dd_copy::<false>(i, o).unwrap();
 
         let mut rest = Vec::new();
         file.read_to_end(&mut rest).unwrap();
