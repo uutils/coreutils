@@ -169,7 +169,9 @@ uu_checksum_common = { version = "0.13.0", path = "src/uu/checksum_common" }
 uutests = { version = "0.13.0", path = "tests/uutests" }
 uutests_procs = { version = "0.13.0", path = "tests/uutests_procs" }
 
-zbus = { version = "6.2.1", default-features = false, features = ["default-rt"] }
+zbus = { version = "6.2.1", default-features = false, features = [
+  "default-rt",
+] }
 
 # This is the linting configuration for all crates.
 # In order to use these, all crates have `[lints] workspace = true` section.
