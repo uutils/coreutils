@@ -1387,17 +1387,20 @@ fn format_extended_year_value(
     width: Option<usize>,
 ) -> String {
     let mut digits = value.to_string();
-    let force_sign = flags.contains('+');
-    let add_sign = force_sign && (width.is_some() || digits.len() > default_width);
     let mut pad = format_modifiers::Pad::Zero;
+    // `+` only adds a sign when no other padding flag follows it.
+    let mut force_sign = false;
     for flag in flags.chars() {
         match flag {
             '-' => pad = format_modifiers::Pad::None,
             '_' => pad = format_modifiers::Pad::Space,
             '0' | '+' => pad = format_modifiers::Pad::Zero,
-            _ => {}
+            _ => continue,
         }
+        force_sign = flag == '+';
     }
+    let add_sign = force_sign
+        && (width.is_some_and(|width| width > default_width) || digits.len() > default_width);
     if add_sign {
         digits.insert(0, '+');
     }

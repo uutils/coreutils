@@ -220,10 +220,14 @@ fn test_install_mode_numeric() {
     let permissions = at.metadata(dest_file).permissions();
     assert_eq!(0o100_333_u32, PermissionsExt::mode(&permissions));
 
-    let mode_arg = "-m 0333";
     at.mkdir(dir2);
 
-    scene.ucmd().arg(mode_arg).arg(file).arg(dir2).succeeds();
+    scene
+        .ucmd()
+        .args(&["-m", "0333"])
+        .arg(file)
+        .arg(dir2)
+        .succeeds();
 
     let dest_file = &format!("{dir2}/{file}");
     assert!(at.file_exists(file));
@@ -629,7 +633,7 @@ fn test_multiple_mode_arguments_override_not_error() {
 
     scene
         .ucmd()
-        .args(&[file, &format!("{dir}/{file}"), "-m 999", "-m 200"])
+        .args(&[file, &format!("{dir}/{file}"), "-m", "999", "-m", "200"])
         .succeeds()
         .no_stderr();
 
