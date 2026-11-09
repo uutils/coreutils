@@ -37,11 +37,11 @@ use std::ffi::CString;
 use std::io::Result as IOResult;
 use std::marker::PhantomData;
 use std::os::unix::ffi::OsStrExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::ptr;
 use std::sync::{Mutex, MutexGuard};
 
-#[cfg(all(feature = "systemd_logind", target_os = "linux"))]
+#[cfg(all(target_os = "linux", feature = "systemd_logind"))]
 use crate::features::systemd_logind;
 
 pub use self::ut::*;
@@ -308,7 +308,10 @@ impl Utmpx {
             UtmpxIter::new_systemd()
         }
 
-        #[cfg(not(all(feature = "systemd_logind", target_os = "linux")))]
+        #[cfg(all(target_os = "linux", not(feature = "systemd_logind")))]
+        return UtmpxIter::new_file(None);
+
+        #[cfg(not(target_os = "linux"))]
         {
             let iter = UtmpxIter::new();
             unsafe {
@@ -342,49 +345,84 @@ impl Utmpx {
             }
         }
 
-        let iter = UtmpxIter::new();
-        let path = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
-        unsafe {
-            #[cfg(target_os = "freebsd")]
-            setutxdb(libc::UTXDB_ACTIVE, path.as_ptr());
+        #[cfg(target_os = "linux")]
+        return UtmpxIter::new_file(Some(path.as_ref()));
 
-            // In glibc, utmpxname() only fails if there's not enough memory
-            // to copy the string.
-            // Solaris returns 1 on success instead of 0. Supposedly there also
-            // exist systems where it returns void.
-            // GNU who on Debian seems to output nothing if an invalid filename
-            // is specified, no warning or anything.
-            // So this function is pretty crazy and we don't try to detect errors.
-            // Not much we can do besides pray.
-            #[cfg(not(target_os = "freebsd"))]
-            #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
-            utmpxname(path.as_ptr());
+        #[cfg(not(target_os = "linux"))]
+        {
+            let iter = UtmpxIter::new();
+            let path = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
+            unsafe {
+                #[cfg(target_os = "freebsd")]
+                setutxdb(libc::UTXDB_ACTIVE, path.as_ptr());
 
-            #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
-            setutxent();
+                // In glibc, utmpxname() only fails if there's not enough memory
+                // to copy the string.
+                // Solaris returns 1 on success instead of 0. Supposedly there also
+                // exist systems where it returns void.
+                // GNU who on Debian seems to output nothing if an invalid filename
+                // is specified, no warning or anything.
+                // So this function is pretty crazy and we don't try to detect errors.
+                // Not much we can do besides pray.
+                #[cfg(not(target_os = "freebsd"))]
+                #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
+                utmpxname(path.as_ptr());
+
+                #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
+                setutxent();
+            }
+            iter
         }
-        iter
     }
 }
 
-// On some systems these functions are not thread-safe. On others they're
-// thread-local. Therefore we use a mutex to allow only one guard to exist at
-// a time, and make sure UtmpxIter cannot be sent across threads.
-//
-// I believe the only technical memory unsafety that could happen is a data
-// race while copying the data out of the pointer returned by getutxent(), but
-// ordinary race conditions are also very much possible.
-static LOCK: Mutex<()> = Mutex::new(());
+// Serialize access to libc's utmp state and its shared record buffer. On Linux,
+// the same mutex also protects the selected path, while an iterator keeps the
+// validated file open for libc. UtmpxIter must stay on its creating thread
+// because libc's utmp state may be thread-local.
+static LOCK: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+/// Open and validate a regular file without waiting for FIFO writers.
+///
+/// Keep this descriptor alive while libc reopens it through `/proc/self/fd`.
+/// This avoids resolving the original path again after validation. If procfs
+/// is unavailable, libc's reader yields no records.
+#[cfg(target_os = "linux")]
+fn open_traditional_utmp(path: &Path) -> Option<std::fs::File> {
+    #[cfg(target_env = "musl")]
+    {
+        // musl's utmp APIs are stubs, even when the file is populated.
+        let _ = path;
+        None
+    }
+
+    #[cfg(not(target_env = "musl"))]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(path)
+            .ok()?;
+        file.metadata().ok()?.is_file().then_some(file)
+    }
+}
 
 /// Iterator of login records
 pub struct UtmpxIter {
-    #[allow(dead_code)]
-    guard: MutexGuard<'static, ()>,
     /// Ensure [`UtmpxIter`] is !Send. Technically redundant because [`MutexGuard`]
     /// is also !Send.
     phantom: PhantomData<std::rc::Rc<()>>,
-    #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
+    #[cfg(all(target_os = "linux", feature = "systemd_logind"))]
     systemd_iter: Option<systemd_logind::SystemdUtmpxIter>,
+    #[cfg(target_os = "linux")]
+    traditional_file: Option<std::fs::File>,
+    // Keep the guard last so the file closes before the mutex is released.
+    // Closing any descriptor for the file releases all of this process's
+    // fcntl locks, including locks acquired by a subsequent iterator.
+    #[allow(dead_code)]
+    guard: MutexGuard<'static, Option<PathBuf>>,
 }
 
 impl UtmpxIter {
@@ -394,32 +432,265 @@ impl UtmpxIter {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         Self {
-            guard,
             phantom: PhantomData,
-            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
+            #[cfg(all(target_os = "linux", feature = "systemd_logind"))]
             systemd_iter: None,
+            #[cfg(target_os = "linux")]
+            traditional_file: None,
+            guard,
         }
     }
 
-    #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
+    #[cfg(all(target_os = "linux", feature = "systemd_logind"))]
     fn new_systemd() -> Self {
-        // PoisonErrors can safely be ignored
-        let guard = LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let systemd_iter = match systemd_logind::SystemdUtmpxIter::new() {
-            Ok(iter) => iter,
-            Err(_) => {
-                // Like GNU coreutils: graceful degradation, not fallback to traditional utmp
-                // Return empty iterator rather than falling back  (GNU coreutils also returns 0 when /var/run/utmp is not present, so we don't need to propagate the error here)
-                systemd_logind::SystemdUtmpxIter::empty()
+        let mut iter = Self::new();
+        iter.systemd_iter = Some(
+            systemd_logind::SystemdUtmpxIter::new()
+                .unwrap_or_else(|_| systemd_logind::SystemdUtmpxIter::empty()),
+        );
+        iter
+    }
+
+    #[cfg(target_os = "linux")]
+    #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
+    fn new_file(path: Option<&Path>) -> Self {
+        use std::os::fd::AsRawFd;
+
+        let mut iter = Self::new();
+        if let Some(path) = path {
+            *iter.guard = Some(path.to_path_buf());
+        }
+        let path = iter.guard.as_deref().unwrap_or(Path::new(DEFAULT_FILE));
+        iter.traditional_file = open_traditional_utmp(path).and_then(|file| {
+            let fd_path = CString::new(format!("/proc/self/fd/{}", file.as_raw_fd())).ok()?;
+            // SAFETY: The iterator holds LOCK, fd_path is null-terminated, and
+            // file keeps the validated descriptor alive for libc's reader.
+            unsafe {
+                endutxent();
+                if utmpxname(fd_path.as_ptr()) != 0 {
+                    return None;
+                }
+                setutxent();
+            }
+            Some(file)
+        });
+        iter
+    }
+}
+
+#[cfg(all(test, target_os = "linux", not(target_env = "musl")))]
+mod tests {
+    use super::*;
+    use std::fs::File;
+    use std::io::Write;
+    use std::mem::offset_of;
+    use std::os::unix::fs::OpenOptionsExt;
+
+    // Path selections persist after an iterator is dropped.
+    static ITERATOR_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    fn utmpx_record(user: &str) -> Vec<u8> {
+        let mut bytes = vec![0; size_of::<utmpx>()];
+        let record_type = USER_PROCESS.to_ne_bytes();
+        let type_offset = offset_of!(utmpx, ut_type);
+        bytes[type_offset..type_offset + record_type.len()].copy_from_slice(&record_type);
+        let user_offset = offset_of!(utmpx, ut_user);
+        assert!(user.len() <= UT_NAMESIZE);
+        bytes[user_offset..user_offset + user.len()].copy_from_slice(user.as_bytes());
+        bytes
+    }
+
+    fn write_utmpx_records(path: &Path, users: &[&str]) {
+        let bytes: Vec<u8> = users.iter().flat_map(|user| utmpx_record(user)).collect();
+        std::fs::write(path, bytes).unwrap();
+    }
+
+    #[test]
+    fn traditional_iteration_reads_complete_records() {
+        let _guard = ITERATOR_TEST_LOCK.lock().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("utmp");
+        write_utmpx_records(&path, &["first", "second"]);
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap()
+            .write_all(&[0])
+            .unwrap();
+
+        let users = Utmpx::iter_all_records_from(&path)
+            .map(|record| record.user())
+            .collect::<Vec<_>>();
+        drop(Utmpx::iter_all_records_from(DEFAULT_FILE));
+        assert_eq!(users, ["first", "second"]);
+    }
+
+    #[test]
+    fn traditional_iterator_closes_both_files() {
+        use std::os::unix::fs::MetadataExt;
+
+        let _guard = ITERATOR_TEST_LOCK.lock().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("utmp");
+        write_utmpx_records(&path, &["user"]);
+        let mut iter = Utmpx::iter_all_records_from(&path);
+        let file = iter.traditional_file.as_ref().unwrap();
+        let metadata = file.metadata().unwrap();
+        let identity = (metadata.dev(), metadata.ino());
+        // Read a record so libc has opened its own descriptor, too.
+        assert_eq!(iter.next().unwrap().user(), "user");
+        drop(iter);
+
+        let still_open = std::fs::read_dir("/proc/self/fd")
+            .unwrap()
+            .filter_map(Result::ok)
+            .any(|entry| {
+                std::fs::metadata(entry.path())
+                    .is_ok_and(|metadata| (metadata.dev(), metadata.ino()) == identity)
+            });
+        drop(Utmpx::iter_all_records_from(DEFAULT_FILE));
+        assert!(!still_open, "both utmp descriptors must be closed");
+    }
+
+    #[test]
+    fn traditional_iterator_restores_selected_path_for_libc() {
+        let _guard = ITERATOR_TEST_LOCK.lock().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("utmp");
+        write_utmpx_records(&path, &["first", "second"]);
+        let mut iter = Utmpx::iter_all_records_from(&path);
+        assert_eq!(iter.next().unwrap().user(), "first");
+        drop(iter);
+
+        let user = {
+            let _guard = LOCK.lock().unwrap();
+            // SAFETY: LOCK serializes libc's utmp state and the returned record
+            // is copied before another libc call can replace its buffer.
+            unsafe {
+                setutxent();
+                let record = getutxent();
+                let user = if record.is_null() {
+                    None
+                } else {
+                    Some(
+                        Utmpx {
+                            inner: ptr::read(record),
+                        }
+                        .user(),
+                    )
+                };
+                endutxent();
+                user
             }
         };
-        Self {
-            guard,
-            phantom: PhantomData,
-            systemd_iter: Some(systemd_iter),
+        drop(Utmpx::iter_all_records_from(DEFAULT_FILE));
+        assert_eq!(user.as_deref(), Some("first"));
+    }
+
+    #[test]
+    fn traditional_iterator_reopens_selected_path() {
+        let _guard = ITERATOR_TEST_LOCK.lock().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("utmp");
+        let replacement_path = directory.path().join("replacement");
+        write_utmpx_records(&path, &["original"]);
+        write_utmpx_records(&replacement_path, &["replacement"]);
+        let users = Utmpx::iter_all_records_from(&path)
+            .map(|record| record.user())
+            .collect::<Vec<_>>();
+
+        // A new iterator must resolve the saved pathname again, rather than
+        // retaining the previous iterator's temporary /proc/self/fd path.
+        let _old_file = File::open(&path).unwrap();
+        std::fs::rename(&replacement_path, &path).unwrap();
+        let replacement_users = UtmpxIter::new_file(None)
+            .map(|record| record.user())
+            .collect::<Vec<_>>();
+        drop(Utmpx::iter_all_records_from(DEFAULT_FILE));
+        assert_eq!(users, ["original"]);
+        assert_eq!(replacement_users, ["replacement"]);
+    }
+
+    #[test]
+    fn traditional_iterator_rejects_invalid_source_after_valid_file() {
+        let _guard = ITERATOR_TEST_LOCK.lock().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("utmp");
+        write_utmpx_records(&path, &["first", "second"]);
+
+        for invalid_path in [
+            directory.path().join("missing"),
+            directory.path().to_owned(),
+        ] {
+            let mut iter = Utmpx::iter_all_records_from(&path);
+            assert_eq!(iter.next().unwrap().user(), "first");
+            drop(iter);
+            let mut iter = Utmpx::iter_all_records_from(invalid_path);
+            assert!(iter.next().is_none());
+            assert!(iter.next().is_none());
         }
+        drop(Utmpx::iter_all_records_from(DEFAULT_FILE));
+    }
+
+    #[test]
+    fn traditional_utmp_opens_only_regular_files() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("utmp");
+
+        assert!(open_traditional_utmp(&path).is_none());
+        assert!(open_traditional_utmp(directory.path()).is_none());
+
+        File::create(&path).unwrap();
+        assert_eq!(
+            open_traditional_utmp(&path)
+                .unwrap()
+                .metadata()
+                .unwrap()
+                .len(),
+            0
+        );
+
+        write_utmpx_records(&path, &["user"]);
+        assert_eq!(
+            open_traditional_utmp(&path)
+                .unwrap()
+                .metadata()
+                .unwrap()
+                .len(),
+            size_of::<utmpx>() as u64
+        );
+    }
+
+    #[test]
+    fn traditional_iterator_keeps_file_after_fifo_replacement() {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+
+        let _guard = ITERATOR_TEST_LOCK.lock().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("utmp");
+        write_utmpx_records(&path, &["first", "second"]);
+        let mut iter = Utmpx::iter_all_records_from(&path);
+
+        std::fs::remove_file(&path).unwrap();
+        let fifo_path = CString::new(path.as_os_str().as_bytes()).unwrap();
+        // SAFETY: fifo_path is a live, null-terminated path.
+        assert_eq!(unsafe { libc::mkfifo(fifo_path.as_ptr(), 0o600) }, 0);
+        // Supply a different record so reopening the FIFO fails the assertions
+        // without waiting indefinitely for a writer or for record data.
+        let mut replacement = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(&path)
+            .unwrap();
+        replacement.write_all(&utmpx_record("replacement")).unwrap();
+
+        assert_eq!(iter.next().unwrap().user(), "first");
+        assert_eq!(iter.next().unwrap().user(), "second");
+        assert!(iter.next().is_none());
+        drop(iter);
+        drop(Utmpx::iter_all_records_from(DEFAULT_FILE));
     }
 }
 
@@ -527,15 +798,18 @@ impl UtmpxRecord {
 impl Iterator for UtmpxIter {
     type Item = UtmpxRecord;
     fn next(&mut self) -> Option<Self::Item> {
-        #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
-        {
-            if let Some(ref mut systemd_iter) = self.systemd_iter {
-                // We have a systemd iterator - use it exclusively (never fall back to traditional utmp)
-                return systemd_iter.next().map(UtmpxRecord::Systemd);
-            }
+        #[cfg(all(target_os = "linux", feature = "systemd_logind"))]
+        if let Some(ref mut systemd_iter) = self.systemd_iter {
+            // Use the selected systemd source exclusively.
+            return systemd_iter.next().map(UtmpxRecord::Systemd);
         }
 
-        // Traditional utmp path
+        // Failed validation must not read libc's previously selected file.
+        #[cfg(target_os = "linux")]
+        self.traditional_file.as_ref()?;
+
+        // SAFETY: The iterator holds LOCK while accessing libc's utmp state
+        // and copying its shared record buffer.
         unsafe {
             #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
             let res = getutxent();
@@ -556,9 +830,24 @@ impl Iterator for UtmpxIter {
 
 impl Drop for UtmpxIter {
     fn drop(&mut self) {
+        // SAFETY: The iterator still holds LOCK while closing libc's file.
         unsafe {
             #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
             endutxent();
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            // Do not leave libc pointing at an fd number that can be reused
+            // after traditional_file closes. Restore the original selection.
+            let path = self.guard.as_deref().unwrap_or(Path::new(DEFAULT_FILE));
+            if let Ok(path) = CString::new(path.as_os_str().as_bytes()) {
+                // SAFETY: LOCK is held and path is a live, null-terminated path.
+                #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
+                unsafe {
+                    utmpxname(path.as_ptr());
+                }
+            }
         }
     }
 }
