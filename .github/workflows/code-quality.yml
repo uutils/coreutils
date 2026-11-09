@@ -71,12 +71,12 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: all             , workspace: true }
-          - { os: macos-latest   , features: all             , workspace: true }
-          - { os: windows-latest , features: feat_os_windows }
-          - { os: ubuntu-latest  , features: feat_os_unix_redox , target: x86_64-unknown-redox }
-          - { os: ubuntu-latest  , features: feat_wasm , target: wasm32-wasip1 }
-          - { os: ubuntu-latest  , features: feat_wasm , target: wasm32-wasip2 }
+          - { os: ubuntu-latest  , arg: "--all-features --workspace --all-targets --tests --benches -p uucore" }
+          - { os: macos-latest   , arg: "--all-features --workspace --all-targets --tests --benches -p uucore" }
+          - { os: windows-latest , uu: feat_os_windows , arg: --features="feat_os_windows,feat_diagnostics --all-targets --tests --benches -p coreutils -p uucore" }
+          - { os: ubuntu-latest  , arg: "--features=feat_os_unix_redox" , target: x86_64-unknown-redox }
+          - { os: ubuntu-latest  , arg: "--features=feat_wasm" , target: wasm32-wasip1 }
+          - { os: ubuntu-latest  , arg: "--features=feat_wasm" , target: wasm32-wasip2 }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -96,18 +96,6 @@ jobs:
       run: |
         echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
         echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-    - name: Initialize workflow variables
-      id: vars
-      shell: bash
-      run: |
-        ## VARs setup
-        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-        # failure mode
-        unset FAIL_ON_FAULT ; case "$STYLE_FAIL_ON_FAULT" in
-          ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
-          *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
-        esac;
-        outputs FAIL_ON_FAULT FAULT_TYPE
     - name: Install/setup prerequisites
       if: ${{ ! matrix.job.target }}
       shell: bash
@@ -121,26 +109,11 @@ jobs:
           ;;
         esac
     - name: "`cargo clippy` lint testing"
-      uses: nick-fields/retry@v4
-      with:
-        max_attempts: 3
-        retry_on: error
-        timeout_minutes: 90
-        shell: bash
-        command: |
-          ## `cargo clippy` lint testing
-          ARGS="--features ${{ matrix.job.features }}"
-          ARGS="${ARGS} --fault-type ${{ steps.vars.outputs.FAULT_TYPE }}"
-          if [[ "${{ matrix.job.workspace }}" =~ ^(1|t|true|y|yes)$ ]]; then
-            ARGS="${ARGS} --workspace"
-          fi
-          if [[ -n "${{ matrix.job.target }}" ]]; then
-            ARGS="${ARGS} --target ${{ matrix.job.target }}"
-          fi
-          if [[ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ]]; then
-            ARGS="${ARGS} --fail-on-fault"
-          fi
-          python3 util/run-clippy.py ${ARGS}
+      shell: bash
+      run: |
+        test ${{ matrix.job.uu }} && UTILS=$(cargo tree --depth 1 --features ${{ matrix.job.uu }} --format '{lib}' --prefix none | sed -n 's/^uu_/-p uu_/p')
+        ARGS="--no-default-features ${{ matrix.job.arg }} ${UTILS}"
+        cargo clippy ${ARGS}  -- -D warnings
     - name: "cargo clippy on fuzz dir"
       if: runner.os != 'Windows' && !matrix.job.target
       shell: bash
