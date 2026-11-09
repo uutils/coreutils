@@ -966,11 +966,8 @@ fn eilseq_message() -> String {
     msg.split(" (os error").next().unwrap_or(&msg).to_string()
 }
 
-/// A relative template is created under its relative name, as GNU does, not
-/// under the result of an earlier `getcwd()`: another process could redirect
-/// that absolute path by renaming an ancestor of the working directory in
-/// between. Without search permission on the parent, only the relative name
-/// can be created.
+/// Relative templates must not be resolved through `getcwd()`, see
+/// https://github.com/uutils/coreutils/issues/15786
 #[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(unix)]

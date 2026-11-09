@@ -480,22 +480,15 @@ fn temp_path(dir: &Path, prefix: &OsStr, random: &str, suffix: &OsStr) -> PathBu
 /// The maximum number of names `make_temp` tries before giving up.
 const NUM_RETRIES: u32 = 1 << 16;
 
-/// A random number generator for temporary file names.
-fn name_rng() -> SmallRng {
-    SmallRng::try_from_rng(&mut rngs::SysRng).unwrap_or_else(|_| {
-        // rand::rng panics if getrandom failed, so fall back to a seed that
-        // still differs between runs.
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_nanos() as u64);
-        SmallRng::seed_from_u64(nanos ^ u64::from(std::process::id()))
-    })
-}
-
-/// A string of `len` random ASCII letters and digits.
-fn random_name(rng: &mut SmallRng, len: usize) -> String {
-    let mut bytes = vec![0; len];
-    rng.fill(&mut bytes[..]);
+/// A string of `rand` random ASCII letters and digits.
+fn random_name(rand: usize) -> String {
+    let mut bytes = vec![0; rand];
+    SmallRng::try_from_rng(&mut rngs::SysRng)
+        .unwrap_or_else(|_| {
+            //rand::rng panics if getrandom failed
+            SmallRng::seed_from_u64(bytes.as_ptr() as u64)
+        })
+        .fill(&mut bytes[..]);
     bytes
         .into_iter()
         .map(|byte| {
@@ -510,21 +503,12 @@ fn random_name(rng: &mut SmallRng, len: usize) -> String {
 }
 
 fn dry_exec(tmpdir: &Path, prefix: &OsStr, rand: usize, suffix: &OsStr) -> PathBuf {
-    temp_path(tmpdir, prefix, &random_name(&mut name_rng(), rand), suffix)
+    temp_path(tmpdir, prefix, &random_name(rand), suffix)
 }
 
-/// Create a temporary file or directory as a child of `dir`.
-///
-/// The name of the new entry is the concatenation of `prefix`, a string of
-/// `rand` random characters, and `suffix`. `create` is called with the path
-/// to create, and is retried with a new name if that path already exists.
-///
-/// The path passed to `create`, and returned, is `dir` joined with the
-/// generated name, so a relative `dir` stays relative. The kernel then
-/// resolves it from the current working directory itself, as GNU `mktemp`
-/// does, instead of from the result of an earlier `getcwd()`, which another
-/// process could redirect by renaming one of the working directory's
-/// ancestors in between.
+/// Create `dir` joined with a random name, retrying while the name is taken.
+/// A relative `dir` is passed through as is, so it is resolved from the working
+/// directory rather than from a `getcwd()` result that could change underneath.
 fn make_temp(
     dir: &Path,
     prefix: &OsStr,
@@ -532,11 +516,9 @@ fn make_temp(
     suffix: &OsStr,
     create: impl Fn(&Path) -> std::io::Result<()>,
 ) -> std::io::Result<PathBuf> {
-    let mut rng = name_rng();
-    let retries = if rand == 0 { 1 } else { NUM_RETRIES };
     let mut last_err = None;
-    for _ in 0..retries {
-        let path = temp_path(dir, prefix, &random_name(&mut rng, rand), suffix);
+    for _ in 0..NUM_RETRIES {
+        let path = temp_path(dir, prefix, &random_name(rand), suffix);
         match create(&path) {
             Ok(()) => return Ok(path),
             Err(e) if e.kind() == ErrorKind::AlreadyExists => last_err = Some(e),
