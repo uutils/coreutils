@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore wipesync couldnt
+// spell-checker:ignore wipesync couldnt EOVERFLOW ETXTBSY
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -714,4 +714,47 @@ fn test_shred_socket() {
     ucmd.arg("s")
         .fails_with_code(1)
         .stderr_contains("shred: s: failed to open for writing: ");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
+fn test_stat_failure_reports_open_error() {
+    // Make stat and open fail with different errors on the same path: the
+    // one shown must come from open.
+    use std::process::Command;
+
+    let (at, _ucmd) = at_and_ucmd!();
+    at.touch("victim");
+    let path = at.plus("victim");
+
+    let Ok(out) = Command::new("strace")
+        .arg("-o")
+        .arg("/dev/null")
+        .arg("-P")
+        .arg(&path)
+        .args([
+            "-e",
+            "inject=%%stat:error=EOVERFLOW",
+            "-e",
+            "inject=open,openat:error=ETXTBSY",
+        ])
+        .arg(uutests::util::get_tests_binary())
+        .arg("shred")
+        .arg(&path)
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .output()
+    else {
+        return; // missing strace
+    };
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    if stderr.contains("ptrace") {
+        return; // tracing not permitted here
+    }
+    assert_eq!(out.status.code(), Some(1));
+    assert!(
+        stderr.ends_with("failed to open for writing: Text file busy\n"),
+        "{stderr}"
+    );
 }

@@ -14,7 +14,7 @@ use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(unix)]
-use std::os::unix::prelude::PermissionsExt;
+use std::os::unix::prelude::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
@@ -722,6 +722,14 @@ fn wipe_file(
             ));
         }
         Err(err) => {
+            // When stat fails for another reason (a device that went away,
+            // a FIFO removed meanwhile), the error of the open itself is the
+            // one that says what is wrong with the file, so prefer it.
+            let mut open_options = OpenOptions::new();
+            open_options.write(true);
+            #[cfg(unix)]
+            open_options.custom_flags(libc::O_NONBLOCK);
+            let err = open_options.open(path).err().unwrap_or(err);
             return Err(err).map_err_context(
                 || translate_text!("shred-failed-to-open-for-writing", "file" => display_path.maybe_quote()),
             );

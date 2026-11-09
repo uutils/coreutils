@@ -12,6 +12,7 @@ use crate::translate;
 use base64_simd;
 use data_encoding::Encoding;
 use data_encoding_macro::new_encoding;
+use num_bigint::BigUint;
 use std::collections::VecDeque;
 
 // SIMD base64 wrapper
@@ -269,6 +270,23 @@ pub trait SupportsFastDecodeAndEncode {
     }
 }
 
+/// Turn big-endian base58 digit values into a number.
+///
+/// Converting digit by digit costs O(n²). Splitting the digits in two halves,
+/// `high * 58^len(low) + low`, lets the big-number multiplication do the heavy
+/// lifting, which is much faster on large inputs.
+fn base58_digits_to_number(digits: &[u8]) -> BigUint {
+    const SPLIT_THRESHOLD: usize = 256;
+    if digits.len() <= SPLIT_THRESHOLD {
+        // Every digit is below 58, so this cannot fail.
+        return BigUint::from_radix_be(digits, 58).unwrap_or_default();
+    }
+    let (high, low) = digits.split_at(digits.len() / 2);
+    // A chunk long enough to overflow u32 could never fit in memory as a BigUint.
+    let low_len = low.len() as u32;
+    base58_digits_to_number(high) * BigUint::from(58u32).pow(low_len) + base58_digits_to_number(low)
+}
+
 impl SupportsFastDecodeAndEncode for Base58Wrapper {
     fn alphabet(&self) -> &'static [u8] {
         // Base58 alphabet
@@ -290,46 +308,20 @@ impl SupportsFastDecodeAndEncode for Base58Wrapper {
             return Ok(());
         }
 
-        // Convert base58 to big integer
-        let mut num: Vec<u32> = vec![0];
         let alphabet = self.alphabet();
+        let digits = input_trimmed
+            .iter()
+            .map(|byte| {
+                alphabet
+                    .iter()
+                    .position(|b| b == byte)
+                    .map(|digit| digit as u8)
+                    .ok_or_else(|| USimpleError::new(1, translate!("encoding-error-invalid-input")))
+            })
+            .collect::<UResult<Vec<u8>>>()?;
 
-        for &byte in input_trimmed {
-            // Find position in alphabet
-            let digit = alphabet
-                .iter()
-                .position(|&b| b == byte)
-                .ok_or_else(|| USimpleError::new(1, translate!("encoding-error-invalid-input")))?;
-
-            // Multiply by 58 and add digit
-            let mut carry = digit as u32;
-            for n in &mut num {
-                let tmp = (*n as u64) * 58 + carry as u64;
-                *n = tmp as u32;
-                carry = (tmp >> 32) as u32;
-            }
-            if carry > 0 {
-                num.push(carry);
-            }
-        }
-
-        // Convert to bytes (little endian, then reverse)
-        let mut result = Vec::new();
-        for &n in &num {
-            result.extend_from_slice(&n.to_le_bytes());
-        }
-
-        // Remove trailing zeros and reverse to get big endian
-        while result.last() == Some(&0) && result.len() > 1 {
-            result.pop();
-        }
-        result.reverse();
-
-        // Add leading zeros for leading 1s in input
-        let mut final_result = vec![0; leading_ones];
-        final_result.extend_from_slice(&result);
-
-        output.extend_from_slice(&final_result);
+        output.resize(output.len() + leading_ones, 0);
+        output.extend_from_slice(&base58_digits_to_number(&digits).to_bytes_be());
         Ok(())
     }
 
@@ -350,62 +342,14 @@ impl SupportsFastDecodeAndEncode for Base58Wrapper {
             return Ok(());
         }
 
-        // Convert bytes to big integer (Vec<u32> in little-endian format)
-        let mut num = Vec::with_capacity(input_trimmed.len().div_ceil(4) + 1);
-        for &byte in input_trimmed {
-            let mut carry = byte as u64;
-            for n in &mut num {
-                let tmp = (*n as u64) * 256 + carry;
-                *n = tmp as u32;
-                carry = tmp >> 32;
-            }
-            if carry > 0 {
-                num.push(carry as u32);
-            }
-        }
-
-        // Convert to base58
-        let mut result = Vec::with_capacity((input_trimmed.len() * 138 / 100) + 1);
         let alphabet = self.alphabet();
-
-        // Optimized check: stop when all elements are zero
-        while !num.is_empty() {
-            // Check if we're done (all zeros)
-            let mut all_zero = true;
-            let mut carry = 0u64;
-
-            for n in num.iter_mut().rev() {
-                let tmp = carry * (1u64 << 32) + *n as u64;
-                *n = (tmp / 58) as u32;
-                carry = tmp % 58;
-                if *n != 0 {
-                    all_zero = false;
-                }
-            }
-
-            result.push(alphabet[carry as usize]);
-
-            if all_zero {
-                break;
-            }
-
-            // Trim trailing zeros less frequently
-            if num.len() > 1 && result.len() % 8 == 0 {
-                while num.last() == Some(&0) && num.len() > 1 {
-                    num.pop();
-                }
-            }
-        }
+        let digits = BigUint::from_bytes_be(input_trimmed).to_radix_be(58);
 
         // Add leading 1s for leading zeros in input
         for _ in 0..leading_zeros {
             output.push_back(b'1');
         }
-
-        // Add result (reversed because we built it backwards)
-        for &byte in result.iter().rev() {
-            output.push_back(byte);
-        }
+        output.extend(digits.into_iter().map(|digit| alphabet[usize::from(digit)]));
 
         Ok(())
     }
@@ -594,5 +538,34 @@ impl SupportsFastDecodeAndEncode for Base32Wrapper {
 
     fn supports_partial_decode(&self) -> bool {
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::base58_digits_to_number;
+    use num_bigint::BigUint;
+
+    #[test]
+    fn base58_split_conversion_matches_direct_conversion() {
+        // Runs of zero digits make some halves start with zeros, which the
+        // split must still weigh correctly.
+        let digits: Vec<u8> = (0..3001u32)
+            .map(|i| {
+                if i % 700 < 300 {
+                    0
+                } else {
+                    ((i * 29 + 5) % 58) as u8
+                }
+            })
+            .collect();
+        for len in [1, 256, 257, 1000, 3001] {
+            let slice = &digits[digits.len() - len..];
+            assert_eq!(
+                base58_digits_to_number(slice),
+                BigUint::from_radix_be(slice, 58).unwrap(),
+                "length {len}"
+            );
+        }
     }
 }
