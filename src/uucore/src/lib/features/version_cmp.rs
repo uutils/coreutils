@@ -101,23 +101,15 @@ pub fn version_cmp(mut a: &[u8], mut b: &[u8]) -> Ordering {
         _ => {}
     }
 
-    // Try to strip file extensions
-    let (mut a, mut b) = match (remove_file_ending(a), remove_file_ending(b)) {
-        (a_stripped, b_stripped)
-            if a_stripped == b_stripped
-                || ((a_stripped, b_stripped) != (a, b)
-                    && version_cmp(a_stripped, b_stripped) == Ordering::Equal) =>
-        {
-            // If both would be the same after stripping file extensions, don't strip them.
-            // "Same" means equal as versions, not only as bytes (`1.00` and `1.0`).
-            (a, b)
-        }
-        stripped => stripped,
-    };
+    // If the stems tie, the endings decide.
+    let (stem_a, stem_b) = (remove_file_ending(a), remove_file_ending(b));
+    version_parts_cmp(stem_a, stem_b).then_with(|| version_parts_cmp(a, b))
+}
 
-    // 1. Compare leading non-numerical part
-    // 2. Compare leading numerical part
-    // 3. Repeat
+/// 1. Compare leading non-numerical part
+/// 2. Compare leading numerical part
+/// 3. Repeat
+fn version_parts_cmp(mut a: &[u8], mut b: &[u8]) -> Ordering {
     while !a.is_empty() || !b.is_empty() {
         let a_numerical_start = a.iter().position(u8::is_ascii_digit).unwrap_or(a.len());
         let b_numerical_start = b.iter().position(u8::is_ascii_digit).unwrap_or(b.len());
