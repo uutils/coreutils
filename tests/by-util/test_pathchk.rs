@@ -73,20 +73,11 @@ fn test_posix_mode() {
 
     // _POSIX_PATH_MAX (256) includes the terminating null byte, so 255 bytes
     // is the longest portable file name
-    let path_of_len = |len: usize| {
-        let mut path = "abcdefgh/".repeat(len / 9 + 1);
-        path.truncate(len);
-        if path.ends_with('/') {
-            path.pop();
-            path.push('z');
-        }
-        path
-    };
     new_ucmd!()
-        .args(&["-p", &path_of_len(255)])
+        .args(&["-p", &format!("{}a", "a/".repeat(127))])
         .succeeds()
         .no_output();
-    let path = path_of_len(256);
+    let path = format!("{}ab", "a/".repeat(127));
     new_ucmd!()
         .args(&["-p", &path])
         .fails_with_code(1)
