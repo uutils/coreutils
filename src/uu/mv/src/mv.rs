@@ -1189,7 +1189,7 @@ fn rename_dir_fallback(
     result?;
 
     // As for subdirectories, the mode goes on last.
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "redox")))]
     if let (Ok(src), Ok(dst)) = (open_dir_nofollow(from), open_dir_nofollow(to)) {
         copy_dir_mode(&src, &dst);
     }
@@ -1348,7 +1348,7 @@ fn copy_dir_contents_recursive(
                 display_manager,
             )?;
 
-            #[cfg(unix)]
+            #[cfg(all(unix, not(target_os = "redox")))]
             copy_subdir_xattrs_and_mode(&from_path, &to_path);
         } else {
             // Copy file with or without hardlink support based on platform
@@ -1387,7 +1387,7 @@ fn copy_dir_contents_recursive(
 /// default ACL nor a read-only mode applies to the entries created in it.
 /// Both directories are opened without following symlinks, and the xattrs and
 /// mode go through those fds, so a path swapped for a symlink is not followed.
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 fn copy_subdir_xattrs_and_mode(from: &Path, to: &Path) {
     let (Ok(src), Ok(dst)) = (open_dir_nofollow(from), open_dir_nofollow(to)) else {
         return;
@@ -1411,7 +1411,7 @@ fn copy_subdir_xattrs_and_mode(from: &Path, to: &Path) {
 ///
 /// Call it after the ACL is set: while a directory has an ACL, the group bits
 /// of its mode are the ACL mask, and chmod sets the mask from them.
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 fn copy_dir_mode(src: &fs::File, dst: &fs::File) {
     use std::os::unix::fs::MetadataExt;
 
@@ -1423,7 +1423,7 @@ fn copy_dir_mode(src: &fs::File, dst: &fs::File) {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))] // rustix has no `openat` on Redox
 fn open_dir_nofollow(path: &Path) -> io::Result<fs::File> {
     use rustix::fs::{CWD, Mode, OFlags, openat};
 
