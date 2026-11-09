@@ -22,8 +22,8 @@ use crate::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use crate::quoting_style::locale_aware_shell_escape;
 use crate::sum::{self, Blake2b, Blake3, DigestOutput};
 use crate::{
-    os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_warning_caps, translate,
-    translate_text,
+    os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_warning_caps,
+    stdout_writer, translate, translate_text,
 };
 
 /// To what level should checksum validation print logging info.
@@ -601,7 +601,7 @@ fn get_file_to_check(
     } else {
         let failed_open = || {
             write_file_report(
-                io::stdout(),
+                stdout_writer(),
                 filename,
                 FileChecksumResult::CantOpen,
                 opts.verbose,
@@ -767,7 +767,7 @@ fn compute_and_check_digest_from_file(
                 );
 
                 write_file_report(
-                    io::stdout(),
+                    stdout_writer(),
                     real_filename_to_check,
                     FileChecksumResult::CantOpen,
                     opts.verbose,
@@ -783,7 +783,7 @@ fn compute_and_check_digest_from_file(
         DigestOutput::U16(n) => n.to_be_bytes() == expected_checksum,
     };
     write_file_report(
-        io::stdout(),
+        stdout_writer(),
         real_filename_to_check,
         FileChecksumResult::from_bool(checksum_correct),
         opts.verbose,
