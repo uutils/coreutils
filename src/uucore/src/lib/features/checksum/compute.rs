@@ -245,6 +245,16 @@ where
         let mut file = io::BufReader::with_capacity(
             READ_BUFFER_SIZE,
             if filename == "-" {
+                // Rust reopens a closed stdin as /dev/null before main; detect the
+                // original closed state captured at process start (#10153 / #2873).
+                #[cfg(unix)]
+                if crate::signals::stdin_was_closed() {
+                    let ebadf =
+                        || io::Error::from_raw_os_error(rustix::io::Errno::BADF.raw_os_error());
+                    show!(ebadf().map_err_context(|| locale_aware_shell_escape(filename)));
+                    show!(ebadf().map_err_context(|| "standard input".into()));
+                    continue;
+                }
                 stdin_buf = io::stdin();
                 Box::new(stdin_buf) as Box<dyn io::Read>
             } else {
