@@ -208,6 +208,26 @@ fn test_fold_preserves_invalid_utf8_sequences() {
         .stdout_is_bytes(bad_input);
 }
 
+/// An invalid byte must not make fold split the valid multibyte characters
+/// around it in the same read buffer.
+#[rstest]
+#[case::wide_before_invalid(b"\xe7\x95\x8c\n\xff\n")]
+#[case::wide_after_invalid(b"\xff\n\xe7\x95\x8c\n")]
+#[case::wide_around_invalid(b"\xe7\x95\x8c\n\xff\n\xe7\x95\x8c\n")]
+#[case::narrow_before_invalid(b"\xc3\xa9\xc3\xa9\n\xff\n")]
+fn test_fold_keeps_utf8_characters_next_to_invalid_bytes(#[case] input: &[u8]) {
+    for extra in [None, Some("-s"), Some("-c")] {
+        let mut cmd = new_ucmd!();
+        cmd.arg("-w2");
+        if let Some(option) = extra {
+            cmd.arg(option);
+        }
+        cmd.pipe_in(input.to_vec())
+            .succeeds()
+            .stdout_is_bytes(input);
+    }
+}
+
 #[rstest]
 #[case::utf8_crlf(b"abc\r\n\xc3\xa9\n")]
 #[case::utf8_backspace(b"abc\x08X\n\xc3\xa9\n")]
