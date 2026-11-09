@@ -433,14 +433,19 @@ fn test_change_directory() {
 #[test]
 fn test_short_option_attached_value_keeps_leading_equals() {
     let scene = TestScenario::new(util_name!());
-    scene.fixtures.mkdir("=d");
-    let expected = std::fs::canonicalize(scene.fixtures.plus("=d")).unwrap();
-    let out = scene
-        .ucmd()
-        .args(&["-C=d", "pwd"])
-        .succeeds()
-        .stdout_move_str();
-    assert_eq!(out.trim(), expected.as_os_str());
+    for dir in ["=d", "="] {
+        scene.fixtures.mkdir(dir);
+    }
+    for (args, dir) in [
+        (&["-C=d", "pwd"][..], "=d"),
+        (&["-vC=d", "pwd"], "=d"),
+        (&["-S-C=d pwd"], "=d"),
+        (&["-C=", "pwd"], "="),
+    ] {
+        let expected = std::fs::canonicalize(scene.fixtures.plus(dir)).unwrap();
+        let out = scene.ucmd().args(args).succeeds().stdout_move_str();
+        assert_eq!(out.trim(), expected.as_os_str(), "args: {args:?}");
+    }
 
     scene
         .ucmd()

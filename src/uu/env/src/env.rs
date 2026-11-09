@@ -519,44 +519,43 @@ fn check_and_handle_string_args(
     }
 }
 
-/// Keep a leading `=` in a value attached to a short option. Clap consumes it
-/// as an option/value separator, whereas env treats it as part of the value.
-fn preserve_attached_equals(args: &mut [OsString]) -> UResult<()> {
-    let mut skip_value = false;
-    for arg in args.iter_mut().skip(1) {
-        if std::mem::take(&mut skip_value) {
-            continue;
-        }
-        let bytes = arg.as_encoded_bytes();
-        if bytes == b"--" {
-            break;
-        }
-        if let Some(long) = bytes.strip_prefix(b"--") {
-            skip_value = [options::CHDIR, options::UNSET, options::ARGV0]
-                .iter()
-                .any(|name| name.as_bytes().starts_with(long));
-            continue;
-        }
-        // The first operand ends the options.
-        let Some(short) = bytes.strip_prefix(b"-").filter(|s| !s.is_empty()) else {
-            break;
-        };
-        for (index, option) in short.iter().enumerate() {
-            match option {
-                b'a' | b'C' | b'u' => {
-                    if short.get(index + 1) == Some(&b'=') {
-                        let mut value = bytes.to_vec();
-                        value.insert(index + 2, b'=');
-                        *arg = uucore::os_str_from_bytes(&value)?.to_os_string();
-                    } else {
-                        skip_value = index + 1 == short.len();
-                    }
-                    break;
-                }
-                b'i' | b'0' | b'v' => {}
-                _ => break,
+/// Walk an argument in option position. Set `expecting_arg` when the next
+/// argument is this option's value, and keep a leading `=` in a value attached
+/// to a short option: clap consumes it as a separator, whereas env treats it as
+/// part of the value.
+fn scan_option(
+    arg: &mut OsString,
+    short_flags_with_args: &[u8],
+    flags_with_args: &[&str],
+    expecting_arg: &mut bool,
+    options_ended: &mut bool,
+) -> UResult<()> {
+    if std::mem::take(expecting_arg) || *options_ended {
+        return Ok(());
+    }
+    let bytes = arg.as_encoded_bytes();
+    if bytes == b"--" {
+        *options_ended = true;
+    } else if let Some(long) = bytes.strip_prefix(b"--") {
+        *expecting_arg = flags_with_args
+            .iter()
+            .any(|name| name.as_bytes().starts_with(long));
+    } else if let Some(short) = bytes.strip_prefix(b"-").filter(|s| !s.is_empty()) {
+        if let Some(index) = short
+            .iter()
+            .position(|option| short_flags_with_args.contains(option))
+        {
+            if short.get(index + 1) == Some(&b'=') {
+                let mut value = bytes.to_vec();
+                value.insert(index + 2, b'=');
+                *arg = uucore::os_str_from_bytes(&value)?.to_os_string();
+            } else {
+                *expecting_arg = index + 1 == short.len();
             }
         }
+    } else {
+        // The first operand ends the options.
+        *options_ended = true;
     }
     Ok(())
 }
@@ -596,9 +595,22 @@ impl EnvAppData {
         let mut all_args: Vec<OsString> = Vec::new();
         let mut process_flags = true;
         let mut expecting_arg = false;
-        // Leave out split-string since it's a special case below
-        let flags_with_args = [options::ARGV0, options::CHDIR, options::UNSET];
-        let short_flags_with_args = ['a', 'C', 'u'];
+        let mut options_ended = false;
+        let app = uu_app();
+        let args_with_values: Vec<&Arg> = app
+            .get_arguments()
+            .filter(|arg| arg.get_action().takes_values() && !arg.is_require_equals_set())
+            .collect();
+        let short_flags_with_args: Vec<u8> = args_with_values
+            .iter()
+            .filter_map(|arg| arg.get_short())
+            .filter(char::is_ascii)
+            .map(|short| short as u8)
+            .collect();
+        let flags_with_args: Vec<&str> = args_with_values
+            .iter()
+            .filter_map(|arg| arg.get_long())
+            .collect();
         let mut consumed_split_payload_arg: Option<usize> = None;
         for (n, arg) in original_args.iter().enumerate() {
             if consumed_split_payload_arg == Some(n) {
@@ -617,7 +629,8 @@ impl EnvAppData {
                 all_args.push(arg.clone());
                 continue;
             }
-            expecting_arg = false;
+            let is_value = std::mem::take(&mut expecting_arg);
+            let start = all_args.len();
             // Where the `-S` string sits, for the caret: the argument the
             // parser is looking at right now.
             let located = uucore::diagnostics::enabled().then_some((original_args.as_slice(), n));
@@ -702,29 +715,21 @@ impl EnvAppData {
                     consumed_split_payload_arg = Some(n + 1);
                 }
                 _ => {
-                    if let Some(flag) = arg_str.strip_prefix("--") {
-                        if flags_with_args.contains(&flag) {
-                            expecting_arg = true;
-                        }
-                    } else if let Some(flag) = arg_str.strip_prefix("-") {
-                        for c in flag.chars() {
-                            expecting_arg = short_flags_with_args.contains(&c);
-                        }
-                    }
-                    // Short unset option (-u) is not allowed to contain '='
-                    if arg_str.contains('=')
-                        && arg_str.starts_with("-u")
-                        && !arg_str.starts_with("--")
-                    {
-                        let name = &arg_str[arg_str.find('=').unwrap()..];
-                        return Err(USimpleError::new(
-                            125,
-                            translate!("env-error-cannot-unset", "name" => name),
-                        ));
-                    }
-
                     all_args.push(arg.clone());
+                    if is_value || n == 0 {
+                        continue;
+                    }
                 }
+            }
+            // Arguments split out of a `-S` string are options too.
+            for new_arg in &mut all_args[start..] {
+                scan_option(
+                    new_arg,
+                    &short_flags_with_args,
+                    &flags_with_args,
+                    &mut expecting_arg,
+                    &mut options_ended,
+                )?;
             }
         }
 
@@ -736,8 +741,7 @@ impl EnvAppData {
         original_args: impl uucore::Args,
     ) -> Result<ParsedArguments, Box<dyn UError>> {
         let original_args: Vec<OsString> = original_args.collect();
-        let mut args = self.process_all_string_arguments(&original_args)?;
-        preserve_attached_equals(&mut args)?;
+        let args = self.process_all_string_arguments(&original_args)?;
         #[cfg(unix)]
         let mut signal_apply_all = BTreeSet::new();
 
