@@ -396,10 +396,52 @@ fn recursive_follow_args_dir_symlinks_not_nested() {
 
 #[test]
 fn recursive_preserve_root() {
+    // The type does not exist, so even if --preserve-root stopped working no
+    // file could be relabeled.
     new_ucmd!()
-        .args(&["--recursive", "--preserve-root", "--type=etc_t", "/"])
+        .args(&[
+            "--recursive",
+            "--preserve-root",
+            "--type=uutils_no_such_type_t",
+            "/",
+        ])
         .fails_with_code(1)
+        .no_stdout()
         .stderr_contains("dangerous to operate recursively on '/'");
+}
+
+#[test]
+fn recursive_unreadable_directory_is_not_relabeled() {
+    if rustix::process::geteuid().is_root() {
+        println!("test skipped: root can read any directory");
+        return;
+    }
+    let (dir, mut cmd) = at_and_ucmd!();
+    dir.mkdir("a");
+    dir.set_mode("a", 0o300);
+    let a_context = get_file_context(dir.plus("a")).unwrap();
+
+    cmd.args(&["--recursive", "guest_u:object_r:etc_t:s0:c42", "a"])
+        .fails_with_code(1)
+        .stderr_contains("Permission denied");
+    dir.set_mode("a", 0o700);
+    assert_eq!(get_file_context(dir.plus("a")).unwrap(), a_context);
+}
+
+#[test]
+fn unchanged_fields_are_not_written() {
+    // Relabeling a file we do not own fails, unless nothing changes.
+    let Some(root_context) = get_file_context("/").unwrap() else {
+        return;
+    };
+    let Some(root_type) = root_context.split(':').nth(2) else {
+        return;
+    };
+    new_ucmd!()
+        .arg(format!("--type={root_type}"))
+        .arg("/")
+        .succeeds()
+        .no_output();
 }
 
 #[test]
