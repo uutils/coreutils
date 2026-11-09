@@ -37,6 +37,7 @@ error-invalid-argument = Invalid argument
 error-is-a-directory-text = Is a directory
 error-is-a-directory = { $file }: { error-is-a-directory-text }
 error-too-many-symlink-levels = Too many levels of symbolic links
+error-bad-file-descriptor = Bad file descriptor
 
 # Common actions
 action-copying = copying
