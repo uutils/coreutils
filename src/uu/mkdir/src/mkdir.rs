@@ -34,17 +34,24 @@ mod options {
     pub const CONTEXT: &str = "context";
 }
 
+/// A mode given with -m.
+#[derive(Clone, Copy)]
+pub struct Mode {
+    /// Permission bits (octal) to create the directory with.
+    pub bits: u32,
+
+    /// Setuid/setgid/sticky bits that the mode leaves as the kernel created
+    /// them (e.g. setgid inherited from the parent).
+    pub special_bits_kept: u32,
+}
+
 /// Configuration for directory creation.
 pub struct Config<'a> {
     /// Create parent directories as needed.
     pub recursive: bool,
 
-    /// File permissions (octal) if provided via -m
-    pub mode: Option<u32>,
-
-    /// Setuid/setgid/sticky bits that -m leaves as the kernel created them
-    /// (e.g. setgid inherited from the parent). Only used with `mode`.
-    pub special_bits_kept: u32,
+    /// File permissions if provided via -m
+    pub mode: Option<Mode>,
 
     /// Print message for each created directory.
     pub verbose: bool,
@@ -61,16 +68,14 @@ pub struct Config<'a> {
     clippy::unnecessary_wraps,
     reason = "fn sig must match on all platforms"
 )]
-fn get_mode(_matches: &ArgMatches, _diag_args: Option<&[OsString]>) -> UResult<Option<(u32, u32)>> {
+fn get_mode(_matches: &ArgMatches, _diag_args: Option<&[OsString]>) -> UResult<Option<Mode>> {
     Ok(None)
 }
 
 /// `diag_args` is the argument list a caret can point into, or `None` when the
 /// plain one-line message is all that is wanted.
-///
-/// Returns the mode and the special bits it leaves untouched.
 #[cfg(not(windows))]
-fn get_mode(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Option<(u32, u32)>> {
+fn get_mode(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Option<Mode>> {
     // Not tested on Windows
     let Some(m) = matches.get_one::<String>(options::MODE) else {
         // If no mode argument, let the kernel apply umask and ACLs naturally.
@@ -78,11 +83,14 @@ fn get_mode(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Opt
     };
     let umask = mode::get_umask();
     mode::parse_chmod(DEFAULT_PERM, m, true, umask)
-        .and_then(|requested| {
+        .and_then(|bits| {
             // A special bit the mode neither sets nor clears survives starting
             // from all special bits set.
             let kept = mode::parse_chmod(DEFAULT_PERM | SPECIAL_BITS, m, true, umask)?;
-            Ok(Some((requested, kept & SPECIAL_BITS)))
+            Ok(Some(Mode {
+                bits,
+                special_bits_kept: kept & SPECIAL_BITS,
+            }))
         })
         .map_err(|err| {
             if diag_args.is_some_and(|args| err.render_mode_value(args, m, 0, &err.to_string())) {
@@ -108,7 +116,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let diag_args = uucore::diagnostics::operands(&args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let parsed_mode = get_mode(&matches, diag_args.as_deref())?;
+    let mode = get_mode(&matches, diag_args.as_deref())?;
     let dirs = matches
         .get_many::<OsString>(options::DIRS)
         .unwrap_or_default();
@@ -121,8 +129,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let config = Config {
         recursive,
-        mode: parsed_mode.map(|(mode, _)| mode),
-        special_bits_kept: parsed_mode.map_or(0, |(_, kept)| kept),
+        mode,
         verbose,
         set_security_context: set_security_context || context.is_some(),
         context,
@@ -276,7 +283,7 @@ fn create_dir_with_mode(path: &Path, mode: u32, shaped_umask: u32) -> std::io::R
 
 /// Whether -m asks for special bits that mkdir(2) does not set by itself.
 #[cfg(unix)]
-fn needs_special_bits_fixup(requested: u32, kept: u32) -> bool {
+fn needs_special_bits_fixup(mode: Mode) -> bool {
     // Linux honors the sticky bit in the mkdir(2) mode, other systems (e.g.
     // macOS, the BSDs) drop it. setgid inherited from the parent is applied by
     // the kernel; only clearing it needs a chmod.
@@ -285,7 +292,7 @@ fn needs_special_bits_fixup(requested: u32, kept: u32) -> bool {
     } else {
         0
     };
-    requested & SPECIAL_BITS & !honored != 0 || kept & 0o2000 == 0
+    mode.bits & SPECIAL_BITS & !honored != 0 || mode.special_bits_kept & 0o2000 == 0
 }
 
 /// mkdir(2) ignores setuid/setgid in its mode argument (and setgid may be
@@ -293,7 +300,7 @@ fn needs_special_bits_fixup(requested: u32, kept: u32) -> bool {
 /// left as created, so a default ACL is not disturbed, except for the owner
 /// read bit that [`create_single_dir`] adds so that the directory can be opened.
 #[cfg(unix)]
-fn apply_special_bits(path: &Path, requested: u32, kept: u32) -> std::io::Result<()> {
+fn apply_special_bits(path: &Path, mode: Mode) -> std::io::Result<()> {
     use std::fs::{OpenOptions, Permissions};
     use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
     use uucore::libc;
@@ -304,8 +311,8 @@ fn apply_special_bits(path: &Path, requested: u32, kept: u32) -> std::io::Result
         .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW)
         .open(path)?;
     let current = dir.metadata()?.permissions().mode() & 0o7777;
-    let rwx = current & 0o777 & !(0o400 & !requested);
-    let wanted = rwx | (current & kept) | (requested & SPECIAL_BITS);
+    let rwx = current & 0o777 & !(0o400 & !mode.bits);
+    let wanted = rwx | (current & mode.special_bits_kept) | (mode.bits & SPECIAL_BITS);
     if wanted != current {
         dir.set_permissions(Permissions::from_mode(wanted))?;
     }
@@ -338,12 +345,12 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
                 // If the special bits need fixing up afterwards, the owner must be
                 // able to open the directory; the read bit is dropped again then.
                 Some(m) => {
-                    let m = if needs_special_bits_fixup(m, config.special_bits_kept) {
-                        m | 0o400
+                    let bits = if needs_special_bits_fixup(m) {
+                        m.bits | 0o400
                     } else {
-                        m
+                        m.bits
                     };
-                    (m, umask & !m)
+                    (bits, umask & !bits)
                 }
                 // No -m: leave umask fully intact; kernel applies umask + ACL naturally.
                 None => (DEFAULT_PERM, umask),
@@ -351,7 +358,7 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
         }
     };
     #[cfg(not(unix))]
-    let (mkdir_mode, shaped_umask) = (config.mode.unwrap_or(DEFAULT_PERM), 0u32);
+    let (mkdir_mode, shaped_umask) = (config.mode.map_or(DEFAULT_PERM, |m| m.bits), 0u32);
 
     // Label the directory at creation, as GNU does; relabelling after leaves a window.
     #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
@@ -368,11 +375,11 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
     match create_dir_with_mode(path, mkdir_mode, shaped_umask) {
         Ok(()) => {
             #[cfg(unix)]
-            if let Some(requested) = config
+            if let Some(m) = config
                 .mode
-                .filter(|&m| !is_parent && needs_special_bits_fixup(m, config.special_bits_kept))
+                .filter(|&m| !is_parent && needs_special_bits_fixup(m))
             {
-                apply_special_bits(path, requested, config.special_bits_kept).map_err_context(
+                apply_special_bits(path, m).map_err_context(
                     || {
                         translate_text!("mkdir-error-cannot-set-permissions", "path" => locale_aware_c_single_escape(path))
                     },
