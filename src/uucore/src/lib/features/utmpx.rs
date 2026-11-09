@@ -483,22 +483,18 @@ mod tests {
     use super::*;
     use std::fs::File;
     use std::io::Write;
-    use std::mem::offset_of;
     use std::os::unix::fs::OpenOptionsExt;
+
+    mod support {
+        include!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/support/utmpx.rs"
+        ));
+    }
+    use support::utmpx_record;
 
     // Path selections persist after an iterator is dropped.
     static ITERATOR_TEST_LOCK: Mutex<()> = Mutex::new(());
-
-    fn utmpx_record(user: &str) -> Vec<u8> {
-        let mut bytes = vec![0; size_of::<utmpx>()];
-        let record_type = USER_PROCESS.to_ne_bytes();
-        let type_offset = offset_of!(utmpx, ut_type);
-        bytes[type_offset..type_offset + record_type.len()].copy_from_slice(&record_type);
-        let user_offset = offset_of!(utmpx, ut_user);
-        assert!(user.len() <= UT_NAMESIZE);
-        bytes[user_offset..user_offset + user.len()].copy_from_slice(user.as_bytes());
-        bytes
-    }
 
     fn write_utmpx_records(path: &Path, users: &[&str]) {
         let bytes: Vec<u8> = users.iter().flat_map(|user| utmpx_record(user)).collect();

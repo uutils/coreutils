@@ -11,13 +11,16 @@ use uutests::util::{TestScenario, expected_result, gnu_cmd_result};
 use uutests::util_name;
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[path = "../../src/uucore/tests/support/utmpx.rs"]
+mod utmpx_support;
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
 #[uutests::wasi_ignore(NoFifo)]
 #[rstest::rstest]
 #[case(false)]
 #[case(true)]
 fn test_utmp_fifo_is_rejected(#[case] with_writer: bool) {
     use std::io::Write;
-    use std::mem::offset_of;
     use std::os::unix::fs::OpenOptionsExt;
     use std::time::Duration;
 
@@ -33,13 +36,9 @@ fn test_utmp_fifo_is_rejected(#[case] with_writer: bool) {
             .custom_flags(libc::O_NONBLOCK)
             .open(&path)
             .unwrap();
-        let mut bytes = vec![0; size_of::<libc::utmpx>()];
-        let record_type = libc::USER_PROCESS.to_ne_bytes();
-        let type_offset = offset_of!(libc::utmpx, ut_type);
-        bytes[type_offset..type_offset + record_type.len()].copy_from_slice(&record_type);
-        let user_offset = offset_of!(libc::utmpx, ut_user);
-        bytes[user_offset..user_offset + 4].copy_from_slice(b"fifo");
-        writer.write_all(&bytes).unwrap();
+        writer
+            .write_all(&utmpx_support::utmpx_record("fifo"))
+            .unwrap();
         writer
     });
 
