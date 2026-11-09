@@ -750,12 +750,22 @@ fn test_option_value_starting_with_split_string_is_not_split() {
             .stdout_contains("/-Sprintf X\n");
     }
 
-    for opt in ["-u", "--unset", "--un", "-a", "--argv0"] {
+    for opt in ["-u", "--unset", "--un"] {
         scene
             .ucmd()
             .args(&[opt, dir, "printf", "ok"])
             .succeeds()
             .stdout_is("ok");
+    }
+
+    // A multicall binary such as the coreutils one on Android would dispatch on
+    // the argv0, so let the shell print it.
+    for opt in ["-a", "--argv0"] {
+        scene
+            .ucmd()
+            .args(&[opt, dir, "sh", "-c", "echo \"$0\""])
+            .succeeds()
+            .stdout_is("-Sprintf X\n");
     }
 }
 
