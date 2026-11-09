@@ -228,6 +228,30 @@ fn test_fold_keeps_utf8_characters_next_to_invalid_bytes(#[case] input: &[u8]) {
     }
 }
 
+/// A line that wraps next to an invalid byte: like GNU, the invalid byte
+/// takes one column and the wide character after or before it moves to its
+/// own line. With `-c`, both fit in two characters and nothing wraps.
+#[rstest]
+#[case::wide_after_invalid(b"\xff\xe7\x95\x8c\n", b"\xff\n\xe7\x95\x8c\n")]
+#[case::wide_before_invalid(b"\xe7\x95\x8c\xff\n", b"\xe7\x95\x8c\n\xff\n")]
+fn test_fold_wraps_next_to_invalid_byte(#[case] input: &[u8], #[case] expected: &[u8]) {
+    for extra in [None, Some("-s")] {
+        let mut cmd = new_ucmd!();
+        cmd.arg("-w2");
+        if let Some(option) = extra {
+            cmd.arg(option);
+        }
+        cmd.pipe_in(input.to_vec())
+            .succeeds()
+            .stdout_is_bytes(expected);
+    }
+    new_ucmd!()
+        .args(&["-w2", "-c"])
+        .pipe_in(input.to_vec())
+        .succeeds()
+        .stdout_is_bytes(input);
+}
+
 #[rstest]
 #[case::utf8_crlf(b"abc\r\n\xc3\xa9\n")]
 #[case::utf8_backspace(b"abc\x08X\n\xc3\xa9\n")]
