@@ -90,7 +90,7 @@ fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IORes
     chownat(CWD, path.as_ref(), owner, group, flags).map_err(Into::into)
 }
 
-/// Redox does not provide rustix::fs::chownat.
+/// Redox does not provide `rustix::fs::chownat`.
 // TODO: Remove this fallback when a rustix release includes Redox chownat:
 // https://github.com/bytecodealliance/rustix/pull/1638
 #[cfg(target_os = "redox")]
