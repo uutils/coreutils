@@ -891,10 +891,11 @@ impl<'a> SourceLine<'a> {
             if row == 0 {
                 // ariadne counts the header's column in characters, not bytes.
                 let drawn = format!(" {}:1:", self.name);
-                let from = line.find(&drawn)? + 1;
+                let drawn_start = line.find(&drawn)?;
+                let from = drawn_start + 1;
                 // The name may hold spaces of its own: look past it.
-                let column = from + drawn.len() - 1;
-                let to = column + line[column..].find(' ')?;
+                let drawn_end = drawn_start + drawn.len();
+                let to = drawn_end + line[drawn_end..].find(' ')?;
                 let location = format!("{}:{number}:{}", self.name, start + 1);
                 let _ = write!(
                     out,
