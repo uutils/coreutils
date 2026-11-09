@@ -11,7 +11,6 @@ mktemp-help-tmpdir = interpret TEMPLATE relative to DIR; if DIR is not specified
 mktemp-help-t = Generate a template (using the supplied prefix and TMPDIR (TMP on windows) if set) to create a filename template [deprecated]
 
 # Error messages
-mktemp-error-persist-file = could not persist file { $path }
 mktemp-error-must-end-in-x = with --suffix, template { $template } must end in X
 mktemp-error-too-few-xs = too few X's in template { $template }
 mktemp-error-prefix-contains-separator = invalid template, { $template }, contains directory separator

@@ -958,6 +958,53 @@ fn test_empty_tmpdir_env_var_with_template() {
     assert!(path.starts_with(&format!("{dir}/foo")), "{path}");
 }
 
+/// The message for `EILSEQ` without the "(os error N)" suffix, as uutils
+/// prints it.
+#[cfg(unix)]
+fn eilseq_message() -> String {
+    let msg = std::io::Error::from_raw_os_error(libc::EILSEQ).to_string();
+    msg.split(" (os error").next().unwrap_or(&msg).to_string()
+}
+
+/// A relative template is created under its relative name, as GNU does, not
+/// under the result of an earlier `getcwd()`: another process could redirect
+/// that absolute path by renaming an ancestor of the working directory in
+/// between. Without search permission on the parent, only the relative name
+/// can be created.
+#[uutests::wasi_ignore(NoPermissionBits)]
+#[test]
+#[cfg(unix)]
+fn test_relative_template_does_not_resolve_path_of_current_directory() {
+    if rustix::process::geteuid().is_root() {
+        return; // root ignores the permissions this relies on
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("p/w");
+    for (args, is_dir) in [("fXXX", false), ("-d dXXX", true)] {
+        let result = scene
+            .cmd("sh")
+            .current_dir(at.plus("p/w"))
+            .env("PATH", std::env::var_os("PATH").unwrap())
+            .args(&[
+                "-c",
+                &format!("chmod 0 .. && \"$0\" mktemp {args}; s=$?; chmod 755 ..; exit $s"),
+            ])
+            .arg(&scene.bin_path)
+            .succeeds();
+        let name = result.no_stderr().stdout_str().trim_end();
+        assert!(!name.contains(MAIN_SEPARATOR), "{name}");
+        let path = format!("p/w/{name}");
+        if is_dir {
+            assert!(at.dir_exists(&path), "{path}");
+            assert_eq!(at.metadata(&path).permissions().mode() & 0o777, 0o700);
+        } else {
+            assert!(at.file_exists(&path), "{path}");
+            assert_eq!(at.metadata(&path).permissions().mode() & 0o777, 0o600);
+        }
+    }
+}
+
 #[test]
 fn test_nonexistent_dir_prefix() {
     #[cfg(not(windows))]
@@ -1173,8 +1220,7 @@ fn test_non_utf8_template(
     if cfg!(target_vendor = "apple") && !flags.contains(&"-u") {
         result
             .code_is(1)
-            .no_stdout()
-            .stderr_contains(std::io::Error::from_raw_os_error(libc::EILSEQ).to_string());
+            .stderr_only(format!("mktemp: {}\n", eilseq_message()));
         return;
     }
     result.success().no_stderr();
@@ -1254,8 +1300,7 @@ fn test_invalid_utf8_suffix(#[values(false, true)] dry_run: bool) {
     if cfg!(target_vendor = "apple") && !dry_run {
         result
             .code_is(1)
-            .no_stdout()
-            .stderr_contains(std::io::Error::from_raw_os_error(libc::EILSEQ).to_string());
+            .stderr_only(format!("mktemp: {}\n", eilseq_message()));
         return;
     }
     result.success().no_stderr();

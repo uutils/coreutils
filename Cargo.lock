@@ -3682,7 +3682,6 @@ dependencies = [
  "clap",
  "fluent",
  "rand 0.10.3",
- "tempfile",
  "thiserror 2.0.21",
  "uucore",
 ]
