@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) RFILE RDONLY CLOEXEC ENODATA relabeler
+// spell-checker:ignore (vars) RFILE RDONLY CLOEXEC ENODATA relabeler readlinkat
 
 #![cfg(any(target_os = "linux", target_os = "android"))]
 #![allow(clippy::upper_case_acronyms)]
@@ -627,7 +627,17 @@ impl Relabeler<'_> {
             // -L: links are resolved, and directories they lead to are walked.
             RecursiveMode::RecursiveAndFollowAllDirSymLinks => true,
         };
-        match open_path_at(dir, name, SymlinkBehavior::Follow) {
+        // Read the link we just examined through its handle, then resolve
+        // its target from the same directory, so the name is looked up once.
+        let target = match rustix::fs::readlinkat(&entry, c"", Vec::new()) {
+            Ok(target) => target,
+            Err(e) => {
+                return self
+                    .status
+                    .fail(translate!("chcon-op-accessing"), display, e.into());
+            }
+        };
+        match open_path_at(dir, target.as_c_str(), SymlinkBehavior::Follow) {
             Ok(referent) if walk => {
                 if let Some(st) = self.stat(&referent, display) {
                     self.object(&referent, &st, display, true);
