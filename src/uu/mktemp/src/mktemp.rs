@@ -483,8 +483,8 @@ fn temp_path(dir: &Path, prefix: &OsStr, random: &str, suffix: &OsStr) -> PathBu
 /// The maximum number of names `make_temp` tries before giving up.
 const NUM_RETRIES: u32 = 1 << 16;
 
-/// A random number generator for temporary file names. `buf` is only used
-/// for the fallback seed.
+/// A random number generator for temporary file names. If the system RNG is
+/// unavailable, the address of `buf` is used as the seed.
 fn name_rng(buf: &[u8]) -> SmallRng {
     SmallRng::try_from_rng(&mut rngs::SysRng).unwrap_or_else(|_| {
         //rand::rng panics if getrandom failed
@@ -494,7 +494,7 @@ fn name_rng(buf: &[u8]) -> SmallRng {
 
 /// Fill `buf` with random bytes and map them to ASCII letters and digits.
 fn random_name(rng: &mut SmallRng, buf: &mut [u8]) -> String {
-    rng.fill(&mut buf[..]);
+    rng.fill(buf);
     buf.iter()
         .map(|byte| {
             char::from(match byte % 62 {
