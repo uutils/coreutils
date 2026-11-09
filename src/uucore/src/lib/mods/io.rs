@@ -39,6 +39,7 @@ impl<T: AsFd> io::Read for RawReader<T> {
 }
 
 // create writer without buffering
+// catch `EBADF` when fd is read-only
 #[cfg(any(unix, target_os = "wasi"))]
 pub struct RawWriter<T: AsFd>(pub T);
 #[cfg(any(unix, target_os = "wasi"))]

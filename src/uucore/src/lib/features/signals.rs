@@ -723,8 +723,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(unix)]
 static STDIN_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
 #[cfg(unix)]
-static STDOUT_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
-#[cfg(unix)]
 static STDERR_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
 
 // SIGPIPE state capture - captures whether SIGPIPE was ignored at process startup
@@ -737,7 +735,7 @@ static STARTUP_STATE_WAS_CAPTURED: AtomicBool = AtomicBool::new(false);
 /// Captures stdio and SIGPIPE state at process initialization, before `main()` runs.
 ///
 /// # Safety
-/// Called from `.init_array` before `main()`. Only reads current state.
+/// Called from `.init_array` before `main()`. Only chaiging stdio.
 #[cfg(unix)]
 #[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn capture_startup_state() {
@@ -751,19 +749,79 @@ pub unsafe extern "C" fn capture_startup_state() {
     }
 
     // Capture stdio state
-    unsafe {
-        STDIN_WAS_CLOSED.store(
-            libc::fcntl(libc::STDIN_FILENO, libc::F_GETFD) == -1,
-            Ordering::Relaxed,
-        );
-        STDOUT_WAS_CLOSED.store(
-            libc::fcntl(libc::STDOUT_FILENO, libc::F_GETFD) == -1,
-            Ordering::Relaxed,
-        );
-        STDERR_WAS_CLOSED.store(
-            libc::fcntl(libc::STDERR_FILENO, libc::F_GETFD) == -1,
-            Ordering::Relaxed,
-        );
+    #[cfg(not(target_vendor = "apple"))]
+    let mut polled_fds = [
+        libc::pollfd {
+            fd: libc::STDIN_FILENO,
+            events: 0,
+            revents: 0,
+        },
+        libc::pollfd {
+            fd: libc::STDOUT_FILENO,
+            events: 0,
+            revents: 0,
+        },
+        libc::pollfd {
+            fd: libc::STDERR_FILENO,
+            events: 0,
+            revents: 0,
+        },
+    ];
+    #[cfg(not(target_vendor = "apple"))]
+    let polled = unsafe { libc::poll(polled_fds.as_mut_ptr(), polled_fds.len() as _, 0) } >= 0;
+    let is_closed = |i: libc::c_int| {
+        // try to avoid 3 `fcntl` calls
+        #[cfg(not(target_vendor = "apple"))]
+        if polled {
+            polled_fds[i as usize].revents & libc::POLLNVAL != 0
+        } else {
+            unsafe { libc::fcntl(polled_fds[i as usize].fd, libc::F_GETFD) == -1 }
+        }
+        #[cfg(target_vendor = "apple")] // does not report POLLNVAL for closed fd
+        unsafe {
+            libc::fcntl(i, libc::F_GETFD) == -1
+        }
+    };
+    let stdin_was_closed = is_closed(libc::STDIN_FILENO);
+    STDIN_WAS_CLOSED.store(stdin_was_closed, Ordering::Relaxed);
+    if stdin_was_closed {
+        // open write-only stdin. Then `uucore::io::RawReader` reports `EBADF`.
+        // Don't use `/dev/null` since `std` crashes when `/dev` is not mounted and stdin was closed.
+        let mut pipefd = [-1; 2];
+        // if this failed, `std` opens `/dev/null`.
+        if unsafe { libc::pipe(pipefd.as_mut_ptr()) } == 0 {
+            if pipefd[1] != libc::STDIN_FILENO {
+                // if this failed, stdin might be reader which is still better than crashing.
+                unsafe { libc::dup2(pipefd[1], libc::STDIN_FILENO) };
+                unsafe { libc::close(pipefd[1]) };
+            }
+            if pipefd[0] != libc::STDIN_FILENO {
+                unsafe { libc::close(pipefd[0]) };
+            }
+        }
+    }
+    // likewise
+    let open_reader = |fd: libc::c_int| {
+        let mut pipefd = [-1; 2];
+        if unsafe { libc::pipe(pipefd.as_mut_ptr()) } == 0 {
+            if pipefd[0] != fd {
+                unsafe { libc::dup2(pipefd[0], fd) };
+                if pipefd[0] > fd {
+                    unsafe { libc::close(pipefd[0]) };
+                }
+            }
+            if pipefd[1] > fd {
+                unsafe { libc::close(pipefd[1]) };
+            }
+        }
+    };
+    if is_closed(libc::STDOUT_FILENO) {
+        open_reader(libc::STDOUT_FILENO);
+    }
+    let stderr_was_closed = is_closed(libc::STDERR_FILENO);
+    STDERR_WAS_CLOSED.store(stderr_was_closed, Ordering::Relaxed);
+    if stderr_was_closed {
+        open_reader(libc::STDERR_FILENO);
     }
 
     // Capture SIGPIPE state
@@ -808,16 +866,6 @@ pub fn stdin_was_closed() -> bool {
 
 #[cfg(not(unix))]
 pub const fn stdin_was_closed() -> bool {
-    false
-}
-
-#[cfg(unix)]
-pub fn stdout_was_closed() -> bool {
-    STDOUT_WAS_CLOSED.load(Ordering::Relaxed)
-}
-
-#[cfg(not(unix))]
-pub const fn stdout_was_closed() -> bool {
     false
 }
 
