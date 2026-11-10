@@ -328,10 +328,7 @@ jobs:
         RUST_BACKTRACE: "1"
     - name: Test utmpx with systemd-logind
       if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libsystemd-dev
-        cargo test -p uucore --lib --locked --features systemd_logind
+      run: cargo test -p uucore --lib --locked --features systemd-logind
     - name: Upload test results to Codecov
       if: ${{ !cancelled() }}
       uses: codecov/codecov-action@v7

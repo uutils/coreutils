@@ -1326,7 +1326,6 @@ impl Drop for UtmpxIter {
     }
 }
 
-
 #[cfg(test)]
 mod host_tests {
     use super::{canonicalize_host_with, split_host_display};
