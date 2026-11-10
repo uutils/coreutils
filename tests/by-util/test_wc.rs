@@ -236,6 +236,45 @@ fn test_multiple_default() {
         ));
 }
 
+/// Test that the size of stdin dictates the display width when stdin is a
+/// regular file.
+///
+/// A stream of unknown length falls back to the minimum width, but a regular
+/// file redirected onto stdin has a size known up front, so it dictates the
+/// width just like a named file does.
+#[test]
+// `at_and_ucmd!` is only imported on unix in this file.
+#[cfg(unix)]
+#[uutests::wasi_ignore(StdioHandlesOpaque)]
+fn test_stdin_size_dictates_width() {
+    use std::fs::File;
+
+    // lorem_ipsum.txt contains 772 bytes, a width of 3.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.set_stdin(File::open(at.plus("lorem_ipsum.txt")).unwrap())
+        .succeeds()
+        .stdout_is(" 13 109 772\n");
+
+    // The same content piped in has no size known in advance, so the counts
+    // are padded to the minimum width instead.
+    new_ucmd!()
+        .pipe_in_fixture("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is("     13     109     772\n");
+
+    // "-" contributes the size of stdin to the total, so 772 + 302 = 1074
+    // bytes give a width of 4.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-", "alice_in_wonderland.txt"])
+        .set_stdin(File::open(at.plus("lorem_ipsum.txt")).unwrap())
+        .succeeds()
+        .stdout_is(concat!(
+            "  13  109  772 -\n",
+            "   5   57  302 alice_in_wonderland.txt\n",
+            "  18  166 1074 total\n",
+        ));
+}
+
 /// Test that the total size of all the files in the input dictates
 /// the display width.
 ///
@@ -848,6 +887,7 @@ fn test_count_bytes_from_partial_stdin_offset(#[case] size: u64, #[case] offset:
 
 #[cfg(unix)]
 #[test]
+#[uutests::wasi_ignore(StdioHandlesOpaque)]
 fn test_count_bytes_from_repeated_redirected_stdin() {
     use std::io::Seek;
     let (at, mut command) = at_and_ucmd!();
@@ -857,6 +897,6 @@ fn test_count_bytes_from_repeated_redirected_stdin() {
         .args(&["-c", "-", "-"])
         .set_stdin(input.try_clone().unwrap())
         .succeeds()
-        .stdout_only("      6 -\n      0 -\n      6 total\n");
+        .stdout_only(" 6 -\n 0 -\n 6 total\n");
     assert_eq!(input.stream_position().unwrap(), 6);
 }
