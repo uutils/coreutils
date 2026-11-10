@@ -2167,6 +2167,20 @@ fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyRe
     Ok(())
 }
 
+/// Put a made backup back in place of `dest` after a failed copy, matching
+/// GNU cp: the destination is left as it was before the copy attempt.
+fn restore_backup(dest: &Path, backup_path: &Path, was_dest_symlink: bool) {
+    let restore = if was_dest_symlink {
+        fs::rename(backup_path, dest)
+    } else {
+        fs::copy(backup_path, dest).map(|_| ())
+    };
+
+    if let Err(err) = restore {
+        let _ = err; // restoring is best-effort; the copy error is reported
+    }
+}
+
 /// Decide whether `source` and `dest` are the same directory entry, as opposed
 /// to merely being two different hard links to the same inode.
 fn paths_are_same_entry(source: &Path, dest: &Path) -> bool {
@@ -2895,6 +2909,13 @@ fn copy_file(
         }
     }
 
+    // If a backup was made, GNU cp puts it back in place of `dest` when the
+    // copy fails later on, leaving `dest` as it was before the attempt.
+    let made_backup = options.backup != BackupMode::None
+        && backup_control::get_backup_path(options.backup, dest, &options.backup_suffix)
+            .is_some_and(|backup_path| backup_path.try_exists().unwrap_or(false));
+    let backup_was_symlink = dest_is_symlink;
+
     // `--attributes-only` skips `handle_existing_dest` above, so its
     // same-file check never runs; GNU cp refuses self-copies in this
     // mode too.
@@ -2977,7 +2998,7 @@ fn copy_file(
 
     let source_is_stream = is_stream(&source_metadata);
 
-    let performed_action = handle_copy_mode(
+    let performed_action = match handle_copy_mode(
         source,
         dest,
         options,
@@ -2986,7 +3007,19 @@ fn copy_file(
         symlinked_files,
         source_in_command_line,
         created_parent_dirs,
-    )?;
+    ) {
+        Ok(performed_action) => performed_action,
+        Err(err) => {
+            if made_backup {
+                let backup_path =
+                    backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
+                if let Some(backup_path) = backup_path {
+                    restore_backup(dest, &backup_path, backup_was_symlink);
+                }
+            }
+            return Err(err);
+        }
+    };
 
     if options.verbose && performed_action != PerformedAction::Skipped {
         print_verbose_output(options.parents, progress_bar, source, dest)?;
