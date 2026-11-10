@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (jargon) xattributes
+// spell-checker:ignore (jargon) xattributes newfstatat
 
 #![allow(clippy::missing_errors_doc, clippy::similar_names)]
 #![cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -661,4 +661,37 @@ fn set_file_context(path: impl AsRef<Path>, context: &str) -> Result<(), selinux
         println!("set_file_context: '{context}' => '{}'.", path.display());
     }
     r
+}
+
+#[test]
+fn recursive_ignores_entry_removed_during_traversal() {
+    // Pretend `batch/vanish.log` disappears while `batch` is walked: that race
+    // is ignored and its siblings are still relabelled.
+    use std::process::Command;
+
+    let (dir, _cmd) = at_and_ucmd!();
+    dir.mkdir("batch");
+    dir.touch("batch/vanish.log");
+    dir.touch("batch/stay.log");
+
+    let Ok(out) = Command::new("strace")
+        .current_dir(dir.as_string())
+        .args(["-f", "-o", "/dev/null", "-P", "vanish.log"])
+        .args(["-e", "inject=openat,newfstatat,statx:error=ENOENT"])
+        .arg(uutests::util::get_tests_binary())
+        .args(["chcon", "-R", "-t", "user_tmp_t", "batch"])
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .output()
+    else {
+        return; // missing strace
+    };
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    if stderr.contains("ptrace") {
+        return; // tracing not permitted here
+    }
+    assert_eq!(out.status.code(), Some(0), "{stderr}");
+    assert_eq!(stderr, "");
+    let stay = get_file_context(dir.plus("batch/stay.log")).unwrap();
+    assert!(stay.is_some_and(|context| context.contains(":user_tmp_t:")));
 }

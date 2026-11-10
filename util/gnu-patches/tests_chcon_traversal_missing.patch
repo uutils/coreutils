@@ -1,0 +1,29 @@
+--- a/tests/chcon/traversal-missing.sh
++++ b/tests/chcon/traversal-missing.sh
+@@ -22,20 +22,22 @@
+
+ mkdir d || framework_failure_
+ touch d/foo || framework_failure_
+-xattrs=getxattr,lgetxattr,setxattr,lsetxattr
++# uutils reaches each entry by its bare name, relative to the directory fd
++# (stat, then openat), and relabels it through the fd it opened.
++syscalls=openat,$(get_stat_syscalls_)
+
+ (cd d && chcon -R -t user_tmp_t . > /dev/null 2>&1) \
+   || skip_ 'chcon does not work on the test file system'
+
+ # Skip if strace does not support path-filtered syscall injection.
+-strace --quiet=all -o /dev/null -P /proc/self/fd/4/foo \
+-  -e inject=$xattrs:error=ENOENT true 2> /dev/null \
++strace --quiet=all -o /dev/null -P foo \
++  -e inject=$syscalls:error=ENOENT true 2> /dev/null \
+   || skip_ 'strace does not support the required options and syscalls'
+
+ for errnum in ENOENT; do
+   rm -f err trace
+-  (cd d && strace --quiet=all -o ../trace -P /proc/self/fd/4/foo \
+-     -e inject=$xattrs:error=$errnum chcon -R -t user_tmp_t . \
++  (cd d && strace --quiet=all -o ../trace -P foo \
++     -e inject=$syscalls:error=$errnum chcon -R -t user_tmp_t . \
+      > /dev/null 2> ../err)
+   status=$?

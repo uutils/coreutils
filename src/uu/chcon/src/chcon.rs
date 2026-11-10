@@ -566,6 +566,15 @@ impl Walk<'_> {
     ) {
         let meta = match parent.metadata_at(name, behavior) {
             Ok(meta) => meta,
+            // Removed since its directory was listed: nothing to relabel. A
+            // dangling symlink fails the same way when followed, but is still there.
+            Err(err)
+                if !top_level
+                    && err.kind() == io::ErrorKind::NotFound
+                    && parent.metadata_at(name, SymlinkBehavior::NoFollow).is_err() =>
+            {
+                return;
+            }
             Err(err) => return self.fail(translate!("chcon-op-accessing"), display, err),
         };
         let id = DeviceAndINode::from(&meta);
@@ -597,7 +606,7 @@ impl Walk<'_> {
         // A directory we could not read is reported, not relabelled: its context
         // would otherwise change while its contents were left untouched.
         if descended == Descent::Complete {
-            self.relabel(parent, name, display);
+            self.relabel(parent, name, display, top_level);
         }
     }
 
@@ -651,7 +660,7 @@ impl Walk<'_> {
         outcome
     }
 
-    fn relabel(&mut self, parent: &DirFd, name: &OsStr, display: &Path) {
+    fn relabel(&mut self, parent: &DirFd, name: &OsStr, display: &Path, top_level: bool) {
         if self.options.verbose && self.write_error.is_none() {
             self.write_error = writeln!(
                 io::stdout(),
@@ -661,14 +670,18 @@ impl Walk<'_> {
             .err();
         }
 
-        if let Err(err) = apply_context(
+        match apply_context(
             self.options,
             self.context,
             parent.as_fd(),
             Path::new(name),
             display,
         ) {
-            self.errors.push(err);
+            Ok(()) => {}
+            // Removed since it was stat'ed: nothing to relabel.
+            Err(Error::Io1 { source, .. })
+                if !top_level && source.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => self.errors.push(err),
         }
     }
 }
