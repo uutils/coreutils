@@ -530,7 +530,7 @@ dependencies = [
  "rstest",
  "rstest_reuse",
  "rustc-hash",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "selinux",
  "sha1",
  "tempfile",
@@ -734,7 +734,7 @@ dependencies = [
  "filedescriptor",
  "mio",
  "parking_lot",
- "rustix",
+ "rustix 1.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "signal-hook",
  "signal-hook-mio",
  "winapi",
@@ -2302,7 +2302,7 @@ checksum = "25485360a54d6861439d60facef26de713b1e126bf015ec8f98239467a2b82f7"
 dependencies = [
  "bitflags",
  "procfs-core",
- "rustix",
+ "rustix 1.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2538,6 +2538,18 @@ name = "rustix"
 version = "1.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5e76742e5294153d4dde1207dbec5bdd81eef6fabdc0d2118babadabfd858aa"
+dependencies = [
+ "bitflags",
+ "errno",
+ "libc",
+ "linux-raw-sys",
+ "windows-sys",
+]
+
+[[package]]
+name = "rustix"
+version = "1.1.6"
+source = "git+https://github.com/bytecodealliance/rustix?branch=main#ffa6ee556f54ef646c5cfc67afc72703ae3a7382"
 dependencies = [
  "bitflags",
  "errno",
@@ -2867,7 +2879,7 @@ dependencies = [
  "fastrand",
  "getrandom 0.4.3",
  "once_cell",
- "rustix",
+ "rustix 1.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "windows-sys",
 ]
 
@@ -2877,7 +2889,7 @@ version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
 dependencies = [
- "rustix",
+ "rustix 1.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "windows-sys",
 ]
 
@@ -3137,7 +3149,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "uucore",
 ]
 
@@ -3169,7 +3181,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "tempfile",
  "uu_base32",
  "uucore",
@@ -3183,7 +3195,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "memchr",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "tempfile",
  "thiserror 2.0.21",
  "uucore",
@@ -3197,7 +3209,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "selinux",
  "thiserror 2.0.21",
  "uucore",
@@ -3247,7 +3259,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "thiserror 2.0.21",
  "uucore",
 ]
@@ -3283,7 +3295,7 @@ dependencies = [
  "indicatif",
  "libc",
  "nix",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "selinux",
  "tempfile",
  "thiserror 2.0.21",
@@ -3331,7 +3343,7 @@ dependencies = [
  "jiff-tzdb",
  "libc",
  "parse_datetime",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "tempfile",
  "thiserror 2.0.21",
  "uucore",
@@ -3347,7 +3359,7 @@ dependencies = [
  "fluent",
  "libc",
  "num-integer",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "tempfile",
  "thiserror 2.0.21",
  "uucore",
@@ -3360,7 +3372,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "tempfile",
  "thiserror 2.0.21",
  "unicode-width",
@@ -3437,7 +3449,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "tempfile",
  "thiserror 2.0.21",
  "uucore",
@@ -3530,7 +3542,7 @@ dependencies = [
  "clap",
  "fluent",
  "hostname",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "uucore",
 ]
 
@@ -3552,7 +3564,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "selinux",
  "uucore",
 ]
@@ -3563,7 +3575,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "selinux",
  "thiserror 2.0.21",
  "uucore",
@@ -3589,7 +3601,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "thiserror 2.0.21",
  "uucore",
 ]
@@ -3609,7 +3621,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "thiserror 2.0.21",
  "uucore",
 ]
@@ -3670,7 +3682,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "uucore",
 ]
 
@@ -3717,7 +3729,7 @@ dependencies = [
  "indicatif",
  "nix",
  "rustc-hash",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "tempfile",
  "thiserror 2.0.21",
  "uucore",
@@ -3730,7 +3742,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "uucore",
  "windows-sys",
 ]
@@ -3755,7 +3767,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "thiserror 2.0.21",
  "uucore",
  "windows-sys",
@@ -3768,7 +3780,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "uucore",
 ]
 
@@ -3780,7 +3792,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "memchr",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "thiserror 2.0.21",
  "uucore",
 ]
@@ -3794,7 +3806,7 @@ dependencies = [
  "fluent",
  "half",
  "libc",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "tempfile",
  "uucore",
 ]
@@ -4049,7 +4061,7 @@ dependencies = [
  "rand 0.10.3",
  "rayon",
  "rlimit",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "self_cell",
  "tempfile",
  "thiserror 2.0.21",
@@ -4064,7 +4076,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "memchr",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "tempfile",
  "thiserror 2.0.21",
  "uucore",
@@ -4076,7 +4088,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "thiserror 2.0.21",
  "uucore",
 ]
@@ -4109,7 +4121,7 @@ dependencies = [
  "clap",
  "fluent",
  "nix",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "uucore",
 ]
 
@@ -4119,7 +4131,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "uucore",
 ]
 
@@ -4129,7 +4141,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "uucore",
  "windows-sys",
 ]
@@ -4159,7 +4171,7 @@ dependencies = [
  "memchr",
  "notify",
  "rstest",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "uucore",
  "windows-sys",
 ]
@@ -4171,7 +4183,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "uucore",
 ]
 
@@ -4182,7 +4194,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "tempfile",
  "thiserror 2.0.21",
  "uucore",
@@ -4198,7 +4210,7 @@ dependencies = [
  "fluent",
  "libc",
  "rlimit",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "uucore",
 ]
 
@@ -4212,7 +4224,7 @@ dependencies = [
  "jiff",
  "libc",
  "parse_datetime",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "tempfile",
  "thiserror 2.0.21",
  "uucore",
@@ -4229,7 +4241,7 @@ dependencies = [
  "fluent",
  "memchr",
  "nom 8.0.0",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "uucore",
 ]
 
@@ -4262,7 +4274,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "memchr",
  "rustc-hash",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "thiserror 2.0.21",
  "uucore",
  "windows-sys",
@@ -4274,7 +4286,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "uucore",
  "windows-sys",
 ]
@@ -4296,7 +4308,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "tempfile",
  "thiserror 2.0.21",
  "uucore",
@@ -4360,7 +4372,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "libc",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "tempfile",
  "thiserror 2.0.21",
  "unicode-width",
@@ -4373,7 +4385,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "uucore",
 ]
 
@@ -4383,7 +4395,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "uucore",
  "windows-sys",
 ]
@@ -4395,7 +4407,7 @@ dependencies = [
  "clap",
  "fluent",
  "itertools 0.15.0",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "uucore",
 ]
 
@@ -4440,7 +4452,7 @@ dependencies = [
  "os_display",
  "procfs",
  "rustc-hash",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "selinux",
  "sha1",
  "sha2",
@@ -4481,7 +4493,7 @@ dependencies = [
  "rand 0.10.3",
  "regex",
  "rlimit",
- "rustix",
+ "rustix 1.1.6 (git+https://github.com/bytecodealliance/rustix?branch=main)",
  "tempfile",
  "uucore",
  "uutests_procs",
@@ -4690,7 +4702,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "963d6fab92d5504b971dc8bd90ca743c2575e590bc8071ea5bc571598667ae08"
 dependencies = [
  "libc",
- "rustix",
+ "rustix 1.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
