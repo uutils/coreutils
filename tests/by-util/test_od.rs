@@ -438,6 +438,44 @@ fn test_f32() {
 }
 
 #[test]
+fn test_float_shortest_round_trip() {
+    // Values from issue #13608, printed like GNU od.
+    let f4: [u8; 16] = [
+        0x00, 0x00, 0x80, 0x3f, // 1.0
+        0x0a, 0xd7, 0x23, 0x3c, // 0.01
+        0xac, 0xc5, 0x27, 0x37, // 1e-05
+        0x00, 0x00, 0x20, 0x41, // 10.0
+    ];
+    new_ucmd!()
+        .arg("--endian=little")
+        .arg("-tf4")
+        .run_piped_stdin(&f4[..])
+        .success()
+        .stdout_only(unindent(
+            "
+            0000000               1            0.01           1e-05              10
+            0000020
+            ",
+        ));
+
+    let f8: [u8; 16] = [
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x3f, // 1.0
+        0x9a, 0x99, 0x99, 0x99, 0x99, 0x99, 0xb9, 0x3f, // 0.1
+    ];
+    new_ucmd!()
+        .arg("--endian=little")
+        .arg("-tf8")
+        .run_piped_stdin(&f8[..])
+        .success()
+        .stdout_only(unindent(
+            "
+            0000000                        1                      0.1
+            0000020
+            ",
+        ));
+}
+
+#[test]
 fn test_f64() {
     let input: [u8; 40] = [
         0x27, 0x6b, 0x0a, 0x2f, 0x2a, 0xee, 0x45,

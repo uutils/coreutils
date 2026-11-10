@@ -6,6 +6,8 @@
 // spell-checker:ignore dtoastr ftoastr
 
 use half::{bf16, f16};
+use std::fmt::LowerExp;
+use std::str::FromStr;
 
 use crate::formatter_item_info::{FormatWriter, FormatterItemInfo};
 
@@ -62,66 +64,53 @@ pub fn format_item_bf16(f: f64) -> String {
 
 /// Right-padded to 15 chars (`format_item_f32` prepends one space -> 16 total).
 fn format_f32(f: f32) -> String {
-    let s = gnu_float_repr(&shortest_f32(f), f.is_nan(), f.is_sign_negative(), 6);
+    let s = gnu_float_repr(f, f.is_nan(), f.is_sign_negative(), 6);
     format!("{s:>15}")
 }
 
 /// Right-padded to 24 chars (`format_item_f64` prepends one space -> 25 total).
 fn format_f64(f: f64) -> String {
-    let s = gnu_float_repr(&shortest_f64(f), f.is_nan(), f.is_sign_negative(), 15);
+    let s = gnu_float_repr(f, f.is_nan(), f.is_sign_negative(), 15);
     format!("{s:>24}")
 }
 
-/// The fewest significant digits that read back as `f`, in `{:e}` form,
-/// rounded to nearest with ties to even like GNU. `{:e}` alone may pick
-/// different digits: it rounds ties up, and next to a power of two it can
-/// find a shorter string that is not the correctly rounded one. Its digit
-/// count is still a lower bound, so start there and add digits until the
-/// correctly rounded string reads back as `f`.
-macro_rules! shortest_round_trip {
-    ($name:ident, $t:ty) => {
-        fn $name(f: $t) -> String {
-            let shortest = format!("{f:e}");
-            let Some(digits) = significant_digits(&shortest) else {
-                return shortest;
-            };
-            let mut precision = digits - 1;
-            let mut rounded = format!("{f:.precision$e}");
-            // Equal to `shortest` means it is known to read back as `f`.
-            while rounded != shortest && rounded.parse::<$t>() != Ok(f) {
-                precision += 1;
-                rounded = format!("{f:.precision$e}");
-            }
-            rounded
-        }
-    };
-}
-
-shortest_round_trip!(shortest_f32, f32);
-shortest_round_trip!(shortest_f64, f64);
-
-/// Number of mantissa digits in `{:e}` output, `None` for inf and NaN.
-fn significant_digits(sci: &str) -> Option<usize> {
-    let (mantissa, _) = sci.split_once('e')?;
-    Some(mantissa.chars().filter(char::is_ascii_digit).count())
+/// The fewest significant digits that read back as `f`, rounded to nearest
+/// with ties to even like GNU, as `(digits, exponent)`. `None` for inf and NaN.
+///
+/// `{:e}` may pick other digits, but its digit count is a lower bound.
+fn shortest_round_trip<T>(f: T) -> Option<(String, i32)>
+where
+    T: LowerExp + FromStr + PartialEq + Copy,
+{
+    let shortest = format!("{f:e}");
+    let (mantissa, _) = shortest.split_once('e')?;
+    let mut precision = mantissa.chars().filter(char::is_ascii_digit).count() - 1;
+    let mut rounded = format!("{f:.precision$e}");
+    // Equal to `shortest` means it is known to read back as `f`.
+    while rounded != shortest && rounded.parse::<T>().ok() != Some(f) {
+        precision += 1;
+        rounded = format!("{f:.precision$e}");
+    }
+    let (mantissa, exp) = rounded.split_once('e')?;
+    let digits = mantissa.chars().filter(char::is_ascii_digit).collect();
+    Some((digits, exp.parse().ok()?))
 }
 
 /// Lay out the shortest round-trip digits the way GNU od does: like `%g`
 /// with exactly those digits, switching to scientific notation when the
 /// exponent is below -4 or at least `max(digits, dig)`. `dig` is the number
 /// of decimal digits the type always preserves (6 for f32, 15 for f64).
-///
-/// `shortest` is in `{:e}` form, e.g. `1.5e-7` or `-2e10`.
-fn gnu_float_repr(shortest: &str, is_nan: bool, negative: bool, dig: i32) -> String {
+fn gnu_float_repr<T>(f: T, is_nan: bool, negative: bool, dig: i32) -> String
+where
+    T: LowerExp + FromStr + PartialEq + Copy,
+{
     if is_nan {
         return if negative { "-nan" } else { "nan" }.to_string();
     }
-    let Some((mantissa, exp)) = shortest.split_once('e') else {
+    let Some((digits, exp)) = shortest_round_trip(f) else {
         // inf and -inf
-        return shortest.to_string();
+        return format!("{f:e}");
     };
-    let exp: i32 = exp.parse().unwrap_or(0);
-    let digits: String = mantissa.chars().filter(char::is_ascii_digit).collect();
     let sign = if negative { "-" } else { "" };
     if digits == "0" {
         return format!("{sign}0");
@@ -178,6 +167,10 @@ fn format_long_double(f: f64) -> String {
 fn test_format_f32() {
     // Expected values are GNU od 9.12 output.
     assert_eq!(format_f32(1.0), "              1");
+    assert_eq!(format_f32(10.0), "             10");
+    assert_eq!(format_f32(100.0), "            100");
+    assert_eq!(format_f32(1000.0), "           1000");
+    assert_eq!(format_f32(10000.0), "          10000");
     assert_eq!(format_f32(100_000.0), "         100000");
     assert_eq!(format_f32(1_000_000.0), "          1e+06");
     assert_eq!(format_f32(9_999_999.0), "        9999999");
@@ -185,9 +178,11 @@ fn test_format_f32() {
     assert_eq!(format_f32(1.0e10), "          1e+10");
 
     assert_eq!(format_f32(0.1), "            0.1");
+    assert_eq!(format_f32(0.001), "          0.001");
     assert_eq!(format_f32(1e-4_f32), "         0.0001");
     assert_eq!(format_f32(1e-5_f32), "          1e-05");
 
+    assert_eq!(format_f32(-1.0), "             -1");
     assert_eq!(format_f32(-10.0), "            -10");
     assert_eq!(format_f32(-0.1), "           -0.1");
     assert_eq!(format_f32(3.402_823_3e38), "  3.4028233e+38");
@@ -211,6 +206,7 @@ fn test_format_f32() {
 fn test_format_f64() {
     // Expected values are GNU od 9.12 output.
     assert_eq!(format_f64(1.0), "                       1");
+    assert_eq!(format_f64(10.0), "                      10");
     assert_eq!(
         format_f64(100_000_000_000_000.0),
         "         100000000000000"
@@ -219,6 +215,15 @@ fn test_format_f64() {
         format_f64(1_000_000_000_000_000.0),
         "                   1e+15"
     );
+    assert_eq!(
+        format_f64(10_000_000_000_000_000.0),
+        "                   1e+16"
+    );
+    assert_eq!(
+        format_f64(100_000_000_000_000_000.0),
+        "                   1e+17"
+    );
+    assert_eq!(format_f64(-0.1), "                    -0.1");
     assert_eq!(format_f64(-0.01), "                   -0.01");
     assert_eq!(format_f64(1.5e-9), "                 1.5e-09");
 
@@ -233,9 +238,12 @@ fn test_format_f64() {
         "-2.2250738585072014e-308"
     );
     assert_eq!(format_f64(4e-320), "                  4e-320");
+    assert_eq!(format_f64(f64::NAN), "                     nan");
     assert_eq!(format_f64(-f64::NAN), "                    -nan");
+    assert_eq!(format_f64(f64::INFINITY), "                     inf");
     assert_eq!(format_f64(f64::NEG_INFINITY), "                    -inf");
     assert_eq!(format_f64(-0.0), "                      -0");
+    assert_eq!(format_f64(0.0), "                       0");
 }
 
 #[test]
