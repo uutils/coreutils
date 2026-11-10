@@ -787,15 +787,6 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             hardlink_params.1,
         ) {
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
-            // This message already names both files, so it is shown without a context
-            Err(e) if is_inter_device_move_error(&e) => {
-                let e = USimpleError::new(1, e.to_string());
-                if let Some(ref pb) = display_manager {
-                    pb.suspend(|| show!(e));
-                } else {
-                    show!(e);
-                }
-            }
             Err(e) => {
                 let e = cannot_move_error(e, sourcepath, &targetpath);
                 if let Some(ref pb) = display_manager {
@@ -964,6 +955,10 @@ fn is_fifo(_filetype: fs::FileType) -> bool {
 /// Add GNU's "cannot move" (or "cannot overwrite" for a non-empty
 /// directory) context to an error from `rename`.
 fn cannot_move_error(e: io::Error, source: &Path, target: &Path) -> Box<dyn UError> {
+    // This message already names both files, so it is shown without a context
+    if is_inter_device_move_error(&e) {
+        return USimpleError::new(1, e.to_string());
+    }
     let message = if is_directory_not_empty_error(&e) {
         translate!(
             "mv-error-cannot-overwrite-non-empty-directory",
@@ -1515,7 +1510,7 @@ fn rename_file_fallback(
     #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
 ) -> io::Result<()> {
     // Remove existing target file if it exists
-    if to.is_symlink() || to.exists() {
+    if to.symlink_metadata().is_ok() {
         fs::remove_file(to).map_err(|err| {
             let inter_device_err = MvError::InterDeviceMoveFailed(
                 from.quote().to_string(),
