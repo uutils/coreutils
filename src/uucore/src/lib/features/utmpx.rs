@@ -291,84 +291,51 @@ impl Utmpx {
         Ok(host)
     }
 
-    /// Iterate through all the utmp records.
+    /// Iterate through all utmp records using the most recently selected path.
     ///
-    /// This will use the default location, or the path [`Utmpx::iter_all_records_from`]
-    /// was most recently called with.
+    /// On Linux with `systemd_logind` enabled, the default path selects systemd.
+    /// A custom path selects traditional records, including on subsequent calls
+    /// to this method. Call [`Self::iter_all_records_from`] with [`DEFAULT_FILE`]
+    /// to select systemd again.
     ///
-    /// On systems with systemd-logind feature enabled at compile time,
-    /// this will use systemd-logind instead of traditional utmp files.
-    ///
-    /// Only one instance of [`UtmpxIter`] may be active at a time. This
-    /// function will block as long as one is still active. Beware!
+    /// Only one iterator may be active at a time; this blocks until it is dropped.
     pub fn iter_all_records() -> UtmpxIter {
-        #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
-        {
-            // Use systemd-logind instead of traditional utmp when feature is enabled
-            UtmpxIter::new_systemd()
-        }
-
-        #[cfg(all(target_os = "linux", not(feature = "systemd_logind")))]
-        return UtmpxIter::new_file(None);
+        #[cfg(target_os = "linux")]
+        return UtmpxIter::new_source(None);
 
         #[cfg(not(target_os = "linux"))]
         {
             let iter = UtmpxIter::new();
+            // SAFETY: The iterator holds LOCK while accessing libc's global state.
             unsafe {
-                // This can technically fail, and it would be nice to detect that,
-                // but it doesn't return anything so we'd have to do nasty things
-                // with errno.
-                #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
                 setutxent();
             }
             iter
         }
     }
 
-    /// Iterate through all the utmp records from a specific file.
+    /// Read a specific file, remembering it for subsequent iterators.
     ///
-    /// No failure is reported or detected.
+    /// On Linux with `systemd_logind` enabled, [`DEFAULT_FILE`] selects systemd
+    /// instead of reading the file. Other paths select traditional records.
     ///
-    /// This function affects subsequent calls to [`Utmpx::iter_all_records`].
-    ///
-    /// On systems with systemd-logind feature enabled at compile time,
-    /// if the path matches the default utmp file, this will use systemd-logind
-    /// instead of traditional utmp files.
-    ///
-    /// The same caveats as for [`Utmpx::iter_all_records`] apply.
+    /// Only one iterator may be active at a time; failures produce no records.
     pub fn iter_all_records_from<P: AsRef<Path>>(path: P) -> UtmpxIter {
-        #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
-        {
-            // Use systemd-logind for default utmp file when feature is enabled
-            if path.as_ref() == Path::new(DEFAULT_FILE) {
-                return UtmpxIter::new_systemd();
-            }
-        }
-
         #[cfg(target_os = "linux")]
-        return UtmpxIter::new_file(Some(path.as_ref()));
+        return UtmpxIter::new_source(Some(path.as_ref()));
 
         #[cfg(not(target_os = "linux"))]
         {
             let iter = UtmpxIter::new();
-            let path = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
+            let filename = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
+            // SAFETY: The iterator holds LOCK, and filename remains valid.
             unsafe {
                 #[cfg(target_os = "freebsd")]
-                setutxdb(libc::UTXDB_ACTIVE, path.as_ptr());
-
-                // In glibc, utmpxname() only fails if there's not enough memory
-                // to copy the string.
-                // Solaris returns 1 on success instead of 0. Supposedly there also
-                // exist systems where it returns void.
-                // GNU who on Debian seems to output nothing if an invalid filename
-                // is specified, no warning or anything.
-                // So this function is pretty crazy and we don't try to detect errors.
-                // Not much we can do besides pray.
+                setutxdb(libc::UTXDB_ACTIVE, filename.as_ptr());
                 #[cfg(not(target_os = "freebsd"))]
-                #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
-                utmpxname(path.as_ptr());
-
-                #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
+                #[cfg_attr(target_env = "ohos", allow(deprecated))]
+                utmpxname(filename.as_ptr());
+                #[cfg_attr(target_env = "ohos", allow(deprecated))]
                 setutxent();
             }
             iter
@@ -441,19 +408,9 @@ impl UtmpxIter {
         }
     }
 
-    #[cfg(all(target_os = "linux", feature = "systemd_logind"))]
-    fn new_systemd() -> Self {
-        let mut iter = Self::new();
-        iter.systemd_iter = Some(
-            systemd_logind::SystemdUtmpxIter::new()
-                .unwrap_or_else(|_| systemd_logind::SystemdUtmpxIter::empty()),
-        );
-        iter
-    }
-
     #[cfg(target_os = "linux")]
     #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
-    fn new_file(path: Option<&Path>) -> Self {
+    fn new_source(path: Option<&Path>) -> Self {
         use std::os::fd::AsRawFd;
 
         let mut iter = Self::new();
@@ -461,6 +418,14 @@ impl UtmpxIter {
             *iter.guard = Some(path.to_path_buf());
         }
         let path = iter.guard.as_deref().unwrap_or(Path::new(DEFAULT_FILE));
+        #[cfg(feature = "systemd_logind")]
+        if path == Path::new(DEFAULT_FILE) {
+            iter.systemd_iter = Some(
+                systemd_logind::SystemdUtmpxIter::new()
+                    .unwrap_or_else(|_| systemd_logind::SystemdUtmpxIter::empty()),
+            );
+            return iter;
+        }
         iter.traditional_file = open_traditional_utmp(path).and_then(|file| {
             let fd_path = CString::new(format!("/proc/self/fd/{}", file.as_raw_fd())).ok()?;
             // SAFETY: The iterator holds LOCK, fd_path is null-terminated, and
@@ -599,7 +564,7 @@ mod tests {
         // retaining the previous iterator's temporary /proc/self/fd path.
         let _old_file = File::open(&path).unwrap();
         std::fs::rename(&replacement_path, &path).unwrap();
-        let replacement_users = UtmpxIter::new_file(None)
+        let replacement_users = UtmpxIter::new_source(None)
             .map(|record| record.user())
             .collect::<Vec<_>>();
         drop(Utmpx::iter_all_records_from(DEFAULT_FILE));
@@ -626,6 +591,42 @@ mod tests {
             assert!(iter.next().is_none());
         }
         drop(Utmpx::iter_all_records_from(DEFAULT_FILE));
+    }
+
+    #[test]
+    fn traditional_paths_persist_across_iterators() {
+        let _guard = ITERATOR_TEST_LOCK.lock().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let custom_path = directory.path().join("custom-utmp");
+        let fallback_path = directory.path().join("fallback-utmp");
+        write_utmpx_records(&custom_path, &["custom"]);
+        write_utmpx_records(&fallback_path, &["fallback"]);
+
+        let custom_users = Utmpx::iter_all_records_from(&custom_path)
+            .map(|record| record.user())
+            .collect::<Vec<_>>();
+        let repeated_custom_users = Utmpx::iter_all_records()
+            .map(|record| record.user())
+            .collect::<Vec<_>>();
+        let fallback_users = Utmpx::iter_all_records_from(&fallback_path)
+            .map(|record| record.user())
+            .collect::<Vec<_>>();
+        let repeated_fallback_users = Utmpx::iter_all_records()
+            .map(|record| record.user())
+            .collect::<Vec<_>>();
+
+        // Restore the default before the temporary files are removed.
+        let default_iter = Utmpx::iter_all_records_from(DEFAULT_FILE);
+        #[cfg(feature = "systemd_logind")]
+        assert!(default_iter.systemd_iter.is_some());
+        drop(default_iter);
+        #[cfg(feature = "systemd_logind")]
+        assert!(Utmpx::iter_all_records().systemd_iter.is_some());
+
+        assert_eq!(custom_users, ["custom"]);
+        assert_eq!(repeated_custom_users, custom_users);
+        assert_eq!(fallback_users, ["fallback"]);
+        assert_eq!(repeated_fallback_users, fallback_users);
     }
 
     #[test]
