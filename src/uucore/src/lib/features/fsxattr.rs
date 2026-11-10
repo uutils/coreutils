@@ -320,7 +320,8 @@ const NFS4_ACL_XATTR: &str = "system.nfs4_acl";
 #[cfg(not(target_os = "macos"))]
 fn nfs4_acl_is_nontrivial(mut xdr: &[u8]) -> bool {
     const ACE4_ACCESS_DENIED_ACE_TYPE: u32 = 1;
-    // FILE_INHERIT, DIRECTORY_INHERIT, NO_PROPAGATE_INHERIT, INHERIT_ONLY
+    // FILE_INHERIT, DIRECTORY_INHERIT, NO_PROPAGATE_INHERIT, INHERIT_ONLY;
+    // not INHERITED_ACE (0x80), which says where an entry came from.
     const ACE4_INHERITANCE_FLAGS: u32 = 0x1 | 0x2 | 0x4 | 0x8;
 
     fn take<'a>(xdr: &mut &'a [u8], len: usize) -> Option<&'a [u8]> {
@@ -329,7 +330,7 @@ fn nfs4_acl_is_nontrivial(mut xdr: &[u8]) -> bool {
         Some(head)
     }
     fn take_u32(xdr: &mut &[u8]) -> Option<u32> {
-        take(xdr, 4).map(|b| u32::from_be_bytes(b.try_into().unwrap()))
+        take(xdr, 4)?.try_into().ok().map(u32::from_be_bytes)
     }
     fn nontrivial(xdr: &mut &[u8]) -> Option<bool> {
         for _ in 0..take_u32(xdr)? {
@@ -639,6 +640,17 @@ mod tests {
         assert!(!nfs4_acl_is_nontrivial(&nfs4_acl(&mode_only)));
         assert!(nfs4_acl_is_nontrivial(&nfs4_acl(&[(0, 0, "1000@example")])));
         assert!(nfs4_acl_is_nontrivial(&nfs4_acl(&[(0, 0x1, "OWNER@")])));
+        let inherited = [
+            (0, 0x80, "OWNER@"),
+            (0, 0xc0, "GROUP@"),
+            (0, 0x80, "EVERYONE@"),
+        ];
+        assert!(!nfs4_acl_is_nontrivial(&nfs4_acl(&inherited)));
+        assert!(nfs4_acl_is_nontrivial(&nfs4_acl(&[(
+            0,
+            0x80,
+            "1000@example"
+        )])));
         assert!(nfs4_acl_is_nontrivial(&nfs4_acl(&[(2, 0, "EVERYONE@")])));
         let truncated = nfs4_acl(&mode_only);
         assert!(nfs4_acl_is_nontrivial(&truncated[..truncated.len() - 4]));
