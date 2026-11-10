@@ -362,12 +362,24 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
     // Convert each `MountInfo` into a `Filesystem`, which contains
     // both the mount information and usage information.
 
-    let maybe_mount = |m| platform::filesystem_from_mount(&mounts, m, None).ok();
+    let maybe_mount = |m: &MountInfo| match platform::filesystem_from_mount(&mounts, m, None) {
+        Ok(fs) => Some(fs),
+        // Like GNU, `--all` lists a mount that another mount on the same
+        // directory covers, but without its usage: `statfs` on the mount
+        // point would report the covering filesystem.
+        #[cfg(not(windows))]
+        Err(FsError::OverMounted) if opt.show_all_fs => Some(Filesystem {
+            file: None,
+            mount_info: m.clone(),
+            usage: None,
+        }),
+        Err(_) => None,
+    };
 
     Ok(mounts
         .iter()
         .filter_map(maybe_mount)
-        .filter(|fs| opt.show_all_fs || fs.usage.blocks > 0)
+        .filter(|fs| opt.show_all_fs || fs.usage.as_ref().is_some_and(|u| u.blocks > 0))
         .collect())
 }
 
@@ -731,7 +743,7 @@ mod tests {
                     remote: false,
                     dummy: false,
                 },
-                usage: FsUsage {
+                usage: Some(FsUsage {
                     blocksize: 1024,
                     blocks: 10,
                     bfree: 4,
@@ -739,7 +751,7 @@ mod tests {
                     bavail_top_bit_set: false,
                     files: 20,
                     ffree: 5,
-                },
+                }),
             }
         }
 

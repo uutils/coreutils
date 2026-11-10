@@ -1185,6 +1185,57 @@ fn test_df_masked_proc_fallback() {
     }
 }
 
+/// With `--all`, a mount covered by another mount on the same directory is
+/// listed like GNU does, with "-" for its usage and type (#9952).
+#[test]
+#[cfg(target_os = "linux")]
+fn test_df_all_lists_over_mounted_with_unknown_usage() {
+    use std::process::Command;
+
+    // Check if user namespaces are available
+    if !Command::new("unshare")
+        .args(["-rm", "true"])
+        .status()
+        .is_ok_and(|s| s.success())
+    {
+        return;
+    }
+
+    let ts = TestScenario::new("df");
+    ts.fixtures.mkdir("mnt");
+    let mnt = ts.fixtures.plus("mnt");
+    let df = ts.bin_path.display();
+    let run = |args: &str| {
+        let output = Command::new("unshare")
+            .args(["-rm", "sh", "-c"])
+            .arg(format!(
+                "mount -t tmpfs lower {m} && mount -t tmpfs upper {m} && {df} df {args}",
+                m = mnt.display()
+            ))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).into_owned()
+    };
+
+    let output = run("-a --output=source,fstype,size,pcent");
+    let lower = output.lines().find(|l| l.starts_with("lower"));
+    let upper = output.lines().find(|l| l.starts_with("upper"));
+    assert_eq!(
+        lower.map(|l| l.split_whitespace().collect::<Vec<_>>()),
+        Some(vec!["lower", "-", "-", "-"]),
+        "{output}"
+    );
+    assert!(upper.is_some_and(|l| l.contains("tmpfs")), "{output}");
+
+    // Without --all, the covered mount stays hidden.
+    assert!(!run("").lines().any(|l| l.starts_with("lower")));
+}
+
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     use super::*;

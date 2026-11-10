@@ -39,7 +39,11 @@ pub struct Filesystem {
     pub mount_info: MountInfo,
 
     /// Information about the amount of space used on the filesystem.
-    pub usage: FsUsage,
+    ///
+    /// This is `None` when the usage is unknown, as for a mount that
+    /// another mount on the same directory covers: `statfs` on the mount
+    /// point would report the covering filesystem instead.
+    pub usage: Option<FsUsage>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -121,7 +125,7 @@ impl Filesystem {
         Some(Self {
             file,
             mount_info,
-            usage,
+            usage: Some(usage),
         })
     }
 
