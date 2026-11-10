@@ -1212,10 +1212,11 @@ fn rename_dir_fallback(
 /// contents are copied, and until then, or for good if the copy fails, the
 /// umask-based 0755 would expose entries that a 0700 source kept hidden.
 fn create_dir_fail_closed(path: &Path) -> io::Result<()> {
-    let mut builder = fs::DirBuilder::new();
     #[cfg(unix)]
-    unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
-    builder.create(path).map_err(|e| {
+    let created = unix::fs::DirBuilderExt::mode(&mut fs::DirBuilder::new(), 0o700).create(path);
+    #[cfg(not(unix))]
+    let created = fs::create_dir(path);
+    created.map_err(|e| {
         if e.kind() == io::ErrorKind::AlreadyExists {
             io::Error::new(
                 io::ErrorKind::AlreadyExists,
