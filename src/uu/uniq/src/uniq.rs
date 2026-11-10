@@ -352,25 +352,18 @@ impl Uniq {
     }
 }
 
-fn opt_parsed(opt_name: &str, matches: &ArgMatches) -> UResult<Option<usize>> {
+fn opt_parsed(opt_name: &str, error_key: &str, matches: &ArgMatches) -> UResult<Option<usize>> {
     let Some(arg_str) = matches.get_one::<String>(opt_name) else {
         return Ok(None);
     };
     match arg_str.parse::<usize>() {
         Ok(v) => Ok(Some(v)),
         Err(e) if *e.kind() == IntErrorKind::PosOverflow => Ok(Some(usize::MAX)),
-        Err(_) => {
-            // GNU prints the value as given, without quoting.
-            let arg = arg_str.as_str();
-            let msg = if opt_name == options::SKIP_FIELDS {
-                translate!("uniq-error-invalid-skip-fields", "arg" => arg)
-            } else if opt_name == options::SKIP_CHARS {
-                translate!("uniq-error-invalid-skip-chars", "arg" => arg)
-            } else {
-                translate!("uniq-error-invalid-check-chars", "arg" => arg)
-            };
-            Err(USimpleError::new(1, msg))
-        }
+        // GNU prints the value as given, without quoting.
+        Err(_) => Err(USimpleError::new(
+            1,
+            translate!(error_key, "arg" => arg_str.as_str()),
+        )),
     }
 }
 
@@ -707,8 +700,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|mut fi| (fi.next(), fi.next()))
         .unwrap_or_default();
 
-    let skip_fields_modern: Option<usize> = opt_parsed(options::SKIP_FIELDS, &matches)?;
-    let skip_chars_modern: Option<usize> = opt_parsed(options::SKIP_CHARS, &matches)?;
+    let skip_fields_modern: Option<usize> = opt_parsed(
+        options::SKIP_FIELDS,
+        "uniq-error-invalid-skip-fields",
+        &matches,
+    )?;
+    let skip_chars_modern: Option<usize> = opt_parsed(
+        options::SKIP_CHARS,
+        "uniq-error-invalid-skip-chars",
+        &matches,
+    )?;
 
     let uniq = Uniq {
         repeats_only: matches.get_flag(options::REPEATED)
@@ -720,7 +721,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         show_counts: matches.get_flag(options::COUNT),
         skip_fields: skip_fields_modern.or(skip_fields_old),
         slice_start: skip_chars_modern.or(skip_chars_old),
-        slice_stop: opt_parsed(options::CHECK_CHARS, &matches)?,
+        slice_stop: opt_parsed(
+            options::CHECK_CHARS,
+            "uniq-error-invalid-check-chars",
+            &matches,
+        )?,
         ignore_case: matches.get_flag(options::IGNORE_CASE),
         zero_terminated: matches.get_flag(options::ZERO_TERMINATED),
         is_c_locale: Uniq::is_c_locale(),
