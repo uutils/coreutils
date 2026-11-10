@@ -1940,7 +1940,7 @@ mod inter_partition_copying {
     // that needs a second uid, so it is exercised out of band rather than here.
     #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
-    pub(crate) fn test_mv_inter_partition_keeps_setuid_when_ownership_preserved() {
+    fn test_mv_inter_partition_keeps_setuid_when_ownership_preserved() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
 
@@ -2083,7 +2083,7 @@ mod inter_partition_copying {
     // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
     #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
-    pub(crate) fn test_mv_unlinks_dest_symlink() {
+    fn test_mv_unlinks_dest_symlink() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
 
@@ -2133,7 +2133,7 @@ mod inter_partition_copying {
     // that it would output the proper error message.
     #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
-    pub(crate) fn test_mv_unlinks_dest_symlink_error_message() {
+    fn test_mv_unlinks_dest_symlink_error_message() {
         use uutests::util::TestScenario;
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -2165,8 +2165,7 @@ mod inter_partition_copying {
     // Test that hardlinks are preserved when moving files across partitions
     #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
-    #[cfg(unix)]
-    pub(crate) fn test_mv_preserves_hardlinks_across_partitions() {
+    fn test_mv_preserves_hardlinks_across_partitions() {
         use std::fs;
         use std::os::unix::fs::MetadataExt;
         use tempfile::TempDir;
@@ -2240,10 +2239,9 @@ mod inter_partition_copying {
     // Test that hardlinks are preserved even with multiple sets of hardlinked files
     #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
-    #[cfg(unix)]
     #[allow(clippy::too_many_lines)]
     #[allow(clippy::similar_names)]
-    pub(crate) fn test_mv_preserves_multiple_hardlink_groups_across_partitions() {
+    fn test_mv_preserves_multiple_hardlink_groups_across_partitions() {
         use std::fs::metadata;
         use std::os::unix::fs::MetadataExt;
         use tempfile::TempDir;
@@ -2358,9 +2356,8 @@ mod inter_partition_copying {
     #[rstest]
     #[case::with_minus_t(true)]
     #[case::without_minus_t(false)]
-    #[cfg(unix)]
     #[uutests::wasi_ignore(HostPathsNotVisible)]
-    pub(crate) fn test_mv_preserves_hardlinks_in_directories_to_files_across_partitions(
+    fn test_mv_preserves_hardlinks_in_directories_to_files_across_partitions(
         #[case] with_minus_t: bool,
     ) {
         use std::fs::metadata;
@@ -2427,8 +2424,7 @@ mod inter_partition_copying {
     // Test hardlinks within directories being moved
     #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
-    #[cfg(unix)]
-    pub(crate) fn test_mv_preserves_hardlinks_in_directories_across_partitions() {
+    fn test_mv_preserves_hardlinks_in_directories_across_partitions() {
         use std::fs::metadata;
         use std::os::unix::fs::MetadataExt;
         use tempfile::TempDir;
@@ -2528,10 +2524,9 @@ mod inter_partition_copying {
     // Test complex scenario with multiple hardlink groups across nested directories
     #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
-    #[cfg(unix)]
     #[allow(clippy::too_many_lines)]
     #[allow(clippy::similar_names)]
-    pub(crate) fn test_mv_preserves_complex_hardlinks_across_nested_directories() {
+    fn test_mv_preserves_complex_hardlinks_across_nested_directories() {
         use std::fs::metadata;
         use std::os::unix::fs::MetadataExt;
         use tempfile::TempDir;
@@ -2677,8 +2672,7 @@ mod inter_partition_copying {
 
     #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
-    #[cfg(unix)]
-    pub(crate) fn test_mv_dir_with_fifo_across_partitions() {
+    fn test_mv_dir_with_fifo_across_partitions() {
         use std::os::unix::fs::FileTypeExt;
         use tempfile::TempDir;
         use uutests::util::TestScenario;
@@ -2711,8 +2705,7 @@ mod inter_partition_copying {
     // self-referential symlinks and destroying the content.
     #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
-    #[cfg(unix)]
-    pub(crate) fn test_mv_symlink_to_hardlinked_sibling_across_partitions() {
+    fn test_mv_symlink_to_hardlinked_sibling_across_partitions() {
         use std::os::unix::fs::MetadataExt;
 
         let scene = TestScenario::new(util_name!());
