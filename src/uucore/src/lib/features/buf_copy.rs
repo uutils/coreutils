@@ -18,14 +18,14 @@ pub fn copy_fast(
     if crate::pipes::splice_unbounded_auto(src, dest)?.is_err() {
         // fall back on writing "without buffering", or order of output would be wrong
         // unrelated for cp /dev/stdin since cp does not have multiple input? <https://github.com/uutils/coreutils/issues/5186>
-        // RawWriter also removes io::copy's specialization e.g. copy_file_range which might use reflink
-        std::io::copy(src, &mut crate::io::RawWriter(dest))?;
+        // remove io::copy's specialization e.g. copy_file_range (reflink) too.
+        crate::io::copy(src, &mut crate::io::RawWriter(dest))?;
     }
     Ok(())
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-pub use std::io::copy as copy_fast;
+pub use std::io::copy as copy_fast; // todo: use crate::io::copy and distinguish read/write
 
 #[cfg(test)]
 #[cfg(any(target_os = "linux", target_os = "android"))] // copy_fast is io::copy on other platforms. nothing to test.
