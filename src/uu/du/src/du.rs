@@ -379,6 +379,13 @@ fn time_from_raw_stat(
     }
 }
 
+/// A command-line operand may only be opened through a symlink when `-D`/`-H`
+/// asked for it; otherwise it was classified with a no-follow stat as well.
+#[cfg(all(unix, not(target_os = "redox")))]
+fn operand_symlink_behavior(options: &TraversalOptions) -> SymlinkBehavior {
+    (options.dereference != Deref::None).into()
+}
+
 #[cfg(all(unix, not(target_os = "redox")))]
 // Implement safe_du on Unix (except Redox which lacks full stat support)
 // This is done for TOCTOU safety
@@ -413,7 +420,7 @@ fn safe_du(
         Err(_e) => {
             // Only the root path can reach this branch (subdirectories always pass a
             // valid stat). Try using our DirFd method for the root directory.
-            match DirFd::open(path, SymlinkBehavior::Follow) {
+            match DirFd::open(path, operand_symlink_behavior(options)) {
                 Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path, options.time) {
                     Ok(s) => s,
                     Err(e) => {
@@ -448,13 +455,15 @@ fn safe_du(
         return Ok(my_stat);
     }
 
-    // Open the directory using DirFd
+    // Open the directory using DirFd. A subdirectory is opened with O_NOFOLLOW:
+    // it was classified with a no-follow stat, so if it has been swapped for a
+    // symlink since then, the open must fail instead of walking into the target.
     let open_result = match parent_fd {
         Some(parent) => parent.open_subdir(
             path.file_name().unwrap_or(path.as_os_str()),
-            SymlinkBehavior::Follow,
+            SymlinkBehavior::NoFollow,
         ),
-        None => DirFd::open(path, SymlinkBehavior::Follow),
+        None => DirFd::open(path, operand_symlink_behavior(options)),
     };
 
     let dir_fd = match open_result {
