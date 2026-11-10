@@ -4434,6 +4434,7 @@ dependencies = [
  "md-5",
  "memchr",
  "nix",
+ "num-bigint",
  "num-traits",
  "openssl",
  "os_display",

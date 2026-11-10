@@ -59,6 +59,8 @@ use uucore::fs::{
     target_os = "netbsd"
 ))]
 use uucore::fsxattr;
+#[cfg(unix)]
+use uucore::safe_copy::preserved_mode;
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::set_selinux_security_context;
 use uucore::translate;
@@ -1400,8 +1402,8 @@ fn copy_subdir_xattrs_and_mode(from: &Path, to: &Path) {
         target_os = "netbsd"
     ))]
     {
-        if let Ok(failed) = fsxattr::copy_xattrs_fd_ignore_unsupported(&src, &dst) {
-            show_xattr_failures(failed);
+        if let Ok(failed) = fsxattr::copy_xattrs_fd(&src, &dst) {
+            show_xattr_failures(Some(to), failed);
         }
     }
     copy_dir_mode(&src, &dst);
@@ -1418,33 +1420,17 @@ fn copy_dir_mode(src: &fs::File, dst: &fs::File) {
     if let (Ok(src_meta), Ok(dst_meta)) = (src.metadata(), dst.metadata()) {
         let ownership_preserved =
             src_meta.uid() == dst_meta.uid() && src_meta.gid() == dst_meta.gid();
-        let mode = moved_mode(src_meta.mode(), ownership_preserved);
+        let mode = preserved_mode(src_meta.mode(), ownership_preserved);
         let _ = dst.set_permissions(fs::Permissions::from_mode(mode));
     }
 }
 
 #[cfg(unix)]
 fn open_dir_nofollow(path: &Path) -> io::Result<fs::File> {
-    use rustix::fs::{CWD, Mode, OFlags, openat};
+    use rustix::fs::{Mode, OFlags, open};
 
     let flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC;
-    Ok(openat(CWD, path, flags, Mode::empty())?.into())
-}
-
-/// The mode to give a moved file or directory.
-///
-/// If the chown did not take, the destination belongs to whoever ran `mv`,
-/// and re-applying setuid/setgid would hand them a binary running as
-/// themselves that used to run as someone else. GNU strips the bits in that
-/// case and so do we.
-#[cfg(unix)]
-fn moved_mode(src_mode: u32, ownership_preserved: bool) -> u32 {
-    let mode = src_mode & 0o7777;
-    if ownership_preserved {
-        mode
-    } else {
-        mode & !0o6000
-    }
+    Ok(open(path, flags, Mode::empty())?.into())
 }
 
 #[cfg(unix)]
@@ -1544,8 +1530,7 @@ fn rename_file_fallback(
         let src_mode = src_file
             .metadata()
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?
-            .mode()
-            & 0o7777;
+            .mode();
         let mut dst_file = create_dest_restrictive(to, /* nofollow */ true)
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
         uucore::buf_copy::copy_fast(&mut &src_file, &mut dst_file)
@@ -1567,7 +1552,7 @@ fn rename_file_fallback(
         // chown before chmod: chown(2) clears setuid/setgid for non-root,
         // so the final mode must be applied last to preserve those bits.
         let ownership_preserved = preserve_ownership(from, to).unwrap_or(false);
-        let dest_mode = moved_mode(src_mode, ownership_preserved);
+        let dest_mode = preserved_mode(src_mode, ownership_preserved);
         let _ = dst_file.set_permissions(Permissions::from_mode(dest_mode));
     }
 

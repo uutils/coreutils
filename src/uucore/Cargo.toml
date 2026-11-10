@@ -59,6 +59,7 @@ blake3 = { workspace = true, optional = true }
 sm3 = { workspace = true, optional = true }
 crc-fast = { workspace = true, optional = true, features = ["std"] }
 bigdecimal = { workspace = true, optional = true }
+num-bigint = { workspace = true, optional = true }
 num-traits = { workspace = true, optional = true }
 
 # icu stuff
@@ -156,7 +157,13 @@ backup-control = ["fs"]
 colors = []
 diagnostics = ["dep:ariadne"]
 checksum = ["base64-simd", "quoting-style", "rustix/fs", "sum"]
-encoding = ["data-encoding", "data-encoding-macro", "z85", "base64-simd"]
+encoding = [
+  "data-encoding",
+  "data-encoding-macro",
+  "z85",
+  "base64-simd",
+  "num-bigint",
+]
 entries = ["libc", "rustix/fs", "rustix/process"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
 fast-inc = []
