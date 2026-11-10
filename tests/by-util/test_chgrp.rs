@@ -208,7 +208,8 @@ fn test_reference() {
             .arg("/etc")
             .fails()
             // group name can differ, so just check the first part of the message
-            .stderr_contains("chgrp: changing group of '/etc': Operation not permitted\nfailed to change group of '/etc' from ");
+            .stderr_contains("chgrp: changing group of '/etc': Operation not permitted\n")
+            .stdout_contains("failed to change group of '/etc' from ");
     }
 }
 
@@ -221,7 +222,8 @@ fn test_reference() {
         .arg("/etc")
         .fails()
         // group name can differ, so just check the first part of the message
-        .stderr_contains("chgrp: changing group of '/etc': Operation not permitted\nfailed to change group of '/etc' from ");
+        .stderr_contains("chgrp: changing group of '/etc': Operation not permitted\n")
+        .stdout_contains("failed to change group of '/etc' from ");
 }
 
 #[test]
@@ -736,4 +738,33 @@ fn test_chgrp_cannot_access_vs_cannot_dereference() {
         .arg("dangling")
         .fails_with_code(1)
         .stderr_is("chgrp: cannot dereference 'dangling': No such file or directory\n");
+}
+
+/// With -R -v, a failed change below the operand is reported as for the operand.
+#[cfg(not(target_os = "openbsd"))]
+#[test]
+fn test_chgrp_recursive_verbose_reports_failed_entry() {
+    use std::os::unix::fs::MetadataExt;
+    use uucore::entries::gid2grp;
+
+    // Root can give the files to any group, so nothing fails.
+    if rustix::process::geteuid().is_root() {
+        println!("Test skipped: running as root");
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/file");
+    let group = gid2grp(at.plus("dir").metadata().unwrap().gid()).unwrap();
+
+    ucmd.args(&["-R", "-v", "bin", "dir"])
+        .fails_with_code(1)
+        .stdout_is(format!(
+            "failed to change group of 'dir' from {group} to bin\n\
+             failed to change group of 'dir/file' from {group} to bin\n"
+        ))
+        .stderr_is(
+            "chgrp: changing group of 'dir': Operation not permitted\n\
+             chgrp: changing group of 'dir/file': Operation not permitted\n",
+        );
 }
