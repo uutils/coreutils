@@ -314,14 +314,15 @@ fn pad_left(string: &str, count: usize) -> String {
 }
 
 /// Returns the alternate-access indicator that follows the 9-bit permission
-/// string in long-format output: `.` for a non-trivial security context, `+`
-/// for an ACL, otherwise a space (which acts as a placeholder so columns line
-/// up across items that don't carry an indicator themselves).
+/// string in long-format output: `+` for an ACL (even when the file also has a
+/// security context, which is an extended attribute too), `.` for a non-trivial
+/// security context alone, otherwise a space (which acts as a placeholder so
+/// columns line up across items that don't carry an indicator themselves).
 fn alt_access_indicator(item: &PathData, config: &Config, is_acl_set: bool) -> u8 {
-    if item.security_context(config).len() > 1 {
-        b'.'
-    } else if is_acl_set {
+    if is_acl_set {
         b'+'
+    } else if item.security_context(config).len() > 1 {
+        b'.'
     } else {
         b' '
     }
