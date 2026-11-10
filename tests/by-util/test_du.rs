@@ -3007,3 +3007,49 @@ du: invalid suffix in --block-size argument '1fb'
             .stderr_is("du: invalid suffix in --block-size argument '1fb'\n");
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn test_last_of_dereference_args_no_dereference_wins() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.symlink_file("missing", "dangling");
+    // -P last wins: the dangling symlink argument is not dereferenced, so du succeeds.
+    scene
+        .ucmd()
+        .args(&["--dereference-args", "-P", "dangling"])
+        .succeeds()
+        .stdout_contains("dangling");
+    // --dereference-args last wins: dereferencing the dangling argument fails.
+    scene
+        .ucmd()
+        .args(&["-P", "--dereference-args", "dangling"])
+        .fails()
+        .stderr_contains("cannot access 'dangling'");
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_dereference_args_after_dereference_wins() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.mkdir("outside");
+    at.write("outside/file", "x");
+    at.symlink_dir("outside", "dir/link");
+
+    // `--dereference-args` last wins over `-L`: only command-line arguments
+    // are dereferenced, so the symlink inside `dir` is not followed.
+    scene
+        .ucmd()
+        .args(&["-L", "--dereference-args", "dir"])
+        .succeeds()
+        .stdout_does_not_contain("dir/link");
+
+    // `-L` last wins: the symlink inside `dir` is followed and reported.
+    scene
+        .ucmd()
+        .args(&["--dereference-args", "-L", "dir"])
+        .succeeds()
+        .stdout_contains("dir/link");
+}
