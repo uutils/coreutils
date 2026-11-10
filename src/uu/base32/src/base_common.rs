@@ -817,6 +817,13 @@ pub mod fast_decode {
 
         Ok(())
     }
+
+    /// base64url input that holds `+` or `/` is rejected as a whole, so
+    /// nothing from it is written, unlike other invalid bytes.
+    fn rejects_whole_block(alphabet: &[u8], block: &[u8]) -> bool {
+        let is_base64url = alphabet.contains(&b'_') && !alphabet.contains(&b'+');
+        is_base64url && block.iter().any(|&b| b == b'+' || b == b'/')
+    }
     // End of helper functions
 
     pub fn fast_decode_buffer(
@@ -857,15 +864,17 @@ pub mod fast_decode {
             } else if ignore_garbage {
                 continue;
             } else {
-                emit_decoded_prefix(
-                    &mut buffer,
-                    decode_in_chunks_of_size,
-                    valid_multiple,
-                    supports_partial_decode,
-                    supports_fast_decode_and_encode,
-                    &mut decoded_buffer,
-                    output,
-                )?;
+                if !rejects_whole_block(alphabet, &input) {
+                    emit_decoded_prefix(
+                        &mut buffer,
+                        decode_in_chunks_of_size,
+                        valid_multiple,
+                        supports_partial_decode,
+                        supports_fast_decode_and_encode,
+                        &mut decoded_buffer,
+                        output,
+                    )?;
+                }
                 return Err(USimpleError::new(
                     1,
                     translate!("base-common-invalid-input"),
@@ -945,15 +954,17 @@ pub mod fast_decode {
                 } else if ignore_garbage {
                     continue;
                 } else {
-                    emit_decoded_prefix(
-                        &mut buffer,
-                        decode_in_chunks_of_size,
-                        valid_multiple,
-                        supports_partial_decode,
-                        supports_fast_decode_and_encode,
-                        &mut decoded_buffer,
-                        output,
-                    )?;
+                    if !rejects_whole_block(alphabet, read_buffer) {
+                        emit_decoded_prefix(
+                            &mut buffer,
+                            decode_in_chunks_of_size,
+                            valid_multiple,
+                            supports_partial_decode,
+                            supports_fast_decode_and_encode,
+                            &mut decoded_buffer,
+                            output,
+                        )?;
+                    }
                     return Err(USimpleError::new(
                         1,
                         translate!("base-common-invalid-input"),
