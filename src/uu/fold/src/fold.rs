@@ -706,6 +706,17 @@ fn process_pending_chunk<W: Write>(
                 break;
             }
             Err(err) => {
+                let valid_up_to = err.valid_up_to();
+
+                // Fold the valid prefix as UTF-8 before switching to byte
+                // mode, so that an invalid byte later in the buffer does not
+                // split multibyte characters on earlier lines.
+                if valid_up_to > 0 {
+                    let valid = std::str::from_utf8(&pending[..valid_up_to]).expect("valid prefix");
+                    process_utf8_line(valid, ctx)?;
+                    pending.drain(..valid_up_to);
+                }
+
                 if err.error_len().is_some() {
                     let res = process_non_utf8_line(pending, ctx);
                     pending.clear();
@@ -713,14 +724,9 @@ fn process_pending_chunk<W: Write>(
                     break;
                 }
 
-                let valid_up_to = err.valid_up_to();
                 if valid_up_to == 0 {
                     break;
                 }
-
-                let valid = std::str::from_utf8(&pending[..valid_up_to]).expect("valid prefix");
-                process_utf8_line(valid, ctx)?;
-                pending.drain(..valid_up_to);
             }
         }
     }

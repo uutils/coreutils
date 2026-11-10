@@ -209,6 +209,50 @@ fn test_fold_preserves_invalid_utf8_sequences() {
 }
 
 #[rstest]
+#[case::same_buffer(b"a\xE7\x95\x8C\n\xFF\nb\n", &b"a\n\xE7\x95\x8C\n\xFF\nb\n"[..])]
+#[case::own_buffer(b"\xE7\x95\x8C\n\xFF\n", &b"\xE7\x95\x8C\n\xFF\n"[..])]
+fn test_invalid_byte_keeps_earlier_utf8_lines_intact(
+    #[case] input: &[u8],
+    #[case] expected: &[u8],
+) {
+    // An invalid byte must not affect the folding of valid UTF-8 content
+    // earlier in the same read buffer: GNU keeps each multibyte character
+    // whole and emits its own newline after "a".
+    for width in [&["-w2"][..], &["-s", "-w2"][..]] {
+        let mut cmd = new_ucmd!();
+        cmd.args(width);
+        cmd.pipe_in(input.to_vec())
+            .succeeds()
+            .stdout_is_bytes(expected);
+    }
+
+    // In character-counting mode "a" plus a two-character line fits width 2,
+    // so the fold output is the input itself.
+    let mut cmd = new_ucmd!();
+    cmd.args(&["-c", "-w2"]);
+    cmd.pipe_in(input.to_vec())
+        .succeeds()
+        .stdout_is_bytes(input);
+}
+
+#[test]
+fn test_invalid_byte_does_not_split_earlier_multibyte_chars() {
+    // 界 (U+754C) fits the width, so the output must keep it whole even
+    // though an invalid byte follows in the same read buffer.
+    new_ucmd!()
+        .args(&["-w2"])
+        .pipe_in(b"\xE7\x95\x8C\n\xFF\n".to_vec())
+        .succeeds()
+        .stdout_is_bytes(b"\xE7\x95\x8C\n\xFF\n");
+
+    new_ucmd!()
+        .args(&["-w2"])
+        .pipe_in(b"a\xE7\x95\x8C\n\xFF\nb\n".to_vec())
+        .succeeds()
+        .stdout_is_bytes(b"a\n\xE7\x95\x8C\n\xFF\nb\n");
+}
+
+#[rstest]
 #[case::utf8_crlf(b"abc\r\n\xc3\xa9\n")]
 #[case::utf8_backspace(b"abc\x08X\n\xc3\xa9\n")]
 #[case::invalid_crlf(b"abc\r\n\xff\n")]
