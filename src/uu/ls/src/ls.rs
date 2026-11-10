@@ -83,7 +83,7 @@ enum LsError {
         _ => if 9 == .1.raw_os_error().unwrap_or(1) {
             translate!("ls-error-cannot-open-directory-bad-descriptor", "path" => .0.quote())
         } else {
-            translate!("ls-error-unknown-io-error", "path" => .0.quote(), "error" => format!("{:?}", .1))
+            translate!("ls-error-cannot-access", "path" => .0.quote(), "error" => strip_errno(.1))
         },
     })]
     IOErrorContext(PathBuf, std::io::Error, bool),

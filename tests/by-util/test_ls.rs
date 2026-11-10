@@ -8599,3 +8599,19 @@ fn test_ls_dereference_sibling_alias_not_already_listed() {
         .stdout_contains("link:\nfile")
         .no_stderr();
 }
+
+#[test]
+#[cfg(unix)]
+fn test_ls_long_dereference_symlink_cycle_in_directory() {
+    // `ring/ping` and `ring/pong` point at each other: following them fails
+    // with ELOOP, which must be reported like any other inaccessible entry.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("ring");
+    at.relative_symlink_file("pong", "ring/ping");
+    at.relative_symlink_file("ping", "ring/pong");
+
+    ucmd.args(&["-lL", "ring"]).fails_with_code(1).stderr_is(
+        "ls: cannot access 'ring/ping': Too many levels of symbolic links\n\
+             ls: cannot access 'ring/pong': Too many levels of symbolic links\n",
+    );
+}
