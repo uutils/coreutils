@@ -3142,6 +3142,35 @@ fn test_fifo() {
     }
 }
 
+/// A followed name that is replaced by a FIFO without a writer must not stop
+/// tail from printing the other followed files, in name and descriptor mode.
+#[uutests::wasi_ignore(NoFifo)]
+#[test]
+#[cfg(not(windows))]
+fn test_follow_replaced_by_fifo_does_not_block_other_files() {
+    for follow in ["-F", "-f"] {
+        let ts = TestScenario::new(util_name!());
+        let at = &ts.fixtures;
+        at.write("a", "a1\n");
+        at.write("b", "b1\n");
+
+        let mut p = ts.ucmd().args(&[follow, "a", "b"]).run_no_wait();
+        p.make_assertion_with_delay(500).is_alive();
+
+        at.mkfifo("tmp_fifo");
+        at.rename("tmp_fifo", "b");
+        p.make_assertion_with_delay(500).is_alive();
+
+        at.append("a", "a2\n");
+        p.make_assertion_with_delay(1000).is_alive();
+
+        p.kill()
+            .make_assertion()
+            .with_all_output()
+            .stdout_contains("a2");
+    }
+}
+
 /// Test that tail with --pid exits when the monitored process dies, even with a FIFO.
 /// Without non-blocking FIFO open, tail would block forever waiting for a writer.
 #[uutests::wasi_ignore(NoFifo)]

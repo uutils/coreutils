@@ -228,23 +228,25 @@ fn tail_file(
     Ok(())
 }
 
-/// Opens a file, using non-blocking mode for FIFOs when `use_nonblock_for_fifo` is true.
+/// Opens a file without waiting for a writer when `nonblock` is true.
 ///
-/// When opening a FIFO with `--pid`, we need to use `O_NONBLOCK` so that:
-/// 1. The `open()` call doesn't block waiting for a writer
-/// 2. We can periodically check if the monitored process is still alive
+/// A FIFO without a writer blocks `open()`. That is wrong in two cases:
+/// 1. With `--pid`, we need to check periodically if the monitored process is still alive.
+/// 2. When following, the files are all served by one thread, so a blocked `open()`
+///    on a file that was replaced by a FIFO would stop the output of every file.
 ///
-/// After opening, we clear `O_NONBLOCK` so subsequent reads block normally.
-/// Without `--pid`, FIFOs block on `open()` until a writer connects (GNU behavior).
+/// The file is always opened with `O_NONBLOCK`, without looking at its type first.
+/// Looking first would let a rename between the check and the open bring back the
+/// blocking `open()`. The flag has no effect on regular files. After opening, we
+/// clear `O_NONBLOCK` so subsequent reads block normally.
+/// Without it, FIFOs block on `open()` until a writer connects (GNU behavior).
 #[cfg(unix)]
-fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
+fn open_file(path: &Path, nonblock: bool) -> io::Result<File> {
     use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
     use std::fs::OpenOptions;
-    use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
+    use std::os::unix::fs::OpenOptionsExt;
 
-    let is_fifo = path.metadata().is_ok_and(|m| m.file_type().is_fifo());
-
-    if is_fifo && use_nonblock_for_fifo {
+    if nonblock {
         let file = OpenOptions::new()
             .read(true)
             .custom_flags(libc::O_NONBLOCK)
