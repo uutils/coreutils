@@ -2901,6 +2901,7 @@ fn test_ls_recursive_all_with_version_sort_does_not_walk_up() {
 #[cfg(unix)]
 mod quoting {
     use super::TestScenario;
+    use rstest::rstest;
     use uutests::at_and_ucmd;
     use uutests::util::is_locale_available;
     use uutests::util_name;
@@ -3043,30 +3044,27 @@ mod quoting {
 
     // U+2028 and U+2029 split lines like control characters do, so -b escapes
     // them and -q hides them, as GNU does.
-    #[test]
-    fn test_ls_quoting_line_separators_utf8() {
+    #[rstest]
+    #[case::line_separator("x\u{2028}y", "x\\342\\200\\250y")]
+    #[case::paragraph_separator("x\u{2029}y", "x\\342\\200\\251y")]
+    fn test_ls_quoting_line_separators_utf8(#[case] name: &str, #[case] escaped: &str) {
         if !is_locale_available("en_US.UTF-8") {
             return;
         }
 
-        for (name, escaped) in [
-            ("x\u{2028}y", "x\\342\\200\\250y"),
-            ("x\u{2029}y", "x\\342\\200\\251y"),
-        ] {
-            let (at, mut ucmd) = at_and_ucmd!();
-            at.touch(name);
-            ucmd.env("LC_ALL", "en_US.UTF-8")
-                .args(&["-b", "-1"])
-                .succeeds()
-                .stdout_is(format!("{escaped}\n"));
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch(name);
+        ucmd.env("LC_ALL", "en_US.UTF-8")
+            .args(&["-b", "-1"])
+            .succeeds()
+            .stdout_is(format!("{escaped}\n"));
 
-            let (at, mut ucmd) = at_and_ucmd!();
-            at.touch(name);
-            ucmd.env("LC_ALL", "en_US.UTF-8")
-                .args(&["-q", "-1"])
-                .succeeds()
-                .stdout_is("x?y\n");
-        }
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch(name);
+        ucmd.env("LC_ALL", "en_US.UTF-8")
+            .args(&["-q", "-1"])
+            .succeeds()
+            .stdout_is("x?y\n");
     }
 
     #[test]
