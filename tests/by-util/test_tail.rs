@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile file siette ocho nueve diez MULT watchme nofile wxyz
+// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile file siette ocho nueve diez MULT watchme nofile wxyz cdefghijkl hijklmnop retargeted
 // spell-checker:ignore (libs) kqueue ELOOP EISDIR FSIZE setrlimit SIGXFSZ
 // spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
 // spell-checker:ignore (cmd) taskkill
@@ -5343,9 +5343,8 @@ fn test_tail_obsolete_f_flag() {
     p.kill().make_assertion().with_all_output().no_output();
 }
 
-#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
+#[uutests::wasi_ignore(TailFollowDisabled)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_tail_obsolete_bytes_follow_stdin() {
     // `-f` is ignored when stdin is a pipe, so tail exits after printing.
     new_ucmd!()
@@ -5355,8 +5354,8 @@ fn test_tail_obsolete_bytes_follow_stdin() {
         .stdout_only("hijklmnop\n");
 }
 
+#[uutests::wasi_ignore(TailFollowDisabled)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_tail_obsolete_bytes_follow() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5385,6 +5384,7 @@ fn test_tail_obsolete_bytes_follow() {
         .stderr_is("tail: option used in invalid context -- 5\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
 fn test_obsolete_encoding_unix() {
