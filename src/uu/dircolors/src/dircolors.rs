@@ -184,7 +184,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match files.as_slice() {
         [] => {
-            writeln!(stdout(), "{}", generate_ls_colors(&out_format, ":"))?;
+            let colors = generate_ls_colors(&out_format, ":");
+            // GNU prints nothing at all when TERM matches no entry
+            if !(colors.is_empty() && out_format == OutputFmt::Display) {
+                writeln!(stdout(), "{colors}")?;
+            }
             Ok(())
         }
         [_file_arg, extra, ..] => Err(UUsageError::new(

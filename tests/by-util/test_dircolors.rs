@@ -280,7 +280,7 @@ fn test_builtin_database_print_ls_colors_unknown_term() {
         .env("TERM", "no-such-terminal")
         .arg("--print-ls-colors")
         .succeeds()
-        .stdout_only("\n");
+        .no_output();
 }
 
 #[test]
