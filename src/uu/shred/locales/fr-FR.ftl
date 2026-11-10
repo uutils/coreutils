@@ -65,6 +65,7 @@ shred-pass-progress = {$file}: passage
 shred-failed-to-open-for-writing = {$file} : impossible d'ouvrir pour l'écriture
 shred-file-write-pass-failed = {$file} : Échec du passage d'écriture de fichier
 shred-failed-to-remove-file = {$file} : impossible de supprimer
+shred-error-truncating = {$file} : erreur lors de la troncature
 
 # Messages d'erreur E/S de fichier
 shred-failed-to-clone-file-handle = échec du clonage du descripteur de fichier
