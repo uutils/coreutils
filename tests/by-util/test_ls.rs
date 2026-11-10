@@ -2950,6 +2950,48 @@ mod quoting {
         );
     }
 
+    // Regression test for https://github.com/uutils/coreutils/issues/15745:
+    // the Unicode line and paragraph separators must be escaped (or replaced
+    // with '?' when control characters are hidden) instead of being printed
+    // verbatim.
+    #[test]
+    fn test_ls_quoting_line_separator() {
+        // The test harness runs with LC_ALL=C, where these names are handled
+        // byte by byte and therefore already escaped before the fix. Run the
+        // checks in a UTF-8 locale so that U+2028/U+2029 are seen as single
+        // characters.
+        if !is_locale_available("C.UTF-8") {
+            return;
+        }
+
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("line\u{2028}sep");
+
+        ucmd.env("LC_ALL", "C.UTF-8")
+            .arg("--quoting-style=escape")
+            .arg("-1")
+            .succeeds()
+            .stdout_is("line\\342\\200\\250sep\n");
+
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("line\u{2029}sep");
+        ucmd.env("LC_ALL", "C.UTF-8")
+            .arg("--quoting-style=c")
+            .arg("-1")
+            .succeeds()
+            .stdout_is("\"line\\342\\200\\251sep\"\n");
+
+        // In the C locale each of the three bytes is hidden as a separate '?';
+        // in a UTF-8 locale the single character is hidden as one '?'.
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("line\u{2028}sep");
+        ucmd.env("LC_ALL", "C.UTF-8")
+            .arg("-q")
+            .arg("-1")
+            .succeeds()
+            .stdout_is("line?sep\n");
+    }
+
     // Regression test for GNU tests/ls/quoting-utf8.sh: in a UTF-8 locale the
     // locale/clocale quoting styles use Unicode quotation marks U+2018/U+2019
     // and must not escape embedded apostrophes or double quotes; in the C
