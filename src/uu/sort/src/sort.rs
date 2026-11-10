@@ -3136,8 +3136,6 @@ fn get_rand_string() -> [u8; SALT_LEN] {
 }
 
 const SALT_LEN: usize = 16; // 128-bit salt
-const U64_LEN: usize = 8;
-const RANDOM_SOURCE_TAG: &[u8] = b"uutils-sort-random-source"; // Domain separation tag
 
 /// Create a 128-bit salt by reading exactly 16 bytes ([`SALT_LEN`]) from the given file.
 ///
@@ -3148,37 +3146,19 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     let mut reader = open_with_open_failed_error(path)?;
     let mut buf = [0u8; SALT_LEN];
 
-    match reader.read_exact(&mut buf) {
-        Ok(()) => {}
-        Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => {
-            return Err(SortError::RandomSourceEndOfFile {
+    reader
+        .read_exact(&mut buf)
+        .map_err(|error| match error.kind() {
+            std::io::ErrorKind::UnexpectedEof => SortError::RandomSourceEndOfFile {
                 path: path.to_owned(),
-            }
-            .into());
-        }
-        Err(error) => {
-            return Err(SortError::ReadFailed {
+            },
+            _ => SortError::ReadFailed {
                 path: path.to_owned(),
                 error,
-            }
-            .into());
-        }
-    }
+            },
+        })?;
 
-    // freeze seed for --random-source
-    let mut hasher = FoldHasher::with_seed(1, SharedSeed::global_fixed());
-    hasher.write(&buf);
-    let first = hasher.finish();
-    // freeze seed for --random-source
-    let mut second_hasher = FoldHasher::with_seed(2, SharedSeed::global_fixed());
-    second_hasher.write(RANDOM_SOURCE_TAG);
-    second_hasher.write_u64(first);
-    let second = second_hasher.finish();
-
-    let mut out = [0u8; SALT_LEN];
-    out[..U64_LEN].copy_from_slice(&first.to_le_bytes());
-    out[U64_LEN..].copy_from_slice(&second.to_le_bytes());
-    Ok(out)
+    Ok(buf)
 }
 
 fn get_hash<T: Hash>(t: &T) -> u64 {
