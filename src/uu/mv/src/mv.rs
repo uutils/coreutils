@@ -1207,8 +1207,15 @@ fn rename_dir_fallback(
 ///
 /// `create_dir_all` would accept a symlink planted at `path` after the caller
 /// removed the destination, redirecting the move out of the destination tree.
+///
+/// The directory starts private (0700): its real mode is applied only after its
+/// contents are copied, and until then, or for good if the copy fails, the
+/// umask-based 0755 would expose entries that a 0700 source kept hidden.
 fn create_dir_fail_closed(path: &Path) -> io::Result<()> {
-    fs::create_dir(path).map_err(|e| {
+    let mut builder = fs::DirBuilder::new();
+    #[cfg(unix)]
+    unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+    builder.create(path).map_err(|e| {
         if e.kind() == io::ErrorKind::AlreadyExists {
             io::Error::new(
                 io::ErrorKind::AlreadyExists,
