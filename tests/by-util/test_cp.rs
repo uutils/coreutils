@@ -450,7 +450,6 @@ fn test_cp_multiple_files_with_nonexistent_file() {
     assert_eq!(at.read(TEST_HOW_ARE_YOU_DEST), "How are you?\n");
 }
 
-#[uutests::wasi_ignore(EmptyPathResolvesToDirectory)]
 #[test]
 fn test_cp_multiple_files_with_empty_file_name() {
     #[cfg(windows)]

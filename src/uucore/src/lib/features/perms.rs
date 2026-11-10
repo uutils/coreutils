@@ -16,6 +16,7 @@ use clap::{Arg, ArgMatches, Command};
 
 use libc::{gid_t, uid_t};
 use options::traverse;
+use rustix::fs::{Gid, Uid};
 #[cfg(target_os = "linux")]
 use std::collections::HashSet;
 use std::ffi::OsString;
@@ -25,17 +26,17 @@ use walkdir::WalkDir;
 
 #[cfg(target_os = "linux")]
 use crate::features::fs::FileInformation;
-#[cfg(target_os = "linux")]
-use crate::features::fs::dev_ino_is_root_dir;
-use crate::features::fs::path_is_root_dir;
+use crate::features::fs::{metadata_is_root_dir, path_is_root_dir};
 #[cfg(target_os = "linux")]
 use crate::features::safe_traversal::{DirFd, FileInfo, SymlinkBehavior};
 
+#[cfg(target_os = "redox")]
 use std::ffi::CString;
 use std::fs::Metadata;
 use std::io::{Error as IOError, Result as IOResult};
 use std::os::unix::fs::MetadataExt;
 
+#[cfg(target_os = "redox")]
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
@@ -69,17 +70,39 @@ impl Default for Verbosity {
     }
 }
 
-/// Actually perform the change of owner on a path
+fn rustix_ownership(uid: uid_t, gid: gid_t) -> (Option<Uid>, Option<Gid>) {
+    // rustix rejects -1 as a Uid/Gid; None requests an unchanged ID.
+    let owner = (uid != uid_t::MAX).then(|| Uid::from_raw(uid));
+    let group = (gid != gid_t::MAX).then(|| Gid::from_raw(gid));
+    (owner, group)
+}
+
+/// Change ownership relative to the current directory, preserving the symlink policy.
+#[cfg(not(target_os = "redox"))]
+fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IOResult<()> {
+    use rustix::fs::{AtFlags, CWD, chownat};
+    let flags = if follow {
+        AtFlags::empty()
+    } else {
+        AtFlags::SYMLINK_NOFOLLOW
+    };
+    let (owner, group) = rustix_ownership(uid, gid);
+    chownat(CWD, path.as_ref(), owner, group, flags).map_err(Into::into)
+}
+
+/// Redox does not provide `rustix::fs::chownat`.
+// TODO: Remove this fallback when a rustix release includes Redox chownat:
+// https://github.com/bytecodealliance/rustix/pull/1638
+#[cfg(target_os = "redox")]
 fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IOResult<()> {
     let path = path.as_ref();
-    let s = CString::new(path.as_os_str().as_bytes()).unwrap();
-    let ret = unsafe {
-        if follow {
-            libc::chown(s.as_ptr(), uid, gid)
-        } else {
-            libc::lchown(s.as_ptr(), uid, gid)
-        }
-    };
+    if follow {
+        let (owner, group) = rustix_ownership(uid, gid);
+        return rustix::fs::chown(path, owner, group).map_err(Into::into);
+    }
+    let s = CString::new(path.as_os_str().as_bytes())?;
+    // SAFETY: s is NUL-terminated and lives through the call.
+    let ret = unsafe { libc::lchown(s.as_ptr(), uid, gid) };
     if ret == 0 {
         Ok(())
     } else {
@@ -245,11 +268,11 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
     if !path_is_root_dir(path, would_traverse_symlink) {
         return false;
     }
-    show_preserve_root_error(path);
+    report_root(path);
     true
 }
 
-fn show_preserve_root_error(path: &Path) {
+fn report_root(path: &Path) {
     if path.as_os_str() == "/" {
         show_error!("it is dangerous to operate recursively on '/'");
     } else {
@@ -310,10 +333,14 @@ impl ChownExecutor {
             return 1;
         };
 
+        // `meta` pins the descent below, so a later swap cannot slip "/" past; the
+        // path lookup still catches a symlink to "/", which `meta` did not follow.
         if self.recursive
             && self.preserve_root
-            && is_root(path, self.traverse_symlinks != TraverseSymlinks::None)
+            && (path_is_root_dir(path, self.traverse_symlinks != TraverseSymlinks::None)
+                || metadata_is_root_dir(&meta))
         {
+            report_root(path);
             // Fail-fast, do not attempt to recurse.
             return 1;
         }
@@ -531,17 +558,6 @@ impl ChownExecutor {
         // fd. Using the fd is TOCTOU-safe (no path re-resolution through symlinks) and
         // avoids a redundant path walk. If it's already on the current path, it's a cycle.
         let dir_info = FileInformation::from_file(dir_fd).ok();
-        // The directory that was actually opened may be `/`, even when the
-        // pathname checks before the open said otherwise.
-        if self.preserve_root
-            && dir_info
-                .as_ref()
-                .is_some_and(|info| dev_ino_is_root_dir(info.dev(), info.inode()))
-        {
-            show_preserve_root_error(dir_path);
-            *ret = 1;
-            return;
-        }
         if dir_info
             .as_ref()
             .is_some_and(|info| !ancestors.insert(info.clone()))
@@ -588,8 +604,8 @@ impl ChownExecutor {
             // `meta` follows symlinks only under `-L`, like `is_root()` would. Use
             // it rather than looking `entry_path` up again, which fails when the
             // path is longer than PATH_MAX or crosses too many symlinks.
-            if self.preserve_root && dev_ino_is_root_dir(meta.dev(), meta.ino()) {
-                show_preserve_root_error(&entry_path);
+            if self.preserve_root && metadata_is_root_dir(&meta) {
+                report_root(&entry_path);
                 *ret = 1;
                 return;
             }
@@ -765,9 +781,19 @@ impl ChownExecutor {
         get_metadata(path, follow)
             .inspect_err(|e| {
                 if self.verbosity.level != VerbosityLevel::Silent {
+                    // Like GNU, only say "dereference" when the operand itself
+                    // exists and is a symlink whose target can't be reached.
+                    let dangling_symlink = follow
+                        && path
+                            .symlink_metadata()
+                            .is_ok_and(|m| m.file_type().is_symlink());
                     show_error!(
                         "cannot {} {}: {}",
-                        if follow { "dereference" } else { "access" },
+                        if dangling_symlink {
+                            "dereference"
+                        } else {
+                            "access"
+                        },
                         path.quote(),
                         strip_errno(e)
                     );

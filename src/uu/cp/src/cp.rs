@@ -1615,6 +1615,12 @@ fn copy_source(
     created_parent_dirs: &mut HashSet<PathBuf>,
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
+    // WASI resolves an empty path to the preopened directory instead of
+    // failing with ENOENT, so report the failed stat here.
+    #[cfg(target_os = "wasi")]
+    if source_path.as_os_str().is_empty() {
+        return Err(translate!("cp-error-cannot-stat", "source" => source.quote()).into());
+    }
     if source_path.is_dir() && (options.dereference || !source_path.is_symlink()) {
         // Copy as directory
         copy_directory(
@@ -1963,13 +1969,10 @@ pub(crate) fn copy_attributes(
             let source_perms = {
                 use std::os::unix::fs::PermissionsExt;
                 let mut perms = source_metadata.permissions();
-                if !ownership_preserved.get() {
-                    // GNU cp strips setuid (04000) and setgid (02000) when
-                    // ownership could not be preserved. Keep the sticky bit
-                    // (01000) and all rwx bits.
-                    let mode = perms.mode() & !0o6000;
-                    perms.set_mode(mode);
-                }
+                perms.set_mode(uucore::safe_copy::preserved_mode(
+                    perms.mode(),
+                    ownership_preserved.get(),
+                ));
                 if apply_umask_to_mode {
                     // The umask never covers setuid/setgid, so clear them
                     // explicitly: a non-preserving copy must not carry the

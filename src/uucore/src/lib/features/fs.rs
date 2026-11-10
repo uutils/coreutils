@@ -636,13 +636,12 @@ pub fn path_is_root_dir<P: AsRef<Path>>(path: P, dereference: bool) -> bool {
     }
 }
 
-/// Whether `(dev, ino)` identifies `/`, for a stat taken from an open
-/// descriptor or relative to one. Unlike [`path_is_root_dir`], this can't be
-/// misled by a pathname that is too long or crosses too many symlinks to be
-/// looked up again.
+/// Whether `meta`, a stat already taken, describes `/`. Unlike [`path_is_root_dir`],
+/// it does not look the path up again, which a rename could have re-pointed.
 #[cfg(unix)]
-pub fn dev_ino_is_root_dir(dev: u64, ino: u64) -> bool {
-    root_file_information().is_some_and(|root| root.dev() == dev && root.inode() == ino)
+pub fn metadata_is_root_dir(meta: &impl MetadataExt) -> bool {
+    root_file_information()
+        .is_some_and(|root| root.dev() == meta.dev() && root.inode() == meta.ino())
 }
 
 /// Check if two files are identical by comparing their contents.
@@ -1651,6 +1650,9 @@ mod tests {
         assert!(!path_is_root_dir(dir.path(), true));
         assert!(!path_is_root_dir(dir.path().join("nonexistent"), true));
         assert!(!path_is_root_dir("", true));
+
+        assert!(metadata_is_root_dir(&fs::metadata("/").unwrap()));
+        assert!(!metadata_is_root_dir(&fs::metadata(dir.path()).unwrap()));
     }
 
     /// A symlink to `/` counts only when the caller would follow it.

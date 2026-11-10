@@ -13,7 +13,6 @@ use std::os::unix::ffi::OsStringExt;
 #[cfg(target_os = "linux")]
 use uutests::util::AtPath;
 use uutests::{at_and_ucmd, new_ucmd};
-#[cfg(not(target_vendor = "apple"))]
 use uutests::{util::TestScenario, util_name};
 
 #[test]
@@ -727,4 +726,33 @@ fn test_repeated_flags_are_accepted() {
         .arg(getegid().to_string())
         .arg("dir")
         .succeeds();
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "openbsd")))]
+fn test_chgrp_cannot_access_vs_cannot_dereference() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("f");
+    at.symlink_file("missing", "dangling");
+    let gid = getegid().as_raw().to_string();
+
+    scene
+        .ucmd()
+        .arg(&gid)
+        .arg("f/")
+        .fails_with_code(1)
+        .stderr_is("chgrp: cannot access 'f/': Not a directory\n");
+    scene
+        .ucmd()
+        .arg(&gid)
+        .arg("dir/missing")
+        .fails_with_code(1)
+        .stderr_is("chgrp: cannot access 'dir/missing': No such file or directory\n");
+    scene
+        .ucmd()
+        .arg(&gid)
+        .arg("dangling")
+        .fails_with_code(1)
+        .stderr_is("chgrp: cannot dereference 'dangling': No such file or directory\n");
 }
