@@ -998,6 +998,7 @@ fn test_follow_with_pid_does_not_read_runner_stdin() {
 
     ts.cmd(std::env::current_exe().unwrap())
         .current_dir(std::env::current_dir().unwrap())
+        .env("UUTESTS_BINARY_PATH", &ts.bin_path)
         .env("STDIN_MARKER", ts.fixtures.plus("workflow-stdin-executed"))
         .args(&["--exact", "test_tail::test_follow_with_pid", "--nocapture"])
         .pipe_in("printf executed > \"$STDIN_MARKER\"\n")
