@@ -6,7 +6,7 @@
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
 // spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot EOVERFLOW chowned chmoded
-// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat
+// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat renameat unguessability linkat symlinkat
 
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
@@ -16,6 +16,7 @@
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;
 
+use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::mem::MaybeUninit;
@@ -328,17 +329,7 @@ impl DirFd {
 
     /// Get raw stat data for a file relative to this directory
     pub fn stat_at(&self, name: &OsStr, symlink_behavior: SymlinkBehavior) -> io::Result<FileStat> {
-        let name_cstr =
-            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-
-        let stat = fstatat_fd(&self.fd, name_cstr.as_c_str(), symlink_behavior).map_err(|e| {
-            SafeTraversalError::StatFailed {
-                path: name.into(),
-                source: e,
-            }
-        })?;
-
-        Ok(stat)
+        stat_at_fd(&self.fd, name, symlink_behavior)
     }
 
     /// Get metadata for a file relative to this directory
@@ -788,6 +779,170 @@ impl AsRawFd for DirFd {
 impl AsFd for DirFd {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
+    }
+}
+
+/// [`DirFd::stat_at`] relative to any directory descriptor.
+fn stat_at_fd(
+    dir: impl AsFd,
+    name: &OsStr,
+    symlink_behavior: SymlinkBehavior,
+) -> io::Result<FileStat> {
+    let name_cstr =
+        CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+
+    let stat = fstatat_fd(dir, name_cstr.as_c_str(), symlink_behavior).map_err(|e| {
+        SafeTraversalError::StatFailed {
+            path: name.into(),
+            source: e,
+        }
+    })?;
+
+    Ok(stat)
+}
+
+/// `symlinkat`/`linkat` relative to an open directory.
+pub(crate) fn link_at<Fd: AsFd>(
+    target: &Path,
+    dir: Fd,
+    name: &OsStr,
+    symbolic: bool,
+) -> io::Result<()> {
+    use rustix::fs::{AtFlags, CWD, linkat, symlinkat};
+
+    if symbolic {
+        symlinkat(target, dir, name).map_err(Into::into)
+    } else {
+        // `AtFlags::empty()` matches `std::fs::hard_link`: not dereferenced.
+        linkat(CWD, target, dir, name, AtFlags::empty()).map_err(Into::into)
+    }
+}
+
+/// A directory to create entries in, held open where the platform allows. Without a
+/// search-only open, an unreadable one is reached by its path, resolved again on each call.
+pub struct DirAnchor {
+    path: PathBuf,
+    fd: Option<DirFd>,
+}
+
+impl DirAnchor {
+    /// Open `path` with [`DirFd::open_anchor`], keeping only the path where that is denied.
+    pub fn open(path: &Path) -> io::Result<Self> {
+        let fd = match DirFd::open_anchor(path) {
+            Ok(fd) => Some(fd),
+            Err(e) if SEARCH_ONLY.is_none() && e.kind() == io::ErrorKind::PermissionDenied => None,
+            Err(e) => return Err(e),
+        };
+        Ok(Self {
+            path: path.to_owned(),
+            fd,
+        })
+    }
+
+    /// The directory and name to pass to an `*at` call for the entry `name`.
+    fn at<'a>(&'a self, name: &'a OsStr) -> io::Result<(BorrowedFd<'a>, Cow<'a, OsStr>)> {
+        // Joined to the path, an empty name would be the directory itself.
+        if name.is_empty() {
+            return Err(io::Error::from_raw_os_error(libc::ENOENT));
+        }
+        Ok(match &self.fd {
+            Some(dir) => (dir.as_fd(), Cow::Borrowed(name)),
+            None => (
+                rustix::fs::CWD,
+                Cow::Owned(self.path.join(name).into_os_string()),
+            ),
+        })
+    }
+
+    /// Create `name` as a link to `target`, symbolic if `symbolic` is set.
+    pub fn link_at(&self, target: &Path, name: &OsStr, symbolic: bool) -> io::Result<()> {
+        let (dir, name) = self.at(name)?;
+        link_at(target, dir, &name, symbolic)
+    }
+
+    /// Get metadata for the entry `name`, as [`DirFd::metadata_at`] does.
+    pub fn metadata_at(
+        &self,
+        name: &OsStr,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<Metadata> {
+        let (dir, name) = self.at(name)?;
+        stat_at_fd(dir, &name, symlink_behavior).map(Metadata::from_stat)
+    }
+
+    /// Rename the entry `from` to `to` in this directory.
+    pub fn rename_at(&self, from: &OsStr, to: &OsStr) -> io::Result<()> {
+        let (dir, from) = self.at(from)?;
+        let (_, to) = self.at(to)?;
+        rustix::fs::renameat(dir, &*from, dir, &*to).map_err(Into::into)
+    }
+
+    /// Create `name` with `create`, or replace it the same way if it is taken.
+    pub fn replace_entry_at(
+        &self,
+        name: &OsStr,
+        mut create: impl FnMut(&Self, &OsStr) -> io::Result<()>,
+    ) -> io::Result<()> {
+        match create(self, name) {
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+            res => return res,
+        }
+        self.replace_existing_entry_at(name, create)
+    }
+
+    /// Replace the existing entry `name` with one made by `create`: build it under a
+    /// temporary name and rename it over, so the name is never free.
+    pub(crate) fn replace_existing_entry_at(
+        &self,
+        name: &OsStr,
+        create: impl FnMut(&Self, &OsStr) -> io::Result<()>,
+    ) -> io::Result<()> {
+        use rustix::fs::{AtFlags, renameat, unlinkat};
+
+        let (dir, dest) = self.at(name)?;
+        let ((), tmp) = self.create_at_temp_name(create)?;
+        let (_, tmp) = self.at(&tmp)?;
+        let renamed = renameat(dir, &*tmp, dir, &*dest);
+        // Renaming onto an existing link to the same inode is a
+        // no-op, which leaves the temp behind.
+        let _ = unlinkat(dir, &*tmp, AtFlags::empty());
+        renamed.map_err(Into::into)
+    }
+
+    /// Create an entry under an unused random name with `create`, which must fail with
+    /// `EEXIST` on a taken name. Returns what `create` returned and the name.
+    fn create_at_temp_name<T>(
+        &self,
+        mut create: impl FnMut(&Self, &OsStr) -> io::Result<T>,
+    ) -> io::Result<(T, OsString)> {
+        use std::io::Read;
+
+        // GNU's template `CuXXXXXX`; the ~3% modulo bias per random char is
+        // irrelevant for an 8-char unguessability budget.
+        const ALPHABET: &[u8; 62] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+        let mut urandom = fs::File::open("/dev/urandom")?;
+
+        for _ in 0..32 {
+            let mut tmp = *b"Cu------";
+            let mut raw = [0u8; 6];
+            urandom.read_exact(&mut raw)?;
+            for (slot, byte) in tmp[2..].iter_mut().zip(raw) {
+                *slot = ALPHABET[byte as usize % ALPHABET.len()];
+            }
+            let tmp = OsStr::from_bytes(&tmp);
+
+            match create(self, tmp) {
+                Ok(created) => return Ok((created, tmp.to_owned())),
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            translate!("error-no-unique-temp-name"),
+        ))
     }
 }
 
@@ -1611,6 +1766,31 @@ mod tests {
         fs::set_permissions(&write_only, fs::Permissions::from_mode(0o755)).unwrap();
         assert!(write_only.join("sub").is_dir());
         assert!(write_only.join("file").is_file());
+    }
+
+    #[test]
+    fn test_dir_anchor_replaces_entry_by_fd_and_by_path() {
+        let temp_dir = TempDir::new().unwrap();
+        let dir = temp_dir.path();
+        let by_path = DirAnchor {
+            path: dir.to_owned(),
+            fd: None,
+        };
+        for anchor in [DirAnchor::open(dir).unwrap(), by_path] {
+            fs::write(dir.join("entry"), "old").unwrap();
+            anchor
+                .replace_existing_entry_at(OsStr::new("entry"), |dir, name| {
+                    dir.link_at(Path::new("target"), name, true)
+                })
+                .unwrap();
+            assert_eq!(
+                fs::read_link(dir.join("entry")).unwrap(),
+                Path::new("target")
+            );
+            // The temporary entry is renamed away, not left behind.
+            assert_eq!(fs::read_dir(dir).unwrap().count(), 1);
+            fs::remove_file(dir.join("entry")).unwrap();
+        }
     }
 
     #[test]

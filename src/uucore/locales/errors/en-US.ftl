@@ -56,3 +56,4 @@ range-diag-label-inverted = this range ends before it starts
 
 # Invalid QUOTING_STYLE env var
 invalid-quoting-style-env-var = ignoring invalid value of environment variable QUOTING_STYLE: { $invalid }
+error-no-unique-temp-name = no unique temporary name available in the destination directory
