@@ -335,24 +335,23 @@ fn test_translate_and_squeeze_multiple_lines() {
 /// An 'upper'/'lower' in SET2 must line up with an 'upper'/'lower' in SET1;
 /// any other class there leaves the mapping undefined. GNU calls that a
 /// misaligned construct.
-#[test]
-fn test_misaligned_upper_lower_construct() {
-    for sets in [
-        ["[:alpha:]", "[:upper:]"],
-        ["[:digit:]", "[:upper:]"],
-        ["abc", "[:upper:]"],
-        ["a[:lower:]", "[:upper:]b"],
-        ["[:lower:]", "[:upper:][:lower:]"],
-    ] {
-        new_ucmd!()
-            .args(&sets)
-            // No input: the sets are validated before stdin is read, so tr exits
-            // while the harness is still writing and the write hits a broken pipe.
-            .pipe_in("")
-            .fails_with_code(1)
-            .no_stdout()
-            .stderr_contains("tr: misaligned [:upper:] and/or [:lower:] construct\n");
-    }
+#[rstest]
+#[case::alpha_to_upper(&["[:alpha:]", "[:upper:]"])]
+#[case::digit_to_upper(&["[:digit:]", "[:upper:]"])]
+#[case::chars_to_upper(&["abc", "[:upper:]"])]
+#[case::shifted_classes(&["a[:lower:]", "[:upper:]b"])]
+#[case::extra_class_in_set2(&["[:lower:]", "[:upper:][:lower:]"])]
+// -s alone still translates, so the alignment rule still applies.
+#[case::squeeze(&["-s", "[:alpha:]", "[:upper:]"])]
+fn test_misaligned_upper_lower_construct(#[case] args: &[&str]) {
+    new_ucmd!()
+        .args(args)
+        // No input: the sets are validated before stdin is read, so tr exits
+        // while the harness is still writing and the write hits a broken pipe.
+        .pipe_in("")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("tr: misaligned [:upper:] and/or [:lower:] construct\n");
 }
 
 /// The alignment rule is about translating only: with -d, SET2 is the squeeze
@@ -364,17 +363,6 @@ fn test_misaligned_construct_not_checked_when_deleting() {
         .pipe_in("aZ1")
         .succeeds()
         .stdout_is("1");
-}
-
-/// -s alone still translates, so the alignment rule still applies.
-#[test]
-fn test_misaligned_construct_checked_when_squeezing() {
-    new_ucmd!()
-        .args(&["-s", "[:alpha:]", "[:upper:]"])
-        .pipe_in("")
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_contains("tr: misaligned [:upper:] and/or [:lower:] construct\n");
 }
 
 /// Plain -d takes one set: a class in SET2 is an extra operand, not a
