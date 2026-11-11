@@ -23,10 +23,10 @@ pub fn set_file_times(path: &Path, atime: FileTime, mtime: FileTime) -> Result<(
     set_times(path, atime, mtime, AtFlags::empty()).or_else(|err| {
         // Some hosts reject a mode 0 file when `utimensat` follows symlinks.
         // The flag has no effect on a path that is not a symlink.
-        if path.is_symlink() {
-            Err(err)
-        } else {
+        if err.kind() == std::io::ErrorKind::Unsupported && !path.is_symlink() {
             set_times(path, atime, mtime, AtFlags::SYMLINK_NOFOLLOW)
+        } else {
+            Err(err)
         }
     })
 }
