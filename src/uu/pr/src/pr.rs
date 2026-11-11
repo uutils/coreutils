@@ -1082,10 +1082,11 @@ fn build_options(
     let columns_to_print =
         merge_files_print.unwrap_or_else(|| column_mode_options.as_ref().map_or(1, |i| i.columns));
 
-    // Like GNU pr, -s without -w merges files unpadded and untruncated.
+    // Like GNU pr, -s without -w or -W merges files unpadded and untruncated.
     let merge_with_char_separator = merge_files_print.is_some()
         && matches.contains_id(options::COLUMN_CHAR_SEPARATOR)
-        && !matches.contains_id(options::COLUMN_WIDTH);
+        && !matches.contains_id(options::COLUMN_WIDTH)
+        && !matches.contains_id(options::PAGE_WIDTH);
 
     let line_width = if join_lines || merge_with_char_separator {
         None
@@ -1093,7 +1094,8 @@ fn build_options(
         Some(
             column_mode_options
                 .as_ref()
-                .map_or(column_width, |i| i.width),
+                // -W sets the merged line width and takes precedence over -w.
+                .map_or(page_width.unwrap_or(column_width), |i| i.width),
         )
     } else {
         page_width

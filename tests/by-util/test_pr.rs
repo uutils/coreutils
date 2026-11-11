@@ -8,8 +8,8 @@
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
 use std::fs::metadata;
-use uutests::util::UCommand;
-use uutests::{at_and_ucmd, new_ucmd};
+use uutests::util::{TestScenario, UCommand};
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 const DATE_TIME_FORMAT_DEFAULT: &str = "%Y-%m-%d %H:%M";
 
@@ -711,18 +711,36 @@ fn test_join_lines_keeps_column_separator() {
 fn test_merge_with_column_separator() {
     // like GNU pr, -s joins the merged lines with the separator, unpadded
     // unless -w is given
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.write("one", "first line\n2\n");
-    at.write("two", "x\ny\n");
-    ucmd.args(&["-m", "-t", "-s,", "one", "two", "one"])
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("one", "first line\n2\n");
+    scene.fixtures.write("two", "x\ny\n");
+    scene
+        .ucmd()
+        .args(&["-m", "-t", "-s,", "one", "two", "one"])
         .succeeds()
         .stdout_is("first line,x,first line\n2,y,2\n");
-    new_ucmd!()
-        .args(&["-m", "-t", "-s,", "-w", "10"])
-        .arg(at.plus("one"))
-        .arg(at.plus("two"))
+    scene
+        .ucmd()
+        .args(&["-m", "-t", "-s,", "-w", "10", "one", "two"])
         .succeeds()
         .stdout_is("firs,x\n2   ,y\n");
+}
+
+#[test]
+fn test_merge_with_column_separator_and_page_width() {
+    // -W truncates and pads merged lines like -w, and wins over -w
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("one", "first line\n2\n");
+    scene.fixtures.write("two", "x\ny\n");
+    for widths in [&["-W", "10"][..], &["-W", "10", "-w", "20"]] {
+        scene
+            .ucmd()
+            .args(&["-m", "-t", "-s,"])
+            .args(widths)
+            .args(&["one", "two"])
+            .succeeds()
+            .stdout_is("firs,x\n2   ,y\n");
+    }
 }
 
 #[test]
