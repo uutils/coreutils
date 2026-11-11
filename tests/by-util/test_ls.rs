@@ -72,6 +72,34 @@ fn test_directory_in_file() {
 }
 
 #[test]
+fn test_name_too_long() {
+    let name = "a".repeat(300);
+    let result = new_ucmd!().arg(&name).fails_with_code(2);
+    #[cfg(all(unix, not(target_env = "musl")))]
+    result.stderr_is(format!("ls: cannot access '{name}': File name too long\n"));
+    // musl spells strerror(ENAMETOOLONG) "Filename too long"
+    #[cfg(any(not(unix), target_env = "musl"))]
+    result
+        .stderr_contains(format!("ls: cannot access '{name}': "))
+        .stderr_does_not_contain("os error");
+}
+
+#[test]
+#[cfg(windows)]
+fn test_invalid_filename_windows() {
+    // `*` and `<` cannot appear in a Windows file name, so the lookup fails
+    // with ERROR_INVALID_NAME rather than "not found"
+    for name in ["a*", "a<b"] {
+        new_ucmd!()
+            .arg(name)
+            .fails_with_code(2)
+            .stderr_contains(format!("ls: cannot access '{name}': "))
+            .stderr_does_not_contain("unknown io error")
+            .stderr_does_not_contain("os error");
+    }
+}
+
+#[test]
 fn test_invalid_flag() {
     new_ucmd!()
         .arg("--invalid-argument")
@@ -2901,6 +2929,7 @@ fn test_ls_recursive_all_with_version_sort_does_not_walk_up() {
 #[cfg(unix)]
 mod quoting {
     use super::TestScenario;
+    use rstest::rstest;
     use uutests::at_and_ucmd;
     use uutests::util::is_locale_available;
     use uutests::util_name;
@@ -3039,6 +3068,31 @@ mod quoting {
                 .succeeds()
                 .stdout_only("'it'\\''s'$'\\302\\233''here'\n");
         }
+    }
+
+    // U+2028 and U+2029 split lines like control characters do, so -b escapes
+    // them and -q hides them, as GNU does.
+    #[rstest]
+    #[case::line_separator("x\u{2028}y", "x\\342\\200\\250y")]
+    #[case::paragraph_separator("x\u{2029}y", "x\\342\\200\\251y")]
+    fn test_ls_quoting_line_separators_utf8(#[case] name: &str, #[case] escaped: &str) {
+        if !is_locale_available("en_US.UTF-8") {
+            return;
+        }
+
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch(name);
+        ucmd.env("LC_ALL", "en_US.UTF-8")
+            .args(&["-b", "-1"])
+            .succeeds()
+            .stdout_is(format!("{escaped}\n"));
+
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch(name);
+        ucmd.env("LC_ALL", "en_US.UTF-8")
+            .args(&["-q", "-1"])
+            .succeeds()
+            .stdout_is("x?y\n");
     }
 
     #[test]
@@ -7171,6 +7225,46 @@ fn test_acl_display() {
         .succeeds()
         .stdout_matches(&re_with_acl)
         .stdout_matches(&re_without_acl);
+}
+
+// A non-ACL xattr alone must not mark a file `+`.
+#[cfg(all(unix, not(target_vendor = "apple")))]
+#[test]
+fn test_user_xattr_is_not_acl() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("with_xattr");
+
+    match Command::new("setfattr")
+        .args([
+            "-n",
+            "user.test",
+            "-v",
+            "1",
+            &at.plus_as_string("with_xattr"),
+        ])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: setfattr failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfattr failed with {e}");
+            return;
+        }
+    }
+
+    let re_no_acl = Regex::new(r"(?m)^-[rwx-]{9}[ .]? +\d+ .*with_xattr$").unwrap();
+    scene
+        .ucmd()
+        .args(&["-l", "with_xattr"])
+        .succeeds()
+        .stdout_matches(&re_no_acl);
 }
 
 // On macOS the ACL is not an xattr, and most files carry xattrs anyway, so

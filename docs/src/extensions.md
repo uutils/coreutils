@@ -31,6 +31,9 @@ Our `coreutils` calls utility by `coreutils utility-name` and has `--list` to ru
 Our `coreutils` is called as `utility-name` if its binary name ends with `utility-name` to support prefixed names.
 Longer name is prioritized e.g. `sum` with the prefix `ck` is called as `cksum`.
 
+On Linux with glibc, a symlink alias such as
+`dummy -> true -> coreutils` selects `true` from the alias's immediate target.
+
 ## `base32/base64/basenc`
 
 Just like on macOS, `base32/base64/basenc` provides `-D` to decode data.
