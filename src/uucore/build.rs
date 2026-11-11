@@ -23,6 +23,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             target_os = "solaris",
             target_vendor = "apple"
         ) },
+        // Where `safe_traversal`, and the descriptor walk built on it, exist.
+        has_safe_traversal: { all(unix, not(target_os = "redox")) },
+        // An open flag that holds a symlink itself.
+        has_o_symlink: { target_vendor = "apple" },
     }
 
     let out_dir = env::var("OUT_DIR")?;
