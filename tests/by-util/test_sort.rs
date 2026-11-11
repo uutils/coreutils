@@ -536,6 +536,74 @@ fn test_random_source_of_exactly_the_salt_length() {
 }
 
 #[test]
+fn test_random_source_reads_only_the_salt_length() {
+    use uutests::util_name;
+
+    let ts = TestScenario::new(util_name!());
+    // GNU sort consumes exactly 16 bytes (the salt length) from the random source.
+    // Extra bytes must be ignored, meaning a 16-byte source and a longer source starting
+    // with the same 16 bytes must produce the exact same sort order.
+    let seed16 = [b'x'; 16];
+    let mut seed_longer = Vec::from(seed16);
+    seed_longer.extend_from_slice(&[b'y'; 1024]);
+
+    ts.fixtures.write_bytes("source_16", &seed16);
+    ts.fixtures.write_bytes("source_longer", &seed_longer);
+    ts.fixtures.write(
+        "input",
+        "apple\nbanana\ncherry\ndate\nelderberry\nfig\ngrape\nhoneydew\n",
+    );
+
+    let from_16 = ts
+        .ucmd()
+        .args(&["-R", "--random-source=source_16", "input"])
+        .succeeds()
+        .stdout_move_str();
+
+    let from_longer = ts
+        .ucmd()
+        .args(&["-R", "--random-source=source_longer", "input"])
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(from_16, from_longer);
+}
+
+#[test]
+#[uutests::wasi_ignore(NoFifo)]
+#[cfg(unix)]
+fn test_random_source_pipe_only_needs_16_bytes() {
+    use std::io::Write;
+    use uutests::util_name;
+
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkfifo("fifo");
+    ts.fixtures.write("input", "apple\nbanana\ncherry\n");
+
+    let fifo_path = ts.fixtures.plus("fifo");
+    let (tx, rx) = std::sync::mpsc::channel();
+    let handle = std::thread::spawn(move || {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&fifo_path)
+            .unwrap();
+        // Write exactly 16 bytes and flush, keeping the write end open.
+        file.write_all(&[b'z'; 16]).unwrap();
+        file.flush().unwrap();
+        // Wait until sort has completed before closing the pipe
+        let _ = rx.recv_timeout(Duration::from_secs(3));
+    });
+
+    ts.ucmd()
+        .timeout(Duration::from_secs(2))
+        .args(&["-R", "--random-source=fifo", "input"])
+        .succeeds();
+
+    let _ = tx.send(());
+    handle.join().unwrap();
+}
+
+#[test]
 fn test_random_source_is_not_read_without_random_sort() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write_bytes("source", b"");
@@ -2175,6 +2243,15 @@ fn test_separator_attached_equals() {
         .pipe_in("a=b=c\nb=a=d\n")
         .succeeds()
         .stdout_only("b=a=d\na=b=c\n");
+}
+
+#[test]
+fn test_separator_like_file_operand_after_double_dash() {
+    // After `--`, a file named `-t=` is an operand and must not be rewritten
+    // to `--field-separator==`.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("-t=", "b\na\n");
+    ucmd.args(&["--", "-t="]).succeeds().stdout_only("a\nb\n");
 }
 
 #[test]

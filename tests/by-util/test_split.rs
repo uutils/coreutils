@@ -945,6 +945,7 @@ fn test_suffix_start_too_large(#[case] args: &[&str], #[case] input: &str) {
     new_ucmd!()
         .args(args)
         .pipe_in(input)
+        .ignore_stdin_write_error()
         .fails()
         .usage_error("numerical suffix start value is too large for the suffix length");
 }
@@ -1865,6 +1866,23 @@ fn test_round_robin_limited_file_descriptors() {
         .args(&["-n", "r/40", "onehundredlines.txt"])
         .limit(Resource::NOFILE, 9, 9)
         .succeeds();
+}
+
+// A short write on the last chunk must not be silently dropped: the rest
+// has to be retried so that the resulting error is reported.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_short_write_on_last_chunk_is_reported() {
+    for args in [&["-b", "8192"][..], &["-l", "1"][..]] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("in", &"x".repeat(6000));
+        ucmd.args(args)
+            .arg("in")
+            .limit(Resource::FSIZE, 4096, 4096)
+            .ignore_sigxfsz()
+            .fails_with_code(1)
+            .stderr_contains("File too large");
+    }
 }
 
 #[test]

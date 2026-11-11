@@ -19,7 +19,7 @@ ls-error-cannot-access-operation-not-permitted = impossible d'accéder à {$path
 ls-error-cannot-open-directory-permission-denied = impossible d'ouvrir le répertoire {$path} : Permission refusée
 ls-error-cannot-access-permission-denied = impossible d'accéder à {$path} : Permission refusée
 ls-error-cannot-open-directory-bad-descriptor = impossible d'ouvrir le répertoire {$path} : Mauvais descripteur de fichier
-ls-error-unknown-io-error = erreur d'E/S inconnue : {$path}, '{$error}'
+ls-error-cannot-access = impossible d'accéder à {$path} : {$error}
 ls-error-invalid-block-size = argument --block-size invalide {$size}
 ls-error-dired-and-zero-incompatible = --dired et --zero sont incompatibles
 ls-error-not-listing-already-listed = {$path} : ne liste pas un répertoire déjà listé
@@ -49,7 +49,6 @@ ls-help-long-format-no-group = Format long sans informations de groupe.
   Identique à --format=long avec --no-group.
 ls-help-long-no-owner = Format long sans informations de propriétaire.
 ls-help-long-numeric-uid-gid = -l avec des UID et GID numériques.
-ls-help-set-quoting-style = Définir le style de citation.
 ls-help-literal-quoting-style = Utiliser le style de citation littéral. Équivalent à `--quoting-style=literal`
 ls-help-escape-quoting-style = Utiliser le style de citation d'échappement. Équivalent à `--quoting-style=escape`
 ls-help-c-quoting-style = Utiliser le style de citation C. Équivalent à `--quoting-style=c`

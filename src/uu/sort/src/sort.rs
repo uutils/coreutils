@@ -2109,7 +2109,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242,
     // and the same rewrite in `cut`), so rewrite every attached `-t<chars>`
     // argument to its long form, which preserves the separator verbatim.
+    // Arguments after `--` are file operands and must be left untouched.
+    let mut seen_double_dash = false;
     let args = args.into_iter().map(|x| {
+        if seen_double_dash {
+            return x;
+        }
+        if x == "--" {
+            seen_double_dash = true;
+            return x;
+        }
         // Non-UTF-8 separators are rejected later anyway, so lossy conversion
         // here only affects arguments that cannot become a valid separator.
         let as_str = x.to_string_lossy();
@@ -3127,57 +3136,29 @@ fn get_rand_string() -> [u8; SALT_LEN] {
 }
 
 const SALT_LEN: usize = 16; // 128-bit salt
-const MAX_BYTES: usize = 1024 * 1024; // Read cap: 1 MiB
-const BUF_LEN: usize = 8192; // 8 KiB read buffer
-const U64_LEN: usize = 8;
-const RANDOM_SOURCE_TAG: &[u8] = b"uutils-sort-random-source"; // Domain separation tag
 
-/// Create a 128-bit salt by hashing up to 1 MiB from the given file.
+/// Create a 128-bit salt by reading exactly 16 bytes ([`SALT_LEN`]) from the given file.
 ///
 /// The file has to hold at least [`SALT_LEN`] bytes. GNU asks for the same 128
-/// bits and reports `end of file` when the source cannot supply them, rather
-/// than shuffling with whatever it managed to read.
+/// bits and reports `end of file` when the source cannot supply them. Any
+/// remaining bytes in the source are not read.
 fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     let mut reader = open_with_open_failed_error(path)?;
-    let mut buf = [0u8; BUF_LEN];
-    let mut total = 0usize;
-    // freeze seed for --random-source
-    let mut hasher = FoldHasher::with_seed(1, SharedSeed::global_fixed());
+    let mut buf = [0u8; SALT_LEN];
 
-    while let n @ 1.. = reader
-        .read(&mut buf)
-        .map_err(|error| SortError::ReadFailed {
-            path: path.to_owned(),
-            error,
-        })?
-        && let remaining @ 1.. = MAX_BYTES.saturating_sub(total)
-    {
-        let take = n.min(remaining);
-        hasher.write(&buf[..take]);
-        total = total.saturating_add(take);
-        if take < n {
-            break;
-        }
-    }
+    reader
+        .read_exact(&mut buf)
+        .map_err(|error| match error.kind() {
+            std::io::ErrorKind::UnexpectedEof => SortError::RandomSourceEndOfFile {
+                path: path.to_owned(),
+            },
+            _ => SortError::ReadFailed {
+                path: path.to_owned(),
+                error,
+            },
+        })?;
 
-    if total < SALT_LEN {
-        return Err(SortError::RandomSourceEndOfFile {
-            path: path.to_owned(),
-        }
-        .into());
-    }
-
-    let first = hasher.finish();
-    // freeze seed for --random-source
-    let mut second_hasher = FoldHasher::with_seed(2, SharedSeed::global_fixed());
-    second_hasher.write(RANDOM_SOURCE_TAG);
-    second_hasher.write_u64(first);
-    let second = second_hasher.finish();
-
-    let mut out = [0u8; SALT_LEN];
-    out[..U64_LEN].copy_from_slice(&first.to_le_bytes());
-    out[U64_LEN..].copy_from_slice(&second.to_le_bytes());
-    Ok(out)
+    Ok(buf)
 }
 
 fn get_hash<T: Hash>(t: &T) -> u64 {

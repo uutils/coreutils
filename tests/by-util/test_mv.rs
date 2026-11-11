@@ -1994,6 +1994,117 @@ mod inter_partition_copying {
         );
     }
 
+    // Directories below the moved one keep their mode and their ACL (#15784).
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
+    #[test]
+    pub(crate) fn test_mv_inter_partition_keeps_subdir_mode_and_acl() {
+        use std::path::Path;
+        use std::process::Command;
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.mkdir_all("site/private");
+        at.write("site/private/notes.txt", "internal only");
+        set_permissions(at.plus("site/private"), PermissionsExt::from_mode(0o700))
+            .expect("Unable to set the mode of site/private");
+        set_permissions(at.plus("site"), PermissionsExt::from_mode(0o700))
+            .expect("Unable to set the mode of site");
+
+        let get_acl = |path: &Path| {
+            Command::new("getfacl")
+                .args(["-c", "-n"])
+                .arg(path)
+                .output()
+                .ok()
+                .filter(|out| out.status.success())
+                .map(|out| out.stdout)
+        };
+        // The ACL part is skipped when setfacl is missing or either filesystem has no ACLs.
+        let set_acl = |path: &Path| {
+            Command::new("setfacl")
+                .args(["-m", "u:65534:---"])
+                .arg(path)
+                .status()
+                .is_ok_and(|status| status.success())
+        };
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        let dest = other_fs_tempdir.path().join("site");
+
+        let check_acl = set_acl(&at.plus("site/private")) && set_acl(other_fs_tempdir.path());
+        let acl_before = get_acl(&at.plus("site/private"));
+
+        scene
+            .ucmd()
+            .arg("site")
+            .arg(dest.to_str().unwrap())
+            .succeeds();
+
+        let mode_of = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o7777;
+        let mode = mode_of(&dest);
+        assert_eq!(mode, 0o700, "site should stay 0700, got {mode:o}");
+        let moved = dest.join("private");
+        let mode = mode_of(&moved);
+        assert_eq!(mode, 0o700, "site/private should stay 0700, got {mode:o}");
+        if check_acl {
+            assert_eq!(get_acl(&moved), acl_before, "site/private lost its ACL");
+        }
+    }
+
+    // The source mode is applied to a copied directory only after its contents,
+    // so when the copy fails the directories created so far must not be left
+    // with the umask-based mode, which would open a 0700 source to everyone.
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
+    #[test]
+    pub(crate) fn test_mv_inter_partition_failed_copy_keeps_dirs_private() {
+        use std::path::Path;
+
+        if rustix::process::geteuid().is_root() {
+            println!("test skipped: root can read the unreadable file");
+            return;
+        }
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.mkdir_all("private/sub");
+        at.write("private/notes.txt", "secret");
+        at.write("private/sub/unreadable", "x");
+        set_permissions(
+            at.plus("private/sub/unreadable"),
+            PermissionsExt::from_mode(0o000),
+        )
+        .expect("Unable to make private/sub/unreadable unreadable");
+        set_permissions(at.plus("private/sub"), PermissionsExt::from_mode(0o700))
+            .expect("Unable to set the mode of private/sub");
+        set_permissions(at.plus("private"), PermissionsExt::from_mode(0o700))
+            .expect("Unable to set the mode of private");
+
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        let dest = other_fs_tempdir.path().join("private");
+
+        scene
+            .ucmd()
+            .umask(0o022)
+            .arg("private")
+            .arg(dest.to_str().unwrap())
+            .fails();
+
+        let mode_of = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o7777;
+        for dir in [dest.clone(), dest.join("sub")] {
+            let mode = mode_of(&dir);
+            assert_eq!(
+                mode,
+                0o700,
+                "{} should be 0700, got {mode:o}",
+                dir.display()
+            );
+        }
+        assert!(at.dir_exists("private/sub"), "the source must be kept");
+    }
+
     // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
     #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]

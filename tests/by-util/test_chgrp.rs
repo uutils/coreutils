@@ -11,7 +11,6 @@ use rustix::process::getgroups;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use uutests::{at_and_ucmd, new_ucmd};
-#[cfg(not(target_vendor = "apple"))]
 use uutests::{util::TestScenario, util_name};
 
 #[test]
@@ -60,6 +59,18 @@ fn test_invalid_group() {
         .arg("/")
         .fails()
         .stderr_is("chgrp: invalid group: '__nosuchgroup__'\n");
+}
+
+#[test]
+fn test_invalid_group_with_colon_prefix() {
+    // The `:gid` format is only accepted by --from, not for the group operand
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    let gid = getegid().as_raw();
+    ucmd.arg(format!(":{gid}"))
+        .arg("file")
+        .fails_with_code(1)
+        .stderr_is(format!("chgrp: invalid group: ':{gid}'\n"));
 }
 
 #[test]
@@ -604,11 +615,11 @@ fn test_numeric_group_formats() {
     let new_gid = at.plus("test_file").metadata().unwrap().gid();
     assert_eq!(new_gid, second_group.as_raw());
 
-    // Test :gid format in target group
+    // Test numeric gid in target group (the :gid format is only valid for --from)
     scene
         .ucmd()
         .arg(format!("--from={}", second_group.as_raw()))
-        .arg(format!(":{}", first_group.as_raw()))
+        .arg(first_group.as_raw().to_string())
         .arg("test_file")
         .succeeds()
         .no_stderr();
@@ -708,4 +719,33 @@ fn test_repeated_flags_are_accepted() {
         .arg(getegid().to_string())
         .arg("dir")
         .succeeds();
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "openbsd")))]
+fn test_chgrp_cannot_access_vs_cannot_dereference() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("f");
+    at.symlink_file("missing", "dangling");
+    let gid = getegid().as_raw().to_string();
+
+    scene
+        .ucmd()
+        .arg(&gid)
+        .arg("f/")
+        .fails_with_code(1)
+        .stderr_is("chgrp: cannot access 'f/': Not a directory\n");
+    scene
+        .ucmd()
+        .arg(&gid)
+        .arg("dir/missing")
+        .fails_with_code(1)
+        .stderr_is("chgrp: cannot access 'dir/missing': No such file or directory\n");
+    scene
+        .ucmd()
+        .arg(&gid)
+        .arg("dangling")
+        .fails_with_code(1)
+        .stderr_is("chgrp: cannot dereference 'dangling': No such file or directory\n");
 }

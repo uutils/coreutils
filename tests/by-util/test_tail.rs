@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile file siette ocho nueve diez MULT watchme nofile wxyz
-// spell-checker:ignore (libs) kqueue ELOOP EISDIR
+// spell-checker:ignore (libs) kqueue ELOOP EISDIR FSIZE setrlimit SIGXFSZ
 // spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
 // spell-checker:ignore (cmd) taskkill
 
@@ -164,6 +164,92 @@ fn test_stdin_redirect_offset() {
     fh.seek(SeekFrom::Start(2)).unwrap();
 
     ucmd.set_stdin(fh).succeeds().stdout_only("2\n");
+}
+
+// Runs `ucmd`, whose output is appended to `f`, and checks that it succeeds.
+// Should tail not stop at the end of `f`, it is stopped once `f` grows past
+// 1 MiB, long before the disk is full: by the file size cap on unix, and by
+// watching the size of `f` where there is no such cap. With SIGXFSZ ignored,
+// the cap fails writes instead of killing tail, which a coverage build would
+// otherwise hit when writing its profile data on exit.
+#[cfg(any(unix, windows))]
+fn run_appending_to_input(at: &uutests::util::AtPath, ucmd: &mut uutests::util::UCommand) {
+    const CAP: u64 = 1024 * 1024;
+    #[cfg(unix)]
+    ucmd.limit(rlimit::Resource::FSIZE, CAP, CAP)
+        .ignore_sigxfsz();
+    let mut child = ucmd.run_no_wait();
+    while child.is_alive() {
+        if at.metadata("f").len() > CAP {
+            child.kill();
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    assert!(
+        at.metadata("f").len() <= CAP,
+        "tail did not stop: f grew past {CAP} bytes"
+    );
+    child.wait().unwrap().success();
+}
+
+// `tail f >> f` must print what `f` held when tail started, and stop there
+// rather than read back its own output, the header included. A file above
+// one block takes the seeking path, a smaller one the streaming path.
+#[uutests::wasi_ignore(NoRlimitSetrlimitSupport)]
+#[rstest]
+#[case::last_line_of_large_file(&["-n1"], true, Some("last\n"))]
+#[case::last_line_of_large_file_after_header(&["-v", "-n1"], true, Some("==> f <==\nlast\n"))]
+#[case::last_bytes_of_large_file_after_header(&["-v", "-c5"], true, Some("==> f <==\nlast\n"))]
+#[case::large_file_from_start(&["-c+1"], true, None)]
+#[case::small_file_from_second_line(&["-n+2"], false, Some("b\nc\n"))]
+#[cfg(any(unix, windows))]
+fn test_output_appended_to_input(
+    #[case] args: &[&str],
+    #[case] large: bool,
+    #[case] expected_tail: Option<&str>,
+) {
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let content = if large {
+        format!("{}\nlast\n", "x".repeat(100 * 1024))
+    } else {
+        "a\nb\nc\n".to_string()
+    };
+    // No expectation stands for the whole file.
+    let expected_tail = expected_tail.unwrap_or(&content);
+    at.write("f", &content);
+    let out = OpenOptions::new().append(true).open(at.plus("f")).unwrap();
+
+    run_appending_to_input(&at, ucmd.args(args).arg("f").set_stdout(out));
+    assert_eq!(at.read("f"), format!("{content}{expected_tail}"));
+}
+
+// Same as above with `tail < f >> f`: standard input is the file as well.
+#[uutests::wasi_ignore(NoRlimitSetrlimitSupport)]
+#[test]
+#[cfg(any(unix, windows))]
+fn test_output_appended_to_stdin() {
+    use std::fs::OpenOptions;
+
+    let header = new_ucmd!()
+        .args(&["-v", "-c1"])
+        .pipe_in("")
+        .succeeds()
+        .stdout_move_str();
+    let (at, mut ucmd) = at_and_ucmd!();
+    let content = format!("{}\nlast\n", "x".repeat(100 * 1024));
+    at.write("f", &content);
+    let out = OpenOptions::new().append(true).open(at.plus("f")).unwrap();
+
+    run_appending_to_input(
+        &at,
+        ucmd.args(&["-v", "-c+1"])
+            .set_stdin(File::open(at.plus("f")).unwrap())
+            .set_stdout(out),
+    );
+    assert_eq!(at.read("f"), format!("{content}{header}{content}"));
 }
 
 #[test]
@@ -2325,7 +2411,10 @@ fn test_follow_name_truncate1() {
     at.touch(source); // trigger truncate
     p.delay(delay);
 
-    at.copy(backup, source);
+    // Restore in a single write. On Windows, copying sets the final size
+    // before writing the data, so tail could read zeros there and then wait
+    // for more data after them.
+    at.write(source, &at.read(backup));
     p.delay(delay);
 
     p.make_assertion().is_alive();
@@ -3050,6 +3139,35 @@ fn test_fifo() {
         let mut p = ts.ucmd().arg(arg).arg("FIFO").run_no_wait();
         p.make_assertion_with_delay(500).is_alive();
         p.kill().make_assertion().with_all_output().no_output();
+    }
+}
+
+/// A followed name that is replaced by a FIFO without a writer must not stop
+/// tail from printing the other followed files, in name and descriptor mode.
+#[uutests::wasi_ignore(NoFifo)]
+#[test]
+#[cfg(not(windows))]
+fn test_follow_replaced_by_fifo_does_not_block_other_files() {
+    for follow in ["-F", "-f"] {
+        let ts = TestScenario::new(util_name!());
+        let at = &ts.fixtures;
+        at.write("a", "a1\n");
+        at.write("b", "b1\n");
+
+        let mut p = ts.ucmd().args(&[follow, "a", "b"]).run_no_wait();
+        p.make_assertion_with_delay(500).is_alive();
+
+        at.mkfifo("tmp_fifo");
+        at.rename("tmp_fifo", "b");
+        p.make_assertion_with_delay(500).is_alive();
+
+        at.append("a", "a2\n");
+        p.make_assertion_with_delay(1000).is_alive();
+
+        p.kill()
+            .make_assertion()
+            .with_all_output()
+            .stdout_contains("a2");
     }
 }
 
@@ -5226,6 +5344,47 @@ fn test_tail_obsolete_f_flag() {
 }
 
 #[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+fn test_tail_obsolete_bytes_follow_stdin() {
+    // `-f` is ignored when stdin is a pipe, so tail exits after printing.
+    new_ucmd!()
+        .arg("-cf")
+        .pipe_in("abcdefghijklmnop\n")
+        .succeeds()
+        .stdout_only("hijklmnop\n");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+fn test_tail_obsolete_bytes_follow() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("file", "abcdefghijklmnop\n");
+    let mut p = scene.ucmd().args(&["-cf", "file"]).run_no_wait();
+    p.make_assertion_with_delay(500).is_alive();
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_only("hijklmnop\n");
+
+    scene
+        .ucmd()
+        .arg("-c")
+        .arg("f")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("tail: invalid number of bytes: 'f'\n");
+
+    scene
+        .ucmd()
+        .args(&["-5ff", "file"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("tail: option used in invalid context -- 5\n");
+}
+
 #[test]
 #[cfg(unix)]
 fn test_obsolete_encoding_unix() {

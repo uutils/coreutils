@@ -66,6 +66,7 @@ shred-pass-progress = {$file}: pass
 shred-failed-to-open-for-writing = {$file}: failed to open for writing
 shred-file-write-pass-failed = {$file}: File write pass failed
 shred-failed-to-remove-file = {$file}: failed to remove
+shred-error-truncating = {$file}: error truncating
 
 # File I/O error messages
 shred-failed-to-clone-file-handle = failed to clone file handle
