@@ -89,7 +89,12 @@ pub fn render(args: &[OsString], operands: &Operands, err: &CsplitError) -> bool
         }
         // Both messages describe the format as a whole rather than a character
         // of it, so the whole value is underlined.
-        CsplitError::SuffixFormatIncorrect | CsplitError::SuffixFormatTooManyPercents => {
+        CsplitError::SuffixFormatIncorrect
+        | CsplitError::SuffixFormatTooManyPercents
+        | CsplitError::SuffixFormatMissingPercent
+        | CsplitError::SuffixFormatMissingSpecifier
+        | CsplitError::SuffixFormatInvalidSpecifier(_)
+        | CsplitError::SuffixFormatInvalidFlags(_) => {
             let Some(format) = operands.suffix_format else {
                 return false;
             };

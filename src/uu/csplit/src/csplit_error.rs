@@ -51,6 +51,14 @@ pub enum CsplitError {
     SuffixFormatIncorrect,
     #[error("{}", translate!("csplit-error-suffix-format-too-many-percents"))]
     SuffixFormatTooManyPercents,
+    #[error("{}", translate!("csplit-error-suffix-format-missing-percent"))]
+    SuffixFormatMissingPercent,
+    #[error("{}", translate!("csplit-error-suffix-format-missing-specifier"))]
+    SuffixFormatMissingSpecifier,
+    #[error("{}", translate!("csplit-error-suffix-format-invalid-specifier", "specifier" => _0))]
+    SuffixFormatInvalidSpecifier(String),
+    #[error("{}", translate!("csplit-error-suffix-format-invalid-flags", "conversion" => _0))]
+    SuffixFormatInvalidFlags(String),
     #[error("{}", translate!("csplit-error-not-regular-file", "file" => _0.quote()))]
     NotRegularFile(String),
     #[error("{}", _0)]

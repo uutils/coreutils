@@ -1736,6 +1736,27 @@ fn zero_precision_format() {
 }
 
 #[test]
+fn suffix_format_errors_match_gnu() {
+    for (format, message) in [
+        ("abc", "missing % conversion specification in suffix"),
+        ("x%%y", "missing % conversion specification in suffix"),
+        ("a%", "missing conversion specifier in suffix"),
+        ("%s", "invalid conversion specifier in suffix: s"),
+        ("%5.3q", "invalid conversion specifier in suffix: q"),
+        ("%#d", "invalid flags in conversion specification: %#d"),
+        ("%'x", "invalid flags in conversion specification: %'x"),
+        ("%d%d", "too many % conversion specifications in suffix"),
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["numbers50.txt", "10", "-b", format])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_is(format!("csplit: {message}\n"));
+        assert!(!at.file_exists("xx00"), "no split for {format}");
+    }
+}
+
+#[test]
 fn zero_error() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("in");
