@@ -756,7 +756,6 @@ fn test_complement_set1_longer_than_set2_ending_in_class() {
     ] {
         new_ucmd!()
             .args(&[flags, set1, set2])
-            .pipe_in("AbC1z\n")
             .fails_with_code(1)
             .stderr_only(msg);
     }
@@ -793,7 +792,6 @@ fn test_complement_class_in_set2_unique_chars_error() {
     ] {
         new_ucmd!()
             .args(&[flags, set1, set2])
-            .pipe_in("AbC1z\n")
             .fails_with_code(1)
             .stderr_only(msg);
     }
