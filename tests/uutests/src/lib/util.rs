@@ -99,12 +99,15 @@ fn find_tests_binary() -> Option<PathBuf> {
 /// Find the binary `name` (e.g. `coreutils` or `uudoc`) the same way as
 /// [`get_tests_binary`], the other binaries being next to `UUTESTS_BINARY_PATH`.
 pub fn find_binary(name: &str) -> Option<PathBuf> {
-    resolve_tests_binary(
-        name,
-        env::var_os("UUTESTS_BINARY_PATH"),
-        env::var_os(format!("CARGO_BIN_EXE_{name}")),
-        env::current_exe().ok(),
-    )
+    let uu_bin_path = env::var_os("UUTESTS_BINARY_PATH");
+    let hardcoded_exe = env::var_os(format!("CARGO_BIN_EXE_{name}"));
+    let cur_exe = if uu_bin_path.is_some() || hardcoded_exe.is_some() {
+        None
+    } else {
+        // cross built tests for openbsd panics without guarding this
+        env::current_exe().ok()
+    };
+    resolve_tests_binary(name, uu_bin_path, hardcoded_exe, cur_exe)
 }
 
 /// Set the binary to test (default: `coreutils`), resolved by [`get_tests_binary`].
