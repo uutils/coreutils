@@ -1,10 +1,12 @@
 name: FreeBSD
 
-# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc nextest copyback logind
+# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc mlugg nextest copyback logind zigbuild
 
 env:
-  # * style job configuration
-  STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
+  CARGO_INCREMENTAL: "0"
+  # https://github.com/vmactions/freebsd-vm/tree/VERSION/conf
+  FREEBSD_ABI: "15.1"
+  RUST_BACKTRACE: "1"
 
 on:
   pull_request:
@@ -22,10 +24,13 @@ concurrency:
 
 jobs:
   style:
-    name: Style and Lint
+    name: clippy and test
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+    - name: Avoid no space left on device
+      shell: bash
+      run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
@@ -46,36 +51,30 @@ jobs:
     - uses: mlugg/setup-zig@v2.2.1
     - uses: taiki-e/install-action@cargo-zigbuild
     - name: cargo clippy
-      env:
-        CARGO_INCREMENTAL: "0"
       run: |
         UTILS=$(cargo tree --depth 1 --features feat_os_unix --format '{lib}' --prefix none | sed -n 's/^uu_/-p uu_/p')
-        cargo-zigbuild clippy --target x86_64-unknown-freebsd --features feat_os_unix -p coreutils ${UTILS} --all-targets --tests --benches -- -D warnings
-
-  test:
-    name: Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      mem: 4096
-    steps:
-    - uses: actions/checkout@v7.0.1
-      with:
-        persist-credentials: false
-    - name: Avoid no space left on device (Ubuntu runner)
-      shell: bash
-      run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
-    - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.3.9
+        cargo-zigbuild clippy --target x86_64-unknown-freebsd.${{ env.FREEBSD_ABI }} --features feat_os_unix -p coreutils ${UTILS} --all-targets --tests --benches -- -D warnings
+    - name: prepare testing
+      run: |
+        # system openssl feature is covered on VM
+        cargo-zigbuild test --target x86_64-unknown-freebsd.${{ env.FREEBSD_ABI }} --no-run --features feat_os_unix --message-format=json \
+          | jq -rs '
+            [ .[] | select(.executable != null) | .executable | select(test("/coreutils$") | not) ]
+            | unique
+            | .[]
+            ' > tests.sh
+        cat tests.sh
+    - name: test
+      uses: vmactions/freebsd-vm@v1.6.0
       with:
         usesh: true
         sync: rsync
         copyback: false
-        prepare: pkg install -y gmake nextest rust sudo
+        release: ${{ env.FREEBSD_ABI }}
+        prepare: |
+          pkg install -y nextest rust sudo
         run: |
-          ## Prepare, build, and test
-          # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
-          # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
+          ## test
           set -e
           #
           # We need a file-descriptor file system to test test_ls::test_ls_io_errors
@@ -113,19 +112,15 @@ jobs:
           set +e
           cd "${WORKSPACE}"
           unset FAULT
+          # retry tests when exit code was fixed <https://github.com/uutils/coreutils/issues/3779>
+          while IFS= read -r bin;do
+            "\${bin}" || FAULT=1
+          done < ./tests.sh
           export CARGO_INCREMENTAL=0
-          export RUSTFLAGS="-C strip=symbols" # for disk space
-          # vendored OpenSSL takes many times to build. Use system one (LibreSSL is supported).
-          export OPENSSL_NO_VENDOR=1 OPENSSL_DIR=/usr
-          cargo build || FAULT=1
-          export PATH=~/.cargo/bin:${PATH}
           export RUST_BACKTRACE=1
-          export CARGO_TERM_COLOR=always
-          if (test -z "\$FAULT"); then cargo nextest run --hide-progress-bar --profile ci --features feat_os_unix || FAULT=1 ; fi
+          # openssl cannot be built by zig
+          export OPENSSL_NO_VENDOR=1 OPENSSL_DIR=/usr
           if (test -z "\$FAULT"); then cargo nextest run --hide-progress-bar --profile ci --all-features -p uucore || FAULT=1 ; fi
-          # Test building with make
-          if (test -z "\$FAULT"); then make || FAULT=1 ; fi
-          # Clean to avoid to rsync back the files
-          cargo clean
+          if (test -z "\$FAULT"); then cargo nextest run --hide-progress-bar --profile ci --no-default-features --features cksum,openssl || FAULT=1 ; fi
           if (test -n "\$FAULT"); then exit 1 ; fi
           EOF
