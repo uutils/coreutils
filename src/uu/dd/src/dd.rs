@@ -28,7 +28,6 @@ use uucore::translate;
 use std::cmp;
 use std::env;
 use std::ffi::{OsStr, OsString};
-use std::fs::Metadata;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -241,7 +240,8 @@ impl Source {
         Self::StdinFile(f)
     }
 
-    fn skip(&mut self, n: u64, settings: &Settings, name: &OsStr) -> io::Result<u64> {
+    fn skip(&mut self, settings: &Settings, name: &OsStr) -> io::Result<u64> {
+        let n = settings.skip;
         let ibs = settings.ibs;
         // Skipping past EOF is not fatal, so status=none suppresses it.
         let warn_offset = || {
@@ -279,8 +279,9 @@ impl Source {
                 match n.try_into().ok().map(|n| f.seek(SeekFrom::Current(n))) {
                     Some(Ok(pos)) => {
                         // Sampled after the seek, for the reason given in the File arm below.
-                        let file_len = f.metadata().as_ref().map_or(u64::MAX, Metadata::len);
-                        if file_len != 0 && pos > file_len {
+                        if f.metadata()
+                            .is_ok_and(|m| m.is_file() && m.len() != 0 && pos > m.len())
+                        {
                             warn_offset();
                         }
                         Ok(n)
@@ -308,8 +309,10 @@ impl Source {
                 let pos = f.seek(SeekFrom::Current(n.try_into().unwrap()))?;
                 // Length is read after the seek so a file that changes size in
                 // between is judged against the state the seek landed in.
-                let file_len = f.metadata().as_ref().map_or(u64::MAX, Metadata::len);
-                if file_len != 0 && pos > file_len {
+                // Only a regular file has a size that means anything here.
+                if f.metadata()
+                    .is_ok_and(|m| m.is_file() && m.len() != 0 && pos > m.len())
+                {
                     warn_offset();
                 }
                 Ok(pos)
@@ -414,7 +417,7 @@ impl<'a> Input<'a> {
         }
 
         if settings.skip > 0 {
-            src.skip(settings.skip, settings, OsStr::new("standard input"))?;
+            src.skip(settings, OsStr::new("standard input"))?;
         }
         Ok(Self { src, settings })
     }
@@ -437,7 +440,7 @@ impl<'a> Input<'a> {
 
         let mut src = Source::File(src);
         if settings.skip > 0 {
-            src.skip(settings.skip, settings, filename.as_os_str())?;
+            src.skip(settings, filename.as_os_str())?;
         }
         Ok(Self { src, settings })
     }
@@ -451,7 +454,7 @@ impl<'a> Input<'a> {
         opts.custom_flags(make_linux_iflags(&settings.iflags).unwrap_or(0));
         let mut src = Source::Fifo(opts.open(filename)?);
         if settings.skip > 0 {
-            src.skip(settings.skip, settings, filename.as_os_str())?;
+            src.skip(settings, filename.as_os_str())?;
         }
         Ok(Self { src, settings })
     }
