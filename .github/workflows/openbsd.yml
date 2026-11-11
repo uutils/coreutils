@@ -1,11 +1,15 @@
 name: OpenBSD
 
-# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc nextest copyback logind
+# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc mlugg copyback logind zigbuild
 
 env:
   FEATURES: "feat_Tier1,feat_require_unix"
-  # * style job configuration
-  STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
+  CARGO_INCREMENTAL: "0"
+  # https://github.com/vmactions/openbsd-vm/tree/v1/conf
+  OPENBSD_ABI: "8.0"
+  RUSTFLAGS: "-C strip=symbols" # Avoid filling disk space
+  RUST_BACKTRACE: "1"
+  RUSTC_BOOTSTRAP: "1" # use build-std
 
 on:
   pull_request:
@@ -23,10 +27,13 @@ concurrency:
 
 jobs:
   style:
-    name: Style and Lint
+    name: clippy and test
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+    - name: Avoid no space left on device
+      shell: bash
+      run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
@@ -46,9 +53,6 @@ jobs:
     - uses: mlugg/setup-zig@v2.2.1
     - uses: taiki-e/install-action@cargo-zigbuild
     - name: cargo clippy
-      env:
-        CARGO_INCREMENTAL: "0"
-        RUSTC_BOOTSTRAP: "1"
       run: |
         # Set linker for stdbuf. env: and -Z do not work. Override `config.toml` to avoid duplicated keys.
         # We don't use `aws-lc` at here.
@@ -59,31 +63,25 @@ jobs:
         build-std = ["std", "panic_abort"]
         EOF
         UTILS=$(cargo tree --depth 1 --features ${{ env.FEATURES }} --format '{lib}' --prefix none | sed -n 's/^uu_/-p uu_/p')
-        cargo-zigbuild clippy --target x86_64-unknown-openbsd --features ${{ env.FEATURES }} -p coreutils ${UTILS} --all-targets --tests --benches -- -D warnings
-
-  test:
-    name: Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-    - uses: actions/checkout@v7.0.1
-      with:
-        persist-credentials: false
-    - name: Avoid no space left on device # shared with guest?
-      shell: bash
+        cargo-zigbuild clippy --target x86_64-unknown-openbsd.${{ env.OPENBSD_ABI }} --features ${{ env.FEATURES }} -p coreutils ${UTILS} --all-targets --tests --benches -- -D warnings
+    - name: prepare testing
       run: |
-        mkdir /tmp/empty
-        sudo rsync -a --delete /tmp/empty/ /usr/lib/jvm/
-        sudo rsync -a --delete /tmp/empty/ /usr/share/dotnet/
-        sudo rsync -a --delete /tmp/empty/ /usr/local/lib/android/
-    - name: Prepare, build and test
+        cargo-zigbuild test --target x86_64-unknown-openbsd.${{ env.OPENBSD_ABI }} --no-run --features ${{ env.FEATURES }} --message-format=json \
+          | jq -rs '
+            [ .[] | select(.executable != null) | .executable | select(test("/coreutils$") | not) ]
+            | unique
+            | .[]
+            ' > tests.sh
+        # we test all features with actual consumers (${{ env.FEATURES }},openssl) on the VM without zig.
+        rm .cargo/config.toml
+    - name: test
       uses: vmactions/openbsd-vm@v1
       with:
         usesh: true
         sync: rsync
         copyback: false
+        release: ${{ env.OPENBSD_ABI }}
         mem: 6144
-        # Install rust and build dependencies
         prepare: |
           # Clean up disk space before installing packages
           df -h
@@ -92,17 +90,14 @@ jobs:
           rsync -a --delete empty/ /usr/X11R6/
           rsync -a --delete empty/ /usr/share/doc/
           rsync -a --delete empty/ /usr/share/man/
-          pkg_add curl gmake sudo-- rust
+          pkg_add gmake sudo-- rust
           # Clean up package cache after installation
           pkg_delete -a
           df -h
         run: |
-          ## Prepare, build, and test
-          # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
-          # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
+          ## test
           set -e
           #
-          export CARGO_INCREMENTAL=0
           TEST_USER=tester
           REPO_NAME=${GITHUB_WORKSPACE##*/}
           WORKSPACE_PARENT="/home/runner/work/${REPO_NAME}"
@@ -120,52 +115,27 @@ jobs:
           whoami
           # Increase max open files (512 by default)
           ulimit -n 1024
-          # todo: install nextest if official OpenBSD package was provided
-          # Use regular cargo test currently
           ## Info
-          echo "::group::environment"
           echo "CI='${CI}'"
           echo "REPO_NAME='${REPO_NAME}'"
           echo "TEST_USER='${TEST_USER}'"
           echo "WORKSPACE_PARENT='${WORKSPACE_PARENT}'"
           echo "WORKSPACE='${WORKSPACE}'"
           env | sort
-          echo "::endgroup::"
-          echo "::group::tooling info"
-          cargo -V
-          rustc -V
-          echo "::endgroup::"
           #
           # To ensure that files are cleaned up, we don't want to exit on error
           set +e
           cd "${WORKSPACE}"
           unset FAULT
-          # openbsd is very slow. Omit duplicated cargo build and do test only
-          export RUST_BACKTRACE=1
-          export CARGO_TERM_COLOR=always
-          # Avoid filling disk space
-          export RUSTFLAGS="-C strip=symbols"
-          # vendored OpenSSL takes many times to build. Use system one (LibreSSL is supported).
+          cp -v target/x86_64-unknown-openbsd/debug/coreutils /tmp/coreutils
+          export UUTESTS_BINARY_PATH=/tmp/coreutils
+          while IFS= read -r bin;do
+            "\${bin}" || FAULT=1 # todo: retry tests (should we nextest on the MV instead?)
+          done < ./tests.sh
+          # Test GNUmakefile and system LibreSSL which cannot be covered by zig
           export OPENSSL_NO_VENDOR=1 OPENSSL_DIR=/usr
-          # Use cargo test since nextest might not support OpenBSD
-          if (test -z "\$FAULT"); then
-            echo "::group::cargo test (workspace)"
-            cargo test --features ${{ env.FEATURES }} || FAULT=1
-            echo "::endgroup::"
-          fi
-          if (test -z "\$FAULT"); then
-            echo "::group::cargo test (uucore)"
-            cargo test --all-features -p uucore || FAULT=1
-            echo "::endgroup::"
-          fi
-          # Test building with make
-          if (test -z "\$FAULT"); then
-            echo "::group::make MULTICALL=Y"
-            make MULTICALL=Y || FAULT=1
-            echo "::endgroup::"
-          fi
-          # Clean to avoid to rsync back the files and free up disk space
-          cargo clean
-          # Additional cleanup to free disk space
+          export RUSTFLAGS="-C strip=symbols" # Avoid filling disk space
+          export CARGOFLAGS="--features=openssl"
+          make test MULTICALL=y UTILS=cksum || FAULT=1
           if (test -n "\$FAULT"); then exit 1 ; fi
           EOF
