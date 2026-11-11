@@ -6,7 +6,7 @@
 use std::io::{self, Write};
 
 // it's possible that using a smaller or larger buffer might provide better performance
-pub(super) const BUF_SIZE: usize = 16 * 1024;
+pub(super) const BUF_SIZE: usize = 32 * 1024;
 
 pub fn exec(bytes: &[u8]) -> io::Result<()> {
     let mut stdout = io::stdout().lock();

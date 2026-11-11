@@ -586,3 +586,17 @@ fn test_tac_stdin_redirected_file_truncated_during_read_does_not_crash() {
         result.signal()
     );
 }
+
+#[test]
+fn test_repeated_option_last_one_wins() {
+    new_ucmd!()
+        .args(&["-b", "-b"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_only("\n\nc\nba");
+    new_ucmd!()
+        .args(&["-s", ",", "-s", ";"])
+        .pipe_in("a,b;c;")
+        .succeeds()
+        .stdout_only("c;a,b;");
+}

@@ -426,6 +426,50 @@ fn test_mv_replace_symlink_with_symlink() {
 }
 
 #[rstest]
+#[case::into_directory(false)]
+#[case::no_target_directory(true)]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_symlink_to_directory_does_not_replace_empty_directory(#[case] no_target_dir: bool) {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("outside");
+    at.mkdir("incoming");
+    at.mkdir_all("spool/queue");
+    at.symlink_dir("outside", "incoming/queue");
+
+    if no_target_dir {
+        ucmd.arg("-T").arg("incoming/queue").arg("spool/queue");
+    } else {
+        ucmd.arg("incoming/queue").arg("spool");
+    }
+    ucmd.fails();
+
+    assert!(at.dir_exists("spool/queue"));
+    assert!(!at.is_symlink("spool/queue"));
+    assert!(at.is_symlink("incoming/queue"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_symlink_to_directory_with_trailing_slash_keeps_empty_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("outside");
+    at.mkdir("incoming");
+    at.mkdir_all("spool/queue");
+    at.symlink_dir("outside", "incoming/queue");
+
+    // rename(2) refuses a symlink named with a trailing slash, which must not
+    // leave the destination directory removed.
+    ucmd.arg("incoming/queue/")
+        .arg("spool")
+        .fails()
+        .stderr_contains("Not a directory");
+
+    assert!(at.dir_exists("spool/queue"));
+}
+
+#[rstest]
 #[case::existing_target(true)]
 #[case::dangling_target(false)]
 #[cfg(all(unix, not(target_os = "android")))]
@@ -504,12 +548,9 @@ fn test_mv_file_to_broken_symlink_directory() {
     assert!(!at.file_exists("file"));
 }
 
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: mv doesn't recognize a symlink-to-directory as a directory target, so it overwrites the symlink with a plain file instead of moving into the directory it points to"
-)]
 fn test_mv_file_to_symlink_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -563,11 +604,33 @@ fn test_mv_same_file() {
 }
 
 #[test]
+fn test_mv_same_file_no_clobber() {
+    // GNU mv does not report "are the same file" when it would not
+    // replace the target anyway; it exits 0 and leaves the file alone.
+    let file_a = "test_mv_same_file_a";
+    for args in [["-n"], ["--update=none"]] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write(file_a, "a");
+        ucmd.args(&args)
+            .arg(file_a)
+            .arg(file_a)
+            .succeeds()
+            .no_output();
+        assert_eq!(at.read(file_a), "a");
+    }
+
+    // --update=none-fail still fails, like GNU
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch(file_a);
+    ucmd.arg("--update=none-fail")
+        .arg(file_a)
+        .arg(file_a)
+        .fails_with_code(1);
+}
+
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
+#[test]
 #[cfg(all(unix, not(target_os = "android")))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: rustix::fs::stat doesn't return stable inode identity, so same-file detection via a hard link fails"
-)]
 fn test_mv_same_hardlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_same_file_a";
@@ -596,12 +659,9 @@ fn test_mv_dangling_symlink_to_folder() {
     assert!(at.symlink_exists("x/abc"));
 }
 
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: rustix::fs::stat doesn't return stable inode identity, so same-file detection via a symlink fails"
-)]
 fn test_mv_same_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_same_file_a";
@@ -672,9 +732,9 @@ fn test_mv_symlink_into_target() {
     ucmd.arg("dir-link").arg("dir").succeeds();
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[cfg(target_os = "linux")]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_broken_symlink_to_another_fs() {
     use tempfile::TempDir;
 
@@ -690,12 +750,9 @@ fn test_mv_broken_symlink_to_another_fs() {
     scene.ucmd().arg("foo").arg(dest).succeeds().no_output();
 }
 
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: rustix::fs::stat doesn't return stable inode identity, so same-file detection via a symlink/hardlink pair fails"
-)]
 fn test_mv_hardlink_to_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
@@ -881,7 +938,7 @@ fn test_mv_backup_control(#[case] args: &[&str], #[case] backup_suffix: Option<&
     assert!(!at.file_exists(source));
     assert_eq!(at.read(dest), "new");
     match backup_suffix {
-        Some(suffix) => assert_eq!(at.read(&format!("{dest}{suffix}")), "old"),
+        Some(suffix) => assert_eq!(at.read(format!("{dest}{suffix}")), "old"),
         None => assert!(!at.file_exists(format!("{dest}~"))),
     }
 }
@@ -983,13 +1040,13 @@ fn test_mv_update_option() {
     let times_later = FileTimes::new().set_accessed(now).set_modified(later);
     File::options()
         .write(true)
-        .open(at.plus_as_string(file_a))
+        .open(at.plus(file_a))
         .unwrap()
         .set_times(times_now)
         .unwrap();
     File::options()
         .write(true)
-        .open(at.plus_as_string(file_b))
+        .open(at.plus(file_b))
         .unwrap()
         .set_times(times_later)
         .unwrap();
@@ -1412,7 +1469,7 @@ fn test_mv_errors() {
         .arg(dir)
         .fails()
         .stderr_only(format!(
-            "mv: cannot overwrite directory '{dir}' with non-directory\n"
+            "mv: cannot overwrite directory '{dir}' with non-directory '{file_a}'\n"
         ));
 
     // $ at.mkdir dir && at.touch file
@@ -1458,13 +1515,10 @@ fn test_mv_verbose() {
         ));
 }
 
+#[uutests::wasi_ignore(PathCreateDirectoryNoModeParam)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))] // mkdir does not support -m on windows. Freebsd doesn't return a permission error either.
 #[cfg(feature = "mkdir")]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: mkdir -m444 does not restrict write access under the WASI sandbox, so the subsequent mv succeeds instead of failing with a permission error"
-)]
 fn test_mv_permission_error() {
     let scene = TestScenario::new("mkdir");
     let folder1 = "bar";
@@ -1600,6 +1654,38 @@ fn test_mv_dir_into_dir_with_source_name_a_prefix_of_target_name() {
 }
 
 #[test]
+fn test_mv_rename_error_names_source_and_target() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    let result = scene.ucmd().arg("a").arg("missing/b").fails_with_code(1);
+    #[cfg(unix)]
+    result.stderr_only("mv: cannot move 'a' to 'missing/b': No such file or directory\n");
+    #[cfg(not(unix))]
+    result.stderr_contains("mv: cannot move 'a' to 'missing/b': ");
+
+    assert!(at.file_exists("a"));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_mv_rename_error_permission_denied_names_paths() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.mkdir("ro");
+    at.set_mode("ro", 0o555);
+    scene
+        .ucmd()
+        .arg("a")
+        .arg("ro/b")
+        .fails_with_code(1)
+        .stderr_only("mv: cannot move 'a' to 'ro/b': Permission denied\n");
+    assert!(at.file_exists("a"));
+    assert!(!at.file_exists("ro/b"));
+}
+
+#[test]
 fn test_mv_file_into_dir_where_both_are_files() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1680,11 +1766,8 @@ fn test_mv_seen_multiple_files_to_directory() {
     assert!(at.plus("c").join("g").exists());
 }
 
+#[uutests::wasi_ignore(ErrnoMessageMismatch)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: raw ENOTDIR (\"Not a directory\") surfaces instead of the translated cannot-stat message, because stat() doesn't enforce the trailing-slash-requires-directory rule for non-directory sources"
-)]
 fn test_mv_dir_into_file_where_both_are_files() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1732,13 +1815,13 @@ fn test_acl() {
     let at = &scene.fixtures;
     let path1 = "a";
     let path2 = "b";
-    let file = "a/file";
     let file_target = "b/file";
     at.mkdir(path1);
     at.mkdir(path2);
-    at.touch(file);
+    let filename = "a/file";
+    at.touch(filename);
+    let path = at.plus(filename);
 
-    let path = at.plus_as_string(file);
     // calling the command directly. xattr requires some dev packages to be installed
     // and it adds a complex dependency just for a test
     match Command::new("setfacl")
@@ -1759,7 +1842,7 @@ fn test_acl() {
 
     scene.ucmd().arg(&path).arg(path2).succeeds();
 
-    assert!(compare_xattrs(&file, &file_target));
+    assert!(compare_xattrs(&path, file_target));
 }
 
 #[test]
@@ -1854,8 +1937,8 @@ mod inter_partition_copying {
     // preserved. The mover owns the file here, so the chown is a no-op and the
     // bits are legitimate; only a failed chown justifies stripping them, and
     // that needs a second uid, so it is exercised out of band rather than here.
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
-    #[cfg_attr(wasi_runner, ignore = "WASI sandbox: /dev/shm not visible")]
     pub(crate) fn test_mv_inter_partition_keeps_setuid_when_ownership_preserved() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -1885,9 +1968,120 @@ mod inter_partition_copying {
         );
     }
 
-    // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
+    // Directories below the moved one keep their mode and their ACL (#15784).
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
-    #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+    pub(crate) fn test_mv_inter_partition_keeps_subdir_mode_and_acl() {
+        use std::path::Path;
+        use std::process::Command;
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.mkdir_all("site/private");
+        at.write("site/private/notes.txt", "internal only");
+        set_permissions(at.plus("site/private"), PermissionsExt::from_mode(0o700))
+            .expect("Unable to set the mode of site/private");
+        set_permissions(at.plus("site"), PermissionsExt::from_mode(0o700))
+            .expect("Unable to set the mode of site");
+
+        let get_acl = |path: &Path| {
+            Command::new("getfacl")
+                .args(["-c", "-n"])
+                .arg(path)
+                .output()
+                .ok()
+                .filter(|out| out.status.success())
+                .map(|out| out.stdout)
+        };
+        // The ACL part is skipped when setfacl is missing or either filesystem has no ACLs.
+        let set_acl = |path: &Path| {
+            Command::new("setfacl")
+                .args(["-m", "u:65534:---"])
+                .arg(path)
+                .status()
+                .is_ok_and(|status| status.success())
+        };
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        let dest = other_fs_tempdir.path().join("site");
+
+        let check_acl = set_acl(&at.plus("site/private")) && set_acl(other_fs_tempdir.path());
+        let acl_before = get_acl(&at.plus("site/private"));
+
+        scene
+            .ucmd()
+            .arg("site")
+            .arg(dest.to_str().unwrap())
+            .succeeds();
+
+        let mode_of = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o7777;
+        let mode = mode_of(&dest);
+        assert_eq!(mode, 0o700, "site should stay 0700, got {mode:o}");
+        let moved = dest.join("private");
+        let mode = mode_of(&moved);
+        assert_eq!(mode, 0o700, "site/private should stay 0700, got {mode:o}");
+        if check_acl {
+            assert_eq!(get_acl(&moved), acl_before, "site/private lost its ACL");
+        }
+    }
+
+    // The source mode is applied to a copied directory only after its contents,
+    // so when the copy fails the directories created so far must not be left
+    // with the umask-based mode, which would open a 0700 source to everyone.
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
+    #[test]
+    pub(crate) fn test_mv_inter_partition_failed_copy_keeps_dirs_private() {
+        use std::path::Path;
+
+        if rustix::process::geteuid().is_root() {
+            println!("test skipped: root can read the unreadable file");
+            return;
+        }
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.mkdir_all("private/sub");
+        at.write("private/notes.txt", "secret");
+        at.write("private/sub/unreadable", "x");
+        set_permissions(
+            at.plus("private/sub/unreadable"),
+            PermissionsExt::from_mode(0o000),
+        )
+        .expect("Unable to make private/sub/unreadable unreadable");
+        set_permissions(at.plus("private/sub"), PermissionsExt::from_mode(0o700))
+            .expect("Unable to set the mode of private/sub");
+        set_permissions(at.plus("private"), PermissionsExt::from_mode(0o700))
+            .expect("Unable to set the mode of private");
+
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        let dest = other_fs_tempdir.path().join("private");
+
+        scene
+            .ucmd()
+            .umask(0o022)
+            .arg("private")
+            .arg(dest.to_str().unwrap())
+            .fails();
+
+        let mode_of = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o7777;
+        for dir in [dest.clone(), dest.join("sub")] {
+            let mode = mode_of(&dir);
+            assert_eq!(
+                mode,
+                0o700,
+                "{} should be 0700, got {mode:o}",
+                dir.display()
+            );
+        }
+        assert!(at.dir_exists("private/sub"), "the source must be kept");
+    }
+
+    // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
+    #[test]
     pub(crate) fn test_mv_unlinks_dest_symlink() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -1936,8 +2130,8 @@ mod inter_partition_copying {
 
     // In an inter-partition move if unlinking the destination symlink fails, ensure
     // that it would output the proper error message.
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
-    #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
     pub(crate) fn test_mv_unlinks_dest_symlink_error_message() {
         use uutests::util::TestScenario;
         let scene = TestScenario::new(util_name!());
@@ -1968,9 +2162,9 @@ mod inter_partition_copying {
     }
 
     // Test that hardlinks are preserved when moving files across partitions
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     #[cfg(unix)]
-    #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
     pub(crate) fn test_mv_preserves_hardlinks_across_partitions() {
         use std::fs;
         use std::os::unix::fs::MetadataExt;
@@ -2043,11 +2237,11 @@ mod inter_partition_copying {
     }
 
     // Test that hardlinks are preserved even with multiple sets of hardlinked files
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     #[cfg(unix)]
     #[allow(clippy::too_many_lines)]
     #[allow(clippy::similar_names)]
-    #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
     pub(crate) fn test_mv_preserves_multiple_hardlink_groups_across_partitions() {
         use std::fs::metadata;
         use std::os::unix::fs::MetadataExt;
@@ -2159,9 +2353,9 @@ mod inter_partition_copying {
     }
 
     // Test hardlinks within directories being moved
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     #[cfg(unix)]
-    #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
     pub(crate) fn test_mv_preserves_hardlinks_in_directories_across_partitions() {
         use std::fs::metadata;
         use std::os::unix::fs::MetadataExt;
@@ -2260,11 +2454,11 @@ mod inter_partition_copying {
     }
 
     // Test complex scenario with multiple hardlink groups across nested directories
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     #[cfg(unix)]
     #[allow(clippy::too_many_lines)]
     #[allow(clippy::similar_names)]
-    #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
     pub(crate) fn test_mv_preserves_complex_hardlinks_across_nested_directories() {
         use std::fs::metadata;
         use std::os::unix::fs::MetadataExt;
@@ -2409,9 +2603,9 @@ mod inter_partition_copying {
         );
     }
 
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     #[cfg(unix)]
-    #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
     pub(crate) fn test_mv_dir_with_fifo_across_partitions() {
         use std::os::unix::fs::FileTypeExt;
         use tempfile::TempDir;
@@ -2443,9 +2637,9 @@ mod inter_partition_copying {
     // follows symlinks) instead of symlink_metadata() made mv "preserve" the
     // hardlink by linking the regular files to the copied *symlink*, leaving
     // self-referential symlinks and destroying the content.
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     #[cfg(unix)]
-    #[cfg_attr(wasi_runner, ignore = "WASI sandbox: /dev/shm not visible")]
     pub(crate) fn test_mv_symlink_to_hardlinked_sibling_across_partitions() {
         use std::os::unix::fs::MetadataExt;
 
@@ -2643,9 +2837,9 @@ fn test_special_file_different_filesystem() {
 /// Test cross-device move with permission denied error
 /// Test partial failure handling where
 /// a cross-device move fails due to permission errors when removing the target file
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_cross_device_permission_denied() {
     use std::fs::{set_permissions, write};
     use std::os::unix::fs::PermissionsExt;
@@ -2692,9 +2886,9 @@ fn test_mv_cross_device_permission_denied() {
 /// the symlink. The deterministic stand-in here pre-plants the symlink:
 /// `safe_copy::create_dest_restrictive` must refuse it with `ELOOP` rather
 /// than truncate `victim`.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_cross_device_refuses_planted_symlink_dest() {
     use std::os::unix::fs::symlink;
     use tempfile::TempDir;
@@ -2789,10 +2983,7 @@ fn test_mv_selinux_context() {
         let mut cmd = scene.ucmd();
         cmd.arg(arg);
 
-        let result = cmd
-            .arg(at.plus_as_string(src))
-            .arg(at.plus_as_string(dest))
-            .run();
+        let result = cmd.arg(at.plus(src)).arg(at.plus(dest)).run();
 
         // Skip test if SELinux is not enabled
         if result
@@ -2819,8 +3010,8 @@ fn test_mv_selinux_context() {
         }
 
         // Clean up files
-        let _ = std::fs::remove_file(at.plus_as_string(dest));
-        let _ = std::fs::remove_file(at.plus_as_string(src));
+        let _ = std::fs::remove_file(at.plus(dest));
+        let _ = std::fs::remove_file(at.plus(src));
     }
 }
 
@@ -2847,9 +3038,9 @@ fn test_mv_error_usage_display_too_few() {
         .stderr_contains("For more information, try '--help'.");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_verbose_directory_recursive() {
     use tempfile::TempDir;
 
@@ -2903,9 +3094,9 @@ fn test_mv_verbose_directory_recursive() {
     assert!(stdout.contains("'mv-dir/d/e/f/file2' -> "));
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[cfg(unix)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
 fn test_mv_prompt_unwriteable_file_when_using_tty() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2971,28 +3162,103 @@ fn test_mv_no_prompt_unwriteable_file_with_no_tty() {
     assert!(at.file_exists("target_notty"));
 }
 
-/// Test mv silently succeeds when dest filesystem doesn't support xattrs (ENOTSUP)
+/// Moving a file with xattrs onto a file system without xattr support warns
+/// once for the file, however many attributes it has, and still succeeds, as
+/// GNU 9.12 does. A file without xattrs, or with only a POSIX ACL, moves
+/// without a word. Mounting ramfs needs root, so this skips without sudo.
+#[uutests::wasi_ignore(AclXattrPreservationFails)]
 #[test]
 #[cfg(target_os = "linux")]
-fn test_mv_xattr_enotsup_silent() {
-    use std::process::Command;
+fn test_mv_xattr_enotsup_warns_once() {
+    // spell-checker:ignore noxattr ramfs
+    use rustc_hash::FxHashMap;
+    use std::ffi::OsString;
+    use uucore::fsxattr::apply_xattrs;
+    use uutests::util::path;
+
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.write("src", "x");
 
-    if Command::new("setfattr")
-        .args(["-n", "user.t", "-v", "v", &at.plus_as_string("src")])
-        .status()
-        .is_ok_and(|s| s.success())
-    {
-        scene
-            .ucmd()
-            .arg(at.plus_as_string("src"))
-            .arg("/dev/shm/mv_test")
-            .succeeds()
-            .no_stderr();
-        std::fs::remove_file("/dev/shm/mv_test").ok();
+    let set_xattrs = |name: &str, attrs: &[(&str, &[u8])]| {
+        at.write(name, "content");
+        let attrs: FxHashMap<OsString, Vec<u8>> = attrs
+            .iter()
+            .map(|(attr, value)| (OsString::from(attr), value.to_vec()))
+            .collect();
+        apply_xattrs(at.plus(name), attrs)
+    };
+    if set_xattrs("one_attr", &[("user.test", b"v")]).is_err() {
+        println!("test skipped: the test directory does not accept xattrs");
+        return;
     }
+    at.write("acl_only", "content");
+    match std::process::Command::new("setfacl")
+        .args(["-m", "u:0:r"])
+        .arg(at.plus("acl_only"))
+        .status()
+    {
+        Ok(status) if status.success() => {}
+        Ok(_) => {
+            println!("test skipped: setfacl failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfacl failed with {e}");
+            return;
+        }
+    }
+    let three: &[(&str, &[u8])] = &[("user.one", b"1"), ("user.two", b"2"), ("user.three", b"3")];
+    set_xattrs("three_attrs", three).unwrap();
+    set_xattrs("same_fs", &[("user.test", b"v")]).unwrap();
+    at.write("no_attrs", "content");
+
+    at.mkdir("noxattr");
+    // sudo may not even be installed, as in the cross containers.
+    let mounted = std::process::Command::new("sudo")
+        .current_dir(at.as_string())
+        .env("PATH", path())
+        .args(["-E", "--non-interactive", "mount", "-t", "ramfs"])
+        .args(["-o", "mode=0777", "ramfs", "noxattr"])
+        .status()
+        .is_ok_and(|status| status.success());
+    if !mounted {
+        println!("test skipped: mounting ramfs requires root");
+        return;
+    }
+
+    let move_onto_ramfs = |name: &str| {
+        let dest = format!("noxattr/{name}");
+        let result = scene.ucmd().arg(name).arg(&dest).run();
+        let moved = !at.file_exists(name) && at.file_exists(&dest);
+        (name.to_owned(), result, moved)
+    };
+    let warned = [move_onto_ramfs("one_attr"), move_onto_ramfs("three_attrs")];
+    let silent = [move_onto_ramfs("no_attrs"), move_onto_ramfs("acl_only")];
+
+    // Unmount before the asserts so a failure does not leave it mounted.
+    scene
+        .cmd("sudo")
+        .env("PATH", path())
+        .args(&["-E", "--non-interactive", "umount", "noxattr"])
+        .succeeds();
+
+    for (name, result, moved) in warned {
+        assert!(moved, "{name} was not moved");
+        result.success().stderr_is(format!(
+            "mv: setting attributes for 'noxattr/{name}': Operation not supported\n"
+        ));
+    }
+    for (name, result, moved) in silent {
+        assert!(moved, "{name} was not moved");
+        result.success().no_stderr();
+    }
+
+    scene
+        .ucmd()
+        .arg("same_fs")
+        .arg("same_fs_moved")
+        .succeeds()
+        .no_stderr();
 }
 
 /// Cross-device mv of a directory must preserve the directory's own xattrs.
@@ -3031,7 +3297,7 @@ fn test_mv_cross_device_dir_xattr_preserved() {
 
     scene
         .ucmd()
-        .arg(at.plus_as_string("src_dir"))
+        .arg(at.plus("src_dir"))
         .arg(dst_path.to_str().unwrap())
         .succeeds()
         .no_stderr();
@@ -3057,9 +3323,9 @@ fn test_mv_cross_device_dir_xattr_preserved() {
 /// copied in a cross-device move. Each refused one is reported, but the move
 /// still succeeds. tmpfs takes large values while ext4 caps a value at one
 /// block, so the large attributes fail there and the small ones must survive.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: /dev/shm not visible")]
 fn test_mv_cross_device_xattr_failure_keeps_the_rest() {
     use rustc_hash::FxHashMap;
     use std::ffi::{OsStr, OsString};
@@ -3069,7 +3335,7 @@ fn test_mv_cross_device_xattr_failure_keeps_the_rest() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let too_big = vec![b'x'; 8000];
+    let too_big = vec![b'x'; 128 * 1024];
     at.touch("probe");
     let probe = FxHashMap::from_iter([(OsString::from("user.probe"), too_big.clone())]);
     if apply_xattrs(at.plus("probe"), probe).is_ok() {
@@ -3124,9 +3390,9 @@ fn test_mv_cross_device_xattr_failure_keeps_the_rest() {
 
 /// Cross-device mv of a symlink onto an existing file must replace the
 /// destination atomically, matching GNU.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_cross_device_symlink_onto_existing() {
     use std::fs;
     use std::os::unix::fs::symlink;
@@ -3144,7 +3410,7 @@ fn test_mv_cross_device_symlink_onto_existing() {
 
     scene
         .ucmd()
-        .arg(at.plus_as_string("src_link"))
+        .arg(at.plus("src_link"))
         .arg(dst_path.to_str().unwrap())
         .succeeds()
         .no_stderr();
@@ -3165,9 +3431,9 @@ fn test_mv_cross_device_symlink_onto_existing() {
 
 /// Cross-device mv of a symlink onto an existing directory (`-T`) must
 /// fail without destroying the directory or its contents.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_cross_device_symlink_onto_existing_dir() {
     use std::fs;
     use std::os::unix::fs::symlink;
@@ -3187,7 +3453,7 @@ fn test_mv_cross_device_symlink_onto_existing_dir() {
     scene
         .ucmd()
         .arg("-T")
-        .arg(at.plus_as_string("src_link"))
+        .arg(at.plus("src_link"))
         .arg(dst_dir.to_str().unwrap())
         .fails();
 
@@ -3207,9 +3473,9 @@ fn test_mv_cross_device_symlink_onto_existing_dir() {
 
 /// Test that symlinks inside directories are preserved during cross-device moves
 /// (not expanded into full copies of their targets)
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_cross_device_symlink_preserved() {
     use std::fs;
     use std::os::unix::fs::symlink;
@@ -3255,9 +3521,9 @@ fn test_mv_cross_device_symlink_preserved() {
 }
 
 /// Test that broken/dangling symlinks are preserved during cross-device moves
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_cross_device_broken_symlink_preserved() {
     use std::fs;
     use std::os::unix::fs::symlink;
@@ -3301,9 +3567,9 @@ fn test_mv_cross_device_broken_symlink_preserved() {
 }
 
 /// Test that symlinks to regular files are preserved during cross-device moves
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_cross_device_file_symlink_preserved() {
     use std::fs;
     use std::os::unix::fs::symlink;
@@ -3363,9 +3629,9 @@ fn find_other_group(current: u32) -> Option<u32> {
 /// Test that group ownership is preserved during cross-device file moves.
 /// Uses chgrp to a supplementary group (no root needed).
 /// See <https://github.com/uutils/coreutils/issues/9714>
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_cross_device_preserves_ownership() {
     use std::fs;
     use std::os::unix::fs::MetadataExt;
@@ -3426,9 +3692,9 @@ fn test_mv_cross_device_preserves_ownership() {
 /// Test that group ownership is preserved for files inside directories during cross-device moves.
 /// Uses chgrp to a supplementary group (no root needed).
 /// See <https://github.com/uutils/coreutils/issues/9714>
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_cross_device_preserves_ownership_recursive() {
     use std::fs;
     use std::os::unix::fs::MetadataExt;
@@ -3556,7 +3822,7 @@ fn test_mv_backup_numbered_allows_source_named_like_backup() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: --exchange is not supported")]
+#[cfg(not(wasi_runner))]
 fn test_mv_exchange_file_and_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("leaf", "payload");
@@ -3577,7 +3843,7 @@ fn test_mv_exchange_file_and_dir() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: --exchange is not supported")]
+#[cfg(not(wasi_runner))]
 fn test_mv_exchange_verbose() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("first", "1");
@@ -3596,7 +3862,7 @@ fn test_mv_exchange_verbose() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: --exchange is not supported")]
+#[cfg(not(wasi_runner))]
 fn test_mv_exchange_wrong_operand_count() {
     let scene = TestScenario::new(util_name!());
     scene.fixtures.write("only", "x");
@@ -3627,7 +3893,7 @@ fn test_mv_exchange_wrong_operand_count() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: --exchange is not supported")]
+#[cfg(not(wasi_runner))]
 fn test_mv_exchange_multiple_operands_into_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("a", "src-a");
@@ -3659,7 +3925,7 @@ fn test_mv_exchange_multiple_operands_into_directory() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: --exchange is not supported")]
+#[cfg(not(wasi_runner))]
 fn test_mv_exchange_same_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("only", "data");
@@ -3694,7 +3960,7 @@ fn test_mv_exchange_not_supported() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: --exchange is not supported")]
+#[cfg(not(wasi_runner))]
 fn test_mv_exchange_missing_target() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("present", "data");

@@ -1,0 +1,7 @@
+# workaround for missing utmpdump binary from Ubuntu runner
+# the pre-dump utmp is giben as utmp.bin
+# BLAKE2b for utmp.bin:
+# 13634806eb15d3883e0b616c759d9a620f822684692a4221ee82f9e3e63dd6e2047d52bf4d4b496d8cd32d77661be0191c1db79ce089f4e70d6fd1b116c501ff
+FAKE_UTMP_2='[2] [00000] [~~  ] [reboot] [~   ] [6.0.0-test] [0.0.0.0] [2022-02-22T22:11:22,222222+00:00]'
+FAKE_UTMP_7='[7] [999999] [tty2] [runner] [tty2] [          ] [0.0.0.0] [2022-02-22T22:22:22,222222+00:00]'
+(echo "$FAKE_UTMP_2" ; echo "$FAKE_UTMP_7") | utmpdump -r -o utmp.bin

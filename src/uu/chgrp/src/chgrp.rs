@@ -27,6 +27,18 @@ enum ChgrpError {
 
 impl UError for ChgrpError {}
 
+fn parse_group(group: &str) -> Result<u32, String> {
+    // Try as group name first
+    match entries::grp2gid(group) {
+        Ok(g) => Ok(g),
+        // If group name lookup fails, try parsing as raw number
+        Err(_) => group
+            .parse::<u32>()
+            .map_err(|_| translate!("chgrp-error-invalid-group", "group" => group)),
+    }
+}
+
+/// Parse the `--from` value, which also accepts the `:gid` format.
 fn parse_gid_from_str(group: &str) -> Result<u32, String> {
     if let Some(gid_str) = group.strip_prefix(':') {
         // Handle :gid format
@@ -34,14 +46,7 @@ fn parse_gid_from_str(group: &str) -> Result<u32, String> {
             .parse::<u32>()
             .map_err(|_| translate!("chgrp-error-invalid-group-id", "gid_str" => gid_str))
     } else {
-        // Try as group name first
-        match entries::grp2gid(group) {
-            Ok(g) => Ok(g),
-            // If group name lookup fails, try parsing as raw number
-            Err(_) => group
-                .parse::<u32>()
-                .map_err(|_| translate!("chgrp-error-invalid-group", "group" => group)),
-        }
+        parse_group(group)
     }
 }
 
@@ -67,7 +72,8 @@ fn get_dest_gid(matches: &ArgMatches) -> UResult<(Option<u32>, String)> {
         if group.is_empty() {
             None
         } else {
-            match parse_gid_from_str(group) {
+            // Unlike --from, GNU does not accept the `:gid` format here.
+            match parse_group(group) {
                 Ok(g) => Some(g),
                 Err(e) => return Err(USimpleError::new(1, e)),
             }

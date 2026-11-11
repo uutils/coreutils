@@ -24,14 +24,11 @@
 //! ```
 
 use std::cmp::Ordering;
-use std::ops::Add;
-use std::ops::Neg;
+use std::ops::{Add, Neg};
 
 use bigdecimal::BigDecimal;
 use bigdecimal::num_bigint::BigUint;
-use num_traits::FromPrimitive;
-use num_traits::Signed;
-use num_traits::Zero;
+use num_traits::{FromPrimitive, Signed, Zero};
 
 #[derive(Debug, Clone)]
 pub enum ExtendedBigDecimal {

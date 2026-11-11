@@ -28,7 +28,6 @@ chmod-help-recursive = change files and directories recursively
 chmod-help-reference = use RFILE's mode instead of MODE values
 
 # Verbose messages
-chmod-verbose-failed-dangling = failed to change mode of {$file} from 0000 (---------) to 1500 (r-x-----T)
 chmod-verbose-neither-changed = neither symbolic link {$file} nor referent has been changed
 chmod-verbose-mode-retained = mode of {$file} retained as {$mode_octal} ({$mode_display})
 chmod-verbose-failed-change = failed to change mode of file {$file} from {$old_mode} ({$old_mode_display}) to {$new_mode} ({$new_mode_display})

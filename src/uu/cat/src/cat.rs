@@ -633,7 +633,8 @@ fn write_new_line<W: Write>(
         return Ok(());
     }
     if !state.at_line_start || !options.squeeze_blank || !state.one_blank_kept {
-        state.one_blank_kept = true;
+        // A newline that only finishes a line begun in an earlier read or file is not a blank line.
+        state.one_blank_kept = state.at_line_start;
         if state.at_line_start && options.number == NumberingMode::All {
             state.line_number.write(writer)?;
             state.line_number.increment();

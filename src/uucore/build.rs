@@ -17,15 +17,11 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         // tests/by-util/test_install.rs repeats the union of these targets.
         has_o_path: { any(target_os = "linux", target_os = "android") },
         has_o_search: { any(
-            target_os = "macos",
-            target_os = "ios",
-            target_os = "tvos",
-            target_os = "watchos",
-            target_os = "visionos",
             target_os = "freebsd",
             target_os = "netbsd",
             target_os = "illumos",
-            target_os = "solaris"
+            target_os = "solaris",
+            target_vendor = "apple"
         ) },
     }
 

@@ -122,7 +122,8 @@ pub fn uu_app() -> Command {
                 .short('m')
                 .long(options::MODE)
                 .help(translate!("mkfifo-help-mode"))
-                .value_name("MODE"),
+                .value_name("MODE")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(options::SECURITY_CONTEXT)

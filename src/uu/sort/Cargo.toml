@@ -32,6 +32,7 @@ uucore = { workspace = true, features = [
   "parser-size",
   "version-cmp",
   "i18n-decimal",
+  "numeric-str-cmp",
   "i18n-collator",
   "i18n-datetime",
 ] }

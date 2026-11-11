@@ -13,11 +13,11 @@ use std::path::Path;
 use std::rc::Rc;
 use std::slice::Iter;
 use uucore::display::Quotable;
-use uucore::error::{UIoError, UResult, USimpleError, set_exit_code};
+use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::i18n::charmap::mb_char_len;
 use uucore::line_ending::LineEnding;
-use uucore::show_error;
+use uucore::show;
 use uucore::translate;
 
 mod options {
@@ -103,7 +103,7 @@ fn paste(
 
     if serial {
         return paste_serial(
-            &filenames,
+            filenames,
             &unescaped_and_encoded_delimiters,
             line_ending_byte,
             &stdin_once_cell,
@@ -114,19 +114,7 @@ fn paste(
     let mut input_source_vec = Vec::with_capacity(filenames.len());
 
     for filename in filenames {
-        let input_source = if filename == "-" {
-            InputSource::StandardInput(
-                stdin_once_cell
-                    .get_or_init(|| Rc::new(RefCell::new(stdin())))
-                    .clone(),
-            )
-        } else {
-            let path = Path::new(&filename);
-            let file = File::open(path)?;
-            InputSource::File(BufReader::new(file))
-        };
-
-        input_source_vec.push(input_source);
+        input_source_vec.push(InputSource::open(filename, &stdin_once_cell)?);
     }
 
     let input_source_vec_len = input_source_vec.len();
@@ -195,16 +183,10 @@ fn paste(
     Ok(())
 }
 
-/// Process the input files one at a time, in serial mode (`-s`).
-///
-/// Unlike parallel mode, each file is opened, read and closed before the next
-/// one is opened, so the number of open file descriptors stays at one no
-/// matter how many file operands there are. A file that cannot be opened is
-/// reported on stderr and skipped, and the exit status reflects the failure,
-/// but the remaining files are still processed, like GNU `paste`.
-#[allow(clippy::too_many_arguments)]
+/// Serial mode (`-s`): open, paste and close one file at a time, so a file
+/// that fails is reported without stopping the ones after it.
 fn paste_serial(
-    filenames: &[OsString],
+    filenames: Vec<OsString>,
     unescaped_and_encoded_delimiters: &[Box<[u8]>],
     line_ending_byte: u8,
     stdin_once_cell: &OnceCell<Rc<RefCell<Stdin>>>,
@@ -212,23 +194,13 @@ fn paste_serial(
 ) -> UResult<()> {
     let mut delimiter_state = DelimiterState::new(unescaped_and_encoded_delimiters);
     let mut output = Vec::new();
-    let mut had_error = false;
 
     for filename in filenames {
-        let mut input_source = if filename == "-" {
-            InputSource::StandardInput(
-                stdin_once_cell
-                    .get_or_init(|| Rc::new(RefCell::new(stdin())))
-                    .clone(),
-            )
-        } else {
-            match File::open(Path::new(filename)) {
-                Ok(file) => InputSource::File(BufReader::new(file)),
-                Err(err) => {
-                    show_error!("{}: {}", filename.maybe_quote(), UIoError::from(err));
-                    had_error = true;
-                    continue;
-                }
+        let mut input_source = match InputSource::open(filename, stdin_once_cell) {
+            Ok(input_source) => input_source,
+            Err(err) => {
+                show!(err);
+                continue;
             }
         };
 
@@ -236,16 +208,13 @@ fn paste_serial(
 
         loop {
             match input_source.read_until(line_ending_byte, &mut output) {
-                Ok(read @ 1..) => {
+                Ok(0) => break,
+                Ok(read) => {
                     remove_trailing_line_ending_byte(line_ending_byte, read, &mut output);
                     delimiter_state.write_delimiter(&mut output);
                 }
-                Ok(_) => break,
                 Err(err) => {
-                    // e.g. a directory: report it and move on to the next
-                    // file, still ending this file's output line, like GNU.
-                    show_error!("{}: {}", filename.maybe_quote(), err);
-                    had_error = true;
+                    show!(err);
                     break;
                 }
             }
@@ -260,10 +229,6 @@ fn paste_serial(
         // output line, so the delimiter list has to restart from its first
         // element for the next file rather than carrying the cycle over.
         delimiter_state.reset_to_first_delimiter();
-    }
-
-    if had_error {
-        set_exit_code(1);
     }
 
     Ok(())
@@ -442,14 +407,31 @@ impl<'a> DelimiterState<'a> {
 }
 
 enum InputSource {
-    File(BufReader<File>),
+    /// An opened file and the name it was given as, for error messages.
+    File(BufReader<File>, OsString),
     StandardInput(Rc<RefCell<Stdin>>),
 }
 
 impl InputSource {
+    fn open(filename: OsString, stdin_once_cell: &OnceCell<Rc<RefCell<Stdin>>>) -> UResult<Self> {
+        if filename == "-" {
+            return Ok(Self::StandardInput(
+                stdin_once_cell
+                    .get_or_init(|| Rc::new(RefCell::new(stdin())))
+                    .clone(),
+            ));
+        }
+
+        let path = Path::new(&filename);
+        let file = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
+        Ok(Self::File(BufReader::new(file), filename))
+    }
+
     fn read(&mut self, buf: &mut [u8]) -> UResult<usize> {
         let us = match self {
-            Self::File(bu) => bu.read(buf)?,
+            Self::File(bu, name) => bu
+                .read(buf)
+                .map_err_context(|| name.maybe_quote().to_string())?,
             Self::StandardInput(rc) => rc
                 .try_borrow()
                 .map_err(|bo| {
@@ -464,7 +446,9 @@ impl InputSource {
 
     fn read_until(&mut self, byte: u8, buf: &mut Vec<u8>) -> UResult<usize> {
         let us = match self {
-            Self::File(bu) => bu.read_until(byte, buf)?,
+            Self::File(bu, name) => bu
+                .read_until(byte, buf)
+                .map_err_context(|| name.maybe_quote().to_string())?,
             Self::StandardInput(rc) => rc
                 .try_borrow()
                 .map_err(|bo| {

@@ -169,6 +169,25 @@ fn test_kill_signal_reports_signal_exit_code() {
         .no_output();
 }
 
+/// When the child dumps core, timeout re-raises its signal without dumping
+/// core itself.
+// Linux only: on macOS the child would write a real core file into /cores.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_child_core_dump_not_repeated() {
+    use std::os::unix::process::ExitStatusExt;
+    let ts = TestScenario::new(util_name!());
+    let script = r#"ulimit -c unlimited 2>/dev/null; exec "$0" timeout 5 sh -c 'kill -SEGV $$'"#;
+    let status = std::process::Command::new("sh")
+        .args(["-c", script])
+        .arg(&ts.bin_path)
+        .current_dir(ts.fixtures.as_string())
+        .status()
+        .unwrap();
+    assert_eq!(status.signal(), Some(libc::SIGSEGV));
+    assert!(!status.core_dumped());
+}
+
 #[test]
 fn test_preserve_status_even_when_send_signal() {
     let (ts, bin) = scenario_with_bin();
@@ -419,13 +438,14 @@ fn test_zero_kill_after_does_not_escalate_on_sigint(#[values("0", "10")] duratio
             "-c",
             "trap ': > interrupted' INT; : > ready; while [ ! -f finish ]; do sleep .01; done; exit 42",
         ])
-        .timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(10))
         .run_no_wait();
 
-    // Wait for the trap to be installed, then for the first INT to reach it.
+    // Each wait exits as soon as its marker file appears; the 10s budget is only
+    // a hang ceiling for a starved child on loaded CI, not a behavioral deadline.
     for marker in ["ready", "interrupted"] {
         let start = Instant::now();
-        while !ts.fixtures.file_exists(marker) && start.elapsed() < Duration::from_secs(5) {
+        while !ts.fixtures.file_exists(marker) && start.elapsed() < Duration::from_secs(10) {
             cmd.delay(10);
         }
         if !ts.fixtures.file_exists(marker) {
@@ -435,7 +455,19 @@ fn test_zero_kill_after_does_not_escalate_on_sigint(#[values("0", "10")] duratio
         }
         kill(Pid::from_raw(cmd.id() as i32), Signal::SIGINT).unwrap();
     }
-    cmd.delay(100);
+
+    // The guarantee under test: with --kill-after=0 the SIGINTs must not escalate
+    // to SIGKILL. Assert the child stays alive across a short window instead of
+    // guessing a fixed delay; escalation would kill it well within this span.
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_millis(300) {
+        if !cmd.is_alive() {
+            cmd.wait().unwrap();
+            panic!("child exited before `finish`: --kill-after=0 escalated to SIGKILL");
+        }
+        cmd.delay(20);
+    }
+
     ts.fixtures.touch("finish");
     cmd.wait().unwrap().code_is(42).no_output();
 }

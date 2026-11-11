@@ -30,7 +30,6 @@ chmod-error-missing-operand = opérande manquant
 chmod-error-reference-stat = impossible d'obtenir les attributs de { $file } : { $error }
 
 # Messages verbeux/de statut
-chmod-verbose-failed-dangling = échec du changement de mode de {$file} de 0000 (---------) vers 1500 (r-x-----T)
 chmod-verbose-neither-changed = ni le lien symbolique {$file} ni la référence n'ont été changés
 chmod-verbose-mode-retained = mode de {$file} conservé comme {$mode_octal} ({$mode_display})
 chmod-verbose-failed-change = échec du changement de mode du fichier {$file} de {$old_mode} ({$old_mode_display}) vers {$new_mode} ({$new_mode_display})

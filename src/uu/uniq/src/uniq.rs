@@ -16,6 +16,7 @@ use std::num::IntErrorKind;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::format_usage;
+use uucore::io::InputReader;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::posix::{OBSOLETE, posix_version};
 use uucore::translate;
@@ -186,15 +187,17 @@ impl Uniq {
 
     fn skip_fields_offset(&self, line: &[u8]) -> usize {
         if let Some(skip_fields) = self.skip_fields {
+            // Fields end at a blank or a newline; \r and \f are ordinary bytes.
+            let is_blank = |byte: u8| matches!(byte, b' ' | b'\t' | b'\n');
             let mut idx = 0;
             for _ in 0..skip_fields {
-                while idx < line.len() && line[idx].is_ascii_whitespace() {
+                while idx < line.len() && is_blank(line[idx]) {
                     idx += 1;
                 }
                 if idx >= line.len() {
                     return line.len();
                 }
-                while idx < line.len() && !line[idx].is_ascii_whitespace() {
+                while idx < line.len() && !is_blank(line[idx]) {
                     idx += 1;
                 }
                 if idx >= line.len() {
@@ -859,13 +862,13 @@ fn get_delimiter(matches: &ArgMatches) -> Delimiters {
 }
 
 // None or "-" means stdin.
-fn open_input_file(in_file_name: Option<&OsStr>) -> UResult<Box<dyn BufRead>> {
+fn open_input_file(in_file_name: Option<&OsStr>) -> UResult<InputReader> {
     Ok(match in_file_name {
         Some(path) if path != "-" => {
             let in_file = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
-            Box::new(BufReader::with_capacity(OUTPUT_BUFFER_CAPACITY, in_file))
+            InputReader::File(BufReader::with_capacity(OUTPUT_BUFFER_CAPACITY, in_file))
         }
-        _ => Box::new(stdin().lock()),
+        _ => InputReader::Stdin(stdin().lock()),
     })
 }
 

@@ -11,13 +11,10 @@ use crate::translate;
 #[cfg(all(unix, not(target_os = "haiku")))]
 pub use libc::{major, makedev, minor};
 use std::collections::VecDeque;
-use std::env;
 use std::ffi::{OsStr, OsString};
-use std::fs;
 use std::fs::read_dir;
 use std::hash::Hash;
-use std::io::Stdin;
-use std::io::{Error, ErrorKind, Result as IOResult};
+use std::io::{Error, ErrorKind, Result as IOResult, Stdin};
 #[cfg(any(unix, target_os = "wasi"))]
 use std::os::fd::AsFd;
 #[cfg(unix)]
@@ -29,6 +26,7 @@ use std::os::windows::io::AsRawHandle;
 use std::path::{Component, MAIN_SEPARATOR, Path, PathBuf};
 #[cfg(unix)]
 use std::sync::OnceLock;
+use std::{env, fs};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::MAX_PATH;
 #[cfg(windows)]
@@ -638,6 +636,14 @@ pub fn path_is_root_dir<P: AsRef<Path>>(path: P, dereference: bool) -> bool {
     }
 }
 
+/// Whether `meta`, a stat already taken, describes `/`. Unlike [`path_is_root_dir`],
+/// it does not look the path up again, which a rename could have re-pointed.
+#[cfg(unix)]
+pub fn metadata_is_root_dir(meta: &impl MetadataExt) -> bool {
+    root_file_information()
+        .is_some_and(|root| root.dev() == meta.dev() && root.inode() == meta.ino())
+}
+
 /// Check if two files are identical by comparing their contents.
 ///
 /// Returns `Ok(true)` if both files exist, are regular files, and have identical contents.
@@ -921,9 +927,10 @@ pub fn is_stdin_directory(stdin: &Stdin) -> bool {
 
 pub mod sane_blksize {
 
+    use std::fs::metadata;
     #[cfg(unix)]
     use std::os::unix::fs::MetadataExt;
-    use std::{fs::metadata, path::Path};
+    use std::path::Path;
 
     pub const DEFAULT: u64 = 512;
     pub const MAX: u64 = (u32::MAX / 8 + 1) as u64;
@@ -1643,6 +1650,9 @@ mod tests {
         assert!(!path_is_root_dir(dir.path(), true));
         assert!(!path_is_root_dir(dir.path().join("nonexistent"), true));
         assert!(!path_is_root_dir("", true));
+
+        assert!(metadata_is_root_dir(&fs::metadata("/").unwrap()));
+        assert!(!metadata_is_root_dir(&fs::metadata(dir.path()).unwrap()));
     }
 
     /// A symlink to `/` counts only when the caller would follow it.

@@ -100,39 +100,25 @@ mod ut {
 
     pub const UT_IDSIZE: usize = 4;
 
-    pub use libc::ACCOUNTING;
-    pub use libc::BOOT_TIME;
-    pub use libc::DEAD_PROCESS;
-    pub use libc::EMPTY;
-    pub use libc::INIT_PROCESS;
-    pub use libc::LOGIN_PROCESS;
-    pub use libc::NEW_TIME;
-    pub use libc::OLD_TIME;
-    pub use libc::RUN_LVL;
-    pub use libc::USER_PROCESS;
+    pub use libc::{
+        ACCOUNTING, BOOT_TIME, DEAD_PROCESS, EMPTY, INIT_PROCESS, LOGIN_PROCESS, NEW_TIME,
+        OLD_TIME, RUN_LVL, USER_PROCESS,
+    };
 }
 
 #[cfg(target_vendor = "apple")]
 mod ut {
     pub static DEFAULT_FILE: &str = "/var/run/utmpx";
 
-    pub use libc::_UTX_HOSTSIZE as UT_HOSTSIZE;
-    pub use libc::_UTX_IDSIZE as UT_IDSIZE;
-    pub use libc::_UTX_LINESIZE as UT_LINESIZE;
-    pub use libc::_UTX_USERSIZE as UT_NAMESIZE;
+    pub use libc::{
+        _UTX_HOSTSIZE as UT_HOSTSIZE, _UTX_IDSIZE as UT_IDSIZE, _UTX_LINESIZE as UT_LINESIZE,
+        _UTX_USERSIZE as UT_NAMESIZE,
+    };
 
-    pub use libc::ACCOUNTING;
-    pub use libc::BOOT_TIME;
-    pub use libc::DEAD_PROCESS;
-    pub use libc::EMPTY;
-    pub use libc::INIT_PROCESS;
-    pub use libc::LOGIN_PROCESS;
-    pub use libc::NEW_TIME;
-    pub use libc::OLD_TIME;
-    pub use libc::RUN_LVL;
-    pub use libc::SHUTDOWN_TIME;
-    pub use libc::SIGNATURE;
-    pub use libc::USER_PROCESS;
+    pub use libc::{
+        ACCOUNTING, BOOT_TIME, DEAD_PROCESS, EMPTY, INIT_PROCESS, LOGIN_PROCESS, NEW_TIME,
+        OLD_TIME, RUN_LVL, SHUTDOWN_TIME, SIGNATURE, USER_PROCESS,
+    };
 }
 
 #[cfg(target_os = "freebsd")]
@@ -144,15 +130,10 @@ mod ut {
     pub const UT_IDSIZE: usize = 8;
     pub const UT_HOSTSIZE: usize = 128;
 
-    pub use libc::BOOT_TIME;
-    pub use libc::DEAD_PROCESS;
-    pub use libc::EMPTY;
-    pub use libc::INIT_PROCESS;
-    pub use libc::LOGIN_PROCESS;
-    pub use libc::NEW_TIME;
-    pub use libc::OLD_TIME;
-    pub use libc::SHUTDOWN_TIME;
-    pub use libc::USER_PROCESS;
+    pub use libc::{
+        BOOT_TIME, DEAD_PROCESS, EMPTY, INIT_PROCESS, LOGIN_PROCESS, NEW_TIME, OLD_TIME,
+        SHUTDOWN_TIME, USER_PROCESS,
+    };
 }
 
 #[cfg(target_os = "netbsd")]
@@ -161,10 +142,10 @@ mod ut {
 
     pub const SHUTDOWN_TIME: usize = 11;
 
-    pub use libc::_UTX_HOSTSIZE as UT_HOSTSIZE;
-    pub use libc::_UTX_IDSIZE as UT_IDSIZE;
-    pub use libc::_UTX_LINESIZE as UT_LINESIZE;
-    pub use libc::_UTX_USERSIZE as UT_NAMESIZE;
+    pub use libc::{
+        _UTX_HOSTSIZE as UT_HOSTSIZE, _UTX_IDSIZE as UT_IDSIZE, _UTX_LINESIZE as UT_LINESIZE,
+        _UTX_USERSIZE as UT_NAMESIZE,
+    };
 
     pub use libc::ACCOUNTING;
     pub const BOOT_TIME: i16 = libc::BOOT_TIME as i16;
@@ -183,19 +164,12 @@ mod ut {
 mod ut {
     pub static DEFAULT_FILE: &str = "";
 
-    pub use libc::UT_HOSTSIZE;
-    pub use libc::UT_IDLEN;
-    pub use libc::UT_LINESIZE;
-    pub use libc::UT_NAMESIZE;
+    pub use libc::{UT_HOSTSIZE, UT_IDLEN, UT_LINESIZE, UT_NAMESIZE};
 
-    pub use libc::BOOT_TIME;
-    pub use libc::DEAD_PROCESS;
-    pub use libc::INIT_PROCESS;
-    pub use libc::LOGIN_PROCESS;
-    pub use libc::NEW_TIME;
-    pub use libc::OLD_TIME;
-    pub use libc::RUN_LVL;
-    pub use libc::USER_PROCESS;
+    pub use libc::{
+        BOOT_TIME, DEAD_PROCESS, INIT_PROCESS, LOGIN_PROCESS, NEW_TIME, OLD_TIME, RUN_LVL,
+        USER_PROCESS,
+    };
 }
 
 /// A login record

@@ -408,8 +408,8 @@ fn test_paste_delimiter_escape_sequences() {
 
 // As of 2024-10-09, only bsdutils (https://github.com/dcantrell/bsdutils, derived from FreeBSD) and toybox handle
 // multibyte delimiter characters in the way a user would likely expect. BusyBox and GNU Core Utilities do not.
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
 fn test_multi_byte_delimiter() {
     for option_style in ["-d", "--delimiters"] {
         new_ucmd!()
@@ -435,8 +435,8 @@ fn test_multi_byte_delimiter() {
     }
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
 fn test_data() {
     for example in EXAMPLE_DATA {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -456,9 +456,9 @@ fn test_data() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_non_utf8_delimiter() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("f1", "1\n2\n");
@@ -472,9 +472,9 @@ fn test_non_utf8_delimiter() {
         .stdout_only_bytes(b"1\xA2\xE3a\n2\xA2\xE3b\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_paste_non_utf8_paths() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -499,9 +499,9 @@ fn make_broken_pipe() -> std::io::PipeWriter {
     write
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/dev) not visible")]
 fn test_dev_zero_write_error_dev_full() {
     use std::fs::File;
 
@@ -516,9 +516,9 @@ fn test_dev_zero_write_error_dev_full() {
         .stderr_contains("No space left on device");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/dev) not visible")]
 fn test_dev_zero_closed_pipe() {
     new_ucmd!()
         .arg("/dev/zero")
@@ -613,9 +613,29 @@ fn test_crlf_delimiter_not_eaten_by_an_empty_line() {
 }
 
 #[test]
+fn test_missing_file_is_named_in_error() {
+    new_ucmd!()
+        .arg("missing.txt")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_only("paste: missing.txt: No such file or directory\n");
+}
+
+#[uutests::wasi_ignore(ErrnoMessageMismatch)]
+#[test]
+#[cfg(not(windows))]
+fn test_read_error_names_the_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("sub");
+    ucmd.arg("sub")
+        .fails_with_code(1)
+        .stderr_only("paste: sub: Is a directory\n");
+}
+
+#[uutests::wasi_ignore(NoRlimitSetrlimitSupport)]
+#[test]
 // TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: rlimit/setrlimit not supported")]
 fn test_serial_opens_files_one_at_a_time() {
     // With a serial (`-s`) run over many files and a small NOFILE limit,
     // each file must be closed before the next one is opened.
@@ -640,28 +660,20 @@ fn test_serial_reports_unopenable_file_and_continues() {
     ucmd.args(&["-s", "f1", "missing", "f2"])
         .fails_with_code(1)
         .stdout_is("1\n2\n")
-        .stderr_contains("missing: No such file or directory");
+        .stderr_is("paste: missing: No such file or directory\n");
 }
 
+#[uutests::wasi_ignore(ErrnoMessageMismatch)]
 #[test]
+#[cfg(not(windows))]
 fn test_serial_reports_unreadable_file_and_continues() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("f1", "1\n");
     at.write("f2", "2\n");
     at.mkdir("d");
 
-    let result = ucmd.args(&["-s", "f1", "d", "f2"]).fails_with_code(1);
-    if cfg!(windows) {
-        // Opening a directory already fails on Windows.
-        result.stdout_is("1\n2\n");
-    } else if cfg!(target_os = "wasi") {
-        // Reading a directory yields EBADF under WASI.
-        result
-            .stdout_is("1\n\n2\n")
-            .stderr_contains("d: Bad file descriptor");
-    } else {
-        result
-            .stdout_is("1\n\n2\n")
-            .stderr_contains("d: Is a directory");
-    }
+    ucmd.args(&["-s", "f1", "d", "f2"])
+        .fails_with_code(1)
+        .stdout_is("1\n\n2\n")
+        .stderr_is("paste: d: Is a directory\n");
 }

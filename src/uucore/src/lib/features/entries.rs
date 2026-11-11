@@ -35,14 +35,10 @@
 use core::ffi::{CStr, c_char, c_int};
 #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
 use libc::time_t;
-use libc::{getgrgid, getgrnam};
-use libc::{getpwnam, getpwuid, group, passwd};
-use libc::{gid_t, uid_t};
+use libc::{getgrgid, getgrnam, getpwnam, getpwuid, gid_t, group, passwd, uid_t};
 
 use std::ffi::CString;
-use std::io::Error as IOError;
-use std::io::ErrorKind;
-use std::io::Result as IOResult;
+use std::io::{Error as IOError, ErrorKind, Result as IOResult};
 use std::ptr;
 use std::sync::Mutex;
 
