@@ -25,7 +25,7 @@ jobs:
   rerun:
     if: >
       github.event.issue.pull_request != null &&
-      contains(github.event.comment.body, '/rerun')
+      startsWith(github.event.comment.body, '/rerun')
     runs-on: ubuntu-slim
     # One rerun request per PR at a time. If several comments arrive while a
     # request is already running, only the most recently queued one survives;
@@ -111,12 +111,18 @@ jobs:
                 return;
               }
 
-              // 'head_sha' can collide across PRs (e.g. the same branch opened
-              // against two base branches), so also require the run to list
-              // this PR among its associated pull requests when GitHub reports
-              // any association, to avoid rerunning another PR's workflow run.
+              // 'head_sha' alone is not enough to identify a run as this PR's.
+              // A branch pushed directly to this repo triggers a 'push' run
+              // and a 'pull_request' run on the same commit; only the latter
+              // is what the PR's checks tab shows. 'pull_requests' is also
+              // often empty on fork runs, so a same-SHA run from an unrelated
+              // PR or fork could otherwise be picked by mistake.
+              const headRepository = pr.head.repo?.full_name;
               const belongsToThisPr = run =>
+                run.event === 'pull_request' &&
                 run.head_sha === pr.head.sha &&
+                run.head_branch === pr.head.ref &&
+                run.head_repository?.full_name === headRepository &&
                 (!run.pull_requests?.length || run.pull_requests.some(p => p.number === pr.number));
 
               const rerunNames = [];
@@ -167,14 +173,16 @@ jobs:
                   });
                   rerunNames.push(latestRun.name);
                 } else {
-                  // A plain '/rerun' only targets runs that are actually broken:
-                  // failed runs get their failed jobs rerun, and cancelled runs
-                  // get a full rerun.
-                  const matchingFailedRuns = runsForThisPr.filter(run => run.conclusion === 'failure');
-                  const matchingCancelledRuns = runsForThisPr.filter(run => run.conclusion === 'cancelled');
+                  // A plain '/rerun' only targets runs that are actually broken.
+                  // 'failure' and 'timed_out' leave per-job results behind, so
+                  // only their failed jobs are rerun. 'cancelled', 'stale', and
+                  // 'startup_failure' leave no reliable per-job results, so
+                  // those get a full rerun instead.
+                  const matchingFailedRuns = runsForThisPr.filter(run => ['failure', 'timed_out'].includes(run.conclusion));
+                  const matchingCancelledRuns = runsForThisPr.filter(run => ['cancelled', 'stale', 'startup_failure'].includes(run.conclusion));
 
                   if (matchingFailedRuns.length === 0 && matchingCancelledRuns.length === 0) {
-                    problems.push('No failed or cancelled workflow runs found for the PR head commit.');
+                    problems.push('No failed, cancelled, timed-out, or stale workflow runs found for the PR head commit.');
                     continue;
                   }
 
@@ -188,7 +196,7 @@ jobs:
                   }
 
                   for (const run of matchingCancelledRuns) {
-                    core.info(`Re-running cancelled run ${run.id} (${run.name})`);
+                    core.info(`Re-running run ${run.id} (${run.name})`);
                     await github.rest.actions.reRunWorkflow({
                       ...context.repo,
                       run_id: run.id,
