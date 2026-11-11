@@ -641,7 +641,7 @@ fn test_serial_opens_files_one_at_a_time() {
     // each file must be closed before the next one is opened.
     let (at, mut ucmd) = at_and_ucmd!();
     for i in 0..40 {
-        at.write(&format!("f{i}"), "a\nb\n");
+        at.write(format!("f{i}"), "a\nb\n");
     }
     let args: Vec<String> = (0..40).map(|i| format!("f{i}")).collect();
     ucmd.arg("-s")
