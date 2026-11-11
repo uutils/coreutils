@@ -11,6 +11,8 @@ use uutests::util::TestScenario;
 use uutests::util_name;
 
 use uucore::display::Quotable;
+#[cfg(unix)]
+use uucore::error::strip_errno;
 
 #[cfg(not(windows))]
 use std::path::MAIN_SEPARATOR;
@@ -1171,10 +1173,10 @@ fn test_non_utf8_template(
         .run();
     // Apple filesystems reject non-UTF-8 names, but dry runs can print them.
     if cfg!(target_vendor = "apple") && !flags.contains(&"-u") {
-        result
-            .code_is(1)
-            .no_stdout()
-            .stderr_contains(std::io::Error::from_raw_os_error(libc::EILSEQ).to_string());
+        // mktemp reports the bare OS error, without Rust's "(os error N)" suffix.
+        result.code_is(1).no_stdout().stderr_contains(strip_errno(
+            &std::io::Error::from_raw_os_error(libc::EILSEQ),
+        ));
         return;
     }
     result.success().no_stderr();
@@ -1252,10 +1254,10 @@ fn test_invalid_utf8_suffix(#[values(false, true)] dry_run: bool) {
         .arg("tmpXXXXXX")
         .run();
     if cfg!(target_vendor = "apple") && !dry_run {
-        result
-            .code_is(1)
-            .no_stdout()
-            .stderr_contains(std::io::Error::from_raw_os_error(libc::EILSEQ).to_string());
+        // mktemp reports the bare OS error, without Rust's "(os error N)" suffix.
+        result.code_is(1).no_stdout().stderr_contains(strip_errno(
+            &std::io::Error::from_raw_os_error(libc::EILSEQ),
+        ));
         return;
     }
     result.success().no_stderr();
@@ -1352,4 +1354,60 @@ fn test_write_error_removes_the_temporary_directory() {
         .filter(|name| name.starts_with("keep-none-"))
         .collect();
     assert!(leftovers.is_empty(), "left behind: {leftovers:?}");
+}
+
+// The `io::Error` from the OS contains Rust's "(os error N)" suffix, and the
+// error returned by `tempfile` also contains an internal "at path" context.
+// Neither belongs in mktemp's message: report the template that failed instead.
+#[test]
+fn test_too_long_template_reports_template_not_os_error() {
+    let template = "X".repeat(300);
+    let result = new_ucmd!().arg(&template).fails_with_code(1);
+
+    #[cfg(all(unix, not(target_env = "musl")))]
+    result.stderr_is(format!(
+        "mktemp: failed to create file via template '{template}': File name too long\n"
+    ));
+
+    // musl spells strerror(ENAMETOOLONG) "Filename too long" and the other
+    // platforms use their own wording, so only check that the OS error text
+    // itself is not leaking.
+    #[cfg(any(not(unix), target_env = "musl"))]
+    result
+        .stderr_contains(format!(
+            "mktemp: failed to create file via template '{template}': "
+        ))
+        .stderr_does_not_contain("os error")
+        .stderr_does_not_contain(" at path ");
+}
+
+#[uutests::wasi_ignore(NoPermissionBits)]
+#[test]
+#[cfg(unix)]
+fn test_permission_denied_reports_template() {
+    use rustix::process::geteuid;
+
+    // The permission bits do not stop root from creating the file.
+    if geteuid().is_root() {
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("ro");
+    scene.fixtures.set_mode("ro", 0o555);
+
+    scene
+        .ucmd()
+        .args(&["-p", "ro"])
+        .fails_with_code(1)
+        .stderr_is(
+            "mktemp: failed to create file via template 'ro/tmp.XXXXXXXXXX': Permission denied\n",
+        );
+    scene
+        .ucmd()
+        .args(&["-d", "-p", "ro"])
+        .fails_with_code(1)
+        .stderr_is(
+            "mktemp: failed to create directory via template 'ro/tmp.XXXXXXXXXX': Permission denied\n",
+        );
 }

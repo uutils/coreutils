@@ -8,7 +8,7 @@
 use clap::builder::{TypedValueParser, ValueParserFactory};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use uucore::display::{Quotable, println_verbatim};
-use uucore::error::{FromIo, UError, UResult, UUsageError};
+use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
 use uucore::translate;
 use uucore::{format_usage, os_str_from_bytes};
 
@@ -69,13 +69,29 @@ enum MkTempError {
     #[error("{}", translate!("mktemp-error-too-many-templates"))]
     TooManyTemplates,
 
-    #[error("{}", translate!("mktemp-error-not-found", "template_type" => .0, "template" => .1.quote()))]
-    NotFound(String, PathBuf),
+    #[error("{}", translate!("mktemp-error-not-found", "template_type" => .0, "template" => .1.quote(), "error" => create_error_message(.2)))]
+    CreateFailed(String, PathBuf, std::io::Error),
 }
 
 impl UError for MkTempError {
     fn usage(&self) -> bool {
         matches!(self, Self::TooManyTemplates)
+    }
+}
+
+/// Return the OS error text to show when a temporary file or directory cannot
+/// be created.
+///
+/// `tempfile` wraps the errors it returns together with the path it tried,
+/// which hides the errno from [`std::io::Error::raw_os_error`]. [`strip_errno`]
+/// therefore cannot recognize `ErrorKind::NotFound` and would fall back to the
+/// platform-specific text. Match the kind explicitly so the message stays
+/// "No such file or directory" on every platform, like GNU coreutils prints it.
+fn create_error_message(error: &std::io::Error) -> String {
+    if error.kind() == ErrorKind::NotFound {
+        translate!("mktemp-error-no-such-file-or-directory")
+    } else {
+        strip_errno(error)
     }
 }
 
@@ -531,11 +547,13 @@ fn make_temp_dir(dir: &Path, prefix: &OsStr, rand: usize, suffix: &OsStr) -> URe
             let path = d.keep();
             Ok(path)
         }
-        Err(e) if e.kind() == ErrorKind::NotFound => {
+        Err(e) => {
             let path = temp_path(dir, prefix, &"X".repeat(rand), suffix);
-            Err(MkTempError::NotFound(translate!("mktemp-template-type-directory"), path).into())
+            Err(
+                MkTempError::CreateFailed(translate!("mktemp-template-type-directory"), path, e)
+                    .into(),
+            )
         }
-        Err(e) => Err(e.into()),
     }
 }
 
@@ -559,11 +577,10 @@ fn make_temp_file(dir: &Path, prefix: &OsStr, rand: usize, suffix: &OsStr) -> UR
             Ok((_, pathbuf)) => Ok(pathbuf),
             Err(e) => Err(MkTempError::PersistError(e.file.path().to_path_buf()).into()),
         },
-        Err(e) if e.kind() == ErrorKind::NotFound => {
+        Err(e) => {
             let path = temp_path(dir, prefix, &"X".repeat(rand), suffix);
-            Err(MkTempError::NotFound(translate!("mktemp-template-type-file"), path).into())
+            Err(MkTempError::CreateFailed(translate!("mktemp-template-type-file"), path, e).into())
         }
-        Err(e) => Err(e.into()),
     }
 }
 
