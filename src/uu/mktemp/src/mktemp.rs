@@ -569,14 +569,10 @@ fn make_temp_dir(dir: &Path, prefix: &OsStr, rand: usize, suffix: &OsStr) -> URe
     // On *nix platforms grant read-write-execute for owner only.
     // The directory is created with these permission at creation time, using mkdir(3) syscall.
     // This is not relevant on Windows systems.
+    #[cfg_attr(not(unix), allow(unused_mut))]
+    let mut builder = fs::DirBuilder::new();
     #[cfg(unix)]
-    let builder = {
-        let mut builder = fs::DirBuilder::new();
-        builder.mode(0o700);
-        builder
-    };
-    #[cfg(not(unix))]
-    let builder = fs::DirBuilder::new();
+    builder.mode(0o700);
 
     make_temp(dir, prefix, rand, suffix, |path| builder.create(path)).map_err(|e| {
         let template_type = translate!("mktemp-template-type-directory");
