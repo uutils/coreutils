@@ -3173,7 +3173,7 @@ fn test_follow_replaced_by_fifo_does_not_block_other_files() {
 
 /// A followed FIFO whose writer has connected but sent nothing must not stop
 /// tail from printing the other followed files. Keeping the descriptor
-/// non-blocking makes that read return WouldBlock instead of stalling.
+/// non-blocking makes that read return `WouldBlock` instead of stalling.
 #[uutests::wasi_ignore(NoFifo)]
 #[test]
 #[cfg(not(windows))]
