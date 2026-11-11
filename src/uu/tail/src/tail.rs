@@ -171,7 +171,10 @@ fn tail_file(
             use std::os::fd::AsFd;
             stdin().as_fd().try_clone_to_owned().map(File::from)
         } else {
-            open_file(path, settings.pid.is_some_and(|pid| pid != 0))
+            open_file(
+                path,
+                settings.follow.is_some() || settings.pid.is_some_and(|pid| pid != 0),
+            )
         };
         #[cfg(not(unix))]
         let open_result = File::open(path);
@@ -237,27 +240,20 @@ fn tail_file(
 ///
 /// The file is always opened with `O_NONBLOCK`, without looking at its type first.
 /// Looking first would let a rename between the check and the open bring back the
-/// blocking `open()`. The flag has no effect on regular files. After opening, we
-/// clear `O_NONBLOCK` so subsequent reads block normally.
-/// Without it, FIFOs block on `open()` until a writer connects (GNU behavior).
+/// blocking `open()`. The flag has no effect on regular files. The descriptor is
+/// left non-blocking: a later read on a FIFO whose writer has connected but sent
+/// nothing would otherwise stall the same thread (see issue 16329). Callers treat
+/// `ErrorKind::WouldBlock` as "no new data".
 #[cfg(unix)]
 fn open_file(path: &Path, nonblock: bool) -> io::Result<File> {
-    use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
     use std::fs::OpenOptions;
     use std::os::unix::fs::OpenOptionsExt;
 
     if nonblock {
-        let file = OpenOptions::new()
+        OpenOptions::new()
             .read(true)
             .custom_flags(libc::O_NONBLOCK)
-            .open(path)?;
-
-        // Clear O_NONBLOCK so reads block normally
-        let flags = fcntl_getfl(&file)?;
-        let new_flags = flags & !OFlags::NONBLOCK;
-        fcntl_setfl(&file, new_flags)?;
-
-        Ok(file)
+            .open(path)
     } else {
         File::open(path)
     }

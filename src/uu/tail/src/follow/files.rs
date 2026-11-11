@@ -11,7 +11,9 @@ use crate::paths::{HeaderPrinter, PathExtTail};
 use crate::text;
 use std::collections::HashMap;
 use std::collections::hash_map::Keys;
-use std::fs::{File, Metadata};
+#[cfg(not(unix))]
+use std::fs::File;
+use std::fs::Metadata;
 use std::io::{BufRead, BufReader, BufWriter, Write, stdout};
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
@@ -212,7 +214,16 @@ impl PathData {
         let reader = if old_reader.is_some() {
             // Use old reader with the same file descriptor if there is one
             old_reader
-        } else if let Ok(file) = File::open(path) {
+        } else if let Ok(file) = {
+            #[cfg(unix)]
+            {
+                crate::open_file(path, true)
+            }
+            #[cfg(not(unix))]
+            {
+                File::open(path)
+            }
+        } {
             // Open new file tail from start
             Some(Box::new(BufReader::new(file)) as Box<dyn BufRead>)
         } else {

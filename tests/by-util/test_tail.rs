@@ -268,8 +268,8 @@ fn test_stdin_redirect_offset2() {
         .args(&["k", "-", "l", "m"])
         .succeeds()
         .stdout_only(
-            "==> k <==\n1\n2\n\n==> 'standard input' <==\n2\n\n==> l <==\n3\n4\n\n==> m <==\n5\n6\n",
-        );
+        "==> k <==\n1\n2\n\n==> 'standard input' <==\n2\n\n==> l <==\n3\n4\n\n==> m <==\n5\n6\n",
+    );
 }
 
 #[test]
@@ -3168,6 +3168,41 @@ fn test_follow_replaced_by_fifo_does_not_block_other_files() {
             .make_assertion()
             .with_all_output()
             .stdout_contains("a2");
+    }
+}
+
+/// A followed FIFO whose writer has connected but sent nothing must not stop
+/// tail from printing the other followed files. Keeping the descriptor
+/// non-blocking makes that read return WouldBlock instead of stalling.
+#[uutests::wasi_ignore(NoFifo)]
+#[test]
+#[cfg(not(windows))]
+fn test_follow_silent_fifo_writer_does_not_block_other_files() {
+    for follow in ["-F", "-f"] {
+        let ts = TestScenario::new(util_name!());
+        let at = &ts.fixtures;
+        at.write("a", "a1\n");
+        at.mkfifo("b");
+
+        let mut p = ts.ucmd().args(&[follow, "a", "b"]).run_no_wait();
+        p.make_assertion_with_delay(500).is_alive();
+
+        // Connect a writer and leave it silent. Open can block until tail has
+        // the read end, which the delay above is for.
+        let writer = std::fs::OpenOptions::new()
+            .write(true)
+            .open(at.plus("b"))
+            .unwrap();
+
+        at.append("a", "a2\n");
+        p.make_assertion_with_delay(1000).is_alive();
+
+        p.kill()
+            .make_assertion()
+            .with_all_output()
+            .stdout_contains("a2");
+
+        drop(writer);
     }
 }
 
