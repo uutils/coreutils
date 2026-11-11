@@ -364,7 +364,7 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
 
     let maybe_mount = |m: &MountInfo| match platform::filesystem_from_mount(&mounts, m, None) {
         Ok(fs) => Some(fs),
-        // Like GNU, `--all` lists a mount that another mount on the same
+        // `--all` lists a mount that another mount on the same
         // directory covers, but without its usage: `statfs` on the mount
         // point would report the covering filesystem.
         #[cfg(not(windows))]

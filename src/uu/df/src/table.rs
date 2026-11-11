@@ -155,7 +155,7 @@ impl Row {
             mount_dir,
             ..
         } = fs.mount_info;
-        // Like GNU, a filesystem of unknown usage shows "-" instead of its
+        // a filesystem of unknown usage shows "-" instead of its
         // usage and type, and adds nothing to the total.
         let Some(FsUsage {
             blocksize,

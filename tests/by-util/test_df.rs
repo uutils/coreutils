@@ -1189,21 +1189,24 @@ fn test_df_masked_proc_fallback() {
 /// listed like GNU does, with "-" for its usage and type (#9952).
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
 fn test_df_all_lists_over_mounted_with_unknown_usage() {
     use std::process::Command;
 
-    // Check if user namespaces are available
+    let ts = TestScenario::new("df");
+    ts.fixtures.mkdir("mnt");
+    let mnt = ts.fixtures.plus("mnt");
+
+    // Skip unless a tmpfs can be mounted in a user namespace
     if !Command::new("unshare")
-        .args(["-rm", "true"])
+        .args(["-rm", "mount", "-t", "tmpfs", "probe"])
+        .arg(&mnt)
         .status()
         .is_ok_and(|s| s.success())
     {
         return;
     }
 
-    let ts = TestScenario::new("df");
-    ts.fixtures.mkdir("mnt");
-    let mnt = ts.fixtures.plus("mnt");
     let df = ts.bin_path.display();
     let run = |args: &str| {
         let output = Command::new("unshare")
