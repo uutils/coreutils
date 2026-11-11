@@ -629,9 +629,11 @@ mod fifo {
         at.mkfifo("fifo");
         at.write(FILE1, "1234567890");
 
+        // ESPIPE reads "Illegal seek" with glibc and "Invalid seek" with musl.
         ucmd.args(&["-r", "fifo", FILE1])
             .fails_with_code(1)
-            .stderr_only("truncate: cannot get the size of 'fifo': Illegal seek\n");
+            .no_stdout()
+            .stderr_contains("truncate: cannot get the size of 'fifo': ");
         assert_eq!(at.read(FILE1), "1234567890");
     }
 
