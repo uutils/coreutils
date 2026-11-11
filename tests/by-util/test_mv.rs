@@ -3974,3 +3974,45 @@ fn test_mv_exchange_missing_target() {
         .stderr_contains("present")
         .stderr_contains("absent");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_mv_symlink_writability() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("source_file");
+    at.touch("target_file");
+    at.set_readonly("target_file");
+    at.symlink_file("source_file", "source");
+    at.symlink_file("target_file", "target");
+
+    ucmd.arg("source")
+        .arg("target")
+        .terminal_sim_stdio(TerminalSimulation {
+            stdin: true,
+            stdout: false,
+            stderr: false,
+            ..Default::default()
+        })
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_mv_symlink_overwrite_interactive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("source_file");
+    at.touch("target_file");
+    at.set_readonly("target_file");
+    at.symlink_file("source_file", "source");
+    at.symlink_file("target_file", "target");
+
+    ucmd.arg("source")
+        .arg("target")
+        .arg("-i")
+        .pipe_in("n\n")
+        .fails()
+        .stderr_only("mv: overwrite 'target'? ");
+}
