@@ -3252,6 +3252,8 @@ fn test_locale_names_for_several_dates_in_one_run() {
 #[case("2026-03-21", "+[%10B|%010B]", "[      mars|000000mars]")]
 #[case("2026-03-21", "+[%^b|%^A|%#a]", "[MARS|SAMEDI|SAM.]")]
 #[case("2026-02-21", "+[%^B]", "[FéVRIER]")] // spell-checker:disable-line
+// %10% and %-% are a literal %, as in the C locale
+#[case("2026-03-21", "+[%10%B|%-%%B]", "[%B|%mars]")]
 fn test_locale_names_with_flags(#[case] date: &str, #[case] fmt: &str, #[case] expected: &str) {
     // Flags and widths apply to the localized names, and only ASCII letters
     // change case

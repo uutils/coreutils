@@ -154,6 +154,15 @@ pub fn parse_format_spec(s: &str) -> Option<ParsedSpec<'_>> {
     })
 }
 
+/// Return the length of the `%%` at the start of `s`, also with flags or a
+/// width before the second `%` (`%10%`): jiff reads all of them as a literal `%`.
+pub fn literal_percent_len(s: &str) -> Option<usize> {
+    let rest = s
+        .strip_prefix('%')?
+        .trim_start_matches(|c: char| "_0^#+-".contains(c) || c.is_ascii_digit());
+    rest.starts_with('%').then(|| s.len() - rest.len() + 1)
+}
+
 /// Replace the specifiers for which `value_of` returns a value, with their
 /// flags and width applied, and leave the others for later formatting.
 ///
@@ -168,9 +177,9 @@ pub fn localize_specifiers(
     while let Some(start) = rest.find('%') {
         result.push_str(&rest[..start]);
         rest = &rest[start..];
-        if rest.starts_with("%%") {
-            result.push_str("%%");
-            rest = &rest[2..];
+        if let Some(len) = literal_percent_len(rest) {
+            result.push_str(&rest[..len]);
+            rest = &rest[len..];
             continue;
         }
         let Some(parsed) = parse_format_spec(rest) else {
@@ -960,6 +969,10 @@ mod tests {
         // change case, other specifiers and %% are left for later formatting
         let result = localize_specifiers("%B|%^B|%-d|%_d|%10b|%%B|%H|%:z|%b", value_of).unwrap();
         assert_eq!(result, "février|FéVRIER|1| 1|       50%%|%%B|%H|%:z|50%%");
+        // jiff reads %10% and %-% as a literal %, so the B after %10% is plain
+        // text
+        let result = localize_specifiers("%10%B|%-%%B", value_of).unwrap();
+        assert_eq!(result, "%10%B|%-%février");
         // Composite conversions are modified as a whole
         let result = localize_specifiers("%-D|%_D|%10D", value_of).unwrap();
         assert_eq!(result, "06/14/26|06/14/26|  06/14/26");

@@ -1321,11 +1321,8 @@ fn expand_locale_formats<'a>(
     let mut i = 0;
     while let Some(offset) = format[i..].find('%') {
         i += offset;
-        // jiff reads `%%`, also with flags or a width (`%10%`), as a literal `%`.
-        let rest = format[i + 1..]
-            .trim_start_matches(|c: char| "_0^#+-".contains(c) || c.is_ascii_digit());
-        if rest.starts_with('%') {
-            i = format.len() - rest.len() + 1;
+        if let Some(len) = format_modifiers::literal_percent_len(&format[i..]) {
+            i += len;
             continue;
         }
         let Some(parsed) = format_modifiers::parse_format_spec(&format[i..]) else {
