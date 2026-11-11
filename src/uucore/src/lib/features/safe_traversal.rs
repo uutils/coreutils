@@ -6,7 +6,7 @@
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
 // spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot EOVERFLOW chowned chmoded
-// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat
+// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat renameat unguessability linkat symlinkat mknodat RTLD GETPATH
 
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
@@ -16,6 +16,7 @@
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;
 
+use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::mem::MaybeUninit;
@@ -311,13 +312,41 @@ impl DirFd {
     /// * `name` - The name of the subdirectory to open
     /// * `symlink_behavior` - Whether to follow symlinks when opening
     pub fn open_subdir(&self, name: &OsStr, symlink_behavior: SymlinkBehavior) -> io::Result<Self> {
+        Self::open_subdir_fd(self.fd.as_fd(), name, symlink_behavior)
+    }
+
+    /// [`Self::open_subdir`] relative to any directory descriptor.
+    fn open_subdir_fd(
+        dir: BorrowedFd<'_>,
+        name: &OsStr,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<Self> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
         let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC | LARGEFILE;
         if !symlink_behavior.should_follow() {
             flags |= OFlag::O_NOFOLLOW;
         }
-        let fd = openat(&self.fd, name_cstr.as_c_str(), flags, Mode::empty()).map_err(|e| {
+        let fd = openat(dir, name_cstr.as_c_str(), flags, Mode::empty()).map_err(|e| {
+            SafeTraversalError::OpenFailed {
+                path: name.into(),
+                source: io::Error::from_raw_os_error(e as i32),
+            }
+        })?;
+        Ok(Self { fd })
+    }
+
+    /// Open subdirectory `name` without following a symlink, search-only where
+    /// possible, so entries can be created in it without read permission.
+    fn open_subdir_anchor_fd(dir: BorrowedFd<'_>, name: &OsStr) -> io::Result<Self> {
+        let name_cstr =
+            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        let flags = SEARCH_ONLY.unwrap_or(OFlag::O_RDONLY)
+            | OFlag::O_DIRECTORY
+            | OFlag::O_NOFOLLOW
+            | OFlag::O_CLOEXEC
+            | LARGEFILE;
+        let fd = openat(dir, name_cstr.as_c_str(), flags, Mode::empty()).map_err(|e| {
             SafeTraversalError::OpenFailed {
                 path: name.into(),
                 source: io::Error::from_raw_os_error(e as i32),
@@ -378,6 +407,11 @@ impl DirFd {
 
     /// Remove a file or empty directory relative to this directory
     pub fn unlink_at(&self, name: &OsStr, is_dir: bool) -> io::Result<()> {
+        Self::unlink_at_fd(self.fd.as_fd(), name, is_dir)
+    }
+
+    /// [`Self::unlink_at`] relative to any directory descriptor.
+    fn unlink_at_fd(dir: BorrowedFd<'_>, name: &OsStr, is_dir: bool) -> io::Result<()> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
         let flags = if is_dir {
@@ -386,7 +420,7 @@ impl DirFd {
             UnlinkatFlags::NoRemoveDir
         };
 
-        unlinkat(&self.fd, name_cstr.as_c_str(), flags).map_err(|e| {
+        unlinkat(dir, name_cstr.as_c_str(), flags).map_err(|e| {
             SafeTraversalError::UnlinkFailed {
                 path: name.into(),
                 source: io::Error::from_raw_os_error(e as i32),
@@ -405,6 +439,17 @@ impl DirFd {
         gid: Option<u32>,
         symlink_behavior: SymlinkBehavior,
     ) -> io::Result<()> {
+        Self::chown_at_fd(self.fd.as_fd(), name, uid, gid, symlink_behavior)
+    }
+
+    /// [`Self::chown_at`] relative to any directory descriptor.
+    fn chown_at_fd(
+        dir: BorrowedFd<'_>,
+        name: &OsStr,
+        uid: Option<u32>,
+        gid: Option<u32>,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<()> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
 
@@ -417,7 +462,7 @@ impl DirFd {
         let uid = uid.map(Uid::from_raw);
         let gid = gid.map(Gid::from_raw);
 
-        fchownat(&self.fd, name_cstr.as_c_str(), uid, gid, flags)
+        fchownat(dir, name_cstr.as_c_str(), uid, gid, flags)
             .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
 
         Ok(())
@@ -444,6 +489,16 @@ impl DirFd {
         mode: u32,
         symlink_behavior: SymlinkBehavior,
     ) -> io::Result<()> {
+        Self::chmod_at_fd(self.fd.as_fd(), name, mode, symlink_behavior)
+    }
+
+    /// [`Self::chmod_at`] relative to any directory descriptor.
+    fn chmod_at_fd(
+        dir: BorrowedFd<'_>,
+        name: &OsStr,
+        mode: u32,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<()> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
 
@@ -461,7 +516,7 @@ impl DirFd {
         // fallback takes over instead.
         #[cfg_attr(target_os = "linux", allow(unused_variables))]
         let libc_err = match fchmodat(
-            &self.fd,
+            dir,
             name_cstr.as_c_str(),
             Mode::from_bits_truncate(mode as libc::mode_t),
             flags,
@@ -513,7 +568,7 @@ impl DirFd {
                 let res = unsafe {
                     libc::syscall(
                         SYS_FCHMODAT2,
-                        self.fd.as_raw_fd(),
+                        dir.as_raw_fd(),
                         name_cstr.as_ptr(),
                         mode as libc::mode_t,
                         libc::AT_SYMLINK_NOFOLLOW,
@@ -535,7 +590,7 @@ impl DirFd {
 
         #[cfg(target_os = "linux")]
         {
-            self.chmod_at_via_opath(name_cstr.as_c_str(), mode)
+            Self::chmod_at_via_opath(dir, name_cstr.as_c_str(), mode)
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -551,13 +606,13 @@ impl DirFd {
     /// race because the fd pins the inode.
     ///
     #[cfg(target_os = "linux")]
-    fn chmod_at_via_opath(&self, name: &CStr, mode: u32) -> io::Result<()> {
+    fn chmod_at_via_opath(dir: BorrowedFd<'_>, name: &CStr, mode: u32) -> io::Result<()> {
         // Same reason as in chmod_at: rustix's linux_raw backend would make
         // these raw syscalls, invisible to LD_PRELOAD wrappers.
         use std::os::unix::fs::PermissionsExt;
 
         let fd = openat(
-            &self.fd,
+            dir,
             name,
             OFlag::O_PATH | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
             Mode::empty(),
@@ -583,11 +638,16 @@ impl DirFd {
 
     /// Create a directory relative to this directory
     pub fn mkdir_at(&self, name: &OsStr, mode: u32) -> io::Result<()> {
+        Self::mkdir_at_fd(self.fd.as_fd(), name, mode)
+    }
+
+    /// [`Self::mkdir_at`] relative to any directory descriptor.
+    fn mkdir_at_fd(dir: BorrowedFd<'_>, name: &OsStr, mode: u32) -> io::Result<()> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
         let mode = Mode::from_bits_truncate(mode as libc::mode_t);
 
-        if let Err(e) = mkdirat(self.fd.as_fd(), name_cstr.as_c_str(), mode) {
+        if let Err(e) = mkdirat(dir, name_cstr.as_c_str(), mode) {
             let err = io::Error::from_raw_os_error(e as i32);
             return Err(SafeTraversalError::OpenFailed {
                 path: name.into(),
@@ -598,9 +658,27 @@ impl DirFd {
         Ok(())
     }
 
+    /// Create a fifo, socket or device node `name`, as `mknod(2)` does: `mode`
+    /// holds the file type and permissions, the umask applies.
+    pub fn mknod_at(&self, name: &OsStr, mode: u32, dev: u64) -> io::Result<()> {
+        let name_cstr =
+            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        mknodat(
+            self.fd.as_fd(),
+            &name_cstr,
+            mode as libc::mode_t,
+            dev as libc::dev_t,
+        )
+    }
+
     /// Create a file for writing relative to this directory
     /// Fails with `EEXIST` if the name already exists
     pub fn open_file_at(&self, name: &OsStr) -> io::Result<fs::File> {
+        Self::open_file_at_fd(self.fd.as_fd(), name)
+    }
+
+    /// [`Self::open_file_at`] relative to any directory descriptor.
+    fn open_file_at_fd(dir: BorrowedFd<'_>, name: &OsStr) -> io::Result<fs::File> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
         // Callers reach here right after unlinking `name`, which is precisely
@@ -618,7 +696,7 @@ impl DirFd {
             | LARGEFILE;
         let mode = Mode::from_bits_truncate(0o600);
 
-        let fd: OwnedFd = openat(self.fd.as_fd(), name_cstr.as_c_str(), flags, mode)
+        let fd: OwnedFd = openat(dir, name_cstr.as_c_str(), flags, mode)
             .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
 
         Ok(fs::File::from(fd))
@@ -788,6 +866,277 @@ impl AsRawFd for DirFd {
 impl AsFd for DirFd {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
+    }
+}
+
+/// `mknodat(2)`. Neither nix nor rustix provides it on Apple targets.
+#[cfg(not(target_vendor = "apple"))]
+fn mknodat(
+    dir: BorrowedFd<'_>,
+    name: &CStr,
+    mode: libc::mode_t,
+    dev: libc::dev_t,
+) -> io::Result<()> {
+    // SAFETY: `name` is NUL-terminated and `dir` is an open directory descriptor.
+    let res = unsafe { libc::mknodat(dir.as_raw_fd(), name.as_ptr(), mode, dev) };
+    if res == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+/// `mknodat(2)` exists from macOS 13, so it is looked up at run time, as cp does
+/// for `clonefile`; before that the node is created by the directory's path.
+#[cfg(target_vendor = "apple")]
+fn mknodat(
+    dir: BorrowedFd<'_>,
+    name: &CStr,
+    mode: libc::mode_t,
+    dev: libc::dev_t,
+) -> io::Result<()> {
+    use std::sync::OnceLock;
+
+    type Mknodat = unsafe extern "C" fn(
+        libc::c_int,
+        *const libc::c_char,
+        libc::mode_t,
+        libc::dev_t,
+    ) -> libc::c_int;
+    static MKNODAT: OnceLock<Option<Mknodat>> = OnceLock::new();
+
+    let mknodat = MKNODAT.get_or_init(|| {
+        // SAFETY: the symbol name is NUL-terminated.
+        let sym = unsafe { libc::dlsym(libc::RTLD_DEFAULT, c"mknodat".as_ptr()) };
+        // SAFETY: `mknodat` has this signature wherever libSystem exports it.
+        (!sym.is_null()).then(|| unsafe { std::mem::transmute::<*mut libc::c_void, Mknodat>(sym) })
+    });
+    let Some(mknodat) = mknodat else {
+        return mknod_by_dir_path(dir, name, mode, dev);
+    };
+    // SAFETY: `name` is NUL-terminated and `dir` is an open directory descriptor.
+    let res = unsafe { mknodat(dir.as_raw_fd(), name.as_ptr(), mode, dev) };
+    if res == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+/// `mknod(2)` of `name` under the path `dir` has now, for macOS before 13.
+#[cfg(target_vendor = "apple")]
+fn mknod_by_dir_path(
+    dir: BorrowedFd<'_>,
+    name: &CStr,
+    mode: libc::mode_t,
+    dev: libc::dev_t,
+) -> io::Result<()> {
+    let mut path = PathBuf::new();
+    nix::fcntl::fcntl(dir, nix::fcntl::FcntlArg::F_GETPATH(&mut path))
+        .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+    path.push(OsStr::from_bytes(name.to_bytes()));
+    let path = CString::new(path.as_os_str().as_bytes())
+        .map_err(|_| SafeTraversalError::PathContainsNull)?;
+    // SAFETY: `path` is NUL-terminated.
+    let res = unsafe { libc::mknod(path.as_ptr(), mode, dev) };
+    if res == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+/// `symlinkat`/`linkat` relative to an open directory.
+pub(crate) fn link_at<Fd: AsFd>(
+    target: &Path,
+    dir: Fd,
+    name: &OsStr,
+    symbolic: bool,
+) -> io::Result<()> {
+    use rustix::fs::{AtFlags, CWD, linkat, symlinkat};
+
+    if symbolic {
+        symlinkat(target, dir, name).map_err(Into::into)
+    } else {
+        // `AtFlags::empty()` matches `std::fs::hard_link`: not dereferenced.
+        linkat(CWD, target, dir, name, AtFlags::empty()).map_err(Into::into)
+    }
+}
+
+/// A directory to create entries in, held open where the platform allows. Without a
+/// search-only open, an unreadable one is reached by its path, resolved again on each call.
+pub struct DirAnchor {
+    path: PathBuf,
+    fd: Option<DirFd>,
+}
+
+impl DirAnchor {
+    /// Open `path` with [`DirFd::open_anchor`], keeping only the path where that is denied.
+    pub fn open(path: &Path) -> io::Result<Self> {
+        Self::from_open(path.to_owned(), DirFd::open_anchor(path))
+    }
+
+    /// Open the subdirectory `name` without following a symlink, as [`Self::open`] does.
+    pub fn open_subdir_anchor(&self, name: &OsStr) -> io::Result<Self> {
+        let (dir, at) = self.at(name)?;
+        Self::from_open(self.path.join(name), DirFd::open_subdir_anchor_fd(dir, &at))
+    }
+
+    /// Keep only `path` where opening it was denied and there is no search-only open.
+    fn from_open(path: PathBuf, opened: io::Result<DirFd>) -> io::Result<Self> {
+        let fd = match opened {
+            Ok(fd) => Some(fd),
+            Err(e) if SEARCH_ONLY.is_none() && e.kind() == io::ErrorKind::PermissionDenied => None,
+            Err(e) => return Err(e),
+        };
+        Ok(Self { path, fd })
+    }
+
+    /// The directory and name to pass to an `*at` call for the entry `name`.
+    fn at<'a>(&'a self, name: &'a OsStr) -> io::Result<(BorrowedFd<'a>, Cow<'a, OsStr>)> {
+        // Joined to the path, an empty name would be the directory itself.
+        if name.is_empty() {
+            return Err(io::Error::from_raw_os_error(libc::ENOENT));
+        }
+        Ok(match &self.fd {
+            Some(dir) => (dir.as_fd(), Cow::Borrowed(name)),
+            None => (
+                rustix::fs::CWD,
+                Cow::Owned(self.path.join(name).into_os_string()),
+            ),
+        })
+    }
+
+    /// Create `name` as a link to `target`, symbolic if `symbolic` is set.
+    pub fn link_at(&self, target: &Path, name: &OsStr, symbolic: bool) -> io::Result<()> {
+        let (dir, name) = self.at(name)?;
+        link_at(target, dir, &name, symbolic)
+    }
+
+    /// [`DirFd::chown_at`] in this directory.
+    pub fn chown_at(
+        &self,
+        name: &OsStr,
+        uid: Option<u32>,
+        gid: Option<u32>,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<()> {
+        let (dir, name) = self.at(name)?;
+        DirFd::chown_at_fd(dir, &name, uid, gid, symlink_behavior)
+    }
+
+    /// [`DirFd::open_file_at`] in this directory.
+    pub fn open_file_at(&self, name: &OsStr) -> io::Result<fs::File> {
+        let (dir, name) = self.at(name)?;
+        DirFd::open_file_at_fd(dir, &name)
+    }
+
+    /// [`DirFd::mkdir_at`] in this directory.
+    pub fn mkdir_at(&self, name: &OsStr, mode: u32) -> io::Result<()> {
+        let (dir, name) = self.at(name)?;
+        DirFd::mkdir_at_fd(dir, &name, mode)
+    }
+
+    /// [`DirFd::chmod_at`] in this directory.
+    pub fn chmod_at(
+        &self,
+        name: &OsStr,
+        mode: u32,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<()> {
+        let (dir, name) = self.at(name)?;
+        DirFd::chmod_at_fd(dir, &name, mode, symlink_behavior)
+    }
+
+    /// [`DirFd::open_subdir`] in this directory.
+    pub fn open_subdir(
+        &self,
+        name: &OsStr,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<DirFd> {
+        let (dir, name) = self.at(name)?;
+        DirFd::open_subdir_fd(dir, &name, symlink_behavior)
+    }
+
+    /// [`DirFd::unlink_at`] in this directory.
+    pub fn unlink_at(&self, name: &OsStr, is_dir: bool) -> io::Result<()> {
+        let (dir, name) = self.at(name)?;
+        DirFd::unlink_at_fd(dir, &name, is_dir)
+    }
+
+    /// Move the entry `from` of `from_dir` to `to` in this directory.
+    pub fn rename_from(&self, from_dir: &DirFd, from: &OsStr, to: &OsStr) -> io::Result<()> {
+        let (dir, to) = self.at(to)?;
+        rustix::fs::renameat(from_dir, from, dir, &*to).map_err(Into::into)
+    }
+
+    /// Create `name` with `create`, or replace it the same way if it is taken.
+    /// Returns what `create` returned, e.g. a file it opened.
+    pub fn replace_entry_at<T>(
+        &self,
+        name: &OsStr,
+        mut create: impl FnMut(&Self, &OsStr) -> io::Result<T>,
+    ) -> io::Result<T> {
+        match create(self, name) {
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+            res => return res,
+        }
+        self.replace_existing_entry_at(name, create)
+    }
+
+    /// Replace the existing entry `name` with one made by `create`: build it under a
+    /// temporary name and rename it over, so the name is never free.
+    pub(crate) fn replace_existing_entry_at<T>(
+        &self,
+        name: &OsStr,
+        create: impl FnMut(&Self, &OsStr) -> io::Result<T>,
+    ) -> io::Result<T> {
+        use rustix::fs::{AtFlags, renameat, unlinkat};
+
+        let (dir, dest) = self.at(name)?;
+        let (created, tmp) = self.create_at_temp_name(create)?;
+        let (_, tmp) = self.at(&tmp)?;
+        let renamed = renameat(dir, &*tmp, dir, &*dest);
+        // Renaming onto an existing link to the same inode is a
+        // no-op, which leaves the temp behind.
+        let _ = unlinkat(dir, &*tmp, AtFlags::empty());
+        renamed.map(|()| created).map_err(Into::into)
+    }
+
+    /// Create an entry under an unused random name with `create`, which must fail with
+    /// `EEXIST` on a taken name. Returns what `create` returned and the name.
+    pub fn create_at_temp_name<T>(
+        &self,
+        mut create: impl FnMut(&Self, &OsStr) -> io::Result<T>,
+    ) -> io::Result<(T, OsString)> {
+        use std::io::Read;
+
+        // GNU's template `CuXXXXXX`; the ~3% modulo bias per random char is
+        // irrelevant for an 8-char unguessability budget.
+        const ALPHABET: &[u8; 62] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+        let mut urandom = fs::File::open("/dev/urandom")?;
+
+        for _ in 0..32 {
+            let mut tmp = *b"Cu------";
+            let mut raw = [0u8; 6];
+            urandom.read_exact(&mut raw)?;
+            for (slot, byte) in tmp[2..].iter_mut().zip(raw) {
+                *slot = ALPHABET[byte as usize % ALPHABET.len()];
+            }
+            let tmp = OsStr::from_bytes(&tmp);
+
+            match create(self, tmp) {
+                Ok(created) => return Ok((created, tmp.to_owned())),
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            translate!("error-no-unique-temp-name"),
+        ))
     }
 }
 
@@ -1517,6 +1866,37 @@ mod tests {
     }
 
     #[test]
+    fn test_mknod_at_creates_fifo_and_refuses_existing() {
+        use std::os::unix::fs::FileTypeExt;
+
+        let temp_dir = TempDir::new().unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        // S_IFIFO | 0o600
+        let fifo = 0o010_600;
+
+        dir_fd.mknod_at(OsStr::new("fifo"), fifo, 0).unwrap();
+
+        let metadata = fs::symlink_metadata(temp_dir.path().join("fifo")).unwrap();
+        assert!(metadata.file_type().is_fifo());
+        let err = dir_fd.mknod_at(OsStr::new("fifo"), fifo, 0).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+    }
+
+    #[test]
+    #[cfg(target_vendor = "apple")]
+    fn test_mknod_by_dir_path_creates_fifo() {
+        use std::os::unix::fs::FileTypeExt;
+
+        let temp_dir = TempDir::new().unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        // S_IFIFO | 0o600, as macOS before 13 creates it.
+        mknod_by_dir_path(dir_fd.as_fd(), c"fifo", 0o010_600, 0).unwrap();
+
+        let metadata = fs::symlink_metadata(temp_dir.path().join("fifo")).unwrap();
+        assert!(metadata.file_type().is_fifo());
+    }
+
+    #[test]
     fn test_open_file_at_creates_file() {
         use std::io::Write;
 
@@ -1611,6 +1991,135 @@ mod tests {
         fs::set_permissions(&write_only, fs::Permissions::from_mode(0o755)).unwrap();
         assert!(write_only.join("sub").is_dir());
         assert!(write_only.join("file").is_file());
+    }
+
+    #[test]
+    fn test_dir_anchor_replaces_entry_by_fd_and_by_path() {
+        let temp_dir = TempDir::new().unwrap();
+        let dir = temp_dir.path();
+        let by_path = DirAnchor {
+            path: dir.to_owned(),
+            fd: None,
+        };
+        for anchor in [DirAnchor::open(dir).unwrap(), by_path] {
+            fs::write(dir.join("entry"), "old").unwrap();
+            anchor
+                .replace_existing_entry_at(OsStr::new("entry"), |dir, name| {
+                    dir.link_at(Path::new("target"), name, true)
+                })
+                .unwrap();
+            assert_eq!(
+                fs::read_link(dir.join("entry")).unwrap(),
+                Path::new("target")
+            );
+            // The temporary entry is renamed away, not left behind.
+            assert_eq!(fs::read_dir(dir).unwrap().count(), 1);
+            fs::remove_file(dir.join("entry")).unwrap();
+        }
+    }
+
+    #[test]
+    fn test_dir_anchor_open_subdir_anchor_in_write_only_dir_refuses_symlink() {
+        use std::os::unix::fs::PermissionsExt;
+
+        if Uid::effective().is_root() {
+            // root ignores the permission bits this test depends on
+            return;
+        }
+        let temp_dir = TempDir::new().unwrap();
+        let write_only = temp_dir.path().join("wx");
+        fs::create_dir(&write_only).unwrap();
+        fs::set_permissions(&write_only, fs::Permissions::from_mode(0o300)).unwrap();
+        symlink("wx", temp_dir.path().join("link")).unwrap();
+        let parent = DirAnchor::open(temp_dir.path()).unwrap();
+
+        // Creating entries needs write and execute, not read.
+        let dir = parent.open_subdir_anchor(OsStr::new("wx")).unwrap();
+        dir.open_file_at(OsStr::new("file")).unwrap();
+        assert!(parent.open_subdir_anchor(OsStr::new("link")).is_err());
+
+        fs::set_permissions(&write_only, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(write_only.join("file").is_file());
+    }
+
+    #[test]
+    fn test_dir_anchor_replace_returns_the_file_by_fd_and_by_path() {
+        use std::io::Write;
+
+        let temp_dir = TempDir::new().unwrap();
+        let dir = temp_dir.path();
+        let by_path = DirAnchor {
+            path: dir.to_owned(),
+            fd: None,
+        };
+        for anchor in [DirAnchor::open(dir).unwrap(), by_path] {
+            fs::write(dir.join("file"), "old").unwrap();
+            let mut file = anchor
+                .replace_entry_at(OsStr::new("file"), DirAnchor::open_file_at)
+                .unwrap();
+            file.write_all(b"new").unwrap();
+            assert_eq!(fs::read(dir.join("file")).unwrap(), b"new");
+            assert_eq!(fs::read_dir(dir).unwrap().count(), 1);
+        }
+    }
+
+    /// A symlink planted at the name is replaced, not written through.
+    #[test]
+    fn test_dir_anchor_replace_does_not_follow_symlink() {
+        use std::io::Write;
+
+        let temp_dir = TempDir::new().unwrap();
+        let (dir, outside) = (temp_dir.path().join("dir"), temp_dir.path().join("outside"));
+        fs::create_dir(&dir).unwrap();
+        let by_path = DirAnchor {
+            path: dir.clone(),
+            fd: None,
+        };
+        for anchor in [DirAnchor::open(&dir).unwrap(), by_path] {
+            fs::write(&outside, "keep").unwrap();
+            let _ = fs::remove_file(dir.join("file"));
+            symlink(&outside, dir.join("file")).unwrap();
+            let mut file = anchor
+                .replace_entry_at(OsStr::new("file"), DirAnchor::open_file_at)
+                .unwrap();
+            file.write_all(b"new").unwrap();
+            assert_eq!(fs::read(&outside).unwrap(), b"keep");
+            assert!(!dir.join("file").symlink_metadata().unwrap().is_symlink());
+            assert_eq!(fs::read(dir.join("file")).unwrap(), b"new");
+        }
+    }
+
+    #[test]
+    fn test_dir_anchor_creates_and_removes_entries_by_fd_and_by_path() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_dir = TempDir::new().unwrap();
+        let dir = temp_dir.path();
+        let by_path = DirAnchor {
+            path: dir.to_owned(),
+            fd: None,
+        };
+        for anchor in [DirAnchor::open(dir).unwrap(), by_path] {
+            anchor.mkdir_at(OsStr::new("sub"), 0o755).unwrap();
+            anchor
+                .chmod_at(OsStr::new("sub"), 0o700, SymlinkBehavior::NoFollow)
+                .unwrap();
+            let mode = fs::metadata(dir.join("sub")).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o700);
+
+            let sub = anchor
+                .open_subdir(OsStr::new("sub"), SymlinkBehavior::NoFollow)
+                .unwrap();
+            sub.open_file_at(OsStr::new("file")).unwrap();
+            anchor
+                .rename_from(&sub, OsStr::new("file"), OsStr::new("moved"))
+                .unwrap();
+            assert!(dir.join("moved").is_file());
+
+            anchor.unlink_at(OsStr::new("moved"), false).unwrap();
+            anchor.unlink_at(OsStr::new("sub"), true).unwrap();
+            assert_eq!(fs::read_dir(dir).unwrap().count(), 0);
+        }
     }
 
     #[test]
