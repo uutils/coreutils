@@ -550,11 +550,13 @@ fn test_stdbuf_tmpdir_is_private() {
 #[test]
 #[cfg(unix)]
 fn test_stdbuf_reports_signalled_command() {
-    // SIGQUIT (3) rather than the usual SIGTERM, so the expected 131 cannot be
-    // confused with a status the shell would produce on its own.
+    // SIGKILL (9 on every Unix) because no process can ignore or catch it, so
+    // the shell is guaranteed to die from it. Other signals are not reliable
+    // here: bash, when it is /bin/sh, ignores SIGQUIT for `sh -c`, and any
+    // signal ignored by the parent is inherited as ignored.
     new_ucmd!()
-        .args(&["-o0", "sh", "-c", "kill -QUIT $$"])
-        .fails_with_code(131);
+        .args(&["-o0", "sh", "-c", "kill -KILL $$"])
+        .fails_with_code(137);
 }
 
 #[cfg(unix)]
