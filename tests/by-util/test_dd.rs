@@ -846,6 +846,27 @@ fn test_skip_in_empty_seekable_stdin_no_warning() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_skip_in_directory_no_warning() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    ucmd.args(&["if=d", "bs=1M", "skip=1", "status=noxfer"])
+        .fails()
+        .stderr_does_not_contain("cannot skip to specified offset");
+
+    let stdin = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().read(true),
+        at.plus("d").as_path(),
+    )
+    .unwrap();
+    new_ucmd!()
+        .args(&["bs=1M", "skip=1", "status=noxfer"])
+        .set_stdin(Stdio::from(stdin))
+        .fails()
+        .stderr_does_not_contain("cannot skip to specified offset");
+}
+
+#[test]
 fn test_seek_do_not_overwrite() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut outfile = at.make_file("outfile");
