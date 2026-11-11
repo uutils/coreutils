@@ -409,12 +409,12 @@ fn test_kill_signal_reaches_process_group(
         .args(&[
             "sh",
             "-c",
-            &format!("trap '' TERM; ('{bin}' sleep 1; '{bin}' touch marker) & wait"),
+            &format!("trap '' TERM; ('{bin}' sleep 2; '{bin}' touch marker) & wait"),
         ])
         .run()
         .signal_is(9);
     // Give a surviving grandchild ample time to reach the `touch`.
-    std::thread::sleep(Duration::from_millis(1500));
+    std::thread::sleep(Duration::from_millis(2500));
     assert!(
         !ts.fixtures.file_exists("marker"),
         "grandchild survived the KILL"
