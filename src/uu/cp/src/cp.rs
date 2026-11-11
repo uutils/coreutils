@@ -2298,7 +2298,10 @@ fn restore_backup(dest: &Path, backup: &CreatedBackup) {
         Some(p) if !p.as_os_str().is_empty() => p,
         _ => Path::new("."),
     };
+    #[cfg(any(unix, windows))]
     let pid = std::process::id();
+    #[cfg(not(any(unix, windows)))]
+    let pid = 0_u32;
     let mut staged = false;
     for attempt in 0..64u32 {
         let tmp_path = parent.join(format!(".cp-restore-{pid}-{attempt}"));
