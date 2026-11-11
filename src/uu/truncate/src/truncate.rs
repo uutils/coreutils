@@ -7,10 +7,10 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
-use std::fs::{OpenOptions, metadata};
-use std::io::ErrorKind;
+use std::fs::{Metadata, OpenOptions, metadata};
+use std::io::{self, ErrorKind, Seek, SeekFrom};
 #[cfg(unix)]
-use std::os::unix::fs::FileTypeExt;
+use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
 use std::path::Path;
 use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
@@ -257,7 +257,7 @@ fn do_file_truncate(filename: &Path, create: bool, size: u64) -> UResult<()> {
 
 /// Block size for file in question, or if file does not yet exist, for the
 /// parent directory of the file.
-fn io_block_size(path: &Path, metadata: Option<&std::fs::Metadata>) -> u64 {
+fn io_block_size(path: &Path, metadata: Option<&Metadata>) -> u64 {
     metadata.map_or_else(
         || {
             let parent = path
@@ -268,6 +268,22 @@ fn io_block_size(path: &Path, metadata: Option<&std::fs::Metadata>) -> u64 {
         },
         uucore::fs::sane_blksize::sane_blksize_from_metadata,
     )
+}
+
+/// Size of the `--reference` file. Only a regular file or a directory has
+/// its length in the metadata; for anything else, seek to its end.
+fn reference_file_size(path: &Path, metadata: &Metadata) -> io::Result<u64> {
+    if metadata.is_file() || metadata.is_dir() {
+        return Ok(metadata.len());
+    }
+
+    let mut options = OpenOptions::new();
+    options.read(true);
+    // Do not wait for a writer if this is a FIFO.
+    #[cfg(unix)]
+    options.custom_flags(uucore::libc::O_NONBLOCK);
+
+    options.open(path)?.seek(SeekFrom::End(0))
 }
 
 fn file_truncate(
@@ -375,7 +391,13 @@ fn truncate(
                 _ => error.map_err_context(String::new),
             })?;
 
-            Some(reference_metadata.len())
+            let reference_size =
+                reference_file_size(Path::new(&reference_path), &reference_metadata)
+                    .map_err_context(|| {
+                        translate!("truncate-error-cannot-get-size", "filename" => reference_path.quote())
+                    })?;
+
+            Some(reference_size)
         }
         None => None,
     };

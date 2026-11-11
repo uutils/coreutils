@@ -298,6 +298,37 @@ fn test_reference_file_not_found() {
         .stderr_contains("cannot stat 'a': No such file or directory");
 }
 
+#[uutests::wasi_ignore(NoUnixDomainSockets)]
+#[test]
+#[cfg(unix)]
+fn test_reference_socket_has_no_size() {
+    use std::os::unix::net::UnixListener;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let _listener = UnixListener::bind(at.plus("sock")).expect("failed to create socket");
+    at.write(FILE1, "1234567890");
+
+    // The reason differs between platforms (ENXIO on Linux).
+    ucmd.args(&["-r", "sock", FILE1])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("truncate: cannot get the size of 'sock': ");
+    assert_eq!(at.read(FILE1), "1234567890");
+}
+
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
+#[cfg(unix)]
+fn test_reference_character_device() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(FILE1, "1234567890");
+
+    ucmd.args(&["-r", "/dev/null", FILE1])
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read(FILE1), "");
+}
+
 #[test]
 fn test_reference_with_size_file_not_found() {
     new_ucmd!()
@@ -590,6 +621,18 @@ mod fifo {
             .fails()
             .no_stdout()
             .stderr_contains("cannot open 'fifo' for writing: No such device or address");
+    }
+
+    #[test]
+    fn test_fifo_as_reference_has_no_size() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkfifo("fifo");
+        at.write(FILE1, "1234567890");
+
+        ucmd.args(&["-r", "fifo", FILE1])
+            .fails_with_code(1)
+            .stderr_only("truncate: cannot get the size of 'fifo': Illegal seek\n");
+        assert_eq!(at.read(FILE1), "1234567890");
     }
 
     #[test]
