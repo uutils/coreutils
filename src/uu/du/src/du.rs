@@ -146,6 +146,19 @@ struct Stat {
 }
 
 impl Stat {
+    /// Add `other` to this stat. The sizes saturate at `u64::MAX` instead of
+    /// wrapping, since sparse files can add up past it.
+    fn accumulate(&mut self, other: &Self) {
+        self.size = self.size.saturating_add(other.size);
+        self.blocks = self.blocks.saturating_add(other.blocks);
+        self.inodes = self.inodes.saturating_add(other.inodes);
+        self.latest_time = match (self.latest_time, other.latest_time) {
+            (Some(a), Some(b)) => Some(a.max(b)),
+            (a, None) => a,
+            (None, b) => b,
+        };
+    }
+
     fn new(
         path: &Path,
         dir_entry: Option<&DirEntry>,
@@ -606,28 +619,14 @@ fn safe_du(
             )?;
 
             if !options.separate_dirs {
-                my_stat.size = my_stat.size.saturating_add(this_stat.size);
-                my_stat.blocks = my_stat.blocks.saturating_add(this_stat.blocks);
-                my_stat.inodes = my_stat.inodes.saturating_add(this_stat.inodes);
-                my_stat.latest_time = match (my_stat.latest_time, this_stat.latest_time) {
-                    (Some(a), Some(b)) => Some(a.max(b)),
-                    (a, None) => a,
-                    (None, b) => b,
-                }
+                my_stat.accumulate(&this_stat);
             }
             print_tx.send(Ok(StatPrintInfo {
                 stat: this_stat,
                 depth: depth + 1,
             }))?;
         } else {
-            my_stat.size = my_stat.size.saturating_add(this_stat.size);
-            my_stat.blocks = my_stat.blocks.saturating_add(this_stat.blocks);
-            my_stat.inodes += 1;
-            my_stat.latest_time = match (my_stat.latest_time, this_stat.latest_time) {
-                (Some(a), Some(b)) => Some(a.max(b)),
-                (a, None) => a,
-                (None, b) => b,
-            };
+            my_stat.accumulate(&this_stat);
             if options.all {
                 print_tx.send(Ok(StatPrintInfo {
                     stat: this_stat,
@@ -767,32 +766,14 @@ fn du_regular(
                                 )?;
 
                                 if !options.separate_dirs {
-                                    my_stat.size = my_stat.size.saturating_add(this_stat.size);
-                                    my_stat.blocks =
-                                        my_stat.blocks.saturating_add(this_stat.blocks);
-                                    my_stat.inodes =
-                                        my_stat.inodes.saturating_add(this_stat.inodes);
-                                    my_stat.latest_time =
-                                        match (my_stat.latest_time, this_stat.latest_time) {
-                                            (Some(a), Some(b)) => Some(a.max(b)),
-                                            (a, None) => a,
-                                            (None, b) => b,
-                                        };
+                                    my_stat.accumulate(&this_stat);
                                 }
                                 print_tx.send(Ok(StatPrintInfo {
                                     stat: this_stat,
                                     depth: depth + 1,
                                 }))?;
                             } else {
-                                my_stat.size = my_stat.size.saturating_add(this_stat.size);
-                                my_stat.blocks = my_stat.blocks.saturating_add(this_stat.blocks);
-                                my_stat.inodes += 1;
-                                my_stat.latest_time =
-                                    match (my_stat.latest_time, this_stat.latest_time) {
-                                        (Some(a), Some(b)) => Some(a.max(b)),
-                                        (a, None) => a,
-                                        (None, b) => b,
-                                    };
+                                my_stat.accumulate(&this_stat);
                                 if options.all {
                                     print_tx.send(Ok(StatPrintInfo {
                                         stat: this_stat,

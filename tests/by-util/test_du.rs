@@ -3074,53 +3074,65 @@ fn test_dereference_args_after_dereference_wins() {
 
 /// The apparent-size total must saturate instead of wrapping when the sizes
 /// add up past `u64::MAX` (GNU du prints `Infinity` in that case).
-/// Needs a filesystem that accepts files of `i64::MAX` bytes (e.g. tmpfs);
-/// the test returns early otherwise.
+/// Needs a filesystem that accepts files of `i64::MAX` bytes, such as the
+/// tmpfs usually mounted on /dev/shm; the test is skipped otherwise.
 #[test]
 #[cfg(unix)]
 fn test_du_bytes_total_saturates() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    use std::path::Path;
+    use tempfile::TempDir;
 
-    at.mkdir_all("d/sub");
-    at.write("d/payload", "hello");
+    let ts = TestScenario::new(util_name!());
+    // Keep the directory alive until the end of the test.
+    let shm = Path::new("/dev/shm")
+        .is_dir()
+        .then(|| TempDir::new_in("/dev/shm").ok())
+        .flatten();
+    let dir = shm
+        .as_ref()
+        .map_or_else(|| ts.fixtures.plus(""), |d| d.path().to_path_buf());
 
-    // i64::MAX + (u64::MAX - i64::MAX - 5 + 1): with the 5 byte payload the
-    // three sizes add up to exactly 2^64.
-    let sizes = [
-        ("d/hole1", i64::MAX as u64),
-        ("d/sub/hole2", u64::MAX - i64::MAX as u64 - 4),
-    ];
-    for (name, len) in sizes {
-        let file = std::fs::File::create(at.plus(name)).unwrap();
+    std::fs::create_dir_all(dir.join("d/sub")).unwrap();
+    std::fs::write(dir.join("d/payload"), "hello").unwrap();
+
+    // With the 5 byte payload, the three sizes add up to exactly 2^64.
+    let hole1 = i64::MAX as u64;
+    let hole2 = u64::MAX - hole1 - 4;
+    for (name, len) in [("d/hole1", hole1), ("d/sub/hole2", hole2)] {
+        let file = std::fs::File::create(dir.join(name)).unwrap();
         if file.set_len(len).is_err() {
-            // Filesystem refuses such huge sparse files.
+            println!("test skipped: the filesystem refuses {len} byte sparse files");
             return;
         }
     }
 
     let max = u64::MAX.to_string();
 
-    ucmd.args(&["-sb", "d"])
+    ts.ucmd()
+        .current_dir(&dir)
+        .args(&["-sb", "d"])
         .succeeds()
         .stdout_only(format!("{max}\td\n"));
 
     // Walker used with -L
-    new_ucmd!()
-        .current_dir(at.as_string())
+    ts.ucmd()
+        .current_dir(&dir)
         .args(&["-sbL", "d"])
         .succeeds()
         .stdout_only(format!("{max}\td\n"));
 
     // Grand total over several operands
-    new_ucmd!()
-        .current_dir(at.as_string())
+    ts.ucmd()
+        .current_dir(&dir)
         .args(&["-bc", "d/hole1", "d/sub/hole2", "d/payload"])
         .succeeds()
-        .stdout_contains(format!("{max}\ttotal"));
+        .stdout_only(format!(
+            "{hole1}\td/hole1\n{hole2}\td/sub/hole2\n5\td/payload\n{max}\ttotal\n"
+        ));
 
-    // The wrapped directory must not be dropped by --threshold
-    new_ucmd!()
-        .current_dir(at.as_string())
+    // The saturated directory must not be dropped by --threshold
+    ts.ucmd()
+        .current_dir(&dir)
         .args(&["-sb", "--threshold=1M", "d"])
         .succeeds()
         .stdout_only(format!("{max}\td\n"));
