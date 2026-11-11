@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized unwriteable
 // spell-checker:ignore renameat symlinkat unlinkat unguessability RDONLY CLOEXEC
-// spell-checker:ignore renamer fsetxattr
+// spell-checker:ignore renamer fsetxattr fchown fakeroot
 
 mod error;
 #[cfg(unix)]
@@ -1190,10 +1190,10 @@ fn rename_dir_fallback(
 
     result?;
 
-    // As for subdirectories, the mode goes on last.
+    // As for subdirectories, the owner and mode go on last.
     #[cfg(unix)]
     if let (Ok(src), Ok(dst)) = (open_dir_nofollow(from), open_dir_nofollow(to)) {
-        copy_dir_mode(&src, &dst);
+        copy_dir_owner_and_mode(&src, &dst);
     }
 
     // Remove the source directory after successful copy
@@ -1255,14 +1255,12 @@ fn copy_dir_contents(
     progress_bar: Option<&ProgressBar>,
     display_manager: Option<&MultiProgress>,
 ) -> io::Result<()> {
-    // Create the destination directory
+    // Create the destination directory. Its owner is set only after its
+    // contents are copied (by the caller), not here.
     create_dir_fail_closed(to)?;
 
     #[cfg(unix)]
     {
-        // Preserve ownership (uid/gid) of the top-level directory
-        let _ = preserve_ownership(from, to);
-
         if let (Some(tracker), Some(scanner)) = (hardlink_tracker, hardlink_scanner) {
             copy_dir_contents_recursive(
                 from,
@@ -1337,12 +1335,9 @@ fn copy_dir_contents_recursive(
 
             print_verbose(&from_path, &to_path);
         } else if from_path.is_dir() {
-            // Recursively copy subdirectory (only real directories, not symlinks)
+            // Recursively copy subdirectory (only real directories, not symlinks).
+            // Its owner is set after its contents are copied, not now.
             create_dir_fail_closed(&to_path)?;
-
-            // Preserve ownership (uid/gid) of the subdirectory
-            #[cfg(unix)]
-            let _ = preserve_ownership(&from_path, &to_path);
 
             print_verbose(&from_path, &to_path);
 
@@ -1394,9 +1389,10 @@ fn copy_dir_contents_recursive(
 /// ACLs included) and the mode of its source.
 ///
 /// This runs once the subdirectory's contents are copied, so that neither a
-/// default ACL nor a read-only mode applies to the entries created in it.
-/// Both directories are opened without following symlinks, and the xattrs and
-/// mode go through those fds, so a path swapped for a symlink is not followed.
+/// default ACL, a read-only mode, nor the source owner applies to the entries
+/// created in it. Both directories are opened without following symlinks, and
+/// every change goes through those fds, so a path swapped for a symlink is not
+/// followed.
 #[cfg(unix)]
 fn copy_subdir_xattrs_and_mode(from: &Path, to: &Path) {
     let (Ok(src), Ok(dst)) = (open_dir_nofollow(from), open_dir_nofollow(to)) else {
@@ -1414,23 +1410,34 @@ fn copy_subdir_xattrs_and_mode(from: &Path, to: &Path) {
             show_xattr_failures(Some(to), failed);
         }
     }
-    copy_dir_mode(&src, &dst);
+    copy_dir_owner_and_mode(&src, &dst);
 }
 
-/// Give the directory `dst` the mode of `src`.
+/// Give the directory `dst` the owner of `src`, best effort, then its mode.
 ///
-/// Call it after the ACL is set: while a directory has an ACL, the group bits
-/// of its mode are the ACL mask, and chmod sets the mask from them.
+/// chown first, since it clears setuid/setgid; the mode goes on after it and
+/// after any ACL, when the group bits are the ACL mask that chmod sets from.
+/// If the chown did not take, setuid/setgid stay dropped, as in GNU.
 #[cfg(unix)]
-fn copy_dir_mode(src: &fs::File, dst: &fs::File) {
+fn copy_dir_owner_and_mode(src: &fs::File, dst: &fs::File) {
+    use nix::unistd::{Gid, Uid, fchown};
     use std::os::unix::fs::MetadataExt;
 
-    if let (Ok(src_meta), Ok(dst_meta)) = (src.metadata(), dst.metadata()) {
-        let ownership_preserved =
-            src_meta.uid() == dst_meta.uid() && src_meta.gid() == dst_meta.gid();
-        let mode = preserved_mode(src_meta.mode(), ownership_preserved);
-        let _ = dst.set_permissions(fs::Permissions::from_mode(mode));
-    }
+    let Ok(src_meta) = src.metadata() else {
+        return;
+    };
+    // libc fchown so an ownership emulator such as fakeroot can intercept it.
+    let _ = fchown(
+        dst,
+        Some(Uid::from_raw(src_meta.uid())),
+        Some(Gid::from_raw(src_meta.gid())),
+    );
+    let Ok(dst_meta) = dst.metadata() else {
+        return;
+    };
+    let ownership_preserved = src_meta.uid() == dst_meta.uid() && src_meta.gid() == dst_meta.gid();
+    let mode = preserved_mode(src_meta.mode(), ownership_preserved);
+    let _ = dst.set_permissions(fs::Permissions::from_mode(mode));
 }
 
 #[cfg(unix)]
