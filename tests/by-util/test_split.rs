@@ -987,7 +987,7 @@ fn test_suffix_start_too_large_missing_input() {
 )]
 fn test_invalid_suffix_start(#[case] arg: &str, #[case] error: &str) {
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.arg(arg).pipe_in("a\n").fails().usage_error(error);
+    ucmd.arg(arg).fails().usage_error(error);
     assert!(!at.file_exists("x05"));
 }
 
