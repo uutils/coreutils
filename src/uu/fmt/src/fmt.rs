@@ -231,9 +231,6 @@ fn process_file(
                 ostream
                     .write_all(&s)
                     .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?;
-                ostream
-                    .write_all(b"\n")
-                    .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?;
             }
             Ok(para) => break_lines(&para, fmt_opts, ostream)
                 .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?,
