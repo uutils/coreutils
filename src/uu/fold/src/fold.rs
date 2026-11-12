@@ -19,6 +19,8 @@ use uucore::show;
 use uucore::translate;
 
 const TAB_WIDTH: usize = 8;
+/// Smallest rejected width: like GNU, leave room for a tab stop past the width.
+const TOO_WIDE: usize = usize::MAX - TAB_WIDTH;
 const NL: u8 = b'\n';
 const CR: u8 = b'\r';
 const TAB: u8 = b'\t';
@@ -63,8 +65,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let width = match poss_width {
         Some(inp_width) => match inp_width.parse::<usize>() {
-            // Like GNU, leave room for a tab stop past the width.
-            Ok(w) if w == 0 || w > usize::MAX - TAB_WIDTH - 1 => {
+            Ok(0 | TOO_WIDE..) => {
                 return Err(USimpleError::new(
                     1,
                     translate!("fold-error-width-out-of-range", "width" => inp_width.quote()),
