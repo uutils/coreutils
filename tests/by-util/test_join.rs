@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (words) autoformat nocheck FILENUM
 
+use rstest::rstest;
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 use std::fs::OpenOptions;
 #[cfg(unix)]
@@ -488,6 +489,30 @@ fn empty_format() {
         .arg("")
         .fails()
         .stderr_is("join: invalid file number in field spec: ''\n");
+}
+
+#[rstest]
+#[case::space("1.1,2.2 ")]
+#[case::comma("1.1,2.2,")]
+#[case::tab("1.1 2.2\t")]
+fn format_with_a_trailing_separator(#[case] format: &str) {
+    new_ucmd!()
+        .args(&["-o", format, "fields_1.txt", "fields_2.txt"])
+        .succeeds()
+        .stdout_only("1 a\n2 b\n3 c\n5 e\n8 h\n");
+}
+
+#[rstest]
+#[case::two_trailing("1.1  ")]
+#[case::comma_and_space("1.1, ")]
+#[case::leading(" 1.1")]
+#[case::doubled_inside("1.1,,2.2")]
+#[case::separator_only(",")]
+fn format_with_an_empty_field(#[case] format: &str) {
+    new_ucmd!()
+        .args(&["-o", format, "fields_1.txt", "fields_2.txt"])
+        .fails_with_code(1)
+        .stderr_contains("join: invalid file number in field spec: ''");
 }
 
 #[test]

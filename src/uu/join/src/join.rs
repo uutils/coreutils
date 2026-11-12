@@ -820,9 +820,15 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
                 }
                 // `-o` has no long form.
                 let option = OptionValue::with_names(format, Some('o'), None);
+                const SEPARATORS: [char; 3] = [' ', ',', '\t'];
+                // Like GNU, a single separator may end the list.
+                let list = format
+                    .strip_suffix(SEPARATORS)
+                    .filter(|rest| !rest.is_empty() && !rest.ends_with(SEPARATORS))
+                    .unwrap_or(format);
                 // Each field carries its place in the value, so that the caret can
                 // take the one that is at fault out of a long list.
-                for (part, span) in uucore::diagnostics::list_items(format, &[' ', ',', '\t']) {
+                for (part, span) in uucore::diagnostics::list_items(list, &SEPARATORS) {
                     specs.push(Spec::parse(part).map_err(|error| {
                         let message = error.to_string();
                         uucore::diagnostics::error_after_report(diag_args, error, |args, _| {
