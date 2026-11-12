@@ -12,6 +12,7 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::Write as FmtWrite;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::num::{NonZeroUsize, ParseIntError};
 use std::ops::Range;
 use std::path::Path;
 
@@ -209,30 +210,24 @@ struct WordRef {
     char_start: usize,
 }
 
-/// Parse a C integer the way `strtol` with base 0 does: leading blanks and a
-/// `+` sign are skipped, `0x` starts a hexadecimal number and `0` an octal one.
-fn parse_c_integer(s: &str) -> Option<i64> {
+/// Value parser for a line width or gap size. Like GNU, read a positive C
+/// integer: leading blanks and a `+` are skipped, `0x` starts a hexadecimal
+/// number and `0` an octal one.
+fn parse_positive_size(s: &str) -> Result<usize, ParseIntError> {
     let s = s.trim_start_matches([' ', '\t', '\n', '\x0b', '\x0c', '\r']);
-    let s = s.strip_prefix('+').unwrap_or(s);
-    let (digits, radix) = if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-        (hex, 16)
-    } else if s.len() > 1 && s.starts_with('0') {
-        (&s[1..], 8)
-    } else {
-        (s, 10)
+    let unsigned = s.strip_prefix('+').unwrap_or(s);
+    // `from_str_radix` takes a sign of its own, which must not follow the prefix.
+    let (digits, radix) = match unsigned.strip_prefix(['0']) {
+        Some(rest) if rest.starts_with(['x', 'X']) && !rest[1..].starts_with('+') => {
+            (&rest[1..], 16)
+        }
+        Some(rest) if !rest.is_empty() && !rest.starts_with('+') => (rest, 8),
+        _ => (s, 10),
     };
-    if digits.is_empty() || !digits.chars().all(|c| c.is_digit(radix)) {
-        return None;
+    match NonZeroUsize::new(usize::from_str_radix(digits, radix)?) {
+        Some(n) => Ok(n.get()),
+        None => "0".parse::<NonZeroUsize>().map(NonZeroUsize::get),
     }
-    i64::from_str_radix(digits, radix).ok()
-}
-
-/// Value parser for a line width or gap size, which GNU requires to be positive.
-fn parse_positive_size(value: &str) -> Result<usize, String> {
-    parse_c_integer(value)
-        .filter(|n| *n > 0)
-        .and_then(|n| usize::try_from(n).ok())
-        .ok_or_else(|| translate!("ptx-error-not-positive-integer"))
 }
 
 fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {

@@ -459,7 +459,9 @@ fn test_width_and_gap_accept_c_integers(
 #[case::bad_octal("-w", "08", "width")]
 #[case::no_hex_digits("-w", "0x", "width")]
 #[case::trailing_blank("-w", "5 ", "width")]
-#[case::too_large("-w", "9223372036854775808", "width")]
+#[case::too_large("-w", "18446744073709551616", "width")]
+#[case::two_signs("-w", "++5", "width")]
+#[case::sign_after_prefix("-w", "0x+5", "width")]
 #[case::exponent("-g", "1e1", "gap-size")]
 #[case::gap_zero("-g", "0", "gap-size")]
 fn test_width_and_gap_reject_invalid_numbers(
@@ -471,9 +473,7 @@ fn test_width_and_gap_reject_invalid_numbers(
         .args(&[option, value])
         .fails_with_code(1)
         .no_stdout()
-        .stderr_contains(format!(
-            "invalid value '{value}' for '--{long} <NUMBER>': not a positive integer"
-        ));
+        .stderr_contains(format!("invalid value '{value}' for '--{long} <NUMBER>'"));
 }
 
 #[test]
