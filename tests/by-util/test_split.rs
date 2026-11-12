@@ -1146,6 +1146,11 @@ fn test_number_kth_of_n_round_robin() {
         .args(&["-e", "--number", "r/7/7", "fivelines.txt"])
         .succeeds()
         .stdout_only("");
+    #[cfg(target_pointer_width = "32")]
+    new_ucmd!()
+        .args(&["--number", "r/1/4294967296", "fivelines.txt"])
+        .succeeds()
+        .stdout_only("1\n");
     #[cfg(target_pointer_width = "64")]
     new_ucmd!()
         .args(&[

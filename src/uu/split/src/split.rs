@@ -1271,15 +1271,28 @@ fn n_chunks_by_line_round_robin(
     // Create one writer for each chunk.
     // This will create each of the underlying files
     // or stdin pipes to child shell/command processes if in `--filter` mode
+    let num_chunks_usize = if kth_chunk.is_none() {
+        Some(usize::try_from(num_chunks).map_err(|_| {
+            USimpleError::new(
+                1,
+                translate!(
+                    "split-error-invalid-number-of-chunks",
+                    "chunks" => num_chunks.to_string().quote()
+                ),
+            )
+        })?)
+    } else {
+        None
+    };
+
     if kth_chunk.is_none() {
         out_files = OutFiles::init(num_chunks, settings, settings.elide_empty_files)?;
     }
 
-    let num_chunks: usize = num_chunks.try_into().unwrap();
     let sep = settings.separator;
     let mut closed_writers = 0;
 
-    let mut i = 0;
+    let mut i = 0_u64;
     let mut line = Vec::new();
     loop {
         line.clear();
@@ -1292,21 +1305,21 @@ fn n_chunks_by_line_round_robin(
 
         let bytes = line.as_slice();
         if let Some(chunk_number) = kth_chunk {
-            if (i % num_chunks) == (chunk_number - 1) as usize {
+            if (i % num_chunks) == chunk_number - 1 {
                 stdout_writer.write_all(bytes)?;
             }
-        } else {
-            let writer = out_files.get_writer(i % num_chunks, settings)?;
+        } else if let Some(num_chunks_usize) = num_chunks_usize {
+            let writer = out_files.get_writer((i % num_chunks) as usize, settings)?;
             let writer_stdin_open = custom_write_all(bytes, writer, settings)?;
             if !writer_stdin_open {
                 closed_writers += 1;
             }
+            if closed_writers == num_chunks_usize {
+                // all writers are closed - stop reading
+                break;
+            }
         }
         i += 1;
-        if closed_writers == num_chunks {
-            // all writers are closed - stop reading
-            break;
-        }
     }
     Ok(())
 }
