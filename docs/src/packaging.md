@@ -72,15 +72,6 @@ It is also possible to split the debuginfo into a separate package. See the
 [`split-debuginfo`](https://doc.rust-lang.org/cargo/reference/profiles.html#split-debuginfo)
 option in `cargo`.
 
-On Linux, rustix's raw syscall backend bypasses libc function interposition.
-An `LD_PRELOAD` interceptor such as `fakeroot` cannot override affected calls
-in some utilities. For example, under `fakeroot`, `id -u` still reports the
-real UID. To ship the multicall binary with rustix's libc wrappers, build with:
-
-```bash
-cargo build --release --features unix,rustix/use-libc
-```
-
 ## Profile-Guided Optimization (PGO)
 
 The release binaries we publish are built with [Profile-Guided
