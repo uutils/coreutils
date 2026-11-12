@@ -477,6 +477,18 @@ fn test_null_fullblock() {
         .no_output();
 }
 
+// fullblock is an input flag only: unlike count_bytes, GNU rejects it in oflag.
+#[test]
+fn test_oflag_fullblock_is_rejected() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "abc");
+    ucmd.args(&["if=in", "of=out", "oflag=fullblock", "status=none"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("dd: invalid output flag: 'fullblock'");
+    assert!(!at.file_exists("out"));
+}
+
 #[cfg(unix)]
 #[ignore = "See note below before using this test."]
 #[test]
