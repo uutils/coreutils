@@ -438,7 +438,7 @@ fn path_push(buf: &mut Vec<u8>, name: &OsStr) {
 }
 
 /// Whether `name` is an empty directory in `dir_fd`, asked through the
-/// descriptor rather than the path: past PATH_MAX a path-based check just
+/// descriptor rather than the path: past `PATH_MAX` a path-based check just
 /// fails, and a failure counts as non-empty, so rm would prompt before
 /// descending into an empty directory and leave it behind when that prompt is
 /// declined. An unreadable directory still counts as non-empty.

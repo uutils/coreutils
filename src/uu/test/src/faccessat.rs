@@ -6,7 +6,6 @@
 // spell-checker:ignore (vars) egid euid accessat EACCESS OPNOTSUPP NOSYS XOTH XGRP XUSR
 
 use rustix::fs::Access;
-use rustix::io;
 #[cfg(not(any(windows, target_os = "wasi")))]
 use rustix::process::{getegid, geteuid};
 use std::ffi::OsStr;
@@ -17,21 +16,27 @@ use std::fs::OpenOptions;
 /// Let the OS account for supplementary groups, ACLs and privileged users.
 #[cfg(not(any(windows, target_os = "wasi")))]
 pub(crate) fn effective_access(path: &OsStr, access: Access) -> bool {
-    use rustix::fs::{AtFlags, CWD, accessat};
+    // TODO: Use `accessat` on Redox once the issue below is resolved.
+    // https://github.com/bytecodealliance/rustix/issues/1643
+    #[cfg(not(target_os = "redox"))]
+    {
+        use rustix::fs::{AtFlags, CWD, accessat};
+        use rustix::io;
 
-    #[cfg(target_os = "android")]
-    let flags = AtFlags::empty();
+        #[cfg(target_os = "android")]
+        let flags = AtFlags::empty();
 
-    #[cfg(not(target_os = "android"))]
-    let flags = AtFlags::EACCESS;
+        #[cfg(not(target_os = "android"))]
+        let flags = AtFlags::EACCESS;
 
-    match accessat(CWD, path, access, flags) {
-        Ok(()) => true,
-        Err(io::Errno::NOSYS) | Err(io::Errno::OPNOTSUPP) => {
-            effective_access_fallback(path, access)
+        match accessat(CWD, path, access, flags) {
+            Ok(()) => true,
+            Err(io::Errno::NOSYS | io::Errno::OPNOTSUPP) => effective_access_fallback(path, access),
+            Err(_) => false,
         }
-        Err(_) => false,
     }
+    #[cfg(target_os = "redox")]
+    effective_access_fallback(path, access)
 }
 
 fn effective_access_fallback(path: &OsStr, access: Access) -> bool {

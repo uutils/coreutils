@@ -127,8 +127,17 @@ fn is_fmt_whitespace_byte(b: u8) -> bool {
 #[derive(Debug)]
 pub enum Line {
     FormatLine(FileLine),
-    /// Output bytes, including a newline only at the logical line end.
-    NoFormatLine(Vec<u8>, bool),
+    NoFormatLine(NoFormatLine),
+}
+
+/// A line that is copied as it is
+#[derive(Debug)]
+pub struct NoFormatLine {
+    pub line: Vec<u8>,
+    /// Whether the line is entirely blank
+    blank: bool,
+    /// Whether the line ends with a newline in the output
+    pub newline: bool,
 }
 
 impl Line {
@@ -141,9 +150,9 @@ impl Line {
     }
 
     /// when we know that it's a [`Line::NoFormatLine`], as in the [`ParagraphStream`] iterator
-    fn get_noformatline(self) -> (Vec<u8>, bool) {
+    fn get_noformatline(self) -> NoFormatLine {
         match self {
-            Self::NoFormatLine(s, b) => (s, b),
+            Self::NoFormatLine(nfl) => nfl,
             Self::FormatLine(..) => panic!("Found FormatLine when expecting NoFormatLine"),
         }
     }
@@ -182,6 +191,7 @@ enum LineMode {
 
 struct LimitedLine {
     bytes: Vec<u8>,
+    has_newline: bool,
     hit_limit: bool,
 }
 
@@ -239,10 +249,12 @@ impl FileLines<'_> {
                 self.pending = line.split_off(start);
             }
         }
+        let has_newline = line.ends_with(b"\n");
         Self::strip_line_ending(&mut line);
 
         Some(LimitedLine {
             bytes: line,
+            has_newline,
             hit_limit,
         })
     }
@@ -327,14 +339,18 @@ impl Iterator for FileLines<'_> {
     type Item = Line;
 
     fn next(&mut self) -> Option<Line> {
-        let (mut n, hit_limit, continuing) = loop {
-            let LimitedLine { bytes, hit_limit } = self.read_limited_line()?;
+        let (n, has_newline, hit_limit, continuing) = loop {
+            let LimitedLine {
+                bytes,
+                has_newline,
+                hit_limit,
+            } = self.read_limited_line()?;
             let continuing = self.continuation.take();
             if matches!(continuing, Some(LineMode::Format)) && bytes.is_empty() && !hit_limit {
                 // The preceding formatted chunk already supplied its newline.
                 continue;
             }
-            break (bytes, hit_limit, continuing);
+            break (bytes, has_newline, hit_limit, continuing);
         };
 
         // Blank lines enable mail-header detection, except in pass-through mode.
@@ -344,7 +360,11 @@ impl Iterator for FileLines<'_> {
             if hit_limit {
                 self.continuation = Some(LineMode::Format);
             }
-            return Some(Line::NoFormatLine(vec![b'\n'], true));
+            return Some(Line::NoFormatLine(NoFormatLine {
+                line: Vec::new(),
+                blank: true,
+                newline: true,
+            }));
         }
 
         let (pmatch, poffset) = if continuing.is_some() {
@@ -357,8 +377,9 @@ impl Iterator for FileLines<'_> {
         } else {
             poffset + self.opts.prefix.as_ref().map_or(0, String::len)
         };
+        let prefix_only = pmatch && n[prefix_end..].iter().all(|&b| is_fmt_whitespace_byte(b));
         let mode = continuing.unwrap_or_else(|| {
-            if !pmatch || !self.match_anti_prefix(&n) {
+            if !pmatch || (!prefix_only && !self.match_anti_prefix(&n)) {
                 LineMode::PassThrough
             } else {
                 LineMode::Format
@@ -369,18 +390,20 @@ impl Iterator for FileLines<'_> {
         }
 
         if matches!(mode, LineMode::PassThrough) {
-            // Output chunks verbatim; only the logical line end adds a newline.
-            if !hit_limit {
-                n.push(b'\n');
-            }
-            return Some(Line::NoFormatLine(n, false));
+            // Only the logical line ending supplies a newline, even at EOF.
+            return Some(Line::NoFormatLine(NoFormatLine {
+                line: n,
+                blank: false,
+                newline: has_newline,
+            }));
         }
 
-        if n[prefix_end..].iter().all(|&b| is_fmt_whitespace_byte(b)) {
-            if !hit_limit {
-                n.push(b'\n');
-            }
-            return Some(Line::NoFormatLine(n, false));
+        if prefix_only {
+            return Some(Line::NoFormatLine(NoFormatLine {
+                line: n,
+                blank: false,
+                newline: !hit_limit,
+            }));
         }
 
         let (indent_end, prefix_len, indent_len) = self.compute_indent(&n, prefix_end);
@@ -470,21 +493,21 @@ impl ParagraphStream<'_> {
 }
 
 impl Iterator for ParagraphStream<'_> {
-    type Item = Result<Paragraph, Vec<u8>>;
+    type Item = Result<Paragraph, NoFormatLine>;
 
     #[allow(clippy::cognitive_complexity)]
-    fn next(&mut self) -> Option<Result<Paragraph, Vec<u8>>> {
+    fn next(&mut self) -> Option<Result<Paragraph, NoFormatLine>> {
         // return a NoFormatLine in an Err; it should immediately be output
         let noformat = match self.lines.peek()? {
             Line::FormatLine(_) => false,
-            Line::NoFormatLine(_, _) => true,
+            Line::NoFormatLine(_) => true,
         };
 
         // found a NoFormatLine, immediately dump it out
         if noformat {
-            let (s, nm) = self.lines.next().unwrap().get_noformatline();
-            self.next_mail = nm;
-            return Some(Err(s));
+            let nfl = self.lines.next().unwrap().get_noformatline();
+            self.next_mail = nfl.blank;
+            return Some(Err(nfl));
         }
 
         // found a FormatLine, now build a paragraph
@@ -501,8 +524,6 @@ impl Iterator for ParagraphStream<'_> {
         let mut in_mail = false;
         let mut second_done = false; // for when we use crown or tagged mode
         while let Some(Line::FormatLine(fl)) = self.lines.peek() {
-            // peek ahead
-            // need to explicitly force fl out of scope before we can call self.lines.next()
             if p_lines.is_empty() {
                 // first time through the loop, get things set up
                 // detect mail header

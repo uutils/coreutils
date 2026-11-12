@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (ToDO) rwxr sourcepath targetpath Isnt uioerror matchpathcon
 
+#![cfg(unix)]
+
 mod mode;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
@@ -17,6 +19,8 @@ use std::fmt::Debug;
 use std::fs::{self, metadata};
 use std::fs::{File, OpenOptions};
 use std::io::{Write, stdout};
+use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+use std::os::unix::prelude::OsStrExt;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process;
 use uucore::backup_control::{self, BackupMode, backup_would_destroy_source};
@@ -26,7 +30,7 @@ use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
 use uucore::fs::{are_files_identical, dir_strip_dot_for_creation};
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
-#[cfg(unix)]
+#[cfg(not(target_os = "redox"))]
 use uucore::safe_traversal::{DirFd, SymlinkBehavior, create_dir_all_safe};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::{
@@ -34,12 +38,7 @@ use uucore::selinux::{
     selinux_error_description, set_selinux_security_context,
 };
 use uucore::translate;
-use uucore::{format_usage, show, show_error, show_if_err};
-
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
-#[cfg(unix)]
-use std::os::unix::prelude::OsStrExt;
+use uucore::{format_usage, show, show_error, show_if_err, show_warning};
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
@@ -83,8 +82,14 @@ enum InstallError {
     #[error("{}", translate!("install-error-invalid-target", "path" => .0.quote()))]
     InvalidTarget(PathBuf),
 
-    #[error("{}", translate!("install-error-target-not-dir", "path" => .0.quote()))]
-    TargetDirIsntDir(PathBuf),
+    #[error("{}", translate!("install-error-target-not-dir", "path" => .0.quote(), "error" => strip_errno(.1)))]
+    TargetDirIsntDir(PathBuf, #[source] std::io::Error),
+
+    #[error("{}", translate!("install-error-target-stat", "path" => .0.quote(), "error" => strip_errno(.1)))]
+    TargetStatFailed(PathBuf, #[source] std::io::Error),
+
+    #[error("{}", translate!("install-error-create-regular-file", "path" => .0.quote(), "error" => strip_errno(.1)))]
+    CreateRegularFileFailed(PathBuf, #[source] std::io::Error),
 
     #[error("{}", translate!("install-error-backup-failed", "from" => .0.quote(), "error" => strip_errno(.1)))]
     BackupFailed(PathBuf, #[source] std::io::Error),
@@ -205,10 +210,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let behavior = behavior(&matches, diag_args.as_deref())?;
 
-    match behavior.main_function {
+    // Like GNU, work with the umask cleared: new ancestor directories get
+    // exactly DEFAULT_MODE and the strip program sees a umask of 0.
+    uucore::mode::with_umask(0, || match behavior.main_function {
         MainFunction::Directory => directory(&paths, &behavior),
         MainFunction::Standard => standard(paths, &behavior),
-    }
+    })
 }
 
 pub fn uu_app() -> Command {
@@ -450,8 +457,17 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
         None
     };
 
-    let context = matches.get_one::<String>(OPT_CONTEXT).cloned();
-    let default_context = matches.get_flag(OPT_DEFAULT_CONTEXT);
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    let selinux_enabled = is_selinux_enabled();
+    #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
+    let selinux_enabled = false;
+
+    let mut context = matches.get_one::<String>(OPT_CONTEXT).cloned();
+    if context.is_some() && !selinux_enabled {
+        show_warning!("{}", translate!("install-warning-context-ignored"));
+        context = None;
+    }
+    let default_context = matches.get_flag(OPT_DEFAULT_CONTEXT) && selinux_enabled;
     let privileged = !matches.get_flag(OPT_UNPRIVILEGED);
 
     Ok(Behavior {
@@ -489,39 +505,46 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
     }
 
     for path in paths.iter().map(Path::new) {
+        // Like GNU, `install -d foo/.` creates foo, where `create_dir("foo/.")`
+        // fails; mkdir.rs does the same.
+        let path_to_create = dir_strip_dot_for_creation(path);
+        // Set up first: like GNU, an unusable context fails even when nothing is created.
+        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+        let _selinux_guard = match directory_creation_context(&path_to_create, b) {
+            Ok(guard) => guard,
+            Err(e) => {
+                show!(e);
+                continue;
+            }
+        };
         // if the path already exist, check if it's a file
         if path.exists() {
             if !path.is_dir() {
                 show!(InstallError::ExistingFileNotADirectory(path.to_path_buf()));
                 continue;
             }
+            // Like GNU, -Z resets an existing target to its default context; --context doesn't.
+            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+            if uses_default_context(b) {
+                show_if_err!(
+                    set_selinux_security_context(path, None)
+                        .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))
+                );
+            }
         } else {
-            // Special case to match GNU's behavior:
-            // install -d foo/. should work and just create foo/
-            // std::fs::create_dir("foo/."); fails in pure Rust
-            // See also mkdir.rs for another occurrence of this
-            let path_to_create = dir_strip_dot_for_creation(path);
             // Differently than the primary functionality
             // (MainFunction::Standard), the directory functionality should
             // create all ancestors (or components) of a directory
             // regardless of the presence of the "-D" flag.
             //
-            // NOTE: the GNU "install" sets the expected mode only for the
-            // target directory. All created ancestor directories will have
-            // the default mode. Hence it is safe to use fs::create_dir_all
-            // and then only modify the target's dir mode.
-            if let Err(e) = fs::create_dir_all(&path_to_create).map_err_context(
+            // Only the target gets the requested mode; newly created ancestors
+            // use DEFAULT_MODE.
+            let created = create_dir_all_with(&path_to_create, &mut label_new_directories(b));
+            if let Err(e) = created.map_err_context(
                 || translate!("install-error-create-dir-failed", "path" => path_to_create.quote()),
             ) {
                 show!(e);
                 continue;
-            }
-
-            // Set SELinux context for all created directories if needed
-            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-            if should_set_selinux_context(b) {
-                let context = get_context_for_selinux(b);
-                set_selinux_context_for_directories_install(path_to_create.as_path(), context);
             }
 
             if b.verbose {
@@ -541,17 +564,6 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
             show!(e);
             uucore::error::set_exit_code(1);
             continue;
-        }
-
-        // Set SELinux context for directory if needed
-        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-        if b.privileged {
-            if b.default_context {
-                show_if_err!(set_selinux_default_context(path));
-            } else if b.context.is_some() {
-                let context = get_context_for_selinux(b);
-                show_if_err!(set_selinux_security_context(path, context));
-            }
         }
 
         if mode::chmod(path, b.mode()).is_err() {
@@ -588,18 +600,9 @@ fn is_valid_target(path: &Path) -> bool {
 ///
 /// Returns true, if one of the conditions above is met; else false.
 ///
-#[cfg(unix)]
 fn is_potential_directory_path(path: &Path) -> bool {
     let separator = MAIN_SEPARATOR as u8;
     path.as_os_str().as_bytes().last() == Some(&separator) || path.is_dir()
-}
-
-#[cfg(not(unix))]
-fn is_potential_directory_path(path: &Path) -> bool {
-    matches!(
-        path.as_os_str().as_encoded_bytes().last(),
-        Some(b'/') | Some(b'\\')
-    ) || path.is_dir()
 }
 
 /// Perform an install, given a list of paths and behavior.
@@ -644,9 +647,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
     let sources = &paths.iter().map(PathBuf::from).collect::<Vec<_>>();
 
-    #[cfg(unix)]
+    #[cfg(not(target_os = "redox"))]
     let mut target_parent_fd: Option<DirFd> = None;
-    #[cfg(unix)]
+    #[cfg(not(target_os = "redox"))]
     let mut target_filename: Option<OsString> = None;
 
     if b.create_leading {
@@ -660,12 +663,21 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             None
         };
 
-        // If -t is used, check if target exists as a file before trying to create directories
-        if b.target_dir.is_some() && target.exists() && !target.is_dir() {
-            return Err(InstallError::NotADirectory(target).into());
+        // Reject inaccessible -t targets before trying to create directories.
+        if b.target_dir.is_some() {
+            match metadata(&target) {
+                Ok(meta) if !meta.is_dir() => {
+                    return Err(InstallError::NotADirectory(target).into());
+                }
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                    return Err(InstallError::TargetDirAccess(target, e).into());
+                }
+                _ => {}
+            }
         }
 
         if let Some(to_create) = to_create {
+            #[cfg(not(target_os = "redox"))]
             let to_create_original = to_create;
             let to_create_owned;
             let to_create = match uucore::os_str_as_bytes(to_create.as_os_str()) {
@@ -684,7 +696,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             let dir_exists = to_create.exists() && metadata(to_create).is_ok_and(|m| m.is_dir());
 
             if dir_exists {
-                #[cfg(unix)]
+                #[cfg(not(target_os = "redox"))]
                 if b.target_dir.is_none()
                     && sources.len() == 1
                     && !is_potential_directory_path(&target)
@@ -695,6 +707,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     target_filename = Some(filename.to_os_string());
                 }
             } else {
+                // Before the -v lines, so a context error reports no directories.
+                #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+                let selinux_guard = directory_creation_context(to_create, b)?;
                 if b.verbose {
                     let mut result = PathBuf::new();
                     // When creating directories with -Dv, show directory creations step by step
@@ -711,11 +726,17 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     }
                 }
 
-                #[cfg(unix)]
+                #[cfg(not(target_os = "redox"))]
                 {
-                    // Use DEFAULT_MODE (0o755) for created directories - this matches GNU install
-                    // behavior. The actual mode will be modified by umask at the kernel level.
-                    match create_dir_all_safe(to_create, DEFAULT_MODE) {
+                    let created =
+                        create_dir_all_safe(to_create, DEFAULT_MODE, label_new_directories(b));
+                    // End the creation context before any file is created.
+                    #[cfg(all(
+                        feature = "selinux",
+                        any(target_os = "linux", target_os = "android")
+                    ))]
+                    drop(selinux_guard);
+                    match created {
                         Ok(dir_fd) => {
                             if b.target_dir.is_none()
                                 && sources.len() == 1
@@ -724,16 +745,6 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                             {
                                 target_parent_fd = Some(dir_fd);
                                 target_filename = Some(filename.to_os_string());
-                            }
-
-                            // Set SELinux context for all created directories if needed
-                            #[cfg(all(
-                                feature = "selinux",
-                                any(target_os = "linux", target_os = "android")
-                            ))]
-                            if should_set_selinux_context(b) {
-                                let context = get_context_for_selinux(b);
-                                set_selinux_context_for_directories_install(to_create, context);
                             }
                         }
                         Err(e) => {
@@ -754,8 +765,11 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                         }
                     }
                 }
-                #[cfg(not(unix))]
-                fs::create_dir_all(to_create)
+                #[cfg(target_os = "redox")]
+                fs::DirBuilder::new()
+                    .recursive(true)
+                    .mode(DEFAULT_MODE)
+                    .create(to_create)
                     .map_err(|e| InstallError::CreateDirFailed(to_create.to_path_buf(), e))?;
             }
         }
@@ -783,16 +797,33 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
         if b.backup_mode.ne(&BackupMode::None)
             && let Ok(to_abs) = target.canonicalize()
-            && source.canonicalize()? == to_abs
+            && source
+                .canonicalize()
+                .is_ok_and(|from_abs| from_abs == to_abs)
         {
             return Err(InstallError::SameFile(source.clone(), target.clone()).into());
         }
 
         if is_valid_target(&target) {
-            #[cfg(unix)]
+            #[cfg(not(target_os = "redox"))]
             if let (Some(ref parent_fd), Some(ref filename)) = (target_parent_fd, target_filename) {
                 if b.compare && !need_copy(source, &target, b) {
                     return Ok(());
+                }
+
+                // Check before the destination is removed below, which would
+                // remove the source if both are the same file.
+                let source_meta = metadata(source)?;
+                if let Ok(to_stat) =
+                    parent_fd.stat_at(filename.as_os_str(), SymlinkBehavior::Follow)
+                {
+                    // st_dev and st_ino types vary by platform (i32/u32 on macOS, u64 on Linux)
+                    #[allow(clippy::unnecessary_cast)]
+                    if source_meta.dev() == to_stat.st_dev as u64
+                        && source_meta.ino() == to_stat.st_ino as u64
+                    {
+                        return Err(InstallError::SameFile(source.clone(), target.clone()).into());
+                    }
                 }
 
                 let backup_path = perform_backup(source, &target, b)?;
@@ -812,7 +843,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             } else {
                 copy(source, &target, b)
             }
-            #[cfg(not(unix))]
+            #[cfg(target_os = "redox")]
             {
                 copy(source, &target, b)
             }
@@ -839,14 +870,27 @@ fn metadata_for_source(path: &Path) -> UResult<fs::Metadata> {
 ///
 fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UResult<()> {
     if !target_dir.is_dir() {
+        let reason = metadata(target_dir)
+            .err()
+            .unwrap_or_else(|| rustix::io::Errno::NOTDIR.into());
         if b.target_dir.is_some() {
-            // GNU names why the `-t` directory cannot be used.
-            let reason = metadata(target_dir)
-                .err()
-                .unwrap_or_else(|| rustix::io::Errno::NOTDIR.into());
             return Err(InstallError::TargetDirAccess(target_dir.to_path_buf(), reason).into());
         }
-        return Err(InstallError::TargetDirIsntDir(target_dir.to_path_buf()).into());
+        if files.len() > 1 {
+            return Err(InstallError::TargetDirIsntDir(target_dir.to_path_buf(), reason).into());
+        }
+        if reason.kind() != std::io::ErrorKind::NotFound {
+            return Err(InstallError::TargetStatFailed(target_dir.to_path_buf(), reason).into());
+        }
+        // A trailing slash requires a directory even when its parent exists.
+        let create_error = if is_new_file_path(target_dir) {
+            rustix::io::Errno::NOTDIR.into()
+        } else {
+            reason
+        };
+        return Err(
+            InstallError::CreateRegularFileFailed(target_dir.to_path_buf(), create_error).into(),
+        );
     }
     let mut installed_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
     for sourcepath in files {
@@ -946,7 +990,18 @@ fn perform_backup(from: &Path, to: &Path, b: &Behavior) -> UResult<Option<PathBu
         );
     }
 
-    if to.exists() {
+    // Never move a directory aside to put a file in its place. Like GNU,
+    // refuse it, but still back up a symlink to a directory.
+    if b.backup_mode != BackupMode::None && fs::symlink_metadata(to).is_ok_and(|m| m.is_dir()) {
+        return Err(InstallError::CreateRegularFileFailed(
+            to.to_path_buf(),
+            rustix::io::Errno::ISDIR.into(),
+        )
+        .into());
+    }
+
+    // A dangling symlink is still a destination entry to back up.
+    if to.symlink_metadata().is_ok() {
         if b.verbose {
             writeln!(
                 stdout(),
@@ -975,21 +1030,8 @@ fn perform_backup(from: &Path, to: &Path, b: &Behavior) -> UResult<Option<PathBu
 /// be consolidated because they use fundamentally different APIs:
 /// - `copy_file_safe` uses fd-based `DirFd::open_file_at()` (openat syscall)
 /// - `copy_file` uses path-based `OpenOptions::new().create_new().open()`
-#[cfg(unix)]
+#[cfg(not(target_os = "redox"))]
 fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsStr) -> UResult<()> {
-    let from_meta = metadata(from)?;
-
-    // Check if source and destination are the same file
-    if let Ok(to_stat) = to_parent_fd.stat_at(to_filename, SymlinkBehavior::Follow) {
-        // st_dev and st_ino types vary by platform (i32/u32 on macOS, u64 on Linux)
-        #[allow(clippy::unnecessary_cast)]
-        if from_meta.dev() == to_stat.st_dev as u64 && from_meta.ino() == to_stat.st_ino as u64 {
-            return Err(
-                InstallError::SameFile(from.to_path_buf(), PathBuf::from(to_filename)).into(),
-            );
-        }
-    }
-
     let mut src = File::open(from)?;
     let mut dst = to_parent_fd.open_file_at(to_filename)?;
     copy_fast(&mut src, &mut dst)?;
@@ -1011,8 +1053,9 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
 ///
 fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     use std::os::unix::fs::OpenOptionsExt;
+    // Pipe-backed descriptors can be opened even when canonicalize fails.
     if let Ok(to_abs) = to.canonicalize()
-        && from.canonicalize()? == to_abs
+        && from.canonicalize().is_ok_and(|from_abs| from_abs == to_abs)
     {
         return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
     }
@@ -1239,15 +1282,16 @@ fn should_set_selinux_context(b: &Behavior) -> bool {
     b.privileged && (b.context.is_some() || b.default_context)
 }
 
-/// Check if a file needs to be copied due to ownership differences when no explicit group is specified.
-/// Returns true if the destination file's ownership would differ from what it should be after installation.
-fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
-    use std::os::unix::fs::MetadataExt;
+/// Whether -Z applies: `behavior` only sets `default_context` with SELinux enabled.
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+fn uses_default_context(b: &Behavior) -> bool {
+    b.privileged && b.default_context
+}
 
-    // Check if the destination file's owner differs from the effective user ID
-    if to_meta.uid() != geteuid().as_raw() {
-        return true;
-    }
+/// Check if a file needs to be copied due to a group difference when no explicit group is specified.
+/// Returns true if the destination file's group would differ from what it should be after installation.
+fn needs_copy_for_group(to: &Path, to_meta: &fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
 
     // For group, we need to determine what the group would be after installation
     // If no group is specified, the behavior depends on the directory:
@@ -1343,16 +1387,16 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
 
         // TODO: if -P (#1809) and from/to contexts mismatch, return true.
 
-        // Check if the owner ID is specified and differs from the destination file's owner.
-        match b.owner_id {
-            Some(uid) if uid != to_meta.uid() => return true,
-            _ => {}
+        // Check if the destination file's owner differs from the specified owner ID,
+        // or from the effective user ID when no owner is specified.
+        if to_meta.uid() != b.owner_id.unwrap_or_else(|| geteuid().as_raw()) {
+            return true;
         }
 
         // Check if the group ID is specified and differs from the destination file's group.
         match b.group_id {
             Some(gid) if gid != to_meta.gid() => return true,
-            None if needs_copy_for_ownership(to, &to_meta) => return true,
+            None if needs_copy_for_group(to, &to_meta) => return true,
             _ => {}
         }
     }
@@ -1424,34 +1468,22 @@ fn get_default_context_for_path(path: &Path) -> Result<Option<String>, SeLinuxEr
         return Err(SeLinuxError::SELinuxNotEnabled);
     }
 
-    // Find the first existing parent directory to get its context
-    let mut current_path = path;
-    loop {
-        if current_path.exists()
-            && let Ok(parent_context) = get_selinux_security_context(current_path, false)
-            && !parent_context.is_empty()
-        {
-            // Found a context - derive the appropriate context for our target
-            return Ok(Some(derive_context_from_parent(&parent_context)));
-        }
-
-        // Move up to parent
-        if let Some(parent) = current_path.parent() {
-            if parent == current_path {
-                break; // Reached root
-            }
-            current_path = parent;
-        } else {
-            break;
-        }
-
-        if current_path == Path::new("/") || current_path.as_os_str().is_empty() {
-            break;
-        }
-    }
-
-    // If we can't determine from any parent, return None to fall back to default behavior
-    Ok(None)
+    // Take the context of `path` or of its nearest ancestor that has one, stopping
+    // before `/` or the empty parent of a relative path. With none, return None to
+    // fall back to the default behavior.
+    let parents = path
+        .ancestors()
+        .skip(1)
+        .take_while(|parent| *parent != Path::new("/") && !parent.as_os_str().is_empty());
+    let context = std::iter::once(path)
+        .chain(parents)
+        .filter(|candidate| candidate.exists())
+        .find_map(|candidate| {
+            get_selinux_security_context(candidate, false)
+                .ok()
+                .filter(|context| !context.is_empty())
+        });
+    Ok(context.map(|context| derive_context_from_parent(&context)))
 }
 
 /// Derives an appropriate `SELinux` context based on a parent directory context.
@@ -1487,79 +1519,71 @@ fn derive_context_from_parent(parent_context: &str) -> String {
     }
 }
 
-/// Helper function to collect paths that need `SELinux` context setting.
-///
-/// Traverses from the given starting path up to existing parent directories.
-/// Returns a vector of paths in reverse order (from parent to child).
+/// With --context, label the directories created while the returned guard lives.
+/// -Z looks up each one instead, in `label_new_directories`.
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-fn collect_paths_for_context_setting(starting_path: &Path) -> Vec<&Path> {
-    let mut paths: Vec<&Path> = starting_path
-        .ancestors()
-        .take_while(|p| p.exists())
-        .collect();
-    paths.reverse();
-    paths
+fn directory_creation_context(
+    path: &Path,
+    b: &Behavior,
+) -> Result<Option<uucore::selinux::FsCreateContext>, InstallError> {
+    if b.default_context || !should_set_selinux_context(b) {
+        return Ok(None);
+    }
+    uucore::selinux::FsCreateContext::new(path, None, b.context.as_ref())
+        .map(Some)
+        .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))
 }
 
-/// Sets the `SELinux` security context for a directory hierarchy.
-///
-/// This function traverses from the given starting path up to existing parent directories
-/// and sets the `SELinux` context on each directory in the hierarchy (from parent to child).
-/// This is useful when creating directory structures and needing to set contexts on all
-/// created directories.
-///
-/// # Arguments
-///
-/// * `target_path` - The target path (typically the deepest directory in a hierarchy)
-/// * `context` - Optional `SELinux` context string to set. If None, sets default context.
-///
-/// # Behavior
-///
-/// - Traverses from `target_path` upward to find existing parent directories
-/// - Sets the context on each directory in reverse order (parent to child)
-/// - Uses `show_if_err!` to handle errors gracefully without panicking
-/// - Stops at filesystem root ("/") or empty path to prevent infinite loops
-/// - Only processes paths that exist on the filesystem
-/// - Silently handles `SELinux` context setting failures
-///
-/// # Examples
-///
-/// ```no_run
-/// use std::path::Path;
-///
-/// // Set default context on directory hierarchy
-/// // set_selinux_context_for_directories(Path::new("/tmp/new/deep/dir"), None);
-///
-/// // Set specific context on directory hierarchy
-/// // let context = String::from("user_u:object_r:tmp_t:s0");
-/// // set_selinux_context_for_directories(Path::new("/tmp/new/deep/dir"), Some(&context));
-/// ```
+/// The `before_create` hook for directory creation. With -Z, like GNU, each new
+/// directory is labelled with the policy's default for its own name.
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-fn set_selinux_context_for_directories(target_path: &Path, context: Option<&String>) {
-    for path in collect_paths_for_context_setting(target_path) {
-        show_if_err!(set_selinux_security_context(path, context));
+fn label_new_directories(
+    b: &Behavior,
+) -> impl FnMut(&Path) -> std::io::Result<Option<uucore::selinux::FsCreateContext>> + '_ {
+    move |path| {
+        if !uses_default_context(b) {
+            return Ok(None);
+        }
+        let mode = uucore::libc::S_IFDIR | DEFAULT_MODE as uucore::libc::mode_t;
+        uucore::selinux::FsCreateContext::new(path, Some(mode), None)
+            .map(Some)
+            .map_err(std::io::Error::other)
     }
 }
 
-/// Sets `SELinux` context for created directories using install's -Z default behavior.
-///
-/// Similar to `set_selinux_context_for_directories` but uses install's
-/// specific default context derivation when no context is provided.
-///
-/// # Arguments
-///
-/// * `target_path` - The target path (typically the deepest directory in a hierarchy)
-/// * `context` - Optional `SELinux` context string to set. If None, uses install's default derivation.
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-pub fn set_selinux_context_for_directories_install(target_path: &Path, context: Option<&String>) {
-    if context.is_some() {
-        // Use the standard function for explicit contexts
-        set_selinux_context_for_directories(target_path, context);
-    } else {
-        // For default context, we need our custom install behavior
-        for path in collect_paths_for_context_setting(target_path) {
-            show_if_err!(set_selinux_default_context(path));
-        }
+#[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
+fn label_new_directories(_b: &Behavior) -> impl FnMut(&Path) -> std::io::Result<()> {
+    |_| Ok(())
+}
+
+/// Like [`fs::create_dir_all`], and in the same steps so errors match, but calls
+/// `before_create` before each `mkdir` and keeps what it returns until it is done.
+fn create_dir_all_with<G>(
+    path: &Path,
+    before_create: &mut impl FnMut(&Path) -> std::io::Result<G>,
+) -> std::io::Result<()> {
+    if path.as_os_str().is_empty() {
+        return Ok(());
+    }
+    match create_dir_with(path, before_create) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        res => return res,
+    }
+    if let Some(parent) = path.parent() {
+        create_dir_all_with(parent, before_create)?;
+    }
+    create_dir_with(path, before_create)
+}
+
+/// One `mkdir` of [`create_dir_all_with`], accepting a directory already there.
+fn create_dir_with<G>(
+    dir: &Path,
+    before_create: &mut impl FnMut(&Path) -> std::io::Result<G>,
+) -> std::io::Result<()> {
+    let _created_with = before_create(dir)?;
+    match fs::DirBuilder::new().mode(DEFAULT_MODE).create(dir) {
+        Err(_) if dir.is_dir() => Ok(()),
+        res => res,
     }
 }
 

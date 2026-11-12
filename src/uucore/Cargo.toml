@@ -59,6 +59,7 @@ blake3 = { workspace = true, optional = true }
 sm3 = { workspace = true, optional = true }
 crc-fast = { workspace = true, optional = true, features = ["std"] }
 bigdecimal = { workspace = true, optional = true }
+num-bigint = { workspace = true, optional = true }
 num-traits = { workspace = true, optional = true }
 
 # icu stuff
@@ -106,9 +107,10 @@ dns-lookup = { workspace = true, optional = true }
 rustix = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
+# Core error conversions and signal setup use nix even without optional features.
+nix = { workspace = true, features = ["signal"] }
 # utmpx is unix-only, so its dependencies must not be pulled into other targets
 # (the uptime feature enables utmpx and now builds on windows too).
-nix = { workspace = true, optional = true }
 time = { workspace = true, optional = true, features = [
   "formatting",
   "local-offset",
@@ -151,11 +153,17 @@ utmp-classic = { workspace = true, optional = true }
 [features]
 default = ["signals"]
 # * non-default features
-backup-control = []
+backup-control = ["fs"]
 colors = []
 diagnostics = ["dep:ariadne"]
 checksum = ["base64-simd", "quoting-style", "rustix/fs", "sum"]
-encoding = ["data-encoding", "data-encoding-macro", "z85", "base64-simd"]
+encoding = [
+  "data-encoding",
+  "data-encoding-macro",
+  "z85",
+  "base64-simd",
+  "num-bigint",
+]
 entries = ["libc", "rustix/fs", "rustix/process"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
 fast-inc = []
@@ -164,7 +172,6 @@ fsext = ["libc", "windows-sys", "bstr", "wide"]
 fsxattr = ["xattr", "itertools", "libc"]
 hardware = []
 lines = []
-feat_systemd_logind = ["utmpx", "libc"]
 format = [
   "bigdecimal",
   "extendedbigdecimal",
@@ -186,7 +193,8 @@ i18n-datetime = [
   "jiff-icu",
   "jiff",
 ]
-mode = ["libc", "rustix/process"]
+mode = ["libc", "quoting-style", "rustix/process"]
+numeric-str-cmp = ["i18n-decimal"]
 perms = ["entries", "libc", "safe-traversal", "walkdir"]
 buf-copy = ["pipes"]
 parser-num = ["extendedbigdecimal", "num-traits"]
@@ -201,7 +209,7 @@ ranges = []
 ringbuffer = []
 safe-copy = ["rustix/fs"]
 safe-traversal = ["libc", "nix/fs", "nix/dir", "nix/user", "rustix/fs"]
-selinux = ["dep:selinux"]
+selinux = ["dep:selinux", "libc"]
 smack = ["xattr"]
 signals = ["nix/fs", "nix/signal", "nix/poll"]
 sum = [
@@ -219,6 +227,7 @@ sum = [
   "crc-fast",
   "data-encoding",
 ]
+systemd_logind = ["utmpx", "libc"]
 # Use OpenSSL (libcrypto) for md5/sha1/sha2-family digests instead of the
 # pure-Rust crates. This dramatically speeds up checksum utilities on CPUs
 # without SHA-NI by using OpenSSL's optimized assembly implementations.

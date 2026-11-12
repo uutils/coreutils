@@ -83,6 +83,7 @@ dd-standard-output = 'standard output'
 dd-error-failed-to-open = failed to open { $path }
 dd-error-write-error = write error
 dd-error-failed-to-seek = failed to seek in output file
+dd-error-failed-to-truncate = failed to truncate to { $size } bytes in output file { $file }
 dd-error-io-error = IO error
 dd-error-cannot-skip-offset = '{ $file }': cannot skip to specified offset
 dd-error-cannot-skip-invalid = '{ $file }': cannot skip: Invalid argument
@@ -101,7 +102,6 @@ dd-error-invalid-output-flag = invalid output flag: '{ $flag }'
 dd-error-conv-flag-no-match = invalid conversion: '{ $flag }'
 dd-error-multiplier-parse-failure = invalid number: '{ $input }'
 dd-error-multiplier-overflow = Multiplier string would overflow on current system -> { $input }
-dd-error-block-without-cbs = conv=block or conv=unblock specified without cbs=N
 dd-error-status-not-recognized = invalid status level: '{ $level }'
 dd-error-unimplemented = feature not implemented on this system -> { $feature }
 dd-error-bs-out-of-range = { $param }=N cannot fit into memory

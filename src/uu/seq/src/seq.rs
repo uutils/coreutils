@@ -79,6 +79,60 @@ fn split_short_args_with_value(args: impl uucore::Args) -> impl uucore::Args {
     v.into_iter()
 }
 
+/// Insert "--" in front of the first operand, so option parsing stops there.
+/// An argument starting with "-" is an operand only when a
+/// digit or "." follows (a negative number); anything else in front of the
+/// first operand is an option, so `seq --foo` and `seq -inf 1` are rejected as
+/// options instead of being parsed as numbers.
+fn mark_first_operand(args: Vec<OsString>) -> Vec<OsString> {
+    let mut out = Vec::with_capacity(args.len() + 1);
+    let mut iter = args.into_iter();
+    // the program name
+    out.extend(iter.next());
+    let mut takes_value = false;
+    for arg in iter.by_ref() {
+        let bytes = arg.as_encoded_bytes();
+        if takes_value {
+            takes_value = false;
+            out.push(arg);
+            continue;
+        }
+        if bytes == b"--" {
+            out.push(arg);
+            break;
+        }
+        let is_option = Some(&b'-') == bytes.first()
+            && bytes
+                .get(1)
+                .is_some_and(|c| !(c.is_ascii_digit() || *c == b'.'));
+        if !is_option {
+            out.push(OsString::from("--"));
+            out.push(arg);
+            break;
+        }
+        if let Some(long) = bytes.strip_prefix(b"--") {
+            takes_value = !long.contains(&b'=')
+                && !long.is_empty()
+                && [OPT_SEPARATOR, OPT_TERMINATOR, OPT_FORMAT]
+                    .iter()
+                    .any(|name| name.as_bytes().starts_with(long));
+        } else {
+            // a cluster of short options like "-ws", where the last one may
+            // need the next argument as its value
+            if let Some(i) = bytes
+                .iter()
+                .skip(1)
+                .position(|c| matches!(c, b's' | b't' | b'f'))
+            {
+                takes_value = i + 2 == bytes.len();
+            }
+        }
+        out.push(arg);
+    }
+    out.extend(iter);
+    out
+}
+
 fn select_precision(
     first: &PreciseNumber,
     increment: &PreciseNumber,
@@ -103,7 +157,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let diag_args = uucore::diagnostics::capture(&raw_args);
     let matches = uucore::clap_localization::handle_clap_result(
         uu_app(),
-        split_short_args_with_value(raw_args.into_iter()),
+        mark_first_operand(split_short_args_with_value(raw_args.into_iter()).collect()),
     )?;
 
     let numbers_option = matches.get_many::<String>(ARG_NUMBERS);
@@ -175,12 +229,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let padding = if options.equal_width {
             let precision_value = precision.unwrap_or(0);
+            // The increment is never printed, so only its fractional digits
+            // (through `precision`) matter, not its integral ones.
             // Saturate rather than overflow: a value with an astronomically large
             // exponent makes `num_integral_digits` near `usize::MAX`. The resulting
             // width is rejected later by the formatter's width check.
             first
                 .num_integral_digits
-                .max(increment.num_integral_digits)
                 .max(last.num_integral_digits)
                 .saturating_add(if precision_value > 0 {
                     precision_value.saturating_add(1)
@@ -244,6 +299,7 @@ pub fn uu_app() -> Command {
     Command::new("seq")
         .trailing_var_arg(true)
         .infer_long_args(true)
+        .args_override_self(true)
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("seq-about"))
@@ -252,6 +308,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_SEPARATOR)
                 .short('s')
                 .long("separator")
+                .allow_hyphen_values(true)
                 .help(translate!("seq-help-separator"))
                 .value_parser(clap::value_parser!(OsString)),
         )
@@ -259,6 +316,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_TERMINATOR)
                 .short('t')
                 .long("terminator")
+                .allow_hyphen_values(true)
                 .help(translate!("seq-help-terminator"))
                 .value_parser(clap::value_parser!(OsString)),
         )
@@ -273,13 +331,13 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_FORMAT)
                 .short('f')
                 .long(OPT_FORMAT)
+                .allow_hyphen_values(true)
                 .help(translate!("seq-help-format")),
         )
         .arg(
-            // we use allow_hyphen_values instead of allow_negative_numbers because clap removed
-            // the support for "exotic" negative numbers like -.1 (see https://github.com/clap-rs/clap/discussions/5837)
+            // negative numbers like -1 or -.1 reach clap after a "--" that
+            // mark_first_operand inserts, so no hyphen handling is needed here
             Arg::new(ARG_NUMBERS)
-                .allow_hyphen_values(true)
                 .action(ArgAction::Append)
                 .num_args(1..=3),
         )

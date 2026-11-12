@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//! This module provides replacement for std::{io,fs}::copy without specialization for Linux
+//! This module provides replacement for `std::{io,fs}::copy` without specialization for Linux
 //! related with reflink, but with splice syscall for better throughput.
 //! This module is also used as work around for the limitations of Rust's `fs::copy` which
 //! does not handle copying special files (e.g pipes, character/block devices).
@@ -34,13 +34,9 @@ mod tests {
     use std::fs::File;
     use tempfile::tempdir;
 
-    use {
-        std::fs::OpenOptions,
-        std::{
-            io::{Seek, SeekFrom},
-            thread,
-        },
-    };
+    use std::fs::OpenOptions;
+    use std::io::{Seek, SeekFrom};
+    use std::thread;
 
     use std::io::{Read, Write};
 
