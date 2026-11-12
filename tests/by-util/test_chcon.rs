@@ -350,6 +350,103 @@ fn valid_context_directory_recursive_follow_all_symlinks() {
 }
 
 #[test]
+fn recursive_follow_all_symlinks_to_ancestor() {
+    let (dir, mut cmd) = at_and_ucmd!();
+    dir.mkdir("a");
+    dir.touch("a/b.txt");
+    dir.symlink_dir("a", "a/up");
+
+    let new_context = "guest_u:object_r:etc_t:s0:c42";
+
+    // -L must not walk back into a directory it is already inside.
+    let result = cmd
+        .args(&["--verbose", "--recursive", "-L", new_context, "a"])
+        .succeeds();
+    assert_eq!(result.stdout_str().matches("'a/up'").count(), 1);
+    assert!(!result.stdout_str().contains("a/up/"));
+    assert_eq!(
+        get_file_context(dir.plus("a/b.txt")).unwrap().as_deref(),
+        Some(new_context)
+    );
+}
+
+#[test]
+fn recursive_follow_args_dir_symlinks_not_nested() {
+    let (dir, mut cmd) = at_and_ucmd!();
+    dir.mkdir("a");
+    dir.mkdir("b");
+    dir.touch("b/c.txt");
+    dir.symlink_dir("b", "a/lb");
+
+    let c_context = get_file_context(dir.plus("b/c.txt")).unwrap();
+    let lb_context = get_file_context(dir.plus("a/lb")).unwrap();
+    let new_context = "guest_u:object_r:etc_t:s0:c42";
+
+    // -H: a symbolic link found below an operand is not walked, but the
+    // directory it points to is relabeled, not the link.
+    cmd.args(&["--recursive", "-H", new_context, "a"])
+        .succeeds();
+    assert_eq!(
+        get_file_context(dir.plus("b")).unwrap().as_deref(),
+        Some(new_context)
+    );
+    assert_eq!(get_file_context(dir.plus("b/c.txt")).unwrap(), c_context);
+    assert_eq!(get_file_context(dir.plus("a/lb")).unwrap(), lb_context);
+}
+
+#[test]
+fn recursive_preserve_root() {
+    // The type does not exist, so even if --preserve-root stopped working no
+    // file could be relabeled, and the timeout stops a walk of the whole
+    // file system early.
+    new_ucmd!()
+        .timeout(std::time::Duration::from_secs(10))
+        .args(&[
+            "--recursive",
+            "--preserve-root",
+            "--type=uutils_no_such_type_t",
+            "/",
+        ])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("dangerous to operate recursively on '/'");
+}
+
+#[test]
+fn recursive_unreadable_directory_is_not_relabeled() {
+    if rustix::process::geteuid().is_root() {
+        println!("test skipped: root can read any directory");
+        return;
+    }
+    let (dir, mut cmd) = at_and_ucmd!();
+    dir.mkdir("a");
+    dir.set_mode("a", 0o300);
+    let a_context = get_file_context(dir.plus("a")).unwrap();
+
+    cmd.args(&["--recursive", "guest_u:object_r:etc_t:s0:c42", "a"])
+        .fails_with_code(1)
+        .stderr_contains("Permission denied");
+    dir.set_mode("a", 0o700);
+    assert_eq!(get_file_context(dir.plus("a")).unwrap(), a_context);
+}
+
+#[test]
+fn unchanged_fields_are_not_written() {
+    // Relabeling a file we do not own fails, unless nothing changes.
+    let Some(root_context) = get_file_context("/").unwrap() else {
+        return;
+    };
+    let Some(root_type) = root_context.split(':').nth(2) else {
+        return;
+    };
+    new_ucmd!()
+        .arg(format!("--type={root_type}"))
+        .arg("/")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
 fn user_role_range_type() {
     let (dir, mut cmd) = at_and_ucmd!();
 

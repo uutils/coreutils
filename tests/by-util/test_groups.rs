@@ -32,6 +32,14 @@ fn test_groups() {
 }
 
 #[test]
+#[cfg(all(unix, feature = "id"))]
+fn test_groups_matches_id_gn() {
+    let ts = TestScenario::new(util_name!());
+    let id_output = ts.ccmd("id").arg("-Gn").succeeds().stdout_move_str();
+    ts.ucmd().succeeds().stdout_is(id_output).no_stderr();
+}
+
+#[test]
 #[cfg(unix)]
 fn test_groups_username() {
     let test_users = [&whoami()[..]];
