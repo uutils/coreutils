@@ -917,31 +917,34 @@ fn count_operands(args: &[OsString]) -> usize {
 
 /// Merge separate `-o` field operands into one value so clap does not treat
 /// them as file operands (`join -o 1.1 1.2 2.2 f1 f2`). As many are taken as
-/// can be while still leaving two file operands.
+/// can be while the file operands still missing before them follow them, so
+/// none is taken once both files are given (`join f1 f2 -o 1.1 1.2` has an
+/// extra operand, like GNU).
 fn coalesce_o_fields(args: Vec<OsString>) -> Vec<OsString> {
-    let mut spare = count_operands(args.get(1..).unwrap_or_default()).saturating_sub(2);
     let mut out = Vec::with_capacity(args.len());
-    let mut iter = args.into_iter().peekable();
+    let mut i = 0;
 
-    while let Some(arg) = iter.next() {
-        if arg != "-o" {
-            out.push(arg);
-            continue;
-        }
-
-        out.push(arg);
+    while i < args.len() {
+        let is_o = args[i] == "-o";
+        out.push(args[i].clone());
+        i += 1;
 
         // if there is at least one o-field, consume and join them
-        if let Some(mut joined) = iter.next_if(|f| looks_like_o_field(f)) {
-            while spare > 0
-                && let Some(field) = iter.next_if(|f| looks_like_o_field(f))
-            {
-                spare -= 1;
-                joined.push(" ");
-                joined.push(field);
-            }
-            out.push(joined);
+        if !is_o || !args.get(i).is_some_and(|f| looks_like_o_field(f)) {
+            continue;
         }
+        let files_needed = 2_usize.saturating_sub(count_operands(&out[1..]));
+        let mut joined = args[i].clone();
+        i += 1;
+        while files_needed > 0
+            && args.get(i).is_some_and(|f| looks_like_o_field(f))
+            && count_operands(&args[i + 1..]) >= files_needed
+        {
+            joined.push(" ");
+            joined.push(&args[i]);
+            i += 1;
+        }
+        out.push(joined);
     }
     out
 }
