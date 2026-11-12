@@ -12,8 +12,8 @@ use uutests::new_ucmd;
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
-    new_ucmd!().arg("-g").arg("0").fails_with_code(1); // clap provided message
-    new_ucmd!().arg("-w").arg("0").fails_with_code(1); // clap provided message
+    new_ucmd!().arg("-g").arg("0").fails_with_code(1);
+    new_ucmd!().arg("-w").arg("0").fails_with_code(1);
 }
 #[test]
 fn test_reference_format_for_stdin() {
@@ -427,6 +427,51 @@ fn test_narrow_width_with_long_reference_no_panic() {
         .pipe_in("content")
         .succeeds()
         .stdout_only(":1       content\n");
+}
+
+// Like GNU, -w and -g take C integers: octal and hexadecimal included.
+#[rstest]
+#[case::hex("-w", "0x10", "16")]
+#[case::hex_upper("-g", "0X5", "5")]
+#[case::octal("-w", "010", "8")]
+#[case::plus_and_blanks("-w", " +12", "12")]
+fn test_width_and_gap_accept_c_integers(
+    #[case] option: &str,
+    #[case] value: &str,
+    #[case] decimal: &str,
+) {
+    let input = "foo bar baz\n";
+    let expected = new_ucmd!()
+        .args(&[option, decimal])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_move_str();
+    new_ucmd!()
+        .args(&[option, value])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[rstest]
+#[case::zero("-w", "0", "line width")]
+#[case::negative("-w", "-1", "line width")]
+#[case::bad_octal("-w", "08", "line width")]
+#[case::no_hex_digits("-w", "0x", "line width")]
+#[case::trailing_blank("-w", "5 ", "line width")]
+#[case::too_large("-w", "9223372036854775808", "line width")]
+#[case::exponent("-g", "1e1", "gap width")]
+#[case::gap_zero("-g", "0", "gap width")]
+fn test_width_and_gap_reject_invalid_numbers(
+    #[case] option: &str,
+    #[case] value: &str,
+    #[case] what: &str,
+) {
+    new_ucmd!()
+        .args(&[option, value])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_only(format!("ptx: invalid {what}: '{value}'\n"));
 }
 
 #[test]

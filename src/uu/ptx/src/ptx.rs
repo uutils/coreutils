@@ -15,7 +15,7 @@ use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::ops::Range;
 use std::path::Path;
 
-use clap::{Arg, ArgAction, Command, value_parser};
+use clap::{Arg, ArgAction, Command};
 use regex::Regex;
 use rustc_hash::FxHashSet;
 use uucore::display::Quotable;
@@ -209,6 +209,32 @@ struct WordRef {
     char_start: usize,
 }
 
+/// Parse a C integer the way `strtol` with base 0 does: leading blanks and a
+/// `+` sign are skipped, `0x` starts a hexadecimal number and `0` an octal one.
+fn parse_c_integer(s: &str) -> Option<i64> {
+    let s = s.trim_start_matches([' ', '\t', '\n', '\x0b', '\x0c', '\r']);
+    let s = s.strip_prefix('+').unwrap_or(s);
+    let (digits, radix) = if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        (hex, 16)
+    } else if s.len() > 1 && s.starts_with('0') {
+        (&s[1..], 8)
+    } else {
+        (s, 10)
+    };
+    if digits.is_empty() || !digits.chars().all(|c| c.is_digit(radix)) {
+        return None;
+    }
+    i64::from_str_radix(digits, radix).ok()
+}
+
+/// A line width or gap size, which GNU requires to be positive.
+fn parse_positive_size(value: &str, error: &str) -> UResult<usize> {
+    parse_c_integer(value)
+        .filter(|n| *n > 0)
+        .and_then(|n| usize::try_from(n).ok())
+        .ok_or_else(|| USimpleError::new(1, translate!(error, "value" => value.quote())))
+}
+
 fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
     let mut config = Config::default();
     let err_msg = "parsing options failed";
@@ -246,13 +272,13 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
             .expect(err_msg)
             .clone_into(&mut config.trunc_str);
     }
-    if matches.contains_id(options::WIDTH) {
-        config.line_width = *matches.get_one::<u64>(options::WIDTH).unwrap() as usize;
+    if let Some(width) = matches.get_one::<String>(options::WIDTH) {
+        config.line_width = parse_positive_size(width, "ptx-error-invalid-line-width")?;
     } else if matches.get_flag(options::TYPESET_MODE) {
         config.line_width = 100;
     }
-    if matches.contains_id(options::GAP_SIZE) {
-        config.gap_size = *matches.get_one::<u64>(options::GAP_SIZE).unwrap() as usize;
+    if let Some(gap) = matches.get_one::<String>(options::GAP_SIZE) {
+        config.gap_size = parse_positive_size(gap, "ptx-error-invalid-gap-width")?;
     }
     if let Some(format) = matches.get_one::<String>(options::FORMAT) {
         config.format = match format.as_str() {
@@ -1053,7 +1079,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::GAP_SIZE)
                 .short('g')
                 .long(options::GAP_SIZE)
-                .value_parser(value_parser!(u64).range(1..))
+                .allow_hyphen_values(true)
                 .help(translate!("ptx-help-gap-size"))
                 .value_name("NUMBER"),
         )
@@ -1094,7 +1120,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::WIDTH)
                 .short('w')
                 .long(options::WIDTH)
-                .value_parser(value_parser!(u64).range(1..))
+                .allow_hyphen_values(true)
                 .help(translate!("ptx-help-width"))
                 .value_name("NUMBER"),
         )
