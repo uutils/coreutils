@@ -3679,7 +3679,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "rustix",
  "uucore",
 ]
 
