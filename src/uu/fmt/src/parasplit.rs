@@ -339,7 +339,7 @@ impl Iterator for FileLines<'_> {
     type Item = Line;
 
     fn next(&mut self) -> Option<Line> {
-        let (n, has_newline, hit_limit, continuing) = loop {
+        let (n, has_newline, hit_limit, mut continuing) = loop {
             let LimitedLine {
                 bytes,
                 has_newline,
@@ -353,10 +353,19 @@ impl Iterator for FileLines<'_> {
             break (bytes, has_newline, hit_limit, continuing);
         };
 
-        // Blank lines enable mail-header detection, except in pass-through mode.
-        if !matches!(continuing, Some(LineMode::PassThrough))
-            && n.iter().all(|&b| is_fmt_whitespace_byte(b))
+        let blank = n.iter().all(|&b| is_fmt_whitespace_byte(b));
+        if hit_limit
+            && blank
+            && continuing.is_none()
+            && (self.opts.prefix.is_some() || self.opts.anti_prefix.is_some())
         {
+            // A prefix may follow beyond this bound. Copy the whole logical
+            // line rather than discard whitespace or read ahead to decide.
+            continuing = Some(LineMode::PassThrough);
+        }
+
+        // Blank lines enable mail-header detection, except in pass-through mode.
+        if !matches!(continuing, Some(LineMode::PassThrough)) && blank {
             if hit_limit {
                 self.continuation = Some(LineMode::Format);
             }
@@ -379,7 +388,8 @@ impl Iterator for FileLines<'_> {
         };
         let prefix_only = pmatch && n[prefix_end..].iter().all(|&b| is_fmt_whitespace_byte(b));
         let mode = continuing.unwrap_or_else(|| {
-            if !pmatch || (!prefix_only && !self.match_anti_prefix(&n)) {
+            // Only a complete prefix-only line can override the skip prefix.
+            if !pmatch || ((hit_limit || !prefix_only) && !self.match_anti_prefix(&n)) {
                 LineMode::PassThrough
             } else {
                 LineMode::Format
@@ -854,6 +864,7 @@ mod tests {
 
     struct NoNewlineReader {
         bytes_before_panic: usize,
+        byte: u8,
     }
 
     impl Read for NoNewlineReader {
@@ -863,7 +874,7 @@ mod tests {
                 "reader consumed more than the configured bound"
             );
             let count = buf.len().min(self.bytes_before_panic);
-            buf[..count].fill(0);
+            buf[..count].fill(self.byte);
             self.bytes_before_panic -= count;
             Ok(count)
         }
@@ -887,11 +898,12 @@ mod tests {
         }
     }
 
-    fn bounded_no_newline_reader() -> FileOrStdReader {
+    fn bounded_no_newline_reader(byte: u8) -> FileOrStdReader {
         let source: Box<dyn Read> = Box::new(NoNewlineReader {
             // Any read beyond the limit panics, modeling a stream that has
             // produced exactly the limit and then remains open without data.
             bytes_before_panic: MAX_LINE_BYTES,
+            byte,
         });
         BufReader::with_capacity(TEST_READER_CAPACITY, source)
     }
@@ -899,7 +911,7 @@ mod tests {
     #[test]
     fn read_limited_line_stops_without_newline_or_eof() {
         let options = test_options(true);
-        let mut reader = bounded_no_newline_reader();
+        let mut reader = bounded_no_newline_reader(0);
         let mut lines = FileLines::new(&options, &mut reader);
 
         let line = lines.read_limited_line().unwrap();
@@ -912,13 +924,30 @@ mod tests {
     #[test]
     fn paragraph_stream_stops_without_newline_or_eof() {
         let options = test_options(false);
-        let mut reader = bounded_no_newline_reader();
+        let mut reader = bounded_no_newline_reader(0);
         let mut paragraphs = ParagraphStream::new(&options, &mut reader);
 
         let paragraph = paragraphs.next().unwrap().unwrap();
 
         assert_eq!(paragraph.lines.len(), 1);
         assert_eq!(paragraph.lines[0].len(), MAX_LINE_BYTES);
+    }
+
+    #[test]
+    fn paragraph_stream_preserves_whitespace_without_reading_past_limit() {
+        for (prefix, anti_prefix) in [(Some("X"), None), (None, Some("X"))] {
+            let mut options = test_options(false);
+            options.prefix = prefix.map(str::to_owned);
+            options.anti_prefix = anti_prefix.map(str::to_owned);
+            let mut reader = bounded_no_newline_reader(b' ');
+            let mut paragraphs = ParagraphStream::new(&options, &mut reader);
+
+            let line = paragraphs.next().unwrap().unwrap_err();
+
+            assert_eq!(line.line, vec![b' '; MAX_LINE_BYTES]);
+            assert!(!line.blank);
+            assert!(!line.newline);
+        }
     }
 
     #[test]

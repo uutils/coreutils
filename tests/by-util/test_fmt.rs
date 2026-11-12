@@ -843,3 +843,60 @@ fn test_fmt_line_limit_keeps_matching_prefix_mode() {
             .stdout_is_bytes(expected);
     }
 }
+
+#[rstest::rstest]
+#[case::missing_prefix(&["-p", "X", "-u"])]
+#[case::skip_prefix(&["-P", "Y", "-u"])]
+#[case::both_prefixes(&["-p", "X", "-P", "Y", "-u"])]
+fn test_fmt_line_limit_preserves_leading_whitespace(#[case] args: &[&str]) {
+    for length in [
+        FMT_TEST_LINE_LIMIT,
+        FMT_TEST_LINE_LIMIT + 1,
+        2 * FMT_TEST_LINE_LIMIT,
+    ] {
+        for whitespace in [b" ".as_slice(), b"\t \x0b\x0c"] {
+            for ending in [b"\n".as_slice(), b"\r\n", b""] {
+                let mut input: Vec<_> = whitespace.iter().copied().cycle().take(length).collect();
+                input.extend_from_slice(b"Y b   c");
+                let mut expected = input.clone();
+                input.extend_from_slice(ending);
+                if !ending.is_empty() {
+                    input.extend_from_slice(b"X a   b\n");
+                    expected.extend_from_slice(b"\nX a b\n");
+                }
+                new_ucmd!()
+                    .args(args)
+                    .pipe_in(input)
+                    .succeeds()
+                    .stdout_is_bytes(expected);
+            }
+        }
+    }
+}
+
+#[rstest::rstest]
+#[case::both_prefixes(&["-p", "X", "-P", "X", "-u"])]
+#[case::exact_skip_prefix(&["-p", "X", "-P", "X", "-X", "-s", "-u"])]
+fn test_fmt_line_limit_checks_skip_prefix_after_prefix_only_chunk(#[case] args: &[&str]) {
+    for length in [
+        FMT_TEST_LINE_LIMIT - 1,
+        FMT_TEST_LINE_LIMIT,
+        2 * FMT_TEST_LINE_LIMIT,
+    ] {
+        for ending in [b"\n".as_slice(), b"\r\n", b""] {
+            let mut input = b"X".to_vec();
+            input.extend(std::iter::repeat_n(b' ', length));
+            input.extend_from_slice(b"b   c");
+            let mut expected = input.clone();
+            input.extend_from_slice(ending);
+            if !ending.is_empty() {
+                expected.push(b'\n');
+            }
+            new_ucmd!()
+                .args(args)
+                .pipe_in(input)
+                .succeeds()
+                .stdout_is_bytes(expected);
+        }
+    }
+}
