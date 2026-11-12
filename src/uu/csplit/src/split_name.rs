@@ -78,13 +78,16 @@ impl SplitName {
 fn check_suffix_format(format: &[u8]) -> Result<(), CsplitError> {
     let mut seen_conversion = false;
     let mut i = 0;
-    while i < format.len() {
-        if format[i] != b'%' {
+    while let Some(&c) = format.get(i) {
+        if c != b'%' {
             i += 1;
             continue;
         }
         i += 1;
-        if format.get(i) == Some(&b'%') {
+        let Some(&after_percent) = format.get(i) else {
+            return Err(CsplitError::SuffixFormatMissingSpecifier);
+        };
+        if after_percent == b'%' {
             i += 1;
             continue;
         }
@@ -103,12 +106,18 @@ fn check_suffix_format(format: &[u8]) -> Result<(), CsplitError> {
             }
             i += 1;
         }
-        while format.get(i).is_some_and(u8::is_ascii_digit) {
+        while let Some(&c) = format.get(i) {
+            if !c.is_ascii_digit() {
+                break;
+            }
             i += 1;
         }
-        if format.get(i) == Some(&b'.') {
+        if let Some(&b'.') = format.get(i) {
             i += 1;
-            while format.get(i).is_some_and(u8::is_ascii_digit) {
+            while let Some(&c) = format.get(i) {
+                if !c.is_ascii_digit() {
+                    break;
+                }
                 i += 1;
             }
         }
