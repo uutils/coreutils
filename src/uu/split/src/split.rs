@@ -279,6 +279,9 @@ struct Settings {
     /// chunks. If this is `false`, then empty files will not be
     /// created.
     elide_empty_files: bool,
+    /// `-u`: with `-n r/...`, pass input on as soon as it is read, even part
+    /// of a record. Output files and filters are not buffered anyway.
+    unbuffered: bool,
     io_blksize: Option<u64>,
 }
 
@@ -374,6 +377,7 @@ impl Settings {
             verbose: matches.value_source(options::VERBOSE) == Some(ValueSource::CommandLine),
             separator,
             elide_empty_files: matches.get_flag(options::ELIDE_EMPTY_FILES),
+            unbuffered: matches.get_flag(options::UNBUFFERED),
             io_blksize,
         };
 
@@ -1283,10 +1287,21 @@ fn n_chunks_by_line_round_robin(
     let mut line = Vec::new();
     loop {
         line.clear();
-        let num_bytes_read = reader.by_ref().read_until(sep, &mut line)?;
+        let record_complete = if settings.unbuffered {
+            // Pass on what has been read so far, without waiting for the rest
+            // of the record.
+            let available = reader.fill_buf()?;
+            let end = memchr::memchr(sep, available).map(|pos| pos + 1);
+            line.extend_from_slice(&available[..end.unwrap_or(available.len())]);
+            reader.consume(line.len());
+            end.is_some()
+        } else {
+            reader.by_ref().read_until(sep, &mut line)?;
+            true
+        };
 
         // if there is nothing else to read - exit the loop
-        if num_bytes_read == 0 {
+        if line.is_empty() {
             break;
         }
 
@@ -1294,6 +1309,9 @@ fn n_chunks_by_line_round_robin(
         if let Some(chunk_number) = kth_chunk {
             if (i % num_chunks) == (chunk_number - 1) as usize {
                 stdout_writer.write_all(bytes)?;
+                if settings.unbuffered {
+                    stdout_writer.flush()?;
+                }
             }
         } else {
             let writer = out_files.get_writer(i % num_chunks, settings)?;
@@ -1302,7 +1320,9 @@ fn n_chunks_by_line_round_robin(
                 closed_writers += 1;
             }
         }
-        i += 1;
+        if record_complete {
+            i += 1;
+        }
         if closed_writers == num_chunks {
             // all writers are closed - stop reading
             break;

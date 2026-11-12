@@ -52,6 +52,7 @@ split-help-number = generate CHUNKS output files; see explanation below
 split-help-additional-suffix = additional SUFFIX to append to output file names
 split-help-filter = write to shell COMMAND; file name is $FILE (Currently not implemented for Windows)
 split-help-elide-empty-files = do not generate empty output files with '-n'
+split-help-unbuffered = immediately copy input to output with '-n r/...'
 split-help-numeric-suffixes-short = use numeric suffixes starting at 0, not alphabetic
 split-help-numeric-suffixes = same as -d, but allow setting the start value
 split-help-hex-suffixes-short = use hex suffixes starting at 0, not alphabetic
