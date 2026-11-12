@@ -470,7 +470,7 @@ fn test_missing_file_error_contains_filename() {
 
 #[test]
 fn test_file_errors_quote_names_only_when_needed() {
-    // GNU quotes file names in these errors with quotef, so plain names stay bare.
+    // File names are quoted only when they need it, so plain names stay bare.
     new_ucmd!()
         .arg("a b")
         .fails()
