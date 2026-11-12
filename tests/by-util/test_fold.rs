@@ -878,8 +878,8 @@ fn test_width_overflow() {
         );
 }
 
-#[test]
 #[uutests::wasi_ignore(Usize32BitOverflow)]
+#[test]
 fn test_width_close_to_max() {
     let largest = usize::MAX - 9;
     new_ucmd!()
