@@ -101,6 +101,29 @@ pub enum SuffixError {
     /// The suffix start value does not fit in the fixed suffix length
     #[error("{}", translate!("split-error-numerical-suffix-start-too-large"))]
     StartTooLarge,
+
+    /// The start value of numeric (`false`) or hexadecimal (`true`) suffixes
+    /// is not a number.
+    #[error("{}", if *.1 {
+        translate!("split-error-invalid-hex-suffix-start", "value" => .0.quote())
+    } else {
+        translate!("split-error-invalid-numeric-suffix-start", "value" => .0.quote())
+    })]
+    InvalidStart(String, bool),
+}
+
+/// Parse the start value of numeric or hexadecimal suffixes: digits only, and
+/// an empty value starts at 0.
+fn parse_start(value: &str, stype: SuffixType) -> Result<usize, SuffixError> {
+    let radix = u32::from(stype.radix());
+    if !value.chars().all(|c| c.is_digit(radix)) {
+        let hex = matches!(stype, SuffixType::Hexadecimal);
+        return Err(SuffixError::InvalidStart(value.to_owned(), hex));
+    }
+    if value.is_empty() {
+        return Ok(0);
+    }
+    usize::from_str_radix(value, radix).map_err(|_| SuffixError::StartTooLarge)
 }
 
 impl Suffix {
@@ -157,9 +180,7 @@ impl Suffix {
                 stype = SuffixType::Decimal;
                 // if option was specified, but without value - this will return None as there is no default value
                 if let Some(opt) = matches.get_one::<String>(options::NUMERIC_SUFFIXES) {
-                    start = opt
-                        .parse::<usize>()
-                        .map_err(|_| SuffixError::NotParsable(opt.to_owned()))?;
+                    start = parse_start(opt, stype)?;
                     auto_widening = false;
                 }
             }
@@ -167,8 +188,7 @@ impl Suffix {
                 stype = SuffixType::Hexadecimal;
                 // if option was specified, but without value - this will return None as there is no default value
                 if let Some(opt) = matches.get_one::<String>(options::HEX_SUFFIXES) {
-                    start = usize::from_str_radix(opt, 16)
-                        .map_err(|_| SuffixError::NotParsable(opt.to_owned()))?;
+                    start = parse_start(opt, stype)?;
                     auto_widening = false;
                 }
             }
