@@ -429,7 +429,7 @@ fn test_narrow_width_with_long_reference_no_panic() {
         .stdout_only(":1       content\n");
 }
 
-// Like GNU, -w and -g take C integers: octal and hexadecimal included.
+// -w and -g take C integers: octal and hexadecimal included.
 #[rstest]
 #[case::hex("-w", "0x10", "16")]
 #[case::hex_upper("-g", "0X5", "5")]

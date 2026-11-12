@@ -210,14 +210,14 @@ struct WordRef {
     char_start: usize,
 }
 
-/// Value parser for a line width or gap size. Like GNU, read a positive C
-/// integer: leading blanks and a `+` are skipped, `0x` starts a hexadecimal
-/// number and `0` an octal one.
+/// Value parser for a line width or gap size, read as a positive C integer:
+/// leading blanks and a `+` are skipped, `0x` starts a hexadecimal number and
+/// `0` an octal one.
 fn parse_positive_size(s: &str) -> Result<usize, ParseIntError> {
     let s = s.trim_start_matches([' ', '\t', '\n', '\x0b', '\x0c', '\r']);
     let unsigned = s.strip_prefix('+').unwrap_or(s);
     // `from_str_radix` takes a sign of its own, which must not follow the prefix.
-    let (digits, radix) = match unsigned.strip_prefix(['0']) {
+    let (digits, radix) = match unsigned.strip_prefix('0') {
         Some(rest) if rest.starts_with(['x', 'X']) && !rest[1..].starts_with('+') => {
             (&rest[1..], 16)
         }
@@ -226,6 +226,7 @@ fn parse_positive_size(s: &str) -> Result<usize, ParseIntError> {
     };
     match NonZeroUsize::new(usize::from_str_radix(digits, radix)?) {
         Some(n) => Ok(n.get()),
+        // `ParseIntError` has no public constructor: get its zero error this way.
         None => "0".parse::<NonZeroUsize>().map(NonZeroUsize::get),
     }
 }
