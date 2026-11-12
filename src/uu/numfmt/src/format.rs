@@ -145,12 +145,14 @@ fn valid_prefix_len(s: &str, unit: Unit, unit_separator: &str) -> usize {
 /// Whether `c` separates fields: the blanks of `iswblank`, plus the newline
 /// that a `-z` record may hold. Like GNU, a carriage return, vertical tab, form
 /// feed or no-break space is not one and stays part of the field.
+#[inline]
 pub fn is_blank(c: char) -> bool {
+    if c.is_ascii() {
+        return matches!(c, ' ' | '\t' | '\n');
+    }
     matches!(
         c,
-        ' ' | '\t'
-            | '\n'
-            | '\u{1680}'
+        '\u{1680}'
             | '\u{2000}'..='\u{2006}'
             | '\u{2008}'..='\u{200a}'
             | '\u{205f}'
@@ -384,10 +386,13 @@ fn apply_grouping(s: &str) -> String {
 }
 
 fn split_next_field(s: &str) -> (&str, &str, &str) {
-    let prefix_len = s.find(|c: char| !is_blank(c)).unwrap_or(s.len());
-    let field_end = s[prefix_len..]
-        .find(is_blank)
-        .map_or(s.len(), |i| prefix_len + i);
+    let mut chars = s.char_indices();
+    let prefix_len = chars
+        .find(|&(_, c)| !is_blank(c))
+        .map_or(s.len(), |(i, _)| i);
+    let field_end = chars
+        .find(|&(_, c)| is_blank(c))
+        .map_or(s.len(), |(i, _)| i);
     (&s[..prefix_len], &s[prefix_len..field_end], &s[field_end..])
 }
 
