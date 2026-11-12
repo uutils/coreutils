@@ -6,20 +6,37 @@
 use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
 
 pub fn parse_number_of_bytes(s: &str) -> Result<u64, ParseSizeError> {
+    // GNU's -j/-N number parser skips leading blanks and accepts a single
+    // optional '+' before the number. The digits have to follow the sign
+    // immediately, so a '-', a doubled sign, a sign on its own, or a blank
+    // between the sign and the number is still rejected.
+    const BLANKS: [char; 6] = [' ', '\t', '\n', '\x0b', '\x0c', '\r'];
+    let number = {
+        let no_blanks = s.trim_start_matches(BLANKS);
+        no_blanks.strip_prefix('+').unwrap_or(no_blanks)
+    };
+    // The number must follow the sign immediately: a blank right after a '+' is
+    // rejected (`parse_size_u64` would otherwise trim it). A '-', a doubled
+    // sign, or a sign on its own leaves a value `parse_size_u64` already
+    // rejects below.
+    if number.starts_with(BLANKS) {
+        return Err(ParseSizeError::ParseFailure(s.to_string()));
+    }
+
     let mut start = 0;
-    let mut len = s.len();
+    let mut len = number.len();
     let mut radix = 16;
     let mut multiply = 1;
 
-    if s.starts_with("0x") || s.starts_with("0X") {
+    if number.starts_with("0x") || number.starts_with("0X") {
         start = 2;
-    } else if s.starts_with('0') {
+    } else if number.starts_with('0') {
         radix = 8;
     } else {
-        return parse_size_u64(&s[start..]);
+        return parse_size_u64(number);
     }
 
-    let mut ends_with = s.chars().rev();
+    let mut ends_with = number.chars().rev();
     match ends_with.next() {
         Some('b') if radix != 16 => {
             multiply = 512;
@@ -64,7 +81,7 @@ pub fn parse_number_of_bytes(s: &str) -> Result<u64, ParseSizeError> {
         _ => {}
     }
 
-    let factor = u64::from_str_radix(&s[start..len], radix)
+    let factor = u64::from_str_radix(&number[start..len], radix)
         .map_err(|e| ParseSizeError::ParseFailure(e.to_string()))?;
     factor
         .checked_mul(multiply)
@@ -117,6 +134,28 @@ fn test_parse_number_of_bytes() {
     );
     assert_eq!(1 << 40, parse_number_of_bytes("0x1T").unwrap());
     assert_eq!(1 << 50, parse_number_of_bytes("0x1P").unwrap());
+}
+
+#[test]
+fn test_parse_number_of_bytes_leading_plus_and_blanks() {
+    // A single leading '+' is accepted, before any radix prefix or suffix.
+    assert_eq!(5, parse_number_of_bytes("+5").unwrap());
+    assert_eq!(8, parse_number_of_bytes("+010").unwrap());
+    assert_eq!(5, parse_number_of_bytes("+0x5").unwrap());
+    assert_eq!(5 * 1024, parse_number_of_bytes("+5k").unwrap());
+
+    // Leading blanks are skipped, with or without the sign.
+    assert_eq!(5, parse_number_of_bytes("  5").unwrap());
+    assert_eq!(5, parse_number_of_bytes(" +5").unwrap());
+
+    // The number has to follow the sign immediately: a '-', a doubled sign, a
+    // sign on its own, or a blank after the sign is a parse failure.
+    for s in ["-5", "++5", "+-5", "+", "+ 5"] {
+        assert!(matches!(
+            parse_number_of_bytes(s),
+            Err(ParseSizeError::ParseFailure(_))
+        ));
+    }
 }
 
 #[test]
