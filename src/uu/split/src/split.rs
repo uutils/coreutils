@@ -1288,13 +1288,7 @@ fn n_chunks_by_line_round_robin(
     loop {
         line.clear();
         let record_complete = if settings.unbuffered {
-            // Pass on what has been read so far, without waiting for the rest
-            // of the record.
-            let available = reader.fill_buf()?;
-            let end = memchr::memchr(sep, available).map(|pos| pos + 1);
-            line.extend_from_slice(&available[..end.unwrap_or(available.len())]);
-            reader.consume(line.len());
-            end.is_some()
+            read_available(&mut reader, sep, &mut line)?
         } else {
             reader.by_ref().read_until(sep, &mut line)?;
             true
@@ -1329,6 +1323,19 @@ fn n_chunks_by_line_round_robin(
         }
     }
     Ok(())
+}
+
+/// For `-u`: append to `line` what has been read so far, up to and including
+/// `sep`, without waiting for the rest of the record. Returns whether the
+/// record is complete. Kept out of line so the buffered loop stays as fast.
+#[inline(never)]
+fn read_available(reader: &mut impl BufRead, sep: u8, line: &mut Vec<u8>) -> io::Result<bool> {
+    let available = reader.fill_buf()?;
+    let end = memchr::memchr(sep, available).map(|pos| pos + 1);
+    let len = end.unwrap_or(available.len());
+    line.extend_from_slice(&available[..len]);
+    reader.consume(len);
+    Ok(end.is_some())
 }
 
 /// Like `io::Lines`, but includes the line ending character.
