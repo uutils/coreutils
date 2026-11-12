@@ -1,10 +1,10 @@
 name: FreeBSD
 
-# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc nextest copyback logind
+# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc mlugg nextest copyback logind zigbuild
 
 env:
-  # * style job configuration
-  STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
 
 on:
   pull_request:
@@ -46,8 +46,6 @@ jobs:
     - uses: mlugg/setup-zig@v2.2.1
     - uses: taiki-e/install-action@cargo-zigbuild
     - name: cargo clippy
-      env:
-        CARGO_INCREMENTAL: "0"
       run: |
         UTILS=$(cargo tree --depth 1 --features feat_os_unix --format '{lib}' --prefix none | sed -n 's/^uu_/-p uu_/p')
         cargo-zigbuild clippy --target x86_64-unknown-freebsd --features feat_os_unix -p coreutils ${UTILS} --all-targets --tests --benches -- -D warnings
