@@ -151,6 +151,25 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
     Ok((remaining_mode, nums))
 }
 
+/// Join the values of a repeated `--tabs` into one list. A `+N` or `/N` ending
+/// one of them applies after all the tab stops, so it is moved to the end.
+fn join_tabs_values<'a>(values: impl Iterator<Item = &'a str>) -> String {
+    let mut stops = vec![];
+    let mut specifiers = vec![];
+    for value in values {
+        let value = value.trim_end_matches([' ', '\t', ',']);
+        let start = value.rfind([' ', '\t', ',']).map_or(0, |i| i + 1);
+        if value[start..].starts_with(['+', '/']) {
+            specifiers.push(&value[start..]);
+            stops.push(value[..start].trim_end_matches([' ', '\t', ',']));
+        } else {
+            stops.push(value);
+        }
+    }
+    stops.extend(specifiers);
+    stops.join(",")
+}
+
 struct Options {
     files: Vec<OsString>,
     tabstops: Vec<usize>,
@@ -165,7 +184,7 @@ struct Options {
 impl Options {
     fn new(matches: &ArgMatches) -> Result<Self, ParseError> {
         let (remaining_mode, tabstops) = match matches.get_many::<String>(options::TABS) {
-            Some(s) => tabstops_parse(&s.map(String::as_str).collect::<Vec<_>>().join(","))?,
+            Some(s) => tabstops_parse(&join_tabs_values(s.map(String::as_str)))?,
             None => (RemainingMode::None, vec![DEFAULT_TABSTOP]),
         };
 
