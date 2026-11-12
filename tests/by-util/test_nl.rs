@@ -1143,3 +1143,36 @@ fn test_negative_line_increment_as_a_separate_argument() {
             .stdout_is("     1\ta\n     0\tb\n    -1\tc\n");
     }
 }
+
+#[rstest]
+#[case::separator(&["-s", "-z"], "a\n", "     1-za\n")]
+#[case::separator_double_dash(&["-s", "--"], "a\n", "     1--a\n")]
+#[case::long_separator(&["--number-separator", "-x"], "a\n", "     1-xa\n")]
+#[case::footer_delimiter(&["-d", "-z"], "a\n-z\nb\n", "     1\ta\n\n       b\n")]
+#[case::body_delimiter(&["-d", "--"], "a\n----\nb\n", "     1\ta\n\n     1\tb\n")]
+fn test_hyphen_leading_string_value(
+    #[case] args: &[&str],
+    #[case] input: &str,
+    #[case] expected: &str,
+) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[rstest]
+#[case::width(&["-w", "-2"])]
+#[case::join_blank_lines(&["-l", "-1"])]
+#[case::body_numbering(&["-b", "-x"])]
+#[case::header_numbering(&["-h", "-x"])]
+#[case::footer_numbering(&["-f", "-x"])]
+#[case::number_format(&["-n", "-x"])]
+fn test_hyphen_leading_value_is_checked_as_a_value(#[case] args: &[&str]) {
+    new_ucmd!()
+        .args(args)
+        .fails_with_code(1)
+        .stderr_does_not_contain("unexpected argument")
+        .stderr_contains(format!("'{}'", args[1]));
+}
