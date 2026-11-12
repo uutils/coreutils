@@ -242,10 +242,10 @@ fn test_multiple_default() {
 /// A stream of unknown length falls back to the minimum width, but a regular
 /// file redirected onto stdin has a size known up front, so it dictates the
 /// width just like a named file does.
-#[test]
 // `at_and_ucmd!` is only imported on unix in this file.
 #[cfg(unix)]
 #[uutests::wasi_ignore(StdioHandlesOpaque)]
+#[test]
 fn test_stdin_size_dictates_width() {
     use std::fs::File;
 
@@ -886,8 +886,8 @@ fn test_count_bytes_from_partial_stdin_offset(#[case] size: u64, #[case] offset:
 }
 
 #[cfg(unix)]
-#[test]
 #[uutests::wasi_ignore(StdioHandlesOpaque)]
+#[test]
 fn test_count_bytes_from_repeated_redirected_stdin() {
     use std::io::Seek;
     let (at, mut command) = at_and_ucmd!();
