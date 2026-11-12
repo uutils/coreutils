@@ -114,6 +114,39 @@ fn test_numfmt_stdin(#[case] args: &[&str], #[case] input: &str, #[case] expecte
         .stdout_only(expected);
 }
 
+// Like GNU, a carriage return, vertical tab, form feed or no-break space does
+// not separate fields: it belongs to the number, which is then invalid.
+#[rstest]
+#[case::carriage_return("1\r\n")]
+#[case::crlf_number("1000\r\n")]
+#[case::vertical_tab("1000\x0b\n")]
+#[case::form_feed("1000\x0c\n")]
+#[case::no_break_space("1000\u{a0}\n")]
+fn test_only_space_and_tab_are_blanks(#[case] input: &str) {
+    new_ucmd!()
+        .arg("--to=si")
+        .pipe_in(input)
+        .fails_with_code(2)
+        .no_stdout()
+        .stderr_contains("invalid suffix in input");
+}
+
+#[rstest]
+#[case::vertical_tab(&["--to=si", "--field=2"], "1000\x0b2000\n", "1000\x0b2000\n")]
+#[case::carriage_return(&["--to=si", "--field=2"], "1000\r2000\n", "1000\r2000\n")]
+#[case::ignored(&["--to=si", "--invalid=ignore"], "1000\r\n", "1000\r\n")]
+fn test_other_whitespace_stays_in_the_field(
+    #[case] args: &[&str],
+    #[case] input: &str,
+    #[case] expected: &str,
+) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected);
+}
+
 #[test]
 fn test_from_iec_i_requires_suffix() {
     new_ucmd!()
