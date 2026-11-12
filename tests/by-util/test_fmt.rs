@@ -9,6 +9,8 @@
 use std::os::unix::ffi::OsStringExt;
 use uutests::new_ucmd;
 
+const FMT_TEST_LINE_LIMIT: usize = 1024 * 1024;
+
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
@@ -508,6 +510,31 @@ fn test_fmt_width_multiplication_overflow() {
 }
 
 #[test]
+fn test_fmt_line_limit_boundaries_raw_output() {
+    let mut lf_input = vec![b'a'; FMT_TEST_LINE_LIMIT];
+    lf_input.extend_from_slice(b"\nb\n");
+    let lf_expected = lf_input.clone();
+
+    let mut crlf_input = vec![b'a'; FMT_TEST_LINE_LIMIT - 1];
+    crlf_input.extend_from_slice(b"\r\nb\n");
+    let mut crlf_expected = vec![b'a'; FMT_TEST_LINE_LIMIT - 1];
+    crlf_expected.extend_from_slice(b"\nb\n");
+
+    for (input, expected) in [(lf_input, lf_expected), (crlf_input, crlf_expected)] {
+        for split_only in [false, true] {
+            let mut command = new_ucmd!();
+            if split_only {
+                command.arg("-s");
+            }
+            command
+                .pipe_in(input.clone())
+                .succeeds()
+                .stdout_is_bytes(expected.clone());
+        }
+    }
+}
+
+#[test]
 fn test_fmt_goal_only_defaults_width_to_goal_plus_ten() {
     // GNU defaults the width to goal + 10 when only --goal is given, so `-g G`
     // has to lay a paragraph out exactly as `-w G+10 -g G` does.
@@ -534,4 +561,96 @@ fn test_fmt_goal_only_defaults_width_to_goal_plus_ten() {
         .args(&["one-word-per-line.txt", "--goal", "30"])
         .succeeds()
         .stdout_is("this is a file with one word per line\n");
+}
+
+#[test]
+fn test_fmt_line_limit_preserves_utf8_characters() {
+    for character in ["é", "あ", "😀"] {
+        for trailing_bytes in 1..character.len() {
+            let mut input = vec![b'a'; FMT_TEST_LINE_LIMIT - trailing_bytes];
+            input.extend_from_slice(character.as_bytes());
+            input.push(b'\n');
+            let mut expected = vec![b'a'; FMT_TEST_LINE_LIMIT - trailing_bytes];
+            expected.push(b'\n');
+            expected.extend_from_slice(character.as_bytes());
+            expected.push(b'\n');
+            for args in [vec![], vec!["-s"]] {
+                new_ucmd!()
+                    .args(&args)
+                    .pipe_in(input.clone())
+                    .succeeds()
+                    .stdout_is_bytes(&expected);
+            }
+        }
+    }
+}
+
+#[test]
+fn test_fmt_line_limit_preserves_unformatted_lines() {
+    for args in [vec!["-p", "X"], vec!["-P", "a"]] {
+        for length in [
+            FMT_TEST_LINE_LIMIT - 1,
+            FMT_TEST_LINE_LIMIT,
+            FMT_TEST_LINE_LIMIT + 1,
+            2 * FMT_TEST_LINE_LIMIT,
+        ] {
+            for ending in [b"\n".as_slice(), b"\r\n", b""] {
+                let mut input = vec![b'a'; length];
+                // This prefix inside the same logical line must not change its mode.
+                input.extend_from_slice(b"X b   c");
+                let mut expected = input.clone();
+                expected.extend_from_slice(b"\nnext\n");
+                input.extend_from_slice(ending);
+                if ending.is_empty() {
+                    expected = input.clone();
+                    expected.push(b'\n');
+                } else {
+                    input.extend_from_slice(b"next\n");
+                }
+                new_ucmd!()
+                    .args(&args)
+                    .pipe_in(input)
+                    .succeeds()
+                    .stdout_is_bytes(expected);
+            }
+        }
+    }
+}
+
+#[test]
+fn test_fmt_line_limit_unformatted_exact_boundary() {
+    for length in [
+        FMT_TEST_LINE_LIMIT - 1,
+        FMT_TEST_LINE_LIMIT,
+        FMT_TEST_LINE_LIMIT + 1,
+        2 * FMT_TEST_LINE_LIMIT,
+    ] {
+        for ending in [b"\n".as_slice(), b"\r\n", b""] {
+            let mut input = vec![b'a'; length];
+            let mut expected = input.clone();
+            expected.push(b'\n');
+            input.extend_from_slice(ending);
+            new_ucmd!()
+                .args(&["-p", "X"])
+                .pipe_in(input)
+                .succeeds()
+                .stdout_is_bytes(expected);
+        }
+    }
+}
+
+#[test]
+fn test_fmt_line_limit_keeps_matching_prefix_mode() {
+    for args in [vec!["-p", "X", "-u"], vec!["-P", "Y", "-u"]] {
+        let mut input = b"X".to_vec();
+        input.extend(vec![b'a'; FMT_TEST_LINE_LIMIT - 1]);
+        input.extend_from_slice(b"Y b   c\n");
+        let mut expected = input[..FMT_TEST_LINE_LIMIT].to_vec();
+        expected.extend_from_slice(b"\nY b c\n");
+        new_ucmd!()
+            .args(&args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is_bytes(expected);
+    }
 }
