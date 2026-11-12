@@ -114,11 +114,10 @@ fn test_numfmt_stdin(#[case] args: &[&str], #[case] input: &str, #[case] expecte
         .stdout_only(expected);
 }
 
-// Like GNU, a carriage return, vertical tab, form feed or no-break space does
-// not separate fields: it belongs to the number, which is then invalid.
+// A carriage return, vertical tab, form feed or no-break space does not
+// separate fields: it belongs to the number, which is then invalid.
 #[rstest]
-#[case::carriage_return("1\r\n")]
-#[case::crlf_number("1000\r\n")]
+#[case::carriage_return("1000\r\n")]
 #[case::vertical_tab("1000\x0b\n")]
 #[case::form_feed("1000\x0c\n")]
 #[case::no_break_space("1000\u{a0}\n")]

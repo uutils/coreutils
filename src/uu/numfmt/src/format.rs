@@ -143,8 +143,8 @@ fn valid_prefix_len(s: &str, unit: Unit, unit_separator: &str) -> usize {
 }
 
 /// Whether `c` separates fields: the blanks of `iswblank`, plus the newline
-/// that a `-z` record may hold. Like GNU, a carriage return, vertical tab, form
-/// feed or no-break space is not one and stays part of the field.
+/// that a `-z` record may hold. A carriage return, vertical tab, form feed or
+/// no-break space is not one and stays part of the field.
 #[inline]
 pub fn is_blank(c: char) -> bool {
     if c.is_ascii() {
