@@ -1102,3 +1102,16 @@ fn test_negative_line_increment_as_a_separate_argument() {
             .stdout_is("     1\ta\n     0\tb\n    -1\tc\n");
     }
 }
+
+#[cfg(unix)]
+#[rstest]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+fn test_largest_width_is_written_quickly(#[values("ln", "rn", "rz")] format: &str) {
+    // About 2 GiB of padding, which used to be written a byte at a time.
+    new_ucmd!()
+        .args(&["-w", "2147483647", "-n", format])
+        .pipe_in("a\n")
+        .set_stdout(std::fs::File::create("/dev/null").unwrap())
+        .timeout(std::time::Duration::from_secs(20))
+        .succeeds();
+}
