@@ -110,7 +110,11 @@ fn test_mknod_fifo_existing_file() {
     ts.ucmd()
         .args(&["test_file", "p"])
         .fails()
-        .stderr_contains("File exists");
+        .stderr_is(format!(
+            "{} mknod: {}\n",
+            ts.bin_path.display(),
+            std::io::Error::from_raw_os_error(libc::EEXIST),
+        ));
     assert_eq!(ts.fixtures.read("test_file"), "keep this content");
 }
 
