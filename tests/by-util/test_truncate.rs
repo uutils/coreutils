@@ -332,6 +332,7 @@ fn test_reference_character_device() {
 // Like GNU, a directory's size is where a seek to its end lands, not its
 // metadata length. The seek fails on tmpfs, gives 0 on btrfs, and on ext4
 // lands on a hash offset too large for a file.
+#[uutests::wasi_ignore(DirectorySizeFromMetadata)]
 #[test]
 #[cfg(unix)]
 fn test_reference_directory_size_is_its_end_offset() {
