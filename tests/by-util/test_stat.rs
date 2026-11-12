@@ -330,6 +330,7 @@ fn test_timestamp_format_preserves_nanoseconds() {
 }
 
 #[test]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_timestamp_format_before_epoch() {
     let ts = TestScenario::new(util_name!());
     let path = ts.fixtures.plus("timestamp");
@@ -965,6 +966,7 @@ fn test_percent_escaping() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_correct_metadata() {
     use uucore::fs::{major, minor};
 

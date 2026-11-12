@@ -1213,6 +1213,7 @@ fn test_bytes_iseek_skip_not_additive() {
 }
 
 #[test]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_bytes_oseek_bytes_oflag() {
     new_ucmd!()
         .args(&["oseek=8", "oflag=seek_bytes", "bs=2"])
@@ -1222,6 +1223,7 @@ fn test_bytes_oseek_bytes_oflag() {
 }
 
 #[test]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_bytes_oseek_bytes_trunc_oflag() {
     // The test harness hands stdout over as a regular file. Where dd detects
     // that (Linux, OpenBSD), it seeks in the file and, like GNU, writes
@@ -2326,6 +2328,7 @@ fn test_nocache_eof_fadvise_zero_length() {
 
 #[test]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_iso8859_1_case_conversion() {
     use std::process::Command;
     // Test ISO-8859-1 case conversion for accented characters
