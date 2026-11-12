@@ -63,7 +63,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let width = match poss_width {
         Some(inp_width) => match inp_width.parse::<usize>() {
-            Ok(0) => {
+            // Like GNU, leave room for a tab stop past the width.
+            Ok(w) if w == 0 || w > usize::MAX - TAB_WIDTH - 1 => {
                 return Err(USimpleError::new(
                     1,
                     translate!("fold-error-width-out-of-range", "width" => inp_width.quote()),

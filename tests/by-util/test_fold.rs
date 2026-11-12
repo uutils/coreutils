@@ -879,6 +879,24 @@ fn test_width_overflow() {
 }
 
 #[test]
+fn test_width_close_to_max() {
+    let largest = usize::MAX - 9;
+    new_ucmd!()
+        .arg(format!("-w{largest}"))
+        .pipe_in("abc\n")
+        .succeeds()
+        .stdout_is("abc\n");
+
+    for width in [largest + 1, usize::MAX] {
+        for arg in [format!("-w{width}"), format!("-{width}")] {
+            new_ucmd!().arg(arg).fails_with_code(1).stderr_is(format!(
+                "fold: invalid number of columns: '{width}': Numerical result out of range\n"
+            ));
+        }
+    }
+}
+
+#[test]
 fn test_negative_width_as_separate_value() {
     // GNU consumes the argument after `-w` as its value even when it looks
     // like an option, and reports that value as the invalid one. Passing a
