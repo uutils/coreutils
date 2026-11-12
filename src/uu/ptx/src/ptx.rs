@@ -226,7 +226,7 @@ fn parse_positive_size(s: &str) -> Result<usize, ParseIntError> {
     };
     match NonZeroUsize::new(usize::from_str_radix(digits, radix)?) {
         Some(n) => Ok(n.get()),
-        // `ParseIntError` has no public constructor: get its zero error this way.
+        // A `ParseIntError` of kind `IntErrorKind::Zero` cannot be built directly.
         None => "0".parse::<NonZeroUsize>().map(NonZeroUsize::get),
     }
 }
