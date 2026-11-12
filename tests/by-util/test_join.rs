@@ -1109,3 +1109,23 @@ fn test_o_separate_fields_leave_two_files() {
         .stderr_contains("1.3")
         .stderr_contains("No such file or directory");
 }
+
+#[test]
+fn test_o_separate_fields_only_before_a_file() {
+    // A separate field is only taken while a file operand still follows it.
+    for args in [
+        &["fields_1.txt", "fields_2.txt", "-o", "1.1", "1.2"][..],
+        &["fields_1.txt", "fields_2.txt", "-o", "1.1", "2.2", "1.2"],
+    ] {
+        new_ucmd!()
+            .args(args)
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains(format!("join: extra operand '{}'", args[4]));
+    }
+
+    new_ucmd!()
+        .args(&["fields_1.txt", "-o", "1.1", "2.2", "fields_2.txt"])
+        .succeeds()
+        .stdout_only("1 a\n2 b\n3 c\n5 e\n8 h\n");
+}
