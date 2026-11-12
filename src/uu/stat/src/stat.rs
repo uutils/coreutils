@@ -412,17 +412,25 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Precisio
     // By default, a sign  is  used only for negative numbers.
     // A + overrides a space if both are used.
     let padding_char = determine_padding_char(flags);
+    // With a precision, an integer conversion ignores the 0 flag.
+    let integer_padding = if precision == Precision::NotSpecified {
+        determine_padding_char(flags)
+    } else {
+        Padding::Space
+    };
 
     match output {
         OutputType::Str(s) => print_str(s, flags, width, precision),
         OutputType::OsStr(s) => print_os_str(s, flags, width, precision),
-        OutputType::Integer(num) => print_integer(*num, flags, width, precision, padding_char),
-        OutputType::Unsigned(num) => print_unsigned(*num, flags, width, precision, padding_char),
+        OutputType::Integer(num) => print_integer(*num, flags, width, precision, integer_padding),
+        OutputType::Unsigned(num) => {
+            print_unsigned(*num, flags, width, precision, integer_padding);
+        }
         OutputType::UnsignedOct(num) => {
-            print_unsigned_oct(*num, flags, width, precision, padding_char);
+            print_unsigned_oct(*num, flags, width, precision, integer_padding);
         }
         OutputType::UnsignedHex(num) => {
-            print_unsigned_hex(*num, flags, width, precision, padding_char);
+            print_unsigned_hex(*num, flags, width, precision, integer_padding);
         }
         OutputType::Timestamp(seconds, nanoseconds) => {
             print_timestamp(
