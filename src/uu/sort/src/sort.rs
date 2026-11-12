@@ -17,18 +17,16 @@ mod custom_str_cmp;
 mod diagnostics;
 mod ext_sort;
 mod merge;
-mod numeric_str_cmp;
 mod tmp_dir;
 
 use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use custom_str_cmp::{custom_str_cmp, is_blank};
+use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use foldhash::fast::FoldHasher;
 use foldhash::{HashMap, SharedSeed};
-use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{RngExt as _, rng};
 #[cfg(not(target_os = "wasi"))]
 use rayon::slice::ParallelSliceMut;
@@ -52,8 +50,11 @@ use uucore::extendedbigdecimal::ExtendedBigDecimal;
 #[cfg(feature = "i18n-collator")]
 use uucore::i18n::collator::{compute_sort_key_utf8, locale_cmp};
 use uucore::i18n::datetime::get_locale_months;
-use uucore::i18n::decimal::locale_decimal_separator;
 use uucore::line_ending::LineEnding;
+use uucore::numeric_str_cmp::{
+    NumInfo, NumInfoParseSettings, human_numeric_str_cmp, is_blank, locale_decimal_pt,
+    numeric_str_cmp,
+};
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
@@ -114,14 +115,6 @@ mod options {
 }
 
 const DECIMAL_PT: u8 = b'.';
-
-fn locale_decimal_pt() -> u8 {
-    match locale_decimal_separator().as_bytes().first().copied() {
-        Some(b'.') => b'.',
-        Some(b',') => b',',
-        _ => DECIMAL_PT,
-    }
-}
 
 const NEGATIVE: &u8 = &b'-';
 const POSITIVE: &u8 = &b'+';
@@ -184,6 +177,9 @@ pub enum SortError {
 
     #[error("{}", translate!("sort-multiple-output-files"))]
     MultipleOutputFiles,
+
+    #[error("{}", translate!("sort-multiple-compress-programs"))]
+    MultipleCompressPrograms,
 
     #[error("{}", translate!("sort-incompatible-tabs"))]
     IncompatibleTabs,
@@ -322,34 +318,8 @@ pub struct GlobalSettings {
     buffer_size_is_explicit: bool,
     compress_prog: Option<String>,
     merge_batch_size: usize,
-    numeric_locale: NumericLocaleSettings,
+    numeric_locale: NumInfoParseSettings,
     precomputed: Precomputed,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct NumericLocaleSettings {
-    thousands_sep: Option<u8>,
-    decimal_pt: Option<u8>,
-}
-
-impl Default for NumericLocaleSettings {
-    fn default() -> Self {
-        Self {
-            thousands_sep: None,
-            decimal_pt: Some(DECIMAL_PT),
-        }
-    }
-}
-
-impl NumericLocaleSettings {
-    fn num_info_settings(self, accept_si_units: bool, fold_si_units: bool) -> NumInfoParseSettings {
-        NumInfoParseSettings {
-            accept_si_units,
-            fold_si_units,
-            thousands_separator: self.thousands_sep,
-            decimal_pt: self.decimal_pt,
-        }
-    }
 }
 
 /// Data needed for sorting. Should be computed once before starting to sort
@@ -420,7 +390,7 @@ impl GlobalSettings {
             .any(|s| matches!(s.settings.mode, SortMode::HumanNumeric));
         self.precomputed.tokenize_blank_thousands_sep = self.separator.is_none()
             && uses_numeric
-            && self.numeric_locale.thousands_sep == Some(b' ');
+            && self.numeric_locale.thousands_separator == Some(b' ');
         self.precomputed.tokenize_allow_unit_after_blank =
             self.precomputed.tokenize_blank_thousands_sep && uses_human_numeric;
 
@@ -520,7 +490,7 @@ impl Default for GlobalSettings {
             buffer_size_is_explicit: false,
             compress_prog: None,
             merge_batch_size: default_merge_batch_size(),
-            numeric_locale: NumericLocaleSettings::default(),
+            numeric_locale: NumInfoParseSettings::default(),
             precomputed: Precomputed::default(),
         }
     }
@@ -761,7 +731,7 @@ impl<'a> Line<'a> {
         for (selector, selection) in settings.selectors.iter().map(|selector| {
             (
                 selector,
-                selector.get_selection(line, token_buffer, settings.numeric_locale),
+                selector.get_selection(line, token_buffer, &settings.numeric_locale),
             )
         }) {
             match selection {
@@ -824,9 +794,11 @@ impl<'a> Line<'a> {
                 SortMode::Numeric | SortMode::HumanNumeric => {
                     // find out which range is used for numeric comparisons
                     // GNU marks a lowercase unit as not part of the key, even with -f.
-                    let mut parse_settings = settings
-                        .numeric_locale
-                        .num_info_settings(selector.settings.mode == SortMode::HumanNumeric, false);
+                    let mut parse_settings = NumInfoParseSettings {
+                        accept_si_units: selector.settings.mode == SortMode::HumanNumeric,
+                        fold_si_units: false,
+                        ..settings.numeric_locale
+                    };
                     // Debug annotations should ignore thousands separators to match GNU output.
                     parse_settings.thousands_separator = None;
                     let (_, num_range) =
@@ -1392,7 +1364,7 @@ impl FieldSelector {
         &self,
         line: &'a [u8],
         tokens: &[Field],
-        numeric_locale: NumericLocaleSettings,
+        numeric_locale: &NumInfoParseSettings,
     ) -> Selection<'a> {
         // `get_range` expects `None` when we don't need tokens and would get confused by an empty vector.
         let tokens = if self.needs_tokens {
@@ -1405,10 +1377,11 @@ impl FieldSelector {
             // Parse NumInfo for this number.
             let (info, num_range) = NumInfo::parse(
                 range_str,
-                &numeric_locale.num_info_settings(
-                    self.settings.mode == SortMode::HumanNumeric,
-                    self.settings.ignore_case,
-                ),
+                &NumInfoParseSettings {
+                    accept_si_units: self.settings.mode == SortMode::HumanNumeric,
+                    fold_si_units: self.settings.ignore_case,
+                    ..*numeric_locale
+                },
             );
             // Shorten the range to what we need to pass to numeric_str_cmp later.
             range_str = &range_str[num_range];
@@ -1521,33 +1494,6 @@ impl FieldSelector {
     }
 }
 
-fn detect_numeric_locale() -> NumericLocaleSettings {
-    let numeric_locale = i18n::get_numeric_locale();
-    let locale = &numeric_locale.0;
-    let encoding = numeric_locale.1;
-    let is_c_locale = encoding == i18n::UEncoding::Ascii && locale.to_string() == "und";
-
-    if is_c_locale {
-        return NumericLocaleSettings {
-            decimal_pt: Some(DECIMAL_PT),
-            thousands_sep: None,
-        };
-    }
-
-    let grouping = i18n::decimal::locale_grouping_separator();
-    NumericLocaleSettings {
-        decimal_pt: Some(locale_decimal_pt()),
-        // Upstream GNU coreutils ignore multibyte thousands separators
-        // (FIXME in C source). We keep the same single-byte behavior.
-        thousands_sep: match grouping.as_bytes() {
-            [b] => Some(*b),
-            // ICU returns NBSP as UTF-8 (0xC2 0xA0). In non-UTF8 locales like ISO-8859-1,
-            // the input byte is 0xA0, so map it to a single-byte separator.
-            [0xC2, 0xA0] if encoding != i18n::UEncoding::Utf8 => Some(0xA0),
-            _ => None,
-        },
-    }
-}
 /// Creates an `Arg` for a sort mode flag.
 fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
     Arg::new(mode)
@@ -2147,7 +2093,7 @@ where
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut settings = GlobalSettings {
-        numeric_locale: detect_numeric_locale(),
+        numeric_locale: NumInfoParseSettings::from_locale(),
         ..Default::default()
     };
 
@@ -2163,7 +2109,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242,
     // and the same rewrite in `cut`), so rewrite every attached `-t<chars>`
     // argument to its long form, which preserves the separator verbatim.
+    // Arguments after `--` are file operands and must be left untouched.
+    let mut seen_double_dash = false;
     let args = args.into_iter().map(|x| {
+        if seen_double_dash {
+            return x;
+        }
+        if x == "--" {
+            seen_double_dash = true;
+            return x;
+        }
         // Non-UTF-8 separators are rejected later anyway, so lossy conversion
         // here only affects arguments that cannot become a valid separator.
         let as_str = x.to_string_lossy();
@@ -2185,6 +2140,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Prevent -o/--output to be specified multiple times
     if has_conflicting_values::<OsString>(&matches, options::OUTPUT) {
         return Err(SortError::MultipleOutputFiles.into());
+    }
+
+    // Same as -o: repeating --compress-program is fine as long as the value is the same
+    if has_conflicting_values::<String>(&matches, options::COMPRESS_PROG) {
+        return Err(SortError::MultipleCompressPrograms.into());
     }
 
     // Prevent -t/--field-separator from being given different values. Raw
@@ -2268,7 +2228,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     settings.dictionary_order = dictionary_order;
-    settings.ignore_non_printing = ignore_non_printing;
+    // -i has no effect when -d is also given, as for key options
+    settings.ignore_non_printing = ignore_non_printing && !dictionary_order;
     settings.ignore_case = ignore_case;
 
     let threads = match matches.get_one::<String>(options::PARALLEL) {
@@ -2390,6 +2351,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if matches.contains_id(options::OUTPUT) && settings.check {
         let opts = if settings.check_silent { "Co" } else { "co" };
         return Err(incompatible_options_error(opts));
+    }
+
+    if matches.contains_id(options::OUTPUT) && settings.debug {
+        return Err(incompatible_options_error("o --debug"));
     }
 
     settings.ignore_leading_blanks = matches.get_flag(options::IGNORE_LEADING_BLANKS);
@@ -2717,7 +2682,9 @@ pub fn uu_app() -> Command {
             .long(options::COMPRESS_PROG)
             .help(translate!("sort-help-compress-prog"))
             .value_name("PROG")
-            .value_hint(clap::ValueHint::CommandName),
+            .value_hint(clap::ValueHint::CommandName)
+            // To detect multiple occurrences and raise an error
+            .action(ArgAction::Append),
     )
     .arg(
         Arg::new(options::BATCH_SIZE)
@@ -3169,57 +3136,29 @@ fn get_rand_string() -> [u8; SALT_LEN] {
 }
 
 const SALT_LEN: usize = 16; // 128-bit salt
-const MAX_BYTES: usize = 1024 * 1024; // Read cap: 1 MiB
-const BUF_LEN: usize = 8192; // 8 KiB read buffer
-const U64_LEN: usize = 8;
-const RANDOM_SOURCE_TAG: &[u8] = b"uutils-sort-random-source"; // Domain separation tag
 
-/// Create a 128-bit salt by hashing up to 1 MiB from the given file.
+/// Create a 128-bit salt by reading exactly 16 bytes ([`SALT_LEN`]) from the given file.
 ///
 /// The file has to hold at least [`SALT_LEN`] bytes. GNU asks for the same 128
-/// bits and reports `end of file` when the source cannot supply them, rather
-/// than shuffling with whatever it managed to read.
+/// bits and reports `end of file` when the source cannot supply them. Any
+/// remaining bytes in the source are not read.
 fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     let mut reader = open_with_open_failed_error(path)?;
-    let mut buf = [0u8; BUF_LEN];
-    let mut total = 0usize;
-    // freeze seed for --random-source
-    let mut hasher = FoldHasher::with_seed(1, SharedSeed::global_fixed());
+    let mut buf = [0u8; SALT_LEN];
 
-    while let n @ 1.. = reader
-        .read(&mut buf)
-        .map_err(|error| SortError::ReadFailed {
-            path: path.to_owned(),
-            error,
-        })?
-        && let remaining @ 1.. = MAX_BYTES.saturating_sub(total)
-    {
-        let take = n.min(remaining);
-        hasher.write(&buf[..take]);
-        total = total.saturating_add(take);
-        if take < n {
-            break;
-        }
-    }
+    reader
+        .read_exact(&mut buf)
+        .map_err(|error| match error.kind() {
+            std::io::ErrorKind::UnexpectedEof => SortError::RandomSourceEndOfFile {
+                path: path.to_owned(),
+            },
+            _ => SortError::ReadFailed {
+                path: path.to_owned(),
+                error,
+            },
+        })?;
 
-    if total < SALT_LEN {
-        return Err(SortError::RandomSourceEndOfFile {
-            path: path.to_owned(),
-        }
-        .into());
-    }
-
-    let first = hasher.finish();
-    // freeze seed for --random-source
-    let mut second_hasher = FoldHasher::with_seed(2, SharedSeed::global_fixed());
-    second_hasher.write(RANDOM_SOURCE_TAG);
-    second_hasher.write_u64(first);
-    let second = second_hasher.finish();
-
-    let mut out = [0u8; SALT_LEN];
-    out[..U64_LEN].copy_from_slice(&first.to_le_bytes());
-    out[U64_LEN..].copy_from_slice(&second.to_le_bytes());
-    Ok(out)
+    Ok(buf)
 }
 
 fn get_hash<T: Hash>(t: &T) -> u64 {

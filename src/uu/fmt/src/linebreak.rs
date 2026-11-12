@@ -94,10 +94,12 @@ pub fn break_lines(
         ostream,
     };
 
+    // the first word may end a sentence, like any other word
+    let first_punct = winfo.ends_punct;
     if opts.quick || para.mail_header {
-        break_simple(p_words_words, &mut break_args)
+        break_simple(p_words_words, &mut break_args, first_punct)
     } else {
-        break_knuth_plass(p_words_words, &mut break_args)
+        break_knuth_plass(p_words_words, &mut break_args, first_punct)
     }
 }
 
@@ -106,8 +108,9 @@ pub fn break_lines(
 fn break_simple<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
     mut iter: T,
     args: &mut BreakArgs<'a>,
+    first_punct: bool,
 ) -> std::io::Result<()> {
-    iter.try_fold((args.init_len, false), |(l, prev_punct), winfo| {
+    iter.try_fold((args.init_len, first_punct), |(l, prev_punct), winfo| {
         accum_words_simple(args, l, prev_punct, winfo)
     })?;
     args.ostream.write_all(b"\n")
@@ -141,13 +144,14 @@ fn accum_words_simple<'a>(
 fn break_knuth_plass<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
     mut iter: T,
     args: &mut BreakArgs<'a>,
+    first_punct: bool,
 ) -> std::io::Result<()> {
     // run the algorithm to get the breakpoints
-    let breakpoints = find_kp_breakpoints(iter.clone(), args);
+    let breakpoints = find_kp_breakpoints(iter.clone(), args, first_punct);
 
     // iterate through the breakpoints (note that breakpoints is in reverse break order, so we .rev() it
     let result: std::io::Result<(bool, bool)> = breakpoints.iter().rev().try_fold(
-        (false, false),
+        (first_punct, false),
         |(mut prev_punct, mut fresh), &(next_break, break_before)| {
             if fresh {
                 write_newline(args.indent, args.ostream)?;
@@ -206,6 +210,7 @@ struct LineBreak<'a> {
 fn find_kp_breakpoints<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
     iter: T,
     args: &BreakArgs<'a>,
+    first_punct: bool,
 ) -> Vec<(&'a WordInfo<'a>, bool)> {
     let mut iter = iter.peekable();
     // set up the initial null linebreak
@@ -230,7 +235,11 @@ fn find_kp_breakpoints<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
         args.opts.goal.max(stretch + 1) - stretch
     };
     let mut new_linebreaks = vec![];
-    let mut is_sentence_start = false;
+    // the first word was written before this, so work out here whether the
+    // word after it starts a sentence
+    let mut is_sentence_start = iter
+        .peek()
+        .is_some_and(|w| w.sentence_start || (w.new_line && first_punct));
     while let Some(w) = iter.next() {
         let next_word_sentence_final = is_next_word_sentence_final(iter.clone());
         // if this is the last word, we don't add additional demerits for this break
@@ -357,8 +366,7 @@ fn find_kp_breakpoints<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
 
         if next_active_breaks.is_empty() {
             // every potential linebreak is too long! choose the linebreak with the least demerits, ld_idx
-            let new_break =
-                restart_active_breaks(args, &linebreaks[ld_idx], ld_idx, w, slen, minlength);
+            let new_break = restart_active_breaks(args, &linebreaks[ld_idx], ld_idx, w);
             next_active_breaks.push(linebreaks.len());
             linebreaks.push(new_break);
         }
@@ -460,23 +468,14 @@ fn restart_active_breaks<'a>(
     active: &LineBreak<'a>,
     act_idx: usize,
     w: &'a WordInfo<'a>,
-    slen: usize,
-    min: usize,
 ) -> LineBreak<'a> {
     let (break_before, line_length) = if active.fresh {
         // never break before a word if that word would be the first on a line
         (false, args.indent_len)
     } else {
-        // choose the lesser evil: breaking too early, or breaking too late
-        let wlen = w.word_nchars + args.compute_width(w, active.length, active.fresh);
-        let underlen = min as isize - active.length as isize;
-        let overlen = (wlen + slen + active.length) as isize - args.opts.width as isize;
-        if overlen > underlen {
-            // break early, put this word on the next line
-            (true, args.indent_len + w.word_nchars)
-        } else {
-            (false, args.indent_len)
-        }
+        // the word does not fit, and WIDTH is a hard maximum (like GNU fmt),
+        // so break early and put this word on the next line
+        (true, args.indent_len + w.word_nchars)
     };
 
     // restart the linebreak. This will be our only active path.

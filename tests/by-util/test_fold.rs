@@ -18,9 +18,9 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_non_utf8_filename() {
     use std::os::unix::ffi::OsStringExt;
 
@@ -32,9 +32,9 @@ fn test_non_utf8_filename() {
     ucmd.arg(&filename).succeeds().stdout_only("foo");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_non_utf8_filename_of_nonexisting_file() {
     use std::os::unix::ffi::OsStringExt;
 
@@ -206,6 +206,77 @@ fn test_fold_preserves_invalid_utf8_sequences() {
         .pipe_in(bad_input.to_vec())
         .succeeds()
         .stdout_is_bytes(bad_input);
+}
+
+/// An invalid byte must not make fold split the valid multibyte characters
+/// around it in the same read buffer.
+#[rstest]
+#[case::wide_before_invalid(b"\xe7\x95\x8c\n\xff\n")]
+#[case::wide_after_invalid(b"\xff\n\xe7\x95\x8c\n")]
+#[case::wide_around_invalid(b"\xe7\x95\x8c\n\xff\n\xe7\x95\x8c\n")]
+#[case::narrow_before_invalid(b"\xc3\xa9\xc3\xa9\n\xff\n")]
+fn test_fold_keeps_utf8_characters_next_to_invalid_bytes(#[case] input: &[u8]) {
+    for extra in [None, Some("-s"), Some("-c")] {
+        let mut cmd = new_ucmd!();
+        cmd.arg("-w2");
+        if let Some(option) = extra {
+            cmd.arg(option);
+        }
+        cmd.pipe_in(input.to_vec())
+            .succeeds()
+            .stdout_is_bytes(input);
+    }
+}
+
+/// A line that wraps next to an invalid byte: like GNU, the invalid byte
+/// takes one column and the wide character after or before it moves to its
+/// own line. With `-c`, both fit in two characters and nothing wraps.
+#[rstest]
+#[case::wide_after_invalid(b"\xff\xe7\x95\x8c\n", b"\xff\n\xe7\x95\x8c\n")]
+#[case::wide_before_invalid(b"\xe7\x95\x8c\xff\n", b"\xe7\x95\x8c\n\xff\n")]
+fn test_fold_wraps_next_to_invalid_byte(#[case] input: &[u8], #[case] expected: &[u8]) {
+    for extra in [None, Some("-s")] {
+        let mut cmd = new_ucmd!();
+        cmd.arg("-w2");
+        if let Some(option) = extra {
+            cmd.arg(option);
+        }
+        cmd.pipe_in(input.to_vec())
+            .succeeds()
+            .stdout_is_bytes(expected);
+    }
+    new_ucmd!()
+        .args(&["-w2", "-c"])
+        .pipe_in(input.to_vec())
+        .succeeds()
+        .stdout_is_bytes(input);
+}
+
+#[rstest]
+#[case::utf8_crlf(b"abc\r\n\xc3\xa9\n")]
+#[case::utf8_backspace(b"abc\x08X\n\xc3\xa9\n")]
+#[case::invalid_crlf(b"abc\r\n\xff\n")]
+#[case::invalid_backspace(b"abc\x08X\n\xff\n")]
+fn test_full_width_before_column_reducing_control(#[case] input: &[u8]) {
+    for extra in [None, Some("-s"), Some("-c")] {
+        let mut cmd = new_ucmd!();
+        cmd.arg("-w3");
+        if let Some(option) = extra {
+            cmd.arg(option);
+        }
+        cmd.pipe_in(input.to_vec())
+            .succeeds()
+            .stdout_is_bytes(input);
+    }
+}
+
+#[test]
+fn test_full_width_before_cr_in_byte_mode() {
+    new_ucmd!()
+        .args(&["-b", "-w3"])
+        .pipe_in(b"abc\r\n\xc3\xa9\n".to_vec())
+        .succeeds()
+        .stdout_is_bytes(b"abc\n\r\n\xc3\xa9\n");
 }
 
 #[test]
@@ -609,10 +680,7 @@ fn test_bytewise_carriage_return_is_not_word_boundary() {
 }
 
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: killing the wasmtime process discards the unflushed output buffer, so the streamed bytes never reach stdout"
-)]
+#[uutests::wasi_ignore(KillDiscardsUnflushedOutput)]
 #[test]
 fn test_bytewise_read_from_pseudo_device() {
     let mut child = new_ucmd!().arg("-b").arg("/dev/zero").run_no_wait();
@@ -691,6 +759,18 @@ fn test_tab_advances_at_non_utf8_character() {
         .succeeds()
         .stdout_is_fixture_bytes("non_utf8_tab_stops_w8.expected");
 }
+/// A tab that folds after a non-UTF-8 byte starts the next line at column 0.
+#[rstest]
+#[case::default(&["-w12"])]
+#[case::spaces(&["-s", "-w12"])]
+fn test_tab_after_fold_at_non_utf8_character(#[case] args: &[&str]) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in(&b"\xffaaaaaaaaa\tX\n"[..])
+        .succeeds()
+        .stdout_is_bytes(b"\xffaaaaaaaaa\n\tX\n");
+}
+
 #[test]
 fn test_all_tab_advances_at_non_utf8_character() {
     new_ucmd!()
@@ -879,4 +959,28 @@ fn test_dash_operand_reads_stdin() {
         .ignore_stdin_write_error()
         .fails()
         .stderr_contains("invalid number of columns: '-'");
+}
+
+/// A tab or wide character must fold correctly after the 8 KiB streaming flush.
+#[rstest]
+#[case::ascii_tab(vec![b'a'; 8192], "-w8192", b"\tX\n")]
+#[case::utf8_tab("\u{E9}".repeat(4096).into_bytes(), "-w4100", "\t\u{E9}\n".as_bytes())]
+#[case::non_utf8_tab([&b"\xff"[..], &[b'a'; 8191]].concat(), "-w8192", b"\tX\n")]
+#[case::wide_character(vec![b'a'; 8192], "-w8193", "\u{754C}X\n".as_bytes())]
+fn test_fold_after_long_line_is_flushed(
+    #[case] first_line: Vec<u8>,
+    #[case] width: &str,
+    #[case] rest: &[u8],
+) {
+    let mut input = first_line.clone();
+    input.extend_from_slice(rest);
+    let mut expected = first_line;
+    expected.push(b'\n');
+    expected.extend_from_slice(rest);
+
+    new_ucmd!()
+        .arg(width)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(expected);
 }

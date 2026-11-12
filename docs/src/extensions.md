@@ -31,6 +31,9 @@ Our `coreutils` calls utility by `coreutils utility-name` and has `--list` to ru
 Our `coreutils` is called as `utility-name` if its binary name ends with `utility-name` to support prefixed names.
 Longer name is prioritized e.g. `sum` with the prefix `ck` is called as `cksum`.
 
+On Linux with glibc, a symlink alias such as
+`dummy -> true -> coreutils` selects `true` from the alias's immediate target.
+
 ## `base32/base64/basenc`
 
 Just like on macOS, `base32/base64/basenc` provides `-D` to decode data.
@@ -71,6 +74,12 @@ number of spaces representing a tab when determining the line length.
 ## `install`
 
 `install` offers FreeBSD's `-U` unprivileged option to not change the owner, the group, or the file flags of the destination.
+
+## `join`
+
+`join` accepts `-n`/`--numeric-sort` to compare join fields by numerical value,
+the same way `sort -n` orders them. This lets it join files sorted with `sort -n`,
+and keys such as `1` and `01` are considered equal.
 
 ## `ls`
 

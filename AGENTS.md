@@ -36,6 +36,12 @@ add a Rust test so it cannot silently regress.
 
 No tests, no merge.
 
+### Tests that can't run under WASI
+
+A test that can't run under the WASI runner is skipped with
+`#[uutests::wasi_ignore(ReasonKey)]`. See `docs/src/wasi-test-gaps.md` for the
+reason-key policy.
+
 ## Keep the PR description short
 
 Describe the problem being solved and what changed. That is all.
@@ -55,4 +61,5 @@ rules, this file is only a pointer:
 - `DEVELOPMENT.md` - build, test and environment setup
 - `README.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`
 - `docs/src/*.md` - platforms, performance, l10n, multicall, test coverage
+- `docs/src/wasi-test-gaps.md` - WASI test skips and the `wasi_ignore` reason keys
 - the per-utility `README.md` / `locales/*.ftl` files when touching a utility

@@ -8,13 +8,14 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
 use uucore::char_width::char_width_at;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
+use uucore::io::InputReader;
 use uucore::{format_usage, show, translate};
 
 pub mod options {
@@ -193,11 +194,12 @@ fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
     let mut processed_args = Vec::with_capacity(args.len());
 
     for arg in args {
-        if let Some(arg) = arg.to_str()
-            && arg.starts_with('-')
-            && arg[1..].chars().all(is_digit_or_comma)
+        if let Some(shortcut) = arg
+            .to_str()
+            .and_then(|arg| arg.strip_prefix('-'))
+            .filter(|shortcut| !shortcut.is_empty() && shortcut.chars().all(is_digit_or_comma))
         {
-            arg[1..]
+            shortcut
                 .split(',')
                 .filter(|s| !s.is_empty())
                 .for_each(|s| processed_args.push(OsString::from(format!("--tabs={s}"))));
@@ -258,9 +260,9 @@ pub fn uu_app() -> Command {
     )
 }
 
-fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read>>> {
+fn open(path: &OsString) -> UResult<InputReader> {
     if path == "-" {
-        return Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>));
+        return Ok(InputReader::Stdin(stdin().lock()));
     }
     let path_ref = Path::new(path);
     // some platforms cannot catch this as read error. accept additional overhead.
@@ -274,7 +276,7 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read>>> {
     let file = File::open(path_ref).map_err_context(|| path.maybe_quote().to_string())?;
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
     let _ = rustix::fs::fadvise(&file, 0, None, rustix::fs::Advice::Sequential);
-    Ok(BufReader::new(Box::new(file) as Box<dyn Read>))
+    Ok(InputReader::File(BufReader::new(file)))
 }
 
 /// Compute the number of spaces to the next tabstop.
@@ -340,6 +342,8 @@ fn classify_char(buf: &[u8], byte: usize, utf8: bool) -> (CharType, usize, usize
         return match b {
             b'\t' => (Tab, 0, 1),
             b'\x08' => (Backspace, 0, 1),
+            // NUL has no display width (`wcwidth(L'\0')` is 0).
+            b'\0' => (Other, 0, 1),
             _ => (Other, 1, 1),
         };
     }
@@ -349,6 +353,13 @@ fn classify_char(buf: &[u8], byte: usize, utf8: bool) -> (CharType, usize, usize
         return (Other, width, nbytes);
     }
     (Other, 1, 1) // implicit assumption: non-UTF-8 char is 1 col wide
+}
+
+/// Whether `b` is an ASCII byte that takes one column and needs no special
+/// handling: not a tab, backspace, newline or NUL.
+#[inline]
+fn is_plain(b: u8) -> bool {
+    b.is_ascii() && !matches!(b, b'\t' | b'\x08' | b'\n' | b'\0')
 }
 
 /// Write spaces for a tab expansion.
@@ -392,6 +403,22 @@ fn expand_buf(
     let mut init = true;
 
     while byte < buf.len() {
+        // Write a run of plain one-column ASCII bytes at once.
+        if is_plain(buf[byte]) {
+            let end = buf[byte + 1..]
+                .iter()
+                .position(|&b| !is_plain(b))
+                .map_or(buf.len(), |n| byte + 1 + n);
+            let plain = &buf[byte..end];
+            if init {
+                init = plain.iter().all(|&b| b == b' ');
+            }
+            *col += plain.len();
+            output.write_all(plain)?;
+            byte = end;
+            continue;
+        }
+
         let (ctype, cwidth, nbytes) = classify_char(buf, byte, options.utf8);
 
         // figure out how many columns this char takes up

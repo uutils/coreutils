@@ -117,6 +117,9 @@ fn test_create_fifo_with_mode_and_umask() {
     test_fifo_creation("=rwx,o-w", 0o022, "prwxr-xr-x"); // spell-checker:disable-line
     test_fifo_creation("ug+rw,o+r", 0o022, "prw-rw-rw-"); // spell-checker:disable-line
     test_fifo_creation("u=rwx,g=rx,o=", 0o022, "prwxr-x---"); // spell-checker:disable-line
+    // A negative numeric mode removes bits from the default 0666:
+    // -066 clears 066, leaving 0600.
+    test_fifo_creation("-066", 0o022, "prw-------"); // spell-checker:disable-line
 }
 
 #[test]
@@ -187,7 +190,7 @@ fn test_mkfifo_selinux() {
             context_value.contains("unconfined_u"),
             "Expected 'unconfined_u' not found in getfattr output:\n{context_value}"
         );
-        at.remove(&at.plus_as_string(dest));
+        at.remove(at.plus(dest));
     }
 }
 

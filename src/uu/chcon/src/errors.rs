@@ -23,9 +23,6 @@ pub(crate) enum Error {
     #[error("{}", translate!("chcon-error-no-files-specified"))]
     MissingFiles,
 
-    #[error("{}", translate!("chcon-error-data-out-of-range"))]
-    OutOfRange,
-
     #[error("{0}")]
     ArgumentsMismatch(String),
 

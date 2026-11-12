@@ -5,11 +5,12 @@
 
 // spell-checker:ignore binvalid finvalid hinvalid iinvalid linvalid nabcabc nabcabcabc ninvalid vinvalid winvalid dabc näää févr
 
+use rstest::rstest;
 use uutests::{at_and_ucmd, new_ucmd, util::TestScenario, util_name};
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_non_utf8_paths() {
     use std::os::unix::ffi::OsStringExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -154,6 +155,33 @@ fn test_number_format_rz_with_negative_line_number() {
 }
 
 #[test]
+fn test_number_format_rz_with_minimum_line_number() {
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MIN))
+        .args(&["-n", "rz", "-w", "1", "-s", ":"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is(format!("{}:a\n{}:b\n", i64::MIN, i64::MIN + 1));
+
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MIN))
+        .args(&["-n", "rz", "-w", "25", "-s", ":"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is("-000009223372036854775808:a\n-000009223372036854775807:b\n");
+}
+
+#[test]
+fn test_number_format_rz_decrementing_to_minimum_line_number() {
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MIN + 1))
+        .args(&["--line-increment=-1", "-n", "rz", "-w", "1", "-s", ":"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is(format!("{}:a\n{}:b\n", i64::MIN + 1, i64::MIN));
+}
+
+#[test]
 fn test_invalid_number_format() {
     for arg in ["-ninvalid", "--number-format=invalid"] {
         new_ucmd!()
@@ -230,9 +258,22 @@ fn test_number_separator() {
     }
 }
 
+#[rstest]
+#[case(&["-s", ""], concat!("     1a\n", "      \n", "     2b\n"))]
+#[case(&["-s:"], concat!("     1:a\n", "       \n", "     2:b\n"))]
+#[case(&["-s:-:"], concat!("     1:-:a\n", "         \n", "     2:-:b\n"))]
+#[case(&["-s🦀"], concat!("     1🦀a\n", "          \n", "     2🦀b\n"))]
+fn test_number_separator_and_padding_of_empty_lines(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in("a\n\nb\n")
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_number_separator_non_utf8() {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
@@ -681,9 +722,9 @@ fn test_section_delimiter() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_section_delimiter_non_utf8() {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
@@ -748,9 +789,9 @@ fn test_one_char_section_delimiter() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_one_byte_section_delimiter() {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
@@ -1037,5 +1078,27 @@ fn test_other_numeric_options_still_reject_values_above_the_limit() {
             .args(&[arg, "18446744073709551616"])
             .fails_with_code(1)
             .stderr_contains("invalid value '18446744073709551616'");
+    }
+}
+
+#[test]
+fn test_negative_starting_line_as_a_separate_argument() {
+    for arg in ["-v", "--starting-line-number"] {
+        new_ucmd!()
+            .args(&[arg, "-1"])
+            .pipe_in("a\nb\n")
+            .succeeds()
+            .stdout_is("    -1\ta\n     0\tb\n");
+    }
+}
+
+#[test]
+fn test_negative_line_increment_as_a_separate_argument() {
+    for arg in ["-i", "--line-increment"] {
+        new_ucmd!()
+            .args(&[arg, "-1"])
+            .pipe_in("a\nb\nc\n")
+            .succeeds()
+            .stdout_is("     1\ta\n     0\tb\n    -1\tc\n");
     }
 }

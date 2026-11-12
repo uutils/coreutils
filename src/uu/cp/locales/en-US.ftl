@@ -61,6 +61,7 @@ cp-error-not-writing-dangling-symlink = not writing through dangling symlink { $
 cp-error-failed-to-clone = failed to clone { $dest } from { $source }: { $error }
 cp-error-cannot-change-attribute = cannot change attribute { $dest }: Source file is a non regular file
 cp-error-cannot-stat = cannot stat { $source }: No such file or directory
+cp-error-cannot-stat-context = cannot stat { $source }
 cp-error-cannot-create-symlink = cannot create symlink { $dest } to { $source }
 cp-error-cannot-create-hard-link = cannot create hard link { $dest } to { $source }
 cp-error-omitting-directory = -r not specified; omitting directory { $dir }

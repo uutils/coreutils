@@ -10,6 +10,7 @@
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_tsort_non_utf8_paths() {

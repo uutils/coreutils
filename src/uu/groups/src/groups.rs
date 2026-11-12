@@ -8,7 +8,7 @@
 use std::io::{Write, stdout};
 use uucore::{
     display::Quotable,
-    entries::{Passwd, get_groups_gnu, gid2grp},
+    entries::{Passwd, get_groups_real_gid_first, gid2grp},
     error::{UError, UResult},
     format_usage, show,
 };
@@ -54,7 +54,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap_or_default();
 
     if users.is_empty() {
-        let gids = get_groups_gnu(None).map_err(|_| GroupsError::GetGroupsFailed)?;
+        let gids = get_groups_real_gid_first().map_err(|_| GroupsError::GetGroupsFailed)?;
         let groups: Vec<String> = gids.into_iter().map(infallible_gid2grp).collect();
         writeln!(stdout(), "{}", groups.join(" "))?;
         return Ok(());

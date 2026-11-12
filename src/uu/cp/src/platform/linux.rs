@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore reflink ftruncate fiemap lseek nofollow
+// spell-checker:ignore reflink fiemap lseek nofollow
 
-use rustix::fs::{SeekFrom, ftruncate, ioctl_ficlone, seek};
+use rustix::fs::{SeekFrom, ioctl_ficlone, seek};
 use std::fs::File;
 use std::io::{self, Read};
 use std::os::unix::fs::FileExt;
@@ -155,7 +155,7 @@ fn sparse_copy_without_hole_fd(src_file: &File, dst_file: &File, context: &str) 
     let ctx_err = |e: io::Error| CpError::IoErrContext(e, context.to_owned());
 
     let size = src_file.metadata().map_err(ctx_err)?.size();
-    ftruncate(dst_file, size).map_err(|e| CpError::IoErrContext(e.into(), context.to_owned()))?;
+    dst_file.set_len(size).map_err(ctx_err)?;
     let mut current_offset = 0;
     // Maximize the data read at once to 16 MiB to avoid memory hogging with large files
     // 16 MiB chunks should saturate an SSD
@@ -195,7 +195,7 @@ fn sparse_copy_fd(src_file: &mut File, dst_file: &File, context: &str) -> CopyRe
     // Keep the size as u64: on 32-bit targets a usize conversion would
     // panic for sources of 4 GiB and more.
     let size = src_file.metadata().map_err(ctx_err)?.size();
-    ftruncate(dst_file, size).map_err(|e| CpError::IoErrContext(e.into(), context.to_owned()))?;
+    dst_file.set_len(size).map_err(ctx_err)?;
 
     let blksize = dst_file.metadata().map_err(ctx_err)?.blksize();
     let mut buf: Vec<u8> = vec![0; blksize as usize];
@@ -210,8 +210,7 @@ fn sparse_copy_fd(src_file: &mut File, dst_file: &File, context: &str) -> CopyRe
             // EOF before the size seen at fstat time (source truncated
             // concurrently): shrink the dest to the bytes actually copied
             // instead of leaving a zero-filled tail up to the stale size.
-            ftruncate(dst_file, current_offset)
-                .map_err(|e| CpError::IoErrContext(e.into(), context.to_owned()))?;
+            dst_file.set_len(current_offset).map_err(ctx_err)?;
             break;
         }
         let buf = &buf[..this_read];

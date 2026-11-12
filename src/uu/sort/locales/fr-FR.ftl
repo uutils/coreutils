@@ -24,6 +24,7 @@ sort-file-operands-combined = opérande supplémentaire {$file}
     les opérandes de fichier ne peuvent pas être combinées avec --files0-from
     Essayez '{$help} --help' pour plus d'informations.
 sort-multiple-output-files = plusieurs fichiers de sortie spécifiés
+sort-multiple-compress-programs = plusieurs programmes de compression spécifiés
 sort-incompatible-tabs = tabulations incompatibles
 sort-minus-in-stdin = lors de la lecture des noms de fichiers depuis l'entrée standard, aucun nom de fichier '-' n'est autorisé
 sort-no-input-from = aucune entrée depuis {$file}

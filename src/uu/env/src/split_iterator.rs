@@ -95,7 +95,7 @@ impl<'a> SplitIterator<'a> {
         self.expander.get_parser_mut()
     }
 
-    fn substitute_variable<'x>(&'x mut self) -> Result<(), EnvError> {
+    fn substitute_variable<'x>(&'x mut self) -> Result<bool, EnvError> {
         let mut var_parse = VariableParser::<'a, '_> {
             parser: self.get_parser_mut(),
         };
@@ -105,9 +105,10 @@ impl<'a> SplitIterator<'a> {
         let varname_os_str_cow = from_native_int_representation(Cow::Borrowed(name));
         if let Some(value) = std::env::var_os(varname_os_str_cow) {
             self.expander.put_string(value);
+            return Ok(true);
         }
 
-        Ok(())
+        Ok(false)
     }
 
     fn check_and_replace_ascii_escape_code(&mut self, c: char) -> Result<bool, EnvError> {
@@ -151,6 +152,12 @@ impl<'a> SplitIterator<'a> {
                 }
                 Some(c) if ASCII_WHITESPACE_CHARS.contains(&c) => {
                     self.skip_one()?;
+                }
+                Some(DOLLAR) => {
+                    // An unset variable must not start a word.
+                    if self.substitute_variable()? {
+                        self.state_unquoted()?;
+                    }
                 }
                 Some(_) => {
                     // Don't consume char. Will be done in unquoted state.
