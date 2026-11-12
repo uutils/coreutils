@@ -5,28 +5,13 @@
 
 //! Zero-copy-related functions.
 
-use crate::io::{RawReader, RawWriter};
+use crate::io::{RawReader, RawWriter, ReadWriteError};
 use rustix::pipe::{SpliceFlags, fcntl_setpipe_size};
 use std::cell::Cell;
 use std::io::{PipeReader, PipeWriter, Read, Write};
 use std::os::fd::AsFd;
 pub const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
 const KERNEL_DEFAULT_PIPE_SIZE: usize = 64 * 1024;
-
-/// An error from a pipe operation, retaining whether it came from reading or writing.
-#[derive(Debug)]
-pub enum PipeError {
-    Read(std::io::Error),
-    Write(std::io::Error),
-}
-
-impl From<PipeError> for std::io::Error {
-    fn from(error: PipeError) -> Self {
-        match error {
-            PipeError::Read(error) | PipeError::Write(error) => error,
-        }
-    }
-}
 
 type PipeRes = std::io::Result<Result<(), ()>>;
 
@@ -41,7 +26,7 @@ thread_local! {
 /// - catch the read/write fallback's error by ? or let Err(e)
 ///
 /// use `rustix::io::Result` for functions without read/write fallback
-type SpliceRes = Result<Result<(), ()>, PipeError>;
+type SpliceRes = Result<Result<(), ()>, ReadWriteError>;
 
 /// return pipe and try to extend its size
 /// `SIZE_REQUIRED` should be true if you want to fail when changing pipe size failed
@@ -118,18 +103,18 @@ pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> Splice
         Ok(0) => Ok(()),
         Ok(n) => {
             if drain_pipe(&pipe_rd, dest, n)
-                .map_err(PipeError::Write)?
+                .map_err(ReadWriteError::Write)?
                 .is_err()
             {
                 Err(())
             } else {
                 // GNU cat catches all strace injections for 2nd+ splice
                 while let mut n @ 1.. = splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE)
-                    .map_err(|error| PipeError::Read(error.into()))?
+                    .map_err(|error| ReadWriteError::Read(error.into()))?
                 {
                     while n > 0 {
                         n -= splice(&pipe_rd, dest, n)
-                            .map_err(|error| PipeError::Write(error.into()))?;
+                            .map_err(|error| ReadWriteError::Write(error.into()))?;
                     }
                 }
                 Ok(())

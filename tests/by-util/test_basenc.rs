@@ -220,6 +220,25 @@ fn test_base58_decode_large_input_round_trip() {
 }
 
 #[test]
+fn test_base58_round_trip_large_binary_with_leading_zeros() {
+    let mut input = vec![0u8; 3];
+    input.extend((0..40_000u32).map(|i| (i * 89 + 41) as u8));
+    let encoded = new_ucmd!()
+        .args(&["--base58", "-w0"])
+        .pipe_in(input.clone())
+        .succeeds()
+        .stdout_move_str();
+    // One '1' per leading zero byte, and no more.
+    assert!(encoded.starts_with("111") && !encoded.starts_with("1111"));
+
+    new_ucmd!()
+        .args(&["--base58", "-d"])
+        .pipe_in(encoded)
+        .succeeds()
+        .stdout_is_bytes(input);
+}
+
+#[test]
 fn test_choose_last_encoding_base64() {
     new_ucmd!()
         .args(&[

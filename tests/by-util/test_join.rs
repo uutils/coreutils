@@ -1090,3 +1090,22 @@ fn test_o_separate_field_operands() {
         .succeeds()
         .stdout_only("1  a\n2  b\n3  c\n5  e\n8  h\n");
 }
+
+#[test]
+fn test_o_separate_fields_leave_two_files() {
+    // Files whose names look like field specs are still FILE1 and FILE2.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("2.1", "id lhs\n");
+    at.write("1.3", "id rhs\n");
+    ucmd.args(&["-o", "1.1", "2.2", "1.2", "2.1", "1.3"])
+        .succeeds()
+        .stdout_only("id rhs lhs\n");
+
+    new_ucmd!()
+        .args(&["-o", "0", "1.2", "1.3", "9.9"])
+        .fails_with_code(1)
+        .no_stdout()
+        // Windows quotes the name differently, so only check the operand is reported.
+        .stderr_contains("1.3")
+        .stderr_contains("No such file or directory");
+}

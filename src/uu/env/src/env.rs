@@ -312,6 +312,7 @@ pub fn uu_app() -> Command {
                 .value_name("DIR")
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::DirPath)
+                .allow_hyphen_values(true)
                 .help(translate!("env-help-chdir")),
         )
         .arg(
@@ -328,6 +329,7 @@ pub fn uu_app() -> Command {
                 .value_name("NAME")
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
+                .allow_hyphen_values(true)
                 .help(translate!("env-help-unset")),
         )
         .arg(
@@ -354,6 +356,7 @@ pub fn uu_app() -> Command {
                 .value_name("a")
                 .action(ArgAction::Set)
                 .value_parser(ValueParser::os_string())
+                .allow_hyphen_values(true)
                 .help(translate!("env-help-argv0")),
         )
         .arg(
@@ -629,7 +632,13 @@ impl EnvAppData {
                 all_args.push(arg.clone());
                 continue;
             }
-            let is_value = std::mem::take(&mut expecting_arg);
+            // The value of a detached -C, -u or -a is taken as is, even when
+            // it starts with -S, like GNU env does.
+            if expecting_arg {
+                expecting_arg = false;
+                all_args.push(arg.clone());
+                continue;
+            }
             let start = all_args.len();
             // Where the `-S` string sits, for the caret: the argument the
             // parser is looking at right now.
@@ -716,7 +725,7 @@ impl EnvAppData {
                 }
                 _ => {
                     all_args.push(arg.clone());
-                    if is_value || n == 0 {
+                    if n == 0 {
                         continue;
                     }
                 }
