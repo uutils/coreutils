@@ -91,7 +91,7 @@ skip = [
 # https://embarkstudios.github.io/cargo-deny/checks/sources/cfg.html
 
 [sources]
-unknown-registry = "warn"
-unknown-git = "warn"
+unknown-registry = "deny"
+unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = []
