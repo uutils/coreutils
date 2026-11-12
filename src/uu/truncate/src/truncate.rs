@@ -270,10 +270,11 @@ fn io_block_size(path: &Path, metadata: Option<&Metadata>) -> u64 {
     )
 }
 
-/// Size of the `--reference` file. Only a regular file or a directory has
-/// its length in the metadata; for anything else, seek to its end.
+/// Size of the `--reference` file. Only a regular file has its length in the
+/// metadata; for anything else, seek to its end like GNU. A directory cannot
+/// be opened this way on Windows, so there it keeps its metadata length.
 fn reference_file_size(path: &Path, metadata: &Metadata) -> io::Result<u64> {
-    if metadata.is_file() || metadata.is_dir() {
+    if metadata.is_file() || (cfg!(not(unix)) && metadata.is_dir()) {
         return Ok(metadata.len());
     }
 
