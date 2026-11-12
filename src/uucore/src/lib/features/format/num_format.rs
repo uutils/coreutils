@@ -484,7 +484,7 @@ fn format_float_decimal(
 ///   `.` (the caller must add that to get a valid scientific format number).
 /// - `e` is an integer exponent.
 fn bd_to_string_exp_with_prec(bd: &BigDecimal, precision: usize) -> (String, i64) {
-    // TODO: A lot of time is spent in `with_prec` computing the exact number
+    // TODO: A lot of time is spent in `with_precision_round` computing the exact number
     // of digits, it might be possible to save computation time by doing a rough
     // division followed by arithmetics on `digits` to round if necessary (using
     // `fast_inc`).
@@ -494,7 +494,7 @@ fn bd_to_string_exp_with_prec(bd: &BigDecimal, precision: usize) -> (String, i64
     // Note that rounding will produce an extra digit if it overflows
     // (e.g. 9995 to 3 digits => 1000 * 10^1, but we want 100 * 10^2), we compensate
     // for that later.
-    let precision_nz = NonZeroU64::new(precision as u64).expect("precision is at least 1");
+    let precision_nz = NonZeroU64::new(precision as u64).unwrap_or(NonZeroU64::MIN);
     let bd_round = bd.with_precision_round(precision_nz, RoundingMode::HalfEven);
 
     // Convert to the form XXX * 10^-p (XXX is precision digit long)
