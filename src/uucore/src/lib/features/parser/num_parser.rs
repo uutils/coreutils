@@ -391,7 +391,7 @@ fn make_error(overflow: bool, negative: bool) -> ExtendedParserError<ExtendedBig
 }
 
 /// Largest binary exponent (in absolute value) accepted for hexadecimal floats:
-/// `floor(i32::MAX * log2(10))` (= 7_133_786_260). Since `2**e == 10**(e * log10(2))`,
+/// `floor(i32::MAX * log2(10))` (= `7_133_786_260`). Since `2**e == 10**(e * log10(2))`,
 /// a larger exponent has a decimal exponent that does not fit in an `i32` (the limit
 /// the decimal parser applies) and would overflow the `BigDecimal` scale in `powi`,
 /// so it is treated as overflow/underflow instead.
