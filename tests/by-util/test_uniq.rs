@@ -5,6 +5,7 @@
 
 // spell-checker:ignore nabcd badoption schar nosuchfile
 
+use rstest::rstest;
 use uucore::posix::OBSOLETE;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -1350,4 +1351,33 @@ fn test_obsolete_skip_fields_not_read_after_double_dash() {
         .args(&["--", "-1"])
         .fails()
         .stderr_contains("-1");
+}
+
+#[rstest]
+#[case::unset(None)]
+#[case::empty(Some(""))]
+#[case::before_2001(Some("200111"))]
+#[case::since_2008(Some("200809"))]
+fn test_obsolete_skip_chars_by_default(#[case] posix: Option<&str>) {
+    for args in [&["+1"][..], &["+1", "+2"]] {
+        let mut ucmd = new_ucmd!();
+        if let Some(version) = posix {
+            ucmd.env("_POSIX2_VERSION", version);
+        }
+        ucmd.args(args)
+            .pipe_in("xa\nya\nzb\n")
+            .succeeds()
+            .stdout_is(if args.len() == 1 { "xa\nzb\n" } else { "xa\n" });
+    }
+}
+
+#[rstest]
+#[case::from_2001("200112")]
+#[case::until_2008("200808")]
+fn test_obsolete_skip_chars_disabled(#[case] posix: &str) {
+    new_ucmd!()
+        .env("_POSIX2_VERSION", posix)
+        .arg("+1")
+        .fails_with_code(1)
+        .stderr_is("uniq: +1: No such file or directory\n");
 }
