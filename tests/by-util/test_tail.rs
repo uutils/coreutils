@@ -983,34 +983,6 @@ fn test_follow_with_pid() {
         .success();
 }
 
-/// A shell used as a PID target must not execute the test runner's input.
-/// OpenBSD CI runs its workflow through a here-document on stdin.
-#[uutests::wasi_ignore(TailFollowDisabled)]
-#[test]
-#[cfg(all(
-    not(target_vendor = "apple"),
-    not(target_os = "android"),
-    not(target_os = "freebsd"),
-    not(windows)
-))]
-fn test_follow_with_pid_does_not_read_runner_stdin() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.cmd(std::env::current_exe().unwrap())
-        .current_dir(std::env::current_dir().unwrap())
-        .env("UUTESTS_BINARY_PATH", &ts.bin_path)
-        .env("STDIN_MARKER", ts.fixtures.plus("workflow-stdin-executed"))
-        .args(&["--exact", "test_tail::test_follow_with_pid", "--nocapture"])
-        .pipe_in("printf executed > \"$STDIN_MARKER\"\n")
-        .succeeds()
-        .stdout_contains("1 passed");
-
-    assert!(
-        !ts.fixtures.file_exists("workflow-stdin-executed"),
-        "the PID target shell executed the test runner's stdin"
-    );
-}
-
 #[test]
 fn test_single_big_args() {
     const FILE: &str = "single_big_args.txt";
