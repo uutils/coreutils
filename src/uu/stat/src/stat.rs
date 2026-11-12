@@ -167,6 +167,7 @@ impl DirectiveError {
     }
 }
 
+#[derive(Clone, Copy)]
 enum Padding {
     Zero,
     Space,
@@ -414,7 +415,7 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Precisio
     let padding_char = determine_padding_char(flags);
     // With a precision, an integer conversion ignores the 0 flag.
     let integer_padding = if precision == Precision::NotSpecified {
-        determine_padding_char(flags)
+        padding_char
     } else {
         Padding::Space
     };
