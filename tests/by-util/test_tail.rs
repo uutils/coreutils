@@ -370,6 +370,48 @@ fn test_n0_with_follow() {
     child.kill();
 }
 
+#[test]
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+fn test_follow_sparse_file_growth_under_memory_limit() {
+    use rlimit::Resource;
+
+    // Ensure newly readable data is streamed rather than buffered in full.
+    // Keep the address-space limit smaller than the sparse range.
+    const AS_LIMIT: u64 = 200 * 1024 * 1024;
+    const SPARSE_FILE_SIZE: u64 = 512 * 1024 * 1024;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let test_file = "sparse";
+    at.touch(test_file);
+
+    let mut child = ucmd
+        .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
+        .set_stdout(Stdio::null())
+        .args(&[
+            "-n0",
+            "-f",
+            "--use-polling",
+            "--sleep-interval=0.1",
+            test_file,
+        ])
+        .run_no_wait();
+    assert!(child.delay(500).is_alive(), "{}", child.stderr_all());
+
+    File::options()
+        .write(true)
+        .open(at.plus(test_file))
+        .unwrap()
+        .set_len(SPARSE_FILE_SIZE)
+        .unwrap();
+
+    assert!(
+        child.delay(2 * DEFAULT_SLEEP_INTERVAL_MILLIS).is_alive(),
+        "{}",
+        child.stderr_all()
+    );
+    child.kill();
+}
+
 // TODO: Add similar test for windows
 #[test]
 #[cfg(unix)]
