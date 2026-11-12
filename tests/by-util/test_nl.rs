@@ -1104,8 +1104,8 @@ fn test_negative_line_increment_as_a_separate_argument() {
 }
 
 #[cfg(unix)]
-#[rstest]
 #[uutests::wasi_ignore(HostPathsNotVisible)]
+#[rstest]
 fn test_largest_width_is_written_quickly(#[values("ln", "rn", "rz")] format: &str) {
     // About 2 GiB of padding, which used to be written a byte at a time.
     new_ucmd!()
