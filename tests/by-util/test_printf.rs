@@ -1373,6 +1373,25 @@ fn help_and_version_past_the_format_are_arguments() {
         .stdout_only("--help");
 }
 
+#[rstest]
+#[case::version_then_operand(&["--version", "x"], "--version", "x")]
+#[case::help_then_operand(&["--help", "x"], "--help", "x")]
+#[case::help_then_double_dash(&["--help", "--"], "--help", "--")]
+#[case::version_then_help(&["--version", "--help"], "--version", "--help")]
+fn help_and_version_with_more_arguments_are_the_format(
+    #[case] args: &[&str],
+    #[case] stdout: &str,
+    #[case] excess: &str,
+) {
+    new_ucmd!()
+        .args(args)
+        .succeeds()
+        .stdout_is(stdout)
+        .stderr_is(format!(
+            "printf: warning: ignoring excess arguments, starting with '{excess}'\n"
+        ));
+}
+
 #[test]
 fn test_precision_above_formatter_limit() {
     // A precision larger than u16::MAX must still be honoured in full.
