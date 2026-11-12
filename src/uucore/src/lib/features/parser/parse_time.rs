@@ -9,14 +9,10 @@
 //!
 //! Use the [`from_str`] function to parse a [`Duration`] from a string.
 
-use crate::{
-    display::Quotable,
-    extendedbigdecimal::ExtendedBigDecimal,
-    parser::num_parser::{self, ExtendedParserError, ParseTarget},
-};
-use num_traits::ToPrimitive;
-use num_traits::Zero;
-use num_traits::{FromPrimitive, Signed};
+use crate::display::Quotable;
+use crate::extendedbigdecimal::ExtendedBigDecimal;
+use crate::parser::num_parser::{self, ExtendedParserError, ParseTarget};
+use num_traits::{FromPrimitive, Signed, ToPrimitive, Zero};
 use std::time::Duration;
 
 /// Parse a duration from a string.
@@ -75,7 +71,9 @@ pub fn from_str(string: &str, allow_suffixes: bool) -> Result<Duration, String> 
         },
     ) {
         Ok(ebd) | Err(ExtendedParserError::Overflow(ebd)) => ebd,
-        Err(ExtendedParserError::Underflow(_)) => return Ok(NANOSECOND_DURATION),
+        Err(ExtendedParserError::Underflow(num)) if num != ExtendedBigDecimal::MinusZero => {
+            return Ok(NANOSECOND_DURATION);
+        }
         _ => {
             return Err(format!("invalid time interval {}", string.quote()));
         }
@@ -182,6 +180,32 @@ mod tests {
         assert_eq!(from_str("1e-9", false), Ok(NANOSECOND_DURATION));
         assert_eq!(from_str("1.9e-9", false), Ok(NANOSECOND_DURATION));
         assert_eq!(from_str("2e-9", false), Ok(Duration::from_nanos(2)));
+    }
+
+    #[test]
+    fn test_tiny_hex_duration() {
+        let input = format!("0x.{}f321984", "0".repeat(100_000));
+        assert_eq!(from_str(&input, false), Ok(Duration::from_nanos(1)));
+        assert_eq!(
+            from_str(&format!("{input}d"), true),
+            Ok(Duration::from_nanos(1))
+        );
+        assert!(from_str(&format!("-{input}"), false).is_err());
+        assert!(from_str(&format!("{input}junk"), true).is_err());
+        assert_eq!(
+            from_str(&format!("0x.{}", "0".repeat(100_000)), false),
+            Ok(Duration::ZERO)
+        );
+
+        // Neither fractional zeros nor a negative exponent alone imply that
+        // the duration underflows: the other factors can compensate for them.
+        assert_eq!(
+            from_str("0x.00000001p32", false),
+            Ok(Duration::from_secs(1))
+        );
+        assert_eq!(from_str("0x1p-40d", true), Ok(Duration::from_nanos(78)));
+        assert_eq!(from_str("0x1p-30", false), Ok(Duration::from_nanos(1)));
+        assert_eq!(from_str("0x1p-28", false), Ok(Duration::from_nanos(3)));
     }
 
     #[test]

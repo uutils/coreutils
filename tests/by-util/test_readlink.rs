@@ -33,7 +33,7 @@ fn test_resolve() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("foo");
-    at.symlink_file("foo", "bar");
+    at.relative_symlink_file("foo", "bar");
 
     ucmd.arg("bar").succeeds().stdout_contains("foo\n");
 }
@@ -80,6 +80,7 @@ fn test_canonicalize_existing_keeps_going_after_a_missing_operand() {
     assert_eq!(actual, expect);
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 fn test_canonicalize() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -90,6 +91,7 @@ fn test_canonicalize() {
     assert_eq!(actual, expect);
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 fn test_canonicalize_existing() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -100,6 +102,7 @@ fn test_canonicalize_existing() {
     assert_eq!(actual, expect);
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 fn test_canonicalize_missing() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -110,6 +113,7 @@ fn test_canonicalize_missing() {
     assert_eq!(actual, expect);
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 #[cfg(unix)]
 fn test_canonicalize_symlink_before_parentdir() {
@@ -125,6 +129,7 @@ fn test_canonicalize_symlink_before_parentdir() {
     assert_eq!(actual, expect);
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 fn test_long_redirection_to_current_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -486,6 +491,7 @@ fn test_delimiters() {
         .stdout_is("/a\n/a\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_readlink_non_utf8_paths() {

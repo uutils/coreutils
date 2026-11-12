@@ -14,7 +14,7 @@ use uucore::display::Quotable;
 use uucore::encoding::{
     BASE2LSBF, BASE2MSBF, Base32Wrapper, Base58Wrapper, Base64SimdWrapper, EncodingWrapper, Format,
     SupportsFastDecodeAndEncode, Z85Wrapper,
-    for_base_common::{BASE32, BASE32HEX, BASE64URL, HEXUPPER_PERMISSIVE},
+    for_base_common::{BASE32, BASE32HEX, HEXUPPER_PERMISSIVE},
 };
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError, strip_errno};
 use uucore::format_usage;
@@ -30,6 +30,9 @@ pub const BASE_CMD_PARSE_ERROR: i32 = 1;
 pub const WRAP_DEFAULT: usize = 76;
 
 pub const DEFAULT_BUF_SIZE: usize = 32 * 1024;
+
+/// Largest "-w" value that is honored; anything larger turns wrapping off like GNU
+const MAX_WRAP: usize = isize::MAX as usize;
 
 pub struct Config {
     pub decode: bool,
@@ -69,13 +72,15 @@ impl Config {
 
         let wrap_cols = options
             .get_one::<String>(options::WRAP)
-            .map(|num| {
-                num.parse::<usize>().map_err(|_| {
-                    USimpleError::new(
-                        BASE_CMD_PARSE_ERROR,
-                        translate!("base-common-invalid-wrap-size", "size" => num.quote()),
-                    )
-                })
+            .map(|num| match num.parse::<usize>() {
+                // A size too large to represent turns wrapping off.
+                Ok(cols @ ..=MAX_WRAP) => Ok(cols),
+                Ok(_) => Ok(0),
+                Err(e) if *e.kind() == std::num::IntErrorKind::PosOverflow => Ok(0),
+                Err(_) => Err(USimpleError::new(
+                    BASE_CMD_PARSE_ERROR,
+                    translate!("base-common-invalid-wrap-size", "size" => num.quote()),
+                )),
             })
             .transpose()?;
 
@@ -242,6 +247,13 @@ pub fn get_supports_fast_decode_and_encode(
     const BASE32_UNPADDED_MULTIPLE: usize = 5;
     const BASE64_UNPADDED_MULTIPLE: usize = 3;
 
+    // spell-checker:disable
+    const BASE64_ALPHABET: &[u8] =
+        b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=";
+    const BASE64URL_ALPHABET: &[u8] =
+        b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_=";
+    // spell-checker:enable
+
     match format {
         Format::Base16 => Box::from(EncodingWrapper::new(
             HEXUPPER_PERMISSIVE,
@@ -278,11 +290,17 @@ pub fn get_supports_fast_decode_and_encode(
             // spell-checker:disable-next-line
             b"0123456789ABCDEFGHIJKLMNOPQRSTUV=",
         )),
-        Format::Base64 => {
-            let alphabet: &[u8] = if has_padding {
-                &b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/="[..]
+        Format::Base64 | Format::Base64Url => {
+            let alphabet: &'static [u8] = if matches!(format, Format::Base64Url) {
+                BASE64URL_ALPHABET
             } else {
-                &b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/"[..]
+                BASE64_ALPHABET
+            };
+            // The alphabets end with '=', which is only valid when padding is used.
+            let alphabet = if has_padding {
+                alphabet
+            } else {
+                &alphabet[..alphabet.len() - 1]
             };
             let use_padding = !decode || has_padding;
             Box::from(Base64SimdWrapper::new(
@@ -292,13 +310,6 @@ pub fn get_supports_fast_decode_and_encode(
                 alphabet,
             ))
         }
-        Format::Base64Url => Box::from(EncodingWrapper::new(
-            BASE64URL,
-            BASE64_VALID_DECODING_MULTIPLE,
-            BASE64_UNPADDED_MULTIPLE,
-            // spell-checker:disable-next-line
-            b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789=_-",
-        )),
         Format::Z85 => Box::from(Z85Wrapper {}),
         Format::Base58 => Box::from(Base58Wrapper {}),
     }
@@ -643,6 +654,7 @@ pub mod fast_decode {
     use uucore::{
         encoding::SupportsFastDecodeAndEncode,
         error::{UResult, USimpleError},
+        translate,
     };
 
     // Start of helper functions
@@ -745,9 +757,14 @@ pub mod fast_decode {
             } else if ignore_garbage {
                 continue;
             } else {
-                return Err(USimpleError::new(1, "error: invalid input"));
+                return Err(USimpleError::new(
+                    1,
+                    translate!("base-common-invalid-input"),
+                ));
             }
 
+            // Encodings without partial decode (base58) are one big number, so
+            // they are decoded in one go after the loop, never in chunks.
             if supports_partial_decode {
                 flush_ready_chunks(
                     &mut buffer,
@@ -757,14 +774,6 @@ pub mod fast_decode {
                     &mut decoded_buffer,
                     output,
                 )?;
-            } else if buffer.len() == decode_in_chunks_of_size {
-                decode_in_chunks_to_buffer(
-                    supports_fast_decode_and_encode,
-                    &buffer,
-                    &mut decoded_buffer,
-                )?;
-                write_to_output(&mut decoded_buffer, output)?;
-                buffer.clear();
             }
         }
 
@@ -794,7 +803,10 @@ pub mod fast_decode {
             write_to_output(&mut decoded_buffer, output)?;
 
             if had_invalid_tail {
-                return Err(USimpleError::new(1, "error: invalid input"));
+                return Err(USimpleError::new(
+                    1,
+                    translate!("base-common-invalid-input"),
+                ));
             }
         }
 
@@ -857,7 +869,10 @@ pub mod fast_decode {
                             buffer.drain(..decode_in_chunks_of_size);
                         }
                     }
-                    return Err(USimpleError::new(1, "error: invalid input"));
+                    return Err(USimpleError::new(
+                        1,
+                        translate!("base-common-invalid-input"),
+                    ));
                 }
 
                 if supports_partial_decode {
@@ -909,7 +924,10 @@ pub mod fast_decode {
             write_to_output(&mut decoded_buffer, output)?;
 
             if had_invalid_tail {
-                return Err(USimpleError::new(1, "error: invalid input"));
+                return Err(USimpleError::new(
+                    1,
+                    translate!("base-common-invalid-input"),
+                ));
             }
         }
 

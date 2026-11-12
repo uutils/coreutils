@@ -1,0 +1,138 @@
+# spell-checker:ignore supp jiff rayon crossbeam Memcheck stdin
+#
+# Valgrind suppressions for uutils coreutils.
+#
+# Everything below is allocated once, kept in a static (or a thread that lives
+# until exit) and released by the OS when the process ends. Rust never drops
+# statics, so valgrind reports these blocks as "still reachable" (or "possibly
+# lost" when only an interior pointer is left). None of them grows with the
+# input, so they are not leaks.
+#
+# Usage:
+#   valgrind --leak-check=full --show-reachable=yes \
+#     --suppressions=util/valgrind.supp coreutils cat file
+
+# The parsed .ftl translations. Bundles need `&'static FluentResource`, so the
+# resources are leaked on purpose and cached for the rest of the run.
+{
+   uucore-locale-resources
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:*uucore*mods*locale*
+}
+# Same allocations as above. Debug builds have deep parser stacks and the
+# default --num-callers cuts them before the uucore frame, so match the parser.
+{
+   fluent-resources
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:*fluent_bundle*resource*FluentResource*try_new*
+}
+{
+   fluent-parser
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:*fluent_syntax*parser*
+}
+# The command line, copied once into a LazyLock static by uucore::args_os().
+{
+   uucore-argv
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:*uucore*ARGV*
+}
+# Derived from ARGV and cached for error messages ("coreutils cat: ...").
+{
+   uucore-execution-phrase
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:*uucore*EXECUTION_PHRASE*
+}
+{
+   uucore-util-name
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:*uucore*UTIL_NAME*
+}
+# jiff loads the system time zone database and the local zone into a global
+# cache on first use (date, ls -l, pr, touch...). The cache holds Arcs, so
+# valgrind only sees interior pointers and reports "possibly lost".
+{
+   jiff-timezone-database
+   Memcheck:Leak
+   match-leak-kinds: possible,reachable
+   ...
+   fun:*jiff*tz*
+}
+# sort spawns rayon's global thread pool. Its workers are still parked when
+# main returns, so their stacks and registry show up as "possibly lost".
+{
+   rayon-global-thread-pool
+   Memcheck:Leak
+   match-leak-kinds: possible,reachable
+   ...
+   fun:*rayon_core*registry*
+}
+# The epoch-based garbage collector used by the rayon workers is a global.
+{
+   crossbeam-epoch-collector
+   Memcheck:Leak
+   match-leak-kinds: possible,reachable
+   ...
+   fun:*crossbeam_epoch*
+}
+# Thread handle created when a channel is first used inside a worker thread.
+{
+   std-thread-handle-in-worker
+   Memcheck:Leak
+   match-leak-kinds: possible,reachable
+   ...
+   fun:*std*thread*current*init_current*
+}
+# regex keeps a per-thread id for its matcher cache pool in a static.
+{
+   regex-thread-pool-id
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:*regex_automata*
+}
+# Utilities cache locale-dependent data (date format, decimal separator...) in
+# OnceLock/LazyLock statics. Only "reachable" blocks are matched here, so a
+# real leak inside such an initializer would still be reported.
+{
+   once-lock-statics
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:*OnceLock*initialize*
+}
+{
+   lazy-lock-statics
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:*LazyLock*force*
+}
+# std's global stdin buffer; any Rust program reading stdin has it.
+{
+   std-stdin-buffer
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:*std*io*stdio*
+}
+# std records the main thread's stack bounds for its stack overflow handler.
+{
+   std-main-thread-info
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:*std*sys*pal*unix*stack_overflow*
+}

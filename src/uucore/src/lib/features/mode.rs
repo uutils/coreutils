@@ -8,7 +8,6 @@
 //! Set of functions to parse modes
 
 use std::ffi::OsString;
-use std::fmt::{self, Display};
 use std::ops::Range;
 
 #[cfg(windows)]
@@ -22,7 +21,8 @@ use crate::translate;
 /// `span` is a byte range inside the mode string that was handed to the parser,
 /// so that a caller can point a caret at the one clause — often the one
 /// character — that broke it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{message}")]
 pub struct ModeError {
     pub message: String,
     pub span: Range<usize>,
@@ -195,27 +195,17 @@ impl ModeError {
     }
 }
 
-impl Display for ModeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.message)
-    }
-}
-
-impl std::error::Error for ModeError {}
-
 pub fn parse_numeric(fperm: u32, mode: &str, considering_dir: bool) -> Result<u32, ModeError> {
     let original = mode;
     let (op, pos) = parse_op(mode).map_or_else(|_| (None, 0), |(op, pos)| (Some(op), pos));
-    let digits = mode[pos..].trim();
-    let mode = digits;
+    let mode = &mode[pos..];
     let change = if mode.is_empty() {
         0
     } else {
-        let at = original.len() - original.trim_end().len();
         u32::from_str_radix(mode, 8).map_err(|e| {
             ModeError::new(
                 e.to_string(),
-                pos..original.len() - at,
+                pos..original.len(),
                 ModeErrorKind::InvalidNumber,
             )
         })?
@@ -371,12 +361,11 @@ pub fn parse_chmod(
 
     // Split by commas and process each mode part sequentially
     let mut offset = 0;
-    for raw_part in mode_string.split(',') {
-        let start = offset + (raw_part.len() - raw_part.trim_start().len());
+    for mode_part in mode_string.split(',') {
+        let start = offset;
         // Past the part and the comma that followed it.
-        offset += raw_part.len() + 1;
+        offset += mode_part.len() + 1;
 
-        let mode_part = raw_part.trim();
         if mode_part.is_empty() {
             continue;
         }
@@ -397,6 +386,23 @@ pub fn parse(mode_string: &str, considering_dir: bool, umask: u32) -> Result<u32
     parse_chmod(0, mode_string, considering_dir, umask)
 }
 
+#[cfg(unix)]
+static UMASK_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(unix)]
+thread_local! {
+    /// The umask set by a [`with_umask`] running on this thread, which holds
+    /// `UMASK_LOCK`.
+    static HELD_UMASK: std::cell::Cell<Option<u32>> = const { std::cell::Cell::new(None) };
+}
+
+#[cfg(unix)]
+fn lock_umask() -> std::sync::MutexGuard<'static, ()> {
+    UMASK_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 pub fn get_umask() -> u32 {
     // There's no portable way to read the umask without changing it.
     // We have to replace it and then quickly set it back, hopefully before
@@ -407,6 +413,10 @@ pub fn get_umask() -> u32 {
     {
         use rustix::fs::Mode;
         use rustix::process::umask;
+        if let Some(mask) = HELD_UMASK.get() {
+            return mask;
+        }
+        let _lock = lock_umask();
 
         let mask = umask(Mode::empty());
         let _ = umask(mask);
@@ -429,11 +439,51 @@ pub fn get_umask() -> u32 {
     }
 }
 
+#[cfg(unix)]
+struct UmaskGuard {
+    previous: rustix::fs::Mode,
+    held: Option<u32>,
+}
+
+#[cfg(unix)]
+impl UmaskGuard {
+    fn set(mask: u32) -> Self {
+        // `rustix::fs::RawMode` is u16 on some targets and u32 on others.
+        let mode = rustix::fs::Mode::from_bits_truncate(mask as rustix::fs::RawMode);
+        Self {
+            previous: rustix::process::umask(mode),
+            held: HELD_UMASK.replace(Some(mask & 0o777)),
+        }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for UmaskGuard {
+    fn drop(&mut self) {
+        rustix::process::umask(self.previous);
+        HELD_UMASK.set(self.held);
+    }
+}
+
+/// Run an operation with a temporary process umask.
+///
+/// The previous umask is restored when the operation returns or unwinds.
+/// Calls through this module are serialized because the umask is process-wide.
+/// They nest: inside `operation`, [`get_umask`] returns `mask`, and `with_umask`
+/// can be called again. Other threads wait until `operation` returns, so it
+/// must not wait for one of them.
+#[cfg(unix)]
+pub fn with_umask<T>(mask: u32, operation: impl FnOnce() -> T) -> T {
+    // Only the outermost call on this thread takes the lock.
+    let _lock = HELD_UMASK.get().is_none().then(lock_umask);
+    let _guard = UmaskGuard::set(mask);
+    operation()
+}
+
 #[cfg(test)]
 mod tests {
 
-    use super::parse;
-    use super::parse_chmod;
+    use super::{parse, parse_chmod};
 
     #[test]
     fn test_chmod_symbolic_modes() {
@@ -497,10 +547,22 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_comma_separated_with_spaces() {
-        // Comma-separated with spaces (should be trimmed)
-        assert_eq!(parse("u+rw, g+rw, o+r", false, 0).unwrap(), 0o664);
-        assert_eq!(parse(" u+x , g+x ", false, 0).unwrap(), 0o110);
+    fn test_parse_rejects_whitespace() {
+        for mode in [
+            " 644",
+            "644 ",
+            "+ 644",
+            "   ",
+            "u+rw, g+rw, o+r",
+            " u+x , g+x ",
+            "u+x, +755",
+            "u+x, ,g+w",
+        ] {
+            assert!(
+                parse(mode, false, 0).is_err(),
+                "{mode:?} should be rejected"
+            );
+        }
     }
 
     #[test]
@@ -514,7 +576,6 @@ mod tests {
     fn test_parse_empty_string() {
         // Empty string should return 0
         assert_eq!(parse("", false, 0).unwrap(), 0);
-        assert_eq!(parse("   ", false, 0).unwrap(), 0);
         assert_eq!(parse(",,", false, 0).unwrap(), 0);
     }
 
@@ -567,5 +628,33 @@ mod tests {
 
         // First add user write, then set to 755 (should override)
         assert_eq!(parse("u+w,755", false, 0).unwrap(), 0o755);
+    }
+
+    /// Reads the umask without going through the helpers under test.
+    #[cfg(unix)]
+    fn raw_umask() -> u32 {
+        let mask = rustix::process::umask(rustix::fs::Mode::empty());
+        rustix::process::umask(mask);
+        mask.bits() as u32
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_with_umask_sets_and_restores_mask() {
+        let before = super::get_umask();
+        assert_eq!(super::with_umask(0o027, raw_umask), 0o027);
+        assert_eq!(super::get_umask(), before);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_with_umask_nests() {
+        let before = super::get_umask();
+        super::with_umask(0o027, || {
+            assert_eq!(super::get_umask(), 0o027);
+            assert_eq!(super::with_umask(0o077, raw_umask), 0o077);
+            assert_eq!(raw_umask(), 0o027);
+        });
+        assert_eq!(super::get_umask(), before);
     }
 }

@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf pgrp GETFD pfds revents POLLRDBAND POLLERR unblockable
-// spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGDANGER SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGMIGRATE SIGMSG SIGPIPE SIGPRE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTALRM SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVIRT SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VIRT VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX TALRM AIOCANCEL XRES RTMIN RTMAX LTOSTOP SIGSIGTERM SIGSIGKILL
+// spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGDANGER SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL KILLTHR SIGMIGRATE SIGMSG SIGPIPE SIGPRE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTALRM SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVIRT SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VIRT VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX TALRM AIOCANCEL XRES RTMIN RTMAX LTOSTOP SIGSIGTERM SIGSIGKILL
 
 //! This module provides a way to handle signals in a platform-independent way.
 //! It provides a way to convert signal names to their corresponding values and vice versa.
@@ -92,6 +92,7 @@ pub static ALL_SIGNALS: [&str; 32] = [
     "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "INFO", "USR1", "USR2",
 ];
 
+// spell-checker: disable
 /*
 
      The following signals are defined in Haiku:
@@ -130,6 +131,7 @@ pub static ALL_SIGNALS: [&str; 32] = [
      SIGRESERVED1     31    reserved for future use
      SIGRESERVED2     32    reserved for future use
 */
+// spell-checker: enable
 
 #[cfg(target_os = "haiku")]
 pub static ALL_SIGNALS: [&str; 33] = [
@@ -732,10 +734,10 @@ static SIGPIPE_WAS_IGNORED: AtomicBool = AtomicBool::new(false);
 #[cfg(unix)]
 static STARTUP_STATE_WAS_CAPTURED: AtomicBool = AtomicBool::new(false);
 
-/// Captures stdio and SIGPIPE state at process initialization, before main() runs.
+/// Captures stdio and SIGPIPE state at process initialization, before `main()` runs.
 ///
 /// # Safety
-/// Called from `.init_array` before main(). Only reads current state.
+/// Called from `.init_array` before `main()`. Only reads current state.
 #[cfg(unix)]
 #[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn capture_startup_state() {
@@ -842,10 +844,8 @@ pub const fn sigpipe_was_ignored() -> bool {
 
 #[cfg(target_os = "linux")]
 pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
-    use nix::{
-        poll::{PollFd, PollFlags, PollTimeout, poll},
-        sys::stat::{SFlag, fstat},
-    };
+    use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
+    use nix::sys::stat::{SFlag, fstat};
     use std::io::stdout;
     use std::os::fd::AsFd;
 

@@ -118,6 +118,8 @@ EBUSY
 EEXIST
 EINVAL
 EISDIR
+EMFILE
+ENFILE
 ENODATA
 ENOENT
 ENOSPC
@@ -348,10 +350,14 @@ uutils
 # * function names
 sendfile
 execfn
+execveat
 fadvise
+fexecve
 ficlone
 fstatfs
+ftruncate
 getcwd
+memfd
 mkfifoat
 setpipe
 

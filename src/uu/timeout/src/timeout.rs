@@ -224,7 +224,13 @@ fn wait_or_kill_process(
     verbose: bool,
     spawn_state: &platform::SpawnState,
 ) -> std::io::Result<i32> {
-    match process.wait_or_timeout(duration, true) {
+    // A zero kill-after delay disables escalation, even on further signals.
+    let result = if duration.is_zero() {
+        process.wait().map(TimeoutRet::Exited)
+    } else {
+        process.wait_or_timeout(duration, true)
+    };
+    match result {
         Ok(TimeoutRet::Exited(status)) => {
             if preserve_status {
                 let exit_code = status.code().unwrap_or_else(|| {

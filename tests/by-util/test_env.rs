@@ -20,12 +20,12 @@ use std::process::Command;
 use tempfile::tempdir;
 use uutests::new_ucmd;
 #[cfg(unix)]
-use uutests::util::PATH;
-#[cfg(unix)]
 use uutests::util::TerminalSimulation;
 use uutests::util::TestScenario;
 #[cfg(unix)]
 use uutests::util::UChild;
+#[cfg(unix)]
+use uutests::util::path;
 use uutests::util_name;
 
 #[cfg(unix)]
@@ -477,6 +477,17 @@ fn test_fail_change_directory() {
     assert!(out.contains("env: cannot change directory to "));
 }
 
+#[test]
+fn test_argv0_without_command_fails() {
+    for arg in ["-a", "--argv0"] {
+        let out = new_ucmd!()
+            .args(&[arg, "foo"])
+            .fails_with_code(125)
+            .stderr_move_str();
+        assert!(out.contains("must specify command with --argv0 (-a)"));
+    }
+}
+
 #[cfg(not(windows))] // windows has no executable "echo", its only supported as part of a batch-file
 #[test]
 fn test_split_string_into_args_one_argument_no_quotes() {
@@ -692,6 +703,32 @@ fn test_split_string_backslash_a_behavior_matches_gnu_quoting_context() {
         .no_stdout()
         .stderr_contains("invalid sequence '\\a' in -S");
 }
+
+#[cfg(not(windows))] // no printf available
+#[test]
+fn test_split_string_unset_variable_does_not_start_a_word() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("-Sprintf [%s] a ${UU_UNSET}")
+        .succeeds()
+        .stdout_is("[a]");
+
+    scene
+        .ucmd()
+        .arg("-S${UU_UNSET} printf hi")
+        .succeeds()
+        .stdout_is("hi");
+
+    scene
+        .ucmd()
+        .env("UU_EMPTY", "")
+        .arg("-Sprintf [%s] a ${UU_EMPTY}")
+        .succeeds()
+        .stdout_is("[a][]");
+}
+
 #[test]
 #[allow(clippy::cognitive_complexity)] // Ignore clippy lint of too long function sign
 fn test_env_parsing_errors() {
@@ -996,7 +1033,7 @@ fn test_env_default_signal_all_signals() {
 #[cfg(unix)]
 fn test_env_block_signal_flag() {
     new_ucmd!()
-        .env("PATH", PATH)
+        .env("PATH", path())
         .args(&["--block-signal", "true"])
         .succeeds()
         .no_stderr();
@@ -1006,12 +1043,12 @@ fn test_env_block_signal_flag() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_env_block_realtime_signal() {
     new_ucmd!()
-        .env("PATH", PATH)
+        .env("PATH", path())
         .args(&["--block-signal=SIGRTMIN+7", "true"])
         .succeeds()
         .no_stderr();
     new_ucmd!()
-        .env("PATH", PATH)
+        .env("PATH", path())
         .args(&["--block-signal=SIGRTMAX-7", "true"])
         .succeeds()
         .no_stderr();
@@ -1020,14 +1057,121 @@ fn test_env_block_realtime_signal() {
 #[test]
 #[cfg(unix)]
 fn test_env_list_signal_handling_reports_ignore() {
-    let result = new_ucmd!()
-        .env("PATH", PATH)
+    // Other tests change the dispositions of this process while this one
+    // runs, and env lists what it inherits, so only the line asked for is
+    // checked.
+    new_ucmd!()
+        .env("PATH", path())
         .args(&["--ignore-signal=INT", "--list-signal-handling", "true"])
+        .succeeds()
+        .stderr_contains("INT        ( 2): IGNORE\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_list_signal_handling_states() {
+    // A signal at its default is not listed; one both blocked and ignored
+    // shows both states, as GNU prints them.
+    new_ucmd!()
+        .env("PATH", path())
+        .args(&["--default-signal=PIPE", "--list-signal-handling", "true"])
+        .succeeds()
+        .stderr_does_not_contain("PIPE")
+        .stderr_does_not_contain("DEFAULT");
+    new_ucmd!()
+        .env("PATH", path())
+        .args(&[
+            "--ignore-signal=INT",
+            "--block-signal=INT",
+            "--list-signal-handling",
+            "true",
+        ])
+        .succeeds()
+        .stderr_contains("INT        ( 2): BLOCK,IGNORE\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_list_signal_handling_reports_inherited_ignore() {
+    // The listing is the state of the signals, not only what env changed:
+    // the outer env ignores USR1, the inner one lists it. Tests share one
+    // process, so the disposition is changed in a child, not here.
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .env("PATH", path())
+        .arg("--ignore-signal=USR1")
+        .arg(&ts.bin_path)
+        .args(&["env", "--list-signal-handling", "true"])
+        .succeeds()
+        .stderr_contains(format!("USR1       ({:2}): IGNORE\n", libc::SIGUSR1));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_signal_options_are_applied_in_the_order_given() {
+    // A signal back at its default is not listed; resetting the action keeps it blocked.
+    for (args, expected) in [
+        (&["--ignore-signal=INT", "--default-signal=INT"][..], None),
+        (
+            &["--default-signal=INT", "--ignore-signal=INT"][..],
+            Some("IGNORE"),
+        ),
+        (
+            &["--block-signal=INT", "--default-signal=INT"][..],
+            Some("BLOCK"),
+        ),
+        (&["--ignore-signal=INT", "--default-signal"][..], None),
+        (
+            &["--default-signal", "--ignore-signal=INT"][..],
+            Some("IGNORE"),
+        ),
+        (
+            &["--block-signal=INT", "--ignore-signal=INT"][..],
+            Some("BLOCK,IGNORE"),
+        ),
+    ] {
+        let mut cmd_args = args.to_vec();
+        cmd_args.extend(["--list-signal-handling", "true"]);
+
+        let result = new_ucmd!().env("PATH", path()).args(&cmd_args).succeeds();
+        let state = result
+            .stderr_str()
+            .lines()
+            .find(|line| line.starts_with("INT "))
+            .and_then(|line| line.rsplit(": ").next());
+        assert_eq!(state, expected, "{args:?}");
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_signal_option_without_value_applies_to_every_signal() {
+    // A bare option applies to every signal, so a signal another option set earlier is
+    // ignored again, and one given later still wins.
+    new_ucmd!()
+        .env("PATH", path())
+        .args(&[
+            "--ignore-signal=TERM",
+            "--ignore-signal",
+            "sh",
+            "-c",
+            "kill -INT $$",
+        ])
+        .succeeds();
+
+    let result = new_ucmd!()
+        .env("PATH", path())
+        .args(&[
+            "--ignore-signal",
+            "--default-signal=INT",
+            "--list-signal-handling",
+            "true",
+        ])
         .succeeds();
     let stderr = result.stderr_str();
     assert!(
-        stderr.contains("INT") && stderr.contains("IGNORE"),
-        "unexpected signal listing: {stderr}"
+        stderr.contains("TERM") && !stderr.contains("INT "),
+        "a later explicit option must win over a bare one, got: {stderr}"
     );
 }
 
@@ -1036,7 +1180,7 @@ fn run_sigpipe_script(ts: &TestScenario, extra_args: &[&str]) {
     let shell = env::var("SHELL").unwrap_or_else(|_| String::from("sh"));
     let _guard = SigpipeGuard::new();
     let mut cmd = ts.ucmd();
-    cmd.env("PATH", PATH);
+    cmd.env("PATH", path());
     cmd.args(extra_args);
     cmd.arg(shell);
     cmd.arg("-c");
@@ -1390,6 +1534,33 @@ mod tests_split_iterator {
             (r" w1#w2 ", &["w1#w2"]),
             (r"'not really a # comment'", &["not really a # comment"]),
             (" a # very long comment \n b # another comment", &["a", "b"]),
+        ]);
+    }
+
+    #[test]
+    fn split_unset_variable_on_its_own_adds_no_word() {
+        assert!(std::env::var_os("UU_UNSET").is_none());
+        split_ok(&[
+            ("${UU_UNSET}", &[]),
+            ("a ${UU_UNSET}", &["a"]),
+            ("a ${UU_UNSET} b", &["a", "b"]),
+            ("${UU_UNSET} a", &["a"]),
+            ("a ${UU_UNSET}#c d", &["a"]),
+            (r"a ${UU_UNSET}\_b", &["a", "b"]),
+            (r"a ${UU_UNSET}\c", &["a"]),
+        ]);
+    }
+
+    #[test]
+    fn split_unset_variable_next_to_other_text_keeps_the_word() {
+        assert!(std::env::var_os("UU_UNSET").is_none());
+        split_ok(&[
+            ("x${UU_UNSET}", &["x"]),
+            ("${UU_UNSET}x", &["x"]),
+            ("a ${UU_UNSET}${UU_UNSET}x", &["a", "x"]),
+            (r#""${UU_UNSET}""#, &[""]),
+            (r#"""${UU_UNSET}"#, &[""]),
+            (r#"${UU_UNSET}"""#, &[""]),
         ]);
     }
 

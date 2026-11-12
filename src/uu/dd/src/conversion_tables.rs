@@ -11,7 +11,7 @@
 
 pub type ConversionTable = [u8; 256];
 
-/// Builds a lowercase conversion table using locale-aware libc::tolower
+/// Builds a lowercase conversion table using locale-aware [`libc::tolower`]
 /// This function builds the table dynamically based on the current locale.
 /// The nix crate doesn't provide safe wrappers for locale functions, so we use libc directly.
 pub fn build_lcase_table() -> ConversionTable {
@@ -31,7 +31,7 @@ pub fn build_lcase_table() -> ConversionTable {
     table
 }
 
-/// Builds an uppercase conversion table using locale-aware libc::toupper
+/// Builds an uppercase conversion table using locale-aware [`libc::toupper`]
 /// This function builds the table dynamically based on the current locale.
 /// The nix crate doesn't provide safe wrappers for locale functions, so we use libc directly.
 pub fn build_ucase_table() -> ConversionTable {

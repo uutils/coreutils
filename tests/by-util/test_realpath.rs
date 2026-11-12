@@ -16,6 +16,7 @@ use std::path::{MAIN_SEPARATOR, Path};
 
 static GIBBERISH: &str = "supercalifragilisticexpialidocious";
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_realpath_current_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -23,6 +24,7 @@ fn test_realpath_current_directory() {
     ucmd.arg(".").succeeds().stdout_is(expect);
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_realpath_long_redirection_to_current_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -40,6 +42,7 @@ fn test_realpath_long_redirection_to_root() {
     new_ucmd!().arg(dir).succeeds().stdout_is(expect);
 }
 
+#[uutests::wasi_ignore(AbsoluteSymlinkTargetsUnfollowable)]
 #[test]
 fn test_realpath_file_and_links() {
     let scene = TestScenario::new(util_name!());
@@ -52,6 +55,7 @@ fn test_realpath_file_and_links() {
     scene.ucmd().arg("bar").succeeds().stdout_contains("foo\n");
 }
 
+#[uutests::wasi_ignore(AbsoluteSymlinkTargetsUnfollowable)]
 #[test]
 fn test_realpath_file_and_links_zero() {
     let scene = TestScenario::new(util_name!());
@@ -129,6 +133,7 @@ fn test_realpath_file_and_links_strip_zero() {
     }
 }
 
+#[uutests::wasi_ignore(AbsoluteSymlinkTargetsUnfollowable)]
 #[test]
 fn test_realpath_physical_mode() {
     let scene = TestScenario::new(util_name!());
@@ -162,6 +167,7 @@ fn test_realpath_logical_mode() {
         .stdout_contains("dir1\n");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_realpath_dangling() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -177,6 +183,7 @@ fn test_realpath_dangling() {
     assert_eq!(printed_dir, expect_dir);
 }
 
+#[uutests::wasi_ignore(AbsoluteSymlinkTargetsUnfollowable)]
 #[test]
 fn test_realpath_loop() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -213,7 +220,7 @@ fn test_realpath_symlink_follow_limit() {
     at.touch("target");
     at.relative_symlink_file("target", "link1");
     for i in 2..=41 {
-        at.relative_symlink_file(&format!("link{}", i - 1), &format!("link{i}"));
+        at.relative_symlink_file(format!("link{}", i - 1), format!("link{i}"));
     }
     let expect = path_concat!(at.root_dir_resolved(), "target") + "\n";
     scene.ucmd().arg("link40").succeeds().stdout_only(expect);
@@ -224,6 +231,7 @@ fn test_realpath_symlink_follow_limit() {
         .stderr_contains("Too many levels of symbolic links");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_realpath_default_allows_final_non_existent() {
     let p = Path::new("").join(GIBBERISH);
@@ -238,6 +246,7 @@ fn test_realpath_default_forbids_non_final_non_existent() {
     new_ucmd!().arg(p.to_str().unwrap()).fails();
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_realpath_existing() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -260,6 +269,7 @@ fn test_realpath_existing_error_quiet() {
         .no_output();
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_realpath_missing() {
     let p = Path::new("").join(GIBBERISH).join(GIBBERISH);
@@ -271,6 +281,7 @@ fn test_realpath_missing() {
         .stdout_only(expect);
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_realpath_when_symlink_is_absolute_and_enoent() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -302,6 +313,7 @@ fn test_realpath_when_symlink_is_absolute_and_enoent() {
         .stderr_is("realpath: dir1/foo2: No such file or directory\n");
 }
 
+#[uutests::wasi_ignore(AbsoluteSymlinkTargetsUnfollowable)]
 #[test]
 fn test_realpath_when_symlink_part_is_missing() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -555,6 +567,7 @@ fn test_realpath_empty() {
     new_ucmd!().fails_with_code(1);
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_realpath_non_utf8_paths() {

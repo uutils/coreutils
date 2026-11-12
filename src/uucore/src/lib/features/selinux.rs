@@ -146,8 +146,9 @@ impl FsCreateContext {
                         SeLinuxError::ContextRetrievalFailure(selinux_error_description(&e))
                     })?;
 
+            let path = absolute_for_policy_lookup(path);
             let default_context =
-                match labeler.look_up_by_path(path, mode.and_then(selinux::FileAccessMode::new)) {
+                match labeler.look_up_by_path(&path, mode.and_then(selinux::FileAccessMode::new)) {
                     Ok(context) => context,
                     Err(e) if is_ignorable_context_error(&e) => {
                         return Ok(Self {

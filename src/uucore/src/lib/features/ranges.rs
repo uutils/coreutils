@@ -65,21 +65,14 @@ pub enum RangeErrorKind {
 ///
 /// The message is built here so that it reads exactly as it always has; `span`
 /// and `kind` are what a caret needs on top of it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{message}")]
 pub struct RangeError {
     pub message: String,
     /// Byte range inside the whole list, not inside the one item at fault.
     pub span: ByteRange<usize>,
     pub kind: RangeErrorKind,
 }
-
-impl std::fmt::Display for RangeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.message)
-    }
-}
-
-impl std::error::Error for RangeError {}
 
 impl RangeError {
     /// Render this error against `args`, with a caret under the one range in

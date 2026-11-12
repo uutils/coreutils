@@ -9,7 +9,7 @@ use crate::capitalize;
 use crate::options;
 use crate::uu_app;
 
-use uucore::entries::{Locate, Passwd};
+use uucore::entries::Passwd;
 use uucore::error::UResult;
 use uucore::libc::S_IWGRP;
 use uucore::translate;
@@ -228,7 +228,7 @@ impl Pinky {
         column!(row, "{1:<8.0$}", utmpx::UT_NAMESIZE, ut.user());
 
         if self.layout.real_name {
-            let name = Passwd::locate(ut.user().as_ref())
+            let name = Passwd::locate_name(ut.user().as_ref())
                 .ok()
                 .and_then(|pw| real_name(&pw.name, pw.user_info.as_deref()));
             match name {
@@ -323,7 +323,7 @@ impl Pinky {
             // An unknown account gets the header line and nothing else, not
             // even the blank line that closes a paragraph below: GNU returns
             // from the entry right here.
-            let Ok(pw) = Passwd::locate(name.as_str()) else {
+            let Ok(pw) = Passwd::locate_name(name.as_str()) else {
                 writeln!(writer, " ???")?;
                 continue;
             };

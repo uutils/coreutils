@@ -1,6 +1,6 @@
 # Packaging coreutils
 
-<!-- spell-checker:ignore debuginfo manpages backtraces profdata profraw sysroot rustlib msvc Cprofile DESTDIR -->
+<!-- spell-checker:ignore debuginfo manpages backtraces profdata profraw sysroot rustlib msvc Cprofile DESTDIR fakeroot -->
 
 > **Note**: This page is intended as a guide for packaging the uutils coreutils
 > for package maintainers. Normal users probably do not need to read this. If you
@@ -71,6 +71,15 @@ bounds checks.
 It is also possible to split the debuginfo into a separate package. See the
 [`split-debuginfo`](https://doc.rust-lang.org/cargo/reference/profiles.html#split-debuginfo)
 option in `cargo`.
+
+On Linux, rustix's raw syscall backend bypasses libc function interposition.
+An `LD_PRELOAD` interceptor such as `fakeroot` cannot override affected calls
+in some utilities. For example, under `fakeroot`, `id -u` still reports the
+real UID. To ship the multicall binary with rustix's libc wrappers, build with:
+
+```bash
+cargo build --release --features unix,rustix/use-libc
+```
 
 ## Profile-Guided Optimization (PGO)
 
