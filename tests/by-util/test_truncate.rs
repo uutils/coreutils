@@ -330,7 +330,8 @@ fn test_reference_character_device() {
 }
 
 // Like GNU, a directory's size is where a seek to its end lands, not its
-// metadata length. The seek fails on tmpfs and gives 0 on btrfs.
+// metadata length. The seek fails on tmpfs, gives 0 on btrfs, and on ext4
+// lands on a hash offset too large for a file.
 #[test]
 #[cfg(unix)]
 fn test_reference_directory_size_is_its_end_offset() {
@@ -344,8 +345,11 @@ fn test_reference_directory_size_is_its_end_offset() {
     let end = std::fs::File::open(at.plus("dir")).and_then(|mut dir| dir.seek(SeekFrom::End(0)));
     let result = ucmd.args(&["-r", "dir", FILE1]).run();
     if let Ok(end) = end {
-        result.success().no_output();
-        assert_eq!(at.metadata(FILE1).len(), end);
+        if result.succeeded() {
+            assert_eq!(at.metadata(FILE1).len(), end);
+        } else {
+            assert_eq!(at.read(FILE1), "1234567890");
+        }
     } else {
         result
             .failure()
