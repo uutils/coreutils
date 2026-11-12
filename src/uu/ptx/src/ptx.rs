@@ -227,12 +227,12 @@ fn parse_c_integer(s: &str) -> Option<i64> {
     i64::from_str_radix(digits, radix).ok()
 }
 
-/// A line width or gap size, which GNU requires to be positive.
-fn parse_positive_size(value: &str, error: &str) -> UResult<usize> {
+/// Value parser for a line width or gap size, which GNU requires to be positive.
+fn parse_positive_size(value: &str) -> Result<usize, String> {
     parse_c_integer(value)
         .filter(|n| *n > 0)
         .and_then(|n| usize::try_from(n).ok())
-        .ok_or_else(|| USimpleError::new(1, translate!(error, "value" => value.quote())))
+        .ok_or_else(|| translate!("ptx-error-not-positive-integer"))
 }
 
 fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
@@ -272,13 +272,13 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
             .expect(err_msg)
             .clone_into(&mut config.trunc_str);
     }
-    if let Some(width) = matches.get_one::<String>(options::WIDTH) {
-        config.line_width = parse_positive_size(width, "ptx-error-invalid-line-width")?;
+    if let Some(width) = matches.get_one::<usize>(options::WIDTH) {
+        config.line_width = *width;
     } else if matches.get_flag(options::TYPESET_MODE) {
         config.line_width = 100;
     }
-    if let Some(gap) = matches.get_one::<String>(options::GAP_SIZE) {
-        config.gap_size = parse_positive_size(gap, "ptx-error-invalid-gap-width")?;
+    if let Some(gap) = matches.get_one::<usize>(options::GAP_SIZE) {
+        config.gap_size = *gap;
     }
     if let Some(format) = matches.get_one::<String>(options::FORMAT) {
         config.format = match format.as_str() {
@@ -1080,6 +1080,7 @@ pub fn uu_app() -> Command {
                 .short('g')
                 .long(options::GAP_SIZE)
                 .allow_hyphen_values(true)
+                .value_parser(parse_positive_size)
                 .help(translate!("ptx-help-gap-size"))
                 .value_name("NUMBER"),
         )
@@ -1121,6 +1122,7 @@ pub fn uu_app() -> Command {
                 .short('w')
                 .long(options::WIDTH)
                 .allow_hyphen_values(true)
+                .value_parser(parse_positive_size)
                 .help(translate!("ptx-help-width"))
                 .value_name("NUMBER"),
         )

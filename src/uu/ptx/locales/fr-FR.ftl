@@ -30,5 +30,4 @@ ptx-error-write-failed = échec de l'écriture
 ptx-error-extra-operand = opérande supplémentaire { $operand }
 ptx-error-empty-regexp = Une expression régulière ne peut pas correspondre à une chaîne de longueur zéro
 ptx-error-invalid-regexp = Expression régulière invalide (pour l'expression { $pattern })
-ptx-error-invalid-line-width = largeur de ligne invalide : { $value }
-ptx-error-invalid-gap-width = largeur d'espacement invalide : { $value }
+ptx-error-not-positive-integer = pas un entier positif

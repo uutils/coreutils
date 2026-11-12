@@ -454,24 +454,26 @@ fn test_width_and_gap_accept_c_integers(
 }
 
 #[rstest]
-#[case::zero("-w", "0", "line width")]
-#[case::negative("-w", "-1", "line width")]
-#[case::bad_octal("-w", "08", "line width")]
-#[case::no_hex_digits("-w", "0x", "line width")]
-#[case::trailing_blank("-w", "5 ", "line width")]
-#[case::too_large("-w", "9223372036854775808", "line width")]
-#[case::exponent("-g", "1e1", "gap width")]
-#[case::gap_zero("-g", "0", "gap width")]
+#[case::zero("-w", "0", "width")]
+#[case::negative("-w", "-1", "width")]
+#[case::bad_octal("-w", "08", "width")]
+#[case::no_hex_digits("-w", "0x", "width")]
+#[case::trailing_blank("-w", "5 ", "width")]
+#[case::too_large("-w", "9223372036854775808", "width")]
+#[case::exponent("-g", "1e1", "gap-size")]
+#[case::gap_zero("-g", "0", "gap-size")]
 fn test_width_and_gap_reject_invalid_numbers(
     #[case] option: &str,
     #[case] value: &str,
-    #[case] what: &str,
+    #[case] long: &str,
 ) {
     new_ucmd!()
         .args(&[option, value])
         .fails_with_code(1)
         .no_stdout()
-        .stderr_only(format!("ptx: invalid {what}: '{value}'\n"));
+        .stderr_contains(format!(
+            "invalid value '{value}' for '--{long} <NUMBER>': not a positive integer"
+        ));
 }
 
 #[test]
