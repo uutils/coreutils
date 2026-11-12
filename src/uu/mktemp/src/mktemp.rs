@@ -8,7 +8,7 @@
 use clap::builder::{TypedValueParser, ValueParserFactory};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use uucore::display::{Quotable, println_verbatim};
-use uucore::error::{FromIo, UError, UResult, UUsageError};
+use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
 use uucore::translate;
 use uucore::{format_usage, os_str_from_bytes};
 
@@ -71,6 +71,16 @@ enum MkTempError {
 
     #[error("{}", translate!("mktemp-error-not-found", "template_type" => .0, "template" => .1.quote()))]
     NotFound(String, PathBuf),
+
+    /// Wraps a raw [`std::io::Error`] after stripping the trailing
+    /// " (os error XX)" suffix that Rust appends to OS errors.
+    ///
+    /// GNU coreutils prints just the `strerror(3)` part (e.g. "File name
+    /// too long"), so we match that behaviour here. See #16349.
+    #[error("{message}")]
+    IoError {
+        message: String,
+    },
 }
 
 impl UError for MkTempError {
@@ -535,7 +545,10 @@ fn make_temp_dir(dir: &Path, prefix: &OsStr, rand: usize, suffix: &OsStr) -> URe
             let path = temp_path(dir, prefix, &"X".repeat(rand), suffix);
             Err(MkTempError::NotFound(translate!("mktemp-template-type-directory"), path).into())
         }
-        Err(e) => Err(e.into()),
+        Err(e) => Err(MkTempError::IoError {
+            message: strip_errno(&e),
+        }
+        .into()),
     }
 }
 
@@ -563,7 +576,10 @@ fn make_temp_file(dir: &Path, prefix: &OsStr, rand: usize, suffix: &OsStr) -> UR
             let path = temp_path(dir, prefix, &"X".repeat(rand), suffix);
             Err(MkTempError::NotFound(translate!("mktemp-template-type-file"), path).into())
         }
-        Err(e) => Err(e.into()),
+        Err(e) => Err(MkTempError::IoError {
+            message: strip_errno(&e),
+        }
+        .into()),
     }
 }
 

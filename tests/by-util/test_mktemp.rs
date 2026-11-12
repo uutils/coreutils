@@ -1352,4 +1352,41 @@ fn test_write_error_removes_the_temporary_directory() {
         .filter(|name| name.starts_with("keep-none-"))
         .collect();
     assert!(leftovers.is_empty(), "left behind: {leftovers:?}");
+
+#[cfg(unix)]
+#[test]
+fn test_mktemp_strip_os_error_suffix() {
+    // When mktemp fails because the resulting path would exceed NAME_MAX,
+    // GNU coreutils prints just the strerror part (e.g. "File name too long")
+    // without the trailing " (os error N)" that Rust's std::io::Error adds.
+    //
+    // See: https://github.com/uutils/coreutils/issues/16349
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    // Build a template whose final path would exceed NAME_MAX on most Unix
+    // systems (255 bytes typically). The "X" run is what mktemp replaces with
+    // random bytes, but the prefix alone already overflows the limit.
+    let overflow: Vec<u8> = (b'A'..=b'Z').cycle().take(300).collect();
+    let overflow_template = OsString::from_vec(overflow);
+
+    let scene = TestScenario::new(util_name!());
+    let tmpdir = scene.fixtures.as_string();
+
+    let result = scene
+        .ucmd()
+        .env(TMPDIR, &tmpdir)
+        .arg(&overflow_template)
+        .fails();
+
+    // The error must NOT contain the " (os error N)" suffix that Rust appends
+    // to raw OS errors. We match the GNU behaviour of printing only the
+    // strerror(3) part.
+    let stderr = result.stderr_str();
+    assert!(
+        !stderr.contains("(os error"),
+        "stderr should not contain the "(os error N)" suffix; got: {stderr:?}"
+    );
+}
+
 }
