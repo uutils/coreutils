@@ -1139,3 +1139,34 @@ fn test_last_of_format_printf_wins(#[case] args: &[&str], #[case] expected: &str
         .succeeds()
         .stdout_is(expected);
 }
+
+#[cfg(unix)]
+#[uutests::wasi_ignore(NoPermissionBits)]
+#[rstest]
+#[case::alternate("%#a", "0644\n", "0\n")]
+#[case::precision_with_zero("%#.4a", "0644\n", "0000\n")]
+#[case::precision_above("%#.5a", "00644\n", "00000\n")]
+#[case::precision_below("%#.2a", "0644\n", "00\n")]
+#[case::width("%#8.4a", "    0644\n", "    0000\n")]
+fn test_alternate_octal_adds_a_single_zero(
+    #[case] format: &str,
+    #[case] mode_644: &str,
+    #[case] mode_0: &str,
+) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    std::fs::set_permissions(at.plus("f"), std::fs::Permissions::from_mode(0o644)).unwrap();
+    ucmd.args(&["-c", format, "f"])
+        .succeeds()
+        .stdout_is(mode_644);
+
+    at.touch("z");
+    std::fs::set_permissions(at.plus("z"), std::fs::Permissions::from_mode(0o000)).unwrap();
+    new_ucmd!()
+        .current_dir(at.as_string())
+        .args(&["-c", format, "z"])
+        .succeeds()
+        .stdout_is(mode_0);
+}
