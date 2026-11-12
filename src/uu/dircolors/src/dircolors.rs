@@ -19,7 +19,7 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::translate;
 
-use uucore::{format_usage, parser::parse_glob};
+use uucore::format_usage;
 
 mod options {
     pub const BOURNE_SHELL: &str = "bourne-shell";
@@ -300,8 +300,7 @@ impl StrUtils for str {
     }
 
     fn fnmatch(&self, pat: &str) -> bool {
-        // An invalid glob never matches (GNU ignores it); don't unwrap the Err.
-        parse_glob::from_str(pat).is_ok_and(|glob| glob.matches(self))
+        uucore::colors::fnmatch(self, pat)
     }
 }
 

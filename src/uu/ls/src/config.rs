@@ -425,7 +425,7 @@ fn is_color_compatible_term() -> bool {
         let term = term.to_string_lossy();
         uucore::colors::TERMS
             .iter()
-            .any(|pattern| parse_glob::from_str(pattern).is_ok_and(|glob| glob.matches(&term)))
+            .any(|pattern| uucore::colors::fnmatch(&term, pattern))
     };
 
     match (term, colorterm) {
