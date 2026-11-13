@@ -5389,26 +5389,21 @@ fn test_tail_obsolete_number_before_double_dash() {
         .stdout_only("2\n3\n");
 }
 
-#[test]
-fn test_tail_digit_option_in_invalid_context() {
-    let scene = TestScenario::new(util_name!());
-    scene.fixtures.write("a", "1\n");
-    scene.fixtures.write("b", "2\n");
-    for (args, digit) in [
-        (&["-15", "a", "b"][..], '1'),
-        (&["-5c", "a", "b"], '5'),
-        (&["-15", "--", "a", "b"], '1'),
-        (&["-15", "-f", "a"], '1'),
-        (&["a", "-15", "b"], '1'),
-        (&["-n", "5", "-15", "a"], '1'),
-    ] {
-        scene
-            .ucmd()
-            .args(args)
-            .fails_with_code(1)
-            .no_stdout()
-            .stderr_is(format!("tail: option used in invalid context -- {digit}\n"));
-    }
+#[rstest]
+#[case::two_files(&["-15", "a", "b"], '1')]
+#[case::bytes_two_files(&["-5c", "a", "b"], '5')]
+#[case::two_files_after_double_dash(&["-15", "--", "a", "b"], '1')]
+#[case::before_option(&["-15", "-f", "a"], '1')]
+#[case::between_files(&["a", "-15", "b"], '1')]
+#[case::after_option(&["-n", "5", "-15", "a"], '1')]
+fn test_tail_digit_option_in_invalid_context(#[case] args: &[&str], #[case] digit: char) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "1\n");
+    at.write("b", "2\n");
+    ucmd.args(args)
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is(format!("tail: option used in invalid context -- {digit}\n"));
 }
 
 #[test]
