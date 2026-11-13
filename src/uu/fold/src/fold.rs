@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDOs) ncount routput
+// spell-checker:ignore (ToDOs) ncount routput alnum
 
 use clap::{Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
@@ -31,6 +31,7 @@ mod options {
     pub const BYTES: &str = "bytes";
     pub const CHARACTERS: &str = "characters";
     pub const SPACES: &str = "spaces";
+    pub const PUNCTUATION: &str = "punctuation";
     pub const WIDTH: &str = "width";
     pub const FILE: &str = "file";
 }
@@ -41,14 +42,38 @@ enum WidthMode {
     Characters,
 }
 
+/// How a line is split when it exceeds `width`.
+///
+/// `Punctuation` consults four tiers of break points in priority order:
+/// sentence-ending punctuation (`. ! ? :`), clause punctuation (`, ;`),
+/// whitespace, then any non-alphanumeric byte. All sets are ASCII; non-ASCII
+/// scalars fall into the non-alphanumeric tier when they aren't letters or
+/// digits.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BreakMode {
+    Hard,
+    Spaces,
+    Punctuation,
+}
+
+impl BreakMode {
+    #[inline]
+    fn is_hard(self) -> bool {
+        matches!(self, Self::Hard)
+    }
+}
+
 struct FoldContext<'a, W: Write> {
-    spaces: bool,
+    break_mode: BreakMode,
     width: usize,
     mode: WidthMode,
     writer: &'a mut W,
     output: &'a mut Vec<u8>,
     col_count: &'a mut usize,
     last_space: &'a mut Option<usize>,
+    last_sentence_end: &'a mut Option<usize>,
+    last_clause_end: &'a mut Option<usize>,
+    last_non_alnum: &'a mut Option<usize>,
 }
 
 #[uucore::main]
@@ -58,7 +83,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let bytes = matches.get_flag(options::BYTES);
     let characters = matches.get_flag(options::CHARACTERS);
-    let spaces = matches.get_flag(options::SPACES);
+    let break_mode = if matches.get_flag(options::PUNCTUATION) {
+        BreakMode::Punctuation
+    } else if matches.get_flag(options::SPACES) {
+        BreakMode::Spaces
+    } else {
+        BreakMode::Hard
+    };
     let poss_width = matches.get_one::<String>(options::WIDTH).cloned();
 
     let width = match poss_width {
@@ -91,7 +122,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => vec![OsString::from("-")],
     };
 
-    fold(&files, bytes, characters, spaces, width)
+    fold(&files, bytes, characters, break_mode, width)
 }
 
 pub fn uu_app() -> Command {
@@ -123,6 +154,16 @@ pub fn uu_app() -> Command {
                 .long(options::SPACES)
                 .short('s')
                 .help(translate!("fold-spaces-help"))
+                .conflicts_with(options::PUNCTUATION)
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            // No short flag reserved: GNU may add short options later and `-p`
+            // could clash with one of them.
+            Arg::new(options::PUNCTUATION)
+                .long(options::PUNCTUATION)
+                .help("break at punctuation boundaries (tiered: sentence-end, clause, space, non-alphanumeric)")
+                .conflicts_with(options::SPACES)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -221,7 +262,7 @@ fn fold(
     filenames: &[OsString],
     bytes: bool,
     characters: bool,
-    spaces: bool,
+    break_mode: BreakMode,
     width: usize,
 ) -> UResult<()> {
     let mut output = BufWriter::new(stdout());
@@ -247,14 +288,14 @@ fn fold(
         });
 
         if bytes {
-            fold_file_bytewise(buffer, spaces, width, &mut output)?;
+            fold_file_bytewise(buffer, break_mode, width, &mut output)?;
         } else {
             let mode = if characters {
                 WidthMode::Characters
             } else {
                 WidthMode::Columns
             };
-            fold_file(buffer, spaces, width, mode, &mut output)?;
+            fold_file(buffer, break_mode, width, mode, &mut output)?;
         }
     }
 
@@ -264,6 +305,29 @@ fn fold(
     Ok(())
 }
 
+/// Scan `chunk` from the end for the best break point under `-p`.
+///
+/// A single reverse pass records a candidate for each tier at the same time;
+/// a sentence-end short-circuits, since no later tier can beat it. The
+/// returned index is one past the break byte, so the caller can slice
+/// `[..idx]` to keep the terminator on the current line.
+fn find_punctuation_break(chunk: &[u8]) -> Option<usize> {
+    let mut clause = None;
+    let mut space = None;
+    let mut non_alnum = None;
+    for (i, &b) in chunk.iter().enumerate().rev() {
+        match b {
+            b'.' | b'!' | b'?' | b':' => return Some(i + 1),
+            b',' | b';' if clause.is_none() => clause = Some(i + 1),
+            CR => {}
+            b if b.is_ascii_whitespace() && space.is_none() => space = Some(i + 1),
+            b if !b.is_ascii_alphanumeric() && non_alnum.is_none() => non_alnum = Some(i + 1),
+            _ => {}
+        }
+    }
+    clause.or(space).or(non_alnum)
+}
+
 /// Fold `file` to fit `width` (number of columns), counting all characters as
 /// one column.
 ///
@@ -271,10 +335,11 @@ fn fold(
 /// tab, backspace, and carriage return as occupying one column, identically
 /// to all other characters in the stream.
 ///
-///  If `spaces` is `true`, attempt to break lines at whitespace boundaries.
+/// The `break_mode` controls where lines are broken: at whitespace (`Spaces`),
+/// at tiered punctuation boundaries (`Punctuation`), or at the hard width limit.
 fn fold_file_bytewise<T: Read, W: Write>(
     mut file: BufReader<T>,
-    spaces: bool,
+    break_mode: BreakMode,
     width: usize,
     output: &mut W,
 ) -> UResult<()> {
@@ -321,15 +386,15 @@ fn fold_file_bytewise<T: Read, W: Write>(
             continue;
         }
 
-        // No newline: with -s, break after the last whitespace (excluding CR);
-        // otherwise hard-wrap at `width`.
-        let end = if spaces {
-            chunk
+        // No newline: pick the break point for this mode. `-p` scans tiered
+        // punctuation; `-s` breaks at the last whitespace; otherwise hard-wrap.
+        let end = match break_mode {
+            BreakMode::Punctuation => find_punctuation_break(chunk).unwrap_or(width),
+            BreakMode::Spaces => chunk
                 .iter()
                 .rposition(|c| c.is_ascii_whitespace() && *c != CR)
-                .map_or(width, |i| i + 1)
-        } else {
-            width
+                .map_or(width, |i| i + 1),
+            BreakMode::Hard => width,
         };
 
         // Width/space-driven fold: `end <= width` and the check above ruled out
@@ -376,22 +441,59 @@ fn compute_col_count(buffer: &[u8], mode: WidthMode) -> usize {
     }
 }
 
+fn rebase_tracker(tracker: &mut Option<usize>, consume: usize) {
+    *tracker = tracker.and_then(|idx| if idx < consume { None } else { Some(idx - consume) });
+}
+
+/// Clear every remembered break position. Called when a newline forces the
+/// current buffer out in full, so the next line starts fresh in every tier.
+fn clear_break_trackers<W: Write>(ctx: &mut FoldContext<'_, W>) {
+    *ctx.last_space = None;
+    *ctx.last_sentence_end = None;
+    *ctx.last_clause_end = None;
+    *ctx.last_non_alnum = None;
+}
+
+/// Record `byte` at position `pos` as the newest candidate break point for
+/// whichever tier it belongs to. This replaces the per-byte match that was
+/// duplicated across the ASCII, UTF-8, and non-UTF-8 processors.
+fn track_punctuation<W: Write>(ctx: &mut FoldContext<'_, W>, byte: u8, pos: usize) {
+    match byte {
+        b'.' | b'!' | b'?' | b':' => *ctx.last_sentence_end = Some(pos),
+        b',' | b';' => *ctx.last_clause_end = Some(pos),
+        CR => {}
+        b if b.is_ascii_whitespace() => *ctx.last_space = Some(pos),
+        b if !b.is_ascii_alphanumeric() => *ctx.last_non_alnum = Some(pos),
+        _ => {}
+    }
+}
+
+/// Emit one folded line. The break point is selected based on `break_mode`:
+/// - `Punctuation`: highest-priority tracked position (sentence > clause > space > non-alnum)
+/// - `Spaces`: last remembered whitespace position
+/// - `Hard`: current buffer end
+///
+/// The remainder (if any) stays in the buffer for the next line.
 fn emit_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
-    // Emit one folded line:
-    // - with `-s`, cut at the last remembered whitespace when possible
-    // - otherwise, cut at the current buffer end
-    // The remainder (if any) stays in the buffer for the next line.
-    let consume = match *ctx.last_space {
-        Some(index) => index + 1,
-        None => ctx.output.len(),
+    let consume = match ctx.break_mode {
+        BreakMode::Punctuation => ctx
+            .last_sentence_end
+            .map(|i| i + 1)
+            .or_else(|| ctx.last_clause_end.map(|i| i + 1))
+            .or_else(|| ctx.last_space.map(|i| i + 1))
+            .or_else(|| ctx.last_non_alnum.map(|i| i + 1))
+            .unwrap_or(ctx.output.len()),
+        BreakMode::Spaces => match *ctx.last_space {
+            Some(index) => index + 1,
+            None => ctx.output.len(),
+        },
+        BreakMode::Hard => ctx.output.len(),
     };
 
     if consume > 0 {
         ctx.writer.write_all(&ctx.output[..consume])?;
     }
     ctx.writer.write_all(&[NL])?;
-
-    let last_space = *ctx.last_space;
 
     if consume < ctx.output.len() {
         ctx.output.drain(..consume);
@@ -401,26 +503,26 @@ fn emit_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
 
     *ctx.col_count = compute_col_count(ctx.output, ctx.mode);
 
-    if ctx.spaces {
-        // Rebase the remembered whitespace position into the remaining buffer.
-        *ctx.last_space = last_space.and_then(|idx| {
-            if idx < consume {
-                None
-            } else {
-                Some(idx - consume)
-            }
-        });
-    } else {
-        *ctx.last_space = None;
+    // Rebase remembered break positions into the remaining buffer.
+    match ctx.break_mode {
+        BreakMode::Punctuation => {
+            rebase_tracker(ctx.last_sentence_end, consume);
+            rebase_tracker(ctx.last_clause_end, consume);
+            rebase_tracker(ctx.last_space, consume);
+            rebase_tracker(ctx.last_non_alnum, consume);
+        }
+        BreakMode::Spaces => rebase_tracker(ctx.last_space, consume),
+        BreakMode::Hard => *ctx.last_space = None,
     }
+
     Ok(())
 }
 
 fn maybe_flush_unbroken_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
-    // In streaming mode without `-s`, avoid unbounded buffering by periodically
-    // flushing long unbroken segments. With `-s` we must keep the buffer so we
-    // can still break at the last whitespace boundary.
-    if ctx.spaces || ctx.output.len() < STREAMING_FLUSH_THRESHOLD {
+    // In streaming mode with hard breaks only, avoid unbounded buffering by
+    // periodically flushing long unbroken segments. With `-s` or `-p` we must
+    // keep the buffer so we can still break at the last tracked boundary.
+    if !ctx.break_mode.is_hard() || ctx.output.len() < STREAMING_FLUSH_THRESHOLD {
         return Ok(());
     }
 
@@ -436,13 +538,11 @@ fn maybe_flush_unbroken_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResul
 }
 
 fn push_byte<W: Write>(ctx: &mut FoldContext<'_, W>, byte: u8) -> UResult<()> {
-    // Append a single byte to the buffer.
     ctx.output.push(byte);
     maybe_flush_unbroken_output(ctx)
 }
 
 fn push_bytes<W: Write>(ctx: &mut FoldContext<'_, W>, bytes: &[u8]) -> UResult<()> {
-    // Append a byte slice to the buffer and flush if it grows too large.
     if bytes.is_empty() {
         return Ok(());
     }
@@ -462,6 +562,16 @@ fn advance_tab<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
     }
 }
 
+/// Anchor a `last_space` candidate at the tab we just emitted. Hard mode
+/// drops the anchor; the others let the next fold break here.
+fn record_tab_break<W: Write>(ctx: &mut FoldContext<'_, W>) {
+    if ctx.break_mode.is_hard() {
+        *ctx.last_space = None;
+    } else {
+        *ctx.last_space = Some(ctx.output.len());
+    }
+}
+
 fn process_ascii_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UResult<()> {
     let mut idx = 0;
     let len = line.len();
@@ -469,7 +579,7 @@ fn process_ascii_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UR
     while idx < len {
         match line[idx] {
             NL => {
-                *ctx.last_space = None;
+                clear_break_trackers(ctx);
                 emit_output(ctx)?;
                 idx += 1;
             }
@@ -485,20 +595,18 @@ fn process_ascii_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UR
             }
             TAB => {
                 advance_tab(ctx)?;
-                if ctx.spaces {
-                    *ctx.last_space = Some(ctx.output.len());
-                } else {
-                    *ctx.last_space = None;
-                }
+                record_tab_break(ctx);
                 push_byte(ctx, TAB)?;
                 idx += 1;
             }
             0x00..=0x07 | 0x0B..=0x0C | 0x0E..=0x1F | 0x7F => {
-                push_byte(ctx, line[idx])?;
-                if ctx.spaces && line[idx].is_ascii_whitespace() && line[idx] != CR {
-                    *ctx.last_space = Some(ctx.output.len() - 1);
-                } else if !ctx.spaces {
+                let b = line[idx];
+                push_byte(ctx, b)?;
+                let pos = ctx.output.len() - 1;
+                if ctx.break_mode.is_hard() {
                     *ctx.last_space = None;
+                } else if b.is_ascii_whitespace() && b != CR {
+                    *ctx.last_space = Some(pos);
                 }
 
                 if ctx.mode == WidthMode::Characters {
@@ -547,15 +655,21 @@ fn push_ascii_segment<W: Write>(segment: &[u8], ctx: &mut FoldContext<'_, W>) ->
         push_bytes(ctx, &remaining[..take])?;
         *ctx.col_count += take;
 
-        if ctx.spaces {
-            if let Some(pos) = remaining[..take]
-                .iter()
-                .rposition(|b| b.is_ascii_whitespace() && *b != CR)
-            {
-                *ctx.last_space = Some(base_len + pos);
+        match ctx.break_mode {
+            BreakMode::Punctuation => {
+                for (i, &b) in remaining[..take].iter().enumerate() {
+                    track_punctuation(ctx, b, base_len + i);
+                }
             }
-        } else {
-            *ctx.last_space = None;
+            BreakMode::Spaces => {
+                if let Some(pos) = remaining[..take]
+                    .iter()
+                    .rposition(|b| b.is_ascii_whitespace() && *b != CR)
+                {
+                    *ctx.last_space = Some(base_len + pos);
+                }
+            }
+            BreakMode::Hard => *ctx.last_space = None,
         }
 
         remaining = &remaining[take..];
@@ -578,7 +692,7 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
 
     while let Some((byte_idx, ch)) = iter.next() {
         if ch == '\n' {
-            *ctx.last_space = None;
+            clear_break_trackers(ctx);
             emit_output(ctx)?;
             continue;
         }
@@ -618,11 +732,7 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
 
         if ch == '\t' {
             advance_tab(ctx)?;
-            if ctx.spaces {
-                *ctx.last_space = Some(ctx.output.len());
-            } else {
-                *ctx.last_space = None;
-            }
+            record_tab_break(ctx);
             push_bytes(ctx, &line_bytes[byte_idx..next_idx])?;
             continue;
         }
@@ -640,8 +750,21 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
             emit_output(ctx)?;
         }
 
-        if ctx.spaces && ch.is_ascii_whitespace() {
-            *ctx.last_space = Some(ctx.output.len());
+        let pos = ctx.output.len();
+        match ctx.break_mode {
+            BreakMode::Punctuation => {
+                if ch.is_ascii() {
+                    track_punctuation(ctx, ch as u8, pos);
+                } else if !ch.is_alphanumeric() {
+                    *ctx.last_non_alnum = Some(pos);
+                }
+            }
+            BreakMode::Spaces => {
+                if ch.is_ascii_whitespace() {
+                    *ctx.last_space = Some(pos);
+                }
+            }
+            BreakMode::Hard => {}
         }
 
         push_bytes(ctx, &line_bytes[byte_idx..next_idx])?;
@@ -654,7 +777,7 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
 fn process_non_utf8_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UResult<()> {
     for &byte in line {
         if byte == NL {
-            *ctx.last_space = None;
+            clear_break_trackers(ctx);
             emit_output(ctx)?;
             continue;
         }
@@ -667,20 +790,22 @@ fn process_non_utf8_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) ->
             CR => *ctx.col_count = 0,
             TAB => {
                 advance_tab(ctx)?;
-                *ctx.last_space = if ctx.spaces {
-                    Some(ctx.output.len())
-                } else {
-                    None
-                };
+                record_tab_break(ctx);
                 push_byte(ctx, byte)?;
                 continue;
             }
             0x08 => *ctx.col_count = ctx.col_count.saturating_sub(1),
-            _ if ctx.spaces && byte.is_ascii_whitespace() => {
-                *ctx.last_space = Some(ctx.output.len());
+            _ => {
+                let pos = ctx.output.len();
+                match ctx.break_mode {
+                    BreakMode::Punctuation => track_punctuation(ctx, byte, pos),
+                    BreakMode::Spaces if byte.is_ascii_whitespace() && byte != CR => {
+                        *ctx.last_space = Some(pos);
+                    }
+                    _ => {}
+                }
                 *ctx.col_count = ctx.col_count.saturating_add(1);
             }
-            _ => *ctx.col_count = ctx.col_count.saturating_add(1),
         }
 
         push_byte(ctx, byte)?;
@@ -735,12 +860,13 @@ fn process_pending_chunk<W: Write>(
 /// tab characters count as 8 columns, backspace decreases the
 /// column count, and carriage return resets the column count to 0.
 ///
-/// If `spaces` is `true`, attempt to break lines at whitespace boundaries.
+/// The `break_mode` controls where lines are broken: at whitespace (`Spaces`),
+/// at tiered punctuation boundaries (`Punctuation`), or at the hard width limit.
 #[allow(unused_assignments)]
 #[allow(clippy::cognitive_complexity)]
 fn fold_file<T: Read, W: Write>(
     mut file: BufReader<T>,
-    spaces: bool,
+    break_mode: BreakMode,
     width: usize,
     mode: WidthMode,
     writer: &mut W,
@@ -748,17 +874,23 @@ fn fold_file<T: Read, W: Write>(
     let mut output = Vec::new();
     let mut col_count = 0;
     let mut last_space = None;
+    let mut last_sentence_end = None;
+    let mut last_clause_end = None;
+    let mut last_non_alnum = None;
     let mut pending = Vec::with_capacity(8 * 1024);
 
     {
         let mut ctx = FoldContext {
-            spaces,
+            break_mode,
             width,
             mode,
             writer,
             output: &mut output,
             col_count: &mut col_count,
             last_space: &mut last_space,
+            last_sentence_end: &mut last_sentence_end,
+            last_clause_end: &mut last_clause_end,
+            last_non_alnum: &mut last_non_alnum,
         };
 
         loop {
