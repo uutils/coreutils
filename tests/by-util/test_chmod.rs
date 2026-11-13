@@ -827,7 +827,11 @@ fn test_chmod_preserve_root_symlink_during_recursion() {
 #[cfg(unix)]
 #[rstest::rstest]
 #[case::beyond_path_max(AtPath::symlink_to_root_beyond_path_max)]
-#[case::symlink_chain(AtPath::symlink_chain_to_root)]
+// One hop past Linux's limit of 40 symlinks; macOS gives up at 32, before reaching `/`.
+#[cfg_attr(
+    target_os = "linux",
+    case::symlink_chain(AtPath::symlink_chain_to_root)
+)]
 fn test_chmod_preserve_root_symlink_not_found_by_name(
     #[case] make_tree: fn(&AtPath, &str) -> String,
 ) {
