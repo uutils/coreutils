@@ -461,6 +461,52 @@ fn test_split_lines_interfere_with_io_buf_capacity() {
     assert_eq!(at.read("xab").len(), line_size + 1);
 }
 
+/// Lines cut by small reads still go to the right chunk, up to a last line
+/// without a newline.
+#[rstest]
+#[case::reads_of_1("1")]
+#[case::reads_of_4("4")]
+#[case::reads_of_7("7")]
+#[case::reads_of_64("64")]
+fn test_split_lines_across_small_reads(#[case] io_blksize: &str) {
+    let input: String = (0..50)
+        .map(|i| format!("{}\n", "x".repeat(i % 7)))
+        .chain(std::iter::once("tail".to_owned()))
+        .collect();
+    let lines: Vec<&str> = input.split_inclusive('\n').collect();
+    let name = |k: usize| {
+        format!(
+            "x{}{}",
+            (b'a' + (k / 26) as u8) as char,
+            (b'a' + (k % 26) as u8) as char
+        )
+    };
+
+    for per_chunk in [1, 2, 3, 10] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("in", &input);
+        ucmd.args(&[
+            "-l",
+            &per_chunk.to_string(),
+            "---io-blksize",
+            io_blksize,
+            "in",
+        ])
+        .succeeds();
+
+        let chunks: Vec<String> = lines.chunks(per_chunk).map(<[&str]>::concat).collect();
+        for (k, expected) in chunks.iter().enumerate() {
+            assert_eq!(
+                at.read(&name(k)),
+                *expected,
+                "{} with -l {per_chunk}",
+                name(k)
+            );
+        }
+        assert!(!at.file_exists(name(chunks.len())));
+    }
+}
+
 /// Test short lines option with value concatenated
 #[test]
 fn test_split_lines_short_concatenated_with_value() {

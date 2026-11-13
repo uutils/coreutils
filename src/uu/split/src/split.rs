@@ -777,6 +777,11 @@ impl<'a> LineChunkWriter<'a> {
         while let buf = reader.read(&mut io_blk).map(|n| &io_blk[..n])?
             && !buf.is_empty()
         {
+            // The lines of `buf` that go to the same chunk are written with a
+            // single call, and nothing is kept for the next read.
+            // `start` is the first byte not written yet, `prev` the start of
+            // the current line.
+            let mut start = 0;
             let mut prev = 0;
             let sep = self.settings.separator;
             for i in memchr::memchr_iter(sep, buf) {
@@ -784,15 +789,12 @@ impl<'a> LineChunkWriter<'a> {
                 // current chunk, then start a new chunk and its
                 // corresponding writer.
                 if self.num_lines_remaining_in_current_chunk == 0 {
+                    self.write_pending(&buf[start..prev])?;
+                    start = prev;
                     self.num_chunks_written += 1;
                     self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
                     self.num_lines_remaining_in_current_chunk = self.chunk_size;
                 }
-
-                // Write the line, starting from *after* the previous
-                // separator character and ending *after* the current
-                // separator character.
-                custom_write_all(&buf[prev..=i], &mut self.inner, self.settings)?;
                 prev = i + 1;
                 self.num_lines_remaining_in_current_chunk -= 1;
             }
@@ -801,13 +803,20 @@ impl<'a> LineChunkWriter<'a> {
             // them to the current chunk. But first, we may need to rotate
             // the current chunk in case it has already reached its line
             // limit.
-            if prev < buf.len() {
-                if self.num_lines_remaining_in_current_chunk == 0 {
-                    self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
-                    self.num_lines_remaining_in_current_chunk = self.chunk_size;
-                }
-                custom_write_all(&buf[prev..], &mut self.inner, self.settings)?;
+            if prev < buf.len() && self.num_lines_remaining_in_current_chunk == 0 {
+                self.write_pending(&buf[start..prev])?;
+                start = prev;
+                self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
+                self.num_lines_remaining_in_current_chunk = self.chunk_size;
             }
+            self.write_pending(&buf[start..])?;
+        }
+        Ok(())
+    }
+
+    fn write_pending(&mut self, bytes: &[u8]) -> io::Result<()> {
+        if !bytes.is_empty() {
+            custom_write_all(bytes, &mut self.inner, self.settings)?;
         }
         Ok(())
     }
