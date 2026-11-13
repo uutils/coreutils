@@ -3516,7 +3516,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "rustix",
+ "nix",
  "selinux",
  "uucore",
 ]
