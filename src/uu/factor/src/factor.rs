@@ -5,7 +5,6 @@
 
 // spell-checker:ignore funcs newtype
 
-use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::io::BufRead;
 use std::io::{self, Write, stdin, stdout};
@@ -15,11 +14,13 @@ use std::num::IntErrorKind;
 use clap::{Arg, ArgAction, Command};
 use memchr::memchr3_iter;
 use num_bigint::BigUint;
-use num_prime::nt_funcs::{factorize64, factorize128, factors};
+use num_prime::nt_funcs::{factorize128, factors};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code, strip_errno};
 use uucore::translate;
 use uucore::{format_usage, show_error, show_if_err};
+
+mod u64_factor;
 
 mod options {
     pub static EXPONENTS: &str = "exponents";
@@ -53,9 +54,7 @@ fn write_factors_str(
     };
 
     match x {
-        // use num_prime's factorize64 algorithm for u64 integers
-        Number::U64(x) if x > 1 => write_result(w, &x, factorize64(x), print_exponents),
-        Number::U64(x) => write_result(w, &x, BTreeMap::<u64, usize>::new(), print_exponents),
+        Number::U64(x) => write_result(w, &x, u64_factor::factorize(x).iter(), print_exponents),
         // use num_prime's factorize128 algorithm for u128 integers
         Number::U128(x) => write_result(w, &x, factorize128(x), print_exponents),
         // use num_prime's fallible factorization for anything greater than u128::MAX
@@ -130,7 +129,7 @@ impl Display for NumError<'_> {
 fn write_result(
     w: &mut io::BufWriter<impl Write>,
     x: &impl Display,
-    factorization: BTreeMap<impl Display, usize>,
+    factorization: impl IntoIterator<Item = (impl Display, usize)>,
     print_exponents: bool,
 ) -> io::Result<()> {
     write!(w, "{x}:")?;

@@ -1763,3 +1763,35 @@ fn test_stdin_clean_error_message() {
         .fails()
         .stderr_is("factor: error reading input: Is a directory\n");
 }
+
+// The values around the limits of the `u64` code path, and the shapes of
+// number each of its steps has to handle.
+#[test]
+fn factors_the_extremes_of_u64() {
+    new_ucmd!()
+        .args(&[
+            // 19 and 20 digits
+            "9999999999999999999",
+            "10000000000000000000",
+            // 2^64 - 1, 2^63, and the largest prime below 2^64
+            "18446744073709551615",
+            "9223372036854775808",
+            "18446744073709551557",
+            // the square of a prime, and two primes far apart
+            "4611686014132420609",
+            "18446743979220271189",
+            "8802535469053",
+        ])
+        .arg("-h")
+        .succeeds()
+        .stdout_is(
+            "9999999999999999999: 3^2 1111111111111111111\n\
+             10000000000000000000: 2^19 5^19\n\
+             18446744073709551615: 3 5 17 257 641 65537 6700417\n\
+             9223372036854775808: 2^63\n\
+             18446744073709551557: 18446744073709551557\n\
+             4611686014132420609: 2147483647^2\n\
+             18446743979220271189: 4294967279 4294967291\n\
+             8802535469053: 4099 2147483647\n",
+        );
+}
