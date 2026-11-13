@@ -153,6 +153,7 @@ fn test_date_rejects_input_that_cannot_take_a_timezone() {
         "2024-01-15 12:00 GMT EST",   // likewise, spelled differently
         "2024-01-15 12:00 +0000 EST", // a numeric offset matching TZ
         "2024-01-15 12:00 -0500 EST", // a standalone negative offset
+        "2024-01-15 12:00-0500 EST",  // negative offset attached to time
         "UTC 2024-01-15 12:00 EST",   // zone stated before the date
     ] {
         new_ucmd!()
@@ -4137,4 +4138,23 @@ fn test_invalid_date_escaping_depends_on_locale() {
             .fails_with_code(1)
             .stderr_is(expected);
     }
+}
+
+#[test]
+fn test_date_input_trailing_tz_abbrev_ignores_local_dst() {
+    // 2024-03-10 02:30:00 does not exist on New York clocks (spring forward DST gap).
+    // An input specifying GMT should parse to epoch 1710037800 regardless of the local timezone.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "America/New_York")
+        .args(&["-d", "Sun, 10 Mar 2024 02:30:00 GMT", "+%s"])
+        .succeeds()
+        .stdout_is("1710037800\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "America/New_York")
+        .args(&["-d", "Sun, 10 Mar 2024 02:30:00 UTC", "+%s"])
+        .succeeds()
+        .stdout_is("1710037800\n");
 }
