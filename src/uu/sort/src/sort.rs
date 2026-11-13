@@ -320,6 +320,9 @@ pub struct GlobalSettings {
     merge_batch_size: usize,
     numeric_locale: NumInfoParseSettings,
     precomputed: Precomputed,
+    /// Whether rayon's global thread pool could be created, so chunks can be
+    /// sorted in parallel.
+    parallel: bool,
 }
 
 /// Data needed for sorting. Should be computed once before starting to sort
@@ -492,6 +495,7 @@ impl Default for GlobalSettings {
             merge_batch_size: default_merge_batch_size(),
             numeric_locale: NumInfoParseSettings::default(),
             precomputed: Precomputed::default(),
+            parallel: true,
         }
     }
 }
@@ -2238,9 +2242,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
     // WASI doesn't support threads, so the value is only validated there
     #[cfg(not(target_os = "wasi"))]
-    let _ = rayon::ThreadPoolBuilder::new()
-        .num_threads(threads as usize)
-        .build_global();
+    {
+        // The pool cannot be created when no more threads are allowed (for
+        // example under a cgroup pids limit). rayon then never gets a global
+        // pool, so sort without it instead of panicking on the first large chunk.
+        settings.parallel = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads as usize)
+            .build_global()
+            .is_ok();
+    }
     #[cfg(target_os = "wasi")]
     let _ = threads;
 
@@ -2748,13 +2758,17 @@ fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_dat
     // rayon's thread pool which triggers an unreachable trap.
     if settings.stable || settings.unique {
         #[cfg(not(target_os = "wasi"))]
-        unsorted.par_sort_by(cmp);
-        #[cfg(target_os = "wasi")]
+        if settings.parallel {
+            unsorted.par_sort_by(cmp);
+            return;
+        }
         unsorted.sort_by(cmp);
     } else {
         #[cfg(not(target_os = "wasi"))]
-        unsorted.par_sort_unstable_by(cmp);
-        #[cfg(target_os = "wasi")]
+        if settings.parallel {
+            unsorted.par_sort_unstable_by(cmp);
+            return;
+        }
         unsorted.sort_unstable_by(cmp);
     }
 }
