@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) delim foxjumping sourcefiles undelimited xacfoxjumping
+// spell-checker:ignore (ToDO) bcdf delim foxjumping sourcefiles undelimited xacfoxjumping
 
 use bstr::io::BufReadExt;
 use clap::builder::{PossibleValue, ValueParser};
@@ -1339,6 +1339,62 @@ mod options {
     pub const NO_PARTIAL: &str = "no-partial";
 }
 
+/// GNU takes everything after a short option letter as its value, a leading `=`
+/// included (`-d=` is the `=` delimiter, `-b=1` is the invalid list `=1`), but
+/// clap drops that `=`, see
+/// <https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242>.
+/// Such a value is moved to its own argument, which clap keeps verbatim.
+/// Arguments after `--`, and the value of an option given as the next
+/// argument, are left untouched.
+fn split_equals_values(args: Vec<OsString>) -> Vec<OsString> {
+    const FLAGS: &str = "nsz";
+    const SHORT_WITH_VALUE: &str = "bcdfFO";
+    const LONG_WITH_VALUE: [&str; 5] = [
+        options::BYTES,
+        options::CHARACTERS,
+        options::DELIMITER,
+        options::FIELDS,
+        options::OUTPUT_DELIMITER,
+    ];
+
+    let mut result = Vec::with_capacity(args.len() + 1);
+    let mut args = args.into_iter();
+    while let Some(arg) = args.next() {
+        if arg == "--" {
+            result.push(arg);
+            result.extend(args);
+            break;
+        }
+        let mut value_is_next = false;
+        if let Some(long) = arg.to_str().and_then(|s| s.strip_prefix("--")) {
+            // Long options may be abbreviated.
+            value_is_next = !long.is_empty()
+                && !long.contains('=')
+                && LONG_WITH_VALUE.iter().any(|name| name.starts_with(long));
+        } else if let Some(cluster) = arg.to_str().and_then(|s| s.strip_prefix('-')) {
+            let flags_end = cluster
+                .find(|c| !FLAGS.contains(c))
+                .unwrap_or(cluster.len());
+            let mut rest = cluster[flags_end..].chars();
+            if let Some(short) = rest.next().filter(|c| SHORT_WITH_VALUE.contains(*c)) {
+                let value = rest.as_str();
+                if value.is_empty() {
+                    value_is_next = true;
+                } else if value.starts_with('=') {
+                    result.push(format!("-{}{short}", &cluster[..flags_end]).into());
+                    result.push(value.into());
+                    continue;
+                }
+            }
+        }
+        result.push(arg);
+        if value_is_next {
+            result.extend(args.next());
+        }
+    }
+    result
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<OsString> = args.collect();
@@ -1346,22 +1402,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // they were typed, before the rewrite below edits one of them.
     let diag_args = uucore::diagnostics::capture(&args);
 
-    // GNU `cut` supports `-d=` to set the delimiter to `=`.
-    // Clap parsing is limited in this situation, see:
-    // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
-    // Arguments after `--` are file operands and must be left untouched.
-    let args = args.into_iter().scan(false, |seen_double_dash, x| {
-        Some(if *seen_double_dash {
-            x
-        } else if x == "--" {
-            *seen_double_dash = true;
-            x
-        } else if x == "-d=" {
-            "--delimiter==".into()
-        } else {
-            x
-        })
-    });
+    let args = split_equals_values(args);
 
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
