@@ -1271,20 +1271,6 @@ fn n_chunks_by_line_round_robin(
     // Create one writer for each chunk.
     // This will create each of the underlying files
     // or stdin pipes to child shell/command processes if in `--filter` mode
-    let num_chunks_usize = if kth_chunk.is_none() {
-        Some(usize::try_from(num_chunks).map_err(|_| {
-            USimpleError::new(
-                1,
-                translate!(
-                    "split-error-invalid-number-of-chunks",
-                    "chunks" => num_chunks.to_string().quote()
-                ),
-            )
-        })?)
-    } else {
-        None
-    };
-
     if kth_chunk.is_none() {
         out_files = OutFiles::init(num_chunks, settings, settings.elide_empty_files)?;
     }
@@ -1308,13 +1294,13 @@ fn n_chunks_by_line_round_robin(
             if (i % num_chunks) == chunk_number - 1 {
                 stdout_writer.write_all(bytes)?;
             }
-        } else if let Some(num_chunks_usize) = num_chunks_usize {
+        } else {
             let writer = out_files.get_writer((i % num_chunks) as usize, settings)?;
             let writer_stdin_open = custom_write_all(bytes, writer, settings)?;
             if !writer_stdin_open {
                 closed_writers += 1;
             }
-            if closed_writers == num_chunks_usize {
+            if closed_writers == num_chunks {
                 // all writers are closed - stop reading
                 break;
             }
