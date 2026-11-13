@@ -467,8 +467,9 @@ impl Observer {
                             display_name,
                             translate!("tail-no-such-file-or-directory")
                         );
-                        if !self.files.files_remaining() && self.use_polling {
-                            // NOTE: GNU's tail exits here for `---disable-inotify`
+                        if !self.files.files_remaining() {
+                            // GNU's tail exits here for both inotify and polling when
+                            // --follow=name is used without --retry and no files remain.
                             return Err(USimpleError::new(1, translate!("tail-no-files-remaining")));
                         }
                     }
