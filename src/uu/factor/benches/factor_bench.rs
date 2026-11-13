@@ -35,6 +35,64 @@ fn factor_64bit_semiprime(bencher: Bencher) {
     });
 }
 
+/// Many numbers in a single invocation, so that parsing, factoring and
+/// writing the results outweigh the startup cost.
+mod batch {
+    use super::{Bencher, black_box, run_util_function, uumain};
+
+    fn factor_all<T: ToString>(bencher: Bencher, numbers: impl Iterator<Item = T>) {
+        let numbers: Vec<String> = numbers.map(|n| n.to_string()).collect();
+        let args: Vec<&str> = numbers.iter().map(String::as_str).collect();
+        bencher.bench(|| black_box(run_util_function(uumain, &args)));
+    }
+
+    /// Every number from 2 to 20001: trial division alone factors them.
+    #[divan::bench]
+    fn factor_batch_of_small_numbers(bencher: Bencher) {
+        factor_all(bencher, 2..20_002);
+    }
+
+    /// The 2000 largest `u64` values, most of which have a large cofactor
+    /// left once their small factors are removed.
+    #[divan::bench(sample_count = 10, sample_size = 1)]
+    fn factor_batch_of_largest_u64s(bencher: Bencher) {
+        factor_all(bencher, u64::MAX - 1999..=u64::MAX);
+    }
+
+    /// The 2000 values that follow 2^64, the first ones too large for a
+    /// `u64`. Their second largest prime factor is below 2^33.
+    #[divan::bench(sample_count = 10, sample_size = 1)]
+    fn factor_batch_of_smallest_u128s(bencher: Bencher) {
+        factor_all(bencher, (1u128 << 64)..(1u128 << 64) + 2000);
+    }
+
+    /// 500 products of two primes just above 2^31, where all the time goes
+    /// into Pollard's rho.
+    #[divan::bench(sample_count = 10, sample_size = 1)]
+    fn factor_batch_of_semiprimes(bencher: Bencher) {
+        // The first primes above 2^31, 2^31 + 2^20, 2^31 + 2^21, ...
+        let primes: Vec<u64> = (0..32)
+            .map(|i| {
+                let start = (1 << 31) + (i << 20) + 1;
+                (start..)
+                    .step_by(2)
+                    .find(|&n| {
+                        (3..)
+                            .step_by(2)
+                            .take_while(|d| d * d <= n)
+                            .all(|d| n % d != 0)
+                    })
+                    .unwrap()
+            })
+            .collect();
+        let products = primes
+            .iter()
+            .flat_map(|&p| primes.iter().map(move |&q| p * q))
+            .take(500);
+        factor_all(bencher, products);
+    }
+}
+
 /// Products of several primes of similar, moderate size.
 ///
 /// These are the numbers factorization regressions show up in first: trial
