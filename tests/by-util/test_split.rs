@@ -497,7 +497,7 @@ fn test_split_lines_across_small_reads(#[case] io_blksize: &str) {
         let chunks: Vec<String> = lines.chunks(per_chunk).map(<[&str]>::concat).collect();
         for (k, expected) in chunks.iter().enumerate() {
             assert_eq!(
-                at.read(&name(k)),
+                at.read(name(k)),
                 *expected,
                 "{} with -l {per_chunk}",
                 name(k)
