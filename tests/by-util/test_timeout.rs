@@ -188,6 +188,22 @@ fn test_child_core_dump_not_repeated() {
     assert!(!status.core_dumped());
 }
 
+/// A child killed by a realtime signal is reported like one killed by
+/// SIGTERM: timeout re-raises the signal.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_child_killed_by_realtime_signal() {
+    use std::os::unix::process::ExitStatusExt;
+    let ts = TestScenario::new(util_name!());
+    let sig = libc::SIGRTMIN() + 3;
+    let status = std::process::Command::new(&ts.bin_path)
+        .args(["timeout", "5", "sh", "-c", &format!("kill -{sig} $$")])
+        .current_dir(ts.fixtures.as_string())
+        .status()
+        .unwrap();
+    assert_eq!(status.signal(), Some(sig));
+}
+
 #[test]
 fn test_preserve_status_even_when_send_signal() {
     let (ts, bin) = scenario_with_bin();

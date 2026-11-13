@@ -5,6 +5,7 @@
 
 // spell-checker:ignore sigwait KTIME timeval itimerval setitimer itimer timerid
 // spell-checker:ignore sigevent sigev sigval itimerspec signo clockid sevp
+// spell-checker:ignore sigset sigemptyset sigaddset
 
 #[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use libc::pid_t;
@@ -112,9 +113,18 @@ pub fn timeout_signal_set() -> SigSet {
 
 /// Unblocks a signal from the current thread.
 pub fn unblock_signal(signal: RixSignal) -> io::Result<()> {
-    let mut set = SigSet::empty();
-    // SAFETY: rustix's Signal is also a valid nix Signal.
-    set.add(unsafe { Signal::try_from(signal.as_raw()).unwrap_unchecked() });
+    // nix's Signal has no realtime signals, so build the set from the raw
+    // signal number.
+    let mut set = std::mem::MaybeUninit::<libc::sigset_t>::uninit();
+    // SAFETY: sigemptyset initializes the set before sigaddset and
+    // assume_init use it.
+    let set = unsafe {
+        libc::sigemptyset(set.as_mut_ptr());
+        if libc::sigaddset(set.as_mut_ptr(), signal.as_raw()) != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        SigSet::from_sigset_t_unchecked(set.assume_init())
+    };
 
     set.thread_unblock().map_err(Into::into)
 }
