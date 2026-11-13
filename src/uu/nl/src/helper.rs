@@ -7,14 +7,11 @@
 
 use std::ffi::OsString;
 
-use crate::options;
+use crate::{NumberingStyle, options};
 
-// parse_options loads the options into the settings, returning an array of
-// error messages.
+// parse_options loads the options into the settings.
 #[allow(clippy::cognitive_complexity)]
-pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) -> Vec<String> {
-    // This vector holds error messages encountered.
-    let mut errs: Vec<String> = vec![];
+pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) {
     settings.renumber = opts.get_flag(options::NO_RENUMBER);
 
     if let Some(mut delimiter) = opts
@@ -40,32 +37,14 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
         .get_one::<String>(options::NUMBER_FORMAT)
         .map(Into::into)
         .unwrap_or_default();
-    match opts
-        .get_one::<String>(options::HEADER_NUMBERING)
-        .map(String::as_str)
-        .map(TryInto::try_into)
-    {
-        None => {}
-        Some(Ok(style)) => settings.header_numbering = style,
-        Some(Err(message)) => errs.push(message),
+    if let Some(style) = opts.get_one::<NumberingStyle>(options::HEADER_NUMBERING) {
+        settings.header_numbering = style.clone();
     }
-    match opts
-        .get_one::<String>(options::BODY_NUMBERING)
-        .map(String::as_str)
-        .map(TryInto::try_into)
-    {
-        None => {}
-        Some(Ok(style)) => settings.body_numbering = style,
-        Some(Err(message)) => errs.push(message),
+    if let Some(style) = opts.get_one::<NumberingStyle>(options::BODY_NUMBERING) {
+        settings.body_numbering = style.clone();
     }
-    match opts
-        .get_one::<String>(options::FOOTER_NUMBERING)
-        .map(String::as_str)
-        .map(TryInto::try_into)
-    {
-        None => {}
-        Some(Ok(style)) => settings.footer_numbering = style,
-        Some(Err(message)) => errs.push(message),
+    if let Some(style) = opts.get_one::<NumberingStyle>(options::FOOTER_NUMBERING) {
+        settings.footer_numbering = style.clone();
     }
     if let Some(&num) = opts.get_one::<u64>(options::NUMBER_WIDTH) {
         settings.number_width = num as usize;
@@ -79,5 +58,4 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
     if let Some(num) = opts.get_one::<i64>(options::STARTING_LINE_NUMBER) {
         settings.starting_line_number = *num;
     }
-    errs
 }

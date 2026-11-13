@@ -77,7 +77,7 @@ impl Stats {
 // 2. Number only nonempty lines
 // 3. Don't number any lines at all
 // 4. Number all lines that match a basic regular expression.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum NumberingStyle {
     All,
     NonEmpty,
@@ -244,19 +244,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut settings = Settings::default();
 
-    // Update the settings from the command line options, and terminate the
-    // program if some options could not successfully be parsed.
-    let parse_errors = helper::parse_options(&mut settings, &matches);
-    if !parse_errors.is_empty() {
-        return Err(USimpleError::new(
-            1,
-            format!(
-                "{}\n{}",
-                translate!("nl-error-invalid-arguments"),
-                parse_errors.join("\n")
-            ),
-        ));
-    }
+    helper::parse_options(&mut settings, &matches);
 
     let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILE) {
         Some(v) => v.cloned().collect(),
@@ -324,6 +312,7 @@ pub fn uu_app() -> Command {
                 .short('b')
                 .long(options::BODY_NUMBERING)
                 .help(translate!("nl-help-body-numbering"))
+                .value_parser(|s: &str| NumberingStyle::try_from(s))
                 .value_name("STYLE"),
         )
         .arg(
@@ -339,6 +328,7 @@ pub fn uu_app() -> Command {
                 .short('f')
                 .long(options::FOOTER_NUMBERING)
                 .help(translate!("nl-help-footer-numbering"))
+                .value_parser(|s: &str| NumberingStyle::try_from(s))
                 .value_name("STYLE"),
         )
         .arg(
@@ -346,6 +336,7 @@ pub fn uu_app() -> Command {
                 .short('h')
                 .long(options::HEADER_NUMBERING)
                 .help(translate!("nl-help-header-numbering"))
+                .value_parser(|s: &str| NumberingStyle::try_from(s))
                 .value_name("STYLE"),
         )
         .arg(
