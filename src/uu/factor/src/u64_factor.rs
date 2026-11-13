@@ -16,21 +16,28 @@
 //!
 //! Steps 2 and 3 work in Montgomery form, see [`Montgomery`].
 
-/// A `u64` has at most 15 distinct prime factors: the product of the first 16
-/// primes does not fit.
-const MAX_DISTINCT_FACTORS: usize = 15;
-
-/// The prime factorization of a `u64`, sorted by increasing prime.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub(crate) struct Factors {
-    primes: [u64; MAX_DISTINCT_FACTORS],
-    exponents: [u8; MAX_DISTINCT_FACTORS],
+/// The prime factorization of a number, sorted by increasing prime.
+///
+/// `N` is the largest number of distinct primes a value of the type can have,
+/// so that no allocation is needed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Factors<T, const N: usize> {
+    primes: [T; N],
+    exponents: [u8; N],
     len: usize,
 }
 
-impl Factors {
+impl<T: Copy + Ord + Default, const N: usize> Factors<T, N> {
+    pub(super) fn new() -> Self {
+        Self {
+            primes: [T::default(); N],
+            exponents: [0; N],
+            len: 0,
+        }
+    }
+
     /// Record `exponent` more occurrences of `prime`, keeping the primes sorted.
-    fn push(&mut self, prime: u64, exponent: u8) {
+    pub(super) fn push(&mut self, prime: T, exponent: u8) {
         let mut at = self.len;
         while at > 0 && self.primes[at - 1] > prime {
             at -= 1;
@@ -47,13 +54,17 @@ impl Factors {
     }
 
     /// The `(prime, exponent)` pairs, by increasing prime.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (u64, usize)> + '_ {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (T, usize)> + '_ {
         self.primes[..self.len]
             .iter()
             .zip(&self.exponents[..self.len])
             .map(|(&prime, &exponent)| (prime, usize::from(exponent)))
     }
 }
+
+/// A `u64` has at most 15 distinct prime factors: the product of the first 16
+/// primes does not fit.
+pub(crate) type U64Factors = Factors<u64, 15>;
 
 /// Trial division covers the primes below this bound.
 const SMALL_PRIME_BOUND: usize = 1 << 12;
@@ -62,10 +73,10 @@ const SMALL_PRIME_BOUND: usize = 1 << 12;
 /// with one multiplication: `n` is a multiple of `p` exactly when
 /// `n * inverse (mod 2^64) <= limit`, and that product is then `n / p`.
 #[derive(Clone, Copy)]
-struct SmallPrime {
-    prime: u64,
+pub(super) struct SmallPrime {
+    pub(super) prime: u64,
     /// The inverse of `prime` modulo 2^64.
-    inverse: u64,
+    pub(super) inverse: u64,
     /// `u64::MAX / prime`
     limit: u64,
 }
@@ -116,7 +127,7 @@ const fn inverse_mod_2_64(n: u64) -> u64 {
 const SMALL_PRIME_COUNT: usize = count_odd_primes();
 
 /// The odd primes below [`SMALL_PRIME_BOUND`].
-static SMALL_PRIMES: [SmallPrime; SMALL_PRIME_COUNT] = {
+pub(super) static SMALL_PRIMES: [SmallPrime; SMALL_PRIME_COUNT] = {
     let composite = composite_sieve();
     let mut table = [SmallPrime {
         prime: 0,
@@ -144,8 +155,8 @@ static SMALL_PRIMES: [SmallPrime; SMALL_PRIME_COUNT] = {
 const PRIME_BELOW: u64 = (SMALL_PRIME_BOUND as u64) * (SMALL_PRIME_BOUND as u64);
 
 /// Factorize `n`. Zero and one have no prime factors.
-pub(crate) fn factorize(mut n: u64) -> Factors {
-    let mut factors = Factors::default();
+pub(crate) fn factorize(mut n: u64) -> U64Factors {
+    let mut factors = Factors::new();
     if n < 2 {
         return factors;
     }
@@ -191,7 +202,7 @@ pub(crate) fn factorize(mut n: u64) -> Factors {
 ///
 /// The recursion is shallow: every prime factor is above 2^12, so there are
 /// at most five of them.
-fn factorize_large(n: u64, factors: &mut Factors) {
+fn factorize_large(n: u64, factors: &mut U64Factors) {
     let modulus = Montgomery::new(n);
     if modulus.is_prime() {
         factors.push(n, 1);
@@ -432,10 +443,10 @@ fn gcd(mut a: u64, mut b: u64) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{Factors, Montgomery, SMALL_PRIMES, factorize, fermat_divisor, gcd};
+    use super::{Montgomery, SMALL_PRIMES, U64Factors, factorize, fermat_divisor, gcd};
     use num_prime::nt_funcs::{factorize64, is_prime64};
 
-    fn pairs(factors: &Factors) -> Vec<(u64, usize)> {
+    fn pairs(factors: &U64Factors) -> Vec<(u64, usize)> {
         factors.iter().collect()
     }
 

@@ -14,12 +14,13 @@ use std::num::IntErrorKind;
 use clap::{Arg, ArgAction, Command};
 use memchr::memchr3_iter;
 use num_bigint::BigUint;
-use num_prime::nt_funcs::{factorize128, factors};
+use num_prime::nt_funcs::factors;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code, strip_errno};
 use uucore::translate;
 use uucore::{format_usage, show_error, show_if_err};
 
+mod u128_factor;
 mod u64_factor;
 
 mod options {
@@ -55,8 +56,7 @@ fn write_factors_str(
 
     match x {
         Number::U64(x) => write_result(w, &x, u64_factor::factorize(x).iter(), print_exponents),
-        // use num_prime's factorize128 algorithm for u128 integers
-        Number::U128(x) => write_result(w, &x, factorize128(x), print_exponents),
+        Number::U128(x) => write_result(w, &x, u128_factor::factorize(x).iter(), print_exponents),
         // use num_prime's fallible factorization for anything greater than u128::MAX
         Number::BigUint(x) => {
             let (prime_factors, remaining) = factors(x.clone(), None);
