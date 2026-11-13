@@ -7,7 +7,8 @@
 
 use rstest::rstest;
 use uucore::display::Quotable;
-use uutests::{at_and_ucmd, new_ucmd};
+use uutests::util::TestScenario;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 #[test]
 fn test_invalid_arg() {
@@ -492,4 +493,43 @@ fn test_buffered_reads_new_line_no_tabs_in_first_chunk() {
         .args(&["new_line_in_chunk.txt"])
         .succeeds()
         .stdout_is_fixture("new_line_in_chunk_expected.txt");
+}
+
+#[test]
+fn test_line_continues_into_next_file() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("f1", "a");
+    at.write("f2", "\tb\n");
+    at.write("f3", "\u{e9}");
+    ts.ucmd()
+        .args(&["f1", "f2", "f3", "f2"])
+        .succeeds()
+        .stdout_only("a       b\n\u{e9}       b\n");
+
+    // The tab follows `a`, so it is not an initial one.
+    ts.ucmd()
+        .args(&["-i", "f1", "f2"])
+        .succeeds()
+        .stdout_only("a\tb\n");
+}
+
+#[test]
+fn test_column_kept_across_read_buffers() {
+    // Longer than one read buffer, with no tab before the end of the first one.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let prefix = format!("{}bcd", "a".repeat(8190));
+    at.write("long", &format!("{prefix}\tx\n"));
+    ts.ucmd()
+        .args(&["-t3", "long"])
+        .succeeds()
+        .stdout_only(format!("{prefix}   x\n"));
+
+    let prefix = format!("a{}", " ".repeat(8191));
+    at.write("long_i", &format!("{prefix}\tx\n"));
+    ts.ucmd()
+        .args(&["-i", "long_i"])
+        .succeeds()
+        .stdout_only(format!("{prefix}\tx\n"));
 }
