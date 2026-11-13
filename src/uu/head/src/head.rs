@@ -9,7 +9,7 @@ use clap::ArgMatches;
 use memchr::memrchr_iter;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{self, BufWriter, IsTerminal, Read, Seek, SeekFrom, Write};
 use std::num::TryFromIntError;
 #[cfg(unix)]
 use std::os::fd::AsFd;
@@ -236,23 +236,16 @@ fn print_n_bytes(input: impl Read, n: u64) -> io::Result<u64> {
     Ok(bytes_written)
 }
 
-fn print_n_lines(input: &mut impl io::BufRead, n: u64, separator: u8) -> io::Result<u64> {
+fn print_n_lines(
+    input: &mut impl io::BufRead,
+    n: u64,
+    separator: u8,
+    out: &mut impl Write,
+) -> io::Result<u64> {
     // Read the first `n` lines from the `input` reader.
     let mut reader = take_lines(input, n, separator);
 
-    // Write those bytes to `stdout`.
-    let stdout = io::stdout();
-    let stdout = stdout.lock();
-    let mut writer = BufWriter::with_capacity(BUF_SIZE, stdout);
-
-    let bytes_written = io::copy(&mut reader, &mut writer).map_err(wrap_in_stdout_error)?;
-
-    // Make sure we finish writing everything to the target before
-    // exiting. Otherwise, when Rust is implicitly flushing, any
-    // error will be silently ignored.
-    writer.flush().map_err(wrap_in_stdout_error)?;
-
-    Ok(bytes_written)
+    io::copy(&mut reader, out).map_err(wrap_in_stdout_error)
 }
 
 fn print_but_last_n_bytes(mut input: impl Read, n: u64) -> io::Result<u64> {
@@ -433,30 +426,42 @@ fn head_backwards_on_seekable_file(input: &mut File, options: &HeadOptions) -> i
     }
 }
 
-fn head_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
+fn flush_stdout(out: &mut impl Write) -> io::Result<()> {
+    out.flush().map_err(wrap_in_stdout_error)
+}
+
+fn head_file(input: &mut File, options: &HeadOptions, out: &mut impl Write) -> io::Result<u64> {
+    if let Mode::FirstLines(n) = options.mode {
+        let mut input = io::BufReader::with_capacity(BUF_SIZE, input);
+        return print_n_lines(&mut input, n, options.line_ending.into(), out);
+    }
+    // The other modes write to stdout directly.
+    flush_stdout(out)?;
     match options.mode {
         Mode::FirstBytes(n) => print_n_bytes(input, n),
-        Mode::FirstLines(n) => print_n_lines(
-            &mut io::BufReader::with_capacity(BUF_SIZE, input),
-            n,
-            options.line_ending.into(),
-        ),
-        Mode::AllButLastBytes(_) | Mode::AllButLastLines(_) => head_backwards_file(input, options),
+        _ => head_backwards_file(input, options),
     }
 }
 
 #[allow(clippy::cognitive_complexity)]
 fn uu_head(options: &HeadOptions) -> UResult<()> {
-    let mut stdout = io::stdout().lock();
+    let stdout = io::stdout();
+    // Like GNU, a terminal gets each header and file when it is done, and
+    // anything else one buffer for all files instead of a few writes each.
+    let flush_each = stdout.is_terminal();
+    let mut out = BufWriter::with_capacity(BUF_SIZE, stdout.lock());
     let mut first = true;
     for file in &options.files {
         let res = if file == "-" {
             if (options.files.len() > 1 && !options.quiet) || options.verbose {
                 if !first {
-                    writeln!(stdout)?;
+                    writeln!(out)?;
                 }
                 let name = locale_aware_shell_escape(translate!("head-name-stdin"));
-                writeln!(stdout, "==> {name} <==")?;
+                writeln!(out, "==> {name} <==")?;
+                if flush_each {
+                    flush_stdout(&mut out)?;
+                }
             }
             let stdin = io::stdin();
 
@@ -470,21 +475,24 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     // last byte read so that any tools that parse the remainder of
                     // the stdin stream read from the correct place.
 
-                    let bytes_read = head_file(&mut stdin_file, options)?;
+                    let bytes_read = head_file(&mut stdin_file, options, &mut out)?;
                     stdin_file.seek(SeekFrom::Start(current_pos + bytes_read))?;
                 } else {
-                    let _bytes_read = head_file(&mut stdin_file, options)?;
+                    let _bytes_read = head_file(&mut stdin_file, options, &mut out)?;
                 }
             }
 
             #[cfg(not(unix))]
             {
                 let mut stdin = stdin.lock();
+                flush_stdout(&mut out)?;
 
                 match options.mode {
                     Mode::FirstBytes(n) => print_n_bytes(&mut stdin, n),
                     Mode::AllButLastBytes(n) => print_but_last_n_bytes(&mut stdin, n),
-                    Mode::FirstLines(n) => print_n_lines(&mut stdin, n, options.line_ending.into()),
+                    Mode::FirstLines(n) => {
+                        print_n_lines(&mut stdin, n, options.line_ending.into(), &mut out)
+                    }
                     Mode::AllButLastLines(n) => {
                         print_but_last_n_lines(&mut stdin, n, options.line_ending.into())
                     }
@@ -501,14 +509,17 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
             // GNU head prints "==> name <==" for existing files and
             // directories, but NOT for nonexistent ones — those produce
             // only an error message.
-            let mut print_header = || -> UResult<()> {
+            let mut print_header = |out: &mut BufWriter<io::StdoutLock<'static>>| -> UResult<()> {
                 if (options.files.len() > 1 && !options.quiet) || options.verbose {
                     if !first {
-                        writeln!(stdout)?;
+                        writeln!(out)?;
                     }
                     let name = locale_aware_shell_escape(file);
-                    writeln!(stdout, "==> {name} <==")?;
+                    writeln!(out, "==> {name} <==")?;
                     first = false;
+                    if flush_each {
+                        flush_stdout(out)?;
+                    }
                 }
                 Ok(())
             };
@@ -522,8 +533,9 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                         && Path::new(file).metadata().is_ok_and(|m| m.is_dir())
                     {
                         // We need to print the header, as we have an existing directory
-                        print_header()?;
+                        print_header(&mut out)?;
                         if !zero_output {
+                            flush_stdout(&mut out)?;
                             show!(USimpleError::new(
                                 1,
                                 translate!("head-error-reading-file", "name" => file.quote(), "err" => "Is a directory")
@@ -532,6 +544,8 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                         continue;
                     }
 
+                    // Errors go after what is already written to stdout.
+                    flush_stdout(&mut out)?;
                     show!(err.map_err_context(
                         || translate!("head-error-cannot-open", "name" => file.quote())
                     ));
@@ -542,6 +556,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
             let metadata = match file_handle.metadata() {
                 Ok(m) => m,
                 Err(err) => {
+                    flush_stdout(&mut out)?;
                     show!(err.map_err_context(
                         || translate!("head-error-cannot-open", "name" => file.quote())
                     ));
@@ -549,9 +564,10 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 }
             };
 
-            print_header()?;
+            print_header(&mut out)?;
             if metadata.is_dir() {
                 if !zero_output {
+                    flush_stdout(&mut out)?;
                     show!(USimpleError::new(
                         1,
                         translate!("head-error-reading-file", "name" => file.quote(), "err" => "Is a directory")
@@ -559,7 +575,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 }
                 continue;
             }
-            head_file(&mut file_handle, options)?;
+            head_file(&mut file_handle, options, &mut out)?;
             Ok(())
         };
         if let Err(err) = res {
@@ -571,7 +587,12 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
             return Err(HeadError::Io { name, err }.into());
         }
         first = false;
+        if flush_each {
+            flush_stdout(&mut out)?;
+        }
     }
+    // An error of the last write is reported here, not ignored on drop.
+    flush_stdout(&mut out)?;
     // Even though this is returning `Ok`, it is possible that a call
     // to `show!()` and thus a call to `set_exit_code()` has been
     // called above. If that happens, then this process will exit with
@@ -714,7 +735,7 @@ mod tests {
     fn read_early_exit() {
         let mut empty = io::BufReader::new(Cursor::new(Vec::new()));
         assert!(print_n_bytes(&mut empty, 0).is_ok());
-        assert!(print_n_lines(&mut empty, 0, b'\n').is_ok());
+        assert!(print_n_lines(&mut empty, 0, b'\n', &mut io::sink()).is_ok());
     }
 
     #[test]
