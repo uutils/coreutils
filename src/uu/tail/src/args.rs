@@ -7,6 +7,7 @@
 
 use crate::paths::{Input, stdin_is_regular};
 use crate::{Quotable, parse, platform};
+use clap::error::{ContextKind, ContextValue, ErrorKind};
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use std::ffi::OsString;
 use std::io::{IsTerminal, Write};
@@ -453,16 +454,23 @@ pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
             uucore::diagnostics::capture(&args_vec).as_deref(),
         )
         .inspect_err(|_| settings_failed = true),
-        Err(err) => Err(err.into()),
+        Err(err) => Err(digit_option_error(&err).unwrap_or_else(|| err.into())),
     };
 
     // clap isn't able to handle obsolete syntax.
     // therefore, we want to check further for obsolete arguments.
     // argv[0] is always present, argv[1] might be obsolete arguments
-    // argv[2] might contain an input file, argv[3] isn't allowed in obsolete mode
-    if args_vec.len() != 2 && args_vec.len() != 3 {
-        return clap_result;
-    }
+    // argv[2] might contain an input file, which may follow `--` when argv[1]
+    // starts with '-' (`tail -10 -- FILE`); more operands aren't allowed in
+    // obsolete mode
+    let input = match args_vec.len() {
+        2 => None,
+        3 => Some(&args_vec[2]),
+        4 if args_vec[2] == "--" && args_vec[1].as_encoded_bytes().first() == Some(&b'-') => {
+            Some(&args_vec[3])
+        }
+        _ => return clap_result,
+    };
 
     // At this point, there are a few possible cases:
     //
@@ -491,10 +499,29 @@ pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     if settings_failed && no_value_attached {
         return clap_result;
     }
-    match parse_obsolete(possible_obsolete_args, args_vec.get(2))? {
+    match parse_obsolete(possible_obsolete_args, input)? {
         Some(settings) => Ok(settings),
         None => clap_result,
     }
+}
+
+/// A digit option outside the obsolete `tail -NUM [FILE]` form, as in
+/// `tail -10 a b`, is reported like GNU does: "option used in invalid context".
+fn digit_option_error(err: &clap::Error) -> Option<Box<dyn uucore::error::UError>> {
+    if err.kind() != ErrorKind::UnknownArgument {
+        return None;
+    }
+    let Some(ContextValue::String(arg)) = err.get(ContextKind::InvalidArg) else {
+        return None;
+    };
+    let digit = arg.strip_prefix('-')?;
+    if digit.len() != 1 || !digit.as_bytes()[0].is_ascii_digit() {
+        return None;
+    }
+    Some(USimpleError::new(
+        1,
+        translate!("tail-error-option-used-in-invalid-context", "option" => digit),
+    ))
 }
 
 pub fn uu_app() -> Command {

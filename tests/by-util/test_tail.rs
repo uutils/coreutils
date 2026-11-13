@@ -5381,6 +5381,37 @@ fn test_tail_obsolete_blocks() {
 }
 
 #[test]
+fn test_tail_obsolete_number_before_double_dash() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "1\n2\n3\n");
+    ucmd.args(&["-2", "--", "a"])
+        .succeeds()
+        .stdout_only("2\n3\n");
+}
+
+#[test]
+fn test_tail_digit_option_in_invalid_context() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("a", "1\n");
+    scene.fixtures.write("b", "2\n");
+    for (args, digit) in [
+        (&["-15", "a", "b"][..], '1'),
+        (&["-5c", "a", "b"], '5'),
+        (&["-15", "--", "a", "b"], '1'),
+        (&["-15", "-f", "a"], '1'),
+        (&["a", "-15", "b"], '1'),
+        (&["-n", "5", "-15", "a"], '1'),
+    ] {
+        scene
+            .ucmd()
+            .args(args)
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_is(format!("tail: option used in invalid context -- {digit}\n"));
+    }
+}
+
+#[test]
 fn test_tail_obsolete_error_cases() {
     let scene = TestScenario::new(util_name!());
     scene
