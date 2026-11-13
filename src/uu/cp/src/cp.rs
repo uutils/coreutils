@@ -1456,7 +1456,7 @@ fn show_error_if_needed(error: &CpError) {
 /// Behavior is determined by the `options` parameter, see [`Options`] for details.
 pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult<()> {
     let target_type = TargetType::determine(sources, target);
-    verify_target_type(sources, target, target_type)?;
+    verify_target_type(target, target_type)?;
 
     let mut non_fatal_errors = false;
     let mut seen_sources = HashSet::with_capacity(sources.len());
@@ -3285,16 +3285,11 @@ fn copy_link(
 }
 
 /// Generate an error message if `target` is not the correct `target_type`
-pub fn verify_target_type(
-    sources: &[PathBuf],
-    target: &Path,
-    target_type: TargetType,
-) -> CopyResult<()> {
+pub fn verify_target_type(target: &Path, target_type: TargetType) -> CopyResult<()> {
     match (target_type, target.is_dir()) {
         (TargetType::Directory, false) => Err(translate!("cp-error-target-not-directory", "target" => target.quote())
         .into()),
-        (TargetType::File, true) => Err(translate!("cp-error-cannot-overwrite-directory-with-non-directory",
-            "dir" => target.quote(), "source" => sources.first().map(|s| s.quote().to_string()).unwrap_or_default())
+        (TargetType::File, true) => Err(translate!("cp-error-cannot-overwrite-directory-with-non-directory", "dir" => target.quote())
         .into()),
         _ => Ok(()),
     }
