@@ -1339,23 +1339,21 @@ mod options {
     pub const NO_PARTIAL: &str = "no-partial";
 }
 
-/// GNU takes everything after a short option letter as its value, a leading `=`
-/// included (`-d=` is the `=` delimiter, `-b=1` is the invalid list `=1`), but
-/// clap drops that `=`, see
-/// <https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242>.
-/// Such a value is moved to its own argument, which clap keeps verbatim.
-/// Arguments after `--`, and the value of an option given as the next
-/// argument, are left untouched.
-fn split_equals_values(args: Vec<OsString>) -> Vec<OsString> {
-    const FLAGS: &str = "nsz";
-    const SHORT_WITH_VALUE: &str = "bcdfFO";
-    const LONG_WITH_VALUE: [&str; 5] = [
-        options::BYTES,
-        options::CHARACTERS,
-        options::DELIMITER,
-        options::FIELDS,
-        options::OUTPUT_DELIMITER,
-    ];
+/// GNU keeps the `=` in `-d=x` as part of the value but clap drops it, so such
+/// a value is moved to its own argument, which clap keeps verbatim.
+fn split_equals_values(command: &Command, args: Vec<OsString>) -> Vec<OsString> {
+    let mut flags = String::new();
+    let mut short_with_value = String::new();
+    let mut long_with_value = Vec::new();
+    for arg in command.get_arguments() {
+        let takes_value = arg.get_action().takes_values();
+        if !takes_value {
+            flags.extend(arg.get_short());
+        } else if arg.get_num_args().is_none_or(|n| n.min_values() > 0) {
+            short_with_value.extend(arg.get_short());
+            long_with_value.extend(arg.get_long());
+        }
+    }
 
     let mut result = Vec::with_capacity(args.len() + 1);
     let mut args = args.into_iter();
@@ -1370,13 +1368,13 @@ fn split_equals_values(args: Vec<OsString>) -> Vec<OsString> {
             // Long options may be abbreviated.
             value_is_next = !long.is_empty()
                 && !long.contains('=')
-                && LONG_WITH_VALUE.iter().any(|name| name.starts_with(long));
+                && long_with_value.iter().any(|name| name.starts_with(long));
         } else if let Some(cluster) = arg.to_str().and_then(|s| s.strip_prefix('-')) {
             let flags_end = cluster
-                .find(|c| !FLAGS.contains(c))
+                .find(|c| !flags.contains(c))
                 .unwrap_or(cluster.len());
             let mut rest = cluster[flags_end..].chars();
-            if let Some(short) = rest.next().filter(|c| SHORT_WITH_VALUE.contains(*c)) {
+            if let Some(short) = rest.next().filter(|c| short_with_value.contains(*c)) {
                 let value = rest.as_str();
                 if value.is_empty() {
                     value_is_next = true;
@@ -1402,9 +1400,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // they were typed, before the rewrite below edits one of them.
     let diag_args = uucore::diagnostics::capture(&args);
 
-    let args = split_equals_values(args);
+    let command = uu_app();
+    let args = split_equals_values(&command, args);
 
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let matches = uucore::clap_localization::handle_clap_result(command, args)?;
 
     let complement = matches.get_flag(options::COMPLEMENT);
     let only_delimited = matches.get_flag(options::ONLY_DELIMITED);
