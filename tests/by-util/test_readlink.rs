@@ -147,6 +147,69 @@ fn test_canonicalize_missing() {
 
 #[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
+fn test_canonicalize_precedence() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // 1. -e then -f: -f came last, so it resolves missing file (parent exists) and succeeds
+    let actual = scene
+        .ucmd()
+        .args(&["-e", "--canonicalize", "missing"])
+        .succeeds()
+        .stdout_move_str();
+    let expect = path_concat!(at.root_dir_resolved(), "missing") + "\n";
+    assert_eq!(actual, expect);
+
+    // 2. -f then -e: -e came last, so it fails on non-existent file
+    scene
+        .ucmd()
+        .args(&["--canonicalize", "-e", "missing"])
+        .fails_with_code(1)
+        .no_stdout();
+
+    // 3. -e then -m: -m came last, so it resolves path with missing parent dir and succeeds
+    let actual = scene
+        .ucmd()
+        .args(&[
+            "--canonicalize-existing",
+            "--canonicalize-missing",
+            "missing/nested",
+        ])
+        .succeeds()
+        .stdout_move_str();
+    let expect = path_concat!(at.root_dir_resolved(), "missing", "nested") + "\n";
+    assert_eq!(actual, expect);
+
+    // 4. -m then -e: -e came last, so it fails on missing path
+    scene
+        .ucmd()
+        .args(&[
+            "--canonicalize-missing",
+            "--canonicalize-existing",
+            "missing/nested",
+        ])
+        .fails_with_code(1)
+        .no_stdout();
+
+    // 5. -m then -f: -f came last, so it fails when parent directory does not exist
+    scene
+        .ucmd()
+        .args(&["-m", "-f", "missing/nested"])
+        .fails_with_code(1)
+        .no_stdout();
+
+    // 6. -f then -m: -m came last, so it succeeds even when parent directory is missing
+    let actual = scene
+        .ucmd()
+        .args(&["-f", "-m", "missing/nested"])
+        .succeeds()
+        .stdout_move_str();
+    let expect = path_concat!(at.root_dir_resolved(), "missing", "nested") + "\n";
+    assert_eq!(actual, expect);
+}
+
+#[uutests::wasi_ignore(GuestRootPathResolution)]
+#[test]
 #[cfg(unix)]
 fn test_canonicalize_symlink_before_parentdir() {
     // GNU readlink follows the symlink first and only then evaluates `..`.
