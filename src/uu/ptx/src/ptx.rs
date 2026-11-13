@@ -290,14 +290,14 @@ fn read_input(input_files: &[OsString], config: &Config) -> UResult<FileMap> {
             Box::new(stdin())
         } else {
             // Attach the quoted filename to the error context if opening fails
-            let file =
-                File::open(Path::new(filename)).map_err_context(|| filename.quote().to_string())?;
+            let file = File::open(Path::new(filename))
+                .map_err_context(|| filename.maybe_quote().to_string())?;
             Box::new(file)
         });
 
         // Attach the quoted filename context if reading the contents fails
         let lines = read_lines(sentence_splitter.as_ref(), &mut reader)
-            .map_err_context(|| filename.quote().to_string())?;
+            .map_err_context(|| filename.maybe_quote().to_string())?;
 
         // Indexing UTF-8 string requires walking from the beginning, which can hurts performance badly when the line is long.
         // Since we will be jumping around the line a lot, we dump the content into a Vec<char>, which can be indexed in constant time.
@@ -796,7 +796,7 @@ fn write_traditional_output(
             Box::new(stdout())
         } else {
             let file = File::create(output_filename)
-                .map_err_context(|| output_filename.quote().to_string())?;
+                .map_err_context(|| output_filename.maybe_quote().to_string())?;
             Box::new(file)
         });
 
