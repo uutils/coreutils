@@ -28,7 +28,8 @@ use uucore::libc::getlogin;
 use uucore::line_ending::LineEnding;
 use uucore::translate;
 
-use rustix::process::{Uid, getegid, geteuid, getgid, getuid};
+// `std` might add same API <https://github.com/rust-lang/rust/issues/166252>
+use nix::unistd::{Uid, getegid, geteuid, getgid, getuid};
 use uucore::{format_usage, show_error};
 
 macro_rules! cstr2cow {

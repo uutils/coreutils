@@ -27,6 +27,40 @@ fn test_id_ignore() {
 }
 
 #[test]
+#[cfg(all(target_os = "linux", target_env = "gnu"))] // see test_id_user_name_space for musl
+fn test_id_fakeroot() {
+    if !uutests::util::has_fakeroot_support() {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let coreutils = uutests::util::get_tests_binary();
+    scene
+        .cmd("fakeroot")
+        .args(&[coreutils, "id", "-u"])
+        .succeeds()
+        .stdout_only("0\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_id_user_name_space() {
+    if !Command::new("unshare")
+        .args(["--user", "--map-root-user", "true"])
+        .status()
+        .is_ok_and(|s| s.success())
+    {
+        return;
+    }
+    let coreutils = uutests::util::get_tests_binary();
+    let scene = TestScenario::new(util_name!());
+    scene
+        .cmd("unshare")
+        .args(&["--user", "--map-root-user", coreutils, "id", "-u"])
+        .succeeds()
+        .stdout_only("0\n");
+}
+
+#[test]
 #[allow(unused_mut)]
 fn test_id_no_specified_user() {
     let ts = TestScenario::new(util_name!());
