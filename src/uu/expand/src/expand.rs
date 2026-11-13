@@ -394,8 +394,9 @@ fn expand_buf(
     use self::CharType::{Backspace, Other, Tab};
 
     // The state carries over to the next buffer and the next file, as they
-    // continue the same line.
-    let LineState { col, init } = line;
+    // continue the same line. Copied into locals so that the loop does not
+    // reload it through the reference after every write.
+    let LineState { mut col, mut init } = *line;
     let mut byte = 0;
 
     // Fast path: if there are no tabs, backspaces, and (in UTF-8 mode or no carriage returns),
@@ -408,8 +409,8 @@ fn expand_buf(
         .any(|&b| b == b'\t' || b == b'\x08' || (!options.utf8 && b == b'\r'));
     if !needs_processing && let Some(n) = buf.iter().rposition(|&b| b == b'\n') {
         output.write_all(&buf[..=n])?;
-        *col = 0;
-        *init = true;
+        col = 0;
+        init = true;
         byte = n + 1;
     }
 
@@ -421,10 +422,10 @@ fn expand_buf(
                 .position(|&b| !is_plain(b))
                 .map_or(buf.len(), |n| byte + 1 + n);
             let plain = &buf[byte..end];
-            if *init {
-                *init = plain.iter().all(|&b| b == b' ');
+            if init {
+                init = plain.iter().all(|&b| b == b' ');
             }
-            *col += plain.len();
+            col += plain.len();
             output.write_all(plain)?;
             byte = end;
             continue;
@@ -436,39 +437,39 @@ fn expand_buf(
         match ctype {
             Tab => {
                 // figure out how many spaces to the next tabstop
-                let nts = next_tabstop(tabstops, *col, &options.remaining_mode);
-                *col += nts;
+                let nts = next_tabstop(tabstops, col, &options.remaining_mode);
+                col += nts;
 
                 // now dump out either spaces if we're expanding, or a literal tab if we're not
-                if *init || !options.iflag {
+                if init || !options.iflag {
                     write_spaces(output, nts)?;
                 } else {
                     output.write_all(&buf[byte..byte + nbytes])?;
                 }
             }
             Backspace => {
-                *col = col.saturating_sub(1);
+                col = col.saturating_sub(1);
 
                 // if we're writing anything other than a space, then we're
                 // done with the line's leading spaces
                 if buf[byte] != b' ' {
-                    *init = false;
+                    init = false;
                 }
 
                 output.write_all(&buf[byte..byte + nbytes])?;
             }
             Other => {
-                *col += cwidth;
+                col += cwidth;
 
                 // if we're writing anything other than a space, then we're
                 // done with the line's leading spaces
                 if buf[byte] != b' ' {
-                    *init = false;
+                    init = false;
                 }
 
                 if buf[byte] == b'\n' {
-                    *col = 0;
-                    *init = true;
+                    col = 0;
+                    init = true;
                 }
 
                 output.write_all(&buf[byte..byte + nbytes])?;
@@ -478,6 +479,7 @@ fn expand_buf(
         byte += nbytes; // advance the pointer
     }
 
+    *line = LineState { col, init };
     Ok(())
 }
 
