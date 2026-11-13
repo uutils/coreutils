@@ -61,6 +61,8 @@ fn test_invalid_input() {
 // with -d and -s, set2 is only the set to squeeze, so any class is allowed
 #[case::delete_and_squeeze_digit_class_in_set2(&["-ds", "x", "[:digit:]"], "aab-x1122", "aab-12")]
 #[case::delete_and_squeeze_upper_class_in_set2(&["-ds", "a", "[:upper:]"], "aAAb", "Ab")]
+// the upper/lower alignment rule is about translating only
+#[case::delete_and_squeeze_misaligned_classes(&["-ds", "[:alpha:]", "[:upper:]"], "aZ1", "1")]
 #[case::set1_shorter_than_set2(&["ab", "xyz"], "abcde", "xycde")]
 #[case::truncate_multi(&["-tt", "-t", "abc", "xy"], "abcde", "xycde")]
 #[case::truncate_with_set1_shorter_than_set2(&["-t", "ab", "xyz"], "abcde", "xycde")]
@@ -354,37 +356,22 @@ fn test_misaligned_upper_lower_construct(#[case] args: &[&str]) {
         .stderr_contains("tr: misaligned [:upper:] and/or [:lower:] construct\n");
 }
 
-/// The alignment rule is about translating only: with -d, SET2 is the squeeze
-/// set and lines up with nothing.
-#[test]
-fn test_misaligned_construct_not_checked_when_deleting() {
+/// A class in SET2 that is rejected for another reason keeps that reason's
+/// message instead of the misaligned-construct one.
+#[rstest]
+// plain -d takes one set, so SET2 is an extra operand
+#[case::delete(&["-d", "[:alpha:]", "[:upper:]"], "extra operand '[:upper:]'")]
+#[case::set1_longer_than_set2(
+    &["[:upper:][:lower:]", "[:lower:]"],
+    "when translating with string1 longer than string2,\n"
+)]
+fn test_class_in_set2_other_error(#[case] args: &[&str], #[case] err: &str) {
     new_ucmd!()
-        .args(&["-ds", "[:alpha:]", "[:upper:]"])
-        .pipe_in("aZ1")
-        .succeeds()
-        .stdout_is("1");
-}
-
-/// Plain -d takes one set: a class in SET2 is an extra operand, not a
-/// misaligned construct.
-#[test]
-fn test_delete_with_class_in_set2() {
-    new_ucmd!()
-        .args(&["-d", "[:alpha:]", "[:upper:]"])
+        .args(args)
         .pipe_in("")
         .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("extra operand '[:upper:]'");
-}
-
-/// SET1 longer than SET2 keeps its own message, which GNU also has.
-#[test]
-fn test_set1_longer_than_set2_ending_in_class() {
-    new_ucmd!()
-        .args(&["[:upper:][:lower:]", "[:lower:]"])
-        .pipe_in("aZ1")
-        .fails_with_code(1)
-        .stderr_contains("when translating with string1 longer than string2,\n");
+        .stderr_contains(err);
 }
 
 #[test]
