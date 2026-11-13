@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDOs) ncount routput alnum
+// spell-checker:ignore (ToDOs) ncount routput
 
 use clap::{Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
@@ -442,7 +442,13 @@ fn compute_col_count(buffer: &[u8], mode: WidthMode) -> usize {
 }
 
 fn rebase_tracker(tracker: &mut Option<usize>, consume: usize) {
-    *tracker = tracker.and_then(|idx| if idx < consume { None } else { Some(idx - consume) });
+    *tracker = tracker.and_then(|idx| {
+        if idx < consume {
+            None
+        } else {
+            Some(idx - consume)
+        }
+    });
 }
 
 /// Clear every remembered break position. Called when a newline forces the
