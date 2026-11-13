@@ -1033,6 +1033,6 @@ jobs:
     - name: Install strace
       run: sudo apt-get update && sudo apt-get install -y strace
     - name: Build utilities for TOCTOU checks
-      run: cargo build --profile=release-small -p uu_mkfifo -p uu_touch -p uu_head
+      run: cargo build --profile=release-small -p uu_mkfifo -p uu_head
     - name: Run TOCTOU verification
       run: ./util/check-toctou.sh
