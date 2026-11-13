@@ -604,9 +604,8 @@ impl ChownExecutor {
                 }
             };
 
-            // `meta` follows symlinks only under `-L`, like `is_root()` would. Use
-            // it rather than looking `entry_path` up again, which fails when the
-            // path is longer than PATH_MAX or crosses too many symlinks.
+            // `meta` follows symlinks only under `-L`; looking `entry_path` up again
+            // can fail past PATH_MAX or too many symlinks.
             if self.preserve_root && metadata_is_root_dir(&meta) {
                 report_root(&entry_path);
                 *ret = 1;

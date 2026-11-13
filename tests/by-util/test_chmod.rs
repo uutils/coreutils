@@ -823,20 +823,23 @@ fn test_chmod_preserve_root_symlink_during_recursion() {
         );
 }
 
-/// The guard must also see a symlink to `/` whose path can't be looked up by
-/// name: longer than `PATH_MAX`, or crossing more symlinks than the kernel
-/// follows. `u+r` is harmless if it fails.
-#[cfg(target_os = "linux")]
+/// A symlink to `/` too long or too deep to look up by name must still be refused.
+#[cfg(unix)]
 #[rstest::rstest]
 #[case::beyond_path_max(AtPath::symlink_to_root_beyond_path_max)]
 #[case::symlink_chain(AtPath::symlink_chain_to_root)]
-fn test_chmod_preserve_root_symlink_not_found_by_name(#[case] make_tree: fn(&AtPath, &str)) {
+fn test_chmod_preserve_root_symlink_not_found_by_name(
+    #[case] make_tree: fn(&AtPath, &str) -> String,
+) {
     let (at, mut ucmd) = at_and_ucmd!();
-    make_tree(&at, "tree");
+    let link = make_tree(&at, "tree");
 
     ucmd.args(&["-R", "-L", "--preserve-root", "u+r", "tree"])
         .fails_with_code(1)
-        .stderr_contains("(same as '/')");
+        .stderr_is(format!(
+            "chmod: it is dangerous to operate recursively on '{link}' (same as '/')\n\
+             chmod: use --no-preserve-root to override this failsafe\n"
+        ));
 }
 
 #[test]

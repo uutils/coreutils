@@ -799,9 +799,7 @@ impl Chmoder {
                 }
             };
 
-            // `/` reached through a symlink (under `-L`) or a bind mount. Decide
-            // from the fd-relative stat: looking `entry_path` up again fails when
-            // it is longer than PATH_MAX or crosses too many symlinks.
+            // Looking `entry_path` up again can fail past PATH_MAX or too many symlinks.
             if self.preserve_root && uucore::fs::metadata_is_root_dir(&meta) {
                 show!(ChmodError::PreserveRootSameAs(entry_path));
                 continue;

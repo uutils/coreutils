@@ -6,6 +6,8 @@
 // spell-checker:ignore (words) nosuchgroup groupname
 
 use rustix::process::getegid;
+#[cfg(target_os = "linux")]
+use rustix::process::geteuid;
 #[cfg(not(target_vendor = "apple"))]
 use rustix::process::getgroups;
 #[cfg(target_os = "linux")]
@@ -157,21 +159,26 @@ fn test_preserve_root_symlink() {
         .stderr_is("chgrp: it is dangerous to operate recursively on '__root__/.' (same as '/')\nchgrp: use --no-preserve-root to override this failsafe\n");
 }
 
-/// The guard must also see a symlink to `/` whose path can't be looked up by
-/// name: longer than `PATH_MAX`, or crossing more symlinks than the kernel
-/// follows. Changing to our own group is harmless if it fails.
+/// A symlink to `/` too long or too deep to look up by name must still be refused.
 #[cfg(target_os = "linux")]
 #[rstest::rstest]
 #[case::beyond_path_max(AtPath::symlink_to_root_beyond_path_max)]
 #[case::symlink_chain(AtPath::symlink_chain_to_root)]
-fn test_preserve_root_symlink_not_found_by_name(#[case] make_tree: fn(&AtPath, &str)) {
+fn test_preserve_root_symlink_not_found_by_name(#[case] make_tree: fn(&AtPath, &str) -> String) {
+    // If the guard broke, root would change the group of all of `/`.
+    if geteuid().is_root() {
+        return;
+    }
     let (at, mut ucmd) = at_and_ucmd!();
-    make_tree(&at, "tree");
+    let link = make_tree(&at, "tree");
 
     let gid = getegid().as_raw().to_string();
     ucmd.args(&["-R", "-L", "--preserve-root", &gid, "tree"])
         .fails_with_code(1)
-        .stderr_contains("(same as '/')");
+        .stderr_is(format!(
+            "chgrp: it is dangerous to operate recursively on '{link}' (same as '/')\n\
+             chgrp: use --no-preserve-root to override this failsafe\n"
+        ));
 }
 
 #[test]

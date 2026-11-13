@@ -1350,11 +1350,10 @@ impl AtPath {
         self.symlink_dir_inner(original.as_ref(), self.plus(link).as_ref());
     }
 
-    /// Creates `dir` with a symlink `r` to `/` under 17 nested 250-byte
-    /// names, so that the path of the link is longer than `PATH_MAX`. That path
-    /// is too long to use, so the tree is built one level at a time.
+    /// Creates a symlink to `/` whose path is longer than `PATH_MAX`, one level
+    /// at a time, and returns that path.
     #[cfg(unix)]
-    pub fn symlink_to_root_beyond_path_max(&self, dir: &str) {
+    pub fn symlink_to_root_beyond_path_max(&self, dir: &str) -> String {
         use rustix::fs::{CWD, Mode, OFlags, mkdirat, openat, symlinkat};
 
         self.mkdir(dir);
@@ -1366,14 +1365,14 @@ impl AtPath {
             fd = openat(&fd, &name, flags, Mode::empty()).unwrap();
         }
         symlinkat("/", &fd, "r").unwrap();
+        format!("{dir}/{}r", format!("{name}/").repeat(17))
     }
 
-    /// Creates `dir/next`, the first of a chain of 41 symlinks that ends at
-    /// `/`: `dir/next -> ../dir.hops/1`, `dir.hops/1/next -> ../2`, ...,
-    /// `dir.hops/40/next -> /`. So `dir/next/.../next` crosses one more symlink
-    /// than the kernel follows in a single lookup.
+    /// Creates `dir/next`, the first of 41 chained symlinks that end at `/`,
+    /// one more than the kernel follows in one lookup, and returns the path
+    /// that reaches `/`.
     #[cfg(unix)]
-    pub fn symlink_chain_to_root(&self, dir: &str) {
+    pub fn symlink_chain_to_root(&self, dir: &str) -> String {
         self.mkdir(dir);
         self.relative_symlink_dir(format!("../{dir}.hops/1"), format!("{dir}/next"));
         for i in 1..=40 {
@@ -1385,6 +1384,7 @@ impl AtPath {
             };
             self.relative_symlink_dir(target, format!("{dir}.hops/{i}/next"));
         }
+        format!("{dir}{}", "/next".repeat(41))
     }
 
     pub fn is_symlink<P: AsRef<Path>>(&self, path: P) -> bool {
