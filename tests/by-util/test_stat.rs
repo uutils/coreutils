@@ -1117,7 +1117,8 @@ fn test_last_of_format_printf_wins(#[case] args: &[&str], #[case] expected: &str
 #[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_default_format_device_type_label() {
-    let result = new_ucmd!().arg("/dev/null").succeeds();
-    let stdout = result.stdout_str();
-    assert!(stdout.contains(" Device type: "), "{stdout}");
+    new_ucmd!()
+        .arg("/dev/null")
+        .succeeds()
+        .stdout_contains(" Device type: ");
 }
