@@ -477,6 +477,19 @@ fn test_fail_change_directory() {
     assert!(out.contains("env: cannot change directory to "));
 }
 
+#[cfg(unix)]
+#[test]
+fn test_fail_change_directory_message() {
+    // GNU env prints the strerror text without Rust's "(os error N)" suffix
+    new_ucmd!()
+        .args(&["-C", "some_nonexistent_path", "true"])
+        .fails_with_code(125)
+        .no_stdout()
+        .stderr_is(
+            "env: cannot change directory to 'some_nonexistent_path': No such file or directory\n",
+        );
+}
+
 #[test]
 fn test_argv0_without_command_fails() {
     for arg in ["-a", "--argv0"] {

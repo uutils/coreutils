@@ -1038,7 +1038,7 @@ fn apply_change_directory(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
             Err(error) => {
                 return Err(USimpleError::new(
                     125,
-                    translate!("env-error-cannot-change-directory", "directory" => d.quote(), "error" => error),
+                    translate!("env-error-cannot-change-directory", "directory" => d.quote(), "error" => strip_errno(&error)),
                 ));
             }
         };
