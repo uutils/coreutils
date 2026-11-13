@@ -2184,6 +2184,30 @@ fn test_shebang_error() {
 }
 
 #[test]
+fn test_shebang_hint_only_for_whitespace() {
+    // GNU only suggests -S when the program or an option contains whitespace.
+    new_ucmd!()
+        .args(&["-i", "no_such_command_for_env"])
+        .fails_with_code(127)
+        .stderr_is("env: 'no_such_command_for_env': No such file or directory\n");
+    new_ucmd!()
+        .args(&["cat -n", "./xxx"])
+        .fails_with_code(127)
+        .stderr_is(
+            "env: 'cat -n': No such file or directory\n\
+             env: use -[v]S to pass options in shebang lines\n",
+        );
+    new_ucmd!()
+        .arg("--bogus")
+        .fails_with_code(125)
+        .stderr_does_not_contain("shebang");
+    new_ucmd!()
+        .args(&["-v -S cat -n", "./xxx"])
+        .fails_with_code(125)
+        .stderr_contains("use -[v]S to pass options in shebang lines");
+}
+
+#[test]
 #[cfg(not(windows))]
 fn test_reject_shell_style_variable_expansions() {
     for split in [
