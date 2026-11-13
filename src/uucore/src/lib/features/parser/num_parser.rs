@@ -358,8 +358,20 @@ fn parse_special_value(
                 special = -special;
             }
 
+            let mut rest = &input[str.len()..];
+            // A NaN may carry a payload of letters, digits and '_' in parentheses; it is ignored.
+            if matches!(ebd, ExtendedBigDecimal::Nan)
+                && let Some((payload, after)) =
+                    rest.strip_prefix('(').and_then(|r| r.split_once(')'))
+                && payload
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            {
+                rest = after;
+            }
+
             // "infs" is a valid duration, so parse suffix multiplier in the original input string, but ignore the multiplier.
-            let (_, rest) = parse_suffix_multiplier(&input[str.len()..], allowed_suffixes);
+            let (_, rest) = parse_suffix_multiplier(rest, allowed_suffixes);
 
             return if rest.is_empty() {
                 Ok(special)
@@ -746,6 +758,12 @@ mod tests {
         assert!(f64::extended_parse("nan").unwrap().is_sign_positive());
         assert!(f64::extended_parse("NAN").unwrap().is_nan());
         assert!(f64::extended_parse("NAN").unwrap().is_sign_positive());
+        assert!(f64::extended_parse("nan(Ab_1)").unwrap().is_nan());
+        assert!(f64::extended_parse("-nan()").unwrap().is_sign_negative());
+        assert!(matches!(
+            f64::extended_parse("nan(a-b)"),
+            Err(ExtendedParserError::PartialMatch(n, rest)) if n.is_nan() && rest == "(a-b)"
+        ));
         assert_eq!(
             f64::extended_parse("-infinit"),
             Err(ExtendedParserError::PartialMatch(

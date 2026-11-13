@@ -744,6 +744,28 @@ fn float_non_finite_zero_padding() {
 }
 
 #[test]
+fn float_nan_with_payload() {
+    new_ucmd!()
+        .args(&["%f|%f|%g|%a", "nan(1)", "-nan(0x1)", "NAN()", "nan(abc_1)"])
+        .succeeds()
+        .stdout_only("nan|-nan|nan|nan");
+}
+
+#[rstest]
+#[case::unclosed("nan(")]
+#[case::unclosed_payload("nan(1")]
+#[case::sign_in_payload("nan(-1)")]
+#[case::trailing_garbage("nan(1)x")]
+#[case::no_open_paren("nan)")]
+fn float_nan_with_invalid_payload(#[case] arg: &str) {
+    new_ucmd!()
+        .args(&["%f", arg])
+        .fails_with_code(1)
+        .stdout_is("nan")
+        .stderr_is(format!("printf: '{arg}': value not completely converted\n"));
+}
+
+#[test]
 fn float_abs_value_less_than_one() {
     new_ucmd!()
         .args(&["%g", "0.1171875"])

@@ -146,12 +146,14 @@ fn test_hex_identifier_in_wrong_place() {
         .usage_error("invalid floating point argument: '1234ABCD0x'");
 }
 
-#[test]
-fn test_rejects_nan() {
+#[rstest]
+#[case("NaN")]
+#[case("nan(1)")]
+fn test_rejects_nan(#[case] arg: &str) {
     new_ucmd!()
-        .arg("NaN")
+        .arg(arg)
         .fails()
-        .usage_error("invalid 'not-a-number' argument: 'NaN'");
+        .usage_error(format!("invalid 'not-a-number' argument: '{arg}'"));
 }
 
 #[test]
