@@ -320,8 +320,9 @@ pub struct GlobalSettings {
     merge_batch_size: usize,
     numeric_locale: NumInfoParseSettings,
     precomputed: Precomputed,
-    /// Whether rayon's global thread pool could be created, so chunks can be
-    /// sorted in parallel.
+    /// Whether rayon's global thread pool exists, so chunks can be sorted in
+    /// parallel.
+    #[cfg(not(target_os = "wasi"))]
     parallel: bool,
 }
 
@@ -495,6 +496,7 @@ impl Default for GlobalSettings {
             merge_batch_size: default_merge_batch_size(),
             numeric_locale: NumInfoParseSettings::default(),
             precomputed: Precomputed::default(),
+            #[cfg(not(target_os = "wasi"))]
             parallel: true,
         }
     }
@@ -2243,13 +2245,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // WASI doesn't support threads, so the value is only validated there
     #[cfg(not(target_os = "wasi"))]
     {
-        // The pool cannot be created when no more threads are allowed (for
-        // example under a cgroup pids limit). rayon then never gets a global
-        // pool, so sort without it instead of panicking on the first large chunk.
-        settings.parallel = rayon::ThreadPoolBuilder::new()
-            .num_threads(threads as usize)
-            .build_global()
-            .is_ok();
+        // rayon's global pool can only be built once per process, and sort can
+        // run more than once in one (as in the benchmarks), so decide only once.
+        static PARALLEL: OnceLock<bool> = OnceLock::new();
+        settings.parallel = *PARALLEL.get_or_init(|| {
+            match rayon::ThreadPoolBuilder::new()
+                .num_threads(threads as usize)
+                .build_global()
+            {
+                Ok(()) => true,
+                // An I/O error means no thread could be created (for example
+                // under a cgroup pids limit), and rayon never gets a global
+                // pool: sort without it instead of panicking on the first
+                // large chunk. Any other error means a pool already exists.
+                Err(e) => std::error::Error::source(&e).is_none(),
+            }
+        });
     }
     #[cfg(target_os = "wasi")]
     let _ = threads;
