@@ -928,7 +928,11 @@ fn test_follow_with_pid() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     let dummy_cmd = "sh";
-    let mut dummy = Command::new(dummy_cmd).spawn().unwrap();
+    // Keep the shell alive without letting it read the CI script from stdin.
+    let mut dummy = Command::new(dummy_cmd)
+        .stdin(Stdio::piped())
+        .spawn()
+        .unwrap();
     let pid = dummy.id();
 
     let mut child = ucmd
@@ -961,7 +965,7 @@ fn test_follow_with_pid() {
         .with_current_output()
         .stdout_only_fixture("foobar_follow_multiple_appended.expected");
 
-    // kill the dummy process and give tail time to notice this
+    // Tail must notice the process exit without any further file changes.
     kill_process(
         Pid::from_raw(i32::try_from(pid).unwrap()).unwrap(),
         Signal::USR1,
@@ -969,17 +973,7 @@ fn test_follow_with_pid() {
     .unwrap();
     let _ = dummy.wait();
 
-    child.delay(DEFAULT_SLEEP_INTERVAL_MILLIS);
-
-    let third_append = "should\nbe\nignored\n";
-    at.append(FOOBAR_TXT, third_append);
-
-    child
-        .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
-        .is_not_alive()
-        .with_current_output()
-        .no_output()
-        .success();
+    child.wait().unwrap().no_output().success();
 }
 
 #[test]
@@ -2425,28 +2419,28 @@ fn test_follow_name_truncate1() {
         .stdout_is(expected_stdout);
 }
 
+fn wait_for_output(
+    child: &mut uutests::util::UChild,
+    expected_stdout: &str,
+    expected_stderr: &str,
+) {
+    for _ in 0..500 {
+        if child.stdout_all() == expected_stdout && child.stderr_all() == expected_stderr {
+            return;
+        }
+        child.delay(10);
+    }
+    child
+        .make_assertion()
+        .with_all_output()
+        .stdout_is(expected_stdout)
+        .stderr_is(expected_stderr);
+}
+
 #[uutests::wasi_ignore(TailFollowDisabled)]
 #[test]
 #[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))] // FIXME: for currently not working platforms
 fn test_follow_name_truncate2() {
-    fn wait_for_output(
-        child: &mut uutests::util::UChild,
-        expected_stdout: &str,
-        expected_stderr: &str,
-    ) {
-        for _ in 0..500 {
-            if child.stdout_all() == expected_stdout && child.stderr_all() == expected_stderr {
-                return;
-            }
-            child.delay(10);
-        }
-        child
-            .make_assertion()
-            .with_all_output()
-            .stdout_is(expected_stdout)
-            .stderr_is(expected_stderr);
-    }
-
     // This test triggers a truncate event while `tail --follow=name file` is running.
     // $ ((sleep 1 && echo -n "x\nx\nx\n" >> file && sleep 1 && \
     // echo -n "x\n" > file &)>/dev/null 2>&1 &) ; tail --follow=name file
@@ -2509,7 +2503,7 @@ fn test_follow_name_truncate3() {
     p.make_assertion_with_delay(delay).is_alive();
 
     at.truncate(source, "x\n");
-    p.delay(delay);
+    wait_for_output(&mut p, expected_stdout, "");
 
     p.make_assertion().is_alive();
     p.kill()
@@ -5024,10 +5018,6 @@ fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_stays_same
         ])
         .run_no_wait();
 
-    child.delay(500);
-    let same_data = "same data"; // equal size to file_data
-    at.write(relative_path_name, same_data);
-
     let expected_stdout = format!(
         "==> {0} <==\n\
         {1}\n\
@@ -5038,11 +5028,17 @@ fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_stays_same
         absolute_path.to_str().unwrap(), // 2
     );
 
+    wait_for_output(&mut child, &expected_stdout, "");
+    let same_data = "same data"; // equal size to file_data
+    // Overwrite in place: at.write() briefly truncates the file to zero bytes.
+    let mut file = File::options().write(true).open(&absolute_path).unwrap();
+    file.write_all(same_data.as_bytes()).unwrap();
+
     child.make_assertion_with_delay(500).is_alive();
     child
         .kill()
         .make_assertion()
-        .with_current_output()
+        .with_all_output()
         .stdout_only(expected_stdout);
 }
 
@@ -5730,11 +5726,11 @@ fn test_follow_symlink_appends() {
         let mut p = ucmd
             .args(&["-s.1", "--max-unchanged-stats=1", follow, "latest.log"])
             .run_no_wait();
-        p.delay(500);
+        wait_for_output(&mut p, "a\n", "");
         at.append("2026-09-01.log", "b\n");
-        p.delay(500);
+        wait_for_output(&mut p, "a\nb\n", "");
         at.append("2026-09-01.log", "c\n");
-        p.delay(500);
+        wait_for_output(&mut p, "a\nb\nc\n", "");
         p.kill()
             .make_assertion()
             .with_all_output()
