@@ -844,6 +844,24 @@ fn test_format_adds_newline_after_trailing_newline() {
         .stdout_only(".\n");
 }
 
+#[rstest]
+#[case::format_short(&["-c", "", "."], "\n")]
+#[case::format_long(&["--format=", "."], "\n")]
+#[case::format_two_files(&["-c", "", ".", "."], "\n\n")]
+#[case::format_terse(&["-t", "-c", "", "."], "\n")]
+#[case::printf(&["--printf=", "."], "")]
+fn test_empty_format_is_used(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!().args(args).succeeds().stdout_only(expected);
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[rstest]
+#[case::format(&["-f", "-c", "", "."], "\n")]
+#[case::printf(&["-f", "--printf=", "."], "")]
+fn test_fs_empty_format_is_used(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!().args(args).succeeds().stdout_only(expected);
+}
+
 #[test]
 fn test_default_formats_end_with_a_single_newline() {
     let ts = TestScenario::new(util_name!());
