@@ -12,10 +12,11 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::Write as FmtWrite;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::num::{NonZeroUsize, ParseIntError};
 use std::ops::Range;
 use std::path::Path;
 
-use clap::{Arg, ArgAction, Command, value_parser};
+use clap::{Arg, ArgAction, Command};
 use regex::Regex;
 use rustc_hash::FxHashSet;
 use uucore::display::Quotable;
@@ -209,6 +210,27 @@ struct WordRef {
     char_start: usize,
 }
 
+/// Value parser for a line width or gap size, read as a positive C integer:
+/// leading blanks and a `+` are skipped, `0x` starts a hexadecimal number and
+/// `0` an octal one.
+fn parse_positive_size(s: &str) -> Result<usize, ParseIntError> {
+    let s = s.trim_start_matches([' ', '\t', '\n', '\x0b', '\x0c', '\r']);
+    let unsigned = s.strip_prefix('+').unwrap_or(s);
+    // `from_str_radix` takes a sign of its own, which must not follow the prefix.
+    let (digits, radix) = match unsigned.strip_prefix('0') {
+        Some(rest) if rest.starts_with(['x', 'X']) && !rest[1..].starts_with('+') => {
+            (&rest[1..], 16)
+        }
+        Some(rest) if !rest.is_empty() && !rest.starts_with('+') => (rest, 8),
+        _ => (s, 10),
+    };
+    match NonZeroUsize::new(usize::from_str_radix(digits, radix)?) {
+        Some(n) => Ok(n.get()),
+        // A `ParseIntError` of kind `IntErrorKind::Zero` cannot be built directly.
+        None => "0".parse::<NonZeroUsize>().map(NonZeroUsize::get),
+    }
+}
+
 fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
     let mut config = Config::default();
     let err_msg = "parsing options failed";
@@ -246,13 +268,13 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
             .expect(err_msg)
             .clone_into(&mut config.trunc_str);
     }
-    if matches.contains_id(options::WIDTH) {
-        config.line_width = *matches.get_one::<u64>(options::WIDTH).unwrap() as usize;
+    if let Some(width) = matches.get_one::<usize>(options::WIDTH) {
+        config.line_width = *width;
     } else if matches.get_flag(options::TYPESET_MODE) {
         config.line_width = 100;
     }
-    if matches.contains_id(options::GAP_SIZE) {
-        config.gap_size = *matches.get_one::<u64>(options::GAP_SIZE).unwrap() as usize;
+    if let Some(gap) = matches.get_one::<usize>(options::GAP_SIZE) {
+        config.gap_size = *gap;
     }
     if let Some(format) = matches.get_one::<String>(options::FORMAT) {
         config.format = match format.as_str() {
@@ -1053,7 +1075,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::GAP_SIZE)
                 .short('g')
                 .long(options::GAP_SIZE)
-                .value_parser(value_parser!(u64).range(1..))
+                .allow_hyphen_values(true)
+                .value_parser(parse_positive_size)
                 .help(translate!("ptx-help-gap-size"))
                 .value_name("NUMBER"),
         )
@@ -1094,7 +1117,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::WIDTH)
                 .short('w')
                 .long(options::WIDTH)
-                .value_parser(value_parser!(u64).range(1..))
+                .allow_hyphen_values(true)
+                .value_parser(parse_positive_size)
                 .help(translate!("ptx-help-width"))
                 .value_name("NUMBER"),
         )
