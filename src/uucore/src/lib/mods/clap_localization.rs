@@ -53,7 +53,7 @@ fn get_color_choice() -> clap::ColorChoice {
 }
 
 /// Generic helper to check if colors should be enabled for a given stream
-fn should_use_color_for_stream<S: std::io::IsTerminal>(stream: &S) -> bool {
+pub(crate) fn should_use_color_for_stream<S: std::io::IsTerminal>(stream: &S) -> bool {
     match get_color_choice() {
         clap::ColorChoice::Always => true,
         clap::ColorChoice::Never => false,
