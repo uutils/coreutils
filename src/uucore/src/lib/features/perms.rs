@@ -257,6 +257,9 @@ pub fn check_root(path: &Path, would_recurse_symlink: bool) -> bool {
 ///     )
 /// The first clause is checked by the caller, the second and third here.
 /// The caller has to evaluate -P/-H/-L into `would_recurse_symlink`.
+///
+/// On Linux the walk decides from the stats it already holds instead.
+#[cfg(any(test, not(target_os = "linux")))]
 fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
     // Compare by (st_dev, st_ino), not name: a bind mount of "/" is an ordinary
     // directory whose path never resolves to "/", so the old syntactic "looks
@@ -601,9 +604,10 @@ impl ChownExecutor {
                 }
             };
 
-            if self.preserve_root
-                && is_root(&entry_path, self.traverse_symlinks == TraverseSymlinks::All)
-            {
+            // `meta` follows symlinks only under `-L`; looking `entry_path` up again
+            // can fail past PATH_MAX or too many symlinks.
+            if self.preserve_root && metadata_is_root_dir(&meta) {
+                report_root(&entry_path);
                 *ret = 1;
                 return;
             }

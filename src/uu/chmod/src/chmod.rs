@@ -799,6 +799,12 @@ impl Chmoder {
                 }
             };
 
+            // Looking `entry_path` up again can fail past PATH_MAX or too many symlinks.
+            if self.preserve_root && uucore::fs::metadata_is_root_dir(&meta) {
+                show!(ChmodError::PreserveRootSameAs(entry_path));
+                continue;
+            }
+
             if entry_path.is_symlink() {
                 if let Err(err) = self.handle_symlink_during_safe_recursion(
                     &entry_path,
