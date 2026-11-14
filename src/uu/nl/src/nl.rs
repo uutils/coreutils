@@ -77,6 +77,7 @@ impl Stats {
 // 2. Number only nonempty lines
 // 3. Don't number any lines at all
 // 4. Number all lines that match a basic regular expression.
+#[derive(Debug)]
 enum NumberingStyle {
     All,
     NonEmpty,
@@ -173,11 +174,15 @@ enum SectionDelimiter {
 
 impl SectionDelimiter {
     /// A valid section delimiter contains the pattern one to three times,
-    /// and nothing else.
+    /// and nothing else. With an empty pattern, an empty line is a header.
     fn parse(bytes: &[u8], pattern: &OsStr) -> Option<Self> {
         let pattern = pattern.as_encoded_bytes();
 
-        if bytes.is_empty() || pattern.is_empty() || !bytes.len().is_multiple_of(pattern.len()) {
+        if pattern.is_empty() {
+            return bytes.is_empty().then_some(Self::Header);
+        }
+
+        if bytes.is_empty() || !bytes.len().is_multiple_of(pattern.len()) {
             return None;
         }
 
@@ -322,6 +327,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::BODY_NUMBERING)
                 .short('b')
                 .long(options::BODY_NUMBERING)
+                .allow_hyphen_values(true)
                 .help(translate!("nl-help-body-numbering"))
                 .value_name("STYLE"),
         )
@@ -329,6 +335,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::SECTION_DELIMITER)
                 .short('d')
                 .long(options::SECTION_DELIMITER)
+                .allow_hyphen_values(true)
                 .help(translate!("nl-help-section-delimiter"))
                 .value_parser(clap::value_parser!(OsString))
                 .value_name("CC"),
@@ -337,6 +344,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FOOTER_NUMBERING)
                 .short('f')
                 .long(options::FOOTER_NUMBERING)
+                .allow_hyphen_values(true)
                 .help(translate!("nl-help-footer-numbering"))
                 .value_name("STYLE"),
         )
@@ -344,6 +352,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::HEADER_NUMBERING)
                 .short('h')
                 .long(options::HEADER_NUMBERING)
+                .allow_hyphen_values(true)
                 .help(translate!("nl-help-header-numbering"))
                 .value_name("STYLE"),
         )
@@ -353,13 +362,14 @@ pub fn uu_app() -> Command {
                 .long(options::LINE_INCREMENT)
                 .help(translate!("nl-help-line-increment"))
                 .value_name("NUMBER")
-                .allow_negative_numbers(true)
+                .allow_hyphen_values(true)
                 .value_parser(clap::value_parser!(i64)),
         )
         .arg(
             Arg::new(options::JOIN_BLANK_LINES)
                 .short('l')
                 .long(options::JOIN_BLANK_LINES)
+                .allow_hyphen_values(true)
                 .help(translate!("nl-help-join-blank-lines"))
                 .value_name("NUMBER")
                 .value_parser(parse_join_blank_lines),
@@ -368,6 +378,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::NUMBER_FORMAT)
                 .short('n')
                 .long(options::NUMBER_FORMAT)
+                .allow_hyphen_values(true)
                 .help(translate!("nl-help-number-format"))
                 .value_name("FORMAT")
                 .value_parser(["ln", "rn", "rz"]),
@@ -383,6 +394,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::NUMBER_SEPARATOR)
                 .short('s')
                 .long(options::NUMBER_SEPARATOR)
+                .allow_hyphen_values(true)
                 .help(translate!("nl-help-number-separator"))
                 .value_parser(clap::value_parser!(OsString))
                 .value_name("STRING"),
@@ -393,13 +405,14 @@ pub fn uu_app() -> Command {
                 .long(options::STARTING_LINE_NUMBER)
                 .help(translate!("nl-help-starting-line-number"))
                 .value_name("NUMBER")
-                .allow_negative_numbers(true)
+                .allow_hyphen_values(true)
                 .value_parser(clap::value_parser!(i64)),
         )
         .arg(
             Arg::new(options::NUMBER_WIDTH)
                 .short('w')
                 .long(options::NUMBER_WIDTH)
+                .allow_hyphen_values(true)
                 .help(translate!("nl-help-number-width"))
                 .value_name("NUMBER")
                 .value_parser(clap::value_parser!(u64).range(1..=(i32::MAX as u64))),
@@ -439,12 +452,6 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
 
         let _ = line.pop_if(|byte| *byte == b'\n');
 
-        if line.is_empty() {
-            stats.consecutive_empty_lines += 1;
-        } else {
-            stats.consecutive_empty_lines = 0;
-        }
-
         if let Some(section) = SectionDelimiter::parse(&line, &settings.section_delimiter) {
             stats.section = section;
             if settings.renumber {
@@ -457,6 +464,15 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                 SectionDelimiter::Body => &settings.body_numbering,
                 SectionDelimiter::Footer => &settings.footer_numbering,
             };
+
+            if let NumberingStyle::All = current_numbering_style {
+                if line.is_empty() {
+                    stats.consecutive_empty_lines += 1;
+                } else {
+                    stats.consecutive_empty_lines = 0;
+                }
+            }
+
             let is_line_numbered = match current_numbering_style {
                 // consider $join_blank_lines consecutive empty lines to be one logical line
                 // for numbering, and only number the last one

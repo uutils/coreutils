@@ -312,6 +312,7 @@ pub fn uu_app() -> Command {
                 .value_name("DIR")
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::DirPath)
+                .allow_hyphen_values(true)
                 .help(translate!("env-help-chdir")),
         )
         .arg(
@@ -328,6 +329,7 @@ pub fn uu_app() -> Command {
                 .value_name("NAME")
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
+                .allow_hyphen_values(true)
                 .help(translate!("env-help-unset")),
         )
         .arg(
@@ -354,6 +356,7 @@ pub fn uu_app() -> Command {
                 .value_name("a")
                 .action(ArgAction::Set)
                 .value_parser(ValueParser::os_string())
+                .allow_hyphen_values(true)
                 .help(translate!("env-help-argv0")),
         )
         .arg(
@@ -575,7 +578,13 @@ impl EnvAppData {
                 all_args.push(arg.clone());
                 continue;
             }
-            expecting_arg = false;
+            // The value of a detached -C, -u or -a is taken as is, even when
+            // it starts with -S, like GNU env does.
+            if expecting_arg {
+                expecting_arg = false;
+                all_args.push(arg.clone());
+                continue;
+            }
             // Where the `-S` string sits, for the caret: the argument the
             // parser is looking at right now.
             let located = uucore::diagnostics::enabled().then_some((original_args.as_slice(), n));
@@ -661,12 +670,20 @@ impl EnvAppData {
                 }
                 _ => {
                     if let Some(flag) = arg_str.strip_prefix("--") {
-                        if flags_with_args.contains(&flag) {
-                            expecting_arg = true;
-                        }
+                        // Long options can be abbreviated; `--chdir=DIR`
+                        // carries its value.
+                        expecting_arg = !flag.is_empty()
+                            && !flag.contains('=')
+                            && flags_with_args.iter().any(|f| f.starts_with(flag));
                     } else if let Some(flag) = arg_str.strip_prefix("-") {
-                        for c in flag.chars() {
-                            expecting_arg = short_flags_with_args.contains(&c);
+                        // In a cluster of short options, the first one
+                        // taking a value consumes the rest of the argument.
+                        let mut chars = flag.chars();
+                        while let Some(c) = chars.next() {
+                            if short_flags_with_args.contains(&c) {
+                                expecting_arg = chars.as_str().is_empty();
+                                break;
+                            }
                         }
                     }
                     // Short unset option (-u) is not allowed to contain '='

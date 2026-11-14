@@ -402,8 +402,8 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: "feat_os_unix" }
-          - { os: macos-latest   , features: "feat_os_unix" }
+          - { os: ubuntu-latest  , features: "cat,ls,touch" }
+          - { os: macos-latest   , features: "cat,ls,touch" }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -429,6 +429,8 @@ jobs:
         esac
     - name: Install via make and test multi-call binary
       shell: bash
+      env:
+        UTILS: "cat ls touch"
       run: |
         ## Install using make and test installed binaries
         echo "Installing with make using DESTDIR..."
@@ -547,13 +549,15 @@ jobs:
 
   l10n_installation_test:
     name: L10n/Installation Test (Make & Cargo)
+    env:
+      UTILS: "cat ls touch"
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: "feat_os_unix" }
-          - { os: macos-latest   , features: "feat_os_unix" }
+          - { os: ubuntu-latest  , features: "cat,ls,touch" }
+          - { os: macos-latest   , features: "cat,ls,touch" }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -692,7 +696,7 @@ jobs:
         mkdir -p "$CARGO_INSTALL_DIR"
 
         # Install using cargo with l10n features
-        cargo install --path . --features "ls,cat,touch" --root "$CARGO_INSTALL_DIR" --locked
+        cargo install --path . --no-default-features --features "${{ matrix.job.features }}" --root "$CARGO_INSTALL_DIR" --locked
 
         # Verify installation
         echo "Testing cargo-installed binaries..."
