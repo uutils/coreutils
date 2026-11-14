@@ -472,6 +472,46 @@ fn to_error(text: &NativeIntStr, e: &EnvError) -> Box<dyn UError> {
     }
 }
 
+/// Whether `bytes` contains one of the C locale `isspace()` characters.
+fn has_space(bytes: &[u8]) -> bool {
+    bytes.iter().any(|b| b" \t\n\x0b\x0c\r".contains(b))
+}
+
+/// Whether a short option cluster before the first operand contains
+/// whitespace, as in `#!/usr/bin/env -v -S cat -n`. GNU getopt then sees
+/// the space as an option character and suggests -S. Option arguments,
+/// `-S` payloads and anything after the program are not looked at.
+fn has_shebang_like_option(args: &[OsString]) -> bool {
+    let mut iter = args.iter().skip(1);
+    while let Some(arg) = iter.next() {
+        let bytes = arg.as_encoded_bytes();
+        if bytes == b"--" || bytes.len() < 2 || bytes[0] != b'-' {
+            return false;
+        }
+        if let Some(long) = bytes.strip_prefix(b"--") {
+            let takes_value = [&b"argv0"[..], b"chdir", b"split-string", b"unset"]
+                .iter()
+                .any(|name| name.starts_with(long));
+            if takes_value && !long.contains(&b'=') {
+                iter.next();
+            }
+            continue;
+        }
+        for (i, b) in bytes.iter().enumerate().skip(1) {
+            if has_space(&[*b]) {
+                return true;
+            }
+            if b"aCSu".contains(b) {
+                if i + 1 == bytes.len() {
+                    iter.next();
+                }
+                break;
+            }
+        }
+    }
+    false
+}
+
 fn debug_print_args(args: &[OsString]) {
     let mut error = stderr().lock();
     let _ = writeln!(error, "input args:");
@@ -526,7 +566,6 @@ fn check_and_handle_string_args(
 struct EnvAppData {
     do_debug_printing: bool,
     do_input_debug_printing: Option<bool>,
-    had_string_argument: bool,
 }
 
 struct ParsedArguments {
@@ -544,7 +583,9 @@ impl EnvAppData {
             "{}",
             translate!("env-error-no-such-file", "program" => prog.quote())
         );
-        if !self.had_string_argument {
+        // Like GNU, only hint at -S when the program name looks like a
+        // whole shebang line, e.g. `#!/usr/bin/env cat -n` gives "cat -n".
+        if has_space(prog.as_encoded_bytes()) {
             uucore::show_error!("{}", translate!("env-error-use-s-shebang"));
         }
         ExitCode::new(127)
@@ -597,10 +638,7 @@ impl EnvAppData {
                     true,
                     true,
                     located,
-                )? =>
-                {
-                    self.had_string_argument = true;
-                }
+                )? => {}
                 b if check_and_handle_string_args(
                     b,
                     "-S",
@@ -609,10 +647,7 @@ impl EnvAppData {
                     true,
                     false,
                     located,
-                )? =>
-                {
-                    self.had_string_argument = true;
-                }
+                )? => {}
                 b if check_and_handle_string_args(
                     b,
                     "-vS",
@@ -624,7 +659,6 @@ impl EnvAppData {
                 )? =>
                 {
                     self.do_debug_printing = true;
-                    self.had_string_argument = true;
                 }
                 b if check_and_handle_string_args(
                     b,
@@ -638,7 +672,6 @@ impl EnvAppData {
                 {
                     self.do_debug_printing = true;
                     self.do_input_debug_printing = Some(false); // already done
-                    self.had_string_argument = true;
                 }
                 b if b == "--split-string" || b == "-S" || b == "-vS" || b == "-vvS" => {
                     let Some(next_arg) = original_args.get(n + 1) else {
@@ -664,7 +697,6 @@ impl EnvAppData {
                             .into_iter()
                             .map(from_native_int_representation_owned),
                     );
-                    self.had_string_argument = true;
                     expecting_arg = false;
                     consumed_split_payload_arg = Some(n + 1);
                 }
@@ -736,12 +768,15 @@ impl EnvAppData {
                     _ => {
                         // Use ErrorFormatter directly to handle error with shebang message callback
                         let formatter = uucore::clap_localization::ErrorFormatter::new("env");
+                        let shebang_like = has_shebang_like_option(&original_args);
                         formatter.print_error_and_exit_with_callback(&e, 125, || {
-                            let _ = writeln!(
-                                stderr(),
-                                "env: {}",
-                                translate!("env-error-use-s-shebang")
-                            );
+                            if shebang_like {
+                                let _ = writeln!(
+                                    stderr(),
+                                    "env: {}",
+                                    translate!("env-error-use-s-shebang")
+                                );
+                            }
                         });
                     }
                 }
