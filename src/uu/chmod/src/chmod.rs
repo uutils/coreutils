@@ -784,6 +784,12 @@ impl Chmoder {
 
             let meta = match dir_fd.metadata_at(&entry_name, should_follow_symlink.into()) {
                 Ok(meta) => meta,
+                // Removed since the directory was listed: nothing to change.
+                Err(err)
+                    if err.kind() == std::io::ErrorKind::NotFound && !entry_path.is_symlink() =>
+                {
+                    continue;
+                }
                 Err(err) => {
                     let error =
                         if err.kind() == std::io::ErrorKind::NotFound && entry_path.is_symlink() {
@@ -906,6 +912,10 @@ impl Chmoder {
 
         // Use safe traversal to change the mode
         if let Err(e) = dir_fd.chmod_at(entry_name, new_mode, symlink_behavior) {
+            // Removed since the directory was listed: nothing to change.
+            if e.kind() == std::io::ErrorKind::NotFound {
+                return Ok(());
+            }
             if self.verbose {
                 println!(
                     "failed to change mode of {} to {new_mode:o}",
@@ -913,13 +923,7 @@ impl Chmoder {
                 );
             }
 
-            return Err(match e.kind() {
-                std::io::ErrorKind::ReadOnlyFilesystem => {
-                    ChmodError::ChangingPermissions(file_path.into(), e)
-                }
-                _ => ChmodError::PermissionDenied(file_path.into()),
-            }
-            .into());
+            return Err(ChmodError::ChangingPermissions(file_path.into(), e).into());
         }
 
         // Report the change using the helper method
@@ -1051,5 +1055,37 @@ mod tests {
         assert_eq!(c, None);
         assert_eq!(a, ["--", "-r", "file"]);
         assert!(i.is_empty());
+    }
+
+    #[test]
+    #[cfg(not(target_os = "redox"))]
+    fn test_safe_chmod_file_ignores_vanished_entry() {
+        // An entry listed by readdir may be gone by the time it is chmod'ed:
+        // that race is not an error.
+        let chmoder = Chmoder {
+            changes: false,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: true,
+            fmode: Some(0o640),
+            cmode: None,
+            option_like_mode: false,
+            traverse_symlinks: TraverseSymlinks::None,
+            dereference: false,
+            args: None,
+            mode_indices: Vec::new(),
+        };
+        let dir = std::env::temp_dir();
+        let dir_fd = DirFd::open(&dir, SymlinkBehavior::Follow).unwrap();
+        let name = OsString::from(format!("uu-chmod-vanished-{}", std::process::id()));
+        let result = chmoder.safe_chmod_file(
+            &dir.join(&name),
+            &dir_fd,
+            &name,
+            0o600,
+            SymlinkBehavior::NoFollow,
+        );
+        assert!(result.is_ok());
     }
 }

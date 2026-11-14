@@ -150,6 +150,23 @@ assert_descent_nofollow() {
     echo "✓ $util descent opens use O_NOFOLLOW"
 }
 
+# An entry removed between the directory listing and the syscall that changes
+# it (here faked by injecting ENOENT on that syscall) is a race to ignore, not
+# an error: the run must still succeed silently.
+assert_ignores_vanished_entry() {
+    local util="$1"
+    local syscalls="$2"
+    shift 2
+    local util_path
+    util_path=$(util_cmd "$util")
+    if ! strace -o /dev/null -P file3.txt -e inject="$syscalls":error=ENOENT \
+        $util_path "$@" 2>"vanished_$util.err" || [ -s "vanished_$util.err" ]; then
+        cat "vanished_$util.err"
+        fail_immediately "$util reports an entry removed during traversal"
+    fi
+    echo "✓ $util ignores an entry removed during traversal"
+}
+
 # Test rm - should use openat, unlinkat, newfstatat
 if have_util rm; then
     cp -r test_dir test_rm
@@ -175,6 +192,7 @@ if have_util chmod; then
         fail_immediately "chmod recursed using AT_FDCWD with a multi-component path; expected dirfd-relative openat"
     fi
     assert_descent_nofollow "chmod" strace_chmod_recursive_chmod.log
+    assert_ignores_vanished_entry "chmod" fchmodat,fchmodat2 -R 700 test_chmod
 fi
 
 # Test chown - should use openat, fchownat, newfstatat
