@@ -536,8 +536,16 @@ fn assert_not_same_file(
         // we canonicalize target_dir and join /target
         match absolute(target)?.parent() {
             Some(parent) if parent.to_str() != Some("") => {
-                canonicalize(parent, MissingHandling::Normal, ResolveMode::Logical)?
-                    .join(target.file_name().unwrap_or_default())
+                let canonicalized_parent =
+                    match canonicalize(parent, MissingHandling::Normal, ResolveMode::Logical) {
+                        Ok(path) => path,
+                        // Let rename report inaccessible destinations, preserving its diagnostic.
+                        Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
+                            parent.to_path_buf()
+                        }
+                        Err(err) => return Err(err.into()),
+                    };
+                canonicalized_parent.join(target.file_name().unwrap_or_default())
             }
             // path.parent() returns Some("") or None if there's no parent
             _ => absolute(target)?, // absolute paths should always have a parent, but we'll fall back just in case
