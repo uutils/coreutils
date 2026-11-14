@@ -134,35 +134,42 @@ impl NumberFormat {
             Self::Left => {
                 let num = buffer.format(number);
                 writer.write_all(num.as_bytes())?;
-                for _ in num.len()..min_width {
-                    writer.write_all(b" ")?;
-                }
+                write_padding(writer, &SPACES, min_width.saturating_sub(num.len()))?;
             }
             Self::Right => {
                 let num = buffer.format(number);
-                for _ in num.len()..min_width {
-                    writer.write_all(b" ")?;
-                }
+                write_padding(writer, &SPACES, min_width.saturating_sub(num.len()))?;
                 writer.write_all(num.as_bytes())?;
             }
             Self::RightZero if number < 0 => {
                 writer.write_all(b"-")?;
                 let num = buffer.format(number.unsigned_abs());
-                for _ in num.len()..min_width.saturating_sub(1) {
-                    writer.write_all(b"0")?;
-                }
+                let width = min_width.saturating_sub(1);
+                write_padding(writer, &ZEROS, width.saturating_sub(num.len()))?;
                 writer.write_all(num.as_bytes())?;
             }
             Self::RightZero => {
                 let num = buffer.format(number);
-                for _ in num.len()..min_width {
-                    writer.write_all(b"0")?;
-                }
+                write_padding(writer, &ZEROS, min_width.saturating_sub(num.len()))?;
                 writer.write_all(num.as_bytes())?;
             }
         }
         Ok(())
     }
+}
+
+static SPACES: [u8; 4096] = [b' '; 4096];
+static ZEROS: [u8; 4096] = [b'0'; 4096];
+
+/// Writes `count` bytes of `fill`, a chunk at a time: `-w` can be close to
+/// `i32::MAX`.
+fn write_padding<W: Write>(writer: &mut W, fill: &[u8], mut count: usize) -> io::Result<()> {
+    while count > 0 {
+        let chunk = count.min(fill.len());
+        writer.write_all(&fill[..chunk])?;
+        count -= chunk;
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy)]
@@ -425,10 +432,8 @@ fn write_line(writer: &mut impl Write, line: &[u8]) -> io::Result<()> {
 fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings) -> UResult<()> {
     let mut writer = BufWriter::new(stdout());
     let mut line = Vec::new();
-    // Written before every unnumbered line. Capped to avoid OOM on 32-bit targets
-    // when -w i32::MAX is passed (allocating 2 GiB would panic).
+    // Written before every unnumbered line.
     let blank_width = settings.number_width + settings.number_separator.as_encoded_bytes().len();
-    let space_buf = vec![b' '; blank_width.min(4096)];
 
     loop {
         line.clear();
@@ -500,14 +505,8 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                     .map_err_context(|| translate!("nl-error-could-not-write"))?;
                 stats.line_number = line_number.checked_add(settings.line_increment);
             } else {
-                let mut remaining = blank_width;
-                while remaining > 0 {
-                    let chunk = remaining.min(space_buf.len());
-                    writer
-                        .write_all(&space_buf[..chunk])
-                        .map_err_context(|| translate!("nl-error-could-not-write"))?;
-                    remaining -= chunk;
-                }
+                write_padding(&mut writer, &SPACES, blank_width)
+                    .map_err_context(|| translate!("nl-error-could-not-write"))?;
             }
             write_line(&mut writer, &line)
                 .map_err_context(|| translate!("nl-error-could-not-write"))?;

@@ -1176,3 +1176,16 @@ fn test_hyphen_leading_value_is_checked_as_a_value(#[case] args: &[&str]) {
         .stderr_does_not_contain("unexpected argument")
         .stderr_contains(format!("'{}'", args[1]));
 }
+
+#[cfg(unix)]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[rstest]
+fn test_largest_width_is_written_quickly(#[values("ln", "rn", "rz")] format: &str) {
+    // About 2 GiB of padding, which used to be written a byte at a time.
+    new_ucmd!()
+        .args(&["-w", "2147483647", "-n", format])
+        .pipe_in("a\n")
+        .set_stdout(std::fs::File::create("/dev/null").unwrap())
+        .timeout(std::time::Duration::from_secs(20))
+        .succeeds();
+}
