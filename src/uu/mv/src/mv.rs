@@ -816,7 +816,9 @@ fn rename(
 ) -> io::Result<()> {
     let mut backup_path = None;
 
-    if to.exists() {
+    // The destination entry itself is replaced, so look at it without
+    // following symlinks: a dangling symlink is still there to protect.
+    if to.symlink_metadata().is_ok() {
         if opts.update == UpdateMode::None {
             if opts.debug {
                 println!("{}", translate!("mv-debug-skipped", "target" => to.quote()));
@@ -824,10 +826,18 @@ fn rename(
             return Ok(());
         }
 
-        if (opts.update == UpdateMode::IfOlder)
-            && fs::metadata(from)?.modified()? <= fs::metadata(to)?.modified()?
-        {
-            return Ok(());
+        if opts.update == UpdateMode::IfOlder {
+            let from_metadata = fs::symlink_metadata(from)?;
+            let to_metadata = fs::symlink_metadata(to)?;
+            let from_is_dir =
+                from_metadata.is_dir() || (path_ends_with_terminator(from) && from.is_dir());
+            // A directory can't replace a non-directory, so don't skip it as up to
+            // date: let the rename report the error, as GNU mv does.
+            if (!from_is_dir || to_metadata.is_dir())
+                && from_metadata.modified()? <= to_metadata.modified()?
+            {
+                return Ok(());
+            }
         }
 
         if opts.update == UpdateMode::NoneFail {
@@ -1679,7 +1689,7 @@ fn is_empty_dir(path: &Path) -> bool {
 /// Check if file is writable, returning the mode for potential reuse.
 #[cfg(unix)]
 fn is_writable(path: &Path) -> (bool, Option<u32>) {
-    if let Ok(metadata) = path.metadata() {
+    if let Ok(metadata) = path.symlink_metadata() {
         let mode = metadata.permissions().mode();
         // Check if user write bit is set
         ((mode & 0o200) != 0, Some(mode))
@@ -1691,7 +1701,7 @@ fn is_writable(path: &Path) -> (bool, Option<u32>) {
 /// Check if file is writable.
 #[cfg(not(unix))]
 fn is_writable(path: &Path) -> (bool, Option<u32>) {
-    if let Ok(metadata) = path.metadata() {
+    if let Ok(metadata) = path.symlink_metadata() {
         (!metadata.permissions().readonly(), None)
     } else {
         (false, None) // If we can't get metadata, prompt user to be safe
@@ -1701,7 +1711,7 @@ fn is_writable(path: &Path) -> (bool, Option<u32>) {
 #[cfg(unix)]
 fn get_interactive_prompt(to: &Path, cached_mode: Option<u32>) -> String {
     // Use cached mode if available, otherwise fetch it
-    let mode = cached_mode.or_else(|| to.metadata().ok().map(|m| m.permissions().mode()));
+    let mode = cached_mode.or_else(|| to.symlink_metadata().ok().map(|m| m.permissions().mode()));
     if let Some(mode) = mode {
         let file_mode = mode & 0o777;
         // Check if file is not writable by user
