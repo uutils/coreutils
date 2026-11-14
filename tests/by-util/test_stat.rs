@@ -737,6 +737,27 @@ fn test_quoting_style_invalid_env() {
         .no_stderr();
 }
 
+// Like printf, an integer conversion with a precision ignores the 0 flag.
+#[uutests::wasi_ignore(NoPermissionBits)]
+#[rstest]
+#[case::size("%08.4s", "    0012")]
+#[case::size_no_precision("%08s", "00000012")]
+#[case::size_precision_zero("%08.0s", "      12")]
+#[case::size_precision_dot("%08.s", "      12")]
+#[case::octal_mode("%08.4a", "    0644")]
+#[case::hex_mode("%08.4f", "    81a4")]
+#[case::links("%08.4h", "    0001")]
+fn test_printf_zero_flag_with_precision(#[case] format: &str, #[case] expected: &str) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello world\n");
+    std::fs::set_permissions(at.plus("f"), std::fs::Permissions::from_mode(0o644)).unwrap();
+    ucmd.args(&["--printf", format, "f"])
+        .succeeds()
+        .stdout_only(expected);
+}
+
 #[test]
 fn test_printf_octal_1() {
     let ts = TestScenario::new(util_name!());
