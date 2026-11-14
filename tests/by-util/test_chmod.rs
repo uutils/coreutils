@@ -934,9 +934,11 @@ fn test_chmod_recursive_no_dereference_operand() {
 
 /// `chmod -R` must only descend into the directory whose mode it changed. A racer
 /// re-points the operand between two fixture directories and a file meanwhile.
-#[test]
+#[rstest::rstest]
+#[case(false)]
+#[case(true)]
 #[cfg(not(target_os = "redox"))]
-fn test_chmod_recursive_descends_only_into_the_directory_it_changed() {
+fn test_chmod_recursive_descends_only_into_the_directory_it_changed(#[case] nested: bool) {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -947,13 +949,20 @@ fn test_chmod_recursive_descends_only_into_the_directory_it_changed() {
         at.touch(format!("{dir}/f"));
     }
     at.touch("x");
-    at.relative_symlink_dir("a", "op");
+    at.mkdir("tree");
+    let operand = if nested { "tree/op" } else { "op" };
+    let targets = if nested {
+        ["../b", "../x", "../a", "../x"]
+    } else {
+        ["b", "x", "a", "x"]
+    };
+    at.relative_symlink_dir(if nested { "../a" } else { "a" }, operand);
 
     let stop = Arc::new(AtomicBool::new(false));
-    let (op, tmp) = (at.plus("op"), at.plus("op.tmp"));
+    let (op, tmp) = (at.plus(operand), at.plus("op.tmp"));
     let racer_stop = stop.clone();
     let racer = std::thread::spawn(move || {
-        for target in ["b", "x", "a", "x"].iter().cycle() {
+        for target in targets.iter().cycle() {
             if racer_stop.load(Ordering::Relaxed) {
                 break;
             }
@@ -968,7 +977,10 @@ fn test_chmod_recursive_descends_only_into_the_directory_it_changed() {
             at.set_mode(format!("{dir}/f"), 0o644);
         }
 
-        let result = scene.ucmd().args(&["-R", "700", "op"]).run();
+        let result = scene
+            .ucmd()
+            .args(&["-R", "-L", "700", if nested { "tree" } else { "op" }])
+            .run();
 
         for dir in ["a", "b"] {
             let mode = |file: &str| at.metadata(file).permissions().mode() & 0o7777;
@@ -982,9 +994,10 @@ fn test_chmod_recursive_descends_only_into_the_directory_it_changed() {
             // macOS can also fail a lookup through a symlink being replaced.
             let stderr = result.code_is(1).stderr_str();
             assert!(
-                stderr.starts_with("chmod: ")
-                    && stderr.contains("'op'")
-                    && stderr.lines().count() == 1,
+                !stderr.is_empty()
+                    && stderr.lines().all(|line| {
+                        line.starts_with("chmod: ") && line.contains(&format!("'{operand}'"))
+                    }),
                 "{stderr}"
             );
         }
@@ -992,6 +1005,28 @@ fn test_chmod_recursive_descends_only_into_the_directory_it_changed() {
 
     stop.store(true, Ordering::Relaxed);
     racer.join().unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_chmod_recursive_no_dereference_inner_directory_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("tree");
+    at.mkdir("target");
+    at.touch("target/file");
+    at.set_mode("target", 0o755);
+    at.set_mode("target/file", 0o644);
+    at.relative_symlink_dir("../target", "tree/link");
+
+    ucmd.args(&["-R", "-L", "-h", "700", "tree"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.metadata("target").permissions().mode() & 0o7777, 0o755);
+    assert_eq!(
+        at.metadata("target/file").permissions().mode() & 0o7777,
+        0o700
+    );
 }
 
 /// A directory operand the system refuses to open, as TCC or a sandbox does, gets
@@ -2144,8 +2179,10 @@ fn test_chmod_operator_only_still_calls_syscall() {
 }
 
 #[cfg(not(any(target_os = "redox", target_os = "fuchsia")))]
-#[test]
-fn test_chmod_recursive_does_not_exhaust_fds() {
+#[rstest::rstest]
+#[case(20)]
+#[case(64)]
+fn test_chmod_recursive_does_not_exhaust_fds(#[case] fd_limit: u64) {
     use rlimit::Resource;
     use std::path::PathBuf;
 
@@ -2171,7 +2208,7 @@ fn test_chmod_recursive_does_not_exhaust_fds() {
         }
         scene
             .ucmd()
-            .limit(Resource::NOFILE, 64, 64)
+            .limit(Resource::NOFILE, fd_limit, fd_limit)
             .args(&[flags, "700", "deep"])
             .succeeds()
             .no_stderr();
@@ -2198,7 +2235,10 @@ fn test_chmod_recursive_does_not_exhaust_fds() {
 #[case(None)]
 #[case(Some("-f"))]
 #[case(Some("-v"))]
-fn test_chmod_recursive_fd_limit_continues_after_errors(#[case] flag: Option<&str>) {
+fn test_chmod_recursive_fd_limit_continues_after_errors(
+    #[case] flag: Option<&str>,
+    #[values(20, 64)] fd_limit: u64,
+) {
     use rlimit::Resource;
     use std::path::PathBuf;
 
@@ -2227,7 +2267,7 @@ fn test_chmod_recursive_fd_limit_continues_after_errors(#[case] flag: Option<&st
         ucmd.arg(flag);
     }
     let result = ucmd
-        .limit(Resource::NOFILE, 64, 64)
+        .limit(Resource::NOFILE, fd_limit, fd_limit)
         .args(&["-R", "o=r", "deep", "after"])
         .fails_with_code(1);
     if flag == Some("-f") {
@@ -2255,8 +2295,10 @@ fn test_chmod_recursive_fd_limit_continues_after_errors(#[case] flag: Option<&st
 }
 
 #[cfg(not(any(target_os = "redox", target_os = "fuchsia")))]
-#[test]
-fn test_chmod_recursive_wide_tree_does_not_exhaust_fds() {
+#[rstest::rstest]
+#[case(20)]
+#[case(64)]
+fn test_chmod_recursive_wide_tree_does_not_exhaust_fds(#[case] fd_limit: u64) {
     use rlimit::Resource;
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2267,7 +2309,7 @@ fn test_chmod_recursive_wide_tree_does_not_exhaust_fds() {
     }
     scene
         .ucmd()
-        .limit(Resource::NOFILE, 64, 64)
+        .limit(Resource::NOFILE, fd_limit, fd_limit)
         .args(&["-R", "700", "wide"])
         .succeeds()
         .no_stderr();
@@ -2280,8 +2322,10 @@ fn test_chmod_recursive_wide_tree_does_not_exhaust_fds() {
 }
 
 #[cfg(not(any(target_os = "redox", target_os = "fuchsia")))]
-#[test]
-fn test_chmod_recursive_symlink_chain_does_not_exhaust_fds() {
+#[rstest::rstest]
+#[case(20)]
+#[case(64)]
+fn test_chmod_recursive_symlink_chain_does_not_exhaust_fds(#[case] fd_limit: u64) {
     use rlimit::Resource;
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2299,7 +2343,7 @@ fn test_chmod_recursive_symlink_chain_does_not_exhaust_fds() {
     at.symlink_dir("targets/d0", "targets/d255/cycle");
     scene
         .ucmd()
-        .limit(Resource::NOFILE, 64, 64)
+        .limit(Resource::NOFILE, fd_limit, fd_limit)
         .args(&["-RL", "700", "start"])
         .succeeds()
         .no_stderr();
@@ -2321,7 +2365,7 @@ fn test_chmod_recursive_symlink_chain_does_not_exhaust_fds() {
     }
     scene
         .ucmd()
-        .limit(Resource::NOFILE, 64, 64)
+        .limit(Resource::NOFILE, fd_limit, fd_limit)
         .args(&["-RL", "u+X", "start"])
         .succeeds()
         .no_stderr();

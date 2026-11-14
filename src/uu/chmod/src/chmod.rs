@@ -70,6 +70,27 @@ struct TraversalFrame {
     fd: Option<DirFd>,
 }
 
+// Inherited descriptors or a small process limit can leave less room than the
+// cache's upper bound. Release old ancestors and retry only the failed I/O,
+// without repeating a permission change that may already have succeeded.
+#[cfg(not(target_os = "redox"))]
+fn with_fd_retry<T>(
+    cache: &mut [TraversalFrame],
+    mut operation: impl FnMut(&[TraversalFrame]) -> std::io::Result<T>,
+) -> std::io::Result<T> {
+    loop {
+        match operation(cache) {
+            Err(err) if err.raw_os_error() == Some(uucore::libc::EMFILE) => {
+                let Some(frame) = cache.iter_mut().find(|frame| frame.fd.is_some()) else {
+                    return Err(err);
+                };
+                frame.fd = None;
+            }
+            result => return result,
+        }
+    }
+}
+
 #[cfg(not(target_os = "redox"))]
 fn reopen_directory(
     root_fd: &DirFd,
@@ -713,10 +734,33 @@ impl Chmoder {
             return;
         }
 
-        // Change the mode through a descriptor checked not to be "/". Under -h with -H/-L,
-        // or if it does not open yet, go by path as GNU does; the descent checks for "/".
-        let pinned = if should_follow_symlink == self.dereference {
-            match DirFd::open(file_path, should_follow_symlink.into())
+        if let Some(dir_fd) = self.chmod_and_open_directory(
+            file_path,
+            !file_path.is_symlink() || self.dereference,
+            &mut [],
+            || DirFd::open(file_path, should_follow_symlink.into()),
+            |_| self.chmod_file(file_path),
+        ) {
+            self.safe_traverse_dir(&dir_fd, file_path, ancestors);
+        }
+    }
+
+    /// Pin a directory while changing its mode, then reopen it for descent so
+    /// the new permissions decide whether its entries can be read. The reopened
+    /// descriptor must still identify the directory whose mode was changed.
+    #[cfg(not(target_os = "redox"))]
+    fn chmod_and_open_directory(
+        &self,
+        file_path: &Path,
+        change_target: bool,
+        cache: &mut [TraversalFrame],
+        mut open: impl FnMut() -> std::io::Result<DirFd>,
+        change_by_name: impl FnOnce(&mut [TraversalFrame]) -> UResult<()>,
+    ) -> Option<DirFd> {
+        // A followed directory is pinned before changing it. A link under -h,
+        // or a directory that does not open yet, uses the caller's fallback.
+        let pinned = if change_target {
+            match with_fd_retry(cache, |_| open())
                 .and_then(|dir_fd| Ok((dir_fd.metadata()?, dir_fd)))
             {
                 Ok(pinned) => Some(pinned),
@@ -733,7 +777,7 @@ impl Chmoder {
                 Err(e) => {
                     self.report_failure(ChmodError::CannotStat(file_path.into(), e).into());
                     self.report_not_accessed(file_path);
-                    return;
+                    return None;
                 }
             }
         } else {
@@ -745,12 +789,12 @@ impl Chmoder {
             Some((meta, dir_fd)) => {
                 if self.preserve_root && uucore::fs::metadata_is_root_dir(&meta) {
                     show!(ChmodError::PreserveRootSameAs(file_path.into()));
-                    return;
+                    return None;
                 }
                 let result = self.chmod_dir_fd(&dir_fd, meta.mode() & 0o7777, file_path);
                 (Some(meta.file_info()), result)
             }
-            None => (None, self.chmod_file(file_path)),
+            None => (None, change_by_name(cache)),
         };
         if let Err(err) = result {
             self.report_failure(err);
@@ -758,29 +802,33 @@ impl Chmoder {
 
         // Open again to descend, as GNU does, so the mode just set decides whether
         // the directory can be read.
-        match DirFd::open(file_path, should_follow_symlink.into()) {
+        match with_fd_retry(cache, |_| open()) {
             Ok(dir_fd) => {
+                let meta = match dir_fd.metadata() {
+                    Ok(meta) => meta,
+                    Err(err) => {
+                        self.report_failure(ChmodError::CannotStat(file_path.into(), err).into());
+                        return None;
+                    }
+                };
+                let info = meta.file_info();
                 if let Some(changed) = changed {
                     // Descend only into the directory changed above, known not to be "/".
-                    if !dir_fd
-                        .metadata()
-                        .is_ok_and(|meta| meta.file_info() == changed)
-                    {
+                    if info != changed {
                         self.report_failure(ChmodError::Replaced(file_path.into()).into());
-                        return;
+                        return None;
                     }
-                } else if self.preserve_root
-                    && dir_fd
-                        .metadata()
-                        .is_ok_and(|meta| uucore::fs::metadata_is_root_dir(&meta))
-                {
+                } else if self.preserve_root && uucore::fs::metadata_is_root_dir(&meta) {
                     show!(ChmodError::PreserveRootSameAs(file_path.into()));
-                    return;
+                    return None;
                 }
-                self.safe_traverse_dir(&dir_fd, file_path, ancestors);
+                Some(dir_fd)
             }
             // A directory that does not open cannot be read.
-            Err(err) => self.report_unreadable_dir(file_path, err),
+            Err(err) => {
+                self.report_unreadable_dir(file_path, err);
+                None
+            }
         }
     }
 
@@ -816,11 +864,6 @@ impl Chmoder {
         }];
         let mut dir_path = root_path.to_path_buf();
         let follow = self.traverse_symlinks == TraverseSymlinks::All;
-        let protected_root = if self.preserve_root {
-            fs::metadata("/").ok().map(|meta| (meta.dev(), meta.ino()))
-        } else {
-            None
-        };
 
         while !frames.is_empty() {
             let index = frames.len() - 1;
@@ -830,6 +873,7 @@ impl Chmoder {
                 // on every ascent in deep trees. Symlinks and renames may make
                 // the two parents differ; in that case use the verified chain.
                 if index > 1
+                    && !frames[index - 1].entries.as_slice().is_empty()
                     && frames[index - 1].fd.is_none()
                     && let Some(fd) = &frames[index].fd
                     && let Ok(parent) =
@@ -850,7 +894,9 @@ impl Chmoder {
             let entry_path = dir_path.join(&entry_name);
 
             if index != 0 && frames[index].fd.is_none() {
-                match reopen_directory(root_fd, &frames, follow.into()) {
+                match with_fd_retry(&mut frames, |frames| {
+                    reopen_directory(root_fd, frames, follow.into())
+                }) {
                     Ok(fd) => frames[index].fd = Some(fd),
                     Err(err) => {
                         self.report_unreadable_dir(&dir_path, err);
@@ -863,7 +909,9 @@ impl Chmoder {
                     }
                 }
             }
-            let dir_fd = frames[index].fd.as_ref().unwrap_or(root_fd);
+            // Keep the active descriptor out of the evictable ancestor cache.
+            let (cache, current) = frames.split_at_mut(index);
+            let dir_fd = current[0].fd.as_ref().unwrap_or(root_fd);
             let metadata = dir_fd
                 .metadata_at(&entry_name, SymlinkBehavior::NoFollow)
                 .and_then(|meta| {
@@ -898,43 +946,62 @@ impl Chmoder {
                 }
                 continue;
             }
-            if meta.is_dir() && protected_root == Some((meta.dev(), meta.ino())) {
+            let symlink_behavior = if is_symlink {
+                self.dereference.into()
+            } else {
+                SymlinkBehavior::NoFollow
+            };
+            if meta.is_dir() && self.preserve_root && uucore::fs::metadata_is_root_dir(&meta) {
                 show!(ChmodError::PreserveRootSameAs(entry_path));
                 continue;
             }
-            if let Err(err) = self.safe_chmod_file(
-                &entry_path,
-                dir_fd,
-                &entry_name,
-                &meta,
-                if is_symlink {
-                    self.dereference.into()
-                } else {
-                    SymlinkBehavior::NoFollow
-                },
-            ) {
-                self.report_failure(err);
-            }
-
             if meta.is_dir() {
-                let child = (|| -> std::io::Result<_> {
-                    let fd = dir_fd.open_subdir(&entry_name, follow.into())?;
-                    let info = FileInformation::from_file(&fd)?;
-                    if ancestors.contains(&info) {
-                        return Ok(None);
+                let Some(fd) = self.chmod_and_open_directory(
+                    &entry_path,
+                    !is_symlink || self.dereference,
+                    cache,
+                    || dir_fd.open_subdir(&entry_name, follow.into()),
+                    |cache| {
+                        if is_symlink && !self.dereference {
+                            // -L controls descent independently of -h. Skip the
+                            // link's mode change even when its target is a directory.
+                            if self.verbose {
+                                Self::print_neither_changed(entry_path.clone().into_os_string())?;
+                            }
+                            Ok(())
+                        } else {
+                            self.safe_chmod_file(
+                                &entry_path,
+                                dir_fd,
+                                &entry_name,
+                                &meta,
+                                symlink_behavior,
+                                cache,
+                            )
+                        }
+                    },
+                ) else {
+                    continue;
+                };
+                let info = match FileInformation::from_file(&fd) {
+                    Ok(info) => info,
+                    Err(err) => {
+                        self.report_failure(ChmodError::CannotStat(entry_path, err).into());
+                        continue;
                     }
-                    let entries = fd.read_dir()?;
-                    Ok(Some(TraversalFrame {
-                        name: entry_name,
-                        info,
-                        entries: entries.into_iter(),
-                        fd: Some(fd),
-                    }))
-                })();
-                match child {
-                    Ok(Some(frame)) => {
-                        ancestors.insert(frame.info.clone());
-                        frames.push(frame);
+                };
+                if ancestors.contains(&info) {
+                    continue;
+                }
+                match with_fd_retry(cache, |_| fd.read_dir()) {
+                    Ok(entries) => {
+                        ancestors.insert(info.clone());
+                        frames.push(TraversalFrame {
+                            name: entry_name,
+                            info,
+                            entries: entries.into_iter(),
+                            fd: Some(fd),
+                        });
                         dir_path = entry_path;
                         // Retain only the most recent ancestors. Evicted frames
                         // store names and identities, not descriptors or full paths.
@@ -943,11 +1010,19 @@ impl Chmoder {
                             frames[evict].fd = None;
                         }
                     }
-                    Ok(None) => {}
                     Err(err) => {
                         self.report_unreadable_dir(&entry_path, err);
                     }
                 }
+            } else if let Err(err) = self.safe_chmod_file(
+                &entry_path,
+                dir_fd,
+                &entry_name,
+                &meta,
+                symlink_behavior,
+                cache,
+            ) {
+                self.report_failure(err);
             }
         }
     }
@@ -960,6 +1035,7 @@ impl Chmoder {
         entry_name: &std::ffi::OsStr,
         metadata: &uucore::safe_traversal::Metadata,
         symlink_behavior: SymlinkBehavior,
+        cache: &mut [TraversalFrame],
     ) -> UResult<()> {
         // Use fd-relative metadata even when the display path exceeds PATH_MAX
         // or the kernel's limit on the number of symbolic links in a pathname.
@@ -968,7 +1044,9 @@ impl Chmoder {
             self.calculate_new_mode(current_mode, metadata.is_dir())?;
 
         // Use safe traversal to change the mode
-        if let Err(e) = dir_fd.chmod_at(entry_name, new_mode, symlink_behavior) {
+        if let Err(e) = with_fd_retry(cache, |_| {
+            dir_fd.chmod_at(entry_name, new_mode, symlink_behavior)
+        }) {
             if self.verbose {
                 println!(
                     "failed to change mode of {} to {new_mode:o}",
@@ -1085,6 +1163,60 @@ impl Chmoder {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(not(target_os = "redox"))]
+    #[test]
+    fn test_chmod_directory_rejects_replaced_symlink_before_descent() {
+        use std::os::unix::fs::symlink;
+
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        for name in ["first", "replacement"] {
+            fs::create_dir(root.join(name)).unwrap();
+            fs::set_permissions(root.join(name), fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        symlink("first", root.join("link")).unwrap();
+        symlink("replacement", root.join("next")).unwrap();
+        let chmoder = Chmoder {
+            changes: false,
+            quiet: true,
+            verbose: false,
+            preserve_root: true,
+            recursive: true,
+            fmode: Some(0o700),
+            cmode: None,
+            option_like_mode: false,
+            traverse_symlinks: TraverseSymlinks::All,
+            dereference: true,
+            args: None,
+            mode_indices: Vec::new(),
+        };
+        let mut opens = 0;
+        let result = chmoder.chmod_and_open_directory(
+            &root.join("link"),
+            true,
+            &mut [],
+            || {
+                opens += 1;
+                if opens == 2 {
+                    // Change the name after chmod, before the descent's open.
+                    fs::rename(root.join("next"), root.join("link"))?;
+                }
+                DirFd::open(&root.join("link"), SymlinkBehavior::Follow)
+            },
+            |_| Ok(()),
+        );
+        assert!(result.is_none());
+        assert_eq!(opens, 2);
+        assert_eq!(
+            fs::metadata(root.join("first")).unwrap().mode() & 0o7777,
+            0o700
+        );
+        assert_eq!(
+            fs::metadata(root.join("replacement")).unwrap().mode() & 0o7777,
+            0o755
+        );
+    }
 
     #[cfg(not(target_os = "redox"))]
     #[test]
