@@ -34,13 +34,13 @@ use uucore::{
     i18n::charmap::{Encoding, locale_encoding},
     parser::shortcut_value_parser::ShortcutValueParser,
     quoting_style::{self, QuotingStyle},
-    show,
+    show, show_error,
 };
 
 use crate::{
     count_fast::{count_bytes_chars_and_lines_fast, count_bytes_fast},
     countable::WordCountable,
-    word_count::WordCount,
+    word_count::{CountOverflow, WordCount},
 };
 
 /// The minimum character width for formatting counts when reading from stdin.
@@ -635,7 +635,7 @@ fn process_chunk<
 >(
     total: &mut WordCount,
     text: &str,
-    current_len: &mut usize,
+    current_len: &mut u64,
     in_word: &mut bool,
     is_posixly_correct: bool,
     count_chars_as_bytes: bool,
@@ -667,7 +667,7 @@ fn process_chunk<
                     *current_len += 8;
                 }
                 _ => {
-                    *current_len += ch.width().unwrap_or(0);
+                    *current_len += ch.width().unwrap_or(0) as u64;
                 }
             }
         }
@@ -679,9 +679,9 @@ fn process_chunk<
         }
     }
     if SHOW_CHARS && count_chars_as_bytes {
-        total.chars += text.len();
+        total.chars += text.len() as u64;
     }
-    total.bytes += text.len();
+    total.bytes += text.len() as u64;
 
     total.max_line_length = max(*current_len, total.max_line_length);
 }
@@ -694,9 +694,9 @@ fn handle_error(
 ) -> Option<io::Error> {
     match error {
         BufReadDecoderError::InvalidByteSequence(bytes) => {
-            total.bytes += bytes.len();
+            total.bytes += bytes.len() as u64;
             if count_chars_as_bytes {
-                total.chars += bytes.len();
+                total.chars += bytes.len() as u64;
             }
             if !(*in_word) {
                 *in_word = true;
@@ -809,7 +809,7 @@ fn compute_number_width(inputs: &Inputs, settings: &Settings) -> usize {
                     Input::Path(path) => {
                         if let Ok(meta) = fs::metadata(path) {
                             if meta.is_file() {
-                                total += meta.len();
+                                total = total.saturating_add(meta.len());
                             } else {
                                 minimum_width = MINIMUM_WIDTH;
                             }
@@ -967,6 +967,7 @@ pub(crate) fn wc_simd_allowed(policy: &SimdPolicy) -> bool {
 
 fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
     let mut total_word_count = WordCount::default();
+    let mut total_overflow = CountOverflow::default();
     let mut num_inputs: usize = 0;
 
     let (number_width, are_stats_visible) = match settings.total_when {
@@ -1045,7 +1046,7 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
                 continue;
             }
         };
-        total_word_count += word_count;
+        total_word_count.accumulate(word_count, &mut total_overflow);
         if are_stats_visible {
             let maybe_title = input.to_title();
             let maybe_title_str = maybe_title.as_deref();
@@ -1063,6 +1064,33 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
     }
 
     if settings.total_when.is_total_row_visible(num_inputs) {
+        for (overflowed, enabled, message) in [
+            (
+                total_overflow.lines,
+                settings.show_lines,
+                "wc-error-total-lines-overflow",
+            ),
+            (
+                total_overflow.words,
+                settings.show_words,
+                "wc-error-total-words-overflow",
+            ),
+            (
+                total_overflow.chars,
+                settings.show_chars,
+                "wc-error-total-chars-overflow",
+            ),
+            (
+                total_overflow.bytes,
+                settings.show_bytes,
+                "wc-error-total-bytes-overflow",
+            ),
+        ] {
+            if enabled && overflowed {
+                show_error!("{}", translate!(message));
+                uucore::error::set_exit_code(1);
+            }
+        }
         let wc_total_msg = translate!("wc-total");
         let title = are_stats_visible.then_some(OsStr::new(&wc_total_msg));
         if let Err(err) = print_stats(settings, &total_word_count, title, number_width) {
