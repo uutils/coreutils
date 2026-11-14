@@ -8,7 +8,7 @@
 use clap::builder::{TypedValueParser, ValueParserFactory};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use uucore::display::{Quotable, println_verbatim};
-use uucore::error::{FromIo, UError, UResult, UUsageError};
+use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
 use uucore::translate;
 use uucore::{format_usage, os_str_from_bytes};
 
@@ -19,13 +19,12 @@ use std::io::ErrorKind;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
 #[cfg(unix)]
-use std::os::unix::prelude::PermissionsExt;
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 
 use rand::{
     RngExt as _, SeedableRng as _,
     rngs::{self, SmallRng},
 };
-use tempfile::Builder;
 
 static DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
 
@@ -48,9 +47,6 @@ const FALLBACK_TMPDIR: &str = "/tmp";
 
 #[derive(Debug, thiserror::Error)]
 enum MkTempError {
-    #[error("{}", translate!("mktemp-error-persist-file", "path" => .0.quote()))]
-    PersistError(PathBuf),
-
     #[error("{}", translate!("mktemp-error-must-end-in-x", "template" => .0.quote()))]
     MustEndInX(OsString),
 
@@ -71,6 +67,9 @@ enum MkTempError {
 
     #[error("{}", translate!("mktemp-error-not-found", "template_type" => .0, "template" => .1.quote()))]
     NotFound(String, PathBuf),
+
+    #[error("{}", translate!("mktemp-error-create-failed", "template_type" => .0, "template" => .1.quote(), "error" => .2))]
+    CreateFailed(String, PathBuf, String),
 }
 
 impl UError for MkTempError {
@@ -481,16 +480,22 @@ fn temp_path(dir: &Path, prefix: &OsStr, random: &str, suffix: &OsStr) -> PathBu
     dir.join(filename)
 }
 
-fn dry_exec(tmpdir: &Path, prefix: &OsStr, rand: usize, suffix: &OsStr) -> PathBuf {
-    let mut bytes = vec![0; rand];
-    SmallRng::try_from_rng(&mut rngs::SysRng)
-        .unwrap_or_else(|_| {
-            //rand::rng panics if getrandom failed
-            SmallRng::seed_from_u64(bytes.as_ptr() as u64)
-        })
-        .fill(&mut bytes[..]);
-    let random: String = bytes
-        .into_iter()
+/// The maximum number of names `make_temp` tries before giving up.
+const NUM_RETRIES: u32 = 1 << 16;
+
+/// A random number generator for temporary file names. If the system RNG is
+/// unavailable, the address of `buf` is used as the seed.
+fn name_rng(buf: &[u8]) -> SmallRng {
+    SmallRng::try_from_rng(&mut rngs::SysRng).unwrap_or_else(|_| {
+        //rand::rng panics if getrandom failed
+        SmallRng::seed_from_u64(buf.as_ptr() as u64)
+    })
+}
+
+/// Fill `buf` with random bytes and map them to ASCII letters and digits.
+fn random_name(rng: &mut SmallRng, buf: &mut [u8]) -> String {
+    rng.fill(buf);
+    buf.iter()
         .map(|byte| {
             char::from(match byte % 62 {
                 v @ 0..=9 => v + b'0',
@@ -499,8 +504,54 @@ fn dry_exec(tmpdir: &Path, prefix: &OsStr, rand: usize, suffix: &OsStr) -> PathB
                 _ => unreachable!(),
             })
         })
-        .collect();
-    temp_path(tmpdir, prefix, &random, suffix)
+        .collect()
+}
+
+fn dry_exec(tmpdir: &Path, prefix: &OsStr, rand: usize, suffix: &OsStr) -> PathBuf {
+    let mut buf = vec![0; rand];
+    let mut rng = name_rng(&buf);
+    temp_path(tmpdir, prefix, &random_name(&mut rng, &mut buf), suffix)
+}
+
+/// Create `dir` joined with a random name, retrying while the name is taken.
+/// A relative `dir` is passed through as is, so it is resolved from the working
+/// directory rather than from a `getcwd()` result that could change underneath.
+fn make_temp(
+    dir: &Path,
+    prefix: &OsStr,
+    rand: usize,
+    suffix: &OsStr,
+    create: impl Fn(&Path) -> std::io::Result<()>,
+) -> std::io::Result<PathBuf> {
+    let mut buf = vec![0; rand];
+    let mut rng = name_rng(&buf);
+    let mut last_err = None;
+    for _ in 0..NUM_RETRIES {
+        let path = temp_path(dir, prefix, &random_name(&mut rng, &mut buf), suffix);
+        match create(&path) {
+            Ok(()) => return Ok(path),
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => last_err = Some(e),
+            Err(e) => return Err(e),
+        }
+    }
+    Err(last_err.unwrap_or_else(|| ErrorKind::AlreadyExists.into()))
+}
+
+/// The error for a failed `make_temp`, naming the template it was given.
+fn create_error(
+    e: &std::io::Error,
+    template_type: String,
+    dir: &Path,
+    prefix: &OsStr,
+    rand: usize,
+    suffix: &OsStr,
+) -> Box<dyn UError> {
+    let template = temp_path(dir, prefix, &"X".repeat(rand), suffix);
+    if e.kind() == ErrorKind::NotFound {
+        MkTempError::NotFound(template_type, template).into()
+    } else {
+        MkTempError::CreateFailed(template_type, template, strip_errno(e)).into()
+    }
 }
 
 /// Create a temporary directory with the given parameters.
@@ -515,28 +566,18 @@ fn dry_exec(tmpdir: &Path, prefix: &OsStr, rand: usize, suffix: &OsStr) -> PathB
 /// If the temporary directory could not be written to disk or if the
 /// given directory `dir` does not exist.
 fn make_temp_dir(dir: &Path, prefix: &OsStr, rand: usize, suffix: &OsStr) -> UResult<PathBuf> {
-    let mut builder = Builder::new();
-    builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
-
     // On *nix platforms grant read-write-execute for owner only.
     // The directory is created with these permission at creation time, using mkdir(3) syscall.
-    // This is not relevant on Windows systems. See: https://docs.rs/tempfile/latest/tempfile/#security
-    // `fs` is not imported on Windows anyways.
+    // This is not relevant on Windows systems.
+    #[cfg_attr(not(unix), allow(unused_mut))]
+    let mut builder = fs::DirBuilder::new();
     #[cfg(unix)]
-    builder.permissions(fs::Permissions::from_mode(0o700));
+    builder.mode(0o700);
 
-    match builder.tempdir_in(dir) {
-        Ok(d) => {
-            // `keep` consumes the TempDir without removing it
-            let path = d.keep();
-            Ok(path)
-        }
-        Err(e) if e.kind() == ErrorKind::NotFound => {
-            let path = temp_path(dir, prefix, &"X".repeat(rand), suffix);
-            Err(MkTempError::NotFound(translate!("mktemp-template-type-directory"), path).into())
-        }
-        Err(e) => Err(e.into()),
-    }
+    make_temp(dir, prefix, rand, suffix, |path| builder.create(path)).map_err(|e| {
+        let template_type = translate!("mktemp-template-type-directory");
+        create_error(&e, template_type, dir, prefix, rand, suffix)
+    })
 }
 
 /// Create a temporary file with the given parameters.
@@ -551,20 +592,20 @@ fn make_temp_dir(dir: &Path, prefix: &OsStr, rand: usize, suffix: &OsStr) -> URe
 /// If the file could not be written to disk or if the directory does
 /// not exist.
 fn make_temp_file(dir: &Path, prefix: &OsStr, rand: usize, suffix: &OsStr) -> UResult<PathBuf> {
-    let mut builder = Builder::new();
-    builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
-    match builder.tempfile_in(dir) {
-        // `keep` ensures that the file is not deleted
-        Ok(named_tempfile) => match named_tempfile.keep() {
-            Ok((_, pathbuf)) => Ok(pathbuf),
-            Err(e) => Err(MkTempError::PersistError(e.file.path().to_path_buf()).into()),
-        },
-        Err(e) if e.kind() == ErrorKind::NotFound => {
-            let path = temp_path(dir, prefix, &"X".repeat(rand), suffix);
-            Err(MkTempError::NotFound(translate!("mktemp-template-type-file"), path).into())
-        }
-        Err(e) => Err(e.into()),
-    }
+    let mut options = fs::OpenOptions::new();
+    options.read(true).write(true).create_new(true);
+
+    // Same mode as GNU `mktemp`: read-write for owner only.
+    #[cfg(unix)]
+    options.mode(0o600);
+
+    make_temp(dir, prefix, rand, suffix, |path| {
+        options.open(path).map(drop)
+    })
+    .map_err(|e| {
+        let template_type = translate!("mktemp-template-type-file");
+        create_error(&e, template_type, dir, prefix, rand, suffix)
+    })
 }
 
 fn exec(
@@ -574,25 +615,14 @@ fn exec(
     suffix: &OsStr,
     make_dir: bool,
 ) -> UResult<PathBuf> {
-    let path = if make_dir {
-        make_temp_dir(dir, prefix, rand, suffix)?
+    // The returned path is the one that was created: `dir` (which may be
+    // relative, matching the template given on the command line) joined
+    // with the generated name.
+    if make_dir {
+        make_temp_dir(dir, prefix, rand, suffix)
     } else {
-        make_temp_file(dir, prefix, rand, suffix)?
-    };
-
-    // Get just the last component of the path to the created
-    // temporary file or directory.
-    let filename = path.file_name();
-    let filename = filename.unwrap();
-
-    // Join the directory to the path to get the path to print. We
-    // cannot use the path returned by the `Builder` because it gives
-    // the absolute path and we need to return a filename that matches
-    // the template given on the command-line which might be a
-    // relative path.
-    let path = Path::new(dir).join(filename);
-
-    Ok(path)
+        make_temp_file(dir, prefix, rand, suffix)
+    }
 }
 
 /// Reads from `TMPDIR_ENV_VAR` but defaults to /tmp if value is set to empty string.

@@ -11,6 +11,8 @@ use uutests::util::TestScenario;
 use uutests::util_name;
 
 use uucore::display::Quotable;
+#[cfg(unix)]
+use uucore::error::strip_errno;
 
 #[cfg(not(windows))]
 use std::path::MAIN_SEPARATOR;
@@ -958,6 +960,62 @@ fn test_empty_tmpdir_env_var_with_template() {
     assert!(path.starts_with(&format!("{dir}/foo")), "{path}");
 }
 
+/// Relative templates must not be resolved through `getcwd()`, see
+/// <https://github.com/uutils/coreutils/issues/15786>
+#[uutests::wasi_ignore(NoPermissionBits)]
+#[test]
+#[cfg(unix)]
+fn test_relative_template_does_not_resolve_path_of_current_directory() {
+    if rustix::process::geteuid().is_root() {
+        return; // root ignores the permissions this relies on
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("p/w");
+    for (args, is_dir) in [("fXXX", false), ("-d dXXX", true)] {
+        let result = scene
+            .cmd("sh")
+            .current_dir(at.plus("p/w"))
+            .env("PATH", std::env::var_os("PATH").unwrap())
+            .args(&[
+                "-c",
+                &format!("chmod 0 .. && \"$0\" mktemp {args}; s=$?; chmod 755 ..; exit $s"),
+            ])
+            .arg(&scene.bin_path)
+            .succeeds();
+        let name = result.no_stderr().stdout_str().trim_end();
+        assert!(!name.contains(MAIN_SEPARATOR), "{name}");
+        let path = format!("p/w/{name}");
+        if is_dir {
+            assert!(at.dir_exists(&path), "{path}");
+            assert_eq!(at.metadata(&path).permissions().mode() & 0o777, 0o700);
+        } else {
+            assert!(at.file_exists(&path), "{path}");
+            assert_eq!(at.metadata(&path).permissions().mode() & 0o777, 0o600);
+        }
+    }
+}
+
+#[uutests::wasi_ignore(NoPermissionBits)]
+#[test]
+#[cfg(unix)]
+fn test_create_error_names_template() {
+    if rustix::process::geteuid().is_root() {
+        return; // root ignores the permissions this relies on
+    }
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("ro");
+    scene.fixtures.set_mode("ro", 0o555);
+    scene
+        .ucmd()
+        .arg("ro/XXX")
+        .fails()
+        .stderr_only("mktemp: failed to create file via template 'ro/XXX': Permission denied\n");
+    scene.ucmd().args(&["-d", "ro/XXX"]).fails().stderr_only(
+        "mktemp: failed to create directory via template 'ro/XXX': Permission denied\n",
+    );
+}
+
 #[test]
 fn test_nonexistent_dir_prefix() {
     #[cfg(not(windows))]
@@ -1174,7 +1232,10 @@ fn test_non_utf8_template(
         result
             .code_is(1)
             .no_stdout()
-            .stderr_contains(std::io::Error::from_raw_os_error(libc::EILSEQ).to_string());
+            .stderr_contains("via template")
+            .stderr_contains(strip_errno(&std::io::Error::from_raw_os_error(
+                libc::EILSEQ,
+            )));
         return;
     }
     result.success().no_stderr();
@@ -1255,7 +1316,10 @@ fn test_invalid_utf8_suffix(#[values(false, true)] dry_run: bool) {
         result
             .code_is(1)
             .no_stdout()
-            .stderr_contains(std::io::Error::from_raw_os_error(libc::EILSEQ).to_string());
+            .stderr_contains("via template")
+            .stderr_contains(strip_errno(&std::io::Error::from_raw_os_error(
+                libc::EILSEQ,
+            )));
         return;
     }
     result.success().no_stderr();

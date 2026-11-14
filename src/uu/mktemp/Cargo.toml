@@ -19,7 +19,6 @@ doctest = false
 clap = { workspace = true }
 fluent = { workspace = true }
 rand = { workspace = true }
-tempfile = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true }
 
