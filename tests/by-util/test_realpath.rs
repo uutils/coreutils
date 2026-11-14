@@ -591,22 +591,43 @@ fn test_realpath_non_utf8_paths() {
 
 #[test]
 fn test_realpath_empty_string() {
-    // Test that empty string arguments are rejected with exit code 1
-    new_ucmd!().arg("").fails().code_is(1);
+    new_ucmd!()
+        .arg("")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("realpath: '': entity not found\n");
 
-    // Test that empty --relative-base is rejected
+    // Empty --relative-base / --relative-to are rejected the same way
     new_ucmd!()
         .arg("--relative-base=")
         .arg("--relative-to=.")
         .arg(".")
-        .fails()
-        .code_is(1);
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("realpath: '': entity not found\n");
 
     new_ucmd!()
         .arg("--relative-to=")
         .arg(".")
-        .fails()
-        .code_is(1);
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("realpath: '': entity not found\n");
+}
+
+#[test]
+fn test_realpath_empty_string_does_not_stop_other_operands() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    ucmd.args(&["", "file"])
+        .fails_with_code(1)
+        .stdout_contains(format!("{MAIN_SEPARATOR}file\n"))
+        .stderr_is("realpath: '': entity not found\n");
+
+    // -q silences the message but keeps the exit status
+    new_ucmd!()
+        .args(&["-q", "", "."])
+        .fails_with_code(1)
+        .no_stderr();
 }
 
 #[test]
