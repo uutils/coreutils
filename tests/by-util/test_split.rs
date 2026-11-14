@@ -2520,3 +2520,58 @@ fn test_number_with_plus_prefix(
         .collect();
     assert_eq!(files, expected_files, "-n {number}");
 }
+
+#[rstest]
+#[case::n_2(&["-n", "2"], "a\nb\n", &["xaa", "xab"])]
+#[case::n_l_2(&["-n", "l/2"], "a\nb\n", &["xaa", "xab"])]
+#[case::n_r_2(&["-n", "r/2"], "a\nb\n", &["xaa", "xab"])]
+#[case::n_3(&["-n", "3"], "a\nb\n", &["xaa", "xab", "xac"])]
+#[case::n_l_3(&["-n", "l/3"], "a\nb\n", &["xaa", "xab", "xac"])]
+#[case::n_r_3(&["-n", "r/3"], "a\nb\n", &["xaa", "xab", "xac"])]
+// Only the files that get created are announced with `-e`.
+#[case::elide_n_5(&["-e", "-n", "5"], "a\nb\n", &["xaa", "xab", "xac", "xad"])]
+#[case::elide_n_l_3(&["-e", "-n", "l/3"], "a\nb\n", &["xaa", "xab"])]
+#[case::elide_n_r_3(&["-e", "-n", "r/3"], "a\nb\n", &["xaa", "xab"])]
+// A file written to several times is still announced once.
+#[case::rewritten_n_2(&["-n", "2"], "1\n2\n3\n4\n5\n", &["xaa", "xab"])]
+#[case::rewritten_n_l_2(&["-n", "l/2"], "1\n2\n3\n4\n5\n", &["xaa", "xab"])]
+#[case::rewritten_n_r_2(&["-n", "r/2"], "1\n2\n3\n4\n5\n", &["xaa", "xab"])]
+#[case::rewritten_elide_n_l_2(&["-e", "-n", "l/2"], "1\n2\n3\n4\n5\n", &["xaa", "xab"])]
+#[case::rewritten_elide_n_r_2(&["-e", "-n", "r/2"], "1\n2\n3\n4\n5\n", &["xaa", "xab"])]
+fn test_verbose_number_of_chunks(
+    #[case] args: &[&str],
+    #[case] input: &str,
+    #[case] created: &[&str],
+) {
+    use std::fmt::Write as _;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let expected = created.iter().fold(String::new(), |mut out, name| {
+        writeln!(out, "creating file '{name}'").unwrap();
+        out
+    });
+
+    ucmd.args(args)
+        .arg("--verbose")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected);
+    for name in created {
+        assert!(at.file_exists(name), "{args:?}: {name} is missing");
+    }
+}
+
+#[rstest]
+#[case::kth_bytes(&["-n", "1/2"], "abc")]
+#[case::kth_lines(&["-n", "l/1/2"], "abcd\n")]
+#[case::kth_round_robin(&["-n", "r/1/2"], "abcd\n")]
+fn test_verbose_kth_chunk_creates_no_file(#[case] args: &[&str], #[case] chunk: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.args(args)
+        .arg("--verbose")
+        .pipe_in("abcd\n")
+        .succeeds()
+        .stdout_only(chunk);
+    assert!(!at.file_exists("xaa"), "{args:?}: unexpected output file");
+}
