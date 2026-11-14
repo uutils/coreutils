@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use glob::glob;
+use rstest::rstest;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -222,11 +223,10 @@ fn test_up_to_line_sequence() {
 
 #[test]
 fn test_up_to_line_with_non_ascii_repeat() {
-    // we use a different error message than GNU
     new_ucmd!()
         .args(&["numbers50.txt", "10", "{𝟚}"])
-        .fails()
-        .stderr_contains("invalid pattern");
+        .fails_with_code(1)
+        .stderr_is("csplit: '{𝟚}': integer required between '{' and '}'\n");
 }
 
 #[test]
@@ -1975,4 +1975,52 @@ fn test_elide_empty_files_keeps_file_it_failed_to_create() {
         .stderr_is("csplit: xx00: Permission denied\n");
 
     assert_eq!(at.read("xx00"), "KEEP THIS\n");
+}
+
+// Malformed repeats are rejected
+#[rstest]
+#[case::unterminated("{1", "csplit: '{1': '}' is required in repeat count\n")]
+#[case::trailing_junk("{1}junk", "csplit: '{1}junk': '}' is required in repeat count\n")]
+#[case::not_a_number("{1oops}", "csplit: '{1oops}': integer required between '{' and '}'\n")]
+#[case::star_after_count("{1*}", "csplit: '{1*}': integer required between '{' and '}'\n")]
+#[case::empty("{}", "csplit: '{}': integer required between '{' and '}'\n")]
+#[case::negative("{-1}", "csplit: '{-1}': integer required between '{' and '}'\n")]
+#[case::trailing_blank("{1 }", "csplit: '{1 }': integer required between '{' and '}'\n")]
+#[case::blank_after_plus("{+ 1}", "csplit: '{+ 1}': integer required between '{' and '}'\n")]
+#[case::blank_before_star("{ *}", "csplit: '{ *}': integer required between '{' and '}'\n")]
+#[case::star_without_brace("*}", "csplit: '*}': invalid pattern\n")]
+#[case::junk_before_star("junk*}", "csplit: 'junk*}': invalid pattern\n")]
+fn test_malformed_repeat_is_rejected(#[case] repeat: &str, #[case] stderr: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-", "2", repeat])
+        .pipe_in("a\nb\nc\nd\ne\n")
+        .ignore_stdin_write_error()
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is(stderr);
+    assert!(!at.file_exists("xx00"));
+}
+
+// Blanks and a `+` before the count are accepted
+#[rstest]
+#[case::plain("{1}")]
+#[case::plus("{+1}")]
+#[case::space("{ 1}")]
+#[case::tab("{\t1}")]
+#[case::vertical_tab("{\x0B1}")]
+#[case::newline("{\n1}")]
+#[case::form_feed("{\x0C1}")]
+#[case::carriage_return("{\r1}")]
+#[case::several_blanks("{ \t 1}")]
+#[case::blank_then_plus("{ +1}")]
+#[case::leading_zero("{+01}")]
+fn test_repeat_with_blanks_and_plus(#[case] repeat: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-", "2", repeat])
+        .pipe_in("a\nb\nc\nd\ne\n")
+        .succeeds()
+        .stdout_only("2\n4\n4\n");
+    assert_eq!(at.read("xx00"), "a\n");
+    assert_eq!(at.read("xx01"), "b\nc\n");
+    assert_eq!(at.read("xx02"), "d\ne\n");
 }
