@@ -13,6 +13,16 @@ use std::path::{Path, PathBuf};
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     cfg_aliases! {
+        has_locale_codeset: { all(unix, not(any(
+            target_os = "android",
+            target_os = "redox",
+            target_os = "cygwin"
+        ))) },
+        needs_nl_langinfo_l_binding: { any(
+            target_os = "macos",
+            target_os = "openbsd",
+            target_os = "netbsd"
+        ) },
         // Directory open flags that grant search but not read access.
         // tests/by-util/test_install.rs repeats the union of these targets.
         has_o_path: { any(target_os = "linux", target_os = "android") },
