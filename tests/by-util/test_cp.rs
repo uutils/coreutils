@@ -9658,3 +9658,115 @@ fn test_cp_source_in_unsearchable_dir() {
     at.set_mode("d", 0o755);
     assert!(!at.file_exists("dest"));
 }
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no chmod syscall")]
+fn test_cp_backup_restored_when_copy_fails() {
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("dest");
+    at.write("dest", "old");
+    at.write("secret", "secret");
+    at.set_mode("secret", 0);
+
+    ucmd.args(&["--backup=simple", "--force", "secret", "dest"])
+        .fails_with_code(1)
+        .stderr_contains("Permission denied");
+
+    // GNU cp puts the backup back in place of `dest` after a failed copy.
+    assert_eq!(at.read("dest"), "old");
+    assert_eq!(at.read("dest~"), "old");
+    at.set_mode("secret", 0o644);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_backup_restored_when_source_cannot_be_statted() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("dest");
+    at.write("dest", "old");
+    at.symlink_file("nonexistent-target", "src");
+
+    ucmd.args(&[
+        "--backup=numbered",
+        "--dereference",
+        "--remove-destination",
+        "src",
+        "dest",
+    ])
+    .fails_with_code(1)
+    .stderr_contains("cannot stat");
+
+    assert_eq!(at.read("dest"), "old");
+    assert_eq!(at.read("dest.~1~"), "old");
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no chmod syscall")]
+fn test_cp_backup_restored_preserves_metadata_and_long_names() {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("dest", "private-old");
+    at.set_mode("dest", 0o600);
+    let fixed_mtime = filetime::FileTime::from_unix_time(1_700_000_000, 0);
+    filetime::set_file_mtime(at.plus("dest"), fixed_mtime).unwrap();
+    at.symlink_file("nonexistent-target", "src");
+
+    ucmd.args(&[
+        "--backup=numbered",
+        "--dereference",
+        "--remove-destination",
+        "src",
+        "dest",
+    ])
+    .fails_with_code(1)
+    .stderr_contains("cannot stat");
+
+    assert_eq!(at.read("dest"), "private-old");
+    assert_eq!(at.read("dest.~1~"), "private-old");
+    let restored_meta = std::fs::symlink_metadata(at.plus("dest")).unwrap();
+    assert_eq!(restored_meta.permissions().mode() & 0o777, 0o600);
+    assert_eq!(
+        filetime::FileTime::from_last_modification_time(&restored_meta),
+        fixed_mtime
+    );
+
+    // Without --remove-destination, an untouched destination keeps its original inode.
+    let scenario = TestScenario::new(util_name!());
+    let at2 = &scenario.fixtures;
+    at2.write("dest", "keep-inode");
+    at2.symlink_file("nonexistent-target", "src");
+    let orig_ino = std::fs::symlink_metadata(at2.plus("dest")).unwrap().ino();
+    scenario
+        .ucmd()
+        .args(&["--backup=simple", "--dereference", "src", "dest"])
+        .fails_with_code(1)
+        .stderr_contains("cannot stat");
+    let after_ino = std::fs::symlink_metadata(at2.plus("dest")).unwrap().ino();
+    assert_eq!(orig_ino, after_ino);
+    assert_eq!(at2.read("dest"), "keep-inode");
+
+    // Long destination basenames near NAME_MAX still restore cleanly.
+    let scenario3 = TestScenario::new(util_name!());
+    let at3 = &scenario3.fixtures;
+    let long_name = "a".repeat(245);
+    at3.write(&long_name, "long-old");
+    at3.symlink_file("nonexistent-target", "src");
+    scenario3
+        .ucmd()
+        .args(&[
+            "--backup=numbered",
+            "--dereference",
+            "--remove-destination",
+            "src",
+            &long_name,
+        ])
+        .fails_with_code(1)
+        .stderr_contains("cannot stat");
+    assert_eq!(at3.read(&long_name), "long-old");
+}

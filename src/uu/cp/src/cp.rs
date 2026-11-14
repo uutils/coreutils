@@ -2167,6 +2167,191 @@ fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyRe
     Ok(())
 }
 
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "netbsd"
+))]
+type FileXattrReapply = Box<dyn FnOnce(&fs::File)>;
+
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "netbsd"
+))]
+type FileXattrRestorer = Box<dyn Fn(&fs::File) -> FileXattrReapply>;
+
+struct CreatedBackup {
+    path: PathBuf,
+    was_symlink: bool,
+    dest_deleted: bool,
+    orig_metadata: Option<Metadata>,
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "hurd",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "netbsd"
+    ))]
+    orig_xattrs: Option<FileXattrRestorer>,
+}
+
+fn restore_staged_metadata(tmp_file: &fs::File, backup: &CreatedBackup) {
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "hurd",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "netbsd"
+    ))]
+    let reapply_acls = backup.orig_xattrs.as_ref().map(|apply| apply(tmp_file));
+
+    let meta = backup
+        .orig_metadata
+        .clone()
+        .or_else(|| fs::metadata(&backup.path).ok());
+    if let Some(meta) = meta {
+        let apply_times = |file: &fs::File| {
+            let mut times = fs::FileTimes::new();
+            let mut any_time = false;
+            if let Ok(atime) = meta.accessed() {
+                times = times.set_accessed(atime);
+                any_time = true;
+            }
+            if let Ok(mtime) = meta.modified() {
+                times = times.set_modified(mtime);
+                any_time = true;
+            }
+            if any_time {
+                let _ = file.set_times(times);
+            }
+        };
+        apply_times(tmp_file);
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::{MetadataExt, PermissionsExt, fchown};
+            let chown_ok = if fchown(tmp_file, Some(meta.uid()), Some(meta.gid())).is_ok() {
+                true
+            } else {
+                let _ = fchown(tmp_file, None, Some(meta.gid()));
+                false
+            };
+            let mut perms = meta.permissions();
+            perms.set_mode(uucore::safe_copy::preserved_mode(perms.mode(), chown_ok));
+            let _ = tmp_file.set_permissions(perms);
+        }
+
+        #[cfg(not(unix))]
+        {
+            let _ = tmp_file.set_permissions(meta.permissions());
+        }
+
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "hurd",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "netbsd"
+        ))]
+        if let Some(reapply) = reapply_acls {
+            reapply(tmp_file);
+        }
+
+        apply_times(tmp_file);
+    }
+}
+
+/// Restore the backup after a failed copy, matching GNU cp semantics.
+fn restore_backup(dest: &Path, backup: &CreatedBackup) {
+    // Best-effort restoration; the original copy error is reported.
+    let clear_windows_readonly = || {
+        #[cfg(windows)]
+        if let Ok(mut perms) = fs::metadata(dest).map(|m| m.permissions()) {
+            #[allow(clippy::permissions_set_readonly_false)]
+            perms.set_readonly(false);
+            let _ = fs::set_permissions(dest, perms);
+        }
+    };
+
+    let unlink_non_dir_dest = || {
+        clear_windows_readonly();
+        if dest
+            .symlink_metadata()
+            .is_ok_and(|m| !m.file_type().is_dir())
+        {
+            let _ = fs::remove_file(dest);
+        }
+    };
+
+    if backup.was_symlink {
+        unlink_non_dir_dest();
+        let _ = fs::rename(&backup.path, dest);
+        return;
+    }
+
+    let parent = match dest.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p,
+        _ => Path::new("."),
+    };
+    #[cfg(any(unix, windows))]
+    let pid = std::process::id();
+    #[cfg(not(any(unix, windows)))]
+    let pid = 0_u32;
+    let mut staged = false;
+    for attempt in 0..64u32 {
+        let tmp_path = parent.join(format!(".cp-restore-{pid}-{attempt}"));
+        let mut open_opts = OpenOptions::new();
+        open_opts.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            open_opts.mode(0o600);
+        }
+        match open_opts.open(&tmp_path) {
+            Ok(mut tmp_file) => {
+                let copied = fs::File::open(&backup.path)
+                    .and_then(|mut src| io::copy(&mut src, &mut tmp_file))
+                    .is_ok();
+                if copied {
+                    restore_staged_metadata(&tmp_file, backup);
+                    drop(tmp_file);
+                    clear_windows_readonly();
+                    if dest
+                        .symlink_metadata()
+                        .is_ok_and(|m| !m.file_type().is_dir() && !m.file_type().is_file())
+                    {
+                        let _ = fs::remove_file(dest);
+                    }
+                    if fs::rename(&tmp_path, dest).is_ok() {
+                        staged = true;
+                    } else {
+                        let _ = fs::remove_file(&tmp_path);
+                    }
+                } else {
+                    drop(tmp_file);
+                    let _ = fs::remove_file(&tmp_path);
+                }
+                break;
+            }
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(_) => break,
+        }
+    }
+
+    if !staged {
+        if let Ok(fb_file) = OpenOptions::new().write(true).open(&backup.path) {
+            restore_staged_metadata(&fb_file, backup);
+        }
+        unlink_non_dir_dest();
+        let _ = fs::rename(&backup.path, dest);
+    }
+}
+
 /// Decide whether `source` and `dest` are the same directory entry, as opposed
 /// to merely being two different hard links to the same inode.
 fn paths_are_same_entry(source: &Path, dest: &Path) -> bool {
@@ -2267,7 +2452,7 @@ fn handle_existing_dest(
     options: &Options,
     source_in_command_line: bool,
     copied_files: &HashMap<FileInformation, PathBuf>,
-) -> CopyResult<()> {
+) -> CopyResult<Option<CreatedBackup>> {
     // Disallow copying a file to itself, unless `--force` and
     // `--backup` are both specified.
     if is_forbidden_to_copy_to_same_file(source, dest, options, source_in_command_line) {
@@ -2288,6 +2473,7 @@ fn handle_existing_dest(
         options.overwrite.verify(dest, options.debug)?;
     }
 
+    let mut created_backup = None;
     let mut is_dest_removed = false;
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
     if let Some(backup_path) = backup_path {
@@ -2295,20 +2481,67 @@ fn handle_existing_dest(
             return Err(translate!("cp-error-backing-up-destroy-source", "dest" => dest.quote(), "source" => source.quote())
             .into());
         }
-        is_dest_removed = dest.is_symlink();
+        let orig_metadata = dest.symlink_metadata().ok();
+        is_dest_removed = orig_metadata
+            .as_ref()
+            .is_some_and(|m| m.file_type().is_symlink());
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "hurd",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "netbsd"
+        ))]
+        let orig_xattrs = if is_dest_removed {
+            None
+        } else {
+            uucore::fsxattr::retrieve_xattrs(dest).ok().map(|xattrs| {
+                Box::new(move |file: &fs::File| -> FileXattrReapply {
+                    let mut post_chown_xattrs = xattrs.clone();
+                    post_chown_xattrs.retain(|k, _| {
+                        k == "system.posix_acl_access"
+                            || k == "system.posix_acl_default"
+                            || k == "security.capability"
+                    });
+                    let _ = uucore::fsxattr::apply_xattrs_fd(file, xattrs.clone());
+                    Box::new(move |file: &fs::File| {
+                        if !post_chown_xattrs.is_empty() {
+                            let _ = uucore::fsxattr::apply_xattrs_fd(file, post_chown_xattrs);
+                        }
+                    })
+                }) as FileXattrRestorer
+            })
+        };
         backup_dest(dest, &backup_path, is_dest_removed)?;
+        created_backup = Some(CreatedBackup {
+            path: backup_path,
+            was_symlink: is_dest_removed,
+            dest_deleted: is_dest_removed,
+            orig_metadata,
+            #[cfg(any(
+                target_os = "freebsd",
+                target_os = "hurd",
+                target_os = "linux",
+                target_os = "macos",
+                target_os = "netbsd"
+            ))]
+            orig_xattrs,
+        });
     }
     if !is_dest_removed {
-        delete_dest_if_needed_and_allowed(
+        let deleted = delete_dest_if_needed_and_allowed(
             source,
             dest,
             options,
             source_in_command_line,
             copied_files,
         )?;
+        if let Some(backup) = &mut created_backup {
+            backup.dest_deleted = deleted;
+        }
     }
 
-    Ok(())
+    Ok(created_backup)
 }
 
 /// Checks if:
@@ -2322,7 +2555,7 @@ fn delete_dest_if_needed_and_allowed(
     options: &Options,
     source_in_command_line: bool,
     copied_files: &HashMap<FileInformation, PathBuf>,
-) -> CopyResult<()> {
+) -> CopyResult<bool> {
     let delete_dest = match options.overwrite {
         OverwriteMode::Clobber(cl) | OverwriteMode::Interactive(cl) => {
             match cl {
@@ -2364,9 +2597,10 @@ fn delete_dest_if_needed_and_allowed(
     };
 
     if delete_dest {
-        delete_path(dest, options)
+        delete_path(dest, options)?;
+        Ok(true)
     } else {
-        Ok(())
+        Ok(false)
     }
 }
 
@@ -2859,6 +3093,7 @@ fn copy_file(
         fs::remove_file(dest)?;
     }
 
+    let mut created_backup = None;
     if initial_dest_metadata.is_some()
         && (!options.attributes_only
             || matches!(
@@ -2884,7 +3119,8 @@ fn copy_file(
                 }
             }
         }
-        handle_existing_dest(source, dest, options, source_in_command_line, copied_files)?;
+        created_backup =
+            handle_existing_dest(source, dest, options, source_in_command_line, copied_files)?;
         if are_hardlinks_to_same_file(source, dest) {
             if options.copy_mode == CopyMode::Copy {
                 return Ok(());
@@ -2922,71 +3158,100 @@ fn copy_file(
         return Err(translate!("cp-error-cannot-change-attribute", "dest" => dest.quote()).into());
     }
 
-    // When using --link mode, hard link structure is automatically preserved
-    // because we link to source files (which share inodes).
-    if options.preserve_hard_links() && options.copy_mode != CopyMode::Link {
-        // if we encounter a matching device/inode pair in the source tree
-        // we can arrange to create a hard link between the corresponding names
-        // in the destination tree.
-        if let Some(new_source) = copied_files.get(
-            &FileInformation::from_path(source, options.dereference(source_in_command_line))
-                .map_err(|e| {
-                    CpError::IoErrContext(
-                        e,
-                        translate!("cp-error-cannot-stat-context", "source" => source.quote()),
-                    )
-                })?,
-        ) {
-            fs::hard_link(new_source, dest)?;
+    let mut reached_dest_write = false;
+    let copy_outcome: CopyResult<Option<(PerformedAction, Metadata, Permissions, bool)>> = (|| {
+        // When using --link mode, hard link structure is automatically preserved
+        // because we link to source files (which share inodes).
+        if options.preserve_hard_links() && options.copy_mode != CopyMode::Link {
+            // if we encounter a matching device/inode pair in the source tree
+            // we can arrange to create a hard link between the corresponding names
+            // in the destination tree.
+            if let Some(new_source) = copied_files.get(
+                &FileInformation::from_path(source, options.dereference(source_in_command_line))
+                    .map_err(|e| {
+                        CpError::IoErrContext(
+                            e,
+                            translate!("cp-error-cannot-stat-context", "source" => source.quote()),
+                        )
+                    })?,
+            ) {
+                fs::hard_link(new_source, dest)?;
 
-            if options.verbose {
-                print_verbose_output(options.parents, progress_bar, source, dest)?;
+                if options.verbose {
+                    print_verbose_output(options.parents, progress_bar, source, dest)?;
+                }
+
+                return Ok(None);
             }
-
-            return Ok(());
         }
-    }
 
-    // Calculate the context upfront before canonicalizing the path
-    let context = context_for(source, dest);
-    let context = context.as_str();
+        // Calculate the context upfront before canonicalizing the path
+        let context = context_for(source, dest);
+        let context = context.as_str();
 
-    let source_metadata = {
-        let result = if options.dereference(source_in_command_line) {
-            fs::metadata(source)
-        } else {
-            fs::symlink_metadata(source)
+        let source_metadata = {
+            let result = if options.dereference(source_in_command_line) {
+                fs::metadata(source)
+            } else {
+                fs::symlink_metadata(source)
+            };
+            result.map_err(|err| {
+                CpError::IoErrContext(
+                    err,
+                    translate!("cp-error-cannot-stat-context", "source" => source.quote()),
+                )
+            })?
         };
-        result.map_err(|err| {
-            CpError::IoErrContext(
-                err,
-                translate!("cp-error-cannot-stat-context", "source" => source.quote()),
-            )
-        })?
+
+        let dest_metadata = dest.symlink_metadata().ok();
+
+        let dest_permissions = calculate_dest_permissions(
+            dest_metadata.as_ref(),
+            dest,
+            &source_metadata,
+            options,
+            context,
+        );
+
+        let source_is_stream = is_stream(&source_metadata);
+
+        reached_dest_write = matches!(
+            options.copy_mode,
+            CopyMode::Copy | CopyMode::Update | CopyMode::Link
+        );
+        let performed_action = handle_copy_mode(
+            source,
+            dest,
+            options,
+            context,
+            &source_metadata,
+            symlinked_files,
+            source_in_command_line,
+            created_parent_dirs,
+        )?;
+
+        Ok(Some((
+            performed_action,
+            source_metadata,
+            dest_permissions,
+            source_is_stream,
+        )))
+    })();
+
+    let (performed_action, source_metadata, dest_permissions, source_is_stream) = match copy_outcome
+    {
+        Ok(Some(outcome)) => outcome,
+        Ok(None) => return Ok(()),
+        Err(err) => {
+            if !matches!(err, CpError::Skipped(_))
+                && let Some(backup) = &created_backup
+                && (backup.was_symlink || backup.dest_deleted || reached_dest_write)
+            {
+                restore_backup(dest, backup);
+            }
+            return Err(err);
+        }
     };
-
-    let dest_metadata = dest.symlink_metadata().ok();
-
-    let dest_permissions = calculate_dest_permissions(
-        dest_metadata.as_ref(),
-        dest,
-        &source_metadata,
-        options,
-        context,
-    );
-
-    let source_is_stream = is_stream(&source_metadata);
-
-    let performed_action = handle_copy_mode(
-        source,
-        dest,
-        options,
-        context,
-        &source_metadata,
-        symlinked_files,
-        source_in_command_line,
-        created_parent_dirs,
-    )?;
 
     if options.verbose && performed_action != PerformedAction::Skipped {
         print_verbose_output(options.parents, progress_bar, source, dest)?;
