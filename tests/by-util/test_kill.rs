@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore IAMNOTASIGNAL RTMAX RTMIN SIGIO SIGRTMAX GHSA CHLD SIGSTOP taskkill unreaped
+// spell-checker:ignore IAMNOTASIGNAL RTMAX RTMIN SIGIO SIGRTMAX FFFD GHSA CHLD SIGSTOP taskkill unreaped
 
 use regex::Regex;
 #[cfg(windows)]
@@ -888,4 +888,17 @@ fn test_kill_with_rtmin_offset() {
         .arg(format!("{}", target.pid()))
         .succeeds();
     target.assert_signaled(sig);
+}
+
+#[cfg(unix)]
+#[test]
+fn test_kill_invalid_utf8() {
+    let arg = uucore::os_str_from_bytes(b"\xFFa\xFF")
+        .expect("Only unix platforms can test non-unicode names");
+
+    new_ucmd!()
+        .arg("-l")
+        .arg(&arg)
+        .fails()
+        .stderr_contains("'\u{FFFD}a\u{FFFD}': invalid signal");
 }
