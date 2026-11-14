@@ -61,8 +61,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let spaces = matches.get_flag(options::SPACES);
     let poss_width = matches.get_one::<String>(options::WIDTH).cloned();
 
+    // leading blanks are skipped, trailing ones are not.
     let width = match poss_width {
-        Some(inp_width) => match inp_width.parse::<usize>() {
+        Some(inp_width) => match inp_width
+            .trim_start_matches([' ', '\t', '\n', '\r', '\x0B', '\x0C'])
+            .parse::<usize>()
+        {
             Ok(0) => {
                 return Err(USimpleError::new(
                     1,
