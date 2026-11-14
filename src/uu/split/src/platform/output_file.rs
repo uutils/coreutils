@@ -41,6 +41,8 @@ fn create_or_truncate_output_file(input: &OsStr, filename: &OsStr) -> Result<Fil
         Err(e) if e.kind() == ErrorKind::AlreadyExists => {
             let file = OpenOptions::new()
                 .write(true)
+                .create(true)
+                .truncate(false)
                 .open(Path::new(filename))
                 .map_err(|e| open_file_error(filename, e))?;
             check_not_input(input, filename, &file)?;
