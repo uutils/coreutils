@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore tmpfs Pcent Itotal Iused Iavail Ipcent nosuid nodev
+// spell-checker:ignore autofs binfmt relatime tmpfs Pcent Itotal Iused Iavail Ipcent nosuid nodev
 
 //! The filesystem usage data table.
 //!
@@ -75,11 +75,17 @@ pub(crate) struct Row {
     ///
     /// If the filesystem has zero bytes, then this is `None`.
     inodes_usage: Option<f64>,
+
+    /// Whether the usage of the filesystem is known.
+    ///
+    /// If not, the usage columns and the type are shown as `"-"`.
+    usage_known: bool,
 }
 
 impl Row {
     pub(crate) fn new(source: &str) -> Self {
         Self {
+            usage_known: true,
             file: None,
             fs_device: source.into(),
             fs_type: "-".into(),
@@ -110,6 +116,7 @@ impl AddAssign for Row {
         let inodes = self.inodes + rhs.inodes;
         let inodes_used = self.inodes_used + rhs.inodes_used;
         *self = Self {
+            usage_known: true,
             file: None,
             fs_device: translate!("df-total"),
             fs_type: "-".into(),
@@ -148,7 +155,9 @@ impl Row {
             mount_dir,
             ..
         } = fs.mount_info;
-        let FsUsage {
+        // a filesystem of unknown usage shows "-" instead of its
+        // usage and type, and adds nothing to the total.
+        let Some(FsUsage {
             blocksize,
             blocks,
             bfree,
@@ -156,12 +165,21 @@ impl Row {
             files,
             ffree,
             ..
-        } = fs.usage;
+        }) = fs.usage
+        else {
+            return Self {
+                file: fs.file,
+                fs_mount: mount_dir,
+                usage_known: false,
+                ..Self::new(&dev_name)
+            };
+        };
 
         // On Windows WSL, files can be less than ffree. Protect such cases via saturating_sub.
         let bused = blocks.saturating_sub(bfree);
         let fused = files.saturating_sub(ffree);
         Self {
+            usage_known: true,
             file: fs.file,
             fs_device: dev_name,
             fs_type,
@@ -352,6 +370,20 @@ impl<'a> RowFormatter<'a> {
 
         for column in &self.options.columns {
             let cell = match column {
+                Column::Size
+                | Column::Used
+                | Column::Avail
+                | Column::Pcent
+                | Column::Itotal
+                | Column::Iused
+                | Column::Iavail
+                | Column::Ipcent
+                    if !self.row.usage_known =>
+                {
+                    Cell::from_ascii_string("-")
+                }
+                #[cfg(target_vendor = "apple")]
+                Column::Capacity if !self.row.usage_known => Cell::from_ascii_string("-"),
                 Column::Source => {
                     if self.is_total_row {
                         Cell::from_string(translate!("df-total"))
@@ -487,7 +519,7 @@ impl Table {
             // If the filesystem is not empty, or if the options require
             // showing all filesystems, then print the data as a row in
             // the output table.
-            if options.show_all_fs || filesystem.usage.blocks > 0 {
+            if options.show_all_fs || filesystem.usage.as_ref().is_some_and(|u| u.blocks > 0) {
                 let row = Row::from_filesystem(filesystem, &options.block_size);
                 let fmt = RowFormatter::new(&row, options, false);
                 let values = fmt.get_cells();
@@ -624,6 +656,8 @@ mod tests {
                 inodes_used: 2,
                 inodes_free: 8,
                 inodes_usage: Some(0.2),
+
+                usage_known: true,
             }
         }
     }
@@ -1001,7 +1035,7 @@ mod tests {
                 remote: false,
                 dummy: false,
             },
-            usage: crate::table::FsUsage {
+            usage: Some(crate::table::FsUsage {
                 blocksize: 4096,
                 blocks: 244_029_695,
                 bfree: 125_085_030,
@@ -1009,12 +1043,75 @@ mod tests {
                 bavail_top_bit_set: false,
                 files: 999,
                 ffree: 1_000_000,
-            },
+            }),
         };
 
         let row = Row::from_filesystem(d, &BlockSize::default());
 
         assert_eq!(row.inodes_used, 0);
+    }
+
+    #[test]
+    fn test_row_with_unknown_usage() {
+        init();
+        // An autofs mount covered by the filesystem it mounts on demand.
+        let fs = crate::Filesystem {
+            file: None,
+            mount_info: crate::MountInfo {
+                dev_id: "0:35".to_string(),
+                dev_name: "systemd-1".to_string(),
+                fs_type: "autofs".to_string(),
+                mount_dir: "/proc/sys/fs/binfmt_misc".into(),
+                mount_option: "rw,relatime".to_string(),
+                mount_root: "/".into(),
+                remote: false,
+                dummy: true,
+            },
+            usage: None,
+        };
+        let options = Options {
+            columns: vec![
+                Column::Source,
+                Column::Fstype,
+                Column::Itotal,
+                Column::Iused,
+                Column::Iavail,
+                Column::Ipcent,
+                Column::Size,
+                Column::Used,
+                Column::Avail,
+                Column::Pcent,
+                Column::File,
+                Column::Target,
+            ],
+            ..Default::default()
+        };
+
+        let row = Row::from_filesystem(fs, &options.block_size);
+        let cells = RowFormatter::new(&row, &options, false).get_cells();
+        let expected = vec![
+            "systemd-1",
+            "-",
+            "-",
+            "-",
+            "-",
+            "-",
+            "-",
+            "-",
+            "-",
+            "-",
+            "-",
+            "/proc/sys/fs/binfmt_misc",
+        ];
+        assert_eq!(cells.len(), expected.len());
+        assert!(compare_cell_content(cells, expected));
+
+        // The row adds nothing to the total.
+        let mut total = Row::default();
+        total += row;
+        let expected_total = Row::default();
+        assert_eq!(total.bytes.bytes, expected_total.bytes.bytes);
+        assert_eq!(total.inodes, expected_total.inodes);
     }
 
     #[test]
@@ -1032,7 +1129,7 @@ mod tests {
                 remote: false,
                 dummy: false,
             },
-            usage: crate::table::FsUsage {
+            usage: Some(crate::table::FsUsage {
                 blocksize: 4096,
                 blocks: 244_029_695,
                 bfree: 125_085_030,
@@ -1040,7 +1137,7 @@ mod tests {
                 bavail_top_bit_set: false,
                 files: 99_999_999_999,
                 ffree: 999_999,
-            },
+            }),
         };
 
         let filesystems = vec![d1.clone(), d1];
@@ -1103,7 +1200,7 @@ mod tests {
                 remote: false,
                 dummy: false,
             },
-            usage: crate::table::FsUsage {
+            usage: Some(crate::table::FsUsage {
                 blocksize: 4096,
                 blocks: 244_029_695,
                 bfree: 125_085_030,
@@ -1111,7 +1208,7 @@ mod tests {
                 bavail_top_bit_set: false,
                 files: 99_999_999_999,
                 ffree: 999_999,
-            },
+            }),
         };
 
         let filesystems = vec![d1];
