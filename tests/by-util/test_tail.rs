@@ -5723,6 +5723,21 @@ fn test_follow_symlink_appends() {
     // Appends to the target of a symlink reach tail through the link, by
     // descriptor and by name alike: under --follow=name a symlink given on
     // the command line is not a file that was replaced by a symlink.
+    //
+    // Each step waits for the output instead of sleeping a fixed time: on
+    // macOS the first process a test spawns can take longer than a second to
+    // reach `main`, so a fixed delay appends before tail has even started.
+    // Tail watches the file before its initial read, so once "a" is printed
+    // every later append must arrive through the watch.
+    fn wait_for_stdout(child: &mut uutests::util::UChild, expected: &str) {
+        for _ in 0..500 {
+            if child.stdout_all() == expected {
+                return;
+            }
+            child.delay(10);
+        }
+    }
+
     for follow in ["-f", "-F"] {
         let (at, mut ucmd) = at_and_ucmd!();
         at.write("2026-09-01.log", "a\n");
@@ -5730,11 +5745,11 @@ fn test_follow_symlink_appends() {
         let mut p = ucmd
             .args(&["-s.1", "--max-unchanged-stats=1", follow, "latest.log"])
             .run_no_wait();
-        p.delay(500);
+        wait_for_stdout(&mut p, "a\n");
         at.append("2026-09-01.log", "b\n");
-        p.delay(500);
+        wait_for_stdout(&mut p, "a\nb\n");
         at.append("2026-09-01.log", "c\n");
-        p.delay(500);
+        wait_for_stdout(&mut p, "a\nb\nc\n");
         p.kill()
             .make_assertion()
             .with_all_output()
