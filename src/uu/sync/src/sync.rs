@@ -80,6 +80,11 @@ mod platform {
     pub fn do_fdatasync(files: &[String]) -> UResult<()> {
         do_sync_with(files, |f| f.sync_data())
     }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub fn do_fsync(files: &[String]) -> UResult<()> {
+        do_sync_with(files, rustix::fs::fsync)
+    }
 }
 
 #[cfg(windows)]
@@ -250,6 +255,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if matches.get_flag(options::DATA) {
         #[cfg(unix)]
         fdatasync(&files)?;
+    } else if !files.is_empty() {
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        fsync(&files)?;
     } else {
         sync()?;
     }
@@ -298,4 +306,9 @@ fn syncfs(files: &[String]) -> UResult<()> {
 #[cfg(unix)]
 fn fdatasync(files: &[String]) -> UResult<()> {
     platform::do_fdatasync(files)
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn fsync(files: &[String]) -> UResult<()> {
+    platform::do_fsync(files)
 }
