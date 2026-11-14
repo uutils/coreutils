@@ -467,27 +467,22 @@ fn test_fail_change_directory() {
     let some_non_existing_path = "some_nonexistent_path";
     assert!(!Path::new(some_non_existing_path).is_dir());
 
-    let out = scene
+    let result = scene
         .ucmd()
         .arg("--chdir")
         .arg(some_non_existing_path)
         .arg("pwd")
-        .fails()
-        .stderr_move_str();
-    assert!(out.contains("env: cannot change directory to "));
-}
-
-#[cfg(unix)]
-#[test]
-fn test_fail_change_directory_message() {
-    // GNU env prints the strerror text without Rust's "(os error N)" suffix
-    new_ucmd!()
-        .args(&["-C", "some_nonexistent_path", "true"])
-        .fails_with_code(125)
-        .no_stdout()
-        .stderr_is(
-            "env: cannot change directory to 'some_nonexistent_path': No such file or directory\n",
+        .fails_with_code(125);
+    let err = result.no_stdout().stderr_str();
+    assert!(err.starts_with("env: cannot change directory to 'some_nonexistent_path': "));
+    assert!(!err.contains("os error"));
+    // The error text itself is platform specific
+    if cfg!(unix) {
+        assert_eq!(
+            err,
+            "env: cannot change directory to 'some_nonexistent_path': No such file or directory\n"
         );
+    }
 }
 
 #[test]
