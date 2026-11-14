@@ -14,6 +14,23 @@ use uucore::quoting_style::locale_aware_c_single_escape;
 use uucore::ranges::Range;
 use uucore::translate;
 
+/// Match a value against a list of names, accepting any unambiguous prefix.
+///
+/// An exact name always wins, so `iec` is not ambiguous with `iec-i`. An
+/// empty or unknown input matches nothing.
+pub(crate) fn match_enum_value<T: Copy>(input: &str, values: &[(&'static str, T)]) -> Option<T> {
+    if let Some((_, value)) = values.iter().find(|(name, _)| *name == input) {
+        return Some(*value);
+    }
+    let mut matches = values.iter().filter(|(name, _)| name.starts_with(input));
+    let (_, value) = matches.next()?;
+    if matches.next().is_some() {
+        None
+    } else {
+        Some(*value)
+    }
+}
+
 /// Byte offset the parser stopped at, the end of input when nothing is left.
 fn offset(iter: &mut Peekable<CharIndices<'_>>, s: &str) -> usize {
     iter.peek().map_or(s.len(), |&(i, _)| i)
@@ -398,16 +415,29 @@ impl FromStr for FormatOptions {
     }
 }
 
+impl InvalidModes {
+    /// Resolve an `--invalid` value, accepting any unambiguous prefix.
+    pub(crate) fn canonical(s: &str) -> Option<&'static str> {
+        const MODES: &[(&str, &str)] = &[
+            ("abort", "abort"),
+            ("fail", "fail"),
+            ("warn", "warn"),
+            ("ignore", "ignore"),
+        ];
+        match_enum_value(&s.to_lowercase(), MODES)
+    }
+}
+
 impl FromStr for InvalidModes {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "abort" => Ok(Self::Abort),
-            "fail" => Ok(Self::Fail),
-            "warn" => Ok(Self::Warn),
-            "ignore" => Ok(Self::Ignore),
-            unknown => Err(translate!("numfmt-error-unknown-invalid-mode", "mode" => unknown)),
+        match Self::canonical(s) {
+            Some("abort") => Ok(Self::Abort),
+            Some("fail") => Ok(Self::Fail),
+            Some("warn") => Ok(Self::Warn),
+            Some("ignore") => Ok(Self::Ignore),
+            _ => Err(translate!("numfmt-error-unknown-invalid-mode", "mode" => s.to_lowercase())),
         }
     }
 }
