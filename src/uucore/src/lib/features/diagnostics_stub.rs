@@ -12,6 +12,7 @@
 //! message it would print anywhere but a terminal.
 
 use std::ffi::{OsStr, OsString};
+use std::marker::PhantomData;
 use std::ops::Range;
 
 /// Always `false`: rendering is compiled out.
@@ -36,6 +37,11 @@ pub fn operands(_args: &[OsString]) -> Option<Vec<OsString>> {
 pub use crate::features::diagnostics_boundary::{
     OptionValue, ValueOptions, char_span, floor_boundary, list_items,
 };
+
+/// Always `false`: nothing is drawn to color.
+pub fn use_color() -> bool {
+    false
+}
 
 /// Always the error itself: nothing is ever drawn to replace it.
 pub fn error_after_report<E: Into<Box<dyn crate::error::UError>>>(
@@ -136,5 +142,27 @@ impl Snapshot {
         _help: Option<&str>,
     ) -> bool {
         false
+    }
+}
+
+/// A line of text that renders nothing.
+///
+/// Borrows like the real `SourceLine`, so that a caller naming its lifetime
+/// compiles either way.
+pub struct SourceLine<'a>(PhantomData<&'a str>);
+
+#[allow(clippy::unused_self)]
+impl<'a> SourceLine<'a> {
+    pub fn new(_name: &'a str, _line_number: usize, _text: &'a str) -> Self {
+        Self(PhantomData)
+    }
+
+    pub fn report(
+        &self,
+        _span: Range<usize>,
+        _label: Option<&str>,
+        _help: Option<&str>,
+    ) -> Option<String> {
+        None
     }
 }

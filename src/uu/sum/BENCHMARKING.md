@@ -10,7 +10,7 @@ After you have obtained and uncompressed such a file, you need to build `sum` in
 cargo build --release --package uu_sum
 ```
 
-and then you can time how it long it takes to checksum the file by running
+and then you can time how long it takes to checksum the file by running
 
 ```shell
 time ./target/release/sum wikidatawiki-20251220-pages-logging.xml

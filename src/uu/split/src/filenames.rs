@@ -41,7 +41,6 @@ use clap::ArgMatches;
 use std::ffi::{OsStr, OsString};
 use std::path::is_separator;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError};
 use uucore::translate;
 
 // This is an allocation guard, not a semantic suffix limit. 4096 is around the
@@ -98,6 +97,10 @@ pub enum SuffixError {
     /// Suffix is not large enough to split into specified chunks
     #[error("{}", translate!("split-error-suffix-too-small", "length" => .0))]
     TooSmall(usize),
+
+    /// The suffix start value does not fit in the fixed suffix length
+    #[error("{}", translate!("split-error-numerical-suffix-start-too-large"))]
+    StartTooLarge,
 }
 
 impl Suffix {
@@ -124,14 +127,13 @@ impl Suffix {
     /// - Do NOT pre-calculate new suffix length otherwise, i.e. when
     ///   suffix start >= N number of files
     ///   as in `split --numeric-suffixes=100 --number=r/100 file`
-    ///   OR when suffix length N is specified, except for N=0 (see edge cases below)
+    ///   OR when suffix length N is specified, except for N=0 (see edge case below)
     ///   `-a N` or `--suffix-length=N`
     ///
     /// Edge case:
-    /// - If suffix length is specified as 0 in a command line,
-    ///   first apply auto-width calculations and if still 0
-    ///   set it to default value.
-    ///   Do NOT change auto-widening value
+    /// - A suffix length of 0 in a command line is the same as no suffix
+    ///   length option: the default length is used, and auto-width and
+    ///   auto-widening apply as they would without `-a`.
     ///
     pub fn from(matches: &ArgMatches, strategy: &Strategy) -> Result<Self, SuffixError> {
         let stype: SuffixType;
@@ -185,44 +187,53 @@ impl Suffix {
                 if parsed_length > MAX_SUFFIX_LENGTH {
                     return Err(SuffixError::NotParsable(v.to_owned()));
                 }
-                (parsed_length, true)
+                if parsed_length == 0 {
+                    // A suffix length of 0 means the same as no suffix length option.
+                    (default_length, false)
+                } else {
+                    (parsed_length, true)
+                }
             } else {
                 // no suffix length option was specified in command line
                 // set to default value
                 (default_length, false)
             };
 
-        // Disable dynamic auto-widening if suffix length was specified in command line with value > 0
-        if is_length_cmd_opt && length > 0 {
+        // Disable dynamic auto-widening if suffix length was specified in command line
+        if is_length_cmd_opt {
             auto_widening = false;
         }
 
         // Auto pre-calculate new suffix length (auto-width) if necessary
+        // A suffix start at or past the number of chunks disables auto-width,
+        // and the start value is then checked against the suffix length below
         if let Strategy::Number(number_type) = strategy {
             let chunks = number_type.num_chunks();
-            let required_length = ((start as u64 + chunks) as f64)
-                .log(stype.radix() as f64)
-                .ceil() as usize;
+            if (start as u64) < chunks {
+                let required_length = ((start as u64 + chunks) as f64)
+                    .log(stype.radix() as f64)
+                    .ceil() as usize;
 
-            if (start as u64) < chunks && !(is_length_cmd_opt && length > 0) {
-                // with auto-width ON the auto-widening is OFF
-                auto_widening = false;
+                if !is_length_cmd_opt {
+                    // with auto-width ON the auto-widening is OFF
+                    auto_widening = false;
 
-                // do not reduce suffix length with auto-width
-                if length < required_length {
-                    length = required_length;
+                    // do not reduce suffix length with auto-width
+                    if length < required_length {
+                        length = required_length;
+                    }
                 }
-            }
 
-            if length < required_length {
-                return Err(SuffixError::TooSmall(required_length));
+                if length < required_length {
+                    return Err(SuffixError::TooSmall(required_length));
+                }
             }
         }
 
-        // Check edge case when suffix length == 0 was specified in command line
-        // Set it to default value
-        if is_length_cmd_opt && length == 0 {
-            length = default_length;
+        // Check the start value here rather than when the first file is named,
+        // so that it is reported before the input is read, even if it is empty
+        if !auto_widening && FixedWidthNumber::new(stype.radix(), length, start).is_err() {
+            return Err(SuffixError::StartTooLarge);
         }
 
         let additional = matches
@@ -314,28 +325,24 @@ pub struct FilenameIterator<'a> {
 }
 
 impl<'a> FilenameIterator<'a> {
-    pub fn new(prefix: &'a OsStr, suffix: &'a Suffix) -> UResult<Self> {
+    pub fn new(prefix: &'a OsStr, suffix: &'a Suffix) -> Self {
         let radix = suffix.stype.radix();
         let number = if suffix.auto_widening {
             Number::DynamicWidth(DynamicWidthNumber::new(radix, suffix.start))
         } else {
             Number::FixedWidth(
-                FixedWidthNumber::new(radix, suffix.length, suffix.start).map_err(|_| {
-                    USimpleError::new(
-                        1,
-                        translate!("split-error-numerical-suffix-start-too-large"),
-                    )
-                })?,
+                FixedWidthNumber::new(radix, suffix.length, suffix.start)
+                    .expect("the suffix start value is checked when the suffix is parsed"),
             )
         };
         let additional_suffix = &suffix.additional;
 
-        Ok(FilenameIterator {
+        FilenameIterator {
             prefix,
             additional_suffix,
             number,
             first_iteration: true,
-        })
+        }
     }
 }
 
@@ -363,6 +370,7 @@ mod tests {
     use crate::filenames::FilenameIterator;
     use crate::filenames::Suffix;
     use crate::filenames::SuffixType;
+    use crate::number::FixedWidthNumber;
 
     #[test]
     fn test_filename_iterator_alphabetic_fixed_width() {
@@ -373,12 +381,12 @@ mod tests {
             auto_widening: false,
             additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.next().unwrap(), "chunk_aa.txt");
         assert_eq!(it.next().unwrap(), "chunk_ab.txt");
         assert_eq!(it.next().unwrap(), "chunk_ac.txt");
 
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.nth(26 * 26 - 1).unwrap(), "chunk_zz.txt");
         assert_eq!(it.next(), None);
     }
@@ -392,12 +400,12 @@ mod tests {
             auto_widening: false,
             additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.next().unwrap(), "chunk_00.txt");
         assert_eq!(it.next().unwrap(), "chunk_01.txt");
         assert_eq!(it.next().unwrap(), "chunk_02.txt");
 
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.nth(10 * 10 - 1).unwrap(), "chunk_99.txt");
         assert_eq!(it.next(), None);
     }
@@ -411,12 +419,12 @@ mod tests {
             auto_widening: true,
             additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.next().unwrap(), "chunk_aa.txt");
         assert_eq!(it.next().unwrap(), "chunk_ab.txt");
         assert_eq!(it.next().unwrap(), "chunk_ac.txt");
 
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.nth(26 * 25 - 1).unwrap(), "chunk_yz.txt");
         assert_eq!(it.next().unwrap(), "chunk_zaaa.txt");
         assert_eq!(it.next().unwrap(), "chunk_zaab.txt");
@@ -431,12 +439,12 @@ mod tests {
             auto_widening: true,
             additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.next().unwrap(), "chunk_00.txt");
         assert_eq!(it.next().unwrap(), "chunk_01.txt");
         assert_eq!(it.next().unwrap(), "chunk_02.txt");
 
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.nth(10 * 9 - 1).unwrap(), "chunk_89.txt");
         assert_eq!(it.next().unwrap(), "chunk_9000.txt");
         assert_eq!(it.next().unwrap(), "chunk_9001.txt");
@@ -451,7 +459,7 @@ mod tests {
             auto_widening: true,
             additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.next().unwrap(), "chunk_05.txt");
         assert_eq!(it.next().unwrap(), "chunk_06.txt");
         assert_eq!(it.next().unwrap(), "chunk_07.txt");
@@ -466,7 +474,7 @@ mod tests {
             auto_widening: true,
             additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.next().unwrap(), "chunk_09.txt");
         assert_eq!(it.next().unwrap(), "chunk_0a.txt");
         assert_eq!(it.next().unwrap(), "chunk_0b.txt");
@@ -481,19 +489,11 @@ mod tests {
             auto_widening: false,
             additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.next().unwrap(), "chunk_999.txt");
         assert!(it.next().is_none());
 
-        let suffix = Suffix {
-            stype: SuffixType::Decimal,
-            length: 3,
-            start: 1000,
-            auto_widening: false,
-            additional: ".txt".into(),
-        };
-        let it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
-        assert!(it.is_err());
+        assert!(FixedWidthNumber::new(10, 3, 1000).is_err());
 
         let suffix = Suffix {
             stype: SuffixType::Hexadecimal,
@@ -502,19 +502,11 @@ mod tests {
             auto_widening: false,
             additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.next().unwrap(), "chunk_fff.txt");
         assert!(it.next().is_none());
 
-        let suffix = Suffix {
-            stype: SuffixType::Hexadecimal,
-            length: 3,
-            start: 0x1000,
-            auto_widening: false,
-            additional: ".txt".into(),
-        };
-        let it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
-        assert!(it.is_err());
+        assert!(FixedWidthNumber::new(16, 3, 0x1000).is_err());
     }
     #[test]
     #[cfg(unix)]
@@ -530,8 +522,7 @@ mod tests {
             additional: std::ffi::OsString::from_vec(vec![0xFE]),
         };
 
-        let mut it = FilenameIterator::new(OsStr::from_bytes(b"p\xFF"), &suffix)
-            .expect("valid fixed-width filename iterator");
+        let mut it = FilenameIterator::new(OsStr::from_bytes(b"p\xFF"), &suffix);
         assert_eq!(
             it.next().expect("first chunk filename exists").into_vec(),
             b"p\xFFaa\xFE".to_vec()

@@ -10,6 +10,7 @@ join-help-a = also print unpairable lines from file FILENUM, where
 join-help-v = like -a FILENUM, but suppress joined output lines
 join-help-e = replace missing input fields with EMPTY
 join-help-i = ignore differences in case when comparing fields
+join-help-n = compare join fields by numerical value, as 'sort -n' does
 join-help-j = equivalent to '-1 FIELD -2 FIELD'
 join-help-o = obey FORMAT while constructing output line
 join-help-t = use CHAR as input and output field separator
@@ -34,6 +35,7 @@ join-error-missing-operand-after = missing operand after { $file }
 join-error-extra-operand = extra operand { $operand }
 join-error-invalid-field-number = invalid field number: { $value }
 join-error-incompatible-fields = incompatible join fields { $field1 }, { $field2 }
+join-error-conflicting-empty-field = conflicting empty-field replacement strings
 join-error-not-sorted = { $file }:{ $line_num }: is not sorted: { $content }
 join-error-input-not-sorted = input is not in sorted order
 

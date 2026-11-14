@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) gpghome
+// spell-checker:ignore (words) gpghome EILSEQ
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -118,8 +118,8 @@ fn test_mktemp_mktemp() {
         .fails();
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mktemp_mktemp_t() {
     let scene = TestScenario::new(util_name!());
 
@@ -400,8 +400,8 @@ fn test_mktemp_suffix() {
         .fails();
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mktemp_tmpdir() {
     let scene = TestScenario::new(util_name!());
     let dir = tempdir().unwrap();
@@ -464,8 +464,8 @@ fn test_mktemp_tmpdir() {
         .fails();
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mktemp_empty_tmpdir() {
     let scene = TestScenario::new(util_name!());
     let pathname = scene.fixtures.as_string();
@@ -485,8 +485,8 @@ fn test_mktemp_empty_tmpdir() {
     assert!(result.stdout_str().trim().starts_with(&pathname));
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mktemp_tmpdir_one_arg() {
     let scene = TestScenario::new(util_name!());
 
@@ -499,8 +499,8 @@ fn test_mktemp_tmpdir_one_arg() {
     assert!(PathBuf::from(result.stdout_str().trim()).is_file());
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mktemp_directory_tmpdir() {
     let scene = TestScenario::new(util_name!());
 
@@ -604,12 +604,8 @@ fn test_respect_template_directory() {
 }
 
 #[cfg(unix)]
+#[uutests::wasi_ignore(PathCreateDirectoryNoModeParam)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: path_create_directory has no mode parameter and chmod returns ENOSYS, \
-              so directories can't be created with restricted permissions"
-)]
 fn test_directory_permissions() {
     let (at, mut ucmd) = at_and_ucmd!();
     let result = ucmd.args(&["-d", "XXX"]).succeeds();
@@ -879,8 +875,8 @@ fn test_nonexistent_tmpdir_env_var() {
     }
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_empty_tmpdir_env_var() {
     #[cfg(not(any(windows, target_os = "android")))]
     {
@@ -937,6 +933,31 @@ fn test_empty_tmpdir_env_var() {
     }
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
+#[cfg(not(any(windows, target_os = "android")))]
+fn test_empty_tmpdir_env_var_with_template() {
+    for args in [
+        &["-t", "fooXXX"][..],
+        &["-d", "-t", "fooXXX"],
+        &["--tmpdir", "fooXXX"],
+    ] {
+        let result = new_ucmd!().env(TMPDIR, "").args(args).succeeds();
+        let path = result.stdout_str().trim_end();
+        assert!(path.starts_with("/tmp/foo"), "{args:?}: {path}");
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    let dir = at.plus_as_string("d");
+    let result = ucmd
+        .env(TMPDIR, "")
+        .args(&["-p", &dir, "-t", "fooXXX"])
+        .succeeds();
+    let path = result.stdout_str().trim_end();
+    assert!(path.starts_with(&format!("{dir}/foo")), "{path}");
+}
+
 #[test]
 fn test_nonexistent_dir_prefix() {
     #[cfg(not(windows))]
@@ -978,14 +999,14 @@ fn test_nonexistent_dir_prefix() {
     }
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_default_missing_value() {
     new_ucmd!().arg("-d").arg("--tmpdir").succeeds();
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_default_issue_4821_t_tmpdir() {
     let scene = TestScenario::new(util_name!());
     let pathname = scene.fixtures.as_string();
@@ -1000,8 +1021,8 @@ fn test_default_issue_4821_t_tmpdir() {
     assert!(stdout.contains(&pathname));
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_default_issue_4821_t_tmpdir_p() {
     let scene = TestScenario::new(util_name!());
     let pathname = scene.fixtures.as_string();
@@ -1017,8 +1038,8 @@ fn test_default_issue_4821_t_tmpdir_p() {
     assert!(stdout.contains(&pathname));
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_t_ensure_tmpdir_has_higher_priority_than_p() {
     let scene = TestScenario::new(util_name!());
     let pathname = scene.fixtures.as_string();
@@ -1114,24 +1135,70 @@ fn test_missing_short_tmpdir_flag() {
         .stderr_contains("a value is required for '-p <DIR>' but none was supplied");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
-fn test_non_utf8_template() {
+fn test_non_utf8_template_too_few_xs() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
 
-    let ts = TestScenario::new(util_name!());
-
-    // Test that mktemp gracefully handles non-UTF-8 templates with an error instead of panicking
-    let template = OsStr::from_bytes(b"test_\xFF\xFE_XXXXXX");
-
-    ts.ucmd().arg(template).fails().stderr_contains("invalid");
+    new_ucmd!()
+        .arg(OsStr::from_bytes(b"test_\xff_XX"))
+        .fails_with_code(1)
+        .stderr_only("mktemp: too few X's in template $'test_\\xFF_XX'\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
+#[cfg(unix)]
+#[rstest::rstest]
+#[case(b"test_\xff_XXXXXX", b"test_\xff_", b"")]
+#[case(b"XXXXXX_\xfe", b"", b"_\xfe")]
+#[case(b"test_\xff_XXXXXX_\xfe", b"test_\xff_", b"_\xfe")]
+fn test_non_utf8_template(
+    #[case] template: &[u8],
+    #[case] prefix: &[u8],
+    #[case] suffix: &[u8],
+    #[values(&[][..], &["-d"][..], &["-u"][..], &["-t"][..])] flags: &[&str],
+) {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd
+        .env("TMPDIR", at.as_string())
+        .args(flags)
+        .arg(OsStr::from_bytes(template))
+        .run();
+    // Apple filesystems reject non-UTF-8 names, but dry runs can print them.
+    if cfg!(target_vendor = "apple") && !flags.contains(&"-u") {
+        result
+            .code_is(1)
+            .no_stdout()
+            .stderr_contains(std::io::Error::from_raw_os_error(libc::EILSEQ).to_string());
+        return;
+    }
+    result.success().no_stderr();
+
+    let output = result.stdout().strip_suffix(b"\n").unwrap();
+    let path = at.plus(OsStr::from_bytes(output));
+    let filename = path.file_name().unwrap().as_bytes();
+    assert!(filename.starts_with(prefix));
+    assert!(filename.ends_with(suffix));
+    let random = &filename[prefix.len()..filename.len() - suffix.len()];
+    assert_eq!(random.len(), 6);
+    assert!(random.iter().all(u8::is_ascii_alphanumeric));
+    if flags.contains(&"-u") {
+        assert!(!path.exists());
+    } else if flags.contains(&"-d") {
+        assert!(path.is_dir());
+    } else {
+        assert!(path.is_file());
+    }
+}
+
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
 fn test_non_utf8_tmpdir_path() {
     use std::os::unix::ffi::OsStrExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1144,9 +1211,9 @@ fn test_non_utf8_tmpdir_path() {
     ucmd.arg("-p").arg(at.plus(dir_name)).succeeds();
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
 fn test_non_utf8_tmpdir_long_option() {
     use std::os::unix::ffi::OsStrExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1164,30 +1231,47 @@ fn test_non_utf8_tmpdir_long_option() {
         .succeeds();
 }
 
-#[test]
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
+#[rstest::rstest]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
-fn test_invalid_utf8_suffix() {
+fn test_invalid_utf8_suffix(#[values(false, true)] dry_run: bool) {
     use std::os::unix::ffi::OsStrExt;
     let (at, mut ucmd) = at_and_ucmd!();
 
     // Create invalid UTF-8 bytes for suffix
-    // Test mktemp with bad unicode characters
     let invalid_utf8 = std::ffi::OsStr::from_bytes(b"\xC3|\xED\xBA\xAD");
 
-    // Test that mktemp handles invalid UTF-8 in suffix gracefully
-    // It should succeed and create a file with the lossy conversion of the invalid UTF-8
-    ucmd.arg("-p")
+    if dry_run {
+        ucmd.arg("-u");
+    }
+    let result = ucmd
+        .arg("-p")
         .arg(at.as_string())
         .arg("--suffix")
         .arg(invalid_utf8)
         .arg("tmpXXXXXX")
-        .succeeds();
+        .run();
+    if cfg!(target_vendor = "apple") && !dry_run {
+        result
+            .code_is(1)
+            .no_stdout()
+            .stderr_contains(std::io::Error::from_raw_os_error(libc::EILSEQ).to_string());
+        return;
+    }
+    result.success().no_stderr();
+    let path = result.stdout().strip_suffix(b"\n").unwrap();
+    assert!(path.ends_with(invalid_utf8.as_bytes()));
+    let path = std::path::Path::new(std::ffi::OsStr::from_bytes(path));
+    if dry_run {
+        assert!(!path.exists());
+    } else {
+        assert!(path.is_file());
+    }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
 fn test_non_utf8_tmpdir_directory_creation() {
     use std::os::unix::ffi::OsStrExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1202,9 +1286,9 @@ fn test_non_utf8_tmpdir_directory_creation() {
     ucmd.arg("-d").arg("-p").arg(at.plus(dir_name)).succeeds();
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mktemp_hidden_file_single_dot() {
     let scene = TestScenario::new(util_name!());
     let dir = tempdir().unwrap();

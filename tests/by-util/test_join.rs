@@ -11,8 +11,11 @@ use std::fs::OpenOptions;
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 #[cfg(windows)]
 use std::{ffi::OsString, os::windows::ffi::OsStringExt};
+use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util::is_locale_available;
 use uutests::util_name;
 
 #[test]
@@ -68,7 +71,7 @@ fn only_whitespace_separators_merge() {
         .arg("-")
         .pipe_in(" a  ,c ")
         .succeeds()
-        .stdout_only("a ,,,b ,c \n");
+        .stdout_only("a ,,,b ,c\n");
 
     new_ucmd!()
         .arg("contiguous_separators.txt")
@@ -199,6 +202,124 @@ fn case_insensitive() {
         .arg("-i")
         .succeeds()
         .stdout_only_fixture("case_insensitive.expected");
+}
+
+#[test]
+fn case_insensitive_prints_each_lines_own_key() {
+    // Keys that differ only in case form one group with -i, but each output
+    // line still shows the key from its own file1 line.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "b z\n");
+    ucmd.args(&["-i", "-", "f"])
+        .pipe_in("B x\nb y\n")
+        .succeeds()
+        .stdout_only("B x z\nb y z\n");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "B\n");
+    ucmd.args(&["-i", "-o", "0", "-", "f"])
+        .pipe_in("B\nb\n")
+        .succeeds()
+        .stdout_only("B\nb\n");
+}
+
+#[test]
+fn case_insensitive_matches_sort_f_order() {
+    // `sort -f` folds to upper case, so `_` sorts after letters.
+    let scene = TestScenario::new(util_name!());
+    scene
+        .fixtures
+        .write("requested", "svcabc mallory\nsvc_backup mallory\n");
+    scene.fixtures.write("reserved", "SVC_BACKUP\n");
+    scene
+        .ucmd()
+        .args(&["-i", "-v", "1", "requested", "reserved"])
+        .succeeds()
+        .stdout_only("svcabc mallory\n");
+    scene
+        .ucmd()
+        .args(&["-i", "requested", "reserved"])
+        .succeeds()
+        .stdout_only("svc_backup mallory\n");
+}
+
+#[test]
+fn numeric_sort() {
+    // Input sorted with `sort -n`: keys are compared by value, so `01` pairs with `1`.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "-3.5 w\n01 x\n2 y\n10 z\n");
+    ucmd.args(&["--numeric-sort", "--check-order", "-", "f"])
+        .pipe_in("-3.50 v\n1 a\n2 b\n9 c\n10 d\n")
+        .succeeds()
+        .stdout_only("-3.50 v w\n1 a x\n2 b y\n10 d z\n");
+}
+
+#[test]
+fn numeric_sort_missing_and_empty_fields_are_zero() {
+    // `sort -n -k2` puts a missing or empty key between -1 and 1, like 0.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "x -1\ny 0\nz 1\n");
+    ucmd.args(&["-n", "-1", "2", "-2", "2", "--check-order", "-", "f"])
+        .pipe_in("a -1\nb\nc 1\n")
+        .succeeds()
+        .stdout_only("-1 a x\n b y\n1 c z\n");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "x,-1\ny,0\nz,1\n");
+    ucmd.args(&[
+        "-n",
+        "-t",
+        ",",
+        "-1",
+        "2",
+        "-2",
+        "2",
+        "--check-order",
+        "-",
+        "f",
+    ])
+    .pipe_in("a,-1\nb,\nc\nd,1\n")
+    .succeeds()
+    .stdout_only("-1,a,x\n,b,y\n,c,y\n1,d,z\n");
+}
+
+#[test]
+fn numeric_sort_non_numeric_keys_are_zero() {
+    // Like `sort -n`, keys that are not numbers compare equal to each other and to 0.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "0 p\nfoo q\n");
+    ucmd.args(&["-n", "-", "f"])
+        .pipe_in("abc x\n")
+        .succeeds()
+        .stdout_only("abc x p\nabc x q\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn numeric_sort_locale_decimal_point() {
+    let locale = "fr_FR.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // With ',' as the decimal point, 1,5 and 1,7 differ; in the C locale both would be 1.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "1,7 x\n2,50 y\n");
+    ucmd.env("LC_ALL", locale)
+        .args(&["-n", "--check-order", "-", "f"])
+        .pipe_in("1,5 a\n2,5 b\n")
+        .succeeds()
+        .stdout_only("2,5 b y\n");
+}
+
+#[test]
+fn numeric_sort_lexicographic_input_is_unsorted() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "1\n10\n2\n");
+    ucmd.args(&["-n", "--check-order", "-", "f"])
+        .pipe_in("1\n2\n10\n")
+        .fails_with_code(1)
+        .stdout_is("1\n")
+        .stderr_is("join: f:3: is not sorted: 2\n");
 }
 
 #[test]
@@ -463,6 +584,56 @@ fn empty_fields_kept_without_empty_filler() {
 }
 
 #[test]
+fn trailing_blanks_do_not_end_a_field() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // Like leading blanks, trailing blanks are not followed by an empty field.
+    at.write("a", "1 a \n2 b\t\n");
+    at.write("b", "1 x\n2 y  \n");
+
+    ts.ucmd()
+        .args(&["a", "b"])
+        .succeeds()
+        .stdout_only("1 a x\n2 b y\n");
+
+    ts.ucmd()
+        .args(&["-o", "auto", "-e", "X", "a", "b"])
+        .succeeds()
+        .stdout_only("1 a x\n2 b y\n");
+
+    // With -z, newline is a blank too, so one at the end of a line is dropped.
+    at.write("z1", "1 a\n\x002 b\n");
+    at.write("z2", "1 x\x002 y\n");
+
+    ts.ucmd()
+        .args(&["-z", "-o", "auto", "-e", "X", "z1", "z2"])
+        .succeeds()
+        .stdout_only("1 a x\x002 b y\x00");
+}
+
+#[test]
+fn repeated_empty_filler() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("a", "1 a\n2 b\n");
+    at.write("b", "1 c\n");
+
+    // -e may be given more than once with the same string.
+    ts.ucmd()
+        .args(&["-a1", "-e", "d", "-e", "d", "-o", "1.1,1.2,2.2", "a", "b"])
+        .succeeds()
+        .stdout_only("1 a c\n2 b d\n");
+
+    // Different strings conflict.
+    ts.ucmd()
+        .args(&["-a1", "-e", "d", "-e", "e", "-o", "1.1,1.2,2.2", "a", "b"])
+        .fails_with_code(1)
+        .stderr_only("join: conflicting empty-field replacement strings\n");
+}
+
+#[test]
 fn nocheck_order() {
     new_ucmd!()
         .arg("fields_1.txt")
@@ -570,6 +741,7 @@ fn non_line_feeds() {
         .stdout_only_fixture("non-line_feeds.expected");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 fn non_unicode() {
     new_ucmd!()
@@ -644,6 +816,7 @@ fn null_line_endings() {
         .stdout_only_fixture("z.expected");
 }
 
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn test_full() {
@@ -656,6 +829,7 @@ fn test_full() {
         .stderr_contains("No space left on device");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_join_non_utf8_paths() {
@@ -703,6 +877,7 @@ fn join_emoji_delim_inner_key() {
         .stdout_only("b🗿a🗿u\n");
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[cfg(unix)]
 #[test]
 fn test_locale_collation() {
@@ -722,6 +897,7 @@ fn test_locale_collation() {
         .stdout_contains("ab:d 1 x");
 }
 
+#[uutests::wasi_ignore(Usize32BitOverflow)]
 #[test]
 fn test_incompatible_fields_reports_exact_field_number() {
     // An out-of-range field clamps to usize::MAX, which used to overflow the
@@ -860,4 +1036,76 @@ fn test_operand_count() {
         .fails_with_code(1)
         .stderr_contains("join: extra operand 'fields_3.txt'\n")
         .stderr_contains("--help");
+}
+
+#[test]
+fn test_missing_key_is_empty_key() {
+    // Like `sort -k`, a line too short to have the join field has an empty key.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("short", "x,\ny\nbob,1002\n");
+    at.write("keys", "1002\n");
+    ts.ucmd()
+        .args(&["-t", ",", "-1", "2", "--check-order", "short", "keys"])
+        .succeeds()
+        .stdout_only("1002,bob\n");
+
+    // ...and pairs with lines whose join field is empty.
+    ts.ucmd()
+        .args(&["-t", ",", "-j", "2", "short", "short"])
+        .succeeds()
+        .stdout_only(",x,x\n,x,y\n,y,x\n,y,y\n1002,bob,bob\n");
+
+    // Same with the default blank separator and a trailing blank.
+    at.write("blank", "a \nb\nbob 1002\n");
+    ts.ucmd()
+        .args(&["-1", "2", "--check-order", "blank", "keys"])
+        .succeeds()
+        .stdout_only("1002 bob\n");
+}
+
+#[test]
+fn test_last_of_check_order_nocheck_order_wins() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("a.txt", "b\na\n");
+    scene
+        .ucmd()
+        .args(&["--check-order", "--nocheck-order", "a.txt", "a.txt"])
+        .succeeds()
+        .stdout_is("b\na\n");
+
+    // The other order: --check-order wins and the unsorted input is reported.
+    scene
+        .ucmd()
+        .args(&["--nocheck-order", "--check-order", "a.txt", "a.txt"])
+        .fails_with_code(1)
+        .stderr_is("join: a.txt:2: is not sorted: a\n");
+}
+
+#[test]
+fn test_o_separate_field_operands() {
+    // GNU accepts -o fields as separate argv words when they follow -o.
+    new_ucmd!()
+        .args(&["-o", "1.1", "1.2", "2.2", "fields_1.txt", "fields_2.txt"])
+        .succeeds()
+        .stdout_only("1  a\n2  b\n3  c\n5  e\n8  h\n");
+}
+
+#[test]
+fn test_o_separate_fields_leave_two_files() {
+    // Files whose names look like field specs are still FILE1 and FILE2.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("2.1", "id lhs\n");
+    at.write("1.3", "id rhs\n");
+    ucmd.args(&["-o", "1.1", "2.2", "1.2", "2.1", "1.3"])
+        .succeeds()
+        .stdout_only("id rhs lhs\n");
+
+    new_ucmd!()
+        .args(&["-o", "0", "1.2", "1.3", "9.9"])
+        .fails_with_code(1)
+        .no_stdout()
+        // Windows quotes the name differently, so only check the operand is reported.
+        .stderr_contains("1.3")
+        .stderr_contains("No such file or directory");
 }

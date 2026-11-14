@@ -5,6 +5,7 @@
 
 // spell-checker:ignore regfile parentdir
 
+use rstest::rstest;
 use uutests::util::{TestScenario, get_root_path};
 use uutests::{at_and_ucmd, new_ucmd, path_concat, util_name};
 
@@ -33,7 +34,7 @@ fn test_resolve() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("foo");
-    at.symlink_file("foo", "bar");
+    at.relative_symlink_file("foo", "bar");
 
     ucmd.arg("bar").succeeds().stdout_contains("foo\n");
 }
@@ -80,6 +81,38 @@ fn test_canonicalize_existing_keeps_going_after_a_missing_operand() {
     assert_eq!(actual, expect);
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
+#[rstest]
+#[case::canonicalize("-f")]
+#[case::canonicalize_existing("-e")]
+#[case::canonicalize_missing("-m")]
+fn test_canonicalize_empty_operand(#[case] mode: &str) {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    let dir = path_concat!(at.root_dir_resolved(), "dir") + "\n";
+
+    // An empty operand is a missing file, not the current directory, and
+    // does not stop the operands after it.
+    scene
+        .ucmd()
+        .args(&[mode, "", "dir"])
+        .fails_with_code(1)
+        .stdout_is(&dir)
+        .no_stderr();
+
+    let result = scene
+        .ucmd()
+        .args(&["-v", mode, "", "dir"])
+        .fails_with_code(1);
+    result.stdout_is(&dir);
+    #[cfg(not(windows))]
+    result.stderr_is("readlink: '': No such file or directory\n");
+    #[cfg(windows)]
+    result.stderr_contains("readlink: '': ");
+}
+
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 fn test_canonicalize() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -90,6 +123,7 @@ fn test_canonicalize() {
     assert_eq!(actual, expect);
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 fn test_canonicalize_existing() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -100,6 +134,7 @@ fn test_canonicalize_existing() {
     assert_eq!(actual, expect);
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 fn test_canonicalize_missing() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -110,6 +145,7 @@ fn test_canonicalize_missing() {
     assert_eq!(actual, expect);
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 #[cfg(unix)]
 fn test_canonicalize_symlink_before_parentdir() {
@@ -125,6 +161,7 @@ fn test_canonicalize_symlink_before_parentdir() {
     assert_eq!(actual, expect);
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 fn test_long_redirection_to_current_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -486,6 +523,7 @@ fn test_delimiters() {
         .stdout_is("/a\n/a\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_readlink_non_utf8_paths() {

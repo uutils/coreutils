@@ -8,7 +8,7 @@
 use crate::text;
 use std::ffi::OsStr;
 use std::fs::{File, Metadata};
-use std::io::{Seek, SeekFrom};
+use std::io::{self, Seek, SeekFrom, Write, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(not(target_os = "wasi"))]
@@ -88,7 +88,7 @@ impl Input {
                     use std::os::unix::ffi::OsStrExt;
 
                     // /dev/fd/0 cannot be canonicalized on macOS; query the descriptor instead.
-                    let path = rustix::fs::getpath(std::io::stdin()).ok()?;
+                    let path = rustix::fs::getpath(io::stdin()).ok()?;
                     Path::new(OsStr::from_bytes(path.to_bytes()))
                         .canonicalize()
                         .ok()
@@ -112,7 +112,7 @@ fn resolve_stdin_path() -> Option<PathBuf> {
     use windows_sys::Win32::Foundation::MAX_PATH;
     use windows_sys::Win32::Storage::FileSystem::{FILE_NAME_OPENED, GetFinalPathNameByHandleW};
 
-    let handle = std::io::stdin().lock().as_raw_handle();
+    let handle = io::stdin().lock().as_raw_handle();
     if handle.is_null() {
         return None;
     }
@@ -158,20 +158,23 @@ impl HeaderPrinter {
         }
     }
 
-    pub fn print_input(&mut self, input: &Input) {
-        self.print(input.display_name.as_str());
+    pub fn print_input(&mut self, input: &Input) -> io::Result<()> {
+        self.print(input.display_name.as_str())
     }
 
-    pub fn print(&mut self, string: &str) {
+    pub fn print(&mut self, string: &str) -> io::Result<()> {
         if self.verbose {
-            println!(
+            writeln!(
+                stdout().lock(),
                 "{}==> {} <==",
                 if self.first_header { "" } else { "\n" },
                 // GNU quotes the name shown in the header when it needs it.
                 locale_aware_shell_escape(string),
-            );
+            )?;
             self.first_header = false;
         }
+
+        Ok(())
     }
 }
 pub trait FileExtTail {

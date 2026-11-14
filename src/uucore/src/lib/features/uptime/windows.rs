@@ -11,10 +11,10 @@
 
 use super::UptimeError;
 use crate::error::UResult;
-use libc::time_t;
 use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt;
 use std::ptr;
+use std::time::Duration;
 use windows_sys::Win32::System::RemoteDesktop::{
     WTS_CURRENT_SERVER_HANDLE, WTS_SESSION_INFOW, WTSEnumerateSessionsW, WTSFreeMemory,
     WTSQuerySessionInformationW, WTSUserName,
@@ -24,18 +24,18 @@ use windows_sys::Win32::System::RemoteDesktop::{
 ///
 /// # Arguments
 ///
-/// boot_time will be ignored, pass None.
+/// `boot_time` will be ignored, pass None.
 ///
 /// # Returns
 ///
-/// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
+/// Returns a `UResult` with the elapsed duration since boot if successful, otherwise an `UptimeError`.
 #[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
-pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
+pub fn get_uptime(_boot_time: Option<i64>) -> UResult<Duration> {
     // GetTickCount64 (unlike GetTickCount) does not wrap after 49.7 days.
     use windows_sys::Win32::System::SystemInformation::GetTickCount64;
     // SAFETY: no preconditions; always returns milliseconds since boot
     let uptime = unsafe { GetTickCount64() };
-    Ok((uptime / 1000) as i64)
+    Ok(Duration::from_millis(uptime))
 }
 
 /// Owns a WTS-allocated buffer, freeing it on every exit path.
@@ -148,7 +148,7 @@ pub(crate) fn default_nusers() -> usize {
 ///
 /// # Returns
 ///
-/// Returns a UResult with an UptimeError.
+/// Returns a `UResult` with an `UptimeError`.
 pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
     Err(UptimeError::WindowsLoadavg)?
 }

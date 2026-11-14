@@ -9,6 +9,7 @@
 //! (`GetTickCount64`).
 
 use clap::{ArgMatches, Command};
+use std::time::Duration;
 use uucore::error::UResult;
 use uucore::uptime::get_uptime;
 
@@ -22,7 +23,7 @@ pub(crate) fn maybe_uptime_from_file(_matches: &ArgMatches) -> Option<UResult<()
     None
 }
 
-/// The system uptime in seconds, for `--since`.
-pub(crate) fn system_uptime_seconds() -> UResult<i64> {
+/// The elapsed duration since boot, for `--since`.
+pub(crate) fn system_uptime() -> UResult<Duration> {
     get_uptime(None)
 }

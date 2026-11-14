@@ -51,7 +51,7 @@ pr-help-page-width =
                   tronquer les lignes, sauf si l'option -J est définie, aucune interférence
                   avec -S ou -s
 pr-help-across =
-  Modifier l'effet de l'option - colonne pour que les colonnes soient remplies
+  Modifier l'effet de l'option -COLONNE pour que les colonnes soient remplies
                   à travers la page dans un ordre round-robin (par exemple, quand colonne est 2,
                   la première ligne d'entrée va en tête de colonne 1, la seconde va en tête de colonne 2,
                   la troisième est la seconde ligne en colonne 1, et ainsi de suite).
@@ -99,7 +99,20 @@ pr-error-socket-not-supported = pr : impossible d'ouvrir {$file}, Opération non
 pr-error-no-such-file = pr : impossible d'ouvrir {$file}, Aucun fichier ou répertoire de ce type
 pr-error-column-merge-conflict = impossible de spécifier le nombre de colonnes lors de l'impression en parallèle
 pr-error-across-merge-conflict = impossible de spécifier à la fois l'impression transversale et l'impression en parallèle
-pr-error-invalid-pages-range = argument --pages invalide '{$start}:{$end}'
+pr-error-invalid-pages-range = plage de pages invalide {$range}
+pr-error-invalid-pages-argument = argument {$option} invalide {$spec}
+pr-error-invalid-pages-suffix = suffixe invalide dans l'argument {$option} {$spec}
+pr-error-pages-argument-too-large = argument {$option} {$spec} trop grand
+pr-error-invalid-page-length = '-l PAGE_LENGTH' nombre de lignes invalide
+pr-error-invalid-column-width = '-w PAGE_WIDTH' nombre de caractères invalide
+pr-error-invalid-page-width = '-W PAGE_WIDTH' nombre de caractères invalide
+pr-error-invalid-first-line-number = '-N NUMBER' numéro de ligne de départ invalide
+pr-error-invalid-number-of-columns = nombre de colonnes invalide
+pr-error-invalid-line-offset = '-o MARGIN' décalage de ligne invalide
+pr-error-invalid-value = {$message} : {$value}
+pr-error-value-too-large = {$message} : {$value} : Valeur trop grande pour le type de données défini
+pr-error-value-out-of-range = {$message} : {$value} : Résultat numérique hors limites
 pr-error-starting-page-exceeds-page-count = le numéro de page de début {$start} dépasse le nombre de pages {$count}
-pr-error-invalid-expand-tab-argument = Caractères supplémentaires ou nombre invalide dans l'argument de '-e': '{$arg}'
-pr-error-invalid-number-argument = Caractères supplémentaires ou nombre invalide dans l'argument de '-n': '{$arg}'
+pr-error-integer-overflow = dépassement de capacité d'entier
+pr-error-invalid-expand-tab-argument = Caractères supplémentaires ou nombre invalide dans l'argument de '-e': {$arg}
+pr-error-invalid-number-argument = Caractères supplémentaires ou nombre invalide dans l'argument de '-n': {$arg}

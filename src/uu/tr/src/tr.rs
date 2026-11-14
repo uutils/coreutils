@@ -15,6 +15,8 @@ use operation::{
 };
 use simd::process_input;
 use std::ffi::OsString;
+#[cfg(not(any(unix, target_os = "wasi")))]
+use std::io::Write;
 use std::io::{stdin, stdout};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
@@ -23,10 +25,12 @@ use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, show};
 
 mod options {
+    pub const ASCII: &str = "ascii";
     pub const COMPLEMENT: &str = "complement";
     pub const DELETE: &str = "delete";
     pub const SQUEEZE: &str = "squeeze-repeats";
     pub const TRUNCATE_SET1: &str = "truncate-set1";
+    pub const UNBUFFERED: &str = "unbuffered";
     pub const SETS: &str = "sets";
 }
 
@@ -99,10 +103,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut locked_stdin = stdin.lock();
     // Write straight to the file descriptor: `Stdout` is line buffered, which
     // costs a search for the last newline and an extra write per chunk.
+    // Every chunk is written as soon as it is translated, so `-u` has nothing
+    // left to do here.
     #[cfg(any(unix, target_os = "wasi"))]
     let mut output = uucore::io::RawWriter(stdout());
     #[cfg(not(any(unix, target_os = "wasi")))]
-    let mut output = stdout().lock();
+    let mut output = FlushEachChunk {
+        inner: stdout().lock(),
+        enabled: matches.get_flag(options::UNBUFFERED),
+    };
 
     // According to the man page: translating only happens if deleting or if a second set is given
     let translating = !delete_flag && sets.len() > 1;
@@ -161,6 +170,33 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
+/// `Stdout` holds back what follows the last newline; with `-u`, flush it
+/// after every chunk so that a partial line is not held back either.
+#[cfg(not(any(unix, target_os = "wasi")))]
+struct FlushEachChunk<W: Write> {
+    inner: W,
+    enabled: bool,
+}
+
+#[cfg(not(any(unix, target_os = "wasi")))]
+impl<W: Write> Write for FlushEachChunk<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.inner.write(buf)
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        self.inner.write_all(buf)?;
+        if self.enabled {
+            self.inner.flush()?;
+        }
+        Ok(())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
 pub fn uu_app() -> Command {
     Command::new("tr")
         .version(uucore::crate_version!())
@@ -170,6 +206,15 @@ pub fn uu_app() -> Command {
         .after_help(translate!("tr-after-help"))
         .infer_long_args(true)
         .trailing_var_arg(true)
+        .arg(
+            // GNU's undocumented -A acts like LC_ALL=C. Our classes are
+            // ASCII-only anyway, so there is nothing to switch.
+            Arg::new(options::ASCII)
+                .short('A')
+                .hide(true)
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::ASCII),
+        )
         .arg(
             Arg::new(options::COMPLEMENT)
                 .visible_short_alias('C')
@@ -202,6 +247,13 @@ pub fn uu_app() -> Command {
                 .help(translate!("tr-help-truncate-set1"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::TRUNCATE_SET1),
+        )
+        .arg(
+            Arg::new(options::UNBUFFERED)
+                .short('u')
+                .hide(true)
+                .help(translate!("tr-help-unbuffered"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SETS)

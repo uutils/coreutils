@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+#![cfg(all(unix, not(target_os = "redox")))]
+
 #[cfg(unix)]
 use std::fs::File;
 #[cfg(unix)]
@@ -47,6 +49,9 @@ fn run_more_with_pty(
 fn quit_more(controller: &mut File, mut child: uutests::util::UChild) {
     controller.write_all(b"q").unwrap();
     child.delay(50);
+    // Not all options quit on `q` here, and a `more` left behind spins once
+    // its terminal hangs up.
+    child.kill();
 }
 
 #[cfg(unix)]
@@ -110,9 +115,7 @@ fn test_alive(args: &[&str]) {
 
     assert!(child.is_alive(), "Command should still be alive");
 
-    // cleanup
-    controller.write_all(b"q").unwrap();
-    child.delay(50);
+    quit_more(&mut controller, child);
 }
 
 #[test]
@@ -207,7 +210,7 @@ fn test_more_non_utf8_paths() {
     let file_name = std::ffi::OsStr::from_bytes(b"test_\xFF\xFE.txt");
     // Create test file with normal name first
     at.write(
-        &file_name.to_string_lossy(),
+        file_name.to_string_lossy().to_string(),
         "test content for non-UTF-8 file",
     );
 

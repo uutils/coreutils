@@ -3,26 +3,22 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore readelf memfd Memfd fexecve
+// spell-checker:ignore readelf
 
 use uutests::util::TestScenario;
 
 #[cfg(unix)]
 use std::os::unix::fs::symlink as symlink_file;
 
-use std::env;
-pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
-
-// Set the environment variable for any tests
-
 // Use the ctor attribute to run this function before any tests
 #[ctor::ctor(unsafe)]
 fn init() {
-    unsafe {
-        env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
-    }
+    uutests::util::set_default_tests_binary("coreutils");
     // Print for debugging
-    eprintln!("Setting UUTESTS_BINARY_PATH={TESTS_BINARY}");
+    eprintln!(
+        "UUTESTS_BINARY_PATH={}",
+        uutests::util::try_get_tests_binary().unwrap_or("<not found>")
+    );
 }
 
 #[test]
@@ -73,16 +69,49 @@ fn binary_name_execfn_fallback() {
     assert!(res1 && res2);
 }
 
-#[test]
-fn test_coreutils_help_ignore_args() {
+#[rstest::rstest]
+fn test_coreutils_help_ignore_args(#[values("--h", "--he", "--hel", "--help", "-h")] flag: &str) {
     let scenario = TestScenario::new("help_ignoring_args");
     let output = std::process::Command::new(&scenario.bin_path)
-        .arg("--help")
+        .arg(flag)
         .arg("---")
         .output()
         .unwrap();
 
     assert_eq!(output.status.code(), Some(0));
+    assert!(output.stderr.is_empty());
+    assert!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("(multi-call binary)")
+    );
+}
+
+#[rstest::rstest]
+fn test_coreutils_help_near_misses(#[values("--", "--hell", "--helps", "--helpless")] flag: &str) {
+    let scenario = TestScenario::new("invalid_help");
+    let output = std::process::Command::new(&scenario.bin_path)
+        .arg(flag)
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains(&format!("unrecognized option '{flag}'"))
+    );
+}
+
+#[test]
+#[cfg(feature = "echo")]
+fn test_coreutils_help_argument_is_forwarded() {
+    TestScenario::new("echo")
+        .ucmd()
+        .arg("--hel")
+        .succeeds()
+        .stdout_only("--hel\n");
 }
 
 #[test]
@@ -263,7 +292,7 @@ fn util_version() {
         assert_eq!(output.status.code(), Some(0));
         assert_eq!(output.stderr, b"");
         let output_str = String::from_utf8(output.stdout).unwrap();
-        let ver = env::var("CARGO_PKG_VERSION").unwrap();
+        let ver = env!("CARGO_PKG_VERSION");
         assert_eq!(format!("coreutils {ver} (multi-call binary)\n"), output_str);
     }
 }
@@ -307,4 +336,68 @@ fn test_sorted_utils() {
     )
     .unwrap();
     assert!(out.lines().filter(|s| !s.is_empty()).is_sorted());
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu", feature = "echo"))]
+#[rstest::rstest]
+#[case::relative_target_absolute_alias(false, false, false)]
+#[case::relative_target_path_lookup(false, true, false)]
+#[case::absolute_target_absolute_alias(true, false, false)]
+#[case::absolute_target_path_lookup(true, true, false)]
+#[case::relative_target_without_path(false, false, true)]
+fn test_utility_alias_symlink_chain(
+    #[case] absolute_target: bool,
+    #[case] path_lookup: bool,
+    #[case] unset_path: bool,
+) {
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+    let scene = TestScenario::new("alias");
+    let at = &scene.fixtures;
+    at.mkdir("bin");
+    symlink_file(&scene.bin_path, at.plus("bin/echo")).unwrap();
+    let target = if absolute_target {
+        at.plus("bin/echo")
+    } else {
+        std::path::PathBuf::from("bin/echo")
+    };
+    symlink_file(target, at.plus("dummy")).unwrap();
+    let binary = if path_lookup {
+        std::path::PathBuf::from("dummy")
+    } else {
+        at.plus("dummy")
+    };
+    let mut command = Command::new(binary);
+    command.args(["hello", "world"]).current_dir(at.plus("bin"));
+    if unset_path {
+        command.arg0("dummy").env_remove("PATH");
+    } else {
+        command.env("PATH", at.root_dir_resolved());
+    }
+    let output = command.output().unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(output.stdout, b"hello world\n");
+    assert!(output.stderr.is_empty());
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[rstest::rstest]
+#[case::direct(false)]
+#[case::chain(true)]
+fn test_utility_alias_rejects_unknown_target(#[case] chain: bool) {
+    let scene = TestScenario::new("alias");
+    let at = &scene.fixtures;
+    let target = if chain {
+        symlink_file(&scene.bin_path, at.plus("foo")).unwrap();
+        at.plus("foo")
+    } else {
+        scene.bin_path.clone()
+    };
+    symlink_file(target, at.plus("dummy")).unwrap();
+    let output = std::process::Command::new(at.plus("dummy"))
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(output.stderr, b"coreutils: unknown program 'dummy'\n");
 }

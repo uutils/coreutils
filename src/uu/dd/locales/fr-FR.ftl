@@ -10,7 +10,7 @@ dd-after-help = Opérandes :
       - ibs=N : la taille du tampon utilisé pour les lectures (par défaut : 512)
       - if=FICHIER : le fichier utilisé pour l'entrée. Quand non spécifié, stdin est utilisé à la place
       - iflag=INDICATEURS : une liste séparée par des virgules d'indicateurs d'entrée qui spécifient comment la source d'entrée est traitée. INDICATEURS peut être n'importe lequel des indicateurs d'entrée ou indicateurs généraux spécifiés ci-dessous.
-      - skip=N (ou iseek=N) : ignorer N enregistrements de taille ibs dans l'entrée avant de commencer les opérations de copie/conversion. Voir iflag=seek_bytes si la recherche de N octets est préférée.
+      - skip=N (ou iseek=N) : ignorer N enregistrements de taille ibs dans l'entrée avant de commencer les opérations de copie/conversion. Voir iflag=skip_bytes si la recherche de N octets est préférée.
       - obs=N : la taille du tampon utilisé pour les écritures (par défaut : 512)
       - of=FICHIER : le fichier utilisé pour la sortie. Quand non spécifié, stdout est utilisé à la place
       - oflag=INDICATEURS : liste séparée par des virgules d'indicateurs de sortie qui spécifient comment la source de sortie est traitée. INDICATEURS peut être n'importe lequel des indicateurs de sortie ou indicateurs généraux spécifiés ci-dessous
@@ -73,7 +73,7 @@ dd-after-help = Opérandes :
     - noatime : ne pas mettre à jour l'heure d'accès.
     - nocache : demander au système d'exploitation de supprimer le cache.
     - noctty : ne pas assigner un tty de contrôle.
-    - nofollow : ne pas suivre les liens système.
+    - nofollow : ne pas suivre les liens symboliques.
 
 # Common strings
 dd-standard-input = 'entrée standard'
@@ -83,6 +83,7 @@ dd-standard-output = 'sortie standard'
 dd-error-failed-to-open = échec de l'ouverture de { $path }
 dd-error-write-error = erreur d'écriture
 dd-error-failed-to-seek = échec de la recherche dans le fichier de sortie
+dd-error-failed-to-truncate = échec de la troncature à { $size } octets du fichier de sortie { $file }
 dd-error-io-error = erreur E/S
 dd-error-cannot-skip-offset = '{ $file }' : impossible d'ignorer jusqu'au décalage spécifié
 dd-error-cannot-skip-invalid = '{ $file }' : impossible d'ignorer : Argument invalide
@@ -101,7 +102,6 @@ dd-error-invalid-output-flag = indicateur de sortie invalide : '{ $flag }'
 dd-error-conv-flag-no-match = conversion invalide : '{ $flag }'
 dd-error-multiplier-parse-failure = nombre invalide : '{ $input }'
 dd-error-multiplier-overflow = La chaîne de multiplicateur déborderait sur le système actuel -> { $input }
-dd-error-block-without-cbs = conv=block ou conv=unblock spécifié sans cbs=N
 dd-error-status-not-recognized = niveau d'état invalide : '{ $level }'
 dd-error-unimplemented = fonctionnalité non implémentée sur ce système -> { $feature }
 dd-error-bs-out-of-range = { $param }=N ne peut pas tenir en mémoire

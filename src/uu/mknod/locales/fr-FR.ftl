@@ -20,9 +20,9 @@ mknod-after-help = Les arguments obligatoires pour les options longues le sont a
 mknod-help-mode = définir les bits de permission de fichier à MODE, pas a=rw - umask
 mknod-help-name = nom du nouveau fichier
 mknod-help-type = type du nouveau fichier (b, c, u ou p)
-mknod-help-major = type de fichier majeur
-mknod-help-minor = type de fichier mineur
-mknod-help-selinux = définir le contexte de sécurité SELinux de chaque répertoire créé au type par défaut
+mknod-help-major = numéro de périphérique majeur
+mknod-help-minor = numéro de périphérique mineur
+mknod-help-selinux = définir le contexte de sécurité SELinux du fichier créé au type par défaut
 mknod-help-context = comme -Z, ou si CTX est spécifié, définir le contexte de sécurité SELinux ou SMACK à CTX
 
 # Messages d'erreur

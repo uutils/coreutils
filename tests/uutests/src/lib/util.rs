@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//spell-checker:ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
-//spell-checker:ignore (linux) winsize xpixel ypixel setrlimit Fsize SIGBUS SIGSEGV SIGXFSZ EFBIG sigbus tmpfs mksocket
-//spell-checker:ignore (ToDO) ttyname
+// spell-checker:ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty openpt grantpt unlockpt ptsname tcsetwinsize CLOEXEC RDWR SETFD
+// spell-checker:ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV SIGXFSZ EFBIG sigbus tmpfs mksocket
+// spell-checker:ignore (ToDO) ttyname
 
 #![allow(dead_code)]
 #![allow(
@@ -24,8 +24,8 @@ use nix::sys;
 #[cfg(not(windows))]
 use nix::sys::stat::{self, SFlag};
 use pretty_assertions::assert_eq;
-#[cfg(unix)]
-use rustix::process::{Resource, Rlimit, setrlimit};
+#[cfg(all(unix, not(target_os = "fuchsia")))]
+use rlimit::{Resource, setrlimit};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, VecDeque};
 use std::ffi::{OsStr, OsString};
@@ -43,8 +43,6 @@ use std::os::unix::process::CommandExt;
 use std::os::unix::process::ExitStatusExt;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
-#[cfg(windows)]
-use std::path::MAIN_SEPARATOR_STR;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::rc::Rc;
@@ -68,18 +66,84 @@ static NO_STDIN_MEANINGLESS: &str = "Setting this flag has no effect if there is
 static END_OF_TRANSMISSION_SEQUENCE: &[u8] = b"\n\x04";
 
 static TESTS_BINARY_PATH: OnceLock<PathBuf> = OnceLock::new();
-/// This function needs the env variable UUTESTS_BINARY_PATH
-/// which will very probably be env!("`CARGO_BIN_EXE_<program>`")
-/// because here, we are in a crate but we need the name of the final binary
+static DEFAULT_TESTS_BINARY: OnceLock<&'static str> = OnceLock::new();
+
+/// Path of the binary under test: `UUTESTS_BINARY_PATH` (the `coreutils` binary)
+/// if set, otherwise the default binary registered with [`set_default_tests_binary`].
+///
+/// # Panics
+/// If the binary cannot be found or its path is not valid UTF-8, see
+/// [`try_get_tests_binary`] to avoid this.
 pub fn get_tests_binary() -> &'static str {
-    TESTS_BINARY_PATH.get_or_init(|| {
-        if let Ok(path) = env::var("UUTESTS_BINARY_PATH") {
-            return PathBuf::from(path);
-        }
-        panic!("Could not determine coreutils binary path. Please set UUTESTS_BINARY_PATH environment variable");
+    try_get_tests_binary().unwrap_or_else(|| {
+        let name = DEFAULT_TESTS_BINARY.get().copied().unwrap_or("coreutils");
+        panic!(
+            "Could not find the {name} binary or its path is not valid UTF-8. \
+             Please set UUTESTS_BINARY_PATH to the path of coreutils"
+        )
     })
-    .to_str()
-    .unwrap()
+}
+
+/// Same as [`get_tests_binary`], but returns `None` instead of panicking.
+pub fn try_get_tests_binary() -> Option<&'static str> {
+    if TESTS_BINARY_PATH.get().is_none() {
+        let _ = TESTS_BINARY_PATH.set(find_tests_binary()?);
+    }
+    TESTS_BINARY_PATH.get()?.to_str()
+}
+
+fn find_tests_binary() -> Option<PathBuf> {
+    find_binary(DEFAULT_TESTS_BINARY.get().copied().unwrap_or("coreutils"))
+}
+
+/// Find the binary `name` (e.g. `coreutils` or `uudoc`) the same way as
+/// [`get_tests_binary`], the other binaries being next to `UUTESTS_BINARY_PATH`.
+pub fn find_binary(name: &str) -> Option<PathBuf> {
+    resolve_tests_binary(
+        name,
+        env::var_os("UUTESTS_BINARY_PATH"),
+        env::var_os(format!("CARGO_BIN_EXE_{name}")),
+        env::current_exe().ok(),
+    )
+}
+
+/// Set the binary to test (default: `coreutils`), resolved by [`get_tests_binary`].
+pub fn set_default_tests_binary(name: &'static str) {
+    let _ = DEFAULT_TESTS_BINARY.set(name);
+}
+
+/// Find the binary `name`, given the values of `UUTESTS_BINARY_PATH`,
+/// `CARGO_BIN_EXE_<name>` (which cargo sets at runtime since 1.94, MSRV is
+/// 1.88) and the path of the test executable. Without those, look next to the
+/// `deps` directory of the test executable, where cargo puts the binary.
+fn resolve_tests_binary(
+    name: &str,
+    override_path: Option<OsString>,
+    cargo_exe: Option<OsString>,
+    current_exe: Option<PathBuf>,
+) -> Option<PathBuf> {
+    let file_name = format!("{name}{}", env::consts::EXE_SUFFIX);
+    if let Some(path) = override_path {
+        let path = PathBuf::from(path);
+        if name == "coreutils" {
+            return Some(path);
+        }
+        // UUTESTS_BINARY_PATH is the coreutils binary, the other binaries
+        // are installed next to it
+        if let Some(dir) = path.parent() {
+            return Some(dir.join(file_name));
+        }
+    }
+    if let Some(path) = cargo_exe {
+        return Some(PathBuf::from(path));
+    }
+    let mut path = current_exe?;
+    path.pop();
+    if path.ends_with("deps") {
+        path.pop();
+    }
+    path.push(file_name);
+    path.is_file().then_some(path)
 }
 
 #[macro_export]
@@ -89,7 +153,19 @@ macro_rules! get_tests_binary {
     };
 }
 
-pub const PATH: &str = env!("PATH");
+/// The `PATH` to use when running commands with a cleared environment
+///
+/// This is the `PATH` of the process running the tests, read at runtime.
+/// It must not be read at compile time (`env!("PATH")`): with `cargo test`
+/// both happen in the same shell so the values are identical, but when the
+/// test binaries are built separately from where they are run (e.g.
+/// `cargo test --no-run` in a build sandbox, or cross-compiling), a
+/// compile-time value would embed the build machine's `PATH` in the binaries.
+/// That breaks reproducible builds and points at directories that may not
+/// exist on the machine running the tests.
+pub fn path() -> OsString {
+    env::var_os("PATH").unwrap_or_default()
+}
 
 /// Default environment variables to run the commands with
 const DEFAULT_ENV: [(&str, &str); 2] = [("LC_ALL", "C"), ("TZ", "UTC")];
@@ -546,7 +622,7 @@ impl CmdResult {
     /// but you might find yourself using this function if
     /// 1.  you can not know exactly what stderr will be or
     /// 2.  you know that stderr will also be empty
-    ///     new_ucmd!()
+    ///     `new_ucmd!()`
     ///
     /// # Examples
     ///
@@ -968,8 +1044,8 @@ impl CmdResult {
     }
 }
 
-pub fn log_info<T: AsRef<str>, U: AsRef<str>>(msg: T, par: U) {
-    println!("{}: {}", msg.as_ref(), par.as_ref());
+pub fn log_info<T: AsRef<str>, U: std::fmt::Display>(msg: T, par: U) {
+    println!("{}: {par}", msg.as_ref());
 }
 
 pub fn recursive_copy(src: &Path, dest: &Path) -> Result<()> {
@@ -1005,18 +1081,17 @@ pub fn get_root_path() -> &'static str {
     target_os = "android",
     target_os = "netbsd"
 ))]
-pub fn compare_xattrs<P: AsRef<Path>>(path1: P, path2: P) -> bool {
-    let get_sorted_xattrs = |path: P| {
-        xattr::list(path)
-            .map(|attrs| {
-                let mut attrs = attrs.collect::<Vec<_>>();
-                attrs.sort();
-                attrs
-            })
-            .unwrap_or_default()
+pub fn compare_xattrs<P1: AsRef<Path>, P2: AsRef<Path>>(path1: P1, path2: P2) -> bool {
+    let get_sorted_xattrs = |list: Result<xattr::XAttrs>| {
+        list.map(|attrs| {
+            let mut attrs = attrs.collect::<Vec<_>>();
+            attrs.sort();
+            attrs
+        })
+        .unwrap_or_default()
     };
 
-    get_sorted_xattrs(path1) == get_sorted_xattrs(path2)
+    get_sorted_xattrs(xattr::list(path1)) == get_sorted_xattrs(xattr::list(path2))
 }
 
 /// Object-oriented path struct that represents and operates on
@@ -1038,17 +1113,16 @@ impl AtPath {
     }
 
     pub fn plus<P: AsRef<Path>>(&self, name: P) -> PathBuf {
-        let mut pathbuf = self.subdir.clone();
-        pathbuf.push(name);
-        pathbuf
+        let pathbuf = self.subdir.clone();
+        pathbuf.join(name)
     }
 
     pub fn plus_as_string<P: AsRef<Path>>(&self, name: P) -> String {
         self.plus(name).display().to_string()
     }
 
-    fn minus(&self, name: &str) -> PathBuf {
-        let prefixed = PathBuf::from(name);
+    fn minus<P: AsRef<Path>>(&self, name: P) -> PathBuf {
+        let prefixed = name.as_ref().to_path_buf();
         if prefixed.starts_with(&self.subdir) {
             let mut unprefixed = PathBuf::new();
             for component in prefixed.components().skip(self.subdir.components().count()) {
@@ -1060,86 +1134,80 @@ impl AtPath {
         }
     }
 
-    pub fn minus_as_string(&self, name: &str) -> String {
+    pub fn minus_as_string<P: AsRef<Path>>(&self, name: P) -> String {
         String::from(self.minus(name).to_str().unwrap())
     }
 
-    pub fn set_readonly(&self, name: &str) {
-        let metadata = fs::metadata(self.plus(name)).unwrap();
+    pub fn set_readonly<P: AsRef<Path>>(&self, name: P) {
+        let metadata = fs::metadata(self.plus(&name)).unwrap();
         let mut permissions = metadata.permissions();
         permissions.set_readonly(true);
         fs::set_permissions(self.plus(name), permissions).unwrap();
     }
 
-    pub fn open(&self, name: &str) -> File {
-        log_info("open", self.plus_as_string(name));
-        File::open(self.plus(name)).unwrap()
+    pub fn open<P: AsRef<Path>>(&self, name: P) -> File {
+        let path = self.plus(name);
+        log_info("open", path.display());
+        File::open(path).unwrap()
     }
 
-    pub fn read(&self, name: &str) -> String {
-        let mut f = self.open(name);
-        let mut contents = String::new();
-        f.read_to_string(&mut contents)
-            .unwrap_or_else(|e| panic!("Couldn't read {name}: {e}"));
-        contents
+    pub fn read<P: AsRef<Path>>(&self, name: P) -> String {
+        String::from_utf8(self.read_bytes(&name))
+            .unwrap_or_else(|e| panic!("Couldn't decode {} as UTF-8: {e}", name.as_ref().display()))
     }
 
-    pub fn read_bytes(&self, name: &str) -> Vec<u8> {
+    pub fn read_bytes<P: AsRef<Path>>(&self, name: P) -> Vec<u8> {
+        let name = name.as_ref();
         let mut f = self.open(name);
         let mut contents = Vec::new();
         f.read_to_end(&mut contents)
-            .unwrap_or_else(|e| panic!("Couldn't read {name}: {e}"));
+            .unwrap_or_else(|e| panic!("Couldn't read {}: {e}", name.display()));
         contents
     }
 
-    pub fn write(&self, name: &str, contents: &str) {
-        log_info("write(default)", self.plus_as_string(name));
-        fs::write(self.plus(name), contents)
-            .unwrap_or_else(|e| panic!("Couldn't write {name}: {e}"));
+    pub fn write<P: AsRef<Path>>(&self, name: P, contents: &str) {
+        self.write_bytes(name, contents.as_bytes());
     }
 
-    pub fn write_bytes(&self, name: &str, contents: &[u8]) {
-        log_info("write(default)", self.plus_as_string(name));
-        fs::write(self.plus(name), contents)
-            .unwrap_or_else(|e| panic!("Couldn't write {name}: {e}"));
+    pub fn write_bytes<P: AsRef<Path>>(&self, name: P, contents: &[u8]) {
+        let path = self.plus(&name);
+        log_info("write(default)", path.display());
+        fs::write(path, contents)
+            .unwrap_or_else(|e| panic!("Couldn't write {}: {e}", name.as_ref().display()));
     }
 
-    pub fn append(&self, name: impl AsRef<Path>, contents: &str) {
-        let name = name.as_ref();
-        log_info("write(append)", self.plus_as_string(name));
+    pub fn append<P: AsRef<Path>>(&self, name: P, contents: &str) {
+        self.append_bytes(name, contents.as_bytes());
+    }
+
+    pub fn append_bytes<P: AsRef<Path>>(&self, name: P, contents: &[u8]) {
+        let path = self.plus(&name);
+        log_info("write(append)", path.display());
         let mut f = OpenOptions::new()
             .append(true)
             .create(true)
-            .open(self.plus(name))
+            .open(path)
             .unwrap();
-        f.write_all(contents.as_bytes())
-            .unwrap_or_else(|e| panic!("Couldn't write(append) {}: {e}", name.display()));
+        f.write_all(contents).unwrap_or_else(|e| {
+            panic!("Couldn't write(append) to {}: {e}", name.as_ref().display())
+        });
     }
 
-    pub fn append_bytes(&self, name: &str, contents: &[u8]) {
-        log_info("write(append)", self.plus_as_string(name));
-        let mut f = OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(self.plus(name))
-            .unwrap();
-        f.write_all(contents)
-            .unwrap_or_else(|e| panic!("Couldn't write(append) to {name}: {e}"));
-    }
-
-    pub fn truncate(&self, name: &str, contents: &str) {
-        log_info("write(truncate)", self.plus_as_string(name));
+    pub fn truncate<P: AsRef<Path>>(&self, name: P, contents: &str) {
+        let path = self.plus(name.as_ref());
+        log_info("write(truncate)", path.display());
         let mut f = OpenOptions::new()
             .write(true)
             .truncate(true)
             .create(true)
-            .open(self.plus(name))
+            .open(path)
             .unwrap();
-        f.write_all(contents.as_bytes())
-            .unwrap_or_else(|e| panic!("Couldn't write(truncate) {name}: {e}"));
+        f.write_all(contents.as_bytes()).unwrap_or_else(|e| {
+            panic!("Couldn't write(truncate) {}: {e}", name.as_ref().display())
+        });
     }
 
-    pub fn rename(&self, source: &str, target: &str) {
+    pub fn rename<P1: AsRef<Path>, P2: AsRef<Path>>(&self, source: P1, target: P2) {
         let source = self.plus(source);
         let target = self.plus(target);
         log_info(
@@ -1155,14 +1223,14 @@ impl AtPath {
         });
     }
 
-    pub fn remove(&self, source: &str) {
+    pub fn remove<P: AsRef<Path>>(&self, source: P) {
         let source = self.plus(source);
         log_info("remove", format!("{}", source.display()));
         remove_file(&source)
             .unwrap_or_else(|e| panic!("Couldn't remove {}: {e}", source.display()));
     }
 
-    pub fn copy(&self, source: &str, target: &str) {
+    pub fn copy<P1: AsRef<Path>, P2: AsRef<Path>>(&self, source: P1, target: P2) {
         let source = self.plus(source);
         let target = self.plus(target);
         log_info("copy", format!("{} {}", source.display(), target.display()));
@@ -1175,180 +1243,153 @@ impl AtPath {
         });
     }
 
-    pub fn rmdir(&self, dir: &str) {
-        log_info("rmdir", self.plus_as_string(dir));
-        fs::remove_dir(self.plus(dir)).unwrap();
+    pub fn rmdir<P: AsRef<Path>>(&self, dir: P) {
+        let path = self.plus(dir);
+        log_info("rmdir", path.display());
+        fs::remove_dir(path).unwrap();
     }
 
     pub fn mkdir<P: AsRef<Path>>(&self, dir: P) {
-        let dir = dir.as_ref();
-        log_info("mkdir", self.plus_as_string(dir));
-        fs::create_dir(self.plus(dir)).unwrap();
+        let path = self.plus(dir);
+        log_info("mkdir", path.display());
+        fs::create_dir(path).unwrap();
     }
 
-    pub fn mkdir_all(&self, dir: &str) {
-        log_info("mkdir_all", self.plus_as_string(dir));
-        fs::create_dir_all(self.plus(dir)).unwrap();
+    pub fn mkdir_all<P: AsRef<Path>>(&self, dir: P) {
+        let path = self.plus(dir);
+        log_info("mkdir_all", path.display());
+        fs::create_dir_all(path).unwrap();
     }
 
-    pub fn make_file(&self, name: &str) -> File {
-        match File::create(self.plus(name)) {
-            Ok(f) => f,
-            Err(e) => panic!("{e}"),
-        }
+    pub fn make_file<P: AsRef<Path>>(&self, name: P) -> File {
+        let name = name.as_ref();
+        File::create(self.plus(name))
+            .unwrap_or_else(|e| panic!("Couldn't create file {}: {e}", name.display()))
     }
 
     pub fn touch<P: AsRef<Path>>(&self, file: P) {
-        let file = file.as_ref();
-        log_info("touch", self.plus_as_string(file));
-        File::create(self.plus(file)).unwrap();
+        log_info("touch", self.plus(&file).display());
+        let _ = self.make_file(file);
     }
 
     #[cfg(not(windows))]
-    pub fn mkfifo(&self, fifo: &str) {
+    pub fn mkfifo<P: AsRef<Path>>(&self, fifo: P) {
         // rustix::fs::mkfifoat is linux only
         use nix::sys::stat::Mode;
-        let full_path = self.plus_as_string(fifo);
-        log_info("mkfifo", &full_path);
+        let path = self.plus(fifo);
+        log_info("mkfifo", path.display());
 
         let mode = Mode::S_IRUSR | Mode::S_IWUSR;
-        nix::unistd::mkfifo(Path::new(&full_path), mode).expect("mkfifo failed");
+        nix::unistd::mkfifo(&path, mode).expect("mkfifo failed");
     }
 
     #[cfg(unix)]
-    pub fn mksocket(&self, socket: &str) {
-        let full_path = self.plus_as_string(socket);
-        log_info("mksocket", &full_path);
-        UnixListener::bind(full_path).expect("Socket file creation failed.");
+    pub fn mksocket<P: AsRef<Path>>(&self, socket: P) {
+        let path = self.plus(socket);
+        log_info("mksocket", path.display());
+        UnixListener::bind(path).expect("Socket file creation failed.");
     }
 
     #[cfg(not(windows))]
-    pub fn is_fifo(&self, fifo: &str) -> bool {
+    pub fn is_fifo<P: AsRef<Path>>(&self, fifo: P) -> bool {
         stat::stat(&self.plus(fifo))
             .is_ok_and(|s| SFlag::from_bits_truncate(s.st_mode).contains(SFlag::S_IFIFO))
     }
 
     #[cfg(not(windows))]
-    pub fn is_char_device(&self, char_dev: &str) -> bool {
+    pub fn is_char_device<P: AsRef<Path>>(&self, char_dev: P) -> bool {
         stat::stat(&self.plus(char_dev))
             .is_ok_and(|s| SFlag::from_bits_truncate(s.st_mode).contains(SFlag::S_IFCHR))
     }
 
-    pub fn hard_link(&self, original: &str, link: &str) {
+    pub fn hard_link<P1: AsRef<Path>, P2: AsRef<Path>>(&self, original: P1, link: P2) {
+        let original = self.plus(original);
+        let link = self.plus(link);
         log_info(
             "hard_link",
-            format!(
-                "{},{}",
-                self.plus_as_string(original),
-                self.plus_as_string(link)
-            ),
+            format!("{},{}", original.display(), link.display()),
         );
-        hard_link(self.plus(original), self.plus(link)).unwrap();
+        hard_link(original, link).unwrap();
     }
 
-    pub fn symlink_file(&self, original: &str, link: &str) {
+    fn symlink_inner(&self, original: &Path, link: &Path) {
         log_info(
             "symlink",
-            format!(
-                "{},{}",
-                self.plus_as_string(original),
-                self.plus_as_string(link)
-            ),
+            format!("{},{}", original.display(), link.display()),
         );
-        symlink_file(self.plus(original), self.plus(link)).unwrap();
+        symlink_file(original, link).unwrap();
     }
 
-    pub fn relative_symlink_file(&self, original: &str, link: &str) {
+    pub fn symlink_file<P1: AsRef<Path>, P2: AsRef<Path>>(&self, original: P1, link: P2) {
+        self.symlink_inner(self.plus(original).as_ref(), self.plus(link).as_ref());
+    }
+
+    pub fn relative_symlink_file<P1: AsRef<Path>, P2: AsRef<Path>>(&self, original: P1, link: P2) {
+        // Windows stores the target verbatim, so use native separators
         #[cfg(windows)]
-        let original = original.replace('/', MAIN_SEPARATOR_STR);
-        log_info(
-            "symlink",
-            format!("{original},{}", self.plus_as_string(link)),
-        );
-        symlink_file(original, self.plus(link)).unwrap();
+        let original: PathBuf = original.as_ref().components().collect();
+        self.symlink_inner(original.as_ref(), self.plus(link).as_ref());
     }
 
-    pub fn symlink_dir(&self, original: &str, link: &str) {
+    fn symlink_dir_inner(&self, original: &Path, link: &Path) {
         log_info(
             "symlink",
-            format!(
-                "{},{}",
-                self.plus_as_string(original),
-                self.plus_as_string(link)
-            ),
+            format!("{},{}", original.display(), link.display()),
         );
-        symlink_dir(self.plus(original), self.plus(link)).unwrap();
+        symlink_dir(original, link).unwrap();
     }
 
-    pub fn relative_symlink_dir(&self, original: &str, link: &str) {
+    pub fn symlink_dir<P1: AsRef<Path>, P2: AsRef<Path>>(&self, original: P1, link: P2) {
+        self.symlink_dir_inner(self.plus(original).as_ref(), self.plus(link).as_ref());
+    }
+
+    pub fn relative_symlink_dir<P1: AsRef<Path>, P2: AsRef<Path>>(&self, original: P1, link: P2) {
+        // Windows stores the target verbatim, so use native separators
         #[cfg(windows)]
-        let original = original.replace('/', MAIN_SEPARATOR_STR);
-        log_info(
-            "symlink",
-            format!("{original},{}", self.plus_as_string(link)),
-        );
-        symlink_dir(original, self.plus(link)).unwrap();
+        let original: PathBuf = original.as_ref().components().collect();
+        self.symlink_dir_inner(original.as_ref(), self.plus(link).as_ref());
     }
 
-    pub fn is_symlink(&self, path: &str) -> bool {
-        log_info("is_symlink", self.plus_as_string(path));
-        match fs::symlink_metadata(self.plus(path)) {
-            Ok(m) => m.file_type().is_symlink(),
-            Err(_) => false,
-        }
+    pub fn is_symlink<P: AsRef<Path>>(&self, path: P) -> bool {
+        let path = self.plus(path);
+        log_info("is_symlink", path.display());
+        fs::symlink_metadata(path).is_ok_and(|m| m.is_symlink())
     }
 
-    pub fn resolve_link(&self, path: &str) -> String {
-        log_info("resolve_link", self.plus_as_string(path));
-        match fs::read_link(self.plus(path)) {
+    pub fn resolve_link<P: AsRef<Path>>(&self, path: P) -> String {
+        let path = self.plus(path);
+        log_info("resolve_link", path.display());
+        match fs::read_link(path) {
             Ok(p) => self.minus_as_string(p.to_str().unwrap()),
             Err(_) => String::new(),
         }
     }
 
-    pub fn read_symlink(&self, path: &str) -> String {
-        log_info("read_symlink", self.plus_as_string(path));
-        fs::read_link(self.plus(path))
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_owned()
+    pub fn read_symlink<P: AsRef<Path>>(&self, path: P) -> String {
+        let path = self.plus(path);
+        log_info("read_symlink", path.display());
+        fs::read_link(path).unwrap().to_str().unwrap().to_owned()
     }
 
-    pub fn symlink_metadata(&self, path: &str) -> fs::Metadata {
-        match fs::symlink_metadata(self.plus(path)) {
-            Ok(m) => m,
-            Err(e) => panic!("{e}"),
-        }
+    pub fn symlink_metadata<P: AsRef<Path>>(&self, path: P) -> fs::Metadata {
+        fs::symlink_metadata(self.plus(path)).unwrap()
     }
 
-    pub fn metadata(&self, path: &str) -> fs::Metadata {
-        match fs::metadata(self.plus(path)) {
-            Ok(m) => m,
-            Err(e) => panic!("{e}"),
-        }
+    pub fn metadata<P: AsRef<Path>>(&self, path: P) -> fs::Metadata {
+        fs::metadata(self.plus(path)).unwrap()
     }
 
     pub fn file_exists<P: AsRef<Path>>(&self, path: P) -> bool {
-        match fs::metadata(self.plus(path)) {
-            Ok(m) => m.is_file(),
-            Err(_) => false,
-        }
+        fs::metadata(self.plus(path)).is_ok_and(|m| m.is_file())
     }
 
     /// Decide whether the named symbolic link exists in the test directory.
     pub fn symlink_exists<P: AsRef<Path>>(&self, path: P) -> bool {
-        match fs::symlink_metadata(self.plus(path)) {
-            Ok(m) => m.file_type().is_symlink(),
-            Err(_) => false,
-        }
+        fs::symlink_metadata(self.plus(path)).is_ok_and(|m| m.is_symlink())
     }
 
     pub fn dir_exists<P: AsRef<Path>>(&self, path: P) -> bool {
-        match fs::metadata(self.plus(path)) {
-            Ok(m) => m.is_dir(),
-            Err(_) => false,
-        }
+        fs::metadata(self.plus(path)).is_ok_and(|m| m.is_dir())
     }
 
     pub fn root_dir_resolved(&self) -> String {
@@ -1392,7 +1433,7 @@ impl AtPath {
     /// This function panics if there is an error loading the metadata
     /// or setting the permissions of the file.
     #[cfg(not(windows))]
-    pub fn set_mode(&self, filename: &str, mode: u32) {
+    pub fn set_mode<P: AsRef<Path>>(&self, filename: P, mode: u32) {
         let path = self.plus(filename);
         let mut perms = fs::metadata(&path).unwrap().permissions();
         perms.set_mode(mode);
@@ -1412,7 +1453,7 @@ pub struct TestScenario {
     pub fixtures: AtPath,
     tmpd: Rc<TempDir>,
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
-    tmp_fs_mountpoint: Option<String>,
+    tmp_fs_mountpoint: Option<OsString>,
 }
 
 impl TestScenario {
@@ -1474,7 +1515,10 @@ impl TestScenario {
 
     /// Mounts a temporary filesystem at the specified mount point.
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
-    pub fn mount_temp_fs(&mut self, mount_point: &str) -> core::result::Result<(), String> {
+    pub fn mount_temp_fs<P: AsRef<Path>>(
+        &mut self,
+        mount_point: P,
+    ) -> core::result::Result<(), String> {
         if self.tmp_fs_mountpoint.is_some() {
             return Err("already mounted".to_string());
         }
@@ -1485,12 +1529,12 @@ impl TestScenario {
             .arg("-o")
             .arg("size=640k") // ought to be enough
             .arg("tmpfs")
-            .arg(mount_point)
+            .arg(mount_point.as_ref())
             .run();
         if !cmd_result.succeeded() {
             return Err(format!("mount failed: {}", cmd_result.stderr_str()));
         }
-        self.tmp_fs_mountpoint = Some(mount_point.to_string());
+        self.tmp_fs_mountpoint = Some(mount_point.as_ref().as_os_str().to_os_string());
         Ok(())
     }
 
@@ -1550,7 +1594,7 @@ pub struct UCommand {
     stdout: Option<Stdio>,
     stderr: Option<Stdio>,
     bytes_into_stdin: Option<Vec<u8>>,
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     limits: Vec<(Resource, u64, u64)>,
     #[cfg(unix)]
     ignore_sigxfsz: bool,
@@ -1715,7 +1759,7 @@ impl UCommand {
         self
     }
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     pub fn limit(&mut self, resource: Resource, soft_limit: u64, hard_limit: u64) -> &mut Self {
         self.limits.push((resource, soft_limit, hard_limit));
         self
@@ -1914,13 +1958,9 @@ impl UCommand {
         // that runner so host-compiled tests can exercise a WASI binary. Only
         // apply to the coreutils binary under test, not to helper commands like
         // sh or seq that should run natively on the host.
-        let wasm_runner = env::var("UUTESTS_WASM_RUNNER").ok().filter(|_| {
-            self.bin_path.as_deref()
-                == env::var("UUTESTS_BINARY_PATH")
-                    .ok()
-                    .map(PathBuf::from)
-                    .as_deref()
-        });
+        let wasm_runner = env::var("UUTESTS_WASM_RUNNER")
+            .ok()
+            .filter(|_| self.bin_path.as_deref() == Some(Path::new(get_tests_binary())));
 
         // Collect environment variables for the command.
         let mut cmd_env: Vec<(OsString, OsString)> = Vec::new();
@@ -2038,7 +2078,11 @@ impl UCommand {
                 let OpenptyResult {
                     slave: pi_slave,
                     master: pi_master,
-                } = nix::pty::openpty(&terminal_size, None).unwrap();
+                } = open_pty(Some(&terminal_size));
+                // Read the echo, as a terminal would. This also keeps the PTY
+                // open until the child closes it, so closing stdin doesn't hang it up.
+                let mut echo = File::from(pi_master.try_clone().unwrap());
+                thread::spawn(move || io::copy(&mut echo, &mut io::sink()));
                 stdin_pty = Some(File::from(pi_master));
                 command.stdin(pi_slave);
             }
@@ -2047,7 +2091,7 @@ impl UCommand {
                 let OpenptyResult {
                     slave: po_slave,
                     master: po_master,
-                } = nix::pty::openpty(&terminal_size, None).unwrap();
+                } = open_pty(Some(&terminal_size));
                 captured_stdout = Self::spawn_reader_thread(
                     captured_stdout,
                     po_master,
@@ -2060,7 +2104,7 @@ impl UCommand {
                 let OpenptyResult {
                     slave: pe_slave,
                     master: pe_master,
-                } = nix::pty::openpty(&terminal_size, None).unwrap();
+                } = open_pty(Some(&terminal_size));
                 captured_stderr = Self::spawn_reader_thread(
                     captured_stderr,
                     pe_master,
@@ -2070,20 +2114,14 @@ impl UCommand {
             }
         }
 
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "fuchsia")))]
         if !self.limits.is_empty() {
             // just to be safe: move a copy of the limits list into the closure.
             // this way the closure is fully self-contained.
             let limits_copy = self.limits.clone();
             let closure = move || -> Result<()> {
                 for &(resource, soft_limit, hard_limit) in &limits_copy {
-                    setrlimit(
-                        resource,
-                        Rlimit {
-                            current: Some(soft_limit),
-                            maximum: Some(hard_limit),
-                        },
-                    )?;
+                    setrlimit(resource, soft_limit, hard_limit)?;
                 }
                 Ok(())
             };
@@ -2980,7 +3018,7 @@ impl UChild {
 
     /// Close the child process stdout.
     ///
-    /// Note this will have no effect if the output was captured with CapturedOutput which is the
+    /// Note this will have no effect if the output was captured with `CapturedOutput` which is the
     /// default if [`UCommand::set_stdout`] wasn't called.
     pub fn close_stdout(&mut self) -> &mut Self {
         self.raw.stdout.take();
@@ -2989,7 +3027,7 @@ impl UChild {
 
     /// Close the child process stderr.
     ///
-    /// Note this will have no effect if the output was captured with CapturedOutput which is the
+    /// Note this will have no effect if the output was captured with `CapturedOutput` which is the
     /// default if [`UCommand::set_stderr`] wasn't called.
     pub fn close_stderr(&mut self) -> &mut Self {
         self.raw.stderr.take();
@@ -3038,6 +3076,63 @@ pub fn whoami() -> String {
         })
 }
 
+/// Open a PTY whose two ends are close-on-exec, so that commands started by
+/// other tests in the meantime don't inherit them.
+#[cfg(all(unix, not(target_os = "redox")))]
+fn open_pty(size: Option<&libc::winsize>) -> OpenptyResult {
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "freebsd",
+        target_os = "netbsd"
+    ))]
+    {
+        use rustix::fs::{Mode, OFlags, open};
+        use rustix::pty::{OpenptFlags, grantpt, openpt, ptsname, unlockpt};
+        use rustix::termios::{Winsize, tcsetwinsize};
+
+        let master =
+            openpt(OpenptFlags::RDWR | OpenptFlags::NOCTTY | OpenptFlags::CLOEXEC).unwrap();
+        grantpt(&master).unwrap();
+        unlockpt(&master).unwrap();
+        let name = ptsname(&master, Vec::new()).unwrap();
+        let slave = open(
+            name,
+            OFlags::RDWR | OFlags::NOCTTY | OFlags::CLOEXEC,
+            Mode::empty(),
+        )
+        .unwrap();
+        if let Some(size) = size {
+            let size = Winsize {
+                ws_row: size.ws_row,
+                ws_col: size.ws_col,
+                ws_xpixel: size.ws_xpixel,
+                ws_ypixel: size.ws_ypixel,
+            };
+            tcsetwinsize(&slave, size).unwrap();
+        }
+        OpenptyResult { master, slave }
+    }
+
+    // Elsewhere a PTY can't be opened close-on-exec, so a command started
+    // between openpty and fcntl can still inherit it.
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "freebsd",
+        target_os = "netbsd"
+    )))]
+    {
+        use nix::fcntl::{FcntlArg, FdFlag, fcntl};
+
+        let pty = nix::pty::openpty(size, None).unwrap();
+        for fd in [&pty.master, &pty.slave] {
+            fcntl(fd, FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC)).unwrap();
+        }
+        pty
+    }
+}
+
 /// Create a PTY (pseudo-terminal) for testing utilities that require a TTY.
 ///
 /// Returns a tuple of (path, controller, replica) where:
@@ -3046,9 +3141,8 @@ pub fn whoami() -> String {
 /// - replica: The replica file
 #[cfg(all(unix, not(target_os = "redox")))]
 pub fn pty_path() -> (String, File, File) {
-    use nix::pty::openpty;
     use nix::unistd::ttyname;
-    let pty = openpty(None, None).expect("Failed to create PTY");
+    let pty = open_pty(None);
     let path = ttyname(&pty.slave)
         .expect("Failed to get PTY path")
         .to_string_lossy()
@@ -3198,7 +3292,7 @@ pub fn gnu_cmd_result(
 
     let result = ts
         .cmd(util_name.as_ref())
-        .env("PATH", PATH)
+        .env("PATH", path())
         .envs(DEFAULT_ENV)
         .envs(envs.iter().copied())
         .args(args)
@@ -3308,7 +3402,7 @@ pub fn run_ucmd_as_root_with_stdin_stdout(
                 // we can run sudo and we're root
                 // run ucmd as root:
                 let mut cmd = ts.cmd("sudo");
-                cmd.env("PATH", PATH)
+                cmd.env("PATH", path())
                     .envs(DEFAULT_ENV)
                     .arg("-E")
                     .arg("--non-interactive")
@@ -3339,6 +3433,67 @@ pub fn run_ucmd_as_root_with_stdin_stdout(
 mod tests {
     // spell-checker:ignore (tests) asdfsadfa
     use super::*;
+
+    #[test]
+    fn test_resolve_tests_binary() {
+        let exe = |name: &str| format!("{name}{}", env::consts::EXE_SUFFIX);
+        let some = |s: &str| Some(OsString::from(s));
+        let dir = tempfile::tempdir().unwrap();
+        let deps = dir.path().join("deps");
+        fs::create_dir(&deps).unwrap();
+        let test_exe = Some(deps.join("test"));
+
+        // Nothing to find
+        std::assert_eq!(
+            resolve_tests_binary("coreutils", None, None, test_exe.clone()),
+            None
+        );
+
+        // Next to the `deps` directory of the test executable, when not run by cargo
+        let coreutils = dir.path().join(exe("coreutils"));
+        fs::write(&coreutils, "").unwrap();
+        std::assert_eq!(
+            resolve_tests_binary("coreutils", None, None, test_exe.clone()),
+            Some(coreutils)
+        );
+        std::assert_eq!(
+            resolve_tests_binary("uudoc", None, None, test_exe.clone()),
+            None
+        );
+
+        // CARGO_BIN_EXE_<name> is used before looking at the test executable
+        std::assert_eq!(
+            resolve_tests_binary(
+                "coreutils",
+                None,
+                some("/cargo/coreutils"),
+                test_exe.clone()
+            ),
+            Some(PathBuf::from("/cargo/coreutils"))
+        );
+
+        // UUTESTS_BINARY_PATH has precedence over the other two
+        std::assert_eq!(
+            resolve_tests_binary(
+                "coreutils",
+                some("/other/coreutils"),
+                some("/cargo/coreutils"),
+                test_exe.clone()
+            ),
+            Some(PathBuf::from("/other/coreutils"))
+        );
+
+        // Other binaries are looked up next to the coreutils from UUTESTS_BINARY_PATH
+        std::assert_eq!(
+            resolve_tests_binary(
+                "uudoc",
+                some("/other/coreutils"),
+                some("/cargo/uudoc"),
+                test_exe
+            ),
+            Some(PathBuf::from("/other").join(exe("uudoc")))
+        );
+    }
 
     // Create a init for the test with a fake value (not needed)
     #[cfg(test)]
@@ -3702,7 +3857,7 @@ mod tests {
             .stdout_is("unlimited\nunlimited\n");
     }
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     #[test]
     fn test_application_of_process_resource_limits_limited_file_size() {
         let unit_size_bytes = if cfg!(target_vendor = "apple") {
@@ -3714,7 +3869,7 @@ mod tests {
         let ts = TestScenario::new("util");
         ts.cmd("sh")
             .args(&["-c", "ulimit -Sf; ulimit -Hf"])
-            .limit(Resource::Fsize, 8 * unit_size_bytes, 16 * unit_size_bytes)
+            .limit(Resource::FSIZE, 8 * unit_size_bytes, 16 * unit_size_bytes)
             .succeeds()
             .no_stderr()
             .stdout_is("8\n16\n");

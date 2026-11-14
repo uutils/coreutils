@@ -39,6 +39,8 @@ use crate::{
 };
 
 pub mod options {
+    use uucore::quoting_style;
+
     pub mod format {
         pub static ONE_LINE: &str = "1";
         pub static LONG: &str = "long";
@@ -97,7 +99,7 @@ pub mod options {
     }
 
     pub static HELP: &str = "help";
-    pub static QUOTING_STYLE: &str = "quoting-style";
+    pub use quoting_style::parser::QUOTING_STYLE;
     pub static HIDE_CONTROL_CHARS: &str = "hide-control-chars";
     pub static SHOW_CONTROL_CHARS: &str = "show-control-chars";
     pub static WIDTH: &str = "width";
@@ -532,7 +534,7 @@ fn extract_quoting_style(
     } else if options.get_flag(options::quoting::ESCAPE) {
         QuotingStyle::Escape
     } else if options.get_flag(options::quoting::C) {
-        QuotingStyle::C_DOUBLE
+        QuotingStyle::C_ALWAYS
     } else {
         // If set, the QUOTING_STYLE environment variable specifies a default style.
         if let Some(qs) = quoting_style_from_env() {

@@ -15,7 +15,7 @@ use std::fs::{File, Metadata};
 use std::io::{BufReader, BufWriter, Seek, Write, stdout};
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
-use uucore::{show_error, translate};
+use uucore::{show_error, translate_text};
 
 /// Data structure to keep a handle on files to follow.
 /// `last` always holds the path/key of the last file that was printed from.
@@ -115,9 +115,15 @@ impl FileHandling {
 
     /// Reopen the file at the monitored `path`
     pub fn update_reader(&mut self, path: &Path) -> UResult<()> {
-        self.get_mut(path)
-            .reader
-            .replace(BufReader::new(File::open(path)?));
+        // A FIFO without a writer blocks `open`, and this runs on the thread that
+        // serves every followed file. Open FIFOs without waiting for a writer.
+        #[cfg(unix)]
+        let file = crate::open_file(path, true)?;
+        #[cfg(not(unix))]
+        let file = File::open(path)?;
+        let data = self.get_mut(path);
+        data.reader.replace(BufReader::new(file));
+        data.symlink = path.is_symlink();
         Ok(())
     }
 
@@ -149,7 +155,7 @@ impl FileHandling {
                 {
                     show_error!(
                         "{}",
-                        translate!("tail-status-file-truncated", "file" => pd.display_name)
+                        translate_text!("tail-status-file-truncated", "file" => pd.display_name)
                     );
                     reader.rewind()?;
                 }
@@ -160,7 +166,7 @@ impl FileHandling {
         if chunks.has_data() {
             if self.needs_header(path, verbose) {
                 let display_name = self.get(path).display_name.clone();
-                self.header_printer.print(display_name.as_str());
+                self.header_printer.print(display_name.as_str())?;
             }
 
             let mut writer = BufWriter::new(stdout().lock());
@@ -197,6 +203,11 @@ pub struct PathData {
     pub reader: Option<BufReader<File>>,
     pub metadata: Option<Metadata>,
     pub display_name: String,
+    /// Whether the path was a symbolic link when it was last opened. Under
+    /// `--follow=name`, a link named on the command line is followed to
+    /// whatever it points at, while a regular file that turns into a link is
+    /// not: its target could be any file.
+    pub symlink: bool,
 }
 
 impl PathData {
@@ -204,11 +215,13 @@ impl PathData {
         reader: Option<BufReader<File>>,
         metadata: Option<Metadata>,
         display_name: &str,
+        symlink: bool,
     ) -> Self {
         Self {
             reader,
             metadata,
             display_name: display_name.to_owned(),
+            symlink,
         }
     }
     pub fn from_other_with_path(data: Self, path: &Path) -> Self {
@@ -229,6 +242,11 @@ impl PathData {
             .as_ref()
             .and_then(|reader| reader.get_ref().metadata().ok())
             .or_else(|| path.metadata().ok());
-        Self::new(reader, metadata, data.display_name.as_str())
+        Self::new(
+            reader,
+            metadata,
+            data.display_name.as_str(),
+            path.is_symlink(),
+        )
     }
 }

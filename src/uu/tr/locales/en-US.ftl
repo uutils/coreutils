@@ -7,6 +7,7 @@ tr-help-complement = use the complement of SET1
 tr-help-delete = delete characters in SET1, do not translate
 tr-help-squeeze = replace each sequence of a repeated character that is listed in the last specified SET, with a single occurrence of that character
 tr-help-truncate-set1 = first truncate SET1 to length of SET2
+tr-help-unbuffered = do not buffer output
 
 # Error messages
 tr-error-missing-operand = missing operand
@@ -31,6 +32,8 @@ tr-error-invalid-char-class = invalid character class { $class }
 tr-error-missing-equivalence-class-char = missing equivalence class character '[==]'
 tr-error-multiple-char-repeat-in-set2 = only one [c*] repeat construct may appear in string2
 tr-error-char-repeat-in-set1 = the [c*] repeat construct may not appear in string1
+tr-error-char-repeat-in-set2-when-not-translating = the [c*] construct may appear in string2 only when translating
+tr-error-equivalence-class-in-set2-when-translating = [=c=] expressions may not appear in string2 when translating
 tr-error-invalid-repeat-count = invalid repeat count { $count } in [c*n] construct
 tr-error-empty-set2-when-not-truncating = when not truncating set1, string2 must be non-empty
 tr-error-class-except-lower-upper-in-set2 = when translating, the only character classes that may appear in set2 are 'upper' and 'lower'

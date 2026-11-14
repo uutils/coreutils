@@ -10,6 +10,7 @@ use crate::{Quotable, parse, platform};
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use std::ffi::OsString;
 use std::io::{IsTerminal, Write};
+use std::num::IntErrorKind;
 use std::time::Duration;
 use uucore::diagnostics::OptionValue;
 use uucore::error::{UResult, USimpleError, UUsageError};
@@ -17,6 +18,7 @@ use uucore::parser::parse_signed_num::{SignPrefix, number_offset, parse_signed_n
 use uucore::parser::parse_size::ParseSizeError;
 use uucore::parser::parse_time;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+use uucore::posix::{MODERN, TRADITIONAL, posix_version};
 use uucore::translate;
 use uucore::{format_usage, show_warning};
 
@@ -261,6 +263,8 @@ impl Settings {
         if let Some(s) = matches.get_one::<String>(options::MAX_UNCHANGED_STATS) {
             settings.max_unchanged_stats = match s.parse::<u32>() {
                 Ok(s) => s,
+                // GNU clamps values that do not fit instead of rejecting them.
+                Err(e) if e.kind() == &IntErrorKind::PosOverflow => u32::MAX,
                 Err(_) => {
                     return Err(UUsageError::new(
                         1,
@@ -389,6 +393,18 @@ impl Settings {
 }
 
 pub fn parse_obsolete(arg: &OsString, input: Option<&OsString>) -> UResult<Option<Settings>> {
+    let posix = posix_version();
+    // A bare `-c` is only obsolete syntax under POSIX 1992; otherwise `-c`
+    // needs a value.
+    if arg == "-c" && posix.is_none_or(|v| v >= TRADITIONAL) {
+        return Ok(None);
+    }
+    // POSIX 2001 has no `+NUM` form, so such an argument is a file name.
+    if arg.as_encoded_bytes().first() == Some(&b'+')
+        && posix.is_some_and(|v| (TRADITIONAL..MODERN).contains(&v))
+    {
+        return Ok(None);
+    }
     match parse::parse_obsolete(arg) {
         Some(Ok(args)) => Ok(Some(Settings::from_obsolete_args(&args, input))),
         None => Ok(None),
@@ -428,13 +444,15 @@ fn parse_num(src: &str) -> Result<Signum, ParseSizeError> {
 pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     let args_vec: Vec<OsString> = args.collect();
     let clap_args = uu_app().try_get_matches_from(args_vec.clone());
+    let mut settings_failed = false;
     let clap_result = match clap_args {
         // Kept for the caret in size diagnostics, which needs the value as
         // typed.
-        Ok(matches) => Ok(Settings::from_with_diagnostics(
+        Ok(matches) => Settings::from_with_diagnostics(
             &matches,
             uucore::diagnostics::capture(&args_vec).as_deref(),
-        )?),
+        )
+        .inspect_err(|_| settings_failed = true),
         Err(err) => Err(err.into()),
     };
 
@@ -465,6 +483,14 @@ pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     if clap_result.is_ok() && possible_obsolete_args.as_encoded_bytes().first() != Some(&b'+') {
         return clap_result;
     }
+    // `tail -cf` is obsolete syntax even though clap reads it as `-c f`,
+    // but in `tail -c f` the separate argument is always the count.
+    // A bare short option such as `-c` is two bytes long: no value is
+    // attached to it, so the value came from the next argument.
+    let no_value_attached = possible_obsolete_args.len() <= "-c".len();
+    if settings_failed && no_value_attached {
+        return clap_result;
+    }
     match parse_obsolete(possible_obsolete_args, args_vec.get(2))? {
         Some(settings) => Ok(settings),
         None => clap_result,
@@ -491,6 +517,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::BYTES)
                 .short('c')
                 .long(options::BYTES)
+                .value_name("[+]NUM")
                 .allow_hyphen_values(true)
                 .overrides_with_all([options::BYTES, options::LINES])
                 .help(translate!("tail-help-bytes")),
@@ -510,6 +537,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::LINES)
                 .short('n')
                 .long(options::LINES)
+                .value_name("[+]NUM")
                 .allow_hyphen_values(true)
                 .overrides_with_all([options::BYTES, options::LINES])
                 .help(translate!("tail-help-lines")),

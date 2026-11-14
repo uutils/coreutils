@@ -425,9 +425,13 @@ fn maybe_flush_unbroken_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResul
     }
 
     // Write raw bytes without inserting a newline; folding will continue
-    // based on updated column tracking in the caller.
-    ctx.writer.write_all(ctx.output)?;
-    ctx.output.clear();
+    // based on updated column tracking in the caller. Keep the last byte
+    // buffered: callers take a non-empty buffer to mean that the current
+    // line has started, and decide whether a tab or wide character folds
+    // on that.
+    let keep = ctx.output.len() - 1;
+    ctx.writer.write_all(&ctx.output[..keep])?;
+    ctx.output.drain(..keep);
     Ok(())
 }
 
@@ -444,6 +448,18 @@ fn push_bytes<W: Write>(ctx: &mut FoldContext<'_, W>, bytes: &[u8]) -> UResult<(
     }
     ctx.output.extend_from_slice(bytes);
     maybe_flush_unbroken_output(ctx)
+}
+
+fn advance_tab<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
+    loop {
+        let next_stop = next_tab_stop(*ctx.col_count);
+        if next_stop > ctx.width && !ctx.output.is_empty() {
+            emit_output(ctx)?;
+            continue;
+        }
+        *ctx.col_count = next_stop;
+        return Ok(());
+    }
 }
 
 fn process_ascii_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UResult<()> {
@@ -468,15 +484,7 @@ fn process_ascii_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UR
                 idx += 1;
             }
             TAB => {
-                loop {
-                    let next_stop = next_tab_stop(*ctx.col_count);
-                    if next_stop > ctx.width && !ctx.output.is_empty() {
-                        emit_output(ctx)?;
-                        continue;
-                    }
-                    *ctx.col_count = next_stop;
-                    break;
-                }
+                advance_tab(ctx)?;
                 if ctx.spaces {
                     *ctx.last_space = Some(ctx.output.len());
                 } else {
@@ -569,6 +577,12 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
     let mut iter = line.char_indices().peekable();
 
     while let Some((byte_idx, ch)) = iter.next() {
+        if ch == '\n' {
+            *ctx.last_space = None;
+            emit_output(ctx)?;
+            continue;
+        }
+
         // Include combining characters with the base character when we are
         // measuring by display columns. In character-counting mode every
         // scalar value must advance the counter to match `chars().count()`
@@ -586,16 +600,6 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
 
         let next_idx = iter.peek().map_or(line_bytes.len(), |(idx, _)| *idx);
 
-        if ch == '\n' {
-            *ctx.last_space = None;
-            emit_output(ctx)?;
-            continue;
-        }
-
-        if *ctx.col_count >= ctx.width {
-            emit_output(ctx)?;
-        }
-
         if ch == '\r' {
             push_bytes(ctx, &line_bytes[byte_idx..next_idx])?;
             *ctx.col_count = 0;
@@ -608,16 +612,12 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
             continue;
         }
 
+        if *ctx.col_count >= ctx.width {
+            emit_output(ctx)?;
+        }
+
         if ch == '\t' {
-            loop {
-                let next_stop = next_tab_stop(*ctx.col_count);
-                if next_stop > ctx.width && !ctx.output.is_empty() {
-                    emit_output(ctx)?;
-                    continue;
-                }
-                *ctx.col_count = next_stop;
-                break;
-            }
+            advance_tab(ctx)?;
             if ctx.spaces {
                 *ctx.last_space = Some(ctx.output.len());
             } else {
@@ -659,18 +659,14 @@ fn process_non_utf8_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) ->
             continue;
         }
 
-        if *ctx.col_count >= ctx.width {
+        if !matches!(byte, CR | 0x08) && *ctx.col_count >= ctx.width {
             emit_output(ctx)?;
         }
 
         match byte {
             CR => *ctx.col_count = 0,
             TAB => {
-                let next_stop = next_tab_stop(*ctx.col_count);
-                if next_stop > ctx.width && !ctx.output.is_empty() {
-                    emit_output(ctx)?;
-                }
-                *ctx.col_count = next_stop;
+                advance_tab(ctx)?;
                 *ctx.last_space = if ctx.spaces {
                     Some(ctx.output.len())
                 } else {
@@ -696,38 +692,39 @@ fn process_non_utf8_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) ->
 /// Process buffered bytes, emitting output for valid UTF-8 prefixes and
 /// deferring incomplete sequences until more input arrives.
 ///
-/// If the buffer contains invalid UTF-8, it is handled in non-UTF-8 mode and
-/// the buffer is fully consumed.
+/// Invalid bytes are handled in non-UTF-8 mode one sequence at a time, so the
+/// valid UTF-8 around them is still folded by character.
 fn process_pending_chunk<W: Write>(
     pending: &mut Vec<u8>,
     ctx: &mut FoldContext<'_, W>,
 ) -> UResult<()> {
-    while !pending.is_empty() {
-        match std::str::from_utf8(pending) {
+    let mut start = 0;
+    while start < pending.len() {
+        match std::str::from_utf8(&pending[start..]) {
             Ok(valid) => {
                 process_utf8_line(valid, ctx)?;
-                pending.clear();
-                break;
+                start = pending.len();
             }
             Err(err) => {
-                if err.error_len().is_some() {
-                    let res = process_non_utf8_line(pending, ctx);
-                    pending.clear();
-                    res?;
-                    break;
+                let valid_up_to = start + err.valid_up_to();
+                if valid_up_to > start {
+                    let valid =
+                        std::str::from_utf8(&pending[start..valid_up_to]).expect("valid prefix");
+                    process_utf8_line(valid, ctx)?;
+                    start = valid_up_to;
                 }
 
-                let valid_up_to = err.valid_up_to();
-                if valid_up_to == 0 {
+                // An incomplete sequence at the end waits for more input.
+                let Some(error_len) = err.error_len() else {
                     break;
-                }
+                };
 
-                let valid = std::str::from_utf8(&pending[..valid_up_to]).expect("valid prefix");
-                process_utf8_line(valid, ctx)?;
-                pending.drain(..valid_up_to);
+                process_non_utf8_line(&pending[start..start + error_len], ctx)?;
+                start += error_len;
             }
         }
     }
+    pending.drain(..start);
 
     Ok(())
 }

@@ -71,9 +71,9 @@ fn test_empty() {
     new_ucmd!().arg("").succeeds().stdout_is(".\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_dirname_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -177,9 +177,9 @@ fn test_trailing_dot_emoji() {
     new_ucmd!().arg("/🎉/🚀/.").succeeds().stdout_is("/🎉/🚀\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_trailing_dot_non_utf8() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -327,4 +327,20 @@ fn test_win_path_prefixes() {
             .succeeds()
             .stdout_is(format!("{expected}\n"));
     }
+}
+
+#[test]
+#[cfg(windows)]
+fn test_win_non_unicode_path() {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+
+    // Even when removing the final component would leave valid Unicode,
+    // preserve the fallback for an input containing an unpaired surrogate.
+    let mut path: Vec<u16> = r"C:\foo\".encode_utf16().collect();
+    path.push(0xD800);
+    let path = OsString::from_wide(&path);
+
+    new_ucmd!().arg(&path).succeeds().stdout_is(".\n");
+    new_ucmd!().arg("-z").arg(&path).succeeds().stdout_is(".\0");
 }

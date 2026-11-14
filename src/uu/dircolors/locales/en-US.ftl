@@ -7,7 +7,7 @@ dircolors-after-help = If FILE is specified, read it to determine which colors t
 # Help messages
 dircolors-help-bourne-shell = output Bourne shell code to set LS_COLORS
 dircolors-help-c-shell = output C shell code to set LS_COLORS
-dircolors-help-print-database = print the byte counts
+dircolors-help-print-database = print the default color database
 dircolors-help-print-ls-colors = output fully escaped colors for display
 
 # Error messages

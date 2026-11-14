@@ -5,6 +5,7 @@
 
 // spell-checker:ignore crème brûlée
 
+use rstest::rstest;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
@@ -69,6 +70,33 @@ fn test_fs_format() {
     let ts = TestScenario::new(util_name!());
     let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
     ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
+}
+
+// Like GNU, a file size is unsigned, so `+` and ` ` add no sign to it.
+#[rstest]
+#[case::plus("%+s", "12")]
+#[case::space("% s", "12")]
+#[case::plus_with_precision("%+.3s", "012")]
+fn test_printf_size_takes_no_sign(#[case] format: &str, #[case] expected: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello world\n");
+    ucmd.args(&["--printf", format, "f"])
+        .succeeds()
+        .stdout_only(expected);
+}
+
+// GNU prints the free and total block and free node counts of `-f` as signed
+// numbers and the fundamental block size as an unsigned one.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_fs_printf_sign() {
+    let ts = TestScenario::new(util_name!());
+    for format in ["%+a", "%+b", "%+d", "%+f"] {
+        let result = ts.ucmd().args(&["-f", "--printf", format, "."]).succeeds();
+        assert!(result.stdout_str().starts_with('+'), "{format}");
+    }
+    let result = ts.ucmd().args(&["-f", "--printf", "%+S", "."]).succeeds();
+    assert!(!result.stdout_str().starts_with('+'));
 }
 
 #[test]
@@ -775,6 +803,64 @@ fn test_printf_invalid_directive() {
 }
 
 #[test]
+fn test_format_flags_closed_by_percent_are_invalid() {
+    // GNU rejects flag-only fragments ended by another '%', e.g. `%++-+%`.
+    new_ucmd!()
+        .args(&["--format=%++-+%1212x", "/"])
+        .fails_with_code(1)
+        .stderr_is("stat: '%++-+%': invalid directive\n");
+}
+
+#[test]
+fn test_format_adds_newline_after_trailing_newline() {
+    let ts = TestScenario::new(util_name!());
+    // `--format` prints a newline after the output even when the format
+    // already ends with one.
+    for (fmt, expected) in [
+        ("%n\n", ".\n\n"),
+        ("\n", "\n\n"),
+        ("%n\n\n", ".\n\n\n"),
+        ("%%\n", "%\n\n"),
+        // a directive that takes the newline as its conversion char
+        ("%\n", "?\n"),
+    ] {
+        ts.ucmd()
+            .args(&["-c", fmt, "."])
+            .succeeds()
+            .stdout_only(expected);
+    }
+    ts.ucmd()
+        .args(&["--format=%n\n", ".", "."])
+        .succeeds()
+        .stdout_only(".\n\n.\n\n");
+    ts.ucmd()
+        .args(&["-t", "-c", "%n\n", "."])
+        .succeeds()
+        .stdout_only(".\n\n");
+    // `--printf` adds nothing.
+    ts.ucmd()
+        .args(&["--printf=%n\n", "."])
+        .succeeds()
+        .stdout_only(".\n");
+}
+
+#[test]
+fn test_default_formats_end_with_a_single_newline() {
+    let ts = TestScenario::new(util_name!());
+    let mut cases: Vec<&[&str]> = vec![&["."], &["-t", "."]];
+    if cfg!(any(target_os = "linux", target_os = "android")) {
+        cases.extend([&["-f", "."][..], &["-f", "-t", "."]]);
+    }
+    for args in cases {
+        let out = ts.ucmd().args(args).succeeds().stdout_move_str();
+        assert!(
+            out.ends_with('\n') && !out.ends_with("\n\n"),
+            "{args:?}: {out:?}"
+        );
+    }
+}
+
+#[test]
 fn test_invalid_directive_after_multibyte_char() {
     let ts = TestScenario::new(util_name!());
     // The text before the directive is printed, as GNU does. What is checked
@@ -787,6 +873,29 @@ fn test_invalid_directive_after_multibyte_char() {
             .stdout_is(before)
             .stderr_is(format!("stat: '{directive}': invalid directive\n"));
     }
+}
+
+#[test]
+fn test_unknown_multibyte_directive_keeps_trailing_bytes() {
+    let ts = TestScenario::new(util_name!());
+    // Only the first byte of a multibyte char after `%` is taken as the
+    // (unknown) directive, so the remaining bytes are still printed.
+    for (fmt, expected) in [
+        ("%\u{bf}", &b"?\xbf"[..]),
+        ("a%\u{e9}b", &b"a?\xa9b"[..]),
+        ("%\u{20ac}%n", &b"?\x82\xac."[..]),
+        ("%5\u{20ac}", &b"?\x82\xac"[..]),
+    ] {
+        ts.ucmd()
+            .arg(format!("--printf={fmt}"))
+            .arg(".")
+            .succeeds()
+            .stdout_only_bytes(expected);
+    }
+    ts.ucmd()
+        .args(&["-c", "%\u{bf}", "."])
+        .succeeds()
+        .stdout_only_bytes(b"?\xbf\n");
 }
 
 #[test]
@@ -1010,4 +1119,23 @@ fn test_error_message_preserves_non_utf8_filename() {
                 .stderr_contains(quoted);
         }
     }
+}
+
+// --format prints a trailing newline, --printf prints nothing. -c is the
+// short form of --format and follows the same rule: the last one wins.
+#[rstest]
+#[case::printf_then_format(&["--printf=X", "--format=Y"], "Y\n")]
+#[case::format_then_printf(&["--format=Y", "--printf=X"], "X")]
+#[case::short_format_then_printf(&["-c", "Y", "--printf=X"], "X")]
+#[case::printf_then_short_format(&["--printf=X", "-c", "Y"], "Y\n")]
+fn test_last_of_format_printf_wins(#[case] args: &[&str], #[case] expected: &str) {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("a.txt", "");
+
+    scene
+        .ucmd()
+        .args(args)
+        .arg("a.txt")
+        .succeeds()
+        .stdout_is(expected);
 }

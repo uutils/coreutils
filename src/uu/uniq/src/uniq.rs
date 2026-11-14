@@ -16,6 +16,7 @@ use std::num::IntErrorKind;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::format_usage;
+use uucore::io::InputReader;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::posix::{OBSOLETE, posix_version};
 use uucore::translate;
@@ -84,7 +85,11 @@ impl Uniq {
         let mut next_meta = LineMeta::default();
         let mut line_out = Vec::with_capacity(1024);
 
-        while Self::read_line(&mut reader, &mut next_buf, line_terminator)? {
+        let read_result = loop {
+            match Self::read_line(&mut reader, &mut next_buf, line_terminator) {
+                Ok(true) => {}
+                result => break result.map(|_| ()),
+            }
             self.build_meta(&next_buf, &mut next_meta);
 
             if self.keys_are_equal(&current_buf, &current_meta, &next_buf, &next_meta) {
@@ -119,9 +124,14 @@ impl Uniq {
                 group_count = 1;
             }
             next_buf.clear();
-        }
+        };
 
-        if (group_count == 1 && !self.repeats_only) || (group_count > 1 && !self.uniques_only) {
+        // Counts and filtering require the group to end; a read error does not end it.
+        let can_write_pending_line =
+            read_result.is_ok() || !(self.show_counts || self.repeats_only || self.uniques_only);
+        let group_matches_filter =
+            (group_count == 1 && !self.repeats_only) || (group_count > 1 && !self.uniques_only);
+        if can_write_pending_line && group_matches_filter {
             self.write_line(
                 writer,
                 &mut line_out,
@@ -141,7 +151,7 @@ impl Uniq {
         writer
             .flush()
             .map_err_context(|| translate!("uniq-error-write-error"))?;
-        Ok(())
+        read_result
     }
 
     fn get_line_terminator(&self) -> u8 {
@@ -177,15 +187,17 @@ impl Uniq {
 
     fn skip_fields_offset(&self, line: &[u8]) -> usize {
         if let Some(skip_fields) = self.skip_fields {
+            // Fields end at a blank or a newline; \r and \f are ordinary bytes.
+            let is_blank = |byte: u8| matches!(byte, b' ' | b'\t' | b'\n');
             let mut idx = 0;
             for _ in 0..skip_fields {
-                while idx < line.len() && line[idx].is_ascii_whitespace() {
+                while idx < line.len() && is_blank(line[idx]) {
                     idx += 1;
                 }
                 if idx >= line.len() {
                     return line.len();
                 }
-                while idx < line.len() && !line[idx].is_ascii_whitespace() {
+                while idx < line.len() && !is_blank(line[idx]) {
                     idx += 1;
                 }
                 if idx >= line.len() {
@@ -850,13 +862,13 @@ fn get_delimiter(matches: &ArgMatches) -> Delimiters {
 }
 
 // None or "-" means stdin.
-fn open_input_file(in_file_name: Option<&OsStr>) -> UResult<Box<dyn BufRead>> {
+fn open_input_file(in_file_name: Option<&OsStr>) -> UResult<InputReader> {
     Ok(match in_file_name {
         Some(path) if path != "-" => {
             let in_file = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
-            Box::new(BufReader::with_capacity(OUTPUT_BUFFER_CAPACITY, in_file))
+            InputReader::File(BufReader::with_capacity(OUTPUT_BUFFER_CAPACITY, in_file))
         }
-        _ => Box::new(stdin().lock()),
+        _ => InputReader::Stdin(stdin().lock()),
     })
 }
 

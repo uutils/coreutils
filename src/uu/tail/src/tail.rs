@@ -33,7 +33,8 @@ use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
-use uucore::translate;
+use uucore::fs::FileInformation;
+use uucore::{translate, translate_text};
 
 use uucore::{show, show_error};
 
@@ -130,7 +131,7 @@ fn tail_file(
         set_exit_code(1);
         show_error!(
             "{}",
-            translate!(
+            translate_text!(
                 "tail-error-cannot-open-no-such-file",
                 "file" => input.display_name,
                 "error" => translate!("tail-no-such-file-or-directory")
@@ -143,12 +144,12 @@ fn tail_file(
     if path.is_dir() {
         set_exit_code(1);
 
-        header_printer.print_input(input);
+        header_printer.print_input(input)?;
         let err_msg = translate!("tail-is-a-directory");
 
         show_error!(
             "{}",
-            translate!("tail-error-reading-file", "file" => input.display_name, "error" => err_msg)
+            translate_text!("tail-error-reading-file", "file" => input.display_name, "error" => err_msg)
         );
         if settings.follow.is_some() {
             let msg = if settings.retry {
@@ -158,7 +159,7 @@ fn tail_file(
             };
             show_error!(
                 "{}",
-                translate!("tail-error-cannot-follow-file-type", "file" => input.display_name, "msg" => msg)
+                translate_text!("tail-error-cannot-follow-file-type", "file" => input.display_name, "msg" => msg)
             );
         }
         if !observer.follow_name_retry() {
@@ -178,13 +179,13 @@ fn tail_file(
             Err(e) if e.kind() == ErrorKind::PermissionDenied => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 show!(e.map_err_context(|| {
-                    translate!("tail-error-cannot-open-for-reading", "file" => input.display_name)
+                    translate_text!("tail-error-cannot-open-for-reading", "file" => input.display_name)
                 }));
             }
             Err(e) => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 return Err(e.map_err_context(|| {
-                    translate!("tail-error-cannot-open-for-reading", "file" => input.display_name)
+                    translate_text!("tail-error-cannot-open-for-reading", "file" => input.display_name)
                 }));
             }
         }
@@ -204,18 +205,25 @@ fn tail_opened_file(
     let st = file.metadata()?;
     let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
     let offset = file.stream_position().unwrap_or(0);
-    header_printer.print_input(input);
-    let mut reader;
+    // When our output goes to this very file (`tail f >> f`), it
+    // ends where it ended when we opened it. Reading on to the
+    // moving end of file would copy our own output back, forever.
+    let end = (st.is_file() && is_stdout(&file)).then_some(st.len());
+    header_printer.print_input(input)?;
     if !settings.presume_input_pipe
         && file.is_seekable(offset)
         && (!st.is_file() || st.len() > blksize_limit)
     {
-        bounded_tail(&mut file, settings)?;
-        reader = BufReader::new(file);
+        bounded_tail(&mut file, settings, end)?;
     } else {
-        reader = BufReader::new(file);
-        unbounded_tail(&mut reader, settings)?;
+        let remaining = match end {
+            Some(end) => end.saturating_sub(file.stream_position()?),
+            None => u64::MAX,
+        };
+        // Dropping this reader loses nothing: unbounded_tail reads to EOF or not at all.
+        unbounded_tail(&mut BufReader::new((&file).take(remaining)), settings)?;
     }
+    let reader = BufReader::new(file);
     if st.is_tailable() {
         observer.add_path(path, input.display_name.as_str(), Some(reader), true)?;
     } else {
@@ -224,23 +232,25 @@ fn tail_opened_file(
     Ok(())
 }
 
-/// Opens a file, using non-blocking mode for FIFOs when `use_nonblock_for_fifo` is true.
+/// Opens a file without waiting for a writer when `nonblock` is true.
 ///
-/// When opening a FIFO with `--pid`, we need to use O_NONBLOCK so that:
-/// 1. The open() call doesn't block waiting for a writer
-/// 2. We can periodically check if the monitored process is still alive
+/// A FIFO without a writer blocks `open()`. That is wrong in two cases:
+/// 1. With `--pid`, we need to check periodically if the monitored process is still alive.
+/// 2. When following, the files are all served by one thread, so a blocked `open()`
+///    on a file that was replaced by a FIFO would stop the output of every file.
 ///
-/// After opening, we clear O_NONBLOCK so subsequent reads block normally.
-/// Without `--pid`, FIFOs block on open() until a writer connects (GNU behavior).
+/// The file is always opened with `O_NONBLOCK`, without looking at its type first.
+/// Looking first would let a rename between the check and the open bring back the
+/// blocking `open()`. The flag has no effect on regular files. After opening, we
+/// clear `O_NONBLOCK` so subsequent reads block normally.
+/// Without it, FIFOs block on `open()` until a writer connects (GNU behavior).
 #[cfg(unix)]
-fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
+fn open_file(path: &Path, nonblock: bool) -> io::Result<File> {
     use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
     use std::fs::OpenOptions;
-    use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
+    use std::os::unix::fs::OpenOptionsExt;
 
-    let is_fifo = path.metadata().is_ok_and(|m| m.file_type().is_fifo());
-
-    if is_fifo && use_nonblock_for_fifo {
+    if nonblock {
         let file = OpenOptions::new()
             .read(true)
             .custom_flags(libc::O_NONBLOCK)
@@ -255,6 +265,49 @@ fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
     } else {
         File::open(path)
     }
+}
+
+/// Whether `file` is the file that standard output writes to.
+fn is_stdout<
+    #[cfg(any(unix, target_os = "wasi"))] F: std::os::fd::AsFd,
+    #[cfg(windows)] F: std::os::windows::io::AsRawHandle,
+>(
+    file: &F,
+) -> bool {
+    matches!(
+        (FileInformation::from_file(file), FileInformation::from_file(&stdout())),
+        (Ok(input), Ok(output)) if input == output
+    )
+}
+
+/// How much of standard input to read: all of it, unless it is the regular
+/// file that standard output writes to (`tail < f >> f`), which ends where
+/// it ended when we started. This covers files whose paths cannot be resolved;
+/// resolved files are read by `tail_opened_file`.
+fn stdin_limit() -> u64 {
+    #[cfg(windows)]
+    use std::os::windows::io::AsHandle;
+
+    #[cfg(unix)]
+    if let Ok(st) = rustix::fs::fstat(stdin())
+        && rustix::fs::FileType::from_raw_mode(st.st_mode).is_file()
+        && is_stdout(&stdin())
+        && let Ok(pos) = rustix::fs::tell(stdin())
+    {
+        return u64::try_from(st.st_size).unwrap_or(0).saturating_sub(pos);
+    }
+    // A duplicate of the handle shares its file position, and closing it
+    // leaves standard input open.
+    #[cfg(windows)]
+    if let Ok(file) = stdin().as_handle().try_clone_to_owned().map(File::from)
+        && let Ok(st) = file.metadata()
+        && st.is_file()
+        && is_stdout(&file)
+        && let Ok(pos) = (&file).stream_position()
+    {
+        return st.len().saturating_sub(pos);
+    }
+    u64::MAX
 }
 
 /// Print stdin and return whether it resolves to a regular file that can be followed.
@@ -295,7 +348,9 @@ fn tail_stdin(
         }
     }
 
-    header_printer.print_input(input);
+    // Taken before the header, which may be appended to standard input.
+    let limit = stdin_limit();
+    header_printer.print_input(input)?;
     if paths::stdin_is_bad_fd() {
         set_exit_code(1);
         show_error!(
@@ -317,7 +372,7 @@ fn tail_stdin(
             );
         }
     } else {
-        let mut reader = BufReader::new(stdin());
+        let mut reader = BufReader::new(stdin().take(limit));
         unbounded_tail(&mut reader, settings)?;
     }
 
@@ -410,18 +465,18 @@ fn forwards_thru_file(
 }
 
 /// Iterate over bytes in the file, in reverse, until we find the
-/// `num_delimiters` instance of `delimiter`. The `file` is left seek'd to the
-/// position just after that delimiter.
-fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
+/// `num_delimiters` instance of `delimiter`, starting from `end`. The `file` is
+/// left seek'd to the position just after that delimiter.
+fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8, end: SeekFrom) {
     if num_delimiters == 0 {
-        file.seek(SeekFrom::End(0)).unwrap();
+        file.seek(end).unwrap();
         return;
     }
     // This variable counts the number of delimiters found in the file
     // so far (reading from the end of the file toward the beginning).
     let mut counter = 0;
     let mut first_slice = true;
-    for slice in ReverseChunks::new(file) {
+    for slice in ReverseChunks::new(file, end) {
         // Iterate over each byte in the slice in reverse order.
         let mut iter = memrchr_iter(delimiter, &slice);
 
@@ -458,26 +513,31 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
 /// end of the file, and then read the file "backwards" in blocks of size
 /// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
 /// being a nice performance win for very large files.
-fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
+///
+/// If `end` is given, nothing at or beyond that offset is printed.
+fn bounded_tail(file: &mut File, settings: &Settings, end: Option<u64>) -> UResult<()> {
     debug_assert!(!settings.presume_input_pipe);
     let start = file.stream_position()?;
     let mut limit = None;
+    // Counting from the end starts at `end`: our own output, such as the
+    // header, may already have been appended beyond it.
+    let eof = end.map_or(SeekFrom::End(0), SeekFrom::Start);
 
     // Find the position in the file to start printing from.
     match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), delimiter) => {
-            backwards_thru_file(file, *count, *delimiter);
+            backwards_thru_file(file, *count, *delimiter, eof);
         }
         FilterMode::Lines(Signum::Positive(count), delimiter) if count > &1 => {
             let i = forwards_thru_file(file, *count - 1, *delimiter).unwrap();
             file.seek(SeekFrom::Start(start + i as u64))?;
         }
         FilterMode::Lines(Signum::MinusZero, _) | FilterMode::Bytes(Signum::MinusZero) => {
-            file.seek(SeekFrom::End(0)).unwrap();
+            file.seek(eof).unwrap();
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
             // Never include bytes preceding the current input position.
-            let end = file.seek(SeekFrom::End(0))?;
+            let end = file.seek(eof)?;
             file.seek(SeekFrom::Start(end.saturating_sub(*count).max(start)))?;
             limit = Some(*count);
         }
@@ -492,6 +552,11 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
                 .unwrap();
         }
         _ => {}
+    }
+
+    if let Some(end) = end {
+        let remaining = end.saturating_sub(file.stream_position()?);
+        limit = Some(limit.map_or(remaining, |limit| limit.min(remaining)));
     }
 
     print_target_section(file, limit)?;
@@ -594,7 +659,10 @@ fn print_target_section<
         }
     } else {
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        if uucore::pipes::splice_unbounded_auto(file, &mut stdout)?.is_err() {
+        if uucore::pipes::splice_unbounded_auto(file, &mut stdout)
+            .map_err(io::Error::from)?
+            .is_err()
+        {
             io::copy(file, &mut stdout)?;
         }
         #[cfg(not(any(target_os = "linux", target_os = "android")))]

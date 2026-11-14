@@ -28,7 +28,7 @@ pub const BUFFER_SIZE: usize = 8192;
 
 /// An iterator over a file in non-overlapping chunks from the end of the file.
 ///
-/// Each chunk is a [`Vec`]<[`u8`]> of size [`BLOCK_SIZE`] (except
+/// Each chunk is a [`Vec<u8>`] of size [`BLOCK_SIZE`] (except
 /// possibly the last chunk, which might be smaller). Each call to
 /// [`ReverseChunks::next`] will seek backwards through the given file.
 pub struct ReverseChunks<'a> {
@@ -46,9 +46,10 @@ pub struct ReverseChunks<'a> {
 }
 
 impl<'a> ReverseChunks<'a> {
-    pub fn new(file: &'a mut File) -> Self {
+    /// Iterates backwards from `end`, the position seen as the end of the file.
+    pub fn new(file: &'a mut File, end: SeekFrom) -> Self {
         let current = file.stream_position().unwrap();
-        let size = file.seek(SeekFrom::End(0)).unwrap().saturating_sub(current);
+        let size = file.seek(end).unwrap().saturating_sub(current);
         if size == 0 {
             file.seek(SeekFrom::Start(current)).unwrap();
         }

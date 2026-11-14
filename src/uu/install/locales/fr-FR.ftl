@@ -13,7 +13,7 @@ install-help-owner = définir la propriété (super-utilisateur uniquement)
 install-help-preserve-timestamps = appliquer les temps d'accès/modification des fichiers SOURCE aux fichiers de destination correspondants
 install-help-strip = supprimer les tables de symboles
 install-help-strip-program = programme utilisé pour supprimer les binaires
-install-help-target-directory = déplacer tous les arguments SOURCE dans RÉPERTOIRE
+install-help-target-directory = copier tous les arguments SOURCE dans RÉPERTOIRE
 install-help-no-target-directory = traiter DEST comme un fichier normal
 install-help-verbose = expliquer ce qui est fait
 install-help-preserve-context = préserver le contexte de sécurité
@@ -28,7 +28,7 @@ install-error-chmod-failed = échec du chmod { $path }
 install-error-chmod-failed-detailed = { $path } : échec du chmod avec l'erreur { $error }
 install-error-chown-failed = échec du chown { $path } : { $error }
 install-error-invalid-target = cible invalide { $path } : Aucun fichier ou répertoire de ce type
-install-error-target-not-dir = la cible { $path } n'est pas un répertoire
+install-error-target-not-dir = la cible { $path } : { $error }
 install-error-backup-failed = impossible de sauvegarder { $from } : { $error }
 install-error-install-failed = impossible d'installer { $from } vers { $to }: { $error }
 install-error-strip-failed = échec du programme strip : { $error }
@@ -50,7 +50,7 @@ install-error-mutually-exclusive-target = Les options --target-directory et --no
 install-error-mutually-exclusive-compare-strip = Les options --compare et --strip sont mutuellement exclusives
 install-error-missing-file-operand = opérande de fichier manquant
 install-error-missing-destination-operand = opérande de fichier de destination manquant après { $path }
-install-error-failed-to-remove = Échec de la suppression du fichier existant { $path }. Erreur : { $error }
+install-error-failed-to-remove = Échec de la suppression du fichier existant { $path }. { $error }
 install-error-will-not-overwrite-just-created = n'écrasera pas le fichier tout juste créé { $dest } avec { $source }
 
 # Messages d'avertissement

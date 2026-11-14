@@ -26,6 +26,8 @@ common-help-suggestion = For more information, try '--help'.
 help-flag-help = Print help information
 help-flag-version = Print version information
 
+help-set-quoting-style = Set quoting style
+
 # Common error contexts
 error-io = I/O error
 error-permission-denied = Permission denied
@@ -100,3 +102,15 @@ mode-diag-help-syntax = a mode is either octal, as in 644, or clauses such as u+
 # Shared recursive chown/chgrp/chmod diagnostics (uucore::perms)
 perms-cannot-access = cannot access { $file }: { $error }
 perms-cannot-access-replaced = cannot access { $file }: replaced while it was being processed
+
+# Encoding/decoding error messages (base32, base64, basenc)
+encoding-error-invalid-input = invalid input
+encoding-error-invalid-input-z85-length = invalid input (length must be multiple of 4 characters)
+
+# Backup control messages (uucore::backup_control)
+backup-error-invalid-argument = invalid argument { $arg } for '{ $origin }'
+backup-error-ambiguous-argument = ambiguous argument { $arg } for '{ $origin }'
+backup-valid-arguments = Valid arguments are:
+
+# OsStr conversion errors
+error-non-utf8-os-str = invalid UTF-8 input { $input } encountered when converting to bytes on a platform that doesn't expose byte arguments
