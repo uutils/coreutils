@@ -19,6 +19,7 @@ doctest = false
 clap = { workspace = true }
 filetime = { workspace = true }
 fluent = { workspace = true }
+hashbrown = { workspace = true }
 indicatif = { workspace = true }
 libc = { workspace = true }
 thiserror = { workspace = true }

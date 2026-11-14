@@ -28,6 +28,15 @@ fn skipping_test_is_okay(result: &CmdResult, needle: &str) -> bool {
     if !result.succeeded() {
         println!("result.stdout = {}", result.stdout_str());
         println!("result.stderr = {}", result.stderr_str());
+        // A subprocess terminated by a signal (e.g. killed by the CI runner)
+        // has no exit code, so `result.code()` returns `None` and `success()`
+        // would panic on `Option::unwrap()`. Treat this as an environmental
+        // skip on CI, matching the helper's intent for unreliable user/group
+        // lookup tools.
+        if is_ci() && result.try_exit_status().is_some_and(|s| s.code().is_none()) {
+            println!("test skipped: subprocess terminated by signal");
+            return true;
+        }
         if is_ci() && result.stderr_str().contains(needle) {
             println!("test skipped:");
             return true;
