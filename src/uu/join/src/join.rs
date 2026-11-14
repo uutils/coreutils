@@ -781,6 +781,9 @@ fn get_and_parse_field_number(matches: &clap::ArgMatches, key: &str) -> UResult<
     parse_field_number_option(value)
 }
 
+/// What separates the fields of a `-o` list.
+const O_SEPARATORS: [char; 3] = [' ', ',', '\t'];
+
 /// Parses the command-line arguments and constructs a `Settings` struct.
 ///
 /// This function takes the matches from the command-line arguments, processes them,
@@ -820,9 +823,14 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
                 }
                 // `-o` has no long form.
                 let option = OptionValue::with_names(format, Some('o'), None);
+                // Like GNU, a single separator may end the list.
+                let list = format
+                    .strip_suffix(O_SEPARATORS)
+                    .filter(|rest| !rest.is_empty() && !rest.ends_with(O_SEPARATORS))
+                    .unwrap_or(format);
                 // Each field carries its place in the value, so that the caret can
                 // take the one that is at fault out of a long list.
-                for (part, span) in uucore::diagnostics::list_items(format, &[' ', ',', '\t']) {
+                for (part, span) in uucore::diagnostics::list_items(list, &O_SEPARATORS) {
                     specs.push(Spec::parse(part).map_err(|error| {
                         let message = error.to_string();
                         uucore::diagnostics::error_after_report(diag_args, error, |args, _| {
