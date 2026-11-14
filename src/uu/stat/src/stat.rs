@@ -1025,14 +1025,13 @@ impl Stater {
             .map(|v| v.map(OsString::from).collect())
             .unwrap();
         let use_printf = matches.contains_id(options::PRINTF);
+        let format_option = if use_printf {
+            options::PRINTF
+        } else {
+            options::FORMAT
+        };
         // An empty format given by the user is still used instead of the default.
-        let user_format = matches
-            .get_one::<String>(if use_printf {
-                options::PRINTF
-            } else {
-                options::FORMAT
-            })
-            .map(String::as_str);
+        let user_format = matches.get_one::<String>(format_option).map(String::as_str);
         let format_str = user_format.unwrap_or_default();
         let terse = matches.get_flag(options::TERSE);
         let show_fs = matches.get_flag(options::FILE_SYSTEM);
@@ -1044,11 +1043,7 @@ impl Stater {
             OptionValue::with_names(
                 format_str,
                 if use_printf { None } else { Some('c') },
-                Some(if use_printf {
-                    options::PRINTF
-                } else {
-                    options::FORMAT
-                }),
+                Some(format_option),
             )
         };
         // A format stat built itself cannot hold an unknown directive, so an
