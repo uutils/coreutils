@@ -833,11 +833,13 @@ impl Stater {
             check_bound(format_str, bound, old, j)?;
 
             let j_byte = char_index_to_byte_index(format_str, j);
-            match format_str[j_byte..].scan_num::<i32>() {
+            // A sign after '.' is not part of the precision.
+            match format_str[j_byte..]
+                .scan_num::<i32>()
+                .filter(|_| chars[j].is_ascii_digit())
+            {
                 Some((value, offset)) => {
-                    if value >= 0 {
-                        precision = Precision::Number(value as usize);
-                    }
+                    precision = Precision::Number(value as usize);
                     j += offset;
                 }
                 None => precision = Precision::NoNumber,
@@ -1686,9 +1688,12 @@ mod tests {
                     ..Default::default()
                 },
                 width: 20,
-                precision: Precision::NotSpecified,
-                format: 'w',
+                precision: Precision::NoNumber,
+                format: '-',
             },
+            Token::Char('2'),
+            Token::Char('3'),
+            Token::Char('w'),
             Token::Byte(b'\x12'),
             Token::Byte(b'w'),
             Token::Byte(b'Z'),
