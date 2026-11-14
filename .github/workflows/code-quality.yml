@@ -1,7 +1,7 @@
 name: Code Quality
 
-# spell-checker:ignore (people) juliangruber pell reactivecircus taiki-e taplo
-# spell-checker:ignore (misc) TERMUX noaudio pkill swiftshader esac pcoreutils shopt subshell dequote libsystemd wasi wasip
+# spell-checker:ignore (people) juliangruber mlugg pell reactivecircus taiki-e taplo
+# spell-checker:ignore (misc) TERMUX noaudio pkill swiftshader esac pcoreutils shopt subshell dequote libsystemd wasi wasip zigbuild
 
 on:
   pull_request:
@@ -75,6 +75,7 @@ jobs:
           - { os: macos-latest   , features: all             , workspace: true }
           - { os: windows-latest , features: feat_os_windows }
           - { os: ubuntu-latest  , features: feat_os_unix_redox , target: x86_64-unknown-redox }
+          - { os: ubuntu-latest  , features: feat_os_unix , target: x86_64-unknown-netbsd , zig: true }
           - { os: ubuntu-latest  , features: feat_wasm , target: wasm32-wasip1 }
           - { os: ubuntu-latest  , features: feat_wasm , target: wasm32-wasip2 }
     steps:
@@ -96,6 +97,10 @@ jobs:
       run: |
         echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
         echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - uses: mlugg/setup-zig@v2.2.1
+      if: matrix.job.zig == true
+    - uses: taiki-e/install-action@cargo-zigbuild
+      if: matrix.job.zig == true
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -120,7 +125,11 @@ jobs:
             sudo apt-get -y install libselinux1-dev libsystemd-dev
           ;;
         esac
+    - name: "`cargo zigbuild clippy` lint testing"
+      if: matrix.job.zig == true
+      run: cargo-zigbuild clippy --target ${{ matrix.job.target }} --features ${{ matrix.job.features }} -- -D warnings
     - name: "`cargo clippy` lint testing"
+      if: matrix.job.zig != true
       uses: nick-fields/retry@v4
       with:
         max_attempts: 3
