@@ -934,8 +934,10 @@ fn test_suffix_auto_width_with_number() {
 #[rstest]
 #[case::numeric(&["--numeric-suffixes=100"], "")]
 #[case::numeric_with_input(&["--numeric-suffixes=100"], "a\n")]
+#[case::numeric_with_large_input(&["--numeric-suffixes=100"], &"a".repeat(1024 * 1024))]
 #[case::hex(&["--hex-suffixes=100"], "")]
 #[case::hex_with_input(&["--hex-suffixes=100"], "a\n")]
+#[case::hex_with_large_input(&["--hex-suffixes=100"], &"a".repeat(1024 * 1024))]
 #[case::length_1(&["-a", "1", "--numeric-suffixes=10"], "")]
 #[case::length_0(&["-a", "0", "--numeric-suffixes=100"], "")]
 #[case::number(&["-n", "2", "--numeric-suffixes=100"], "")]
@@ -944,6 +946,8 @@ fn test_suffix_auto_width_with_number() {
 fn test_suffix_start_too_large(#[case] args: &[&str], #[case] input: &str) {
     new_ucmd!()
         .args(args)
+        // Argument validation can close stdin before the writer finishes.
+        .ignore_stdin_write_error()
         .pipe_in(input)
         .ignore_stdin_write_error()
         .fails()

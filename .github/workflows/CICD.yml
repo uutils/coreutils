@@ -42,6 +42,27 @@ jobs:
         persist-credentials: false
     - uses: EmbarkStudios/cargo-deny-action@v2
 
+  logind:
+    name: Logind/${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-24.04]
+    steps:
+    - uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ env.RUST_MIN_SRV }}
+    - uses: Swatinem/rust-cache@v2
+    - name: Compare with systemd commands
+      shell: bash
+      run: |
+        cargo test --locked --no-default-features --features test_logind --test tests --no-run --message-format=json > "$RUNNER_TEMP/logind-tests.json"
+        logind_test_binary=$(jq -r 'select(.reason == "compiler-artifact" and .target.name == "tests" and .executable != null) | .executable' "$RUNNER_TEMP/logind-tests.json")
+        bash util/test-logind.sh "$logind_test_binary"
+
   style_deps:
     ## ToDO: [2021-11-10; rivy] 'Style/deps' needs more informative output and better integration of results into the GHA dashboard
     name: Style/deps
@@ -233,7 +254,7 @@ jobs:
         cargo +stable fetch --locked --quiet --target $(rustc --print host-tuple)
         cargo +stable tree --no-dedupe --locked -e=no-dev --prefix=none ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
     - name: Test
-      run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
+      run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --features test_logind -p uucore -p coreutils
       env:
         RUSTFLAGS: "-Awarnings"
         RUST_BACKTRACE: "1"
@@ -305,6 +326,9 @@ jobs:
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
         RUST_BACKTRACE: "1"
+    - name: Test utmpx with systemd-logind
+      if: runner.os == 'Linux'
+      run: cargo test -p uucore --lib --locked --features systemd-logind
     - name: Upload test results to Codecov
       if: ${{ !cancelled() }}
       uses: codecov/codecov-action@v7
