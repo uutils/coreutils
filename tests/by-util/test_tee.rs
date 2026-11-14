@@ -844,3 +844,45 @@ fn test_write_failure_reports_error_and_nonzero_exit() {
 
     assert!(!result.stderr_str().is_empty());
 }
+
+#[test]
+#[cfg(target_os = "linux")] // use default pipe size
+#[cfg(not(wasi_runner))]
+fn test_tee_stdout_matches_with_file() {
+    use std::io::{Read as _, Seek as _, Write as _};
+    use std::process::Command;
+    use uutests::util::TestScenario;
+
+    let scene = TestScenario::new("tee");
+    let at = &scene.fixtures;
+    let orig_len = 64 * 1024;
+    let orig = vec![b'a'; orig_len];
+    at.write_bytes("in", &orig);
+
+    let (mut stdout_reader, stdout_writer) = std::io::pipe().unwrap();
+    let mut child = Command::new(&scene.bin_path)
+        .arg(&scene.util_name)
+        .arg("file")
+        .current_dir(at.plus(""))
+        .stdin(std::fs::File::open(at.plus("in")).unwrap())
+        .stdout(stdout_writer)
+        .spawn()
+        .unwrap();
+
+    assert!(child.wait().unwrap().success());
+
+    let mut in_edit = std::fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus("in"))
+        .unwrap();
+    // change page caches of input
+    in_edit
+        .seek(std::io::SeekFrom::Start((orig_len - 2) as u64))
+        .unwrap();
+    in_edit.write_all(b"b").unwrap();
+
+    let mut stdout = Vec::with_capacity(orig_len);
+    stdout_reader.read_to_end(&mut stdout).unwrap();
+    assert_eq!(stdout, orig);
+    assert_eq!(at.read_bytes("file"), orig);
+}
