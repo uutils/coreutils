@@ -39,7 +39,7 @@ Index: gnu/tests/uniq/uniq.pl
   ['144', '--group -D',       {IN=>""}, {OUT=>""}, {EXIT=>1},
 -  {ERR=>"$prog: --group is mutually exclusive with -c/-d/-D/-u\n" .
 -        "Try 'uniq --help' for more information.\n"}],
-+  {ERR=>"error: the argument '--group[=<group-method>]' cannot be used with '--all-repeated[=<delimit-method>]'\n\n" .
++  {ERR=>"error: the argument '--group[=<group-method>]' cannot be used with '-D'\n\n" .
 +        "For more information, try '--help'.\n"}],
   # Grouping with badoption
   ['145', '--group=badoption',{IN=>""}, {OUT=>""}, {EXIT=>1},
