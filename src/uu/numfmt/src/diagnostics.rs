@@ -14,7 +14,7 @@ use uucore::diagnostics::{Snapshot, ValueOptions};
 use uucore::ranges::RangeError;
 use uucore::translate;
 
-use crate::format::{holds_number, invalid_span};
+use crate::format::{holds_number, invalid_span, is_blank};
 use crate::options::{FormatError, FormatErrorKind, NumfmtOptions, OptionValueError};
 use crate::units::Unit;
 
@@ -86,7 +86,12 @@ pub fn render_input(
     let Ok(input) = std::str::from_utf8(input) else {
         return false;
     };
-    if input.split_whitespace().count() > 1 {
+    if input
+        .split(is_blank)
+        .filter(|field| !field.is_empty())
+        .count()
+        > 1
+    {
         return false;
     }
 
