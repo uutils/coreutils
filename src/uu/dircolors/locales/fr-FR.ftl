@@ -20,4 +20,4 @@ dircolors-error-no-shell-environment = aucune variable d'environnement SHELL, et
 dircolors-error-extra-operand = opérande supplémentaire { $operand }
 dircolors-error-expected-file-got-directory = fichier attendu, répertoire obtenu { $path }
 dircolors-error-invalid-line-missing-token = { $file }:{ $line } : ligne invalide ; jeton manquant
-dircolors-error-unrecognized-keyword = mot-clé non reconnu { $keyword }
+dircolors-error-unrecognized-keyword = { $file }:{ $line } : mot-clé non reconnu { $keyword }

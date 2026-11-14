@@ -130,6 +130,22 @@ fn test_stdin() {
 }
 
 #[test]
+fn test_unrecognized_keyword_location() {
+    new_ucmd!()
+        .pipe_in("TERM xterm\nBOGUS 01\n")
+        .env("TERM", "xterm")
+        .args(&["-b", "-"])
+        .fails_with_code(1)
+        .stderr_only("dircolors: -:2: unrecognized keyword BOGUS\n");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("db", "DIR 01;34\nbogus 01\n");
+    ucmd.args(&["-b", "db"])
+        .fails_with_code(1)
+        .stderr_only("dircolors: db:2: unrecognized keyword bogus\n");
+}
+
+#[test]
 fn test_quoting() {
     new_ucmd!()
         .pipe_in("exec 'echo Hello;:'\n")
