@@ -30,6 +30,7 @@ truncate-error-invalid-number = Invalid number: { $error }
 truncate-error-must-specify-relative-size = you must specify a relative '--size' with '--reference'
 truncate-error-division-by-zero = division by zero
 truncate-error-cannot-stat-no-such-file = cannot stat { $filename }: No such file or directory
+truncate-error-cannot-get-size = cannot get the size of { $filename }
 truncate-error-value-too-large = Value too large for defined data type
 truncate-error-value-too-large-arg = { $arg }: Value too large for defined data type
 truncate-error-io-block-mul-overflow = overflow in { $num } * { $factor } byte blocks
