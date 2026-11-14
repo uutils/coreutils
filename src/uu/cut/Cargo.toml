@@ -20,7 +20,7 @@ bstr = { workspace = true }
 clap = { workspace = true }
 fluent = { workspace = true }
 memchr = { workspace = true }
-uucore = { workspace = true, features = ["i18n-charmap", "parser", "ranges"] }
+uucore = { workspace = true, features = ["fs", "i18n-charmap", "parser", "ranges"] }
 
 [dev-dependencies]
 divan = { workspace = true }
