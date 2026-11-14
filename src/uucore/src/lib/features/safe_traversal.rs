@@ -33,7 +33,7 @@ use nix::libc;
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 use nix::sys::stat::fstatat;
 use nix::sys::stat::{FchmodatFlags, Mode, fchmodat, mkdirat};
-use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
+use nix::unistd::{Gid, Uid, UnlinkatFlags, fchownat, unlinkat};
 use os_display::Quotable;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::fs::{RawDir, fstat, statat};
@@ -419,16 +419,6 @@ impl DirFd {
 
         fchownat(&self.fd, name_cstr.as_c_str(), uid, gid, flags)
             .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
-
-        Ok(())
-    }
-
-    /// Change ownership of this directory
-    pub fn fchown(&self, uid: Option<u32>, gid: Option<u32>) -> io::Result<()> {
-        let uid = uid.map(Uid::from_raw);
-        let gid = gid.map(Gid::from_raw);
-
-        fchown(&self.fd, uid, gid).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
 
         Ok(())
     }

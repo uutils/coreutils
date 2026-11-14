@@ -460,8 +460,8 @@ impl ChownExecutor {
         let dest_uid = self.dest_uid.unwrap_or_else(|| meta.uid());
         let dest_gid = self.dest_gid.unwrap_or_else(|| meta.gid());
 
-        // Use fchown (safe) to change the directory's ownership
-        if let Err(e) = dir_fd.fchown(self.dest_uid, self.dest_gid) {
+        // Use fd-based safe operation to change the directory's ownership
+        if let Err(e) = std::os::unix::fs::fchown(dir_fd, Some(dest_uid), Some(dest_gid)) {
             let mut error_msg = format!(
                 "changing {} of {}: {}",
                 if self.verbosity.groups_only {
