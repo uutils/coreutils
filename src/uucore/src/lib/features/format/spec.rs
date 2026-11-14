@@ -15,7 +15,7 @@ use super::{
 };
 use crate::format::FormatArguments;
 use crate::os_str_as_bytes;
-use crate::quoting_style::locale_aware_shell_escape;
+use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use std::io::Write;
 use std::num::NonZero;
 use std::ops::ControlFlow;
@@ -406,8 +406,17 @@ impl Spec {
                 writer.write_all(&parsed).map_err(FormatError::IoError)
             }
             Self::QuotedString { position } => {
-                let s = locale_aware_shell_escape(args.next_string(*position));
-                writer.write_all(s.as_bytes()).map_err(FormatError::IoError)
+                let value = args.next_string(*position);
+
+                let has_brace = os_str_as_bytes(value)
+                    .is_ok_and(|bytes| bytes.iter().any(|b| matches!(b, b'{' | b'}')));
+
+                let style = QuotingStyle::SHELL_ESCAPE.always_quote(has_brace);
+                let s = locale_aware_escape_name(value, style);
+
+                writer
+                    .write_all(s.as_encoded_bytes())
+                    .map_err(FormatError::IoError)
             }
             Self::SignedInt {
                 width,

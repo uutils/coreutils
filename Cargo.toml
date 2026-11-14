@@ -27,13 +27,14 @@ members = [
   "src/uucore",
   "src/uucore_procs",
   "tests/uutests",
+  "tests/uutests_procs",
   # "fuzz",  # TODO
 ]
 
 [workspace.package]
 categories = ["command-line-utilities"]
 edition = "2024"
-rust-version = "1.88.0"
+rust-version = "1.89"
 homepage = "https://github.com/uutils/coreutils"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 license = "MIT"
@@ -120,9 +121,12 @@ rustc-hash = "2.1.1"
 rustix = { version = "1.1.4", default-features = false }
 self_cell = "1.0.4"
 selinux = "0.6"
+syn = { version = "3.0", features = ["full"] }
 tempfile = "3.15.0"
 terminal_size = "0.4.0"
-textwrap = { version = "0.16.1", features = ["terminal_size"] }
+textwrap = { version = "0.16.1", default-features = false, features = [
+  "terminal_size",
+] }
 thiserror = "2.0.3"
 time = { version = "0.3.36" }
 quote = "1.0.36"
@@ -162,6 +166,7 @@ uu_ls = { version = "0.13.0", path = "src/uu/ls" }
 uu_base32 = { version = "0.13.0", path = "src/uu/base32" }
 uu_checksum_common = { version = "0.13.0", path = "src/uu/checksum_common" }
 uutests = { version = "0.13.0", path = "tests/uutests" }
+uutests_procs = { version = "0.13.0", path = "tests/uutests_procs" }
 
 # This is the linting configuration for all crates.
 # In order to use these, all crates have `[lints] workspace = true` section.
@@ -623,6 +628,31 @@ feat_os_unix_android = [
   #
   "feat_require_unix",
 ]
+# "feat_os_unix_illumos" == set of utilities which can be built on the "x86_64-unknown-illumos" target
+feat_os_unix_illumos = [
+  "feat_common_core",
+  # todo: use feat_Tier1 if whoami and uptime were supported <https://github.com/uutils/coreutils/issues/15520>
+  # mknod, stat: wrong unsafe? <https://github.com/rust-lang/libc/issues/5646>
+  "chgrp",
+  "chmod",
+  "chown",
+  "df",
+  "du",
+  "env",
+  "groups",
+  "hostname",
+  # "id" has wrong cfg?
+  "install",
+  "kill",
+  "logname",
+  "mkfifo",
+  "more",
+  "nohup",
+  "nproc",
+  "stty",
+  "sync",
+  "timeout",
+]
 ## feature sets with requirements (restricting cross-platform availability)
 #
 # ** NOTE: these `feat_require_...` sets should be minimized as much as possible to encourage cross-platform availability of utilities
@@ -648,7 +678,7 @@ feat_require_unix_core = [
 ]
 # "feat_require_unix_utmpx" == set of utilities requiring unix utmp/utmpx support
 # * ref: <https://wiki.musl-libc.org/faq.html#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?>
-feat_require_unix_utmpx = ["pinky", "uptime", "users", "who"]
+feat_require_unix_utmpx = ["pinky", "users", "who"]
 # "feat_require_selinux" == set of utilities depending on SELinux.
 feat_require_selinux = ["chcon", "runcon"]
 ## (alternate/newer/smaller platforms) feature sets
@@ -670,9 +700,23 @@ feat_os_unix_fuchsia = [
 # "feat_os_unix_redox" == set of utilities which can be built/run on "Redox OS" (refs: <https://www.redox-os.org>; <https://en.wikipedia.org/wiki/Redox_(operating_system)>)
 feat_os_unix_redox = [
   "feat_common_core",
-  #
+  "chgrp",
   "chmod",
+  "chown",
+  "df",
+  "du",
+  "env",
+  "install",
+  "kill",
+  "logname",
+  "more",
+  "nice",
+  "nohup",
+  "nproc",
   "stat",
+  "stty",
+  "timeout",
+  "whoami",
 ]
 ##
 # * bypass/override ~ translate 'test' feature name to avoid dependency collision with rust core 'test' crate (o/w surfaces as compiler errors during testing)

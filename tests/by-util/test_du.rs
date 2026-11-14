@@ -299,6 +299,75 @@ fn test_du_env_block_size_hierarchy() {
 }
 
 #[test]
+fn test_du_suffix_only_block_size() {
+    let ts = TestScenario::new(util_name!());
+    let file = "file";
+    ts.fixtures.write(file, "x");
+
+    for (arg, env, expected) in [
+        (Some("-BM"), None, "1M"),
+        (Some("-B1M"), None, "1"),
+        (Some("-B'M"), None, "1M"),
+        (Some("-B'1M"), None, "1"),
+        (None, Some(("DU_BLOCK_SIZE", "M")), "1M"),
+        (None, Some(("BLOCK_SIZE", "KB")), "1kB"),
+        (None, Some(("BLOCKSIZE", "MiB")), "1MiB"),
+        (None, Some(("DU_BLOCK_SIZE", "'KiB")), "1KiB"),
+        (None, Some(("DU_BLOCK_SIZE", "'1KiB")), "1"),
+        (None, Some(("DU_BLOCK_SIZE", "1M")), "1"),
+    ] {
+        let mut cmd = ts.ucmd();
+        if let Some(arg) = arg {
+            cmd.arg(arg);
+        }
+        if let Some((var, value)) = env {
+            cmd.env(var, value);
+        }
+        cmd.arg("--apparent-size")
+            .arg(file)
+            .succeeds()
+            .stdout_only(format!("{expected}\t{file}\n"));
+    }
+}
+
+#[test]
+fn test_du_block_size_locale_grouping() {
+    let ts = TestScenario::new(util_name!());
+    let file = "file";
+    let fpath = ts.fixtures.plus(file);
+    std::fs::File::create(&fpath)
+        .expect("cannot create test file")
+        .set_len(100_000_000)
+        .expect("cannot set file size");
+
+    for (block_size, expected) in [("'KiB", "97\u{202f}657KiB"), ("'1KiB", "97\u{202f}657")] {
+        ts.ucmd()
+            .arg("--apparent-size")
+            .arg(format!("--block-size={block_size}"))
+            .arg(file)
+            .env("LC_ALL", "fr_FR.UTF-8")
+            .succeeds()
+            .stdout_only(format!("{expected}\t{file}\n"));
+    }
+
+    ts.ucmd()
+        .arg("--apparent-size")
+        .arg(file)
+        .env("BLOCK_SIZE", "'KiB")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .succeeds()
+        .stdout_only(format!("97\u{202f}657KiB\t{file}\n"));
+
+    ts.ucmd()
+        .arg("--apparent-size")
+        .arg("--block-size='KiB")
+        .arg(file)
+        .env("LC_ALL", "fr_FR")
+        .succeeds()
+        .stdout_only_bytes(&b"97\xa0657KiB\tfile\n"[..]);
+}
+
+#[test]
 fn test_du_binary_block_size() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -704,6 +773,24 @@ fn test_du_dereference_args() {
     result.stdout_contains("0\tsublink\n");
 }
 
+#[cfg(not(windows))]
+#[test]
+fn test_du_symlink_dir_operand_trailing_slash() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir");
+    at.write("dir/file", "content");
+    at.symlink_dir("dir", "link");
+
+    // The trailing slash resolves the symlink even without -D, as in GNU du.
+    ts.ucmd()
+        .arg("-a")
+        .arg("link/")
+        .succeeds()
+        .stdout_contains("link/file\n");
+}
+
 #[cfg(target_vendor = "apple")]
 fn du_dereference(s: &str) {
     assert_eq!(s, "4\tsubdir/links/deeper_dir\n16\tsubdir/links\n");
@@ -955,8 +1042,8 @@ fn test_du_h_precision() {
     }
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
 fn test_du_h_locale_decimal_separator() {
     for (locale, expected) in [("fr_FR.UTF-8", "8,4K"), ("C", "8.4K")] {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -2105,7 +2192,7 @@ fn test_du_inodes_blocksize_ineffective() {
     let at = &ts.fixtures;
     let fpath = at.plus("test.txt");
     at.touch(fpath);
-    for method in ["-B3", "--block-size=3"] {
+    for method in ["-B3", "--block-size=3", "-BM"] {
         // No warning
         ts.ucmd()
             .arg(method)
@@ -2937,4 +3024,50 @@ du: invalid suffix in --block-size argument '1fb'
             .fails_with_code(1)
             .stderr_is("du: invalid suffix in --block-size argument '1fb'\n");
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn test_last_of_dereference_args_no_dereference_wins() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.symlink_file("missing", "dangling");
+    // -P last wins: the dangling symlink argument is not dereferenced, so du succeeds.
+    scene
+        .ucmd()
+        .args(&["--dereference-args", "-P", "dangling"])
+        .succeeds()
+        .stdout_contains("dangling");
+    // --dereference-args last wins: dereferencing the dangling argument fails.
+    scene
+        .ucmd()
+        .args(&["-P", "--dereference-args", "dangling"])
+        .fails()
+        .stderr_contains("cannot access 'dangling'");
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_dereference_args_after_dereference_wins() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.mkdir("outside");
+    at.write("outside/file", "x");
+    at.symlink_dir("outside", "dir/link");
+
+    // `--dereference-args` last wins over `-L`: only command-line arguments
+    // are dereferenced, so the symlink inside `dir` is not followed.
+    scene
+        .ucmd()
+        .args(&["-L", "--dereference-args", "dir"])
+        .succeeds()
+        .stdout_does_not_contain("dir/link");
+
+    // `-L` last wins: the symlink inside `dir` is followed and reported.
+    scene
+        .ucmd()
+        .args(&["--dereference-args", "-L", "dir"])
+        .succeeds()
+        .stdout_contains("dir/link");
 }

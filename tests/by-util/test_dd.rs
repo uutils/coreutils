@@ -1334,6 +1334,25 @@ fn test_invalid_flag_arg_gnu_compatibility() {
 }
 
 #[test]
+fn test_numeric_looking_values_are_kept_verbatim_in_errors() {
+    // Values such as "007" or "1e3" must not be reformatted as numbers.
+    for (arg, msg) in [
+        ("007", "unrecognized operand '007'"),
+        ("iflag=007", "invalid input flag: '007'"),
+        ("oflag=1e3", "invalid output flag: '1e3'"),
+        ("conv=007", "invalid conversion: '007'"),
+        ("status=007", "invalid status level: '007'"),
+        ("count=1.50", "invalid number: '1.50'"),
+        ("bs=1e3", "invalid number: '1e3'"),
+    ] {
+        new_ucmd!()
+            .arg(arg)
+            .fails_with_code(1)
+            .stderr_contains(format!("dd: {msg}\n"));
+    }
+}
+
+#[test]
 fn test_invalid_file_arg_gnu_compatibility() {
     new_ucmd!()
         .args(&["if="])
@@ -1547,6 +1566,34 @@ fn test_seekable_stdout_without_of_is_not_truncated() {
     assert!(out[1024..].iter().all(|&b| b == b'x'));
 }
 
+/// An `oflag=` on a seekable stdout must keep the flags it was opened with,
+/// so output redirected with `>>` is still appended, with or without
+/// `conv=notrunc`.
+#[rstest]
+#[cfg(target_os = "linux")]
+fn test_oflag_keeps_append_mode_of_stdout(
+    #[values("oflag=dsync", "oflag=sync", "oflag=nonblock")] oflag: &str,
+    #[values(&[][..], &["conv=notrunc"][..])] conv: &[&str],
+) {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("out", "old\n");
+    let stdout = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().append(true),
+        at.plus("out").as_path(),
+    )
+    .unwrap();
+
+    ts.ucmd()
+        .args(&[oflag, "status=none"])
+        .args(conv)
+        .pipe_in("new\n")
+        .set_stdout(Stdio::from(stdout))
+        .succeeds();
+
+    assert_eq!(at.read("out"), "old\nnew\n");
+}
+
 /// A failed truncate of the output names the file and the size, the copy
 /// still runs and prints its statistics, and the exit status is 1.
 #[test]
@@ -1592,6 +1639,85 @@ fn test_seek_output_fifo() {
         .unwrap()
         .success()
         .stderr_only("0+0 records in\n0+0 records out\n");
+}
+
+/// `conv=excl` fails on an existing output FIFO, also through a symlink and
+/// with `seek=`, before reading from it (#15763). Without the check, `dd`
+/// blocks opening the FIFO for reading, so the timeout turns that into a failure.
+#[cfg(unix)]
+#[rstest]
+#[case::fifo("fifo", "seek=0")]
+#[case::fifo_seek("fifo", "seek=1")]
+#[case::symlink_seek("slot", "seek=1")]
+fn test_excl_output_fifo_fails(#[case] of: &str, #[case] seek: &str) {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("fifo");
+    at.symlink_file("fifo", "slot");
+
+    ts.ucmd()
+        .args(&[
+            "if=/dev/null",
+            &format!("of={of}"),
+            "conv=excl",
+            seek,
+            "count=0",
+        ])
+        .timeout(Duration::from_secs(10))
+        .fails()
+        .stderr_contains("File exists");
+}
+
+/// `oflag=nofollow` refuses a symlink to an output FIFO before the seek
+/// reads from it (#15763).
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_seek_output_fifo_symlink_nofollow() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("fifo");
+    at.symlink_file("fifo", "slot");
+
+    // The C libraries word ELOOP differently.
+    #[cfg(all(target_os = "linux", not(target_env = "musl")))]
+    let eloop = "Too many levels of symbolic links";
+    #[cfg(all(target_os = "linux", target_env = "musl"))]
+    let eloop = "Symbolic link loop";
+    #[cfg(target_os = "android")]
+    let eloop = "Too many symbolic links encountered";
+
+    ts.ucmd()
+        .args(&[
+            "if=/dev/null",
+            "of=slot",
+            "oflag=nofollow",
+            "seek=1",
+            "count=0",
+        ])
+        .timeout(Duration::from_secs(10))
+        .fails()
+        .stderr_contains(eloop);
+}
+
+/// `oflag=nonblock` reaches the open that seeks in an output FIFO, so it does
+/// not wait for a writer (#15763).
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_seek_output_fifo_nonblock() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("fifo");
+
+    ts.ucmd()
+        .args(&[
+            "if=/dev/null",
+            "of=fifo",
+            "oflag=nonblock",
+            "seek=1",
+            "count=0",
+        ])
+        .timeout(Duration::from_secs(10))
+        .succeeds();
 }
 
 /// Test that a skip on an input FIFO results in a read.

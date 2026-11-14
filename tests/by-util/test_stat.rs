@@ -5,6 +5,7 @@
 
 // spell-checker:ignore crème brûlée
 
+use rstest::rstest;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
@@ -69,6 +70,33 @@ fn test_fs_format() {
     let ts = TestScenario::new(util_name!());
     let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
     ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
+}
+
+// Like GNU, a file size is unsigned, so `+` and ` ` add no sign to it.
+#[rstest]
+#[case::plus("%+s", "12")]
+#[case::space("% s", "12")]
+#[case::plus_with_precision("%+.3s", "012")]
+fn test_printf_size_takes_no_sign(#[case] format: &str, #[case] expected: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello world\n");
+    ucmd.args(&["--printf", format, "f"])
+        .succeeds()
+        .stdout_only(expected);
+}
+
+// GNU prints the free and total block and free node counts of `-f` as signed
+// numbers and the fundamental block size as an unsigned one.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_fs_printf_sign() {
+    let ts = TestScenario::new(util_name!());
+    for format in ["%+a", "%+b", "%+d", "%+f"] {
+        let result = ts.ucmd().args(&["-f", "--printf", format, "."]).succeeds();
+        assert!(result.stdout_str().starts_with('+'), "{format}");
+    }
+    let result = ts.ucmd().args(&["-f", "--printf", "%+S", "."]).succeeds();
+    assert!(!result.stdout_str().starts_with('+'));
 }
 
 #[test]
@@ -1091,4 +1119,23 @@ fn test_error_message_preserves_non_utf8_filename() {
                 .stderr_contains(quoted);
         }
     }
+}
+
+// --format prints a trailing newline, --printf prints nothing. -c is the
+// short form of --format and follows the same rule: the last one wins.
+#[rstest]
+#[case::printf_then_format(&["--printf=X", "--format=Y"], "Y\n")]
+#[case::format_then_printf(&["--format=Y", "--printf=X"], "X")]
+#[case::short_format_then_printf(&["-c", "Y", "--printf=X"], "X")]
+#[case::printf_then_short_format(&["--printf=X", "-c", "Y"], "Y\n")]
+fn test_last_of_format_printf_wins(#[case] args: &[&str], #[case] expected: &str) {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("a.txt", "");
+
+    scene
+        .ucmd()
+        .args(args)
+        .arg("a.txt")
+        .succeeds()
+        .stdout_is(expected);
 }

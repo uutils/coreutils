@@ -8,11 +8,12 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, Read, Stdin, Stdout, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Stdin, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use uucore::char_width::char_info_at;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
+use uucore::io::InputReader;
 use uucore::translate;
 use uucore::{format_usage, show};
 
@@ -244,6 +245,7 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(&translate!("unexpand-usage")))
         .about(translate!("unexpand-about"))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
@@ -283,21 +285,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-enum Input {
-    Stdin(Stdin),
-    File(File),
-}
-
-impl Read for Input {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            Self::Stdin(s) => s.read(buf),
-            Self::File(f) => f.read(buf),
-        }
-    }
-}
-
-fn open(path: &OsString) -> UResult<BufReader<Input>> {
+fn open(path: &OsString) -> UResult<BufReader<InputReader<File, Stdin>>> {
     // some platforms show different read error
     #[cfg(any(target_os = "wasi", windows))]
     {
@@ -310,12 +298,12 @@ fn open(path: &OsString) -> UResult<BufReader<Input>> {
         }
     }
     if path == "-" {
-        return Ok(BufReader::new(Input::Stdin(stdin())));
+        return Ok(BufReader::new(InputReader::Stdin(stdin())));
     }
     let f = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
     let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
-    Ok(BufReader::new(Input::File(f)))
+    Ok(BufReader::new(InputReader::File(f)))
 }
 
 fn next_tabstop(tab_config: &TabConfig, col: usize) -> Option<usize> {
@@ -446,6 +434,13 @@ fn is_multibyte_blank(c: char) -> bool {
         | '\u{3000}')
 }
 
+/// Whether `b` is an ASCII byte that takes one column and needs no special
+/// handling: not a blank, backspace or NUL.
+#[inline]
+fn is_plain(b: u8) -> bool {
+    b.is_ascii() && !matches!(b, b' ' | b'\t' | b'\x08' | b'\0')
+}
+
 /// Classify the character at `buf[byte]` for tab conversion, returning its
 /// [`CharType`] along with its display width and byte length. Unlike
 /// [`char_info_at`], the first element is a classification rather than the
@@ -458,6 +453,8 @@ fn classify_char_at(utf8: bool, buf: &[u8], byte: usize) -> (CharType, usize, us
             b' ' => (Space, 1, 1),
             b'\t' => (Tab, 0, 1),
             b'\x08' => (Backspace, 0, 1),
+            // NUL has no display width (`wcwidth(L'\0')` is 0).
+            b'\0' => (Other, 0, 1),
             _ => (Other, 1, 1),
         };
     }
@@ -490,6 +487,16 @@ struct PrintState {
 }
 
 impl PrintState {
+    fn new() -> Self {
+        Self {
+            col: 0,
+            scol: 0,
+            leading: true,
+            pctype: CharType::Other,
+            pending_wide: Vec::new(),
+        }
+    }
+
     // reinitializes the PrintState struct to beginning of line values
     fn new_line(&mut self) {
         self.col = 0;
@@ -579,12 +586,29 @@ fn unexpand_buf(
     }
 
     while byte < buf.len() {
-        // when we have a finite number of columns, never convert past the last column
-        if lastcol > 0 && print_state.col >= lastcol {
+        // when we have a finite number of columns, never convert past the last column,
+        // but only fast forward if there are no backspaces that could move col back
+        if lastcol > 0 && print_state.col >= lastcol && !buf[byte..].contains(&b'\x08') {
             write_tabs(output, tab_config, print_state, true)?;
             output.write_all(&buf[byte..])?;
             print_state.scol = print_state.col;
             break;
+        }
+
+        // Write a run of plain one-column ASCII bytes at once.
+        if is_plain(buf[byte]) {
+            let end = buf[byte + 1..]
+                .iter()
+                .position(|&b| !is_plain(b))
+                .map_or(buf.len(), |n| byte + 1 + n);
+            write_tabs(output, tab_config, print_state, options.aflag)?;
+            print_state.leading = false;
+            print_state.col += end - byte;
+            output.write_all(&buf[byte..end])?;
+            print_state.scol = print_state.col;
+            print_state.pctype = CharType::Other;
+            byte = end;
+            continue;
         }
 
         // figure out how big the next char is, if it's UTF-8
@@ -647,22 +671,41 @@ fn unexpand_file(
     options: &Options,
     lastcol: usize,
     tab_config: &TabConfig,
+    line_state: &mut PrintState,
 ) -> UResult<()> {
     let mut input = open(file)?;
-    let mut print_state = PrintState {
-        col: 0,
-        scol: 0,
-        leading: true,
-        pctype: CharType::Other,
-        pending_wide: Vec::new(),
-    };
+    // Work on a local copy of the line state, so it can stay in registers
+    // while unexpanding, and hand it back when done with this file.
+    let mut print_state = std::mem::replace(line_state, PrintState::new());
+    let result = unexpand_input(
+        &mut input,
+        file,
+        output,
+        options,
+        lastcol,
+        tab_config,
+        &mut print_state,
+    );
+    *line_state = print_state;
+    result
+}
 
+/// Unexpands everything `input` yields, carrying the line state in `print_state`.
+fn unexpand_input(
+    input: &mut impl BufRead,
+    file: &OsString,
+    output: &mut BufWriter<Stdout>,
+    options: &Options,
+    lastcol: usize,
+    tab_config: &TabConfig,
+    print_state: &mut PrintState,
+) -> UResult<()> {
     while let buf @ [_, ..] = input
         .fill_buf()
         .map_err(|e| e.map_err_context(|| file.maybe_quote().to_string()) as Box<dyn UError>)?
     {
         for line in buf.split_inclusive(|b| *b == b'\n') {
-            unexpand_buf(line, output, options, lastcol, tab_config, &mut print_state)?;
+            unexpand_buf(line, output, options, lastcol, tab_config, print_state)?;
             if let Some(b'\n') = line.last() {
                 print_state.new_line();
             }
@@ -670,8 +713,7 @@ fn unexpand_file(
         let len = buf.len();
         input.consume(len);
     }
-    // write out anything remaining
-    write_tabs(output, tab_config, &mut print_state, options.aflag)
+    Ok(())
 }
 
 fn unexpand(options: &Options) -> UResult<()> {
@@ -686,12 +728,25 @@ fn unexpand(options: &Options) -> UResult<()> {
         0
     };
 
+    // Input files form a single stream: a line that does not end in a
+    // newline continues in the next file.
+    let mut print_state = PrintState::new();
+
     for file in &options.files {
-        if let Err(e) = unexpand_file(file, &mut output, options, lastcol, tab_config) {
+        if let Err(e) = unexpand_file(
+            file,
+            &mut output,
+            options,
+            lastcol,
+            tab_config,
+            &mut print_state,
+        ) {
             show!(e);
             set_exit_code(1);
         }
     }
+    // write out anything remaining
+    write_tabs(&mut output, tab_config, &mut print_state, options.aflag)?;
     output.flush()?;
     Ok(())
 }

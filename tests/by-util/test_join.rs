@@ -71,7 +71,7 @@ fn only_whitespace_separators_merge() {
         .arg("-")
         .pipe_in(" a  ,c ")
         .succeeds()
-        .stdout_only("a ,,,b ,c \n");
+        .stdout_only("a ,,,b ,c\n");
 
     new_ucmd!()
         .arg("contiguous_separators.txt")
@@ -584,6 +584,35 @@ fn empty_fields_kept_without_empty_filler() {
 }
 
 #[test]
+fn trailing_blanks_do_not_end_a_field() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // Like leading blanks, trailing blanks are not followed by an empty field.
+    at.write("a", "1 a \n2 b\t\n");
+    at.write("b", "1 x\n2 y  \n");
+
+    ts.ucmd()
+        .args(&["a", "b"])
+        .succeeds()
+        .stdout_only("1 a x\n2 b y\n");
+
+    ts.ucmd()
+        .args(&["-o", "auto", "-e", "X", "a", "b"])
+        .succeeds()
+        .stdout_only("1 a x\n2 b y\n");
+
+    // With -z, newline is a blank too, so one at the end of a line is dropped.
+    at.write("z1", "1 a\n\x002 b\n");
+    at.write("z2", "1 x\x002 y\n");
+
+    ts.ucmd()
+        .args(&["-z", "-o", "auto", "-e", "X", "z1", "z2"])
+        .succeeds()
+        .stdout_only("1 a x\x002 b y\x00");
+}
+
+#[test]
 fn repeated_empty_filler() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -712,8 +741,8 @@ fn non_line_feeds() {
         .stdout_only_fixture("non-line_feeds.expected");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn non_unicode() {
     new_ucmd!()
         .arg("non-unicode_1.bin")
@@ -787,9 +816,9 @@ fn null_line_endings() {
         .stdout_only_fixture("z.expected");
 }
 
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
-#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_full() {
     let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
     new_ucmd!()
@@ -800,9 +829,9 @@ fn test_full() {
         .stderr_contains("No space left on device");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_join_non_utf8_paths() {
     use std::fs::File;
     use std::io::Write;
@@ -848,9 +877,9 @@ fn join_emoji_delim_inner_key() {
         .stdout_only("b🗿a🗿u\n");
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[cfg(unix)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: locale database not visible")]
 fn test_locale_collation() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -868,12 +897,8 @@ fn test_locale_collation() {
         .stdout_contains("ab:d 1 x");
 }
 
+#[uutests::wasi_ignore(Usize32BitOverflow)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: usize::MAX is computed for the 64-bit host test binary, \
-              but the wasm32 target binary saturates at the 32-bit usize::MAX"
-)]
 fn test_incompatible_fields_reports_exact_field_number() {
     // An out-of-range field clamps to usize::MAX, which used to overflow the
     // one-based increment. Field numbers past 2^53 also used to be rounded on
@@ -1037,4 +1062,50 @@ fn test_missing_key_is_empty_key() {
         .args(&["-1", "2", "--check-order", "blank", "keys"])
         .succeeds()
         .stdout_only("1002 bob\n");
+}
+
+#[test]
+fn test_last_of_check_order_nocheck_order_wins() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("a.txt", "b\na\n");
+    scene
+        .ucmd()
+        .args(&["--check-order", "--nocheck-order", "a.txt", "a.txt"])
+        .succeeds()
+        .stdout_is("b\na\n");
+
+    // The other order: --check-order wins and the unsorted input is reported.
+    scene
+        .ucmd()
+        .args(&["--nocheck-order", "--check-order", "a.txt", "a.txt"])
+        .fails_with_code(1)
+        .stderr_is("join: a.txt:2: is not sorted: a\n");
+}
+
+#[test]
+fn test_o_separate_field_operands() {
+    // GNU accepts -o fields as separate argv words when they follow -o.
+    new_ucmd!()
+        .args(&["-o", "1.1", "1.2", "2.2", "fields_1.txt", "fields_2.txt"])
+        .succeeds()
+        .stdout_only("1  a\n2  b\n3  c\n5  e\n8  h\n");
+}
+
+#[test]
+fn test_o_separate_fields_leave_two_files() {
+    // Files whose names look like field specs are still FILE1 and FILE2.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("2.1", "id lhs\n");
+    at.write("1.3", "id rhs\n");
+    ucmd.args(&["-o", "1.1", "2.2", "1.2", "2.1", "1.3"])
+        .succeeds()
+        .stdout_only("id rhs lhs\n");
+
+    new_ucmd!()
+        .args(&["-o", "0", "1.2", "1.3", "9.9"])
+        .fails_with_code(1)
+        .no_stdout()
+        // Windows quotes the name differently, so only check the operand is reported.
+        .stderr_contains("1.3")
+        .stderr_contains("No such file or directory");
 }

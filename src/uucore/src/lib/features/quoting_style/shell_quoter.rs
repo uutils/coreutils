@@ -134,11 +134,16 @@ impl<'a> EscapedShellQuoter<'a> {
         let (mut quotes, must_quote) = initial_quoting(reference, dirname, always_quote, true);
         // Dollar-quoted byte escapes cannot be nested in double quotes.
         if quotes == ShellQuotes::Double {
-            let invalid = match encoding {
+            let needs_dollar = match encoding {
                 UEncoding::Ascii => !reference.is_ascii(),
-                UEncoding::Utf8 => std::str::from_utf8(reference).is_err(),
+                UEncoding::Utf8 => std::str::from_utf8(reference).map_or(true, |name| {
+                    name.chars().any(|c| {
+                        let escaped = EscapedChar::new_shell(c, true, ShellQuotes::Double);
+                        matches!(escaped.state, EscapeState::Octal(_))
+                    })
+                }),
             };
-            if invalid {
+            if needs_dollar {
                 quotes = ShellQuotes::Single;
             }
         }

@@ -545,15 +545,15 @@ fn process_token_filesystem(
         } => {
             let output = match format {
                 // free blocks available to non-superuser
-                'a' => OutputType::Unsigned(meta.avail_blocks()),
+                'a' => OutputType::Integer(meta.avail_blocks() as i64),
                 // total data blocks in file system
-                'b' => OutputType::Unsigned(meta.total_blocks()),
+                'b' => OutputType::Integer(meta.total_blocks() as i64),
                 // total file nodes in file system
                 'c' => OutputType::Unsigned(meta.total_file_nodes()),
                 // free file nodes in file system
-                'd' => OutputType::Unsigned(meta.free_file_nodes()),
+                'd' => OutputType::Integer(meta.free_file_nodes() as i64),
                 // free blocks in file system
-                'f' => OutputType::Unsigned(meta.free_blocks()),
+                'f' => OutputType::Integer(meta.free_blocks() as i64),
                 // file system ID in hex
                 'i' => OutputType::UnsignedHex(meta.fsid()),
                 // maximum length of filenames
@@ -565,7 +565,7 @@ fn process_token_filesystem(
                 // block size (for faster transfers)
                 's' => OutputType::Unsigned(meta.io_size()),
                 // fundamental block size (for block counts)
-                'S' => OutputType::Integer(meta.block_size()),
+                'S' => OutputType::Unsigned(meta.block_size() as u64),
                 // file system type in hex
                 't' => OutputType::UnsignedHex(meta.fs_type() as u64),
                 // file system type in human readable form
@@ -1259,7 +1259,7 @@ impl Stater {
                     // optimal I/O transfer size hint
                     'o' => OutputType::Unsigned(meta.blksize()),
                     // total size, in bytes
-                    's' => OutputType::Integer(meta.len() as i64),
+                    's' => OutputType::Unsigned(meta.len()),
                     // major device type in hex, for character/block device special
                     // files
                     't' => OutputType::UnsignedHex(major(meta.rdev() as _) as u64),
@@ -1541,13 +1541,15 @@ pub fn uu_app() -> Command {
                 .long(options::FORMAT)
                 .help(translate!("stat-help-format"))
                 .value_name("FORMAT")
-                .allow_hyphen_values(true),
+                .allow_hyphen_values(true)
+                .overrides_with(options::PRINTF),
         )
         .arg(
             Arg::new(options::PRINTF)
                 .long(options::PRINTF)
                 .value_name("FORMAT")
                 .allow_hyphen_values(true)
+                .overrides_with(options::FORMAT)
                 .help(translate!("stat-help-printf")),
         )
         .arg(

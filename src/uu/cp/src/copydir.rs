@@ -106,34 +106,35 @@ struct Context<'a> {
     /// The current working directory at the time of starting the traversal.
     current_dir: PathBuf,
 
-    /// The path to the parent of the source directory, if any.
+    /// The base that entry paths are made relative to: the parent of the
+    /// source directory, or the source directory itself.
     root_parent: Option<PathBuf>,
 
     /// The target path to which the directory will be copied.
     target: &'a Path,
-
-    /// The source path from which the directory will be copied.
-    root: &'a Path,
 }
 
-// True if the path ends with a dot component (e.g. ".", "./", "dir/.").
-fn ends_with_curdir(path: &Path) -> bool {
+// True if the path ends with a "." or ".." component (e.g. ".", "dir/.", "..", "dir/../").
+fn ends_with_dot_component(path: &Path) -> bool {
     let mut bytes = path.as_os_str().as_encoded_bytes();
     while let [rest @ .., b'/' | b'\\'] = bytes {
         bytes = rest;
     }
-    bytes == b"." || bytes.ends_with(b"/.") || bytes.ends_with(b"\\.")
+    let last = bytes.rsplit(|&b| b == b'/' || b == b'\\').next();
+    matches!(last, Some(b"." | b".."))
 }
 
 impl<'a> Context<'a> {
-    fn new(root: &'a Path, target: &'a Path) -> io::Result<Self> {
+    fn new(root: &'a Path, target: &'a Path, no_target_dir: bool) -> io::Result<Self> {
         let current_dir = if root.is_absolute() {
             PathBuf::new()
         } else {
             env::current_dir()?
         };
         let root_path = current_dir.join(root);
-        let root_parent = if target.exists() && !ends_with_curdir(root) {
+        // With `-T` the contents of `root` go directly into `target`, so
+        // destination paths are always relative to `root` itself.
+        let root_parent = if !no_target_dir && target.exists() && !ends_with_dot_component(root) {
             root_path.parent().map(ToOwned::to_owned)
         } else {
             Some(root_path)
@@ -142,7 +143,6 @@ impl<'a> Context<'a> {
             current_dir,
             root_parent,
             target,
-            root,
         })
     }
 }
@@ -199,31 +199,33 @@ impl Entry {
         let source = source.as_ref();
         let source_relative = source.to_path_buf();
         let source_absolute = context.current_dir.join(&source_relative);
-        let mut descendant =
+        let descendant =
             get_local_to_root_parent(&source_absolute, context.root_parent.as_deref())?;
-        if no_target_dir {
-            let source_is_dir = source.is_dir();
-            if path_ends_with_terminator(context.target)
-                && source_is_dir
-                && !exists(context.target).is_ok_and(identity)
-            {
-                if let Err(e) = fs::create_dir_all(context.target) {
-                    eprintln!(
-                        "{}",
-                        translate!("cp-error-failed-to-create-directory", "error" => e)
-                    );
-                }
-            } else if let Some(stripped) = context
-                .root
-                .components()
-                .next_back()
-                .and_then(|stripped| descendant.strip_prefix(stripped).ok())
-            {
-                descendant = stripped.to_path_buf();
-            }
+        if no_target_dir
+            && path_ends_with_terminator(context.target)
+            && source.is_dir()
+            && !exists(context.target).is_ok_and(identity)
+            && let Err(e) = fs::create_dir_all(context.target)
+        {
+            eprintln!(
+                "{}",
+                translate!("cp-error-failed-to-create-directory", "error" => e)
+            );
         }
 
-        let local_to_target = context.target.join(descendant);
+        // `join("")` adds a separator that makes `copy_direntry` look through a
+        // symlinked target; only `src/.` or `src/..` without `-T` keeps it, to copy into it.
+        let local_to_target = if descendant.as_os_str().is_empty()
+            && (no_target_dir
+                || !context
+                    .root_parent
+                    .as_deref()
+                    .is_some_and(ends_with_dot_component))
+        {
+            context.target.to_path_buf()
+        } else {
+            context.target.join(descendant)
+        };
         Ok(Self {
             source_absolute,
             source_relative,
@@ -437,7 +439,7 @@ pub(crate) fn copy_directory(
         // Collect some paths here that are invariant during the traversal
         // of the given directory, like the current working directory and
         // the target directory.
-        let context = match Context::new(root, target) {
+        let context = match Context::new(root, target, options.no_target_dir) {
             Ok(c) => c,
             Err(e) => {
                 return Err(translate!("cp-error-failed-get-current-dir", "error" => e).into());

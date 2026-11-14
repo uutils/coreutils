@@ -10,6 +10,7 @@ use crate::{Quotable, parse, platform};
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use std::ffi::OsString;
 use std::io::{IsTerminal, Write};
+use std::num::IntErrorKind;
 use std::time::Duration;
 use uucore::diagnostics::OptionValue;
 use uucore::error::{UResult, USimpleError, UUsageError};
@@ -262,6 +263,8 @@ impl Settings {
         if let Some(s) = matches.get_one::<String>(options::MAX_UNCHANGED_STATS) {
             settings.max_unchanged_stats = match s.parse::<u32>() {
                 Ok(s) => s,
+                // GNU clamps values that do not fit instead of rejecting them.
+                Err(e) if e.kind() == &IntErrorKind::PosOverflow => u32::MAX,
                 Err(_) => {
                     return Err(UUsageError::new(
                         1,
@@ -441,13 +444,15 @@ fn parse_num(src: &str) -> Result<Signum, ParseSizeError> {
 pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     let args_vec: Vec<OsString> = args.collect();
     let clap_args = uu_app().try_get_matches_from(args_vec.clone());
+    let mut settings_failed = false;
     let clap_result = match clap_args {
         // Kept for the caret in size diagnostics, which needs the value as
         // typed.
-        Ok(matches) => Ok(Settings::from_with_diagnostics(
+        Ok(matches) => Settings::from_with_diagnostics(
             &matches,
             uucore::diagnostics::capture(&args_vec).as_deref(),
-        )?),
+        )
+        .inspect_err(|_| settings_failed = true),
         Err(err) => Err(err.into()),
     };
 
@@ -476,6 +481,14 @@ pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     // checking whether clap succeeded or the first argument starts with '+'.
     let possible_obsolete_args = &args_vec[1];
     if clap_result.is_ok() && possible_obsolete_args.as_encoded_bytes().first() != Some(&b'+') {
+        return clap_result;
+    }
+    // `tail -cf` is obsolete syntax even though clap reads it as `-c f`,
+    // but in `tail -c f` the separate argument is always the count.
+    // A bare short option such as `-c` is two bytes long: no value is
+    // attached to it, so the value came from the next argument.
+    let no_value_attached = possible_obsolete_args.len() <= "-c".len();
+    if settings_failed && no_value_attached {
         return clap_result;
     }
     match parse_obsolete(possible_obsolete_args, args_vec.get(2))? {

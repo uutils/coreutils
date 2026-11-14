@@ -77,6 +77,7 @@ impl Stats {
 // 2. Number only nonempty lines
 // 3. Don't number any lines at all
 // 4. Number all lines that match a basic regular expression.
+#[derive(Debug)]
 enum NumberingStyle {
     All,
     NonEmpty,
@@ -146,7 +147,7 @@ impl NumberFormat {
             }
             Self::RightZero if number < 0 => {
                 writer.write_all(b"-")?;
-                let num = buffer.format(number.abs());
+                let num = buffer.format(number.unsigned_abs());
                 for _ in num.len()..min_width.saturating_sub(1) {
                     writer.write_all(b"0")?;
                 }
@@ -353,6 +354,7 @@ pub fn uu_app() -> Command {
                 .long(options::LINE_INCREMENT)
                 .help(translate!("nl-help-line-increment"))
                 .value_name("NUMBER")
+                .allow_negative_numbers(true)
                 .value_parser(clap::value_parser!(i64)),
         )
         .arg(
@@ -392,6 +394,7 @@ pub fn uu_app() -> Command {
                 .long(options::STARTING_LINE_NUMBER)
                 .help(translate!("nl-help-starting-line-number"))
                 .value_name("NUMBER")
+                .allow_negative_numbers(true)
                 .value_parser(clap::value_parser!(i64)),
         )
         .arg(
@@ -416,7 +419,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
     let mut line = Vec::new();
     // Written before every unnumbered line. Capped to avoid OOM on 32-bit targets
     // when -w i32::MAX is passed (allocating 2 GiB would panic).
-    let blank_width = settings.number_width + 1;
+    let blank_width = settings.number_width + settings.number_separator.as_encoded_bytes().len();
     let space_buf = vec![b' '; blank_width.min(4096)];
 
     loop {
@@ -437,12 +440,6 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
 
         let _ = line.pop_if(|byte| *byte == b'\n');
 
-        if line.is_empty() {
-            stats.consecutive_empty_lines += 1;
-        } else {
-            stats.consecutive_empty_lines = 0;
-        }
-
         if let Some(section) = SectionDelimiter::parse(&line, &settings.section_delimiter) {
             stats.section = section;
             if settings.renumber {
@@ -455,6 +452,15 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                 SectionDelimiter::Body => &settings.body_numbering,
                 SectionDelimiter::Footer => &settings.footer_numbering,
             };
+
+            if let NumberingStyle::All = current_numbering_style {
+                if line.is_empty() {
+                    stats.consecutive_empty_lines += 1;
+                } else {
+                    stats.consecutive_empty_lines = 0;
+                }
+            }
+
             let is_line_numbered = match current_numbering_style {
                 // consider $join_blank_lines consecutive empty lines to be one logical line
                 // for numbering, and only number the last one

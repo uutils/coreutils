@@ -25,15 +25,12 @@ use nix::sys::signal::{SigSet, SigmaskHow, Signal, sigprocmask};
 #[cfg(unix)]
 use nix::unistd::execvp;
 use std::borrow::Cow;
-#[cfg(all(unix, not(target_os = "fuchsia")))]
-use std::collections::BTreeMap;
 #[cfg(unix)]
 use std::collections::BTreeSet;
 use std::env;
 #[cfg(unix)]
 use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
-#[cfg(not(unix))]
 use std::io;
 use std::io::Write as _;
 use std::io::stderr;
@@ -199,13 +196,13 @@ impl SignalRequest {
 
     fn for_each_signal<F>(&self, mut f: F) -> UResult<()>
     where
-        F: FnMut(usize, bool) -> UResult<()>,
+        F: FnMut(usize) -> UResult<()>,
     {
         if self.is_empty() {
             return Ok(());
         }
         for &sig in &self.signals {
-            f(sig, true)?;
+            f(sig)?;
         }
         if self.apply_all {
             for sig_value in 1..=signal_number_upper_bound() {
@@ -216,7 +213,7 @@ impl SignalRequest {
                 if sig_value == libc::SIGKILL as usize || sig_value == libc::SIGSTOP as usize {
                     continue;
                 }
-                f(sig_value, false)?;
+                f(sig_value)?;
             }
         }
         Ok(())
@@ -229,34 +226,6 @@ enum SignalActionKind {
     Default,
     Ignore,
     Block,
-}
-
-#[cfg(all(unix, not(target_os = "fuchsia")))]
-#[derive(Copy, Clone)]
-struct SignalActionRecord {
-    kind: SignalActionKind,
-    explicit: bool,
-}
-
-#[cfg(all(unix, not(target_os = "fuchsia")))]
-#[derive(Default)]
-struct SignalActionLog {
-    records: BTreeMap<usize, SignalActionRecord>,
-}
-
-#[cfg(all(unix, not(target_os = "fuchsia")))]
-impl SignalActionLog {
-    fn record(&mut self, sig_value: usize, kind: SignalActionKind, explicit: bool) {
-        self.records
-            .entry(sig_value)
-            .and_modify(|entry| {
-                entry.kind = kind;
-                if explicit {
-                    entry.explicit = true;
-                }
-            })
-            .or_insert(SignalActionRecord { kind, explicit });
-    }
 }
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
@@ -343,6 +312,7 @@ pub fn uu_app() -> Command {
                 .value_name("DIR")
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::DirPath)
+                .allow_hyphen_values(true)
                 .help(translate!("env-help-chdir")),
         )
         .arg(
@@ -359,6 +329,7 @@ pub fn uu_app() -> Command {
                 .value_name("NAME")
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
+                .allow_hyphen_values(true)
                 .help(translate!("env-help-unset")),
         )
         .arg(
@@ -385,6 +356,7 @@ pub fn uu_app() -> Command {
                 .value_name("a")
                 .action(ArgAction::Set)
                 .value_parser(ValueParser::os_string())
+                .allow_hyphen_values(true)
                 .help(translate!("env-help-argv0")),
         )
         .arg(
@@ -606,7 +578,13 @@ impl EnvAppData {
                 all_args.push(arg.clone());
                 continue;
             }
-            expecting_arg = false;
+            // The value of a detached -C, -u or -a is taken as is, even when
+            // it starts with -S, like GNU env does.
+            if expecting_arg {
+                expecting_arg = false;
+                all_args.push(arg.clone());
+                continue;
+            }
             // Where the `-S` string sits, for the caret: the argument the
             // parser is looking at right now.
             let located = uucore::diagnostics::enabled().then_some((original_args.as_slice(), n));
@@ -692,12 +670,20 @@ impl EnvAppData {
                 }
                 _ => {
                     if let Some(flag) = arg_str.strip_prefix("--") {
-                        if flags_with_args.contains(&flag) {
-                            expecting_arg = true;
-                        }
+                        // Long options can be abbreviated; `--chdir=DIR`
+                        // carries its value.
+                        expecting_arg = !flag.is_empty()
+                            && !flag.contains('=')
+                            && flags_with_args.iter().any(|f| f.starts_with(flag));
                     } else if let Some(flag) = arg_str.strip_prefix("-") {
-                        for c in flag.chars() {
-                            expecting_arg = short_flags_with_args.contains(&c);
+                        // In a cluster of short options, the first one
+                        // taking a value consumes the rest of the argument.
+                        let mut chars = flag.chars();
+                        while let Some(c) = chars.next() {
+                            if short_flags_with_args.contains(&c) {
+                                expecting_arg = chars.as_str().is_empty();
+                                break;
+                            }
                         }
                     }
                     // Short unset option (-u) is not allowed to contain '='
@@ -803,21 +789,28 @@ impl EnvAppData {
 
         #[cfg(all(unix, not(target_os = "fuchsia")))]
         {
-            let mut signal_action_log = SignalActionLog::default();
             // GNU applies the options in the order they are given, so the last one for a
             // signal wins.
             for (action_kind, request) in &opts.signal_actions {
-                apply_signal_action(request, &mut signal_action_log, *action_kind)?;
+                apply_signal_action(request, *action_kind)?;
             }
             if opts.list_signal_handling {
-                list_signal_handling(&signal_action_log);
+                list_signal_handling();
             }
+        }
+
+        // GNU env requires a command when --argv0 is given. Validate before
+        // apply_change_directory performs its side effect.
+        if opts.program.is_empty() && opts.argv0.is_some() {
+            return Err(UUsageError::new(
+                125,
+                translate!("env-error-must-specify-command-with-argv0"),
+            ));
         }
 
         apply_change_directory(&opts)?;
         if opts.program.is_empty() {
-            // no program provided, so just dump all env vars to stdout
-            print_all_env_vars(opts.line_ending)?;
+            print_all_env_vars(io::stdout(), opts.line_ending)?;
         } else {
             return self.run_program(&opts, self.do_debug_printing);
         }
@@ -1092,12 +1085,8 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
 }
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
-fn apply_signal_action(
-    request: &SignalRequest,
-    log: &mut SignalActionLog,
-    action_kind: SignalActionKind,
-) -> UResult<()> {
-    request.for_each_signal(|sig_value, explicit| {
+fn apply_signal_action(request: &SignalRequest, action_kind: SignalActionKind) -> UResult<()> {
+    request.for_each_signal(|sig_value| {
         // On some platforms ALL_SIGNALS may contain values that are not valid in libc.
         // Skip those invalid ones and continue (GNU env also ignores undefined signals).
         if !signal_is_valid(sig_value) {
@@ -1109,7 +1098,6 @@ fn apply_signal_action(
             SignalActionKind::Ignore => ignore_signal(sig_value)?,
             SignalActionKind::Block => block_signal(sig_value)?,
         }
-        log.record(sig_value, action_kind, explicit);
 
         // Set environment variable to communicate to Rust child processes
         // that SIGPIPE should be default (not ignored)
@@ -1208,19 +1196,35 @@ fn block_signal(sig: usize) -> UResult<()> {
     Ok(())
 }
 
+/// List the signals that are not at their default, blocked or ignored,
+/// whether env was asked for that or inherited it, as GNU does.
 #[cfg(all(unix, not(target_os = "fuchsia")))]
-fn list_signal_handling(log: &SignalActionLog) {
-    for (&sig_value, record) in &log.records {
-        if !record.explicit {
+fn list_signal_handling() {
+    let mask = SigSet::thread_get_mask().unwrap_or_else(|_| SigSet::empty());
+    for sig_value in 1..=signal_number_upper_bound() {
+        let Some(signal_name) = signal_name_by_value(sig_value) else {
+            continue;
+        };
+        if !signal_is_valid(sig_value) {
             continue;
         }
-        let action = match record.kind {
-            SignalActionKind::Default => "DEFAULT",
-            SignalActionKind::Ignore => "IGNORE",
-            SignalActionKind::Block => "BLOCK",
+        let sig = sig_value as libc::c_int;
+        // SAFETY: a null new action only queries the current one, into a
+        // zeroed `sigaction` that `sigaction(2)` fills in entirely.
+        let ignored = unsafe {
+            let mut current: libc::sigaction = zeroed();
+            libc::sigaction(sig, std::ptr::null(), &raw mut current) == 0
+                && current.sa_sigaction == libc::SIG_IGN
         };
-        let signal_name = signal_name_by_value(sig_value).unwrap_or("?".to_string());
-        eprintln!("{signal_name:<10} ({}): {action}", sig_value as i32);
+        // SAFETY: `sigismember` only reads the set it is given.
+        let blocked = unsafe { libc::sigismember(mask.as_ref(), sig) == 1 };
+        let state = match (blocked, ignored) {
+            (true, true) => "BLOCK,IGNORE",
+            (true, false) => "BLOCK",
+            (false, true) => "IGNORE",
+            (false, false) => continue,
+        };
+        eprintln!("{signal_name:<10} ({sig:2}): {state}");
     }
 }
 

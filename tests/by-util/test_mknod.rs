@@ -58,6 +58,20 @@ fn test_mknod_version() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_mknod_non_utf8_file_name() {
+    use std::os::unix::ffi::OsStrExt;
+    use uutests::at_and_ucmd;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file_name = std::ffi::OsStr::from_bytes(b"fifo_\xFF\xFE");
+
+    ucmd.arg(file_name).arg("p").succeeds().no_output();
+    assert!(std::path::Path::new(&at.plus(file_name)).exists());
+}
+
+#[test]
 fn test_mknod_fifo_default_writable() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd().arg("test_file").arg("p").succeeds();
@@ -212,6 +226,20 @@ fn test_mknod_mode_comma_separated() {
         ts.fixtures.metadata("test_file").permissions().mode() & 0o777,
         0o750
     );
+}
+
+#[test]
+fn test_mknod_mode_capital_x_adds_no_execute() {
+    for mode in ["a+X", "u+X", "go+rX", "a-x+X", "a+rwX", "u=rwX"] {
+        let ts = TestScenario::new(util_name!());
+        ts.ucmd().args(&["-m", mode, "test_fifo", "p"]).succeeds();
+        assert!(ts.fixtures.is_fifo("test_fifo"));
+        assert_eq!(
+            ts.fixtures.metadata("test_fifo").permissions().mode() & 0o777,
+            0o666,
+            "mode {mode}"
+        );
+    }
 }
 
 #[test]

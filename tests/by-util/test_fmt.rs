@@ -560,9 +560,9 @@ fn test_fmt_knuth_plass_line_breaking() {
         .stdout_is(expected);
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_fmt_non_utf8_paths() {
     use uutests::at_and_ucmd;
 
@@ -680,6 +680,44 @@ fn test_fmt_anti_prefix_keeps_missing_final_newline() {
     ] {
         new_ucmd!()
             .args(&args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn test_fmt_width_is_a_hard_maximum() {
+    // when no active break can take the next word, it must move to the next
+    // line instead of overflowing WIDTH
+    new_ucmd!()
+        .args(&["-w", "20"])
+        .pipe_in("    at a narrow width x y\n")
+        .succeeds()
+        .stdout_only("    at a narrow\n    width x y\n");
+    new_ucmd!()
+        .args(&["-w", "20"])
+        .pipe_in("    indented text that is long enough to wrap at a narrow width\n")
+        .succeeds()
+        .stdout_only(
+            "    indented text\n    that is long\n    enough to wrap\n    at a narrow\n    width\n",
+        );
+}
+
+#[test]
+fn test_fmt_first_word_ending_a_sentence() {
+    // A first word that ends a sentence at the end of its line gets two
+    // spaces after it, like any later word.
+    for (args, input, expected) in [
+        (&[][..], "Hello.\nWorld.\n", "Hello.  World.\n"),
+        (&["-u"], "Why?\nnot\n", "Why?  not\n"),
+        // --quick takes the greedy path
+        (&["-q"], "Hello!\nWorld.\n", "Hello!  World.\n"),
+        (&[], "A.\nB.\nC.\n", "A.  B.  C.\n"),
+        (&["-p", "x"], "x Hello.\nx World.\n", "x Hello.  World.\n"),
+    ] {
+        new_ucmd!()
+            .args(args)
             .pipe_in(input)
             .succeeds()
             .stdout_only(expected);

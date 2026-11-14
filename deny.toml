@@ -81,6 +81,8 @@ skip = [
   { name = "syn", version = "2.0.117" },
   # bindgen
   { name = "shlex", version = "1.3.0" },
+  # blake3, blake2b_simd
+  { name = "constant_time_eq", version = "0.4.2" },
 ]
 # spell-checker: enable
 
@@ -89,7 +91,7 @@ skip = [
 # https://embarkstudios.github.io/cargo-deny/checks/sources/cfg.html
 
 [sources]
-unknown-registry = "warn"
-unknown-git = "warn"
+unknown-registry = "deny"
+unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = []
