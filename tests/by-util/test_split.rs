@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit NOFILE
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit NOFILE xdigit FSIZE sigxfsz
 
 use rand::{RngExt as _, SeedableRng, rng};
 use regex::Regex;
@@ -1189,7 +1189,6 @@ fn test_number_kth_of_n() {
         .args(&["--number=3/10", "/dev/null"])
         .succeeds()
         .stdout_only("");
-    #[cfg(target_pointer_width = "64")]
     new_ucmd!()
         .args(&[
             "--number=r/9223372036854775807/18446744073709551615",
@@ -1205,7 +1204,6 @@ fn test_number_kth_of_n() {
         .args(&["--number=10/5", "asciilowercase.txt"])
         .fails()
         .stderr_contains("split: invalid chunk number: '10'");
-    #[cfg(target_pointer_width = "64")]
     new_ucmd!()
         .args(&[
             "--number=9223372036854775807/18446744073709551616",
@@ -1229,7 +1227,10 @@ fn test_number_kth_of_n_round_robin() {
         .args(&["-e", "--number", "r/7/7", "fivelines.txt"])
         .succeeds()
         .stdout_only("");
-    #[cfg(target_pointer_width = "64")]
+    new_ucmd!()
+        .args(&["--number", "r/1/4294967296", "fivelines.txt"])
+        .succeeds()
+        .stdout_only("1\n");
     new_ucmd!()
         .args(&[
             "--number",
@@ -1238,7 +1239,6 @@ fn test_number_kth_of_n_round_robin() {
         ])
         .succeeds()
         .stdout_only("");
-    #[cfg(target_pointer_width = "64")]
     new_ucmd!()
         .args(&[
             "--number",
