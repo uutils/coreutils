@@ -916,10 +916,8 @@ fn count_operands(args: &[OsString]) -> usize {
 }
 
 /// Merge separate `-o` field operands into one value so clap does not treat
-/// them as file operands (`join -o 1.1 1.2 2.2 f1 f2`). As many are taken as
-/// can be while the file operands still missing before them follow them, so
-/// none is taken once both files are given (`join f1 f2 -o 1.1 1.2` has an
-/// extra operand, like GNU).
+/// them as file operands (`join -o 1.1 1.2 2.2 f1 f2`), but only while the
+/// missing file operands still follow.
 fn coalesce_o_fields(args: Vec<OsString>) -> Vec<OsString> {
     let mut out = Vec::with_capacity(args.len());
     let mut i = 0;
