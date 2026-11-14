@@ -37,6 +37,7 @@ use uucore::entries;
     target_os = "freebsd",
     target_os = "hurd",
     target_os = "linux",
+    target_os = "macos",
     target_os = "netbsd"
 ))]
 use uucore::fsxattr::has_acl;
@@ -313,14 +314,17 @@ fn pad_left(string: &str, count: usize) -> String {
 }
 
 /// Returns the alternate-access indicator that follows the 9-bit permission
-/// string in long-format output: `.` for a non-trivial security context, `+`
-/// for an ACL, otherwise a space (which acts as a placeholder so columns line
-/// up across items that don't carry an indicator themselves).
+/// string in long-format output: `+` for an ACL, `.` for a non-trivial
+/// security context without one, otherwise a space (which acts as a
+/// placeholder so columns line up across items that don't carry an indicator
+/// themselves).
+///
+/// As in GNU ls, an ACL outranks a security context.
 fn alt_access_indicator(item: &PathData, config: &Config, is_acl_set: bool) -> u8 {
-    if item.security_context(config).len() > 1 {
-        b'.'
-    } else if is_acl_set {
+    if is_acl_set {
         b'+'
+    } else if item.security_context(config).len() > 1 {
+        b'.'
     } else {
         b' '
     }
@@ -673,7 +677,7 @@ fn display_date(
 }
 
 fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "illumos")))]
     {
         let ft = metadata.file_type();
         if ft.is_char_device() || ft.is_block_device() {
@@ -769,7 +773,7 @@ fn display_item_name(
         let should_stat_target = has_mi_or_or
             || matches!(
                 config.indicator_style,
-                Some(IndicatorStyle::Classify) | Some(IndicatorStyle::FileType)
+                Some(IndicatorStyle::Classify | IndicatorStyle::FileType)
             );
 
         match path.path().read_link() {
@@ -952,14 +956,15 @@ fn display_item_long(
             target_os = "freebsd",
             target_os = "hurd",
             target_os = "linux",
+            target_os = "macos",
             target_os = "netbsd"
         )))]
-        // TODO: See how Mac should work here
         let is_acl_set = false;
         #[cfg(any(
             target_os = "freebsd",
             target_os = "hurd",
             target_os = "linux",
+            target_os = "macos",
             target_os = "netbsd"
         ))]
         let is_acl_set = has_acl(item.path(), item.must_dereference);
@@ -1381,14 +1386,15 @@ fn calculate_padding_collection(
                 target_os = "freebsd",
                 target_os = "hurd",
                 target_os = "linux",
+                target_os = "macos",
                 target_os = "netbsd"
             )))]
-            // TODO: See how Mac should work here
             let is_acl_set = false;
             #[cfg(any(
                 target_os = "freebsd",
                 target_os = "hurd",
                 target_os = "linux",
+                target_os = "macos",
                 target_os = "netbsd"
             ))]
             let is_acl_set = has_acl(item.path(), item.must_dereference);

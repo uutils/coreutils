@@ -237,6 +237,7 @@ fi
 if have_util du; then
     cp -r test_dir test_du
     check_utility "du" "openat,newfstatat,stat,lstat" "openat" "-a test_du" "directory_usage"
+    assert_descent_nofollow "du" strace_du_directory_usage.log
 fi
 
 # Test mv - should use openat, renameat for directory moves

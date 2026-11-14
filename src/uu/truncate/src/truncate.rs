@@ -135,7 +135,7 @@ impl TruncateMode {
     ///
     /// # Returns
     ///
-    /// `true` is self matches Self::Absolute(_), `false` otherwise.
+    /// `true` is self matches `Self::Absolute(_)`, `false` otherwise.
     fn is_absolute(&self) -> bool {
         matches!(self, Self::Absolute(_))
     }

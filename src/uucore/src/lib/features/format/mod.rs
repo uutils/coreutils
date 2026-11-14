@@ -42,43 +42,52 @@ pub use self::escape::{EscapeSet, EscapedChar, OctalParsing};
 use crate::extendedbigdecimal::ExtendedBigDecimal;
 pub use argument::{FormatArgument, FormatArguments};
 
-use self::{escape::parse_escape_code, num_format::Formatter};
-use crate::{
-    NonUtf8OsStrError,
-    error::{UError, strip_errno},
-    translate, translate_text,
-};
+use self::escape::parse_escape_code;
+use self::num_format::Formatter;
+use crate::error::{UError, strip_errno};
+use crate::{NonUtf8OsStrError, translate, translate_text};
 pub use spec::Spec;
-use std::{
-    error::Error,
-    fmt::Display,
-    io::{Write, stdout},
-    marker::PhantomData,
-    ops::{ControlFlow, Range},
-};
+use std::io::{Write, stdout};
+use std::marker::PhantomData;
+use std::ops::{ControlFlow, Range};
 
 use os_display::Quotable;
 
-#[derive(Debug)]
+// Everything quoted in these messages is text the user typed and has to come
+// back unchanged, hence translate_text! rather than translate!.
+#[derive(Debug, thiserror::Error)]
 pub enum FormatError {
     /// The spec that failed to parse and its byte range in the format string.
+    #[error("{}", translate_text!("format-error-invalid-spec", "spec" => String::from_utf8_lossy(.0)))]
     SpecError(Vec<u8>, Range<usize>),
+    #[error("{}", translate_text!("format-error-write", "error" => strip_errno(.0)))]
     IoError(std::io::Error),
+    #[error("{}", translate!("format-error-no-more-arguments"))]
     NoMoreArguments,
+    #[error("{}", translate!("format-error-invalid-argument"))]
     InvalidArgument(FormatArgument),
+    #[error("{}", translate_text!("format-error-too-many-specs", "format" => String::from_utf8_lossy(.0)))]
     TooManySpecs(Vec<u8>),
+    #[error("{}", translate_text!("format-error-no-spec", "format" => String::from_utf8_lossy(.0)))]
     NeedAtLeastOneSpec(Vec<u8>),
+    // TODO: this message needs some work
+    #[error("{}", translate!("format-error-wrong-spec-type"))]
     WrongSpecType,
+    #[error("{}", translate_text!("format-error-invalid-precision", "precision" => .0))]
     InvalidPrecision(String),
     /// The format specifier ends with a %, as in `%f%`.
+    #[error("{}", translate_text!("format-error-ends-with-percent", "format" => String::from_utf8_lossy(.0).quote()))]
     EndsWithPercent(Vec<u8>),
     /// The escape sequence `\x` appears without a literal hexadecimal value.
     /// Carries its byte range in the format string, when it came from one.
+    #[error("{}", translate!("format-error-missing-hex"))]
     MissingHex(Option<Range<usize>>),
     /// The hexadecimal characters represent a code point that cannot represent a
     /// Unicode character (e.g., a surrogate code point)
     /// Carries its byte range in the format string, when it came from one.
+    #[error("{}", translate_text!("format-error-invalid-universal-character", "escape" => .0, "digits" => String::from_utf8_lossy(.1)))]
     InvalidCharacter(char, Vec<u8>, Option<Range<usize>>),
+    #[error("{0}")]
     InvalidEncoding(NonUtf8OsStrError),
 }
 
@@ -118,7 +127,6 @@ fn spec_error(fmt: &[u8], percent: usize, slice: &[u8]) -> FormatError {
     FormatError::SpecError(slice.to_vec(), percent..start + slice.len())
 }
 
-impl Error for FormatError {}
 impl UError for FormatError {}
 
 impl From<std::io::Error> for FormatError {
@@ -133,43 +141,6 @@ impl From<NonUtf8OsStrError> for FormatError {
     }
 }
 
-impl Display for FormatError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Everything quoted below is text the user typed and has to come back
-        // unchanged, hence translate_text! rather than translate!.
-        let message = match self {
-            Self::SpecError(s, _) => {
-                translate_text!("format-error-invalid-spec", "spec" => String::from_utf8_lossy(s))
-            }
-            Self::TooManySpecs(s) => {
-                translate_text!("format-error-too-many-specs", "format" => String::from_utf8_lossy(s))
-            }
-            Self::NeedAtLeastOneSpec(s) => {
-                translate_text!("format-error-no-spec", "format" => String::from_utf8_lossy(s))
-            }
-            Self::EndsWithPercent(s) => {
-                translate_text!("format-error-ends-with-percent", "format" => String::from_utf8_lossy(s).quote())
-            }
-            Self::InvalidPrecision(precision) => {
-                translate_text!("format-error-invalid-precision", "precision" => precision)
-            }
-            // TODO: Error message below needs some work
-            Self::WrongSpecType => translate!("format-error-wrong-spec-type"),
-            Self::IoError(e) => translate_text!("format-error-write", "error" => strip_errno(e)),
-            Self::NoMoreArguments => translate!("format-error-no-more-arguments"),
-            Self::InvalidArgument(_) => translate!("format-error-invalid-argument"),
-            Self::MissingHex(_) => translate!("format-error-missing-hex"),
-            Self::InvalidCharacter(escape_char, digits, _) => translate_text!(
-                "format-error-invalid-universal-character",
-                "escape" => escape_char,
-                "digits" => String::from_utf8_lossy(digits)
-            ),
-            Self::InvalidEncoding(no) => return no.fmt(f),
-        };
-        f.write_str(&message)
-    }
-}
-
 /// Maximum width for formatting to prevent memory allocation panics.
 /// Rust's formatter will panic when trying to allocate memory for very large widths.
 /// This limit is somewhat arbitrary but should be well above any practical use case
@@ -177,7 +148,7 @@ impl Display for FormatError {
 const MAX_FORMAT_WIDTH: usize = 1_000_000;
 
 /// Check if a width is too large for formatting.
-/// Returns an error if the width exceeds MAX_FORMAT_WIDTH.
+/// Returns an error if the width exceeds [`MAX_FORMAT_WIDTH`].
 fn check_width(width: usize) -> std::io::Result<()> {
     if width > MAX_FORMAT_WIDTH {
         Err(std::io::Error::new(

@@ -198,11 +198,10 @@ fn check_default(path: &[String]) -> bool {
         return false;
     }
     if total_len == 0 {
-        // POSIX has no empty file name, yet some systems accept one as a way
-        // of writing the current directory. Rather than decide that here, ask
-        // the platform: keep the operand when `symlink_metadata` (`lstat`)
-        // resolves it, reject it when that fails.
-        if fs::symlink_metadata(&joined_path).is_err() {
+        // Some systems accept an empty file name as the current directory.
+        // Preserve that behavior except on WASI, where a preopen makes
+        // symlink_metadata("") succeed for an invalid empty path.
+        if cfg!(target_os = "wasi") || fs::symlink_metadata(&joined_path).is_err() {
             show_error!("{}", translate!("pathchk-error-empty-path-not-found"));
             return false;
         }

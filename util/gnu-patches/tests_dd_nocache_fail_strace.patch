@@ -1,0 +1,50 @@
+diff --git a/tests/dd/nocache_fail.sh b/tests/dd/nocache_fail.sh
+index 0395ccaca6..c9e4f736ae 100755
+--- a/tests/dd/nocache_fail.sh
++++ b/tests/dd/nocache_fail.sh
+@@ -19,38 +19,18 @@
+
+ . "${srcdir=.}/tests/init.sh"; path_prepend_ ./src
+ print_ver_ dd
+-require_gcc_shared_
+-
+-# Replace each getxattr and lgetxattr call with a call to these stubs.
+-# Count those and write the total number of calls to the file "x"
+-# via a global destructor.
+-cat > k.c <<'EOF' || framework_failure_
+-#include <errno.h>
+-#include <fcntl.h>
+-#include <stdio.h>
+-#include <sys/types.h>
+-
+-int posix_fadvise (int fd, off_t offset, off_t len, int advice)
+-{
+-  fopen ("called", "w");
+-  return ENOTSUP;  /* Simulate non standard error indication.  */
+-}
+-EOF
+-
+-# Then compile/link it:
+-gcc_shared_ k.c k.so \
+-  || framework_failure_ 'failed to build shared library'
++uses_strace_
+
+ touch ifile || framework_failure_
+
+-LD_PRELOAD=$LD_PRELOAD:./k.so dd if=ifile iflag=nocache count=0 2>err
+-ret=$?
+-
+-test -f called || skip_ "internal test failure: maybe LD_PRELOAD doesn't work?"
++strace -o strace.out \
++  -e trace=fadvise64 \
++  -e fault=fadvise64:error=EOPNOTSUPP \
++  dd if=ifile iflag=nocache count=0 2>err
+
++ret=$?
++grep fadvise64 strace.out || skip_ 'fadvise64 is not intercepted'
+ grep 'dd: failed to discard cache for: ifile' err || fail=1
+-
+-# Ensure that the dd command failed
+ test "$ret" = 1 || fail=1
+
+ Exit $fail

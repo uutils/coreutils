@@ -17,21 +17,13 @@
 //! [radix]: https://en.wikipedia.org/wiki/Radix
 //! [positional notation]: https://en.wikipedia.org/wiki/Positional_notation
 
-use std::error::Error;
 use std::fmt::{self, Display, Formatter, Write};
 use uucore::translate;
 
 /// An overflow due to incrementing a number beyond its representable limit.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("{}", translate!("split-error-overflow"))]
 pub struct Overflow;
-
-impl Display for Overflow {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}", translate!("split-error-overflow"))
-    }
-}
-
-impl Error for Overflow {}
 
 /// A number in arbitrary radix expressed in a positional notation.
 ///

@@ -545,15 +545,15 @@ fn process_token_filesystem(
         } => {
             let output = match format {
                 // free blocks available to non-superuser
-                'a' => OutputType::Unsigned(meta.avail_blocks()),
+                'a' => OutputType::Integer(meta.avail_blocks() as i64),
                 // total data blocks in file system
-                'b' => OutputType::Unsigned(meta.total_blocks()),
+                'b' => OutputType::Integer(meta.total_blocks() as i64),
                 // total file nodes in file system
                 'c' => OutputType::Unsigned(meta.total_file_nodes()),
                 // free file nodes in file system
-                'd' => OutputType::Unsigned(meta.free_file_nodes()),
+                'd' => OutputType::Integer(meta.free_file_nodes() as i64),
                 // free blocks in file system
-                'f' => OutputType::Unsigned(meta.free_blocks()),
+                'f' => OutputType::Integer(meta.free_blocks() as i64),
                 // file system ID in hex
                 'i' => OutputType::UnsignedHex(meta.fsid()),
                 // maximum length of filenames
@@ -565,7 +565,7 @@ fn process_token_filesystem(
                 // block size (for faster transfers)
                 's' => OutputType::Unsigned(meta.io_size()),
                 // fundamental block size (for block counts)
-                'S' => OutputType::Integer(meta.block_size()),
+                'S' => OutputType::Unsigned(meta.block_size() as u64),
                 // file system type in hex
                 't' => OutputType::UnsignedHex(meta.fs_type() as u64),
                 // file system type in human readable form
@@ -755,9 +755,9 @@ fn print_raw_byte(byte: u8) {
 
 impl Stater {
     fn process_flags(chars: &[char], i: &mut usize, bound: usize, flag: &mut Flags) {
-        while *i < bound {
+        for &c in &chars[*i..bound] {
             #[expect(clippy::match_same_arms)] // needs comment
-            match chars[*i] {
+            match c {
                 '#' => flag.alter = true,
                 '0' => flag.zero = true,
                 '-' => flag.left = true,
@@ -793,6 +793,17 @@ impl Stater {
         let mut flag = Flags::default();
 
         Self::process_flags(chars, i, bound, &mut flag);
+
+        // GNU rejects flag-only fragments closed by another '%', e.g. `%++-+%`.
+        if *i < bound && chars[*i] == '%' {
+            let invalid_directive: String = chars[old..=*i].iter().collect();
+            return Err(DirectiveError::new(
+                format_str,
+                &invalid_directive,
+                old,
+                *i + 1,
+            ));
+        }
 
         let mut width = 0;
         let mut precision = Precision::NotSpecified;
@@ -953,7 +964,19 @@ impl Stater {
         while i < bound {
             match chars.get(i) {
                 Some('%') => match Self::handle_percent_case(&chars, &mut i, bound, format_str) {
-                    Ok(token) => tokens.push(token),
+                    Ok(token) => {
+                        // A directive takes a single byte as its conversion, so
+                        // after a multibyte char (always an unknown directive,
+                        // printed as `?`) the rest of its bytes are printed as is.
+                        let rest = match token {
+                            Token::Directive { format, .. } if !format.is_ascii() => {
+                                format.encode_utf8(&mut [0; 4]).as_bytes()[1..].to_vec()
+                            }
+                            _ => Vec::new(),
+                        };
+                        tokens.push(token);
+                        tokens.extend(rest.into_iter().map(Token::Byte));
+                    }
                     Err(error) => return (tokens, Some(error)),
                 },
                 Some('\\') => {
@@ -969,9 +992,6 @@ impl Stater {
                 None => break,
             }
             i += 1;
-        }
-        if !use_printf && !format_str.ends_with('\n') {
-            tokens.push(Token::Char('\n'));
         }
         (tokens, None)
     }
@@ -1043,7 +1063,12 @@ impl Stater {
             }
             tokens
         } else {
-            let (tokens, error) = Self::generate_tokens(format_str, use_printf);
+            let (mut tokens, error) = Self::generate_tokens(format_str, use_printf);
+            // `--format` always prints a newline after the output, even when
+            // the format already ends with one; `--printf` never adds one.
+            if !use_printf && error.is_none() {
+                tokens.push(Token::Char('\n'));
+            }
             format_error = error;
             tokens
         };
@@ -1234,7 +1259,7 @@ impl Stater {
                     // optimal I/O transfer size hint
                     'o' => OutputType::Unsigned(meta.blksize()),
                     // total size, in bytes
-                    's' => OutputType::Integer(meta.len() as i64),
+                    's' => OutputType::Unsigned(meta.len()),
                     // major device type in hex, for character/block device special
                     // files
                     't' => OutputType::UnsignedHex(major(meta.rdev() as _) as u64),
@@ -1516,13 +1541,15 @@ pub fn uu_app() -> Command {
                 .long(options::FORMAT)
                 .help(translate!("stat-help-format"))
                 .value_name("FORMAT")
-                .allow_hyphen_values(true),
+                .allow_hyphen_values(true)
+                .overrides_with(options::PRINTF),
         )
         .arg(
             Arg::new(options::PRINTF)
                 .long(options::PRINTF)
                 .value_name("FORMAT")
                 .allow_hyphen_values(true)
+                .overrides_with(options::FORMAT)
                 .help(translate!("stat-help-printf")),
         )
         .arg(
