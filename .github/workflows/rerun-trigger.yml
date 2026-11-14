@@ -8,8 +8,10 @@ name: Rerun Workflows
 # Comment commands:
 #   /rerun                  - re-run the failed jobs of every failed or
 #                             cancelled workflow
-#   /rerun <workflow name>  - fully re-run the named workflow's latest run
-#                             (e.g. "GnuTests"), whatever its conclusion
+#   /rerun <workflow name>  - re-run the named workflow's latest run
+#                             (e.g. "GnuTests"); only its failed jobs are
+#                             rerun if it failed, cancelled, or timed out,
+#                             otherwise the whole run is rerun
 #
 # Multiple commands can be put on separate lines of the same comment, e.g.:
 #   /rerun GnuTests
@@ -61,6 +63,12 @@ jobs:
               await react('-1');
               core.setFailed(message);
             }
+
+            // Conclusions that leave per-job results behind, so only their
+            // failed/cancelled jobs need rerunning (GitHub's "re-run failed
+            // jobs" reruns any job that isn't 'success', including
+            // 'cancelled' ones).
+            const FAILED_CONCLUSIONS = ['failure', 'timed_out', 'cancelled'];
 
             async function run() {
               // Every non-empty line must itself be a /rerun command, so a
@@ -146,11 +154,13 @@ jobs:
 
               for (const workflowName of workflowNames) {
                 if (workflowName) {
-                  // A named rerun targets only that workflow's latest run on
-                  // the PR's head commit, regardless of its conclusion, since
-                  // the whole point of naming it is to force a fresh run.
-                  // The API already returns runs newest-first, so the first
-                  // match is the latest one.
+                  // A named rerun always targets that workflow's latest run on
+                  // the PR's head commit, since the whole point of naming it
+                  // is to force a fresh run. The API already returns runs
+                  // newest-first, so the first match is the latest one.
+                  // Whether that run gets a full rerun or just its failed
+                  // jobs rerun is decided separately below, based on its
+                  // conclusion.
                   const allMatchingRuns = runsForThisPr
                     .filter(run => run.name.toLowerCase() === workflowName.toLowerCase());
 
@@ -166,22 +176,30 @@ jobs:
                     continue;
                   }
 
-                  core.info(`Re-running run ${latestRun.id} (${latestRun.name})`);
-                  await github.rest.actions.reRunWorkflow({
-                    ...context.repo,
-                    run_id: latestRun.id,
-                  });
+                  if (FAILED_CONCLUSIONS.includes(latestRun.conclusion)) {
+                    core.info(`Re-running failed jobs of run ${latestRun.id} (${latestRun.name})`);
+                    await github.rest.actions.reRunWorkflowFailedJobs({
+                      ...context.repo,
+                      run_id: latestRun.id,
+                    });
+                  } else {
+                    // Anything else gets a full rerun: there's no per-job
+                    // failure info to target.
+                    core.info(`Re-running run ${latestRun.id} (${latestRun.name})`);
+                    await github.rest.actions.reRunWorkflow({
+                      ...context.repo,
+                      run_id: latestRun.id,
+                    });
+                  }
                   rerunNames.push(latestRun.name);
                 } else {
                   // A plain '/rerun' only targets runs that are actually broken.
-                  // 'failure' and 'timed_out' leave per-job results behind, so
-                  // only their failed jobs are rerun. 'cancelled', 'stale', and
-                  // 'startup_failure' leave no reliable per-job results, so
-                  // those get a full rerun instead.
-                  const matchingFailedRuns = runsForThisPr.filter(run => ['failure', 'timed_out'].includes(run.conclusion));
-                  const matchingCancelledRuns = runsForThisPr.filter(run => ['cancelled', 'stale', 'startup_failure'].includes(run.conclusion));
+                  // 'stale' and 'startup_failure' also have no per-job
+                  // failure info, so those get a full rerun.
+                  const matchingFailedRuns = runsForThisPr.filter(run => FAILED_CONCLUSIONS.includes(run.conclusion));
+                  const matchingUnsalvageableRuns = runsForThisPr.filter(run => ['stale', 'startup_failure'].includes(run.conclusion));
 
-                  if (matchingFailedRuns.length === 0 && matchingCancelledRuns.length === 0) {
+                  if (matchingFailedRuns.length === 0 && matchingUnsalvageableRuns.length === 0) {
                     problems.push('No failed, cancelled, timed-out, or stale workflow runs found for the PR head commit.');
                     continue;
                   }
@@ -195,7 +213,7 @@ jobs:
                     rerunNames.push(run.name);
                   }
 
-                  for (const run of matchingCancelledRuns) {
+                  for (const run of matchingUnsalvageableRuns) {
                     core.info(`Re-running run ${run.id} (${run.name})`);
                     await github.rest.actions.reRunWorkflow({
                       ...context.repo,
