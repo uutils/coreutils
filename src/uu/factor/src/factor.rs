@@ -48,13 +48,10 @@ fn write_factors_str(
     flush_each: bool,
 ) -> UResult<()> {
     let parsed = parse_num(num_str);
-    if parsed.is_err() {
-        // Keep the factors printed so far ahead of the error message.
-        w.flush()
-            .map_err_context(|| translate!("factor-error-write-error"))?;
-    }
-    show_if_err!(&parsed);
     let Ok(x) = parsed else {
+        // Keep the factors printed so far ahead of the error message.
+        flush_stdout(w)?;
+        show_if_err!(&parsed);
         // return Ok(). it's non-fatal and we should try the next number.
         return Ok(());
     };
@@ -83,6 +80,11 @@ fn write_factors_str(
     .and_then(|()| w.write_all(out))
     .and_then(|()| if flush_each { w.flush() } else { Ok(()) })
     .map_err_context(|| translate!("factor-error-write-error"))
+}
+
+fn flush_stdout(w: &mut impl Write) -> UResult<()> {
+    w.flush()
+        .map_err_context(|| translate!("factor-error-write-error"))
 }
 
 fn parse_num(slice: &[u8]) -> UResult<Number> {
@@ -219,8 +221,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     }
                 }
                 Err(e) => {
-                    w.flush()
-                        .map_err_context(|| translate!("factor-error-write-error"))?;
+                    flush_stdout(&mut w)?;
                     set_exit_code(1);
                     show_error!(
                         "{}",
@@ -232,8 +233,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    w.flush()
-        .map_err_context(|| translate!("factor-error-write-error"))
+    flush_stdout(&mut w)
 }
 
 pub fn uu_app() -> Command {
