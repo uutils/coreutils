@@ -1024,17 +1024,16 @@ impl Stater {
             .get_many::<OsString>(options::FILES)
             .map(|v| v.map(OsString::from).collect())
             .unwrap();
-        let format_str = if matches.contains_id(options::PRINTF) {
-            matches
-                .get_one::<String>(options::PRINTF)
-                .expect("Invalid format string")
-        } else {
-            matches
-                .get_one::<String>(options::FORMAT)
-                .map_or("", |s| s.as_str())
-        };
-
         let use_printf = matches.contains_id(options::PRINTF);
+        // An empty format given by the user is still used instead of the default.
+        let user_format = matches
+            .get_one::<String>(if use_printf {
+                options::PRINTF
+            } else {
+                options::FORMAT
+            })
+            .map(String::as_str);
+        let format_str = user_format.unwrap_or_default();
         let terse = matches.get_flag(options::TERSE);
         let show_fs = matches.get_flag(options::FILE_SYSTEM);
 
@@ -1055,7 +1054,7 @@ impl Stater {
         // A format stat built itself cannot hold an unknown directive, so an
         // error there is our bug, has nothing to point at, and is raised now.
         let mut format_error = None;
-        let default_tokens = if format_str.is_empty() {
+        let default_tokens = if user_format.is_none() {
             let (tokens, error) =
                 Self::generate_tokens(&Self::default_format(show_fs, terse, false), use_printf);
             if let Some(error) = error {
@@ -1088,7 +1087,7 @@ impl Stater {
         Ok(Self {
             follow: matches.get_flag(options::DEREFERENCE),
             show_fs,
-            from_user: !format_str.is_empty(),
+            from_user: user_format.is_some(),
             files,
             mount_list: OnceCell::new(),
             mount_list_needed,
