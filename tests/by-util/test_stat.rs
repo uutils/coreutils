@@ -85,6 +85,19 @@ fn test_printf_size_takes_no_sign(#[case] format: &str, #[case] expected: &str) 
         .stdout_only(expected);
 }
 
+#[rstest]
+#[case::plus("%.+5s", "?5s")]
+#[case::minus("%.-2s", "?2s")]
+#[case::with_width("%5.+3s|", "?3s|")]
+#[case::leading_zero("%.05s", "00012")]
+fn test_printf_precision_takes_no_sign(#[case] format: &str, #[case] expected: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello world\n");
+    ucmd.args(&["--printf", format, "f"])
+        .succeeds()
+        .stdout_only(expected);
+}
+
 // GNU prints the free and total block and free node counts of `-f` as signed
 // numbers and the fundamental block size as an unsigned one.
 #[test]
