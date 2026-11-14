@@ -72,6 +72,46 @@ fn test_fs_format() {
     ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
 }
 
+// Like GNU, a file size is unsigned, so `+` and ` ` add no sign to it.
+#[rstest]
+#[case::plus("%+s", "12")]
+#[case::space("% s", "12")]
+#[case::plus_with_precision("%+.3s", "012")]
+fn test_printf_size_takes_no_sign(#[case] format: &str, #[case] expected: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello world\n");
+    ucmd.args(&["--printf", format, "f"])
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[rstest]
+#[case::plus("%.+5s", "?5s")]
+#[case::minus("%.-2s", "?2s")]
+#[case::with_width("%5.+3s|", "?3s|")]
+#[case::leading_zero("%.05s", "00012")]
+fn test_printf_precision_takes_no_sign(#[case] format: &str, #[case] expected: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello world\n");
+    ucmd.args(&["--printf", format, "f"])
+        .succeeds()
+        .stdout_only(expected);
+}
+
+// GNU prints the free and total block and free node counts of `-f` as signed
+// numbers and the fundamental block size as an unsigned one.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_fs_printf_sign() {
+    let ts = TestScenario::new(util_name!());
+    for format in ["%+a", "%+b", "%+d", "%+f"] {
+        let result = ts.ucmd().args(&["-f", "--printf", format, "."]).succeeds();
+        assert!(result.stdout_str().starts_with('+'), "{format}");
+    }
+    let result = ts.ucmd().args(&["-f", "--printf", "%+S", "."]).succeeds();
+    assert!(!result.stdout_str().starts_with('+'));
+}
+
 #[test]
 // `stat -f` is only implemented for these targets; elsewhere `fs_type` is
 // still `unimplemented!()`.

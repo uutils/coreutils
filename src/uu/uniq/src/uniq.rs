@@ -23,6 +23,7 @@ use uucore::translate;
 
 pub mod options {
     pub static ALL_REPEATED: &str = "all-repeated";
+    pub static ALL_REPEATED_SHORT: &str = "all-repeated-short";
     pub static CHECK_CHARS: &str = "check-chars";
     pub static COUNT: &str = "count";
     pub static IGNORE_CASE: &str = "ignore-case";
@@ -705,12 +706,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let skip_fields_modern: Option<usize> = opt_parsed(options::SKIP_FIELDS, &matches)?;
     let skip_chars_modern: Option<usize> = opt_parsed(options::SKIP_CHARS, &matches)?;
 
+    let all_repeated =
+        matches.contains_id(options::ALL_REPEATED) || matches.get_flag(options::ALL_REPEATED_SHORT);
     let uniq = Uniq {
-        repeats_only: matches.get_flag(options::REPEATED)
-            || matches.contains_id(options::ALL_REPEATED),
+        repeats_only: matches.get_flag(options::REPEATED) || all_repeated,
         uniques_only: matches.get_flag(options::UNIQUE),
-        all_repeated: matches.contains_id(options::ALL_REPEATED)
-            || matches.contains_id(options::GROUP),
+        all_repeated: all_repeated || matches.contains_id(options::GROUP),
         delimiters: get_delimiter(&matches),
         show_counts: matches.get_flag(options::COUNT),
         skip_fields: skip_fields_modern.or(skip_fields_old),
@@ -745,8 +746,14 @@ pub fn uu_app() -> Command {
         .after_help(translate!("uniq-after-help"));
     uucore::clap_localization::configure_localized_command(cmd)
         .arg(
-            Arg::new(options::ALL_REPEATED)
+            Arg::new(options::ALL_REPEATED_SHORT)
                 .short('D')
+                .help(translate!("uniq-help-all-repeated-short"))
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::ALL_REPEATED),
+        )
+        .arg(
+            Arg::new(options::ALL_REPEATED)
                 .long(options::ALL_REPEATED)
                 .value_parser(ShortcutValueParser::new(["none", "prepend", "separate"]))
                 .help(translate!("uniq-help-all-repeated"))
@@ -755,7 +762,7 @@ pub fn uu_app() -> Command {
                 .default_missing_value("none")
                 .require_equals(true)
                 // Let the final occurrence select the delimiter method.
-                .overrides_with(options::ALL_REPEATED),
+                .overrides_with_all([options::ALL_REPEATED, options::ALL_REPEATED_SHORT]),
         )
         .arg(
             Arg::new(options::GROUP)
@@ -771,6 +778,7 @@ pub fn uu_app() -> Command {
                 .conflicts_with_all([
                     options::REPEATED,
                     options::ALL_REPEATED,
+                    options::ALL_REPEATED_SHORT,
                     options::UNIQUE,
                     options::COUNT,
                 ]),

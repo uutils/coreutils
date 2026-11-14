@@ -13,23 +13,8 @@ use std::io;
 const NEWLINE: u8 = b'\n';
 const SPACE: u8 = b' ';
 
-/// `cbs` may be huge, so `conv=block` writes the padding in pieces of this size.
+/// `cbs` may be huge, so runs of spaces are written in pieces of this size.
 const PAD_CHUNK: usize = 64 * 1024;
-
-/// Trims padding from each cbs-length partition of buf
-/// as specified by conv=unblock and cbs=N
-/// Expects ascii encoded data
-fn unblock(buf: &[u8], cbs: usize) -> Vec<u8> {
-    buf.chunks(cbs).fold(Vec::new(), |mut acc, block| {
-        if let Some(last_char_idx) = block.iter().rposition(|&e| e != SPACE) {
-            // Include text up to last space.
-            acc.extend(&block[..=last_char_idx]);
-        }
-
-        acc.push(NEWLINE);
-        acc
-    })
-}
 
 fn apply_conversion(buf: &[u8], ct: &ConversionTable) -> Vec<u8> {
     buf.iter().map(|&b| ct[b as usize]).collect()
@@ -37,15 +22,17 @@ fn apply_conversion(buf: &[u8], ct: &ConversionTable) -> Vec<u8> {
 
 /// Applies the conversion, blocking, and/or unblocking of a [`ConversionMode`].
 ///
-/// The current `conv=block` record is kept across calls, since a record
-/// may span several reads.
+/// The current `conv=block` or `conv=unblock` record is kept across calls,
+/// since a record may span several reads.
 pub(crate) struct Converter {
     mode: ConversionMode,
     /// The length of the current record, at most `cbs`.
     record_len: usize,
+    /// The spaces ending the current `conv=unblock` record so far, not yet written.
+    pending_spaces: usize,
     /// Whether the current record was counted as truncated.
     truncated: bool,
-    /// The blocked output not yet written.
+    /// The blocked or unblocked output not yet written.
     out: Vec<u8>,
 }
 
@@ -54,6 +41,7 @@ impl Converter {
         Self {
             mode,
             record_len: 0,
+            pending_spaces: 0,
             truncated: false,
             out: Vec::new(),
         }
@@ -77,17 +65,16 @@ impl Converter {
             ConversionMode::ConvertThenBlock(ct, cbs) => {
                 self.block(&apply_conversion(buf, ct), cbs, None, rstat, write)
             }
-            ConversionMode::UnblockOnly(cbs) => write(&unblock(buf, cbs)),
-            ConversionMode::UnblockThenConvert(ct, cbs) => {
-                write(&apply_conversion(&unblock(buf, cbs), ct))
-            }
+            ConversionMode::UnblockOnly(cbs) => self.unblock(buf, cbs, None, write),
+            ConversionMode::UnblockThenConvert(ct, cbs) => self.unblock(buf, cbs, Some(ct), write),
             ConversionMode::ConvertThenUnblock(ct, cbs) => {
-                write(&unblock(&apply_conversion(buf, ct), cbs))
+                self.unblock(&apply_conversion(buf, ct), cbs, None, write)
             }
         }
     }
 
-    /// Pad the last record if the input did not end with a newline.
+    /// Pad the last `conv=block` record if the input did not end with a newline,
+    /// or end the last `conv=unblock` record if the input stopped inside it.
     pub(crate) fn finish(
         &mut self,
         write: &mut impl FnMut(&[u8]) -> io::Result<()>,
@@ -97,7 +84,13 @@ impl Converter {
                 (cbs, None)
             }
             ConversionMode::BlockThenConvert(ct, cbs) => (cbs, Some(ct)),
-            _ => return Ok(()),
+            ConversionMode::UnblockOnly(_) | ConversionMode::ConvertThenUnblock(..) => {
+                return self.finish_unblock(None, write);
+            }
+            ConversionMode::UnblockThenConvert(ct, _) => {
+                return self.finish_unblock(Some(ct), write);
+            }
+            ConversionMode::ConvertOnly(_) => return Ok(()),
         };
         if self.record_len > 0 {
             self.end_record(cbs, ct, write)?;
@@ -136,6 +129,60 @@ impl Converter {
         self.flush(write)
     }
 
+    /// Trim padding from each cbs-length record of `buf`
+    /// as specified by conv=unblock and cbs=N
+    /// Expects ascii encoded data
+    ///
+    /// `ct` is applied to the output, spaces and newlines included.
+    fn unblock(
+        &mut self,
+        mut buf: &[u8],
+        cbs: usize,
+        ct: Option<&ConversionTable>,
+        write: &mut impl FnMut(&[u8]) -> io::Result<()>,
+    ) -> io::Result<()> {
+        let space = ct.map_or(SPACE, |ct| ct[SPACE as usize]);
+        while !buf.is_empty() {
+            let (part, rest) = buf.split_at(buf.len().min(cbs - self.record_len));
+            buf = rest;
+            if let Some(last) = part.iter().rposition(|&e| e != SPACE) {
+                self.fill(self.pending_spaces, space, write)?;
+                let text = &part[..=last];
+                match ct {
+                    Some(ct) => self.out.extend(text.iter().map(|&b| ct[b as usize])),
+                    None => self.out.extend_from_slice(text),
+                }
+                self.pending_spaces = part.len() - 1 - last;
+            } else {
+                self.pending_spaces += part.len();
+            }
+            self.record_len += part.len();
+            if self.record_len == cbs {
+                self.end_unblocked_record(ct);
+            }
+        }
+        self.flush(write)
+    }
+
+    /// Drop the trailing spaces of the current `conv=unblock` record and start a new one.
+    fn end_unblocked_record(&mut self, ct: Option<&ConversionTable>) {
+        self.out.push(ct.map_or(NEWLINE, |ct| ct[NEWLINE as usize]));
+        self.record_len = 0;
+        self.pending_spaces = 0;
+    }
+
+    /// End the last `conv=unblock` record if the input stopped inside it.
+    fn finish_unblock(
+        &mut self,
+        ct: Option<&ConversionTable>,
+        write: &mut impl FnMut(&[u8]) -> io::Result<()>,
+    ) -> io::Result<()> {
+        if self.record_len > 0 {
+            self.end_unblocked_record(ct);
+        }
+        self.flush(write)
+    }
+
     /// Pad the current record to `cbs` bytes and start a new one.
     fn end_record(
         &mut self,
@@ -144,17 +191,27 @@ impl Converter {
         write: &mut impl FnMut(&[u8]) -> io::Result<()>,
     ) -> io::Result<()> {
         let pad = ct.map_or(SPACE, |ct| ct[SPACE as usize]);
-        let mut remaining = cbs - self.record_len;
-        while remaining > 0 {
-            let n = remaining.min(PAD_CHUNK);
-            self.out.resize(self.out.len() + n, pad);
-            remaining -= n;
+        self.fill(cbs - self.record_len, pad, write)?;
+        self.record_len = 0;
+        self.truncated = false;
+        Ok(())
+    }
+
+    /// Add `len` copies of `byte` to the output, written in pieces as `len` may be huge.
+    fn fill(
+        &mut self,
+        mut len: usize,
+        byte: u8,
+        write: &mut impl FnMut(&[u8]) -> io::Result<()>,
+    ) -> io::Result<()> {
+        while len > 0 {
+            let n = len.min(PAD_CHUNK);
+            self.out.resize(self.out.len() + n, byte);
+            len -= n;
             if self.out.len() >= PAD_CHUNK {
                 self.flush(write)?;
             }
         }
-        self.record_len = 0;
-        self.truncated = false;
         Ok(())
     }
 
@@ -171,7 +228,7 @@ impl Converter {
 #[cfg(test)]
 mod tests {
 
-    use crate::blocks::{Converter, PAD_CHUNK, unblock};
+    use crate::blocks::{Converter, PAD_CHUNK};
     use crate::datastructures::ConversionMode;
     use crate::progress::ReadStat;
     use std::io;
@@ -197,6 +254,27 @@ mod tests {
 
     fn block(buf: &[u8], cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
         block_reads(&[buf], cbs, rstat)
+    }
+
+    /// Unblock each slice of `reads` in turn.
+    fn unblock_reads(reads: &[&[u8]], cbs: usize) -> Vec<u8> {
+        let mut converter = Converter::new(ConversionMode::UnblockOnly(cbs));
+        let mut out = Vec::new();
+        let mut write = |data: &[u8]| -> io::Result<()> {
+            out.extend_from_slice(data);
+            Ok(())
+        };
+        for buf in reads {
+            converter
+                .convert(buf, &mut ReadStat::default(), &mut write)
+                .unwrap();
+        }
+        converter.finish(&mut write).unwrap();
+        out
+    }
+
+    fn unblock(buf: &[u8], cbs: usize) -> Vec<u8> {
+        unblock_reads(&[buf], cbs)
     }
 
     #[test]
@@ -468,5 +546,36 @@ mod tests {
         .collect::<Vec<_>>();
 
         assert_eq!(res, exp);
+    }
+
+    #[test]
+    fn unblock_test_record_across_reads() {
+        // The records are "ab  c   ", "ef      " and the unfinished "gh".
+        let res = unblock_reads(&[b"ab ", b" c   ef", b"  ", b"    gh"], 8);
+
+        assert_eq!(res, b"ab  c\nef\ngh\n");
+    }
+
+    #[test]
+    fn unblock_test_huge_cbs_writes_in_pieces() {
+        let mut converter = Converter::new(ConversionMode::UnblockOnly(usize::MAX));
+        let mut out = Vec::new();
+        let mut write = |data: &[u8]| -> io::Result<()> {
+            assert!(data.len() <= 2 * PAD_CHUNK);
+            out.extend_from_slice(data);
+            Ok(())
+        };
+        let spaces = vec![SPACE; 3 * PAD_CHUNK];
+        let reads: [&[u8]; 2] = [&spaces, b"x"];
+        for buf in reads {
+            converter
+                .convert(buf, &mut ReadStat::default(), &mut write)
+                .unwrap();
+        }
+        converter.finish(&mut write).unwrap();
+
+        assert_eq!(out.len(), spaces.len() + 2);
+        assert!(out.ends_with(b"x\n"));
+        assert!(out[..spaces.len()].iter().all(|&b| b == SPACE));
     }
 }

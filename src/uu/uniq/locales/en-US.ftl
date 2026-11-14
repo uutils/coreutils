@@ -7,6 +7,7 @@ uniq-after-help = Filter adjacent matching lines from INPUT (or standard input),
   You may want to sort the input first, or use sort -u without uniq.
 
 # Help messages
+uniq-help-all-repeated-short = print all duplicate lines
 uniq-help-all-repeated = print all duplicate lines. Delimiting is done with blank lines. [default: none]
 uniq-help-group = show all items, separating groups with an empty line. [default: separate]
 uniq-help-check-chars = compare no more than N characters in lines
