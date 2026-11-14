@@ -898,12 +898,13 @@ impl Stater {
         match chars[*i] {
             'a' => Token::Byte(0x07),   // BEL
             'b' => Token::Byte(0x08),   // Backspace
+            'e' => Token::Byte(0x1B),   // Escape
             'f' => Token::Byte(0x0C),   // Form feed
             'n' => Token::Byte(0x0A),   // Line feed
             'r' => Token::Byte(0x0D),   // Carriage return
             't' => Token::Byte(0x09),   // Horizontal tab
+            'v' => Token::Byte(0x0B),   // Vertical tab
             '\\' => Token::Byte(b'\\'), // Backslash
-            '\'' => Token::Byte(b'\''), // Single quote
             '"' => Token::Byte(b'"'),   // Double quote
             '0'..='7' => {
                 // Parse octal escape sequence (up to 3 digits)

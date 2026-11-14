@@ -768,6 +768,16 @@ fn test_printf_octal_out_of_range() {
         .stdout_is_bytes(expected_stdout);
 }
 
+// Like GNU, \e and \v are escapes, while \' is not one and only gives a warning.
+#[test]
+fn test_printf_escape_and_vertical_tab_escapes() {
+    new_ucmd!()
+        .args(&["--printf=\\e\\v\\'", "."])
+        .succeeds()
+        .stdout_is_bytes(b"\x1b\x0b'")
+        .stderr_is("stat: warning: unrecognized escape '\\''\n");
+}
+
 #[test]
 fn test_printf_incomplete_hex() {
     let ts = TestScenario::new(util_name!());
