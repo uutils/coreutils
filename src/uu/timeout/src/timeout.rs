@@ -76,19 +76,16 @@ impl Config {
             },
         };
 
-        let duration =
-            parse_time::from_str(options.get_one::<String>(options::DURATION).unwrap(), true)
-                .map_err(|err| UUsageError::new(ExitStatus::TimeoutFailed.into(), err))?;
+        // COMMAND is required with num_args(2..), so it holds DURATION and a command.
+        let mut operands = options.get_many::<OsString>(options::COMMAND).unwrap();
+        let duration = parse_time::from_str(&operands.next().unwrap().to_string_lossy(), true)
+            .map_err(|err| UUsageError::new(ExitStatus::TimeoutFailed.into(), err))?;
 
         let preserve_status: bool = options.get_flag(options::PRESERVE_STATUS);
         let foreground = options.get_flag(options::FOREGROUND);
         let verbose = options.get_flag(options::VERBOSE);
 
-        let command = options
-            .get_many::<OsString>(options::COMMAND)
-            .unwrap()
-            .cloned()
-            .collect::<Vec<_>>();
+        let command = operands.cloned().collect::<Vec<_>>();
 
         Ok(Self {
             foreground,
@@ -159,16 +156,14 @@ pub fn uu_app() -> Command {
                 .help(translate!("timeout-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
-        .arg(
-            Arg::new(options::DURATION)
-                .required(true)
-                .help(translate!("timeout-help-duration")),
-        )
+        // DURATION is the first value here, so that options end at DURATION.
         .arg(
             Arg::new(options::COMMAND)
                 .required(true)
                 .action(ArgAction::Append)
-                .help(translate!("timeout-help-command"))
+                .num_args(2..)
+                .value_names([options::DURATION, options::COMMAND])
+                .help(translate!("timeout-help-duration"))
                 .value_hint(clap::ValueHint::CommandName)
                 .value_parser(clap::value_parser!(OsString)),
         )
