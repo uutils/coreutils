@@ -665,6 +665,19 @@ fn unexpand_buf(
     Ok(())
 }
 
+/// Whether stdin is a regular file, i.e. reads from it never wait for a writer.
+fn stdin_is_regular_file() -> bool {
+    #[cfg(unix)]
+    {
+        rustix::fs::fstat(stdin())
+            .is_ok_and(|st| rustix::fs::FileType::from_raw_mode(st.st_mode).is_file())
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
+}
+
 fn unexpand_file(
     file: &OsString,
     output: &mut BufWriter<Stdout>,
@@ -700,6 +713,8 @@ fn unexpand_input(
     tab_config: &TabConfig,
     print_state: &mut PrintState,
 ) -> UResult<()> {
+    // See expand: flush before the next read only when stdin can block.
+    let flush_lines = file == "-" && !stdin_is_regular_file();
     while let buf @ [_, ..] = input
         .fill_buf()
         .map_err(|e| e.map_err_context(|| file.maybe_quote().to_string()) as Box<dyn UError>)?
@@ -712,6 +727,9 @@ fn unexpand_input(
         }
         let len = buf.len();
         input.consume(len);
+        if flush_lines {
+            output.flush()?;
+        }
     }
     Ok(())
 }
