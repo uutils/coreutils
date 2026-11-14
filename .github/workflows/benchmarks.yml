@@ -116,6 +116,8 @@ jobs:
         uses: CodSpeedHQ/action@v5
         env:
           CODSPEED_LOG: debug
+          # The long-line sort benchmarks start a fresh process for each run.
+          CODSPEED_SIMULATION_TRACK_SUBPROCESS: ${{ matrix.package == 'uu_sort' && 'true' || 'false' }}
         with:
           mode: ${{ matrix.type }}
           run: |

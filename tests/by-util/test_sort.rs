@@ -4088,7 +4088,7 @@ fn test_sort_locale_punctuation() {
 
 #[test]
 fn test_locale_collation_long_lines() {
-    // Long lines within the per-chunk budget still reuse collation keys.
+    // Moderately long lines still reuse collation keys.
     // Interleave them with short lines and exercise case and accent ordering.
     const LONG: usize = 70_000;
 
@@ -4109,29 +4109,26 @@ fn test_locale_collation_long_lines() {
 
 #[test]
 fn test_locale_collation_long_line_boundary() {
-    // Crossing the short-line threshold must preserve locale-aware order:
-    // shorter prefixes first, lowercase before uppercase at the same length.
-    const AT_CAP: usize = 65_535;
+    // Compare a precomputed key at the limit with a lazy line just over it.
+    const AT_CAP: usize = 16 * 1024 * 1024;
 
     let lower_at = "a".repeat(AT_CAP);
-    let upper_at = "A".repeat(AT_CAP);
-    let lower_over = "a".repeat(AT_CAP + 1);
     let upper_over = "A".repeat(AT_CAP + 1);
-    let input = format!("{upper_over}\n{lower_at}\n{upper_at}\n{lower_over}\n");
-    let expected = format!("{lower_at}\n{upper_at}\n{lower_over}\n{upper_over}\n");
+    let input = format!("{upper_over}\nb\n{lower_at}\na\n");
+    let expected = format!("a\n{lower_at}\n{upper_over}\nb\n");
 
     new_ucmd!()
         .env("LC_ALL", "en_US.UTF-8")
+        .args(&["--parallel", "1", "-S", "128M"])
         .pipe_in(input)
         .succeeds()
         .stdout_is(expected);
 }
 
 #[test]
-fn test_locale_collation_over_budget_line() {
-    // A line exceeding the entire long-line budget is compared lazily.
-    // Keys recorded after it must retain correct arena offsets, and skipping
-    // it must leave room in the budget for later, smaller long lines.
+fn test_locale_collation_over_limit_line() {
+    // A line exceeding the per-line limit is compared lazily.
+    // Keys recorded after it must retain correct arena offsets.
     let huge = "A".repeat(17 * 1024 * 1024);
     let long = "a".repeat(70_000);
     let input = format!("b\n{huge}\na\n{long}\n");
