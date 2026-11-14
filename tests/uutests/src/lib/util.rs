@@ -1841,11 +1841,9 @@ impl UCommand {
     }
 
     #[cfg(unix)]
-    fn read_from_pty(pty_fd: OwnedFd, out: File) {
-        let read_file = File::from(pty_fd);
-        let mut reader = io::BufReader::new(read_file);
-        let mut writer = BufWriter::new(out);
-        let result = io::copy(&mut reader, &mut writer);
+    fn read_from_pty(pty_fd: OwnedFd, mut out: File) {
+        // Copy without buffering so a running child's output can be checked.
+        let result = io::copy(&mut File::from(pty_fd), &mut out);
         match result {
             Ok(_) => {}
             // Input/output error (os error 5) is returned due to pipe closes. Buffer gets content anyway.
