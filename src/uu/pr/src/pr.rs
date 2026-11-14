@@ -1399,8 +1399,14 @@ fn write_page(
     let header = header_content(options, page);
     let trailer_content = trailer_content(options);
 
-    for x in header {
-        writer.write_all(&x)?;
+    // Stream the left margin onto the first blank separator line and the
+    // header text line. The other blank lines stay empty. Building the margin
+    // as one string would allocate the whole indent on every page.
+    for (index, line) in header.into_iter().enumerate() {
+        if matches!(index, 0 | 2) {
+            write_offset_spaces(writer, options.offset_spaces)?;
+        }
+        writer.write_all(&line)?;
         writer.write_all(line_separator)?;
     }
 
@@ -1715,6 +1721,9 @@ fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: us
 
 /// Returns a five line header content if displaying header is not disabled by
 /// using `NO_HEADER_TRAILER_OPTION` option.
+///
+/// The first line and the header text line (the third) are where the left
+/// margin is written. The other lines are empty.
 fn header_content(options: &OutputOptions, page: usize) -> Vec<Vec<u8>> {
     if !options.display_header_and_trailer {
         return Vec::new();
