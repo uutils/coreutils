@@ -13,7 +13,7 @@ permissions:
 # End the current execution if there is a new changeset in the PR.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
 
 on:
   # * only trigger on pull request closed to specific branches
@@ -28,11 +28,7 @@ jobs:
     # Refresh dependencies (ie, 'Cargo.lock') and show updated dependency tree
     if: github.event.pull_request.merged == true ## only for PR merges
     name: Update/dependencies
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      matrix:
-        job:
-          - { os: ubuntu-latest , features: feat_os_unix }
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -47,7 +43,10 @@ jobs:
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ steps.vars.outputs.RUST_MIN_SRV }}
-    - uses: Swatinem/rust-cache@v2
+    - uses: ./.github/actions/rust-cache
+      with:
+        key: fix-pr-msrv
+        sccache: false
     - name: Ensure updated 'Cargo.lock'
       shell: bash
       run: |
@@ -75,7 +74,7 @@ jobs:
         echo "## dependency list"
         cargo fetch --locked --quiet --target $(rustc --print host-tuple)
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
-        cargo +stable tree --locked --no-dedupe -e=no-dev --prefix=none --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
+        cargo +stable tree --locked --no-dedupe -e=no-dev --prefix=none --features feat_os_unix | grep -vE "$PWD" | sort --unique
     - name: Commit any changes (to '${{ env.BRANCH_TARGET }}')
       uses: EndBug/add-and-commit@v11
       with:

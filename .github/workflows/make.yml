@@ -28,7 +28,7 @@ permissions:
 # End the current execution if there is a new changeset in the PR.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
 
 jobs:
   build_makefile:
@@ -38,28 +38,16 @@ jobs:
       RUSTFLAGS: "-C force-unwind-tables=no -C strip=symbols -Clink-arg=-z -Clink-arg=pack-relative-relocs"
     permissions:
       contents: write # Publish individual binaries
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-latest , features: feat_os_unix }
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: taiki-e/install-action@nextest
-    - uses: Swatinem/rust-cache@v2
+    - uses: ./.github/actions/rust-cache
+      with:
+        key: make-linux
     # Test build on the system missing libselinux (don't install libselinux1-dev at here)
-    - name: Run sccache-cache
-      id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.11
-      continue-on-error: true
-    - name: Export sccache
-      if: steps.sccache-setup.outcome == 'success'
-      run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: "`make build`"
         # Also check that target/CACHEDIR.TAG is created on a fresh checkout
       shell: bash
@@ -268,29 +256,18 @@ jobs:
     name: Build MSYS
     permissions:
       contents: write # Publish cygwin binary
-    runs-on: ${{ matrix.job.os }}
+    runs-on: windows-latest
     env:
       CARGO_INCREMENTAL: 0
       RUSTFLAGS: "-C link-arg=-Wl,--dynamicbase -C link-arg=-Wl,--enable-auto-image-base"
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.11
-      continue-on-error: true
-    - name: Export sccache
-      if: steps.sccache-setup.outcome == 'success'
-      run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - uses: ./.github/actions/rust-cache
+      with:
+        key: make-msys
+        sccache: false
     - name: Disable Mandatory ASLR (required for Cygwin/MSYS2 bash on GitHub runners)
       shell: powershell
       run: |
@@ -377,12 +354,7 @@ jobs:
 
   test_busybox:
     name: Tests/BusyBox test suite
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-latest }
+    runs-on: ubuntu-latest
     steps:
     - name: Initialize workflow variables
       id: vars
@@ -393,16 +365,9 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.11
-      continue-on-error: true
-    - name: Export sccache
-      if: steps.sccache-setup.outcome == 'success'
-      run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - uses: ./.github/actions/rust-cache
+      with:
+        key: busybox
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -461,12 +426,7 @@ jobs:
 
   test_toybox:
     name: Tests/Toybox test suite
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-latest }
+    runs-on: ubuntu-latest
     steps:
     - name: Initialize workflow variables
       id: vars
@@ -479,16 +439,9 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.11
-      continue-on-error: true
-    - name: Export sccache
-      if: steps.sccache-setup.outcome == 'success'
-      run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - uses: ./.github/actions/rust-cache
+      with:
+        key: toybox
     - name: Install/setup prerequisites
       shell: bash
       run: |
