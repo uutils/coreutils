@@ -212,84 +212,125 @@ fn wrap_in_stdout_error(err: io::Error) -> io::Error {
     )
 }
 
+enum PrintError {
+    Read(io::Error),
+    Write(io::Error),
+}
+
+impl PrintError {
+    /// Wrap a read `io::Error` into a `PrintError::Read`, stripping the errno suffix.
+    fn read(e: io::Error) -> Self {
+        Self::Read(io::Error::new(e.kind(), strip_errno(&e)))
+    }
+
+    /// Wrap a write `io::Error` into a `PrintError::Write`, adding the stdout context.
+    fn write(e: io::Error) -> Self {
+        Self::Write(wrap_in_stdout_error(e))
+    }
+
+    fn into_uu_error(self, name: PathBuf) -> Box<dyn UError> {
+        match self {
+            Self::Read(err) => HeadError::Io { name, err }.into(),
+            Self::Write(err) => err.into(),
+        }
+    }
+}
+
+fn copy_with_errors(reader: &mut impl Read, writer: &mut impl Write) -> Result<u64, PrintError> {
+    let mut buf = [0u8; BUF_SIZE];
+    let mut total = 0u64;
+
+    loop {
+        let n = match reader.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(PrintError::read(e)),
+        };
+
+        writer.write_all(&buf[..n]).map_err(PrintError::write)?;
+
+        total += n as u64;
+    }
+
+    Ok(total)
+}
+
 // zero-copy fast-path
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn print_n_bytes(input: impl AsFd, n: u64) -> io::Result<u64> {
+fn print_n_bytes(input: impl AsFd, n: u64) -> Result<u64, PrintError> {
     let out = io::stdout();
-    uucore::pipes::send_n_bytes(input, &out, n).map_err(wrap_in_stdout_error)
+
+    uucore::pipes::send_n_bytes_classified(input, &out, n).map_err(|e| match e {
+        uucore::pipes::PipeError::Read(e) => PrintError::read(e),
+        uucore::pipes::PipeError::Write(e) => PrintError::write(e),
+    })
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn print_n_bytes(input: impl Read, n: u64) -> io::Result<u64> {
-    // Read the first `n` bytes from the `input` reader.
+fn print_n_bytes(input: impl Read, n: u64) -> Result<u64, PrintError> {
     let mut reader = input.take(n);
 
-    // Write those bytes to `stdout`.
-    let stdout = io::stdout();
-    let mut stdout = stdout.lock();
-
-    let bytes_written = io::copy(&mut reader, &mut stdout).map_err(wrap_in_stdout_error)?;
-
-    // flush prevents ignoring I/O error
-    stdout.flush().map_err(wrap_in_stdout_error)?;
-
-    Ok(bytes_written)
-}
-
-fn print_n_lines(input: &mut impl io::BufRead, n: u64, separator: u8) -> io::Result<u64> {
-    // Read the first `n` lines from the `input` reader.
-    let mut reader = take_lines(input, n, separator);
-
-    // Write those bytes to `stdout`.
     let stdout = io::stdout();
     let stdout = stdout.lock();
     let mut writer = BufWriter::with_capacity(BUF_SIZE, stdout);
 
-    let bytes_written = io::copy(&mut reader, &mut writer).map_err(wrap_in_stdout_error)?;
+    let bytes_written = copy_with_errors(&mut reader, &mut writer)?;
 
-    // Make sure we finish writing everything to the target before
-    // exiting. Otherwise, when Rust is implicitly flushing, any
-    // error will be silently ignored.
-    writer.flush().map_err(wrap_in_stdout_error)?;
+    writer.flush().map_err(PrintError::write)?;
 
     Ok(bytes_written)
 }
 
-fn print_but_last_n_bytes(mut input: impl Read, n: u64) -> io::Result<u64> {
+fn print_n_lines(input: &mut impl io::BufRead, n: u64, separator: u8) -> Result<u64, PrintError> {
+    let mut reader = take_lines(input, n, separator);
+
+    let stdout = io::stdout();
+    let stdout = stdout.lock();
+    let mut writer = BufWriter::with_capacity(BUF_SIZE, stdout);
+
+    let bytes_written = copy_with_errors(&mut reader, &mut writer)?;
+
+    writer.flush().map_err(PrintError::write)?;
+
+    Ok(bytes_written)
+}
+
+fn print_but_last_n_bytes(mut input: impl Read, n: u64) -> Result<u64, PrintError> {
     let mut bytes_written: u64 = 0;
     if let Ok(n) = usize::try_from(n) {
         let stdout = io::stdout();
         let mut stdout = stdout.lock();
 
         bytes_written = copy_all_but_n_bytes(&mut input, &mut stdout, n)
-            .map_err(wrap_in_stdout_error)?
+            .map_err(PrintError::write)?
             .try_into()
             .unwrap();
 
         // Make sure we finish writing everything to the target before
         // exiting. Otherwise, when Rust is implicitly flushing, any
         // error will be silently ignored.
-        stdout.flush().map_err(wrap_in_stdout_error)?;
+        stdout.flush().map_err(PrintError::write)?;
     }
     Ok(bytes_written)
 }
 
-fn print_but_last_n_lines(mut input: impl Read, n: u64, separator: u8) -> io::Result<u64> {
+fn print_but_last_n_lines(mut input: impl Read, n: u64, separator: u8) -> Result<u64, PrintError> {
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
     if n == 0 {
-        return io::copy(&mut input, &mut stdout).map_err(wrap_in_stdout_error);
+        return io::copy(&mut input, &mut stdout).map_err(PrintError::write);
     }
     let mut bytes_written: u64 = 0;
     if let Ok(n) = usize::try_from(n) {
         bytes_written = copy_all_but_n_lines(input, &mut stdout, n, separator)
-            .map_err(wrap_in_stdout_error)?
+            .map_err(PrintError::write)?
             .try_into()
             .unwrap();
         // Make sure we finish writing everything to the target before
         // exiting. Otherwise, when Rust is implicitly flushing, any
         // error will be silently ignored.
-        stdout.flush().map_err(wrap_in_stdout_error)?;
+        stdout.flush().map_err(PrintError::write)?;
     }
     Ok(bytes_written)
 }
@@ -393,8 +434,8 @@ fn is_seekable(input: &mut File) -> bool {
         && input.seek(SeekFrom::Start(current_pos.unwrap())).is_ok()
 }
 
-fn head_backwards_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
-    let st = input.metadata()?;
+fn head_backwards_file(input: &mut File, options: &HeadOptions) -> Result<u64, PrintError> {
+    let st = input.metadata().map_err(PrintError::read)?;
     let seekable = is_seekable(input);
     let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
     if !seekable || st.len() <= blksize_limit || options.presume_input_pipe {
@@ -404,7 +445,10 @@ fn head_backwards_file(input: &mut File, options: &HeadOptions) -> io::Result<u6
     }
 }
 
-fn head_backwards_without_seek_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
+fn head_backwards_without_seek_file(
+    input: &mut File,
+    options: &HeadOptions,
+) -> Result<u64, PrintError> {
     match options.mode {
         Mode::AllButLastBytes(n) => print_but_last_n_bytes(input, n),
         Mode::AllButLastLines(n) => print_but_last_n_lines(input, n, options.line_ending.into()),
@@ -412,13 +456,18 @@ fn head_backwards_without_seek_file(input: &mut File, options: &HeadOptions) -> 
     }
 }
 
-fn head_backwards_on_seekable_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
+fn head_backwards_on_seekable_file(
+    input: &mut File,
+    options: &HeadOptions,
+) -> Result<u64, PrintError> {
     match options.mode {
         Mode::AllButLastBytes(n) => {
             let remaining = input
-                .metadata()?
+                .metadata()
+                .map_err(PrintError::read)?
                 .len()
-                .saturating_sub(input.stream_position()?);
+                .saturating_sub(input.stream_position().map_err(PrintError::read)?);
+
             if n >= remaining {
                 Ok(0)
             } else {
@@ -426,14 +475,15 @@ fn head_backwards_on_seekable_file(input: &mut File, options: &HeadOptions) -> i
             }
         }
         Mode::AllButLastLines(n) => {
-            let found = find_nth_line_from_end(input, n, options.line_ending.into())?;
+            let found = find_nth_line_from_end(input, n, options.line_ending.into())
+                .map_err(PrintError::read)?;
             print_n_bytes(input, found)
         }
         _ => unreachable!(),
     }
 }
 
-fn head_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
+fn head_file(input: &mut File, options: &HeadOptions) -> Result<u64, PrintError> {
     match options.mode {
         Mode::FirstBytes(n) => print_n_bytes(input, n),
         Mode::FirstLines(n) => print_n_lines(
@@ -470,10 +520,12 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     // last byte read so that any tools that parse the remainder of
                     // the stdin stream read from the correct place.
 
-                    let bytes_read = head_file(&mut stdin_file, options)?;
+                    let bytes_read = head_file(&mut stdin_file, options)
+                        .map_err(|e| e.into_uu_error("standard input".into()))?;
                     stdin_file.seek(SeekFrom::Start(current_pos + bytes_read))?;
                 } else {
-                    let _bytes_read = head_file(&mut stdin_file, options)?;
+                    head_file(&mut stdin_file, options)
+                        .map_err(|e| e.into_uu_error("standard input".into()))?;
                 }
             }
 
@@ -481,14 +533,15 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
             {
                 let mut stdin = stdin.lock();
 
-                match options.mode {
+                let res = match options.mode {
                     Mode::FirstBytes(n) => print_n_bytes(&mut stdin, n),
                     Mode::AllButLastBytes(n) => print_but_last_n_bytes(&mut stdin, n),
                     Mode::FirstLines(n) => print_n_lines(&mut stdin, n, options.line_ending.into()),
                     Mode::AllButLastLines(n) => {
                         print_but_last_n_lines(&mut stdin, n, options.line_ending.into())
                     }
-                }?;
+                };
+                res.map_err(|e| e.into_uu_error("standard input".into()))?;
             }
 
             Ok(())
@@ -559,17 +612,15 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 }
                 continue;
             }
-            head_file(&mut file_handle, options)?;
-            Ok(())
+            head_file(&mut file_handle, options).map(|_| ())
         };
-        if let Err(err) = res {
-            let name = if file == "-" {
-                "standard input".into()
-            } else {
-                file.into()
-            };
-            return Err(HeadError::Io { name, err }.into());
-        }
+        let name = if file == "-" {
+            "standard input".into()
+        } else {
+            file.into()
+        };
+
+        res.map_err(|err| err.into_uu_error(name))?;
         first = false;
     }
     // Even though this is returning `Ok`, it is possible that a call
