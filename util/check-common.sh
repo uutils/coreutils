@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Shared setup for the util/check-*.sh syscall verification scripts
-# (check-safe-traversal.sh, check-toctou.sh, check-libc-interposition.sh).
+# (check-safe-traversal.sh, check-toctou.sh.
 #
 # Source it after setting CHECK_UTILS to the utilities the caller exercises:
 #

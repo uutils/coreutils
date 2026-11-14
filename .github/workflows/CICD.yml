@@ -206,8 +206,8 @@ jobs:
       shell: bash
       run: |
         # Install a package for one of the tests
-        # Some tests are silently skipped if strace is missing
-        sudo apt-get -y update ; sudo apt-get -y install attr strace
+        # Some tests are silently skipped if some tools are missing
+        sudo apt-get -y update ; sudo apt-get -y install attr fakeroot strace
         # Some tests are silently skipped if unshare failed
         # userns is enabled only on few jobs for security
         sudo sysctl -w kernel.unprivileged_userns_clone=1
@@ -985,23 +985,6 @@ jobs:
       run: cargo build --profile=release-small -p uu_rm -p uu_chmod -p uu_chown -p uu_chgrp -p uu_mv -p uu_du -p uu_split -p uu_chcon
     - name: Run safe traversal verification
       run: ./util/check-safe-traversal.sh
-
-  test_libc_interposition:
-    name: libc Interposition Check
-    runs-on: ubuntu-latest
-    needs: [ min_version, deps ]
-
-    steps:
-    - uses: actions/checkout@v7.0.1
-      with:
-        persist-credentials: false
-    - uses: Swatinem/rust-cache@v2
-    - name: Install fakeroot
-      run: sudo apt-get update && sudo apt-get install -y fakeroot
-    - name: Build utilities that must stay interposable
-      run: cargo build --profile=release-small -p uu_chmod -p uu_chown
-    - name: Run libc interposition verification
-      run: ./util/check-libc-interposition.sh
 
   test_open_once:
     name: Redundant Open Check

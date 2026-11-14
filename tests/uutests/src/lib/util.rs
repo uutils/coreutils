@@ -84,6 +84,14 @@ pub fn get_tests_binary() -> &'static str {
     })
 }
 
+/// Check that `fakeroot` works on the system
+pub fn has_fakeroot_support() -> bool {
+    Command::new("fakeroot")
+        .arg("true")
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
 /// Same as [`get_tests_binary`], but returns `None` instead of panicking.
 pub fn try_get_tests_binary() -> Option<&'static str> {
     if TESTS_BINARY_PATH.get().is_none() {

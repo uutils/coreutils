@@ -74,6 +74,31 @@ fn run_tests(tests: Vec<TestCase>) {
 }
 
 #[test]
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn test_chmod_fakeroot() {
+    if !uutests::util::has_fakeroot_support() {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir = "dir";
+    let file = "dir/file";
+    at.mkdir(dir);
+    at.touch(file);
+    let coreutils = uutests::util::get_tests_binary();
+    scene
+        .cmd("fakeroot")
+        .current_dir(at.plus(dir))
+        .args(&[
+            "sh",
+            "-c",
+            &format!("chown -R 7:11 . && {coreutils} chmod -R 2751 . && stat -c %a ."),
+        ])
+        .succeeds()
+        .stdout_only("2751\n");
+}
+
+#[test]
 #[allow(clippy::unreadable_literal)]
 fn test_chmod_octal() {
     let tests = vec![
