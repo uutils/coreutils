@@ -1300,12 +1300,12 @@ fn n_chunks_by_line_round_robin(
             if !writer_stdin_open {
                 closed_writers += 1;
             }
+            if closed_writers == num_chunks {
+                // all writers are closed - stop reading
+                break;
+            }
         }
         i += 1;
-        if closed_writers == num_chunks {
-            // all writers are closed - stop reading
-            break;
-        }
     }
     Ok(())
 }

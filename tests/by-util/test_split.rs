@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit NOFILE
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit NOFILE xdigit FSIZE sigxfsz
 
 use rand::{RngExt as _, SeedableRng, rng};
 use regex::Regex;
@@ -1149,6 +1149,10 @@ fn test_number_kth_of_n_round_robin() {
         .args(&["-e", "--number", "r/7/7", "fivelines.txt"])
         .succeeds()
         .stdout_only("");
+    new_ucmd!()
+        .args(&["--number", "r/1/4294967296", "fivelines.txt"])
+        .succeeds()
+        .stdout_only("1\n");
     #[cfg(target_pointer_width = "64")]
     new_ucmd!()
         .args(&[
