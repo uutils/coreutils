@@ -10,10 +10,15 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
+#[path = "cfg_aliases.rs"]
+mod cfg_aliases;
+
 pub fn main() {
     const ENV_FEATURE_PREFIX: &str = "CARGO_FEATURE_";
     const FEATURE_PREFIX: &str = "feat_";
     const OVERRIDE_PREFIX: &str = "uu_";
+
+    cfg_aliases::register();
 
     // Do not rebuild build script unless the script itself or the enabled features are modified
     // See <https://doc.rust-lang.org/cargo/reference/build-scripts.html#change-detection>
