@@ -114,9 +114,6 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
         "SymlinkHardlinkCaps" => {
             "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
         }
-        "SymlinkLoopNoEloop" => {
-            "WASI: symlink loop traversal does not surface ELOOP ('Too many levels of symbolic links')"
-        }
         "TailFollowDisabled" => "WASI: tail follow mode disabled",
         "UnsupportedStdApi" => {
             "WASI: the std or libc API is unsupported (File::try_clone, setlocale LC_* constants)"
