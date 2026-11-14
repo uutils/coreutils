@@ -128,6 +128,9 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
                 }
             } else if matches.get_flag(OPT_SHORT) {
                 writeln!(stdout(), "{hostname}")?;
+            } else {
+                // GNU hostname --domain prints "(none)" when the name has no dot.
+                writeln!(stdout(), "(none)")?;
             }
             return Ok(());
         }
