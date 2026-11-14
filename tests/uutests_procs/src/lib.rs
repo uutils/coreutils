@@ -118,6 +118,7 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
             "WASI: symlink loop traversal does not surface ELOOP ('Too many levels of symbolic links')"
         }
         "TailFollowDisabled" => "WASI: tail follow mode disabled",
+        "UnsupportedIoHints" => "WASI sandbox: no O_DIRECT, posix_fadvise or atime control",
         "UnsupportedStdApi" => {
             "WASI: the std or libc API is unsupported (File::try_clone, setlocale LC_* constants)"
         }
