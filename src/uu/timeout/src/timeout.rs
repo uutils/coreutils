@@ -15,7 +15,7 @@ use clap::{Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
 use std::io::{ErrorKind, Write};
 use std::process::{self, Child, Stdio};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parser::parse_time;
@@ -303,7 +303,70 @@ fn timeout(
     // TODO The structure of this block is extremely similar to the
     // structure of `wait_or_kill_process()`. They can probably be
     // refactored into some common function.
-    match process.wait_or_timeout(duration, false) {
+    //
+    // Like GNU, relaying a signal neither cancels the original deadline nor
+    // stops us from relaying later signals: without `--kill-after`, we keep
+    // waiting until the child exits or `duration` elapses.
+    //
+    // Relaying a signal to our process group also queues it for us. GNU
+    // ignores such a signal from then on, so we skip it to avoid a loop.
+    let start = Instant::now();
+    let mut relayed = None;
+    let mut relayed_to_group = Vec::new();
+    let result = loop {
+        // A zero duration disables the timer.
+        let remaining = if duration.is_zero() {
+            duration
+        } else {
+            match duration.checked_sub(start.elapsed()) {
+                Some(remaining) if !remaining.is_zero() => remaining,
+                _ => break Ok(TimeoutRet::TimedOut),
+            }
+        };
+        match process.wait_or_timeout(remaining, false) {
+            Ok(TimeoutRet::Interrupted(signal_to_send))
+                if relayed_to_group.contains(&signal_to_send) => {}
+            Ok(TimeoutRet::Interrupted(signal_to_send)) => {
+                report_if_verbose(signal_to_send, &cmd[0], verbose);
+                platform::send_signal(
+                    process,
+                    signal_to_send,
+                    foreground,
+                    Some(signal_to_send),
+                    &spawn_state,
+                );
+
+                // Only the first relayed signal starts the kill-after timer.
+                if let Some(kill_after) = kill_after {
+                    return match wait_or_kill_process(
+                        process,
+                        &cmd[0],
+                        kill_after,
+                        preserve_status,
+                        foreground,
+                        verbose,
+                        &spawn_state,
+                    ) {
+                        Ok(status) => Err(status.into()),
+                        Err(e) => Err(USimpleError::new(
+                            ExitStatus::TimeoutFailed.into(),
+                            e.to_string(),
+                        )),
+                    };
+                }
+                relayed = Some(signal_to_send);
+                if !foreground {
+                    relayed_to_group.push(signal_to_send);
+                }
+            }
+            other => break other,
+        }
+    };
+    // The child exited after we relayed a signal to it.
+    if let (Ok(TimeoutRet::Exited(_)), Some(signal_sent)) = (&result, relayed) {
+        return Err(ExitStatus::SignalSent(signal_sent).into());
+    }
+    match result {
         Ok(TimeoutRet::Exited(status)) => {
             let exit_code = status.code().unwrap_or_else(|| {
                 platform::status_signal(status).map_or_else(
@@ -356,37 +419,8 @@ fn timeout(
                 Err(ExitStatus::CommandTimedOut.into())
             }
         }
-        Ok(TimeoutRet::Interrupted(signal_to_send)) => {
-            report_if_verbose(signal_to_send, &cmd[0], verbose);
-            platform::send_signal(
-                process,
-                signal_to_send,
-                foreground,
-                Some(signal_to_send),
-                &spawn_state,
-            );
-
-            if let Some(kill_after) = kill_after {
-                return match wait_or_kill_process(
-                    process,
-                    &cmd[0],
-                    kill_after,
-                    preserve_status,
-                    foreground,
-                    verbose,
-                    &spawn_state,
-                ) {
-                    Ok(status) => Err(status.into()),
-                    Err(e) => Err(USimpleError::new(
-                        ExitStatus::TimeoutFailed.into(),
-                        e.to_string(),
-                    )),
-                };
-            }
-
-            process.wait()?;
-            Err(ExitStatus::SignalSent(signal_to_send).into())
-        }
+        // The loop above handles every relayed signal.
+        Ok(TimeoutRet::Interrupted(_)) => unreachable!(),
         Err(_) => {
             // We're going to return ERR_EXIT_STATUS regardless of
             // whether `send_signal()` succeeds or fails
