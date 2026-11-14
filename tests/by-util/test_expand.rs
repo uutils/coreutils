@@ -533,3 +533,26 @@ fn test_column_kept_across_read_buffers() {
         .succeeds()
         .stdout_only(format!("{prefix}\tx\n"));
 }
+
+#[rstest]
+#[case::plus_in_first(&["-t", "1,+5", "-t", "2"], "a b    c    d\n")]
+#[case::slash_in_first(&["-t", "1,/5", "-t", "2"], "a b  c    d\n")]
+#[case::plus_alone_first(&["-t", "+5", "-t", "3"], "a  b    c    d\n")]
+#[case::slash_then_larger_stop(&["-t", "2,/4", "-t", "9"], "a b      c  d\n")]
+#[case::slash_before_two_values(&["-t", "/4", "-t", "2", "-t", "7"], "a b    c    d\n")]
+fn test_specifier_in_an_earlier_tabs_value(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in("a\tb\tc\td\n")
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
+fn test_specifier_in_two_tabs_values() {
+    new_ucmd!()
+        .args(&["-t", "/4", "-t", "/5"])
+        .pipe_in("a\tb\n")
+        .fails_with_code(1)
+        .stderr_is("expand: '/' specifier only allowed with the last value\n");
+}

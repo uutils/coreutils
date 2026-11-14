@@ -27,6 +27,9 @@ pub mod options {
 
 static DEFAULT_TABSTOP: usize = 8;
 
+/// Characters that separate the values of a tab stop list.
+const TAB_STOP_SEPARATORS: [char; 3] = [' ', '\t', ','];
+
 /// The mode to use when replacing tabs beyond the last one specified in
 /// the `--tabs` argument.
 #[derive(PartialEq)]
@@ -70,7 +73,7 @@ impl UError for ParseError {}
 /// list specified here.
 fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
     // Leading spaces, tabs, and commas are ignored.
-    let s = s.trim_start_matches([' ', '\t', ',']);
+    let s = s.trim_start_matches(TAB_STOP_SEPARATORS);
 
     // If there were only spaces, tabs, and commas in the string, just use the
     // default tabstops.
@@ -81,7 +84,7 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
     let mut nums = vec![];
     let mut remaining_mode = RemainingMode::None;
     let mut is_specifier_already_used = false;
-    for word in s.split([' ', '\t', ',']) {
+    for word in s.split(TAB_STOP_SEPARATORS) {
         let bytes = word.as_bytes();
         for i in 0..bytes.len() {
             match bytes[i] {
@@ -151,6 +154,25 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
     Ok((remaining_mode, nums))
 }
 
+/// Join the values of a repeated `--tabs` into one list. A `+N` or `/N` ending
+/// one of them applies after all the tab stops, so it is moved to the end.
+fn join_tabs_values<'a>(values: impl Iterator<Item = &'a str>) -> String {
+    let mut stops = vec![];
+    let mut specifiers = vec![];
+    for value in values {
+        let value = value.trim_end_matches(TAB_STOP_SEPARATORS);
+        let start = value.rfind(TAB_STOP_SEPARATORS).map_or(0, |i| i + 1);
+        if value[start..].starts_with(['+', '/']) {
+            specifiers.push(&value[start..]);
+            stops.push(value[..start].trim_end_matches(TAB_STOP_SEPARATORS));
+        } else {
+            stops.push(value);
+        }
+    }
+    stops.extend(specifiers);
+    stops.join(",")
+}
+
 struct Options {
     files: Vec<OsString>,
     tabstops: Vec<usize>,
@@ -165,7 +187,7 @@ struct Options {
 impl Options {
     fn new(matches: &ArgMatches) -> Result<Self, ParseError> {
         let (remaining_mode, tabstops) = match matches.get_many::<String>(options::TABS) {
-            Some(s) => tabstops_parse(&s.map(String::as_str).collect::<Vec<_>>().join(","))?,
+            Some(s) => tabstops_parse(&join_tabs_values(s.map(String::as_str)))?,
             None => (RemainingMode::None, vec![DEFAULT_TABSTOP]),
         };
 
