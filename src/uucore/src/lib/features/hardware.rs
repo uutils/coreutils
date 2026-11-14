@@ -69,13 +69,11 @@ impl TryFrom<&str> for HardwareFeature {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         use HardwareFeature::{Asimd, Avx2, Avx512, Pclmulqdq, Pmull, Sse2};
-        // TODO: like GNU, accept `PCLMULQDQ` for `Pclmulqdq` and `PMULL` for
-        // `Pmull`.
         match value {
             "AVX512" | "AVX512F" => Ok(Avx512),
             "AVX2" => Ok(Avx2),
-            "PCLMUL" | "PMULL" => Ok(Pclmulqdq),
-            "VMULL" => Ok(Pmull),
+            "PCLMUL" | "PCLMULQDQ" => Ok(Pclmulqdq),
+            "PMULL" | "VMULL" => Ok(Pmull),
             "SSE2" => Ok(Sse2),
             "ASIMD" => Ok(Asimd),
             _ => Err(InvalidHardwareFeature),
@@ -362,6 +360,15 @@ mod tests {
         expected.insert(HardwareFeature::Avx512);
 
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_parse_disabled_features_polynomial_multiply_names() {
+        let result = parse_disabled_features("glibc.cpu.hwcaps=-PCLMULQDQ,-PMULL");
+        assert_eq!(
+            result,
+            BTreeSet::from([HardwareFeature::Pclmulqdq, HardwareFeature::Pmull])
+        );
     }
 
     #[test]
