@@ -45,10 +45,22 @@ pub fn ext_sort(
 ) -> UResult<()> {
     let (sorted_sender, sorted_receiver) = std::sync::mpsc::sync_channel(1);
     let (recycled_sender, recycled_receiver) = std::sync::mpsc::sync_channel(1);
-    thread::spawn({
+    let sorter_thread = thread::Builder::new().spawn({
         let settings = settings.clone();
         move || sorter(&recycled_receiver, &sorted_sender, &settings)
     });
+    // When no thread can be created (for example under a cgroup pids limit),
+    // send the chunks back to this thread and sort them as they arrive.
+    let (recycled_sender, sorted_receiver, sort_inline) = if sorter_thread.is_ok() {
+        (recycled_sender, sorted_receiver, false)
+    } else {
+        let (sender, receiver) = std::sync::mpsc::sync_channel(2);
+        (sender, receiver, true)
+    };
+    let sorted = SortedChunks {
+        receiver: &sorted_receiver,
+        sort_inline,
+    };
 
     // Test if compression program exists and works, disable if not
     let mut effective_settings = settings.clone();
@@ -80,7 +92,7 @@ pub fn ext_sort(
         reader_writer::<_, WriteableCompressedTmpFile>(
             files,
             &effective_settings,
-            &sorted_receiver,
+            &sorted,
             recycled_sender,
             output,
             tmp_dir,
@@ -89,7 +101,7 @@ pub fn ext_sort(
         reader_writer::<_, WriteablePlainTmpFile>(
             files,
             &effective_settings,
-            &sorted_receiver,
+            &sorted,
             recycled_sender,
             output,
             tmp_dir,
@@ -103,7 +115,7 @@ fn reader_writer<
 >(
     files: F,
     settings: &GlobalSettings,
-    receiver: &Receiver<Chunk>,
+    sorted: &SortedChunks,
     sender: SyncSender<Chunk>,
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
@@ -125,7 +137,7 @@ fn reader_writer<
         separator,
         buffer_size,
         settings,
-        receiver,
+        sorted,
         sender,
     )?;
     match read_result {
@@ -185,14 +197,37 @@ fn reader_writer<
 /// The function that is executed on the sorter thread.
 fn sorter(receiver: &Receiver<Chunk>, sender: &SyncSender<Chunk>, settings: &GlobalSettings) {
     while let Ok(mut payload) = receiver.recv() {
-        payload.with_dependent_mut(|_, contents| {
-            sort_by(&mut contents.lines, settings, &contents.line_data);
-        });
+        sort_chunk(&mut payload, settings);
         if sender.send(payload).is_err() {
             // The receiver has gone away, likely because the other thread hit an error.
             // We stop silently because the actual error is printed by the other thread.
             return;
         }
+    }
+}
+
+fn sort_chunk(chunk: &mut Chunk, settings: &GlobalSettings) {
+    chunk.with_dependent_mut(|_, contents| {
+        sort_by(&mut contents.lines, settings, &contents.line_data);
+    });
+}
+
+/// Where the reader gets its chunks back from: the sorter thread, or, when
+/// that thread could not be created, the reader itself.
+struct SortedChunks<'a> {
+    receiver: &'a Receiver<Chunk>,
+    sort_inline: bool,
+}
+
+impl SortedChunks<'_> {
+    /// Receives the next sorted chunk. Without a sorter thread, the chunk
+    /// comes back unsorted and is sorted here.
+    fn recv(&self, settings: &GlobalSettings) -> Option<Chunk> {
+        let mut chunk = self.receiver.recv().ok()?;
+        if self.sort_inline {
+            sort_chunk(&mut chunk, settings);
+        }
+        Some(chunk)
     }
 }
 
@@ -214,7 +249,7 @@ fn read_write_loop<I: WriteableTmpFile>(
     separator: u8,
     buffer_size: usize,
     settings: &GlobalSettings,
-    receiver: &Receiver<Chunk>,
+    sorted: &SortedChunks,
     sender: SyncSender<Chunk>,
 ) -> UResult<ReadResult<I>> {
     let mut file = files.next().unwrap()?;
@@ -238,8 +273,8 @@ fn read_write_loop<I: WriteableTmpFile>(
             // We have already read the whole input. Since we are in our first two reads,
             // this means that we can fit the whole input into memory. Bypass writing below and
             // handle this case in a more straightforward way.
-            return Ok(if let Ok(first_chunk) = receiver.recv() {
-                if let Ok(second_chunk) = receiver.recv() {
+            return Ok(if let Some(first_chunk) = sorted.recv(settings) {
+                if let Some(second_chunk) = sorted.recv(settings) {
                     ReadResult::SortedTwoChunks([first_chunk, second_chunk])
                 } else {
                     ReadResult::SortedSingleChunk(first_chunk)
@@ -253,7 +288,7 @@ fn read_write_loop<I: WriteableTmpFile>(
     let mut sender_option = Some(sender);
     let mut tmp_files = vec![];
     loop {
-        let Ok(chunk) = receiver.recv() else {
+        let Some(chunk) = sorted.recv(settings) else {
             return Ok(ReadResult::WroteChunksToFile { tmp_files });
         };
 

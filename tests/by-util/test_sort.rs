@@ -1977,6 +1977,36 @@ fn test_merge_batch_size() {
         .stdout_only_fixture("merge_ints_interleaved.expected");
 }
 
+/// sort must keep working when it cannot create any threads, for example under
+/// a cgroup pids limit. `RLIMIT_NPROC` set to 1 has the same effect for an
+/// unprivileged process.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_no_threads_available() {
+    if rustix::process::geteuid().is_root() {
+        println!("test skipped: root is not limited by RLIMIT_NPROC");
+        return;
+    }
+    new_ucmd!()
+        .limit(Resource::NPROC, 1, 1)
+        .pipe_in("b\na\n")
+        .succeeds()
+        .stdout_only("a\nb\n");
+    // Large enough for the parallel sort to need rayon's thread pool.
+    let mut input = String::new();
+    let mut expected = String::new();
+    for i in 0..100_000 {
+        writeln!(input, "{}", 99_999 - i).unwrap();
+        writeln!(expected, "{i}").unwrap();
+    }
+    new_ucmd!()
+        .limit(Resource::NPROC, 1, 1)
+        .arg("-n")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected);
+}
+
 #[test]
 // TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
 // #[cfg(any(target_os = "linux", target_os = "android"))]
