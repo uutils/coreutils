@@ -317,6 +317,33 @@ fn ensure_is_directory(path: &Path) -> IOResult<()> {
     }
 }
 
+/// Validates path components preceding each `..` component
+///
+/// Ensures that the accumulated path is a directory before traversing
+/// to its parent. This prevents paths containing a regular file followed
+/// by `..` from being incorrectly accepted after logical normalization..
+fn validate_parent_component(path: &Path) -> IOResult<()> {
+    let mut current = PathBuf::new();
+
+    for component in path.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir | Component::Normal(_) => {
+                current.push(component.as_os_str());
+            }
+
+            Component::CurDir => {}
+
+            Component::ParentDir => {
+                if !current.as_os_str().is_empty() {
+                    ensure_is_directory(&current)?;
+                }
+                current.pop();
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Return the canonical, absolute form of a path.
 ///
 /// This function is a generalization of [`std::fs::canonicalize`] that
@@ -362,6 +389,9 @@ pub fn canonicalize<P: AsRef<Path>>(
         dunce::canonicalize(current_dir)?.join(original)
     };
     let path = if res_mode == ResolveMode::Logical {
+        if miss_mode != MissingHandling::Missing {
+            validate_parent_component(&original)?;
+        }
         normalize_path(&original)
     } else {
         original
@@ -380,6 +410,9 @@ pub fn canonicalize<P: AsRef<Path>>(
             }
             OwningComponent::CurDir => {}
             OwningComponent::ParentDir => {
+                if !result.as_os_str().is_empty() && miss_mode != MissingHandling::Missing {
+                    ensure_is_directory(&result)?;
+                }
                 result.pop();
             }
         }
