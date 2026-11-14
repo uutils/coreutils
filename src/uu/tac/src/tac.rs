@@ -63,6 +63,7 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(&translate!("tac-usage")))
         .about(translate!("tac-about"))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::BEFORE)
                 .short('b')
@@ -83,6 +84,7 @@ pub fn uu_app() -> Command {
                 .long(options::SEPARATOR)
                 .help(translate!("tac-help-separator"))
                 .value_parser(clap::value_parser!(OsString))
+                .allow_hyphen_values(true)
                 .value_name("STRING"),
         )
         .arg(

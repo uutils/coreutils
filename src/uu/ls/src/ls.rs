@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
-// spell-checker:ignore nohash strtime clocale
+// spell-checker:ignore nohash strtime clocale inode
 
 use clap::{
     Arg, ArgAction, Command,
@@ -27,7 +27,6 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use thiserror::Error;
 
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
@@ -39,7 +38,7 @@ use uucore::{
     fsext::metadata_get_time,
     os_str_as_bytes_lossy,
     parser::shortcut_value_parser::ShortcutValueParser,
-    show, translate,
+    quoting_style, show, translate,
     version_cmp::version_cmp,
 };
 
@@ -59,7 +58,7 @@ use config::{Dereference, Files, Sort};
 use dired::DiredOutput;
 use display::{display_items, display_size, should_display, show_dir_name};
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 enum LsError {
     #[error("{}", translate!("ls-error-invalid-line-width", "width" => format!("'{_0}'")))]
     InvalidLineWidth(String),
@@ -84,7 +83,7 @@ enum LsError {
         _ => if 9 == .1.raw_os_error().unwrap_or(1) {
             translate!("ls-error-cannot-open-directory-bad-descriptor", "path" => .0.quote())
         } else {
-            translate!("ls-error-unknown-io-error", "path" => .0.quote(), "error" => format!("{:?}", .1))
+            translate!("ls-error-cannot-access", "path" => .0.quote(), "error" => strip_errno(.1))
         },
     })]
     IOErrorContext(PathBuf, std::io::Error, bool),
@@ -298,26 +297,12 @@ pub fn uu_app() -> Command {
     )
     // Quoting style
     .arg(
-        Arg::new(QUOTING_STYLE)
-            .long(QUOTING_STYLE)
-            .help(translate!("ls-help-set-quoting-style"))
-            .value_parser(ShortcutValueParser::new([
-                PossibleValue::new("literal"),
-                PossibleValue::new("locale"),
-                PossibleValue::new("shell"),
-                PossibleValue::new("shell-escape"),
-                PossibleValue::new("shell-always"),
-                PossibleValue::new("shell-escape-always"),
-                PossibleValue::new("clocale"),
-                PossibleValue::new("c").alias("c-maybe"),
-                PossibleValue::new("escape"),
-            ]))
-            .overrides_with_all([
-                QUOTING_STYLE,
-                options::quoting::LITERAL,
-                options::quoting::ESCAPE,
-                options::quoting::C,
-            ]),
+        quoting_style::parser::clap_quoting_argument().overrides_with_all([
+            QUOTING_STYLE,
+            options::quoting::LITERAL,
+            options::quoting::ESCAPE,
+            options::quoting::C,
+        ]),
     )
     .arg(
         Arg::new(options::quoting::LITERAL)
@@ -821,7 +806,7 @@ pub struct PathData<'a> {
 }
 
 impl<'a> PathData<'a> {
-    /// Convert this PathData to an EntryInfo for programmatic access
+    /// Convert this [`PathData`] to an [`EntryInfo`] for programmatic access
     pub fn to_entry_info(&self, config: &Config) -> EntryInfo {
         EntryInfo {
             path: self.p_buf.clone().into_owned(),
@@ -1245,20 +1230,26 @@ pub fn list_with_output<O: LsOutput>(
         // Only recursion can revisit a directory, so only then is it worth a
         // stat to remember this one; without -R the set is never consulted.
         let mut listed_ancestors = FxHashSet::default();
-        if config.recursive {
-            listed_ancestors.insert(FileInformation::from_path(
-                path_data.path(),
-                path_data.must_dereference,
-            )?);
-        }
+        let id = if config.recursive {
+            let info = FileInformation::from_path(path_data.path(), path_data.must_dereference)?;
+            let id = DirId::new(&info);
+            listed_ancestors.insert(id);
+            Some(id)
+        } else {
+            None
+        };
+
         enter_directory(
             path_data,
             read_dir,
             config,
+            id,
             &mut listed_ancestors,
             output,
             &mut entries,
         )?;
+
+        debug_assert!(listed_ancestors.is_empty());
     }
 
     output.finalize(config)?;
@@ -1342,15 +1333,13 @@ fn write_directory_entries<O: LsOutput>(
     output: &mut O,
 ) -> UResult<()> {
     if config.format == Format::Long || config.alloc_size {
-        let total_size: u64 = entries
+        // GNU adds up the allocated bytes and scales the sum once, so a
+        // partly used block is rounded up for the total, not once per file.
+        let total_bytes: u64 = entries
             .iter()
-            .map(|item| {
-                item.metadata()
-                    .as_ref()
-                    .map_or(0, |md| get_block_size(md, config))
-            })
+            .map(|item| item.metadata().as_ref().map_or(0, |md| get_block_bytes(md)))
             .sum();
-        output.write_total(total_size, config)?;
+        output.write_total(scale_block_bytes(total_bytes, config), config)?;
     }
 
     if matches!(output.stream_mode(), StreamMode::Streaming) {
@@ -1363,6 +1352,19 @@ fn write_directory_entries<O: LsOutput>(
     }
 }
 
+/// Wrapper for `(dev, inode)`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
+struct DirId(u64, u64);
+
+impl DirId {
+    fn new(info: &FileInformation) -> Self {
+        #[cfg(any(unix, target_os = "wasi"))]
+        return Self(info.dev(), info.inode());
+        #[cfg(windows)]
+        return Self(info.dev(), info.file_index());
+    }
+}
+
 /// Recursively traverse directories using an explicit stack.
 ///
 /// This avoids deep recursive call chains while preserving GNU-style
@@ -1371,7 +1373,8 @@ fn enter_directory<O: LsOutput>(
     path_data: &PathData,
     read_dir: ReadDir,
     config: &Config,
-    listed_ancestors: &mut FxHashSet<FileInformation>,
+    id: Option<DirId>,
+    listed_ancestors: &mut FxHashSet<DirId>,
     output: &mut O,
     entries: &mut Vec<PathData>,
 ) -> UResult<()> {
@@ -1379,17 +1382,46 @@ fn enter_directory<O: LsOutput>(
         path: PathBuf,
         command_line: bool,
         is_first: bool,
+        id: Option<DirId>, // None on the base case.
+    }
+
+    /// Controls inode freeing precisely in the loop, so we correctly thread
+    /// cycle detection and inode discarding.
+    enum StackItem {
+        Enter(StackEntry),
+        Exit(DirId),
     }
 
     let mut stack = Vec::new();
-    let mut current = Some(StackEntry {
+    let mut current = Some(StackItem::Enter(StackEntry {
         path: path_data.path().to_path_buf(),
         command_line: path_data.command_line,
         is_first: true,
-    });
+        id: None,
+    }));
     let mut initial_read_dir = Some(read_dir);
 
     while let Some(entry) = current.take().or_else(|| stack.pop()) {
+        let entry = match entry {
+            StackItem::Exit(id) => {
+                listed_ancestors.remove(&id);
+                continue;
+            }
+            StackItem::Enter(entry) => entry,
+        };
+
+        // Check for duplicates at entry time, so we can reliably track cycles.
+        if !entry.is_first && entry.id.is_some_and(|id| !listed_ancestors.insert(id)) {
+            output.flush()?;
+            show!(LsError::AlreadyListedError(entry.path.clone()));
+            continue;
+        }
+
+        // Register clean-up now.
+        if let Some(id) = entry.id {
+            stack.push(StackItem::Exit(id));
+        }
+
         let path_data = PathData::new(
             entry.path.as_path().into(),
             None,
@@ -1435,7 +1467,19 @@ fn enter_directory<O: LsOutput>(
                 let child_must_dereference = child.must_dereference;
                 let child_command_line = child.command_line;
 
-                match fs::read_dir(&child_path) {
+                // Try to read_dir now to eagerly report errors, matching GNU.
+                if let Err(err) = fs::read_dir(&child_path) {
+                    output.flush()?;
+                    show!(LsError::IOErrorContext(
+                        child_path.clone(),
+                        err,
+                        child_command_line,
+                    ));
+                    continue;
+                }
+
+                let info = match FileInformation::from_path(&child_path, child_must_dereference) {
+                    Ok(info) => info,
                     Err(err) => {
                         output.flush()?;
                         show!(LsError::IOErrorContext(
@@ -1443,25 +1487,22 @@ fn enter_directory<O: LsOutput>(
                             err,
                             child_command_line,
                         ));
+                        continue;
                     }
-                    Ok(_) => {
-                        if listed_ancestors.insert(FileInformation::from_path(
-                            &child_path,
-                            child_must_dereference,
-                        )?) {
-                            stack.push(StackEntry {
-                                path: child_path,
-                                command_line: child_command_line,
-                                is_first: false,
-                            });
-                        } else {
-                            output.flush()?;
-                            show!(LsError::AlreadyListedError(child_path));
-                        }
-                    }
-                }
+                };
+                stack.push(StackItem::Enter(StackEntry {
+                    path: child_path,
+                    command_line: child_command_line,
+                    is_first: false,
+                    id: Some(DirId::new(&info)),
+                }));
             }
         }
+    }
+
+    // Pop base case
+    if let Some(ref id) = id {
+        listed_ancestors.remove(id);
     }
 
     Ok(())
@@ -1570,23 +1611,17 @@ fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Resu
     }
 }
 
-#[allow(unused_variables)]
-fn get_block_size(md: &Metadata, config: &Config) -> u64 {
+/// Allocated size of a file in bytes, before it is scaled to the block size.
+fn get_block_bytes(md: &Metadata) -> u64 {
     /* GNU ls will display sizes in terms of block size
        md.len() will differ from this value when the file has some holes
     */
     #[cfg(unix)]
     {
-        use uucore::format::human::SizeFormat;
-
-        let raw_blocks = if md.file_type().is_char_device() || md.file_type().is_block_device() {
+        if md.file_type().is_char_device() || md.file_type().is_block_device() {
             0u64
         } else {
             md.blocks() * 512
-        };
-        match config.size_format {
-            SizeFormat::Binary | SizeFormat::Decimal => raw_blocks,
-            SizeFormat::Bytes => raw_blocks / config.block_size,
         }
     }
     #[cfg(not(unix))]
@@ -1594,6 +1629,35 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
         // no way to get block size for windows, fall-back to file size
         md.len()
     }
+}
+
+/// Scale an allocated size in bytes to `config.block_size`.
+///
+/// A partly used block still occupies a whole block, so the division rounds
+/// up: with `--block-size=1000`, 4096 allocated bytes are five blocks, not
+/// four. `-h`/`--si` keep the byte count, which the human-readable formatter
+/// scales itself.
+#[cfg_attr(not(unix), allow(unused_variables))]
+fn scale_block_bytes(bytes: u64, config: &Config) -> u64 {
+    #[cfg(unix)]
+    {
+        use uucore::format::human::SizeFormat;
+
+        match config.size_format {
+            SizeFormat::Binary | SizeFormat::Decimal => bytes,
+            SizeFormat::Bytes => bytes.div_ceil(config.block_size),
+        }
+    }
+    // On non-unix `get_block_bytes` falls back to the file size rather than an
+    // allocation figure, which was never scaled here. Left as it was.
+    #[cfg(not(unix))]
+    {
+        bytes
+    }
+}
+
+fn get_block_size(md: &Metadata, config: &Config) -> u64 {
+    scale_block_bytes(get_block_bytes(md), config)
 }
 
 #[cfg(unix)]

@@ -28,7 +28,7 @@ pub const BUFFER_SIZE: usize = 8192;
 
 /// An iterator over a file in non-overlapping chunks from the end of the file.
 ///
-/// Each chunk is a [`Vec`]<[`u8`]> of size [`BLOCK_SIZE`] (except
+/// Each chunk is a [`Vec<u8>`] of size [`BLOCK_SIZE`] (except
 /// possibly the last chunk, which might be smaller). Each call to
 /// [`ReverseChunks::next`] will seek backwards through the given file.
 pub struct ReverseChunks<'a> {
@@ -46,13 +46,14 @@ pub struct ReverseChunks<'a> {
 }
 
 impl<'a> ReverseChunks<'a> {
-    pub fn new(file: &'a mut File) -> Self {
+    /// Iterates backwards from `end`, the position seen as the end of the file.
+    pub fn new(file: &'a mut File, end: SeekFrom) -> Self {
         let current = if cfg!(unix) {
             file.stream_position().unwrap()
         } else {
             0
         };
-        let size = file.seek(SeekFrom::End(0)).unwrap() - current;
+        let size = file.seek(end).unwrap() - current;
         let max_blocks_to_read = (size as f64 / BLOCK_SIZE as f64).ceil() as usize;
         let block_idx = 0;
         ReverseChunks {
@@ -75,9 +76,10 @@ impl Iterator for ReverseChunks<'_> {
 
         // The chunk size is `BLOCK_SIZE` for all but the last chunk
         // (that is, the chunk closest to the beginning of the file),
-        // which contains the remainder of the bytes.
+        // which contains the remaining bytes. That is a full block when
+        // the size is an exact multiple of `BLOCK_SIZE`.
         let block_size = if self.block_idx == self.max_blocks_to_read - 1 {
-            self.size % BLOCK_SIZE
+            self.size - (self.max_blocks_to_read as u64 - 1) * BLOCK_SIZE
         } else {
             BLOCK_SIZE
         };

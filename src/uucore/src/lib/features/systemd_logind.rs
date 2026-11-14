@@ -33,8 +33,6 @@ mod ffi {
             remote_host: *mut *mut c_char,
         ) -> c_int;
         pub fn sd_session_get_display(session: *const c_char, display: *mut *mut c_char) -> c_int;
-        pub fn sd_session_get_type(session: *const c_char, session_type: *mut *mut c_char)
-        -> c_int;
         pub fn sd_session_get_seat(session: *const c_char, seat: *mut *mut c_char) -> c_int;
 
     }
@@ -43,14 +41,14 @@ mod ffi {
 /// Safe wrapper functions for libsystemd FFI calls
 mod login {
     use super::ffi;
-    use core::ffi::CStr;
+    use core::ffi::{CStr, c_char, c_int};
     use std::ffi::CString;
     use std::ptr;
     use std::time::SystemTime;
 
     /// Get all active sessions
     pub fn get_sessions() -> Result<Vec<String>, Box<dyn std::error::Error>> {
-        let mut sessions_ptr: *mut *mut core::ffi::c_char = ptr::null_mut();
+        let mut sessions_ptr: *mut *mut c_char = ptr::null_mut();
 
         let result = unsafe { ffi::sd_get_sessions(&raw mut sessions_ptr) };
 
@@ -114,155 +112,44 @@ mod login {
         Ok(usec)
     }
 
-    /// Get TTY for a session
-    pub fn get_session_tty(session_id: &str) -> Result<Option<String>, Box<dyn std::error::Error>> {
-        let session_cstring = CString::new(session_id)?;
-        let mut tty_ptr: *mut core::ffi::c_char = ptr::null_mut();
-
-        let result = unsafe { ffi::sd_session_get_tty(session_cstring.as_ptr(), &raw mut tty_ptr) };
-
-        if result < 0 {
-            return Err(
-                format!("sd_session_get_tty failed for session '{session_id}': {result}").into(),
-            );
-        }
-
-        if tty_ptr.is_null() {
-            return Ok(None);
-        }
-
-        let tty_cstr = unsafe { CStr::from_ptr(tty_ptr) };
-        let tty_string = tty_cstr.to_string_lossy().into_owned();
-
-        unsafe { libc::free(tty_ptr.cast()) };
-
-        Ok(Some(tty_string))
-    }
-
-    /// Get remote host for a session
-    pub fn get_session_remote_host(
+    /// Read a string property of a session, such as its TTY or seat, with one of
+    /// the `sd_session_get_*` getters. An error or an unset property gives an
+    /// empty string.
+    pub fn get_session_string(
         session_id: &str,
-    ) -> Result<Option<String>, Box<dyn std::error::Error>> {
-        let session_cstring = CString::new(session_id)?;
-        let mut host_ptr: *mut core::ffi::c_char = ptr::null_mut();
+        getter: unsafe extern "C" fn(*const c_char, *mut *mut c_char) -> c_int,
+    ) -> String {
+        let Ok(session_cstring) = CString::new(session_id) else {
+            return String::new();
+        };
+        let mut value_ptr: *mut c_char = ptr::null_mut();
 
-        let result =
-            unsafe { ffi::sd_session_get_remote_host(session_cstring.as_ptr(), &raw mut host_ptr) };
-
-        if result < 0 {
-            return Err(format!(
-                "sd_session_get_remote_host failed for session '{session_id}': {result}",
-            )
-            .into());
+        // SAFETY: `session_cstring` is NUL-terminated and outlives the call; the
+        // getter only stores a pointer in `value_ptr`.
+        let result = unsafe { getter(session_cstring.as_ptr(), &raw mut value_ptr) };
+        if result < 0 || value_ptr.is_null() {
+            return String::new();
         }
 
-        if host_ptr.is_null() {
-            return Ok(None);
-        }
-
-        let host_cstr = unsafe { CStr::from_ptr(host_ptr) };
-        let host_string = host_cstr.to_string_lossy().into_owned();
-
-        unsafe { libc::free(host_ptr.cast()) };
-
-        Ok(Some(host_string))
-    }
-
-    /// Get display for a session
-    pub fn get_session_display(
-        session_id: &str,
-    ) -> Result<Option<String>, Box<dyn std::error::Error>> {
-        let session_cstring = CString::new(session_id)?;
-        let mut display_ptr: *mut core::ffi::c_char = ptr::null_mut();
-
-        let result =
-            unsafe { ffi::sd_session_get_display(session_cstring.as_ptr(), &raw mut display_ptr) };
-
-        if result < 0 {
-            return Err(format!(
-                "sd_session_get_display failed for session '{session_id}': {result}",
-            )
-            .into());
-        }
-
-        if display_ptr.is_null() {
-            return Ok(None);
-        }
-
-        let display_cstr = unsafe { CStr::from_ptr(display_ptr) };
-        let display_string = display_cstr.to_string_lossy().into_owned();
-
-        unsafe { libc::free(display_ptr.cast()) };
-
-        Ok(Some(display_string))
-    }
-
-    /// Get type for a session
-    pub fn get_session_type(
-        session_id: &str,
-    ) -> Result<Option<String>, Box<dyn std::error::Error>> {
-        let session_cstring = CString::new(session_id)?;
-        let mut type_ptr: *mut core::ffi::c_char = ptr::null_mut();
-
-        let result =
-            unsafe { ffi::sd_session_get_type(session_cstring.as_ptr(), &raw mut type_ptr) };
-
-        if result < 0 {
-            return Err(
-                format!("sd_session_get_type failed for session '{session_id}': {result}").into(),
-            );
-        }
-
-        if type_ptr.is_null() {
-            return Ok(None);
-        }
-
-        let type_cstr = unsafe { CStr::from_ptr(type_ptr) };
-        let type_string = type_cstr.to_string_lossy().into_owned();
-
-        unsafe { libc::free(type_ptr.cast()) };
-
-        Ok(Some(type_string))
-    }
-
-    /// Get seat for a session
-    pub fn get_session_seat(
-        session_id: &str,
-    ) -> Result<Option<String>, Box<dyn std::error::Error>> {
-        let session_cstring = CString::new(session_id)?;
-        let mut seat_ptr: *mut core::ffi::c_char = ptr::null_mut();
-
-        let result =
-            unsafe { ffi::sd_session_get_seat(session_cstring.as_ptr(), &raw mut seat_ptr) };
-
-        if result < 0 {
-            return Err(
-                format!("sd_session_get_seat failed for session '{session_id}': {result}").into(),
-            );
-        }
-
-        if seat_ptr.is_null() {
-            return Ok(None);
-        }
-
-        let seat_cstr = unsafe { CStr::from_ptr(seat_ptr) };
-        let seat_string = seat_cstr.to_string_lossy().into_owned();
-
-        unsafe { libc::free(seat_ptr.cast()) };
-
-        Ok(Some(seat_string))
+        // SAFETY: on success `value_ptr` is a NUL-terminated string allocated by
+        // libsystemd, which we own and free once copied.
+        let value = unsafe { CStr::from_ptr(value_ptr) }
+            .to_string_lossy()
+            .into_owned();
+        unsafe { libc::free(value_ptr.cast()) };
+        value
     }
 
     /// Get system boot time using systemd random-seed file fallback
     ///
     /// TODO: This replicates GNU coreutils' fallback behavior for compatibility.
     /// GNU coreutils uses the mtime of /var/lib/systemd/random-seed as a heuristic for boot time
-    /// when utmp is unavailable, rather than querying systemd's authoritative KernelTimestamp.
+    /// when utmp is unavailable, rather than querying systemd's authoritative `KernelTimestamp`.
     /// This creates inconsistency: `uptime -s` shows the actual kernel boot time
     /// while `who -b` shows ~1 minute later when systemd services start.
     ///
-    /// Ideally, both should use the same source (KernelTimestamp) for semantic consistency.
-    /// Consider proposing to GNU coreutils to use systemd's KernelTimestamp property instead.
+    /// Ideally, both should use the same source (`KernelTimestamp`) for semantic consistency.
+    /// Consider proposing to GNU coreutils to use systemd's `KernelTimestamp` property instead.
     pub fn get_boot_time() -> Result<SystemTime, Box<dyn std::error::Error>> {
         use std::fs;
 
@@ -302,7 +189,7 @@ impl SystemdLoginRecord {
         !self.user.is_empty() && self.record_type == SystemdRecordType::UserProcess
     }
 
-    /// Get login time as time::OffsetDateTime compatible with utmpx
+    /// Get login time as [`time::OffsetDateTime`] compatible with utmpx
     pub fn login_time_offset(&self) -> time::OffsetDateTime {
         let duration = self
             .login_time
@@ -321,7 +208,7 @@ impl SystemdLoginRecord {
 }
 
 /// Read login records from systemd-logind using safe wrapper functions
-/// This matches the approach used by GNU coreutils read_utmp_from_systemd()
+/// This matches the approach used by GNU coreutils `read_utmp_from_systemd()`
 pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
     let mut records = Vec::new();
 
@@ -396,16 +283,10 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
         });
 
         // Get TTY using safe wrapper
-        let mut tty = login::get_session_tty(&session_id)
-            .ok()
-            .flatten()
-            .unwrap_or_default();
+        let mut tty = login::get_session_string(&session_id, ffi::sd_session_get_tty);
 
         // Get seat using safe wrapper
-        let mut seat = login::get_session_seat(&session_id)
-            .ok()
-            .flatten()
-            .unwrap_or_default();
+        let mut seat = login::get_session_string(&session_id, ffi::sd_session_get_seat);
 
         // Strip any existing prefixes from systemd values (if any)
         if tty.starts_with('?') {
@@ -416,22 +297,10 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
         }
 
         // Get remote host using safe wrapper
-        let remote_host = login::get_session_remote_host(&session_id)
-            .ok()
-            .flatten()
-            .unwrap_or_default();
+        let remote_host = login::get_session_string(&session_id, ffi::sd_session_get_remote_host);
 
         // Get display using safe wrapper (for GUI sessions)
-        let display = login::get_session_display(&session_id)
-            .ok()
-            .flatten()
-            .unwrap_or_default();
-
-        // Get session type using safe wrapper (currently unused but available)
-        let _session_type = login::get_session_type(&session_id)
-            .ok()
-            .flatten()
-            .unwrap_or_default();
+        let display = login::get_session_string(&session_id, ffi::sd_session_get_display);
 
         // Determine host (use remote_host if available)
         // If host is local (non-remote) we use display,
@@ -523,38 +392,38 @@ pub struct SystemdUtmpxCompat {
 }
 
 impl SystemdUtmpxCompat {
-    /// Create new instance from a SystemdLoginRecord
+    /// Create new instance from a [`SystemdLoginRecord`]
     pub fn new(record: SystemdLoginRecord) -> Self {
         Self { record }
     }
 
-    /// A.K.A. ut.ut_type
+    /// A.K.A. `ut.ut_type`
     pub fn record_type(&self) -> i16 {
         self.record.record_type as i16
     }
 
-    /// A.K.A. ut.ut_pid
+    /// A.K.A. `ut.ut_pid`
     pub fn pid(&self) -> i32 {
         self.record.pid as i32
     }
 
-    /// A.K.A. ut.ut_id
+    /// A.K.A. `ut.ut_id`
     pub fn terminal_suffix(&self) -> String {
         // Extract last part of session ID or use session ID
         self.record.session_id.clone()
     }
 
-    /// A.K.A. ut.ut_user
+    /// A.K.A. `ut.ut_user`
     pub fn user(&self) -> String {
         self.record.user.clone()
     }
 
-    /// A.K.A. ut.ut_host
+    /// A.K.A. `ut.ut_host`
     pub fn host(&self) -> String {
         self.record.host.clone()
     }
 
-    /// A.K.A. ut.ut_line
+    /// A.K.A. `ut.ut_line`
     pub fn tty_device(&self) -> String {
         // Return raw device name for device access if available, otherwise formatted seat_or_tty
         if self.record.raw_device.is_empty() {

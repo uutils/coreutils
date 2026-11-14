@@ -3,7 +3,6 @@
 # uucore strings because every utility parses those at startup, and almost
 # no run ever needs one of these.
 
-checksum-error-failed-to-read-input = failed to read input
 checksum-error-algo-bad-format = { $file }: { $line }: improperly formatted { $algo } checksum line
 # Format string parsing messages (printf, seq, env, ...)
 format-error-invalid-spec = %{ $spec }: invalid conversion specification
@@ -54,3 +53,6 @@ size-diag-help-syntax = a size is a number and an optional unit: K, M, G and so 
 # in its own words.
 range-diag-label-too-large = this number is too large
 range-diag-label-inverted = this range ends before it starts
+
+# Invalid QUOTING_STYLE env var
+invalid-quoting-style-env-var = ignoring invalid value of environment variable QUOTING_STYLE: { $invalid }

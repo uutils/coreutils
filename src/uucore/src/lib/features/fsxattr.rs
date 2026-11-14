@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore getxattr posix_acl_default posix_acl_access ENOTSUP EOPNOTSUPP renamer
+// spell-checker:ignore getxattr posix_acl_default posix_acl_access ENOTSUP EOPNOTSUPP renamer posix1e nfsace
 
 //! Set of functions to manage xattr on files and dirs
 
@@ -17,7 +17,7 @@ use std::path::Path;
 /// True if the error is `ENOTSUP` / `EOPNOTSUPP` (same errno on Linux,
 /// distinct on the BSDs).
 #[cfg(unix)]
-fn is_xattr_unsupported(err: &std::io::Error) -> bool {
+pub fn is_xattr_unsupported(err: &std::io::Error) -> bool {
     matches!(
         err.raw_os_error(),
         Some(e) if e == libc::ENOTSUP || e == libc::EOPNOTSUPP
@@ -25,69 +25,99 @@ fn is_xattr_unsupported(err: &std::io::Error) -> bool {
 }
 
 #[cfg(not(unix))]
-fn is_xattr_unsupported(_err: &std::io::Error) -> bool {
+pub fn is_xattr_unsupported(_err: &std::io::Error) -> bool {
     false
 }
 
-/// Copies extended attributes (xattrs) from one path to another.
-/// All errors propagate, including `ENOTSUP` / `EOPNOTSUPP`; for
-/// best-effort callers see [`copy_xattrs_ignore_unsupported`].
-pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
-    for attr_name in xattr::list(&source)? {
-        if let Some(value) = xattr::get(&source, &attr_name)? {
-            xattr::set(&dest, &attr_name, &value)?;
+/// The result of copying xattrs: each attribute that could not be copied,
+/// along with its error. Only failing to list the attributes of the source
+/// is an `Err`.
+pub type XattrCopyResult = std::io::Result<Vec<(OsString, std::io::Error)>>;
+
+/// Leaves `ENOTSUP` / `EOPNOTSUPP` out of the result of copying xattrs, for
+/// callers where xattr preservation is best-effort.
+fn without_unsupported(result: XattrCopyResult) -> XattrCopyResult {
+    match result {
+        Ok(mut failed) => {
+            failed.retain(|(_, e)| !is_xattr_unsupported(e));
+            Ok(failed)
         }
+        Err(e) if is_xattr_unsupported(&e) => Ok(Vec::new()),
+        Err(e) => Err(e),
     }
-    Ok(())
 }
 
-/// Like [`copy_xattrs`], but maps `ENOTSUP` / `EOPNOTSUPP` to `Ok(())`
-/// for callers where xattr preservation is best-effort.
-pub fn copy_xattrs_ignore_unsupported<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
-    match copy_xattrs(source, dest) {
-        Err(e) if is_xattr_unsupported(&e) => Ok(()),
-        res => res,
+/// Copies each attribute in `names` that `keep` accepts, reading its value
+/// with `get` and writing it with `set`. An attribute that cannot be copied
+/// does not stop the others; it is returned along with its error.
+fn copy_each_xattr(
+    names: impl IntoIterator<Item = OsString>,
+    keep: impl Fn(&OsStr) -> bool,
+    get: impl Fn(&OsStr) -> std::io::Result<Option<Vec<u8>>>,
+    set: impl Fn(&OsStr, &[u8]) -> std::io::Result<()>,
+) -> Vec<(OsString, std::io::Error)> {
+    let mut failed = Vec::new();
+    for attr_name in names.into_iter().filter(|name| keep(name)) {
+        let result = get(&attr_name).and_then(|value| match value {
+            Some(value) => set(&attr_name, &value),
+            None => Ok(()),
+        });
+        if let Err(e) = result {
+            failed.push((attr_name, e));
+        }
     }
+    failed
+}
+
+/// Copies extended attributes (xattrs) from one path to another.
+///
+/// An attribute that cannot be copied does not stop the others from being
+/// copied. Returns each attribute that failed along with its error, including
+/// `ENOTSUP` / `EOPNOTSUPP`; for best-effort callers see
+/// [`copy_xattrs_ignore_unsupported`]. Only failing to list the attributes of
+/// `source` is an `Err`.
+pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> XattrCopyResult {
+    Ok(copy_each_xattr(
+        xattr::list(&source)?,
+        |_| true,
+        |name| xattr::get(&source, name),
+        |name, value| xattr::set(&dest, name, value),
+    ))
+}
+
+/// Like [`copy_xattrs`], but leaves out `ENOTSUP` / `EOPNOTSUPP` for callers
+/// where xattr preservation is best-effort.
+pub fn copy_xattrs_ignore_unsupported<P: AsRef<Path>>(source: P, dest: P) -> XattrCopyResult {
+    without_unsupported(copy_xattrs(source, dest))
 }
 
 /// Copies xattrs between two open file descriptors. Pins both inodes so
 /// list/get/set calls cannot be redirected by a concurrent renamer, unlike
-/// the path-based [`copy_xattrs`].
+/// the path-based [`copy_xattrs`], and reports failures the same way.
 #[cfg(unix)]
-pub fn copy_xattrs_fd(source: &std::fs::File, dest: &std::fs::File) -> std::io::Result<()> {
+pub fn copy_xattrs_fd(source: &std::fs::File, dest: &std::fs::File) -> XattrCopyResult {
     use xattr::FileExt;
-    for attr_name in source.list_xattr()? {
-        if let Some(value) = source.get_xattr(&attr_name)? {
-            dest.set_xattr(&attr_name, &value)?;
-        }
-    }
-    Ok(())
-}
-
-/// Like [`copy_xattrs_fd`], but maps `ENOTSUP` / `EOPNOTSUPP` to `Ok(())`.
-#[cfg(unix)]
-pub fn copy_xattrs_fd_ignore_unsupported(
-    source: &std::fs::File,
-    dest: &std::fs::File,
-) -> std::io::Result<()> {
-    match copy_xattrs_fd(source, dest) {
-        Err(e) if is_xattr_unsupported(&e) => Ok(()),
-        res => res,
-    }
+    Ok(copy_each_xattr(
+        source.list_xattr()?,
+        |_| true,
+        |name| source.get_xattr(name),
+        |name, value| dest.set_xattr(name, value),
+    ))
 }
 
 /// Like `copy_xattrs`, but skips the security.selinux attribute.
 #[cfg(unix)]
-pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
-    for attr_name in xattr::list(&source)? {
-        if attr_name.as_bytes() != b"security.selinux"
-            && let Some(value) = xattr::get(&source, &attr_name)?
-        {
-            xattr::set(&dest, &attr_name, &value)?;
-        }
-    }
-    Ok(())
+pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> XattrCopyResult {
+    Ok(copy_each_xattr(
+        xattr::list(&source)?,
+        |name| name.as_bytes() != b"security.selinux",
+        |name| xattr::get(&source, name),
+        |name, value| xattr::set(&dest, name, value),
+    ))
 }
+
+/// The xattrs Linux stores POSIX ACLs in.
+const POSIX_ACL_XATTRS: [&str; 2] = ["system.posix_acl_access", "system.posix_acl_default"];
 
 /// Copies only the POSIX ACL xattrs (`system.posix_acl_access` and
 /// `system.posix_acl_default`) from `source` to `dest`.
@@ -103,7 +133,7 @@ pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> std::io::
 /// failures here when `mode` is the only thing being preserved.
 #[cfg(unix)]
 pub fn copy_acls<P: AsRef<Path>>(source: P, dest: P) {
-    for name in ["system.posix_acl_access", "system.posix_acl_default"] {
+    for name in POSIX_ACL_XATTRS {
         if let Ok(Some(value)) = xattr::get(&source, name) {
             // Best-effort: silently skip if dest doesn't support ACL xattrs.
             let _ = xattr::set(&dest, name, &value);
@@ -119,7 +149,7 @@ pub fn copy_acls<P: AsRef<Path>>(source: P, dest: P) {
 ///
 /// # Returns
 ///
-/// A result containing a HashMap of attributes names and values, or an error.
+/// A result containing a `HashMap` of attributes names and values, or an error.
 pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<FxHashMap<OsString, Vec<u8>>> {
     let mut attrs = FxHashMap::default();
     for attr_name in xattr::list(&source)? {
@@ -159,7 +189,7 @@ pub fn retrieve_xattrs_fd(source: &std::fs::File) -> std::io::Result<FxHashMap<O
 /// # Arguments
 ///
 /// * `dest` - A reference to the path of the file or directory.
-/// * `xattrs` - A HashMap containing attribute names and their corresponding values.
+/// * `xattrs` - A `HashMap` containing attribute names and their corresponding values.
 ///
 /// # Returns
 ///
@@ -211,7 +241,10 @@ pub fn apply_xattrs_fd_ignore_unsupported(
     }
 }
 
-/// Checks if a file has an Access Control List (ACL) based on its extended attributes.
+/// Checks if a file has an Access Control List (ACL).
+///
+/// On macOS this asks the ACL API; elsewhere it looks at the file's extended
+/// attributes.
 ///
 /// # Arguments
 ///
@@ -220,19 +253,148 @@ pub fn apply_xattrs_fd_ignore_unsupported(
 ///
 /// # Returns
 ///
-/// `true` if the file has extended attributes (indicating an ACL), `false` otherwise.
+/// `true` if the file carries a POSIX ACL or a non-trivial `NFSv4` ACL (an
+/// extended ACL on macOS), `false` otherwise.
 pub fn has_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
+    // On macOS most files carry some xattr (e.g. com.apple.provenance) and the
+    // ACL is not one of them, so ask the ACL API instead.
+    #[cfg(target_os = "macos")]
+    return macos_acl::has_extended_acl(file.as_ref(), dereference);
+
     // don't use exacl here, it is doing more getxattr call then needed
+    #[cfg(not(target_os = "macos"))]
     let attrs = if dereference {
-        xattr::list_deref(file)
+        xattr::list_deref(&file)
     } else {
-        xattr::list(file)
+        xattr::list(&file)
     };
 
-    attrs.is_ok_and(|acl| {
-        // if we have extra attributes, we have an acl
-        acl.count() > 0
-    })
+    #[cfg(not(target_os = "macos"))]
+    {
+        let Ok(names) = attrs else { return false };
+        // Only ACL attributes count; other xattrs such as security.selinux don't.
+        let mut has_nfs4_acl = false;
+        for name in names {
+            if is_acl_xattr(&name) {
+                return true;
+            }
+            has_nfs4_acl |= name == NFS4_ACL_XATTR;
+        }
+        if !has_nfs4_acl {
+            return false;
+        }
+        let value = if dereference {
+            xattr::get_deref(&file, NFS4_ACL_XATTR)
+        } else {
+            xattr::get(&file, NFS4_ACL_XATTR)
+        };
+        matches!(value, Ok(Some(acl)) if nfs4_acl_is_nontrivial(&acl))
+    }
+}
+
+/// Whether `name` is an xattr that stores an ACL.
+#[cfg(not(target_os = "macos"))]
+fn is_acl_xattr(name: &OsStr) -> bool {
+    // FreeBSD and NetBSD expose UFS POSIX.1e and NFSv4 ACLs under these names.
+    #[cfg(any(target_os = "freebsd", target_os = "netbsd"))]
+    const NAMES: &[&str] = &[
+        "system.posix1e.acl_access",
+        "system.posix1e.acl_default",
+        "system.nfs4.acl",
+    ];
+    #[cfg(not(any(target_os = "freebsd", target_os = "netbsd")))]
+    const NAMES: &[&str] = &POSIX_ACL_XATTRS;
+    NAMES.iter().any(|acl| name == *acl)
+}
+
+/// The xattr the Linux `NFSv4` client exposes a file's ACL through.
+#[cfg(not(target_os = "macos"))]
+const NFS4_ACL_XATTR: &str = "system.nfs4_acl";
+
+/// Whether an XDR-encoded `NFSv4` ACL (RFC 7530 `nfsace4` list) says more than
+/// the mode bits.
+///
+/// The NFS client lists this xattr on every file, so only an ACL with
+/// principals other than `OWNER@`, `GROUP@` and `EVERYONE@`, inheritance, or
+/// audit/alarm entries counts. Unparsable data is treated as an ACL.
+#[cfg(not(target_os = "macos"))]
+fn nfs4_acl_is_nontrivial(mut xdr: &[u8]) -> bool {
+    const ACE4_ACCESS_DENIED_ACE_TYPE: u32 = 1;
+    // FILE_INHERIT, DIRECTORY_INHERIT, NO_PROPAGATE_INHERIT, INHERIT_ONLY;
+    // not INHERITED_ACE (0x80), which says where an entry came from.
+    const ACE4_INHERITANCE_FLAGS: u32 = 0x1 | 0x2 | 0x4 | 0x8;
+
+    fn take<'a>(xdr: &mut &'a [u8], len: usize) -> Option<&'a [u8]> {
+        let (head, tail) = xdr.split_at_checked(len)?;
+        *xdr = tail;
+        Some(head)
+    }
+    fn take_u32(xdr: &mut &[u8]) -> Option<u32> {
+        take(xdr, 4)?.try_into().ok().map(u32::from_be_bytes)
+    }
+    fn nontrivial(xdr: &mut &[u8]) -> Option<bool> {
+        for _ in 0..take_u32(xdr)? {
+            let ace_type = take_u32(xdr)?;
+            let flags = take_u32(xdr)?;
+            let _access_mask = take_u32(xdr)?;
+            let who_len = usize::try_from(take_u32(xdr)?).ok()?;
+            let who = take(xdr, who_len)?;
+            take(xdr, who_len.next_multiple_of(4) - who_len)?;
+            if ace_type > ACE4_ACCESS_DENIED_ACE_TYPE
+                || flags & ACE4_INHERITANCE_FLAGS != 0
+                || !matches!(who, b"OWNER@" | b"GROUP@" | b"EVERYONE@")
+            {
+                return Some(true);
+            }
+        }
+        Some(false)
+    }
+
+    nontrivial(&mut xdr).unwrap_or(true)
+}
+
+#[cfg(target_os = "macos")]
+mod macos_acl {
+    use std::ffi::{CString, c_char, c_int, c_void};
+    use std::os::unix::ffi::OsStrExt;
+    use std::path::Path;
+
+    // <sys/acl.h>
+    const ACL_TYPE_EXTENDED: c_int = 0x0000_0100;
+    const ACL_FIRST_ENTRY: c_int = 0;
+
+    unsafe extern "C" {
+        fn acl_get_file(path: *const c_char, acl_type: c_int) -> *mut c_void;
+        fn acl_get_link_np(path: *const c_char, acl_type: c_int) -> *mut c_void;
+        fn acl_get_entry(acl: *mut c_void, entry_id: c_int, entry: *mut *mut c_void) -> c_int;
+        fn acl_free(obj: *mut c_void) -> c_int;
+    }
+
+    /// Whether `path` has an extended ACL with at least one entry.
+    pub(super) fn has_extended_acl(path: &Path, dereference: bool) -> bool {
+        let Ok(c_path) = CString::new(path.as_os_str().as_bytes()) else {
+            return false;
+        };
+        // SAFETY: `c_path` is a valid NUL-terminated string that outlives the
+        // call. A NULL result means there is no ACL (or it can't be read).
+        let acl = unsafe {
+            if dereference {
+                acl_get_file(c_path.as_ptr(), ACL_TYPE_EXTENDED)
+            } else {
+                acl_get_link_np(c_path.as_ptr(), ACL_TYPE_EXTENDED)
+            }
+        };
+        if acl.is_null() {
+            return false;
+        }
+        let mut entry: *mut c_void = std::ptr::null_mut();
+        // SAFETY: `acl` is a valid ACL returned above; `entry` is a valid
+        // out-pointer. The ACL is freed exactly once below.
+        let has_entry = unsafe { acl_get_entry(acl, ACL_FIRST_ENTRY, &raw mut entry) } == 0;
+        // SAFETY: `acl` came from acl_get_file/acl_get_link_np and isn't used after this.
+        unsafe { acl_free(acl) };
+        has_entry
+    }
 }
 
 /// Checks if a file has an Access Control List (ACL) named "security.capability" based on its extended attributes.
@@ -271,7 +433,7 @@ pub fn has_security_cap_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool 
 ///
 /// # Returns
 ///
-/// `u32`  the perm bits of a file having extended attributes of type 'system.posix_acl_default' with permissions
+/// `u32`  the perm bits of a file having extended attributes of type `system.posix_acl_default` with permissions
 /// otherwise returns a 0 if perm bits are 0 or the file has no extended attributes
 pub fn get_acl_perm_bits_from_xattr<P: AsRef<Path>>(source: P) -> u32 {
     // TODO: Modify this to work on non linux unix systems.
@@ -335,7 +497,7 @@ mod tests {
         let test_value = b"test value";
         xattr::set(&source_path, test_attr, test_value).unwrap();
 
-        copy_xattrs(&source_path, &dest_path).unwrap();
+        assert!(copy_xattrs(&source_path, &dest_path).unwrap().is_empty());
 
         let copied_value = xattr::get(&dest_path, test_attr).unwrap().unwrap();
         assert_eq!(copied_value, test_value);
@@ -364,7 +526,7 @@ mod tests {
             .open(&dest_path)
             .unwrap();
 
-        copy_xattrs_fd(&src, &dst).unwrap();
+        assert!(copy_xattrs_fd(&src, &dst).unwrap().is_empty());
 
         let copied = xattr::get(&dest_path, test_attr).unwrap().unwrap();
         assert_eq!(copied, test_value);
@@ -439,6 +601,80 @@ mod tests {
         assert_eq!(0o700, perm_bits);
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_file_has_acl_macos() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("test_file.txt");
+        File::create(&file_path).unwrap();
+        assert!(!has_acl(&file_path, true));
+
+        let status = std::process::Command::new("chmod")
+            .args(["+a", "everyone allow read"])
+            .arg(&file_path)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        assert!(has_acl(&file_path, true));
+        assert!(has_acl(&file_path, false));
+    }
+
+    /// Encodes `NFSv4` ACEs as XDR: (type, flags, who), access mask 0.
+    #[cfg(not(target_os = "macos"))]
+    fn nfs4_acl(aces: &[(u32, u32, &str)]) -> Vec<u8> {
+        let mut xdr = (aces.len() as u32).to_be_bytes().to_vec();
+        for (ace_type, flags, who) in aces {
+            for word in [*ace_type, *flags, 0, who.len() as u32] {
+                xdr.extend(word.to_be_bytes());
+            }
+            xdr.extend(who.as_bytes());
+            xdr.resize(xdr.len().next_multiple_of(4), 0);
+        }
+        xdr
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn test_nfs4_acl_is_nontrivial() {
+        let mode_only = [(0, 0, "OWNER@"), (1, 0x40, "GROUP@"), (0, 0, "EVERYONE@")];
+        assert!(!nfs4_acl_is_nontrivial(&nfs4_acl(&mode_only)));
+        assert!(nfs4_acl_is_nontrivial(&nfs4_acl(&[(0, 0, "1000@example")])));
+        assert!(nfs4_acl_is_nontrivial(&nfs4_acl(&[(0, 0x1, "OWNER@")])));
+        let inherited = [
+            (0, 0x80, "OWNER@"),
+            (0, 0xc0, "GROUP@"),
+            (0, 0x80, "EVERYONE@"),
+        ];
+        assert!(!nfs4_acl_is_nontrivial(&nfs4_acl(&inherited)));
+        assert!(nfs4_acl_is_nontrivial(&nfs4_acl(&[(
+            0,
+            0x80,
+            "1000@example"
+        )])));
+        assert!(nfs4_acl_is_nontrivial(&nfs4_acl(&[(2, 0, "EVERYONE@")])));
+        let truncated = nfs4_acl(&mode_only);
+        assert!(nfs4_acl_is_nontrivial(&truncated[..truncated.len() - 4]));
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn test_is_acl_xattr() {
+        #[cfg(any(target_os = "freebsd", target_os = "netbsd"))]
+        let acl_names = [
+            "system.posix1e.acl_access",
+            "system.posix1e.acl_default",
+            "system.nfs4.acl",
+        ];
+        #[cfg(not(any(target_os = "freebsd", target_os = "netbsd")))]
+        let acl_names = ["system.posix_acl_access", "system.posix_acl_default"];
+        for name in acl_names {
+            assert!(is_acl_xattr(OsStr::new(name)), "{name}");
+        }
+        for name in ["user.test", "security.selinux", "security.capability"] {
+            assert!(!is_acl_xattr(OsStr::new(name)), "{name}");
+        }
+    }
+
     #[test]
     fn test_file_has_acl() {
         let temp_dir = tempdir().unwrap();
@@ -446,14 +682,14 @@ mod tests {
 
         File::create(&file_path).unwrap();
 
-        // FIXME: this fails on a system that uses SELinux
         assert!(!has_acl(&file_path, true));
 
         let test_attr = "user.test_acl";
         let test_value = b"test value";
         xattr::set(&file_path, test_attr, test_value).unwrap();
 
-        assert!(has_acl(&file_path, true));
+        // An unrelated xattr is not an ACL on any platform.
+        assert!(!has_acl(&file_path, true));
         assert!(!has_security_cap_acl(&file_path, true));
 
         // FreeBSD/NetBSD's xattr library does not support the "security" namespace

@@ -8,7 +8,7 @@
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, StdinLock, Write, stderr, stdin};
+use std::io::{self, BufRead, BufReader, BufWriter, Stdin, Write, stderr, stdin};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
@@ -62,6 +62,7 @@ struct OrderChecker {
     mode: CheckOrder,
     has_error: bool,
     use_locale: bool,
+    line_ending: u8,
 }
 
 /// Compare two lines the way the input was ordered.
@@ -69,7 +70,12 @@ struct OrderChecker {
 /// `sort` orders with the locale collation, and so do `join` and `ls`. Reading
 /// that order back with a byte comparison rejects input that is in order and
 /// puts lines in the wrong column, so `comm` has to measure it the same way.
-fn line_cmp(a: &[u8], b: &[u8], use_locale: bool) -> Ordering {
+///
+/// The terminator is not part of the line: an empty line sorts before a tab,
+/// even though a newline byte sorts after a tab byte.
+fn line_cmp(a: &[u8], b: &[u8], line_ending: u8, use_locale: bool) -> Ordering {
+    let a = a.strip_suffix(&[line_ending]).unwrap_or(a);
+    let b = b.strip_suffix(&[line_ending]).unwrap_or(b);
     if use_locale {
         locale_cmp(a, b)
     } else {
@@ -78,13 +84,15 @@ fn line_cmp(a: &[u8], b: &[u8], use_locale: bool) -> Ordering {
 }
 
 enum Input {
-    Stdin(StdinLock<'static>),
+    // Locked per read rather than once, so that `comm - -` reads both operands
+    // from the one shared stdin buffer instead of blocking on a second lock.
+    Stdin(Stdin),
     FileIn(BufReader<File>),
 }
 
 impl Input {
     fn stdin() -> Self {
-        Self::Stdin(stdin().lock())
+        Self::Stdin(stdin())
     }
 
     fn from_file(f: File) -> Self {
@@ -106,7 +114,7 @@ impl LineReader {
         let line_ending = self.line_ending.into();
 
         let result = match &mut self.input {
-            Input::Stdin(r) => r.read_until(line_ending, buf),
+            Input::Stdin(r) => r.lock().read_until(line_ending, buf),
             Input::FileIn(r) => r.read_until(line_ending, buf),
         };
 
@@ -119,28 +127,35 @@ impl LineReader {
 }
 
 impl OrderChecker {
-    fn new(file_num: FileNumber, mode: CheckOrder, use_locale: bool) -> Self {
+    fn new(file_num: FileNumber, mode: CheckOrder, use_locale: bool, line_ending: u8) -> Self {
         Self {
             last_line: Vec::new(),
             file_num,
             mode,
             has_error: false,
             use_locale,
+            line_ending,
         }
     }
 
     fn verify_order(&mut self, current_line: &[u8], files_differ: bool) -> bool {
         if self.mode == CheckOrder::IfDiffer && !files_differ {
-            self.last_line = current_line.to_vec();
+            self.last_line.clear();
+            self.last_line.extend_from_slice(current_line);
             return true;
         }
 
         if self.last_line.is_empty() {
-            self.last_line = current_line.to_vec();
+            self.last_line.extend_from_slice(current_line);
             return true;
         }
 
-        let is_ordered = line_cmp(current_line, &self.last_line, self.use_locale) != Ordering::Less;
+        let is_ordered = line_cmp(
+            current_line,
+            &self.last_line,
+            self.line_ending,
+            self.use_locale,
+        ) != Ordering::Less;
         if !is_ordered && !self.has_error {
             let _ = writeln!(
                 stderr(),
@@ -150,7 +165,8 @@ impl OrderChecker {
             self.has_error = true;
         }
 
-        self.last_line = current_line.to_vec();
+        self.last_line.clear();
+        self.last_line.extend_from_slice(current_line);
         is_ordered || self.mode != CheckOrder::Always
     }
 }
@@ -173,8 +189,12 @@ fn comm(
     delim: &str,
     opts: &ArgMatches,
 ) -> UResult<()> {
-    let width_col_1 = usize::from(!opts.get_flag(options::COLUMN_1));
-    let width_col_2 = usize::from(!opts.get_flag(options::COLUMN_2));
+    // Hoist clap lookups out of the per-line loop.
+    let print_col_1 = !opts.get_flag(options::COLUMN_1);
+    let print_col_2 = !opts.get_flag(options::COLUMN_2);
+    let print_col_3 = !opts.get_flag(options::COLUMN_3);
+    let width_col_1 = usize::from(print_col_1);
+    let width_col_2 = usize::from(print_col_2);
 
     let delim_col_2 = delim.repeat(width_col_1);
     let delim_col_3 = delim.repeat(width_col_1 + width_col_2);
@@ -190,9 +210,9 @@ fn comm(
         .read_line(rb)
         .map_err_context(|| filename2.maybe_quote().to_string())?;
 
-    let mut total_col_1 = 0;
-    let mut total_col_2 = 0;
-    let mut total_col_3 = 0;
+    let mut total_col_1: u64 = 0;
+    let mut total_col_2: u64 = 0;
+    let mut total_col_3: u64 = 0;
 
     let mode = if opts.get_flag(options::CHECK_ORDER) {
         CheckOrder::Always
@@ -203,8 +223,9 @@ fn comm(
     };
 
     let use_locale = should_use_locale_collation();
-    let mut checker1 = OrderChecker::new(FileNumber::One, mode, use_locale);
-    let mut checker2 = OrderChecker::new(FileNumber::Two, mode, use_locale);
+    let line_ending = a.line_ending.into();
+    let mut checker1 = OrderChecker::new(FileNumber::One, mode, use_locale, line_ending);
+    let mut checker2 = OrderChecker::new(FileNumber::Two, mode, use_locale, line_ending);
     let mut files_differ = false;
     let mut input_error = false;
 
@@ -212,7 +233,7 @@ fn comm(
         let ord = match (na, nb) {
             (0, _) => Ordering::Greater,
             (_, 0) => Ordering::Less,
-            (_, _) => line_cmp(ra, rb, use_locale),
+            (_, _) => line_cmp(ra, rb, line_ending, use_locale),
         };
 
         if ord != Ordering::Equal {
@@ -224,7 +245,7 @@ fn comm(
                 if mode != CheckOrder::Never && !checker1.verify_order(ra, files_differ) {
                     break;
                 }
-                if !opts.get_flag(options::COLUMN_1) {
+                if print_col_1 {
                     writer
                         .write_all(ra)
                         .map_err_context(|| translate!("comm-error-write"))?;
@@ -239,7 +260,7 @@ fn comm(
                 if mode != CheckOrder::Never && !checker2.verify_order(rb, files_differ) {
                     break;
                 }
-                if !opts.get_flag(options::COLUMN_2) {
+                if print_col_2 {
                     write_line_with_delimiter(&mut writer, delim_col_2.as_bytes(), rb)?;
                 }
                 rb.clear();
@@ -255,7 +276,7 @@ fn comm(
                 {
                     break;
                 }
-                if !opts.get_flag(options::COLUMN_3) {
+                if print_col_3 {
                     write_line_with_delimiter(&mut writer, delim_col_3.as_bytes(), ra)?;
                 }
                 ra.clear();
@@ -424,13 +445,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::CHECK_ORDER)
                 .long(options::CHECK_ORDER)
                 .help(translate!("comm-help-check-order"))
+                .overrides_with(options::NO_CHECK_ORDER)
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_CHECK_ORDER)
                 .long(options::NO_CHECK_ORDER)
                 .help(translate!("comm-help-no-check-order"))
-                .action(ArgAction::SetTrue)
-                .conflicts_with(options::CHECK_ORDER),
+                .overrides_with(options::CHECK_ORDER)
+                .action(ArgAction::SetTrue),
         )
 }

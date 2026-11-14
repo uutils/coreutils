@@ -7,7 +7,7 @@ printf-after-help = templating de chaîne anonyme de base :
   la sortie affiche les littéraux échappés dans la chaîne de format comme des littéraux de caractères
   la sortie remplace les champs anonymes par le prochain argument inutilisé, formaté selon le champ.
 
-  Affiche le , en remplaçant les séquences de caractères échappés par des littéraux de caractères
+  Affiche la chaîne FORMAT, en remplaçant les séquences de caractères échappés par des littéraux de caractères
   et les séquences de champs de substitution par les arguments passés
 
   littéralement, à l'exception de ce qui suit
@@ -20,19 +20,19 @@ printf-after-help = templating de chaîne anonyme de base :
 
     - \" guillemet double
     - \\ barre oblique inverse
-    - \\a alerte (BEL)
-    - \\b retour arrière
-    - \\c Fin d'entrée
-    - \\e échappement
-    - \\f saut de page
-    - \\n nouvelle ligne
-    - \\r retour chariot
-    - \\t tabulation horizontale
-    - \\v tabulation verticale
-    - \\NNN octet avec valeur exprimée en valeur octale NNN (1 à 3 chiffres) les valeurs supérieures à 256 seront traitées
-    - \\xHH octet avec valeur exprimée en valeur hexadécimale NN (1 à 2 chiffres)
-    - \\uHHHH caractère Unicode (IEC 10646) avec valeur exprimée en valeur hexadécimale HHHH (4 chiffres)
-    - \\uHHHH caractère Unicode avec valeur exprimée en valeur hexadécimale HHHH (8 chiffres)
+    - \a alerte (BEL)
+    - \b retour arrière
+    - \c Fin d'entrée
+    - \e échappement
+    - \f saut de page
+    - \n nouvelle ligne
+    - \r retour chariot
+    - \t tabulation horizontale
+    - \v tabulation verticale
+    - \NNN octet avec valeur exprimée en valeur octale NNN (1 à 3 chiffres) les valeurs supérieures à 256 seront traitées
+    - \xHH octet avec valeur exprimée en valeur hexadécimale HH (1 à 2 chiffres)
+    - \uHHHH caractère Unicode (IEC 10646) avec valeur exprimée en valeur hexadécimale HHHH (4 chiffres)
+    - \UHHHHHHHH caractère Unicode avec valeur exprimée en valeur hexadécimale HHHHHHHH (8 chiffres)
     - %% un seul %
 
   SUBSTITUTIONS :
@@ -77,7 +77,7 @@ printf-after-help = templating de chaîne anonyme de base :
 
   printf '%4c' q
 
-  Il a un premier paramètre de 4 et pas de deuxième paramètre et donnera ' q'
+  Il a un premier paramètre de 4 et pas de deuxième paramètre et donnera '   q'
 
   Le premier paramètre d'un champ est la largeur minimale pour remplir la sortie
   si la sortie est inférieure à cette valeur absolue de cette largeur,
@@ -110,13 +110,13 @@ printf-after-help = templating de chaîne anonyme de base :
   Passer plus d'arguments qu'il n'y en a dans la chaîne de format fera que la chaîne de format sera
   répétée pour les substitutions restantes
 
-  printf 'il fait %i F à %s \n' 22 Portland 25 Boston 27 New York
+  printf 'il fait %i F à %s \n' 22 Portland 25 Boston 27 'New York'
 
   affichera
 
       il fait 22 F à Portland
       il fait 25 F à Boston
-      il fait 27 F à Boston
+      il fait 27 F à New York
 
   Si une chaîne de format est affichée mais qu'il reste moins d'arguments
   qu'il n'y a de champs de substitution, les champs de substitution sans
@@ -138,12 +138,12 @@ printf-after-help = templating de chaîne anonyme de base :
 
   - %b: chaîne échappée - la chaîne sera vérifiée pour tout littéral échappé de
   la liste de littéraux échappés ci-dessus, et les traduire en caractères littéraux.
-  ex. \\n sera transformé en caractère de nouvelle ligne.
+  ex. \n sera transformé en caractère de nouvelle ligne.
   Une règle spéciale sur le mode %b est que les littéraux octaux sont interprétés différemment.
-  Dans les arguments passés par %b, les littéraux interprétés en octal doivent être sous la forme \\0NNN
-  au lieu de \\NNN. (Bien que, pour des raisons d'héritage, les littéraux octaux sous la forme \\NNN seront
+  Dans les arguments passés par %b, les littéraux interprétés en octal doivent être sous la forme \0NNN
+  au lieu de \NNN. (Bien que, pour des raisons d'héritage, les littéraux octaux sous la forme \NNN seront
   toujours interprétés et ne lanceront pas d'avertissement, vous aurez des problèmes si vous utilisez cela pour un
-  littéral dont le code commence par zéro, car il sera vu comme étant sous forme \\0NNN.)
+  littéral dont le code commence par zéro, car il sera vu comme étant sous forme \0NNN.)
 
   - %q: chaîne échappée - la chaîne dans un format qui peut être réutilisé comme entrée par la plupart des shells.
   Les caractères non imprimables sont échappés avec la syntaxe POSIX proposée '$''',
@@ -170,7 +170,7 @@ printf-after-help = templating de chaîne anonyme de base :
   SUBSTITUTIONS EN VIRGULE FLOTTANTE :
 
   Tous les champs en virgule flottante ont un paramètre 'max places décimales / max chiffres significatifs'
-  %.10f signifie une virgule flottante décimale avec 7 places décimales après 0
+  %.10f signifie une virgule flottante décimale avec 10 places décimales après 0
   %.10e signifie un nombre en notation scientifique avec 10 chiffres significatifs
   %.10g signifie le même comportement pour décimal et Sci. Note, respectivement, et fournit la plus courte
   de chaque sortie.
@@ -220,7 +220,7 @@ printf-after-help = templating de chaîne anonyme de base :
   seront interprétés comme octal (base 8) pour les champs entiers
 
   Hexadécimal : si l'argument commence par 0x, les caractères suivants seront interprétés
-  seront interprétés comme hexadécimal (base 16) pour tous les champs numériques
+  comme hexadécimal (base 16) pour tous les champs numériques
   pour les champs flottants, l'entrée hexadécimale résulte en une limite de précision
   (dans la conversion de l'entrée après la virgule) de 10^-15
 

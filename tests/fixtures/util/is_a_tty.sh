@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 if [ -t 0 ] ; then
     echo "stdin is a tty"

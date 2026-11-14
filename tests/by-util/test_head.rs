@@ -12,7 +12,7 @@
     not(target_os = "openbsd"),
     not(windows)
 ))]
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
@@ -440,8 +440,8 @@ fn test_presume_input_pipe_5_chars() {
         .stdout_is_fixture("lorem_ipsum_5_chars.expected");
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no subprocess spawning")]
 fn test_all_but_last_bytes_large_file_piped() {
     // Validate print-all-but-last-n-bytes with a large piped-in (i.e. non-seekable) file.
     let scene = TestScenario::new(util_name!());
@@ -509,8 +509,8 @@ fn test_all_but_last_lines_large_file_presume_input_pipe() {
         .stdout_only_fixture(expected_output_file_name);
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no subprocess spawning")]
 fn test_all_but_last_lines_large_file() {
     // Create our fixtures on the fly. We need the input file to be at least double
     // the size of BUF_SIZE as specified in head.rs. Go for something a bit bigger
@@ -583,11 +583,8 @@ fn test_all_but_last_lines_large_file() {
     not(target_os = "openbsd"),
     not(windows)
 ))]
+#[uutests::wasi_ignore(StdinPositionNotPreserved)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: stdin file position not preserved through wasmtime"
-)]
 fn test_validate_stdin_offset_lines() {
     // A handful of unix-only tests to validate behavior when reading from stdin on a seekable
     // file. GNU-compatibility requires that the stdin file be left such that if another
@@ -678,6 +675,30 @@ fn test_validate_stdin_offset_lines() {
         .set_stdin(file_shadow)
         .succeeds()
         .stdout_only_fixture(seq_1001_20000_file_name);
+
+    // Test 4 - All but the last n lines of a large file whose stdin offset is
+    // already past the first line.
+    scene
+        .cmd("seq")
+        .args(&["2", "1000"])
+        .set_stdout(fixtures.make_file("seq_2_1000"))
+        .succeeds();
+    let file = fixtures.open(seq_20000_file_name);
+    let mut file_shadow = file.try_clone().unwrap();
+    let mut first_line = [0u8; 2];
+    file_shadow.read_exact(&mut first_line).unwrap();
+    assert_eq!(&first_line, b"1\n");
+    scene
+        .ucmd()
+        .args(&["-n", "-19000"])
+        .set_stdin(file)
+        .succeeds()
+        .stdout_only_fixture("seq_2_1000");
+    scene
+        .cmd("cat")
+        .set_stdin(file_shadow)
+        .succeeds()
+        .stdout_only_fixture(seq_1001_20000_file_name);
 }
 
 #[cfg(all(
@@ -692,6 +713,36 @@ fn test_validate_stdin_offset_lines() {
     wasi_runner,
     ignore = "WASI: stdin file position not preserved through wasmtime"
 )]
+fn test_stdin_offset_past_eof() {
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+    scene
+        .cmd("seq")
+        .arg("20000")
+        .set_stdout(fixtures.make_file("seq_20000"))
+        .succeeds();
+
+    for args in [["-n", "-1"], ["-c", "-1"]] {
+        let mut file = fixtures.open("seq_20000");
+        file.seek(SeekFrom::End(100)).unwrap();
+        scene
+            .ucmd()
+            .args(&args)
+            .set_stdin(file)
+            .succeeds()
+            .no_output();
+    }
+}
+
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd"),
+    not(windows)
+))]
+#[uutests::wasi_ignore(StdinPositionNotPreserved)]
+#[test]
 fn test_validate_stdin_offset_bytes() {
     // A handful of unix-only tests to validate behavior when reading from stdin on a seekable
     // file. GNU-compatibility requires that the stdin file be left such that if another
@@ -807,6 +858,36 @@ fn test_validate_stdin_offset_bytes() {
         .set_stdin(file_shadow)
         .succeeds()
         .stdout_only_fixture(seq_19001_20000_file_name);
+
+    // Test 5 - All but the last n bytes of a large file whose stdin offset is
+    // already past the first line.
+    scene
+        .cmd("seq")
+        .args(&["2", "10000"])
+        .set_stdout(fixtures.make_file("seq_2_10000"))
+        .succeeds();
+    scene
+        .cmd("seq")
+        .args(&["10001", "20000"])
+        .set_stdout(fixtures.make_file("seq_10001_20000"))
+        .succeeds();
+    let file = fixtures.open(seq_20000_file_name);
+    let mut file_shadow = file.try_clone().unwrap();
+    let mut first_line = [0u8; 2];
+    file_shadow.read_exact(&mut first_line).unwrap();
+    assert_eq!(&first_line, b"1\n");
+    let suffix_length = fixtures.open("seq_10001_20000").metadata().unwrap().len();
+    scene
+        .ucmd()
+        .args(&["-c", &format!("-{suffix_length}")])
+        .set_stdin(file)
+        .succeeds()
+        .stdout_only_fixture("seq_2_10000");
+    scene
+        .cmd("cat")
+        .set_stdin(file_shadow)
+        .succeeds()
+        .stdout_only_fixture("seq_10001_20000");
 }
 
 #[cfg(all(
@@ -816,8 +897,8 @@ fn test_validate_stdin_offset_bytes() {
     not(target_os = "openbsd"),
     not(windows)
 ))]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_read_backwards_bytes_proc_fs_version() {
     let ts = TestScenario::new(util_name!());
 
@@ -833,8 +914,8 @@ fn test_read_backwards_bytes_proc_fs_version() {
     not(target_os = "openbsd"),
     not(windows)
 ))]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_read_backwards_bytes_proc_fs_modules() {
     let ts = TestScenario::new(util_name!());
 
@@ -854,8 +935,8 @@ fn test_read_backwards_bytes_proc_fs_modules() {
     not(target_os = "openbsd"),
     not(windows)
 ))]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_read_backwards_lines_proc_fs_modules() {
     let ts = TestScenario::new(util_name!());
 
@@ -875,8 +956,8 @@ fn test_read_backwards_lines_proc_fs_modules() {
     not(target_os = "openbsd"),
     not(windows)
 ))]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/sys) not visible")]
 fn test_read_backwards_bytes_sys_kernel_profiling() {
     let ts = TestScenario::new(util_name!());
     // in case the kernel was not built with profiling support, e.g. WSL
@@ -948,9 +1029,9 @@ fn test_write_to_dev_full() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_head_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -981,7 +1062,7 @@ fn test_do_not_attempt_to_read_a_directory() {
         .stderr_contains("error reading '.'");
 }
 
-/// Regression test for https://github.com/uutils/coreutils/issues/12215
+/// Regression test for <https://github.com/uutils/coreutils/issues/12215>
 /// `head -c0 <directory>` should succeed (nothing to read), matching GNU.
 #[test]
 fn test_zero_bytes_on_directory_succeeds() {
@@ -1058,9 +1139,9 @@ fn test_unreadable_file_prints_no_header() {
 /// `print_verbatim(...).unwrap()`. A filename longer than the stdout buffer
 /// forces the header write to flush mid-write so the failure surfaces inside
 /// the filename write rather than at the next checked one.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/dev) not visible")]
 fn test_verbose_header_write_error_long_filename() {
     use std::fs::File;
 

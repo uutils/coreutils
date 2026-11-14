@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore DATETIME getmntinfo subsecond (fs) cifs smbfs ohos virtiofs
+// spell-checker:ignore DATETIME getmntinfo subsecond (fs) cifs smbfs ohos virtiofs automounts
 
 //! Set of functions to manage file systems
 
@@ -36,8 +36,10 @@ use core::ffi::CStr;
 use libc::{
     S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, mode_t, strerror,
 };
+use std::borrow::Cow;
 #[cfg(unix)]
 use std::ffi::CString;
+use std::ffi::OsString;
 #[cfg(unix)]
 use std::io::Error as IOError;
 #[cfg(unix)]
@@ -45,7 +47,6 @@ use std::mem;
 use std::time::SystemTime;
 #[cfg(unix)]
 use std::time::UNIX_EPOCH;
-use std::{borrow::Cow, ffi::OsString};
 
 use std::fs::Metadata;
 #[cfg(unix)]
@@ -139,7 +140,7 @@ fn metadata_get_change_time(md: &Metadata) -> Option<SystemTime> {
 
 #[cfg(not(unix))]
 fn metadata_get_change_time(_md: &Metadata) -> Option<SystemTime> {
-    // Not available.
+    // ctime isn't exposed by std Metadata outside unix
     None
 }
 
@@ -187,8 +188,7 @@ impl MountInfo {
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
     fn new(file_name: &str, raw: &[&[u8]]) -> Option<Self> {
         use std::ffi::OsStr;
-        use std::os::unix::ffi::OsStrExt;
-        use std::os::unix::ffi::OsStringExt;
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
         let (dev_name, fs_type, mount_root, mount_dir, mount_option) = match file_name {
             // spell-checker:ignore (word) noatime
@@ -220,7 +220,12 @@ impl MountInfo {
             _ => return None,
         };
 
-        let dev_id = mount_dev_id(&mount_dir);
+        // Prefer the device number from mountinfo: stat()ing the mount point
+        // would trigger automounts, which can hang.
+        let dev_id = (file_name == LINUX_MOUNTINFO)
+            .then(|| parse_dev_id(raw[2]))
+            .flatten()
+            .unwrap_or_else(|| mount_dev_id(&mount_dir));
         let dummy = is_dummy_filesystem(&fs_type, &mount_option);
         let remote = is_remote_filesystem(&dev_name, &fs_type);
 
@@ -308,6 +313,14 @@ fn is_remote_filesystem(dev_name: &str, fs_type: &str) -> bool {
     dev_name.find(':').is_some()
         || (dev_name.starts_with("//") && fs_type == "smbfs" || fs_type == "cifs")
         || dev_name == "-hosts"
+}
+
+/// Parse the `major:minor` field of a mountinfo line like [`mount_dev_id`].
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
+fn parse_dev_id(field: &[u8]) -> Option<String> {
+    let (major, minor) = std::str::from_utf8(field).ok()?.split_once(':')?;
+    let dev = libc::makedev(major.parse().ok()?, minor.parse().ok()?);
+    Some((dev as i32).to_string())
 }
 
 #[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
@@ -670,6 +683,7 @@ impl FsMeta for StatFs {
         target_os = "android",
         target_os = "netbsd"
     )))]
+    #[allow(clippy::unnecessary_cast)]
     fn io_size(&self) -> u64 {
         self.f_bsize as u64
     }
@@ -734,6 +748,7 @@ impl FsMeta for StatFs {
         target_os = "netbsd",
         target_os = "openbsd"
     )))]
+    #[allow(clippy::unnecessary_cast)]
     fn namelen(&self) -> u64 {
         self.f_namemax as u64 // spell-checker:disable-line
     }
@@ -1032,6 +1047,20 @@ mod tests {
             info.mount_dir,
             crate::os_str_from_bytes(b"/mnt/some- -dir-\xf3").unwrap()
         );
+    }
+
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_mountinfo_dev_id_without_stat() {
+        let info = MountInfo::new(
+            LINUX_MOUNTINFO,
+            &b"317 61 254:3 / /nonexistent rw,relatime - ext4 /dev/dm-3 rw"
+                .split(|c| *c == b' ')
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+
+        assert_eq!(info.dev_id, (libc::makedev(254, 3) as i32).to_string());
     }
 
     /// A `statfs` as virtiofs fills it in: a 1 MiB preferred transfer size

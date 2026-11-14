@@ -20,8 +20,10 @@
 //! - `_`: Pad with spaces instead of zeros
 //! - `0`: Pad with zeros (default for numeric fields)
 //! - `^`: Convert to uppercase
-//! - `#`: Use opposite case (uppercase becomes lowercase and vice versa)
-//! - `+`: Force display of sign (+ for positive, - for negative)
+//! - `#`: Swap the case of names; lowercase %p and %Z, even with `^`;
+//!   no effect on %c and %r (%P is always lowercase)
+//! - `+`: Pad with zeros, and put `+` before a year (%C, %g, %G, %y, %Y, %F)
+//!   that is wider than its natural width
 //!
 //! ### Width
 //! - One or more digits specifying minimum field width
@@ -45,6 +47,13 @@ use uucore::translate;
 /// under a sanitizer before `try_reserve` could fail gracefully, and OOM
 /// elsewhere.
 const MAX_FORMAT_WIDTH: usize = u16::MAX as usize;
+
+#[derive(Clone, Copy)]
+pub(super) enum Pad {
+    None,
+    Space,
+    Zero,
+}
 
 /// Error type for format modifier operations
 #[derive(Debug)]
@@ -86,17 +95,17 @@ fn field_width_too_large(width: usize, specifier: &str) -> FormatError {
 }
 
 /// A parsed `%`-format specifier: `%[flags][width][:colons]<letter>`.
-struct ParsedSpec<'a> {
+pub struct ParsedSpec<'a> {
     /// Flag characters from `[_0^#+-]`.
-    flags: &'a str,
+    pub flags: &'a str,
     /// Explicit width, if present. `None` means no width was specified.
     /// A value that overflows `usize` is represented as `Some(usize::MAX)` so
     /// the downstream allocation check surfaces it as `FieldWidthTooLarge`.
-    width: Option<usize>,
+    pub width: Option<usize>,
     /// The specifier itself, including any leading colons (e.g. `Y`, `:z`, `::z`).
-    spec: &'a str,
+    pub spec: &'a str,
     /// Total byte length of the parsed sequence including the leading `%`.
-    len: usize,
+    pub len: usize,
 }
 
 /// Try to parse a format spec at the start of `s`.
@@ -104,7 +113,7 @@ struct ParsedSpec<'a> {
 /// Implements the grammar `%[_0^#+-]*[0-9]*:{0,3}[a-zA-Z]` anchored at the
 /// beginning of `s`. Returns `None` if `s` does not start with `%` or no
 /// valid specifier follows.
-fn parse_format_spec(s: &str) -> Option<ParsedSpec<'_>> {
+pub fn parse_format_spec(s: &str) -> Option<ParsedSpec<'_>> {
     let bytes = s.as_bytes();
     bytes.first().filter(|b| *b == &b'%')?;
 
@@ -237,7 +246,15 @@ fn format_with_modifiers(
                 let formatted = broken_down.to_string_with_config(config, &base_format)?;
 
                 if !parsed.flags.is_empty() || parsed.width.is_some() {
-                    let modified = apply_modifiers(&formatted, &parsed)?;
+                    // Composite conversions are already expanded as a whole;
+                    // timezone conversions need sign-aware width handling.
+                    let modified = if is_composite_specifier(parsed.spec) {
+                        apply_composite_modifiers(&formatted, &parsed)?
+                    } else if parsed.spec.ends_with('z') && !parsed.flags.is_empty() {
+                        apply_timezone_modifiers(&formatted, &parsed)?
+                    } else {
+                        apply_modifiers(&formatted, &parsed)?
+                    };
                     result.push_str(&modified);
                 } else {
                     result.push_str(&formatted);
@@ -255,6 +272,145 @@ fn format_with_modifiers(
     }
 
     Ok(result)
+}
+
+/// Composite strftime conversions are expanded atomically by GNU date. In
+/// particular, `-` and `_` do not alter the padding of the fields inside an
+/// expansion such as `%D` or `%T`; an explicit width applies to the complete
+/// expansion instead. `%F` is intentionally handled as a regular numeric field
+/// so its modifiers apply to the year component, as GNU specifies.
+fn is_composite_specifier(specifier: &str) -> bool {
+    matches!(specifier, "c" | "D" | "R" | "r" | "T" | "x" | "X" | "v")
+}
+
+/// Apply flags and an optional width to the complete composite value rather
+/// than changing the padding of the fields inside it.
+pub fn apply_composite_modifiers(
+    value: &str,
+    parsed: &ParsedSpec<'_>,
+) -> Result<String, FormatError> {
+    let mut pad = Pad::Space;
+    let mut uppercase = false;
+
+    for flag in parsed.flags.chars() {
+        match flag {
+            '-' => pad = Pad::None,
+            '_' => pad = Pad::Space,
+            '0' | '+' => pad = Pad::Zero,
+            '^' => {
+                uppercase = true;
+            }
+            _ => {}
+        }
+    }
+
+    let result = if uppercase {
+        value.to_uppercase()
+    } else {
+        value.to_string()
+    };
+
+    if matches!(pad, Pad::None) {
+        return Ok(result);
+    }
+
+    let Some(width) = parsed.width else {
+        return Ok(result);
+    };
+    if width > MAX_FORMAT_WIDTH {
+        return Err(field_width_too_large(width, parsed.spec));
+    }
+    if width <= result.len() {
+        return Ok(result);
+    }
+
+    let padding = width - result.len();
+    let mut padded_result = try_alloc_padded(result.len(), padding, width, parsed.spec)?;
+    let pad_char = match pad {
+        Pad::Space => ' ',
+        Pad::Zero => '0',
+        Pad::None => unreachable!(),
+    };
+    padded_result.extend(std::iter::repeat_n(pad_char, padding));
+    padded_result.push_str(&result);
+    Ok(padded_result)
+}
+
+/// Remove the zero padding from the hour component of a numeric timezone.
+/// GNU still keeps the minute and second components, if present.
+fn strip_timezone_hour_padding(value: &str) -> String {
+    if !value.starts_with(['+', '-']) {
+        return value.to_string();
+    }
+
+    let (sign, body) = value.split_at(1);
+    if body.chars().all(|c| c == '0') {
+        return format!("{sign}0");
+    }
+
+    // `%z` has a four-digit hour/minute form. `%:::z` may instead contain
+    // only the hour, so both forms are handled here.
+    let (hour, rest) = match body.find(':') {
+        Some(i) => (&body[..i], &body[i..]),
+        None if body.len() >= 4 => (&body[..body.len() - 2], &body[body.len() - 2..]),
+        None => (body, ""),
+    };
+
+    let hour = hour.trim_start_matches('0');
+    let hour = if hour.is_empty() { "0" } else { hour };
+    format!("{sign}{hour}{rest}")
+}
+
+/// Return the natural width of each timezone spelling before modifiers apply.
+fn timezone_default_width(specifier: &str) -> usize {
+    match specifier {
+        "z" => 5,
+        ":z" => 6,
+        "::z" => 9,
+        ":::z" => 3,
+        _ => 0,
+    }
+}
+
+/// Apply modifiers to timezone offsets without separating a sign from its
+/// numeric field or losing the variable-width colon forms.
+fn apply_timezone_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, FormatError> {
+    let mode = parsed
+        .flags
+        .chars()
+        .rfind(|&flag| matches!(flag, '-' | '_' | '0' | '+'));
+
+    let result = if matches!(mode, Some('-' | '_')) {
+        strip_timezone_hour_padding(value)
+    } else {
+        value.to_string()
+    };
+
+    if mode == Some('-') {
+        return Ok(result);
+    }
+
+    let width = parsed
+        .width
+        .unwrap_or_else(|| timezone_default_width(parsed.spec));
+    if width > MAX_FORMAT_WIDTH {
+        return Err(field_width_too_large(width, parsed.spec));
+    }
+    if width <= result.len() {
+        return Ok(result);
+    }
+
+    let padding = width - result.len();
+    let mut padded = try_alloc_padded(result.len(), padding, width, parsed.spec)?;
+    if mode == Some('0') && result.starts_with(['+', '-']) {
+        padded.push_str(&result[..1]);
+        padded.extend(std::iter::repeat_n('0', padding));
+        padded.push_str(&result[1..]);
+    } else {
+        padded.extend(std::iter::repeat_n(' ', padding));
+        padded.push_str(&result);
+    }
+    Ok(padded)
 }
 
 /// Returns true if the specifier produces text output (default pad is space)
@@ -276,19 +432,25 @@ fn is_space_padded_specifier(specifier: &str) -> bool {
     )
 }
 
+/// Returns true if the specifier formats a year or a part of one. These are
+/// the only conversions to which the `+` flag adds a sign.
+fn is_year_specifier(specifier: &str) -> bool {
+    matches!(specifier, "C" | "g" | "G" | "y" | "Y" | "F")
+}
+
 /// Returns the default width for a specifier.
 /// This is used when a flag like `_` is used without an explicit width.
 fn get_default_width(specifier: &str) -> usize {
     #[allow(clippy::match_same_arms)] // needs comment at each arms
     match specifier.chars().last() {
         // Day of month: 2 digits (01-31)
-        Some('d') | Some('e') => 2,
+        Some('d' | 'e') => 2,
         // Month: 2 digits (01-12)
         Some('m') => 2,
         // Hour: 2 digits (00-23)
-        Some('H') | Some('k') => 2,
+        Some('H' | 'k') => 2,
         // Hour (12-hour): 2 digits (01-12)
-        Some('I') | Some('l') => 2,
+        Some('I' | 'l') => 2,
         // Minute: 2 digits (00-59)
         Some('M') => 2,
         // Second: 2 digits (00-60)
@@ -298,13 +460,13 @@ fn get_default_width(specifier: &str) -> usize {
         // Day of year: 3 digits (001-366)
         Some('j') => 3,
         // Week number: 2 digits (00-53)
-        Some('U') | Some('W') | Some('V') => 2,
+        Some('U' | 'W' | 'V') => 2,
         // Day of week: 1 digit (0-6 or 1-7)
-        Some('w') | Some('u') => 1,
+        Some('w' | 'u') => 1,
         // Century: 2 digits (00-99)
         Some('C') => 2,
         // Full year: 4 digits
-        Some('Y') | Some('G') => 4,
+        Some('Y' | 'G') => 4,
         // ISO week year (2-digit): 2 digits
         Some('g') => 2,
         // Epoch seconds: typically 10 digits (but variable)
@@ -352,7 +514,7 @@ fn strip_default_padding(value: &str) -> String {
 /// padding character (space for text, zero for numeric).
 /// Flags are processed in order so that when conflicting flags appear,
 /// the last one takes precedence (e.g., `_+` means `+` wins for padding).
-fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, FormatError> {
+pub fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, FormatError> {
     let flags = parsed.flags;
     let width = parsed.width;
     let specifier = parsed.spec;
@@ -380,22 +542,23 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
         match flag {
             '-' => {
                 no_pad = true;
+                force_sign = false;
             }
             '_' => {
                 no_pad = false;
                 pad_char = ' ';
                 underscore_flag = true;
+                force_sign = false;
             }
             '0' => {
                 no_pad = false;
                 pad_char = '0';
+                force_sign = false;
             }
             '^' => {
                 uppercase = true;
-                swap_case = false; // ^ overrides #
             }
-            '#' if !uppercase => {
-                // Only apply # if ^ hasn't been set
+            '#' => {
                 swap_case = true;
             }
             '+' => {
@@ -407,10 +570,14 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
         }
     }
 
-    // Apply case modifications (uppercase takes precedence over swap_case)
-    if uppercase {
+    // `#` only acts on names, %p and %Z; on %p and %Z it lowercases and wins
+    // over `^`. %P is always lowercase.
+    let conversion = specifier.chars().last();
+    if swap_case && matches!(conversion, Some('p' | 'Z')) {
+        result = result.to_lowercase();
+    } else if uppercase && conversion != Some('P') {
         result = result.to_uppercase();
-    } else if swap_case {
+    } else if swap_case && matches!(conversion, Some('a' | 'A' | 'b' | 'B' | 'h')) {
         if result
             .chars()
             .all(|c| !c.is_alphabetic() || c.is_uppercase())
@@ -424,10 +591,18 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
         }
     }
 
+    // %N is a fraction, not an integer, so it has its own width and padding rules.
+    if specifier.ends_with('N') && result.len() == 9 && result.bytes().all(|b| b.is_ascii_digit()) {
+        let pad = if no_pad { None } else { Some(pad_char) };
+        return apply_nanosecond_modifiers(&result, width, pad, specifier);
+    }
+
     // If no_pad flag is active, suppress all padding and return
     if no_pad {
         return Ok(strip_default_padding(&result));
     }
+
+    let unmodified_width = result.len();
 
     // Handle padding flag without explicit width: use default width.
     // This applies when _ or 0 flag overrides the default padding character
@@ -457,19 +632,30 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
         }
     }
 
-    // Apply force sign for numeric values
-    // GNU behavior: + only adds sign if:
-    // 1. An explicit width is provided, OR
-    // 2. The value exceeds the default width for that specifier (e.g., year > 4 digits)
+    // Apply force sign for year values.
+    // GNU behavior: `+` only adds a sign when it is the last padding flag, and
+    // only to the year conversions (%C, %g, %G, %y, %Y and the year of %F). The
+    // sign is added if the width is wider than the conversion's natural width,
+    // or if the value itself has more digits than that (e.g., year > 4 digits).
+    // For any other conversion `+` just pads with zeros, like `0`.
     if force_sign
+        && is_year_specifier(specifier)
         && result
             .chars()
             .next()
             .is_some_and(|c| !matches!(c, '+' | '-') && c.is_ascii_digit())
     {
-        let default_w = get_default_width(specifier);
-        // Add sign only if explicit width provided OR result exceeds default width
-        if width.is_some() || (default_w > 0 && result.len() > default_w) {
+        // `%F` applies the sign to its year only when the width can expand the
+        // complete composite; narrower widths leave the existing date intact.
+        // `result` is never longer than `unmodified_width`, so for `%F` only
+        // the width check below can add the sign.
+        let natural_width = if specifier == "F" {
+            unmodified_width
+        } else {
+            get_default_width(specifier)
+        };
+        let width_allows_sign = width.is_some_and(|width| width > natural_width);
+        if width_allows_sign || result.len() > natural_width {
             result.insert(0, '+');
         }
     }
@@ -495,14 +681,56 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
             padded.push_str(&result);
             result = padded;
         }
-    } else if specifier.ends_with('N')
-        && effective_width <= get_default_width(specifier)
-        && effective_width != 0
-    {
-        result.truncate(effective_width);
     }
 
     Ok(result)
+}
+
+/// Apply width and padding to the 9-digit nanosecond field of `%N`.
+///
+/// The digits are the leading digits of a fraction of a second, so a width
+/// narrower than 9 keeps the first `width` digits (including leading zeros)
+/// and a wider width pads on the right. Within the requested width, trailing
+/// zeros are replaced by the pad character, or dropped when `pad` is `None`
+/// (the `-` flag). Without a width the field is 9 characters wide, and only
+/// the `_` flag changes its digits.
+fn apply_nanosecond_modifiers(
+    digits: &str,
+    width: Option<usize>,
+    pad: Option<char>,
+    specifier: &str,
+) -> Result<String, FormatError> {
+    let Some(width) = width else {
+        if pad == Some(' ') {
+            return apply_nanosecond_modifiers(digits, Some(digits.len()), pad, specifier);
+        }
+        return Ok(digits.to_string());
+    };
+    if width > MAX_FORMAT_WIDTH {
+        return Err(field_width_too_large(width, specifier));
+    }
+    if width == 0 {
+        return Ok(digits.to_string());
+    }
+    let significant = significant_nanosecond_digits(&digits[..width.min(digits.len())]);
+    let Some(pad_char) = pad else {
+        return Ok(significant.to_string());
+    };
+    let padding = width - significant.len();
+    let mut padded = try_alloc_padded(significant.len(), padding, width, specifier)?;
+    padded.push_str(significant);
+    padded.extend(std::iter::repeat_n(pad_char, padding));
+    Ok(padded)
+}
+
+/// Keep at least one digit of `digits` and drop its trailing zeros.
+fn significant_nanosecond_digits(digits: &str) -> &str {
+    let trimmed = digits.trim_end_matches('0');
+    if trimmed.is_empty() {
+        &digits[..1]
+    } else {
+        trimmed
+    }
 }
 
 /// Allocate a `String` with enough capacity for `current_len + padding`,
@@ -551,6 +779,34 @@ mod tests {
             spec,
             len: 0,
         }
+    }
+
+    #[test]
+    fn test_apply_composite_modifiers() {
+        // en_GB's `%r`; the expected values are GNU date's.
+        let value = " 8:17:48 pm UTC";
+        for (flags, width, expected) in [
+            ("^", None, " 8:17:48 PM UTC"),
+            ("#", None, value),
+            ("-", Some(20), value),
+            ("", Some(20), "      8:17:48 pm UTC"),
+            ("0", Some(20), "00000 8:17:48 pm UTC"),
+            ("_0", Some(20), "00000 8:17:48 pm UTC"),
+            ("0_", Some(20), "      8:17:48 pm UTC"),
+            ("+", Some(20), "00000 8:17:48 pm UTC"),
+            ("^", Some(20), "      8:17:48 PM UTC"),
+        ] {
+            let result = apply_composite_modifiers(value, &spec(flags, width, "r")).unwrap();
+            assert_eq!(result, expected, "flags {flags:?}, width {width:?}");
+        }
+        assert!(matches!(
+            apply_composite_modifiers(value, &spec("", Some(usize::MAX), "r")),
+            Err(FormatError::FieldWidthTooLarge { .. })
+        ));
+        assert_eq!(
+            apply_composite_modifiers(value, &spec("-", Some(usize::MAX), "r")).unwrap(),
+            value
+        );
     }
 
     #[test]
@@ -777,10 +1033,10 @@ mod tests {
             apply_modifiers("-22", &spec("_", Some(5), "s")).unwrap(),
             "  -22"
         );
-        // Force sign (_+): + is last, overrides _ → zero pad with sign
+        // Force sign (_+): + is last, overrides _ → zero pad, but only years get a sign
         assert_eq!(
             apply_modifiers("5", &spec("_+", Some(5), "s")).unwrap(),
-            "+0005"
+            "00005"
         );
         // No-pad + uppercase: no padding applied
         assert_eq!(
@@ -843,8 +1099,8 @@ mod tests {
             ("1", "_", Some(3), "d", "  1"),
             ("1", "-", Some(3), "d", "1"), // no-pad: width ignored
             ("abc", "^", Some(5), "B", "  ABC"), // text specifier: space pad
-            ("5", "+", Some(4), "s", "+005"),
-            ("5", "_+", Some(4), "s", "+005"), // + is last: zero pad with sign
+            ("5", "+", Some(4), "s", "0005"), // not a year: zero pad, no sign
+            ("5", "_+", Some(4), "s", "0005"), // + is last: zero pad
             ("-3", "0", Some(5), "s", "-0003"),
             ("05", "_", Some(3), "d", "  5"),
             ("09", "-", Some(4), "d", "9"), // no-pad: width ignored
@@ -944,6 +1200,47 @@ mod tests {
             apply_modifiers("1999", &spec("+", Some(6), "Y")).unwrap(),
             "+01999"
         );
+    }
+
+    #[test]
+    fn test_plus_flag_signs_only_years() {
+        let test_cases = vec![
+            // Not a year: `+` zero pads like `0` and never adds a sign
+            ("01", "+", Some(3), "m", "001"),
+            ("05", "+", Some(4), "d", "0005"),
+            (" 5", "+", Some(3), "e", "005"),
+            ("005", "+", Some(4), "j", "0005"),
+            ("03", "+", Some(2), "H", "03"),
+            // A year gets a sign only when wider than its natural width
+            ("2020", "+", Some(4), "Y", "2020"),
+            ("2020", "+", Some(3), "Y", "2020"),
+            ("2020", "+", Some(5), "Y", "+2020"),
+            ("2020", "+", Some(5), "G", "+2020"),
+            ("20", "+", Some(2), "C", "20"),
+            ("20", "+", Some(3), "C", "+20"),
+            ("20", "+", Some(2), "y", "20"),
+            ("20", "+", Some(3), "y", "+20"),
+            ("20", "+", Some(3), "g", "+20"),
+            ("0099", "+", Some(3), "Y", "099"),
+            // A later padding flag cancels the sign
+            ("2020", "+0", Some(5), "Y", "02020"),
+            ("2020", "+_", Some(5), "Y", " 2020"),
+            ("2020", "+-", Some(5), "Y", "2020"),
+            ("2020", "0+", Some(5), "Y", "+2020"),
+            ("2020", "-+", Some(5), "Y", "+2020"),
+            ("2020", "+^", Some(5), "Y", "+2020"),
+            ("12345", "+0", None, "Y", "12345"),
+            ("2020-01-05", "+_", Some(11), "F", " 2020-01-05"),
+            ("2020-01-05", "+0", Some(11), "F", "02020-01-05"),
+        ];
+
+        for (value, flags, width, s, expected) in test_cases {
+            assert_eq!(
+                apply_modifiers(value, &spec(flags, width, s)).unwrap(),
+                expected,
+                "value='{value}', flags='{flags}', width={width:?}, spec='{s}'",
+            );
+        }
     }
 
     #[test]

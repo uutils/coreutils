@@ -9,7 +9,7 @@
 
 use uucore::display::Quotable;
 use uucore::entries;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::perms::{GidUidOwnerFilter, IfFrom, chown_base, options};
 use uucore::translate;
@@ -19,6 +19,26 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 
+#[derive(Debug, thiserror::Error)]
+enum ChgrpError {
+    #[error("{}", translate!("chgrp-error-invalid-user", "from_group" => _0))]
+    InvalidUser(String),
+}
+
+impl UError for ChgrpError {}
+
+fn parse_group(group: &str) -> Result<u32, String> {
+    // Try as group name first
+    match entries::grp2gid(group) {
+        Ok(g) => Ok(g),
+        // If group name lookup fails, try parsing as raw number
+        Err(_) => group
+            .parse::<u32>()
+            .map_err(|_| translate!("chgrp-error-invalid-group", "group" => group)),
+    }
+}
+
+/// Parse the `--from` value, which also accepts the `:gid` format.
 fn parse_gid_from_str(group: &str) -> Result<u32, String> {
     if let Some(gid_str) = group.strip_prefix(':') {
         // Handle :gid format
@@ -26,14 +46,7 @@ fn parse_gid_from_str(group: &str) -> Result<u32, String> {
             .parse::<u32>()
             .map_err(|_| translate!("chgrp-error-invalid-group-id", "gid_str" => gid_str))
     } else {
-        // Try as group name first
-        match entries::grp2gid(group) {
-            Ok(g) => Ok(g),
-            // If group name lookup fails, try parsing as raw number
-            Err(_) => group
-                .parse::<u32>()
-                .map_err(|_| translate!("chgrp-error-invalid-group", "group" => group)),
-        }
+        parse_group(group)
     }
 }
 
@@ -59,7 +72,8 @@ fn get_dest_gid(matches: &ArgMatches) -> UResult<(Option<u32>, String)> {
         if group.is_empty() {
             None
         } else {
-            match parse_gid_from_str(group) {
+            // Unlike --from, GNU does not accept the `:gid` format here.
+            match parse_group(group) {
                 Ok(g) => Some(g),
                 Err(e) => return Err(USimpleError::new(1, e)),
             }
@@ -71,15 +85,10 @@ fn get_dest_gid(matches: &ArgMatches) -> UResult<(Option<u32>, String)> {
 fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
     // Handle --from option
     let filter = if let Some(from_group) = matches.get_one::<String>(options::FROM) {
-        match parse_gid_from_str(from_group) {
-            Ok(g) => IfFrom::Group(g),
-            Err(_) => {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("chgrp-error-invalid-user", "from_group" => from_group),
-                ));
-            }
-        }
+        let Ok(gid) = parse_gid_from_str(from_group) else {
+            return Err(ChgrpError::InvalidUser(from_group.clone()).into());
+        };
+        IfFrom::Group(gid)
     } else {
         IfFrom::All
     };
@@ -104,7 +113,8 @@ pub fn uu_app() -> Command {
         .version(uucore::crate_version!())
         .about(translate!("chgrp-about"))
         .override_usage(format_usage(&translate!("chgrp-usage")))
-        .infer_long_args(true);
+        .infer_long_args(true)
+        .args_override_self(true);
     uucore::clap_localization::configure_localized_command(cmd)
         .disable_help_flag(true)
         .arg(

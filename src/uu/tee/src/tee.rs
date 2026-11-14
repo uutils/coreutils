@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore nopipe
+// spell-checker:ignore BADF nopipe
 
 use std::ffi::OsString;
 use std::fs::OpenOptions;
@@ -147,32 +147,50 @@ impl MultiWriter {
         #[cfg(not(any(unix, target_os = "wasi")))]
         use io::Read as _;
         const BUF_SIZE: usize = 32 * 1024;
+        #[cfg(all(unix, not(target_os = "fuchsia")))]
+        if uucore::signals::stdin_was_closed() {
+            show_error!(
+                "{}",
+                translate!("tee-error-stdin", "error" => strip_errno(&rustix::io::Errno::BADF.into()))
+            );
+            return Err(());
+        }
         #[cfg(any(unix, target_os = "wasi"))]
         let input = rustix::stdio::stdin();
         #[cfg(not(any(unix, target_os = "wasi")))]
         let mut input = io::stdin();
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        macro_rules! splice_or_detach {
-            ($pipe:expr, $writer:expr, $len:expr) => {
-                if let Err(e) = uucore::pipes::drain_pipe($pipe, $writer, $len) {
-                    self.aborted |=
-                        process_error(self.output_error_mode, e, $writer, &mut self.ignored_errors)
-                            .is_err();
-                    $writer.name.clear(); //mark as exited
-                }
-            };
-        }
         // needs 2 pipes to duplicate input multiple times
+        // freeze by max size since system allocates pipe smaller than default size when user has pages more than fs.pipe-user-pages-soft
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        if let Ok((pipe_read, pipe_write)) = io::pipe()
-            && let Ok((pipe2_read, pipe2_write)) = io::pipe()
+        if let Ok((mut pipe_read, mut pipe_write)) = uucore::pipes::pipe::<true>()
+            && let Ok((mut pipe2_read, mut pipe2_write)) = uucore::pipes::pipe::<true>()
         {
-            use rustix::pipe::fcntl_setpipe_size;
             use uucore::pipes::MAX_ROOTLESS_PIPE_SIZE;
-            // improve throughput. 2nd pipe should be larger than 1st one for proper tee() length.
-            if fcntl_setpipe_size(&pipe2_read, MAX_ROOTLESS_PIPE_SIZE).is_ok() {
-                let _ = fcntl_setpipe_size(&pipe_read, MAX_ROOTLESS_PIPE_SIZE);
-                let _ = fcntl_setpipe_size(&self.writers[0], MAX_ROOTLESS_PIPE_SIZE); // stdout
+            // improve throughput when stdout is pipe, but no needed to be same size with broker.
+            let _ = rustix::pipe::fcntl_setpipe_size(&self.writers[0], MAX_ROOTLESS_PIPE_SIZE);
+            macro_rules! splice_or_detach {
+                ($pipe_read:ident, $pipe_write:ident, $writer:expr, $len:expr) => {
+                    if let Err(e) = uucore::pipes::drain_pipe(&$pipe_read, &$writer, $len) {
+                        self.aborted |= process_error(
+                            self.output_error_mode,
+                            e,
+                            &$writer,
+                            &mut self.ignored_errors,
+                        ).is_err();
+                        $writer.name.clear(); //mark as exited
+                        // the failed write can leave bytes in the pipe: replace it with an empty one.
+                        // Free it first, so that the new one does not need more file descriptors.
+                        drop($pipe_read);
+                        drop($pipe_write);
+                        match uucore::pipes::pipe::<true>() {
+                            Ok(pipe) => ($pipe_read, $pipe_write) = pipe,
+                            Err(e) => {
+                                show_error!("{}", strip_errno(&e));
+                                return Err(());
+                            }
+                        }
+                    }
+                };
             }
             while let Ok(s) = uucore::pipes::splice(&input, &pipe_write, MAX_ROOTLESS_PIPE_SIZE) {
                 if s == 0 {
@@ -186,10 +204,10 @@ impl MultiWriter {
                     // do not consume input
                     let tee_res = uucore::pipes::tee(&pipe_read, &pipe2_write, s);
                     assert_eq!(tee_res, Ok(s), "2nd pipe should have enough spare");
-                    splice_or_detach!(&pipe2_read, other, s);
+                    splice_or_detach!(pipe2_read, pipe2_write, *other, s);
                 }
                 // last one consumes input
-                splice_or_detach!(&pipe_read, last, s);
+                splice_or_detach!(pipe_read, pipe_write, *last, s);
                 self.writers.retain(|w| !w.name.is_empty());
                 if self.aborted {
                     return Err(());
@@ -263,7 +281,7 @@ fn process_error(
 ) -> Result<(), ()> {
     let ignore_pipe = matches!(
         mode,
-        None | Some(OutputErrorMode::WarnNoPipe) | Some(OutputErrorMode::ExitNoPipe)
+        None | Some(OutputErrorMode::WarnNoPipe | OutputErrorMode::ExitNoPipe)
     );
 
     if ignore_pipe && e.kind() == ErrorKind::BrokenPipe {

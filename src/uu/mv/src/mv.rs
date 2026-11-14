@@ -59,6 +59,8 @@ use uucore::fs::{
     target_os = "netbsd"
 ))]
 use uucore::fsxattr;
+#[cfg(unix)]
+use uucore::safe_copy::preserved_mode;
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::set_selinux_security_context;
 use uucore::translate;
@@ -396,7 +398,12 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         )
         .into());
     }
-    let Ok(source_metadata) = source.symlink_metadata() else {
+    // WASI may return file metadata even when a trailing slash requires a directory.
+    let Some(source_metadata) = source
+        .symlink_metadata()
+        .ok()
+        .filter(|metadata| !metadata.is_file() || !path_ends_with_terminator(source))
+    else {
         return Err(if path_ends_with_terminator(source) {
             MvError::CannotStatNotADirectory(source.quote().to_string()).into()
         } else {
@@ -441,28 +448,18 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
                     hardlink_params.0,
                     hardlink_params.1,
                 )
-                .map_err(|e| -> Box<dyn UError> {
-                    let message = if is_directory_not_empty_error(&e) {
-                        translate!(
-                            "mv-error-cannot-overwrite-non-empty-directory",
-                            "target" => target.quote()
-                        )
-                    } else {
-                        translate!(
-                            "mv-error-cannot-move",
-                            "source" => source.quote(),
-                            "target" => target.quote()
-                        )
-                    };
-                    e.map_err_context(|| message)
-                })
+                .map_err(|e| cannot_move_error(e, source, target))
             } else {
-                Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
+                Err(MvError::DirectoryToNonDirectory(
+                    target.quote().to_string(),
+                    source.quote().to_string(),
+                )
+                .into())
             }
         } else {
             move_files_into_dir(&[source.to_path_buf()], target, opts)
         }
-    } else if source_is_dir && target.exists() {
+    } else if source_is_dir && target.symlink_metadata().is_ok() {
         match opts.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => prompt_overwrite(target, None)?,
@@ -495,7 +492,15 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
             hardlink_params.0,
             hardlink_params.1,
         )
-        .map_err(|e| USimpleError::new(1, format!("{e}")))
+        .map_err(|e| -> Box<dyn UError> {
+            // OS errors get the same "cannot move" context as GNU; our own
+            // messages (e.g. "not replacing") are already complete.
+            if e.raw_os_error().is_some() {
+                cannot_move_error(e, source, target)
+            } else {
+                USimpleError::new(1, format!("{e}"))
+            }
+        })
     }
 }
 
@@ -570,6 +575,13 @@ fn assert_not_same_file(
             || source.ends_with("/.")
             || source.is_file())
     {
+        // GNU mv skips the same-file check when it would not replace the
+        // target anyway (-n, --update=none), so this is a silent no-op.
+        if (opts.overwrite == OverwriteMode::NoClobber || opts.update == UpdateMode::None)
+            && source.file_name().is_some()
+        {
+            return Ok(());
+        }
         return Err(MvError::SameFile(source.quote().to_string(), target_display()).into());
     } else if (same_file || canonicalized_target.starts_with(canonicalized_source))
         // don't error if we're moving a symlink of a directory into itself
@@ -774,19 +786,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         ) {
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
-                let message = if is_directory_not_empty_error(&e) {
-                    translate!(
-                        "mv-error-cannot-overwrite-non-empty-directory",
-                        "target" => targetpath.quote()
-                    )
-                } else {
-                    translate!(
-                        "mv-error-cannot-move",
-                        "source" => sourcepath.quote(),
-                        "target" => targetpath.quote()
-                    )
-                };
-                let e = e.map_err_context(|| message);
+                let e = cannot_move_error(e, sourcepath, &targetpath);
                 if let Some(ref pb) = display_manager {
                     pb.suspend(|| show!(e));
                 } else {
@@ -869,7 +869,15 @@ fn rename(
         .is_ok_and(|metadata| metadata.is_dir())
     {
         // normalize behavior between *nix and windows
-        if from.is_dir() {
+        // A symlink to a directory is not a directory: like any other
+        // non-directory, it must not replace the empty directory. Drop
+        // trailing slashes first, as they make lstat follow the symlink.
+        if from
+            .components()
+            .as_path()
+            .symlink_metadata()
+            .is_ok_and(|metadata| metadata.is_dir())
+        {
             if is_empty_dir(to) {
                 fs::remove_dir(to)?;
             } else {
@@ -936,6 +944,24 @@ fn is_fifo(_filetype: fs::FileType) -> bool {
 
 /// A wrapper around `fs::rename`, so that if it fails, we try falling back on
 /// copying and removing.
+/// Add GNU's "cannot move" (or "cannot overwrite" for a non-empty
+/// directory) context to an error from `rename`.
+fn cannot_move_error(e: io::Error, source: &Path, target: &Path) -> Box<dyn UError> {
+    let message = if is_directory_not_empty_error(&e) {
+        translate!(
+            "mv-error-cannot-overwrite-non-empty-directory",
+            "target" => target.quote()
+        )
+    } else {
+        translate!(
+            "mv-error-cannot-move",
+            "source" => source.quote(),
+            "target" => target.quote()
+        )
+    };
+    e.map_err_context(|| message)
+}
+
 fn rename_with_fallback(
     from: &Path,
     to: &Path,
@@ -947,19 +973,14 @@ fn rename_with_fallback(
     #[cfg(not(unix))] _hardlink_scanner: Option<()>,
 ) -> io::Result<()> {
     fs::rename(from, to).or_else(|err| {
-        #[cfg(windows)]
-        const EXDEV: i32 = windows_sys::Win32::Foundation::ERROR_NOT_SAME_DEVICE as _;
-        #[cfg(unix)]
-        const EXDEV: i32 = libc::EXDEV as _;
-        #[cfg(target_os = "wasi")]
-        const EXDEV: i32 = 18; // POSIX EXDEV value
-
         // We will only copy if:
-        // 1. Files are on different devices (EXDEV error)
+        // 1. Files are on different devices (CrossesDevices / EXDEV error)
         // 2. On Windows, if the target file exists and source file is opened by another process
         //    (MoveFileExW fails with "Access Denied" even if the source file has FILE_SHARE_DELETE permission)
-        let should_fallback =
-            matches!(err.raw_os_error(), Some(EXDEV)) || (from.is_file() && can_delete_file(from));
+        let should_fallback = err.kind() == io::ErrorKind::CrossesDevices
+            || (err.kind() == io::ErrorKind::PermissionDenied
+                && from.is_file()
+                && can_delete_file(from));
         if !should_fallback {
             return Err(err);
         }
@@ -1058,7 +1079,9 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
         target_os = "netbsd"
     ))]
     {
-        let _ = fsxattr::copy_xattrs_ignore_unsupported(from, to);
+        if let Ok(failed) = fsxattr::copy_xattrs_ignore_unsupported(from, to) {
+            show_xattr_failures(None, failed);
+        }
     }
     let _ = preserve_ownership(from, to);
     fs::remove_file(from)
@@ -1167,6 +1190,12 @@ fn rename_dir_fallback(
 
     result?;
 
+    // As for subdirectories, the mode goes on last.
+    #[cfg(unix)]
+    if let (Ok(src), Ok(dst)) = (open_dir_nofollow(from), open_dir_nofollow(to)) {
+        copy_dir_mode(&src, &dst);
+    }
+
     // Remove the source directory after successful copy
     fs::remove_dir_all(from)?;
 
@@ -1178,8 +1207,16 @@ fn rename_dir_fallback(
 ///
 /// `create_dir_all` would accept a symlink planted at `path` after the caller
 /// removed the destination, redirecting the move out of the destination tree.
+///
+/// The directory starts private (0700): its real mode is applied only after its
+/// contents are copied, and until then, or for good if the copy fails, the
+/// umask-based 0755 would expose entries that a 0700 source kept hidden.
 fn create_dir_fail_closed(path: &Path) -> io::Result<()> {
-    fs::create_dir(path).map_err(|e| {
+    #[cfg(unix)]
+    let created = unix::fs::DirBuilderExt::mode(&mut fs::DirBuilder::new(), 0o700).create(path);
+    #[cfg(not(unix))]
+    let created = fs::create_dir(path);
+    created.map_err(|e| {
         if e.kind() == io::ErrorKind::AlreadyExists {
             io::Error::new(
                 io::ErrorKind::AlreadyExists,
@@ -1305,9 +1342,7 @@ fn copy_dir_contents_recursive(
 
             // Preserve ownership (uid/gid) of the subdirectory
             #[cfg(unix)]
-            {
-                let _ = preserve_ownership(&from_path, &to_path);
-            }
+            let _ = preserve_ownership(&from_path, &to_path);
 
             print_verbose(&from_path, &to_path);
 
@@ -1322,6 +1357,9 @@ fn copy_dir_contents_recursive(
                 progress_bar,
                 display_manager,
             )?;
+
+            #[cfg(unix)]
+            copy_subdir_xattrs_and_mode(&from_path, &to_path);
         } else {
             // Copy file with or without hardlink support based on platform
             #[cfg(unix)]
@@ -1350,6 +1388,57 @@ fn copy_dir_contents_recursive(
     }
 
     Ok(())
+}
+
+/// Give a subdirectory copied by the cross-device fallback the xattrs (POSIX
+/// ACLs included) and the mode of its source.
+///
+/// This runs once the subdirectory's contents are copied, so that neither a
+/// default ACL nor a read-only mode applies to the entries created in it.
+/// Both directories are opened without following symlinks, and the xattrs and
+/// mode go through those fds, so a path swapped for a symlink is not followed.
+#[cfg(unix)]
+fn copy_subdir_xattrs_and_mode(from: &Path, to: &Path) {
+    let (Ok(src), Ok(dst)) = (open_dir_nofollow(from), open_dir_nofollow(to)) else {
+        return;
+    };
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "hurd",
+        target_os = "linux",
+        target_os = "android",
+        target_os = "netbsd"
+    ))]
+    {
+        if let Ok(failed) = fsxattr::copy_xattrs_fd(&src, &dst) {
+            show_xattr_failures(Some(to), failed);
+        }
+    }
+    copy_dir_mode(&src, &dst);
+}
+
+/// Give the directory `dst` the mode of `src`.
+///
+/// Call it after the ACL is set: while a directory has an ACL, the group bits
+/// of its mode are the ACL mask, and chmod sets the mask from them.
+#[cfg(unix)]
+fn copy_dir_mode(src: &fs::File, dst: &fs::File) {
+    use std::os::unix::fs::MetadataExt;
+
+    if let (Ok(src_meta), Ok(dst_meta)) = (src.metadata(), dst.metadata()) {
+        let ownership_preserved =
+            src_meta.uid() == dst_meta.uid() && src_meta.gid() == dst_meta.gid();
+        let mode = preserved_mode(src_meta.mode(), ownership_preserved);
+        let _ = dst.set_permissions(fs::Permissions::from_mode(mode));
+    }
+}
+
+#[cfg(unix)]
+fn open_dir_nofollow(path: &Path) -> io::Result<fs::File> {
+    use rustix::fs::{Mode, OFlags, open};
+
+    let flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC;
+    Ok(open(path, flags, Mode::empty())?.into())
 }
 
 #[cfg(unix)]
@@ -1391,7 +1480,9 @@ fn copy_file_with_hardlinks_helper(
             target_os = "netbsd"
         ))]
         {
-            let _ = fsxattr::copy_xattrs_ignore_unsupported(from, to);
+            if let Ok(failed) = fsxattr::copy_xattrs_ignore_unsupported(from, to) {
+                show_xattr_failures(None, failed);
+            }
         }
         // Preserve ownership (uid/gid) from the source
         let _ = preserve_ownership(from, to);
@@ -1447,8 +1538,7 @@ fn rename_file_fallback(
         let src_mode = src_file
             .metadata()
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?
-            .mode()
-            & 0o7777;
+            .mode();
         let mut dst_file = create_dest_restrictive(to, /* nofollow */ true)
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
         uucore::buf_copy::copy_fast(&mut &src_file, &mut dst_file)
@@ -1462,22 +1552,15 @@ fn rename_file_fallback(
             target_os = "netbsd"
         ))]
         {
-            let _ = fsxattr::copy_xattrs_fd_ignore_unsupported(&src_file, &dst_file);
+            if let Ok(failed) = fsxattr::copy_xattrs_fd(&src_file, &dst_file) {
+                show_xattr_failures(Some(to), failed);
+            }
         }
 
         // chown before chmod: chown(2) clears setuid/setgid for non-root,
         // so the final mode must be applied last to preserve those bits.
-        //
-        // If the chown did not take, the destination belongs to whoever ran
-        // `mv`, and re-applying setuid/setgid would hand them a binary running
-        // as themselves that used to run as someone else. GNU strips the bits
-        // in that case and so do we.
         let ownership_preserved = preserve_ownership(from, to).unwrap_or(false);
-        let dest_mode = if ownership_preserved {
-            src_mode
-        } else {
-            src_mode & !0o6000
-        };
+        let dest_mode = preserved_mode(src_mode, ownership_preserved);
         let _ = dst_file.set_permissions(Permissions::from_mode(dest_mode));
     }
 
@@ -1490,6 +1573,57 @@ fn rename_file_fallback(
     fs::remove_file(from)
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
     Ok(())
+}
+
+/// Report xattr failures as warnings without failing the move. When `to` is
+/// provided, unsupported xattrs produce one warning for the file, except when
+/// only POSIX ACLs could not be set. Other failures are reported per attribute.
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "android",
+    target_os = "netbsd"
+))]
+fn show_xattr_failures(to: Option<&Path>, failed: Vec<(OsString, io::Error)>) {
+    use uucore::error::strip_errno;
+    use uucore::show_error;
+
+    let failed = if let Some(to) = to {
+        let (unsupported, failed): (Vec<_>, Vec<_>) = failed
+            .into_iter()
+            .partition(|(_, err)| fsxattr::is_xattr_unsupported(err));
+        let is_acl = |name: &OsString| {
+            matches!(
+                name.to_str(),
+                Some("system.posix_acl_access" | "system.posix_acl_default")
+            )
+        };
+        if let Some((_, err)) = unsupported.iter().find(|(name, _)| !is_acl(name)) {
+            show_error!(
+                "{}",
+                translate!(
+                    "mv-error-setting-attributes",
+                    "path" => to.quote(),
+                    "err" => strip_errno(err)
+                )
+            );
+        }
+        failed
+    } else {
+        failed
+    };
+
+    for (name, err) in failed {
+        show_error!(
+            "{}",
+            translate!(
+                "mv-error-setting-attribute",
+                "name" => name.quote(),
+                "err" => strip_errno(&err)
+            )
+        );
+    }
 }
 
 /// Preserve ownership (uid/gid) from source to destination.

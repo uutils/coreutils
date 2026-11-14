@@ -156,12 +156,14 @@ test-after-help = Quitter avec le statut déterminé par EXPRESSION.
 # Messages d'erreur
 test-error-missing-closing-bracket = '{"]"}' manquant
 test-error-expected = { $value } attendu
-test-error-expected-value = valeur attendue
 test-error-missing-argument = argument manquant après { $argument }
 test-error-extra-argument = argument supplémentaire { $argument }
 test-error-unknown-operator = opérateur inconnu { $operator }
 test-error-invalid-integer = entier invalide { $value }
 test-error-unary-operator-expected = { $operator } : opérateur unaire attendu
+test-error-binary-operator-expected = { $operator } : opérateur binaire attendu
+test-error-expected-found = { $expected } attendu, trouvé { $found }
+test-error-does-not-accept-length = { $operator } n'accepte pas -l
 
 # Étiquettes de diagnostic, utilisées quand les erreurs sont rendues avec un extrait
 test-diag-label-unary-operator-expected = nécessite une expression de chaque côté

@@ -473,12 +473,7 @@ pub(crate) struct Table {
 impl Table {
     pub(crate) fn new(options: &Options, filesystems: Vec<Filesystem>) -> Self {
         let headers = Header::get_headers(options);
-        let mut widths: Vec<_> = options
-            .columns
-            .iter()
-            .enumerate()
-            .map(|(i, col)| col.min_width().max(headers[i].len()))
-            .collect();
+        let mut widths: Vec<_> = options.columns.iter().map(|col| col.min_width()).collect();
 
         let mut rows = vec![headers.iter().map(Cell::from_string).collect()];
 
@@ -509,7 +504,8 @@ impl Table {
             rows.push(total_row.get_cells());
         }
 
-        // extend the column widths (in chars) for long values in rows
+        // extend the column widths (in display columns) for long values in rows,
+        // the header row included
         // do it here, after total row was added to the list of rows
         for row in &rows {
             for (i, value) in row.iter().enumerate() {

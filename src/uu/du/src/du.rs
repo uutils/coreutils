@@ -22,12 +22,13 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
 use std::time::SystemTime;
-use thiserror::Error;
 use uucore::diagnostics::OptionValue;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::fs::SYMLINK_FOLLOW_LIMIT;
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
+use uucore::i18n::decimal::locale_grouping_separator;
+use uucore::i18n::{UEncoding, get_numeric_locale};
 use uucore::line_ending::LineEnding;
 #[cfg(all(unix, not(target_os = "redox")))]
 use uucore::safe_traversal::{DirFd, SymlinkBehavior};
@@ -110,11 +111,22 @@ enum Deref {
     None,
 }
 
+impl Deref {
+    /// Whether `path` is followed when it is a symbolic link.
+    fn follows(&self, path: &Path) -> bool {
+        match self {
+            Self::All => true,
+            Self::Args(paths) => paths.contains(&path.to_path_buf()),
+            Self::None => false,
+        }
+    }
+}
+
 #[derive(Clone)]
 enum SizeFormat {
     HumanDecimal,
     HumanBinary,
-    BlockSize(u64),
+    BlockSize(u64, Option<String>),
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
@@ -139,14 +151,7 @@ impl Stat {
         dir_entry: Option<&DirEntry>,
         options: &TraversalOptions,
     ) -> io::Result<Self> {
-        // Determine whether to dereference (follow) the symbolic link
-        let should_dereference = match &options.dereference {
-            Deref::All => true,
-            Deref::Args(paths) => paths.contains(&path.to_path_buf()),
-            Deref::None => false,
-        };
-
-        let metadata = if should_dereference {
+        let metadata = if options.dereference.follows(path) {
             // Get metadata, following symbolic links if necessary
             fs::metadata(path)
         } else if let Some(dir_entry) = dir_entry {
@@ -302,9 +307,14 @@ fn get_file_info(path: &Path, _metadata: &Metadata) -> Option<FileInfo> {
     result
 }
 
-fn read_block_size(s: Option<&str>, diag_args: Option<&[OsString]>) -> UResult<u64> {
+fn read_block_size(
+    s: Option<&str>,
+    diag_args: Option<&[OsString]>,
+) -> UResult<(u64, Option<String>)> {
+    let vars = ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"];
     if let Some(s) = s {
-        parse_size_u64(s)
+        let parsed = s.strip_prefix('\'').unwrap_or(s);
+        parse_size_u64(parsed)
             .and_then(|bytes| {
                 // A block size of zero is rejected here rather than by the
                 // caller, so that it goes through the caret path like every
@@ -312,7 +322,7 @@ fn read_block_size(s: Option<&str>, diag_args: Option<&[OsString]>) -> UResult<u
                 if bytes == 0 {
                     Err(ParseSizeError::ParseFailure(s.to_string()))
                 } else {
-                    Ok(bytes)
+                    Ok((bytes, suffix_from_parsed_block_size(s)))
                 }
             })
             .map_err(|e| {
@@ -325,13 +335,39 @@ fn read_block_size(s: Option<&str>, diag_args: Option<&[OsString]>) -> UResult<u
                     USimpleError::new(1, message.clone()),
                 )
             })
-    } else if let Some(bytes) =
-        parse_block_size::block_size_from_env(&["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"]).found()
-    {
-        Ok(bytes)
     } else {
-        Ok(parse_block_size::default_block_size())
+        for var in vars {
+            if let Ok(value) = env::var(var) {
+                let parsed = value.strip_prefix('\'').unwrap_or(&value);
+                return match parse_size_u64(parsed) {
+                    Ok(bytes) if bytes != 0 => Ok((bytes, suffix_from_parsed_block_size(&value))),
+                    _ => Ok((parse_block_size::default_block_size(), None)),
+                };
+            }
+        }
+        Ok((parse_block_size::default_block_size(), None))
     }
+}
+
+fn suffix_from_parsed_block_size(s: &str) -> Option<String> {
+    let grouping = s.starts_with('\'');
+    let s = s.strip_prefix('\'').unwrap_or(s);
+    let mut chars = s.chars();
+    let unit = chars.next()?.to_ascii_uppercase();
+    if !unit.is_ascii_alphabetic() || unit == 'B' {
+        return grouping.then(|| "'".to_string());
+    }
+
+    let suffix = match chars.as_str() {
+        "" | "D" => unit.to_string(),
+        "B" if unit == 'K' => "kB".to_string(),
+        suffix => format!("{unit}{suffix}"),
+    };
+    Some(if grouping {
+        format!("'{suffix}")
+    } else {
+        suffix
+    })
 }
 
 #[cfg(all(unix, not(target_os = "redox")))]
@@ -381,7 +417,7 @@ fn safe_du(
         Err(_e) => {
             // Only the root path can reach this branch (subdirectories always pass a
             // valid stat). Try using our DirFd method for the root directory.
-            match DirFd::open(path, SymlinkBehavior::Follow) {
+            match DirFd::open(path, options.dereference.follows(path).into()) {
                 Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path, options.time) {
                     Ok(s) => s,
                     Err(e) => {
@@ -416,13 +452,15 @@ fn safe_du(
         return Ok(my_stat);
     }
 
-    // Open the directory using DirFd
+    // Open the directory using DirFd. A subdirectory is opened with O_NOFOLLOW:
+    // it was classified with a no-follow stat, so if it has been swapped for a
+    // symlink since then, the open must fail instead of walking into the target.
     let open_result = match parent_fd {
         Some(parent) => parent.open_subdir(
             path.file_name().unwrap_or(path.as_os_str()),
-            SymlinkBehavior::Follow,
+            SymlinkBehavior::NoFollow,
         ),
-        None => DirFd::open(path, SymlinkBehavior::Follow),
+        None => DirFd::open(path, options.dereference.follows(path).into()),
     };
 
     let dir_fd = match open_result {
@@ -538,11 +576,11 @@ fn safe_du(
         }
 
         // Handle inodes
-        if let Some(inode) = this_stat.inode {
-            if seen_inodes.contains(&inode) && !options.count_links {
-                continue;
-            }
-            seen_inodes.insert(inode);
+        if let Some(inode) = this_stat.inode
+            && !seen_inodes.insert(inode)
+            && !options.count_links
+        {
+            continue;
         }
 
         // Process directories recursively
@@ -702,14 +740,11 @@ fn du_regular(
                                 }
                             }
 
-                            if let Some(inode) = this_stat.inode {
-                                // Check if the inode has been seen before and if we should skip it
-                                if seen_inodes.contains(&inode) && !options.count_links {
-                                    // Skip further processing for this inode
-                                    continue;
-                                }
-                                // Mark this inode as seen
-                                seen_inodes.insert(inode);
+                            if let Some(inode) = this_stat.inode
+                                && !seen_inodes.insert(inode)
+                                && !options.count_links
+                            {
+                                continue;
                             }
 
                             if this_stat.metadata.is_dir() {
@@ -784,7 +819,7 @@ fn du_regular(
     Ok(my_stat)
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum DuError {
     #[error("{}", translate!("du-error-invalid-max-depth", "depth" => _0.quote()))]
     InvalidMaxDepthArg(String),
@@ -849,6 +884,36 @@ struct StatPrintInfo {
     depth: usize,
 }
 
+/// Add the locale grouping requested by a leading apostrophe in SIZE.
+fn format_block_count(blocks: u64, grouping: bool) -> Vec<u8> {
+    if !grouping {
+        return blocks.to_string().into_bytes();
+    }
+
+    let digits = blocks.to_string();
+    let separator = locale_grouping_separator();
+    if separator.is_empty() || digits.len() < 4 {
+        return digits.into_bytes();
+    }
+
+    let separator = if get_numeric_locale().1 == UEncoding::Ascii && separator == "\u{202f}" {
+        &b"\xa0"[..]
+    } else {
+        separator.as_bytes()
+    };
+    let first_group = match digits.len() % 3 {
+        0 => 3,
+        n => n,
+    };
+    let mut grouped = Vec::with_capacity(digits.len() + separator.len());
+    grouped.extend_from_slice(&digits.as_bytes()[..first_group]);
+    for chunk in digits.as_bytes()[first_group..].chunks(3) {
+        grouped.extend_from_slice(separator);
+        grouped.extend_from_slice(chunk);
+    }
+    grouped
+}
+
 impl StatPrinter {
     fn choose_size(&self, stat: &Stat) -> u64 {
         if self.inodes {
@@ -889,41 +954,49 @@ impl StatPrinter {
         }
 
         if self.total {
-            write!(
-                stdout(),
-                "{}\t{}{}",
-                self.convert_size(grand_total),
-                self.total_text,
-                self.line_ending
-            )?;
+            stdout().write_all(&self.convert_size(grand_total))?;
+            write!(stdout(), "\t{}{}", self.total_text, self.line_ending)?;
         }
 
         Ok(())
     }
 
-    fn convert_size(&self, size: u64) -> String {
-        match self.size_format {
+    fn convert_size(&self, size: u64) -> Vec<u8> {
+        match &self.size_format {
             SizeFormat::HumanDecimal => uucore::format::human::human_readable(
                 size,
                 uucore::format::human::SizeFormat::Decimal,
-            ),
+            )
+            .into_bytes(),
             SizeFormat::HumanBinary => uucore::format::human::human_readable(
                 size,
                 uucore::format::human::SizeFormat::Binary,
-            ),
-            SizeFormat::BlockSize(block_size) => {
+            )
+            .into_bytes(),
+            SizeFormat::BlockSize(block_size, suffix) => {
                 if self.inodes {
                     // we ignore block size (-B) with --inodes
-                    size.to_string()
+                    format_block_count(size, suffix.as_deref().is_some_and(|s| s.starts_with('\'')))
                 } else {
-                    size.div_ceil(block_size).to_string()
+                    let blocks = size.div_ceil(*block_size);
+                    let mut blocks = format_block_count(
+                        blocks,
+                        suffix.as_deref().is_some_and(|s| s.starts_with('\'')),
+                    );
+                    if let Some(suffix) = suffix {
+                        blocks.extend_from_slice(
+                            suffix.strip_prefix('\'').unwrap_or(suffix).as_bytes(),
+                        );
+                    }
+                    blocks
                 }
             }
         }
     }
 
     fn print_stat(&self, stat: &Stat, size: u64) -> UResult<()> {
-        write!(stdout(), "{}\t", self.convert_size(size))?;
+        stdout().write_all(&self.convert_size(size))?;
+        write!(stdout(), "\t")?;
 
         if self.time.is_some() {
             if let Some(time) = stat.latest_time {
@@ -1012,23 +1085,24 @@ fn get_size_format_flag_arg_index_if_present(matches: &ArgMatches, arg: &str) ->
 fn parse_size_format(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<SizeFormat> {
     // `read_block_size` falls back to the environment and rejects a zero block
     // size itself, so that the caret can point at the offending value.
-    let block_size_value_or_default_fallback = SizeFormat::BlockSize(read_block_size(
+    let (block_size, suffix) = read_block_size(
         matches
             .get_one::<String>(options::BLOCK_SIZE)
             .map(AsRef::as_ref),
         diag_args,
-    )?);
+    )?;
+    let block_size_value_or_default_fallback = SizeFormat::BlockSize(block_size, suffix);
     let candidates = [
         (
-            SizeFormat::BlockSize(1),
+            SizeFormat::BlockSize(1, None),
             get_size_format_flag_arg_index_if_present(matches, options::BYTES),
         ),
         (
-            SizeFormat::BlockSize(1024),
+            SizeFormat::BlockSize(1024, None),
             get_size_format_flag_arg_index_if_present(matches, options::BLOCK_SIZE_1K),
         ),
         (
-            SizeFormat::BlockSize(1024 * 1024),
+            SizeFormat::BlockSize(1024 * 1024, None),
             get_size_format_flag_arg_index_if_present(matches, options::BLOCK_SIZE_1M),
         ),
         (
@@ -1202,11 +1276,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let stat = Stat::new(&path, None, &traversal_options);
         if let Ok(stat) = stat.as_ref()
             && let Some(inode) = stat.inode
+            && !traversal_options.count_links
+            && !seen_inodes.insert(inode)
         {
-            if !traversal_options.count_links && seen_inodes.contains(&inode) {
-                continue 'loop_file;
-            }
-            seen_inodes.insert(inode);
+            continue 'loop_file;
         }
 
         if use_safe_traversal {
@@ -1430,7 +1503,11 @@ pub fn uu_app() -> Command {
                 .long(options::DEREFERENCE)
                 .help(translate!("du-help-dereference"))
                 .action(ArgAction::SetTrue)
-                .overrides_with(options::DEREFERENCE),
+                .overrides_with_all([
+                    options::DEREFERENCE,
+                    options::DEREFERENCE_ARGS,
+                    options::NO_DEREFERENCE,
+                ]),
         )
         .arg(
             Arg::new(options::DEREFERENCE_ARGS)
@@ -1439,15 +1516,22 @@ pub fn uu_app() -> Command {
                 .long(options::DEREFERENCE_ARGS)
                 .help(translate!("du-help-dereference-args"))
                 .action(ArgAction::SetTrue)
-                .overrides_with(options::DEREFERENCE_ARGS),
+                .overrides_with_all([
+                    options::DEREFERENCE,
+                    options::DEREFERENCE_ARGS,
+                    options::NO_DEREFERENCE,
+                ]),
         )
         .arg(
             Arg::new(options::NO_DEREFERENCE)
                 .short('P')
                 .long(options::NO_DEREFERENCE)
                 .help(translate!("du-help-no-dereference"))
-                .overrides_with(options::DEREFERENCE)
-                .overrides_with(options::NO_DEREFERENCE)
+                .overrides_with_all([
+                    options::DEREFERENCE,
+                    options::DEREFERENCE_ARGS,
+                    options::NO_DEREFERENCE,
+                ])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1637,7 +1721,10 @@ mod test_du {
     fn test_read_block_size() {
         let test_data = [Some("1024".to_string()), Some("K".to_string()), None];
         for it in &test_data {
-            assert!(matches!(read_block_size(it.as_deref(), None), Ok(1024)));
+            assert!(matches!(
+                read_block_size(it.as_deref(), None),
+                Ok((1024, _))
+            ));
         }
     }
 }

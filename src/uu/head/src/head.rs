@@ -16,14 +16,13 @@ use std::os::fd::AsFd;
 #[cfg(windows)]
 use std::path::Path;
 use std::path::PathBuf;
-use thiserror::Error;
 use uucore::diagnostics::OptionValue;
-use uucore::display::{Quotable, print_verbatim};
+use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use uucore::line_ending::LineEnding;
 use uucore::parser::parse_signed_num::number_offset;
 use uucore::parser::parse_size::ParseSizeError;
-use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
+use uucore::quoting_style::locale_aware_shell_escape;
 use uucore::show;
 use uucore::translate;
 
@@ -39,7 +38,7 @@ use take::copy_all_but_n_bytes;
 use take::copy_all_but_n_lines;
 use take::take_lines;
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 enum HeadError {
     /// Wrapper around `io::Error`
     #[error("{}", translate!("head-error-reading-file", "name" => name.quote(), "err" => err))]
@@ -256,13 +255,9 @@ fn print_n_lines(input: &mut impl io::BufRead, n: u64, separator: u8) -> io::Res
     Ok(bytes_written)
 }
 
-fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> {
-    usize::try_from(n).ok()
-}
-
 fn print_but_last_n_bytes(mut input: impl Read, n: u64) -> io::Result<u64> {
     let mut bytes_written: u64 = 0;
-    if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
+    if let Ok(n) = usize::try_from(n) {
         let stdout = io::stdout();
         let mut stdout = stdout.lock();
 
@@ -286,7 +281,7 @@ fn print_but_last_n_lines(mut input: impl Read, n: u64, separator: u8) -> io::Re
         return io::copy(&mut input, &mut stdout).map_err(wrap_in_stdout_error);
     }
     let mut bytes_written: u64 = 0;
-    if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
+    if let Ok(n) = usize::try_from(n) {
         bytes_written = copy_all_but_n_lines(input, &mut stdout, n, separator)
             .map_err(wrap_in_stdout_error)?
             .try_into()
@@ -299,12 +294,12 @@ fn print_but_last_n_lines(mut input: impl Read, n: u64, separator: u8) -> io::Re
     Ok(bytes_written)
 }
 
-/// Return the index in `input` just after the `n`th line from the end.
+/// Return the byte offset, relative to the current position, just after the
+/// `n`th line from the end of the remaining input.
 ///
-/// If `n` exceeds the number of lines in this file, then return 0.
-/// This function rewinds the cursor to the
-/// beginning of the input just before returning unless there is an
-/// I/O error.
+/// If `n` exceeds the number of lines in the remaining input, then return 0.
+/// This function restores the cursor to its original position just before
+/// returning unless there is an I/O error.
 ///
 /// # Errors
 ///
@@ -336,19 +331,21 @@ fn find_nth_line_from_end<R>(input: &mut R, n: u64, separator: u8) -> io::Result
 where
     R: Read + Seek,
 {
+    // Search only after the current position, so a partly consumed seekable input is handled relative to it.
+    let start_offset = input.stream_position()?;
     let file_size = input.seek(SeekFrom::End(0))?;
 
     let mut buffer = [0u8; BUF_SIZE];
 
     let mut lines = 0u64;
     let mut check_last_byte_first_loop = true;
-    let mut bytes_remaining_to_search = file_size;
+    let mut bytes_remaining_to_search = file_size.saturating_sub(start_offset);
 
     loop {
         // the casts here are ok, `buffer.len()` should never be above a few k
         let bytes_to_read_this_loop =
             bytes_remaining_to_search.min(buffer.len().try_into().unwrap());
-        let read_start_offset = bytes_remaining_to_search - bytes_to_read_this_loop;
+        let read_start_offset = start_offset + bytes_remaining_to_search - bytes_to_read_this_loop;
         let buffer = &mut buffer[..bytes_to_read_this_loop.try_into().unwrap()];
         bytes_remaining_to_search -= bytes_to_read_this_loop;
 
@@ -364,8 +361,8 @@ where
             check_last_byte_first_loop = false;
             if buffer.last().is_some_and(|&b| b != separator) {
                 if n == 0 {
-                    input.rewind()?;
-                    return Ok(file_size);
+                    input.seek(SeekFrom::Start(start_offset))?;
+                    return Ok(file_size - start_offset);
                 }
                 assert_eq!(lines, 0);
                 lines = 1;
@@ -375,14 +372,15 @@ where
         for separator_offset in memrchr_iter(separator, &buffer[..]) {
             lines += 1;
             if lines > n {
-                input.rewind()?;
+                input.seek(SeekFrom::Start(start_offset))?;
                 return Ok(read_start_offset
                     + TryInto::<u64>::try_into(separator_offset).unwrap()
-                    + 1);
+                    + 1
+                    - start_offset);
             }
         }
-        if read_start_offset == 0 {
-            input.rewind()?;
+        if read_start_offset == start_offset {
+            input.seek(SeekFrom::Start(start_offset))?;
             return Ok(0);
         }
     }
@@ -417,11 +415,14 @@ fn head_backwards_without_seek_file(input: &mut File, options: &HeadOptions) -> 
 fn head_backwards_on_seekable_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
     match options.mode {
         Mode::AllButLastBytes(n) => {
-            let size = input.metadata()?.len();
-            if n >= size {
+            let remaining = input
+                .metadata()?
+                .len()
+                .saturating_sub(input.stream_position()?);
+            if n >= remaining {
                 Ok(0)
             } else {
-                print_n_bytes(input, size - n)
+                print_n_bytes(input, remaining - n)
             }
         }
         Mode::AllButLastLines(n) => {
@@ -454,11 +455,8 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 if !first {
                     writeln!(stdout)?;
                 }
-                let name = locale_aware_escape_name(
-                    translate!("head-name-stdin").as_ref(),
-                    QuotingStyle::SHELL_ESCAPE,
-                );
-                writeln!(stdout, "==> {} <==", name.to_string_lossy())?;
+                let name = locale_aware_shell_escape(translate!("head-name-stdin"));
+                writeln!(stdout, "==> {name} <==")?;
             }
             let stdin = io::stdin();
 
@@ -508,12 +506,8 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     if !first {
                         writeln!(stdout)?;
                     }
-                    write!(stdout, "==> ")?;
-                    print_verbatim(locale_aware_escape_name(
-                        file.as_ref(),
-                        QuotingStyle::SHELL_ESCAPE,
-                    ))?;
-                    writeln!(stdout, " <==")?;
+                    let name = locale_aware_shell_escape(file);
+                    writeln!(stdout, "==> {name} <==")?;
                     first = false;
                 }
                 Ok(())
@@ -779,6 +773,19 @@ mod tests {
             find_nth_line_from_end(&mut input, lines_in_input_file + 1000, b'\n').unwrap(),
             0
         );
+    }
+
+    #[test]
+    fn test_find_nth_line_from_end_respects_current_position() {
+        let mut input = Cursor::new(b"header\nx\ny\n".to_vec());
+        input.seek(SeekFrom::Start(7)).unwrap();
+
+        assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 4);
+        assert_eq!(input.stream_position().unwrap(), 7);
+        assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 2);
+        assert_eq!(input.stream_position().unwrap(), 7);
+        assert_eq!(find_nth_line_from_end(&mut input, 2, b'\n').unwrap(), 0);
+        assert_eq!(input.stream_position().unwrap(), 7);
     }
 
     #[test]

@@ -116,8 +116,7 @@ pub fn fast_inc_one(val: &mut [u8], start: &mut usize, end: usize) {
 
 #[cfg(test)]
 mod tests {
-    use crate::fast_inc::fast_inc;
-    use crate::fast_inc::fast_inc_one;
+    use crate::fast_inc::{fast_inc, fast_inc_one};
 
     #[test]
     fn test_fast_inc_simple() {

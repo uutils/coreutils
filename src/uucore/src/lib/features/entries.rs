@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) Passwd cstr fnam gecos ngroups egid
+// spell-checker:ignore (vars) Passwd cstr fnam gecos ngroups egid rgid
 
 //! Get password/group file entry
 //!
@@ -35,14 +35,10 @@
 use core::ffi::{CStr, c_char, c_int};
 #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
 use libc::time_t;
-use libc::{getgrgid, getgrnam};
-use libc::{getpwnam, getpwuid, group, passwd};
-use libc::{gid_t, uid_t};
+use libc::{getgrgid, getgrnam, getpwnam, getpwuid, gid_t, group, passwd, uid_t};
 
 use std::ffi::CString;
-use std::io::Error as IOError;
-use std::io::ErrorKind;
-use std::io::Result as IOResult;
+use std::io::{Error as IOError, ErrorKind, Result as IOResult};
 use std::ptr;
 use std::sync::Mutex;
 
@@ -58,15 +54,14 @@ unsafe extern "C" {
     ) -> c_int;
 }
 
-/// The list of group IDs returned from GNU's `groups` and GNU's `id --groups`
-/// starts with the effective group ID (egid).
-/// This is a wrapper for `get_groups()` to mimic this behavior.
+/// The `groups=` list in `id`'s default output starts with the effective
+/// group ID (egid). This wrapper for `getgroups()` mimics that behavior.
+/// For `groups` and `id --groups`, see [`get_groups_real_gid_first`].
 ///
 /// If `arg_id` is `None` (default), `get_groups_gnu` moves the effective
 /// group id (egid) to the first entry in the returned Vector.
 /// If `arg_id` is `Some(x)`, `get_groups_gnu` moves the id with value `x`
-/// to the first entry in the returned Vector. This might be necessary
-/// for `id --groups --real` if `gid` and `egid` are not equal.
+/// to the first entry in the returned Vector.
 ///
 /// From: `<https://www.man7.org/linux/man-pages/man3/getgroups.3p.html>`
 /// > As implied by the definition of supplementary groups, the
@@ -77,7 +72,7 @@ unsafe extern "C" {
 /// > variations and administrative sequences cause the set of groups
 /// > appearing in the result of getgroups() to vary in order and as to
 /// > whether the effective group ID is included, even when the set of
-/// > groups is the same (in the mathematical sense of ``set''). (The
+/// > groups is the same (in the mathematical sense of "set"). (The
 /// > history of a process and its parents could affect the details of
 /// > the result.)
 #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
@@ -86,6 +81,32 @@ pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<rustix::process::RawG
         .map(|g| g.into_iter().map(rustix::fs::Gid::as_raw).collect())?;
     let egid = arg_id.unwrap_or_else(|| rustix::process::getegid().as_raw());
     Ok(sort_groups(groups, egid))
+}
+
+/// The group list for `groups` and `id --groups`: real GID first, then the
+/// effective GID if different, then supplementary groups without duplicates.
+/// The `id --real` option does not affect this list.
+#[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
+pub fn get_groups_real_gid_first() -> IOResult<Vec<rustix::process::RawGid>> {
+    Ok(sort_real_gid_first(
+        rustix::process::getgid().as_raw(),
+        rustix::process::getegid().as_raw(),
+        get_groups_gnu(None)?,
+    ))
+}
+
+#[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
+fn sort_real_gid_first(rgid: gid_t, egid: gid_t, supplementary: Vec<gid_t>) -> Vec<gid_t> {
+    let mut ordered = vec![rgid];
+    if egid != rgid {
+        ordered.push(egid);
+    }
+    for group in supplementary {
+        if !ordered.contains(&group) {
+            ordered.push(group);
+        }
+    }
+    ordered
 }
 
 #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
@@ -100,29 +121,29 @@ fn sort_groups(mut groups: Vec<gid_t>, egid: gid_t) -> Vec<gid_t> {
 
 #[derive(Clone, Debug)]
 pub struct Passwd {
-    /// AKA passwd.pw_name
+    /// AKA `passwd.pw_name`
     pub name: String,
-    /// AKA passwd.pw_uid
+    /// AKA `passwd.pw_uid`
     pub uid: uid_t,
-    /// AKA passwd.pw_gid
+    /// AKA `passwd.pw_gid`
     pub gid: gid_t,
-    /// AKA passwd.pw_gecos
+    /// AKA `passwd.pw_gecos`
     pub user_info: Option<String>,
-    /// AKA passwd.pw_shell
+    /// AKA `passwd.pw_shell`
     pub user_shell: Option<String>,
-    /// AKA passwd.pw_dir
+    /// AKA `passwd.pw_dir`
     pub user_dir: Option<String>,
-    /// AKA passwd.pw_passwd
+    /// AKA `passwd.pw_passwd`
     #[expect(clippy::struct_field_names)]
     pub user_passwd: Option<String>,
-    /// AKA passwd.pw_class
+    /// AKA `passwd.pw_class`
     #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     pub user_access_class: Option<String>,
-    /// AKA passwd.pw_change
+    /// AKA `passwd.pw_change`
     #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     #[expect(clippy::struct_field_names)]
     pub passwd_change_time: time_t,
-    /// AKA passwd.pw_expire
+    /// AKA `passwd.pw_expire`
     #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     pub expiration: time_t,
 }
@@ -133,7 +154,7 @@ pub struct Passwd {
 ///
 /// # Returns
 ///
-/// Returns None if `ptr`` is null.
+/// Returns `None` if `ptr` is null.
 unsafe fn cstr2string(ptr: *const c_char) -> Option<String> {
     if ptr.is_null() {
         None
@@ -145,7 +166,7 @@ unsafe fn cstr2string(ptr: *const c_char) -> Option<String> {
 impl Passwd {
     /// # Safety
     /// All the pointed-to strings must be valid and not change while
-    /// the function runs. That means PW_LOCK must be held.
+    /// the function runs. That means `PW_LOCK` must be held.
     unsafe fn from_raw(raw: passwd) -> Self {
         Self {
             name: unsafe { cstr2string(raw.pw_name).expect("passwd without name") },
@@ -217,16 +238,16 @@ impl Passwd {
 
 #[derive(Clone, Debug)]
 pub struct Group {
-    /// AKA group.gr_name
+    /// AKA `group.gr_name`
     pub name: String,
-    /// AKA group.gr_gid
+    /// AKA `group.gr_gid`
     pub gid: gid_t,
 }
 
 impl Group {
     /// # Safety
-    /// gr_name must be valid and not change while
-    /// the function runs. That means PW_LOCK must be held.
+    /// `gr_name` must be valid and not change while
+    /// the function runs. That means `PW_LOCK` must be held.
     unsafe fn from_raw(raw: group) -> Self {
         Self {
             name: unsafe { cstr2string(raw.gr_name).expect("group without name") },
@@ -277,33 +298,32 @@ macro_rules! f {
             }
         }
 
-        impl<'a> Locate<&'a str> for $st {
-            fn locate(k: &'a str) -> IOResult<Self> {
+        impl $st {
+            /// Look up an entry by name only, without falling back to
+            /// parsing `k` as a numeric ID like [`Locate::locate`] does.
+            pub fn locate_name(k: &str) -> IOResult<Self> {
+                let cstring = CString::new(k)?;
                 let _guard = PW_LOCK.lock();
                 // SAFETY: We're holding PW_LOCK.
                 unsafe {
-                    let cstring = CString::new(k)?;
-                    // try to get user or group with name matching the input with these tow lines:
-                    // f!(getpwnam, getpwuid, uid_t, Passwd);
-                    // f!(getgrnam, getgrgid, gid_t, Group);
                     let data = $fnam(cstring.as_ptr());
-                    if !data.is_null() {
-                        return Ok($st::from_raw(ptr::read(data.cast_const())));
-                    }
-                    if let Ok(id) = k.parse::<$t>() {
-                        let data = $fid(id);
-                        if !data.is_null() {
-                            Ok($st::from_raw(ptr::read(data.cast_const())))
-                        } else {
-                            Err(IOError::new(
-                                ErrorKind::NotFound,
-                                format!("No such id: {id}"),
-                            ))
-                        }
-                    } else {
+                    if data.is_null() {
                         Err(IOError::new(ErrorKind::NotFound, format!("Not found: {k}")))
+                    } else {
+                        Ok($st::from_raw(ptr::read(data.cast_const())))
                     }
                 }
+            }
+        }
+
+        impl<'a> Locate<&'a str> for $st {
+            /// Look up an entry by name, or by ID if no entry has that name
+            /// and `k` parses as a number.
+            fn locate(k: &'a str) -> IOResult<Self> {
+                Self::locate_name(k).or_else(|e| match k.parse::<$t>() {
+                    Ok(id) => Self::locate(id),
+                    Err(_) => Err(e),
+                })
             }
         }
     };
@@ -350,6 +370,25 @@ mod test {
         assert_eq!(sort_groups(vec![1, 2, 3], 2), vec![2, 1, 3]);
         assert_eq!(sort_groups(vec![1, 2, 3], 1), vec![1, 2, 3]);
         assert_eq!(sort_groups(vec![1, 2, 3], 0), vec![0, 1, 2, 3]);
+    }
+
+    #[test]
+    #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
+    fn test_sort_real_gid_first() {
+        // The real GID must be included even when no supplementary groups exist.
+        assert_eq!(sort_real_gid_first(0, 65534, vec![]), vec![0, 65534]);
+        assert_eq!(sort_real_gid_first(0, 65534, vec![65534]), vec![0, 65534]);
+        assert_eq!(
+            sort_real_gid_first(0, 65534, vec![3, 65534, 0, 2]),
+            vec![0, 65534, 3, 2]
+        );
+        assert_eq!(sort_real_gid_first(5, 5, vec![]), vec![5]);
+        assert_eq!(sort_real_gid_first(5, 5, vec![3, 5, 4]), vec![5, 3, 4]);
+        // Both primary and supplementary group duplicates are removed.
+        assert_eq!(
+            sort_real_gid_first(1, 7, vec![7, 3, 7, 2, 3, 1, 2]),
+            vec![1, 7, 3, 2]
+        );
     }
 
     #[test]

@@ -3,14 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::{env, path::PathBuf, process::Command, sync::OnceLock};
+use std::{path::PathBuf, process::Command, sync::OnceLock};
 
 static UUDOC_BINARY_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 fn get_uudoc_command() -> Command {
     let uudoc_binary = UUDOC_BINARY_PATH.get_or_init(|| {
-        let coreutils_binary = PathBuf::from(env!("CARGO_BIN_EXE_coreutils"));
-        coreutils_binary.parent().unwrap().join("uudoc")
+        uutests::util::find_binary("uudoc").expect("Could not find the uudoc binary")
     });
     Command::new(uudoc_binary)
 }
@@ -39,6 +38,10 @@ fn test_manpage_generation() {
     assert!(output_str.contains("\n.TH LS"), "{output_str}");
     assert!(output_str.contains('1'), "{output_str}");
     assert!(output_str.contains("\n.SH NAME\nls"), "{output_str}");
+    assert!(
+        output_str.contains(&format!("\n.SH VERSION\nv{}\n", env!("CARGO_PKG_VERSION"))),
+        "{output_str}"
+    );
 }
 
 #[test]
@@ -65,6 +68,10 @@ fn test_manpage_coreutils() {
     assert!(output_str.contains("\n.TH COREUTILS"), "{output_str}");
     assert!(output_str.contains("coreutils"), "{output_str}");
     assert!(output_str.contains("\n.SH NAME\ncoreutils"), "{output_str}");
+    assert!(
+        output_str.contains(&format!("\n.SH VERSION\nv{}\n", env!("CARGO_PKG_VERSION"))),
+        "{output_str}"
+    );
 }
 
 #[test]
@@ -173,4 +180,32 @@ fn test_markdown_header_format() {
             );
         }
     }
+}
+
+#[test]
+fn test_source_date_epoch() {
+    let output = get_uudoc_command()
+        .arg("manpage")
+        .arg("ls")
+        .env("SOURCE_DATE_EPOCH", "123456")
+        .output()
+        .expect("Failed to execute command");
+
+    assert!(
+        output.status.success(),
+        "Command failed with status: {}",
+        output.status
+    );
+    assert!(
+        output.stderr.is_empty(),
+        "stderr should be empty but got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let output_str = String::from_utf8_lossy(&output.stdout);
+    let first_line = output_str
+        .lines()
+        .find(|line| line.starts_with(".TH"))
+        .unwrap();
+    assert_eq!(first_line, ".TH LS 1 \"1970-01-02\"");
 }

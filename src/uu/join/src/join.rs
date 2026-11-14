@@ -3,29 +3,29 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) autoformat FILENUM whitespaces nocheck memmem
+// spell-checker:ignore (ToDO) autoformat FILENUM whitespaces nocheck memmem aejotv
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
 use memchr::{Memchr3, memchr_iter, memmem::Finder};
 use std::cmp::Ordering;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Split, Stdin, Write, stdin, stdout};
 use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
-use thiserror::Error;
 use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::i18n::collator::{
     AlternateHandling, CollatorOptions, locale_cmp, should_use_locale_collation, try_init_collator,
 };
 use uucore::line_ending::LineEnding;
+use uucore::numeric_str_cmp::{NumInfo, NumInfoParseSettings, numeric_str_cmp};
 use uucore::{format_usage, show_error, translate};
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum JoinError {
     #[error("{}", translate!("join-error-io", "error" => .0))]
     IOError(#[from] io::Error),
@@ -146,7 +146,11 @@ impl Separator for WhitespaceSep {
             }
             last_end = i + 1;
         }
-        field_ranges.push((last_end, haystack.len()));
+        // trailing whitespace should be dropped too, rather than ending an empty field,
+        // but a line with no fields at all still has an empty one to join on
+        if last_end < haystack.len() || field_ranges.is_empty() {
+            field_ranges.push((last_end, haystack.len()));
+        }
         field_ranges
     }
 
@@ -169,6 +173,7 @@ struct Settings {
     print_unpaired2: bool,
     print_joined: bool,
     ignore_case: bool,
+    numeric: bool,
     line_ending: LineEnding,
     separator: SepSetting,
     autoformat: bool,
@@ -187,6 +192,7 @@ impl Default for Settings {
             print_unpaired2: false,
             print_joined: true,
             ignore_case: false,
+            numeric: false,
             line_ending: LineEnding::Newline,
             separator: SepSetting::Whitespaces,
             autoformat: false,
@@ -280,9 +286,9 @@ impl Ord for CaseInsensitiveSlice<'_> {
         if let Some((s, o)) =
             std::iter::zip(self.v.iter(), other.v.iter()).find(|(s, o)| !s.eq_ignore_ascii_case(o))
         {
-            // first characters that differ, return the case-insensitive comparison
-            let s = s.to_ascii_lowercase();
-            let o = o.to_ascii_lowercase();
+            // first characters that differ, compared folded to upper case like `sort -f`
+            let s = s.to_ascii_uppercase();
+            let o = o.to_ascii_uppercase();
             s.cmp(&o)
         } else {
             // one of the strings is a substring or equal of the other
@@ -307,39 +313,46 @@ impl PartialEq for CaseInsensitiveSlice<'_> {
 struct Input<Sep: Separator> {
     separator: Sep,
     ignore_case: bool,
+    numeric: Option<NumInfoParseSettings>,
     check_order: CheckOrder,
     use_locale: bool,
 }
 
 impl<Sep: Separator> Input<Sep> {
-    fn new(separator: Sep, ignore_case: bool, check_order: CheckOrder, use_locale: bool) -> Self {
+    fn new(
+        separator: Sep,
+        ignore_case: bool,
+        numeric: Option<NumInfoParseSettings>,
+        check_order: CheckOrder,
+        use_locale: bool,
+    ) -> Self {
         Self {
             separator,
             ignore_case,
+            numeric,
             check_order,
             use_locale,
         }
     }
 
+    /// Compare two join fields. Like `sort -k`, a field missing from a line
+    /// that is too short compares as an empty field.
     fn compare(&self, field1: Option<&[u8]>, field2: Option<&[u8]>) -> Ordering {
-        if let (Some(field1), Some(field2)) = (field1, field2) {
-            if self.ignore_case {
-                let field1 = CaseInsensitiveSlice { v: field1 };
-                let field2 = CaseInsensitiveSlice { v: field2 };
-                field1.cmp(&field2)
-            } else if self.use_locale {
-                locale_cmp(field1, field2)
-            } else {
-                field1.cmp(field2)
-            }
+        let field1 = field1.unwrap_or_default();
+        let field2 = field2.unwrap_or_default();
+
+        if let Some(parse_settings) = &self.numeric {
+            let (info1, range1) = NumInfo::parse(field1, parse_settings);
+            let (info2, range2) = NumInfo::parse(field2, parse_settings);
+            numeric_str_cmp((&field1[range1], &info1), (&field2[range2], &info2))
+        } else if self.ignore_case {
+            let field1 = CaseInsensitiveSlice { v: field1 };
+            let field2 = CaseInsensitiveSlice { v: field2 };
+            field1.cmp(&field2)
+        } else if self.use_locale {
+            locale_cmp(field1, field2)
         } else {
-            match field1 {
-                Some(_) => Ordering::Greater,
-                None => match field2 {
-                    Some(_) => Ordering::Less,
-                    None => Ordering::Equal,
-                },
-            }
+            field1.cmp(field2)
         }
     }
 }
@@ -512,9 +525,10 @@ impl<'a> State<'a> {
         other: &State,
         repr: &Repr<'a, Sep>,
     ) -> io::Result<()> {
-        let key = self.get_current_key();
-
         for line1 in &self.seq {
+            // With -i the keys of a group can differ in case, so print
+            // each line's own key.
+            let key = line1.get_field(self.key);
             for line2 in &other.seq {
                 if repr.uses_format() {
                     repr.write_format(writer, |spec| match *spec {
@@ -786,6 +800,7 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
     settings.print_unpaired2 = print_unpaired2;
 
     settings.ignore_case = matches.get_flag("i");
+    settings.numeric = matches.get_flag("n");
     settings.key1 = get_field_number(keys, key1)?;
     settings.key2 = get_field_number(keys, key2)?;
     if let Some(value_os) = matches.get_one::<OsString>("t") {
@@ -826,7 +841,15 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
         }
     }
 
-    if let Some(empty) = matches.get_one::<String>("e") {
+    if let Some(mut empties) = matches.get_many::<String>("e") {
+        // Like GNU join, -e may be repeated, but only with the same string.
+        let empty = empties.next().unwrap();
+        if empties.any(|e| e != empty) {
+            return Err(USimpleError::new(
+                1,
+                translate!("join-error-conflicting-empty-field"),
+            ));
+        }
         settings.empty = empty.as_bytes().to_vec();
     }
 
@@ -847,13 +870,90 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
     Ok(settings)
 }
 
+/// Whether `arg` is a GNU `-o` field token (`0`, `N.M`, `auto`, or a
+/// comma/blank-separated list of those), so consecutive operands after `-o`
+/// can be absorbed like GNU join.
+fn looks_like_o_field(arg: &OsStr) -> bool {
+    let Some(s) = arg.to_str() else {
+        return false;
+    };
+    if s.is_empty() {
+        return false;
+    }
+    s.split([' ', ',', '\t'])
+        .filter(|part| !part.is_empty())
+        .all(|part| part == "auto" || Spec::parse(part).is_ok())
+}
+
+/// Count the file operands on the command line (program name excluded), so
+/// that absorbing `-o` fields never steals FILE1 or FILE2.
+fn count_operands(args: &[OsString]) -> usize {
+    // Short options taking a value as the next argument when not attached.
+    const SHORT_WITH_VALUE: &[u8] = b"aejotv12";
+    let mut count = 0;
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        let bytes = arg.as_encoded_bytes();
+        if bytes == b"--" {
+            count += iter.len();
+            break;
+        }
+        match bytes {
+            [b'-', b'-', ..] | [b'-'] | [] => count += usize::from(!bytes.starts_with(b"--")),
+            [b'-', flags @ ..] => {
+                // In a cluster like `-it`, the first value-taking option eats
+                // the rest of the argument, or the next one if nothing is left.
+                if let Some(pos) = flags.iter().position(|f| SHORT_WITH_VALUE.contains(f))
+                    && pos + 1 == flags.len()
+                {
+                    iter.next();
+                }
+            }
+            _ => count += 1,
+        }
+    }
+    count
+}
+
+/// Merge separate `-o` field operands into one value so clap does not treat
+/// them as file operands (`join -o 1.1 1.2 2.2 f1 f2`). As many are taken as
+/// can be while still leaving two file operands.
+fn coalesce_o_fields(args: Vec<OsString>) -> Vec<OsString> {
+    let mut spare = count_operands(args.get(1..).unwrap_or_default()).saturating_sub(2);
+    let mut out = Vec::with_capacity(args.len());
+    let mut iter = args.into_iter().peekable();
+
+    while let Some(arg) = iter.next() {
+        if arg != "-o" {
+            out.push(arg);
+            continue;
+        }
+
+        out.push(arg);
+
+        // if there is at least one o-field, consume and join them
+        if let Some(mut joined) = iter.next_if(|f| looks_like_o_field(f)) {
+            while spare > 0
+                && let Some(field) = iter.next_if(|f| looks_like_o_field(f))
+            {
+                spare -= 1;
+                joined.push(" ");
+                joined.push(field);
+            }
+            out.push(joined);
+        }
+    }
+    out
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // The command line is kept for the caret in `-o` diagnostics, which needs
-    // the list as typed.
+    // the list as typed. Coalesce separate `-o` field operands first so clap
+    // does not eat them as FILE1/FILE2.
     let (matches, diag_args) = uucore::clap_localization::handle_clap_result_with_diagnostics(
         uu_app(),
-        args.collect(),
+        coalesce_o_fields(args.collect()),
         1,
     )?;
 
@@ -863,8 +963,30 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let settings = parse_settings(&matches, diag_args.as_deref())?;
 
-    let file1 = matches.get_one::<OsString>("file1").unwrap();
-    let file2 = matches.get_one::<OsString>("file2").unwrap();
+    let (file1, file2) = match (
+        matches.get_one::<OsString>("file1"),
+        matches.get_one::<OsString>("file2"),
+    ) {
+        (Some(file1), Some(file2)) => (file1, file2),
+        (Some(file1), None) => {
+            return Err(UUsageError::new(
+                1,
+                translate!("join-error-missing-operand-after", "file" => file1.quote()),
+            ));
+        }
+        _ => {
+            return Err(UUsageError::new(
+                1,
+                translate!("join-error-missing-operand"),
+            ));
+        }
+    };
+    if let Some(extra) = matches.get_one::<OsString>("extra") {
+        return Err(UUsageError::new(
+            1,
+            translate!("join-error-extra-operand", "operand" => extra.quote()),
+        ));
+    }
 
     if file1 == "-" && file2 == "-" {
         return Err(USimpleError::new(
@@ -901,7 +1023,6 @@ pub fn uu_app() -> Command {
                 .short('a')
                 .action(ArgAction::Append)
                 .num_args(1)
-                .value_parser(["1", "2"])
                 .value_name("FILENUM")
                 .help(translate!("join-help-a")),
         )
@@ -910,13 +1031,14 @@ pub fn uu_app() -> Command {
                 .short('v')
                 .action(ArgAction::Append)
                 .num_args(1)
-                .value_parser(["1", "2"])
                 .value_name("FILENUM")
                 .help(translate!("join-help-v")),
         )
         .arg(
             Arg::new("e")
                 .short('e')
+                .action(ArgAction::Append)
+                .num_args(1)
                 .value_name("EMPTY")
                 .help(translate!("join-help-e")),
         )
@@ -925,6 +1047,13 @@ pub fn uu_app() -> Command {
                 .short('i')
                 .long("ignore-case")
                 .help(translate!("join-help-i"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("n")
+                .short('n')
+                .long("numeric-sort")
+                .help(translate!("join-help-n"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -968,13 +1097,15 @@ pub fn uu_app() -> Command {
             Arg::new("check-order")
                 .long("check-order")
                 .help(translate!("join-help-check-order"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with("nocheck-order"),
         )
         .arg(
             Arg::new("nocheck-order")
                 .long("nocheck-order")
                 .help(translate!("join-help-nocheck-order"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with("check-order"),
         )
         .arg(
             Arg::new("header")
@@ -991,7 +1122,6 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new("file1")
-                .required(true)
                 .value_name("FILE1")
                 .value_hint(clap::ValueHint::FilePath)
                 .value_parser(clap::value_parser!(OsString))
@@ -999,9 +1129,14 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new("file2")
-                .required(true)
                 .value_name("FILE2")
                 .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString))
+                .hide(true),
+        )
+        .arg(
+            Arg::new("extra")
+                .num_args(0..)
                 .value_parser(clap::value_parser!(OsString))
                 .hide(true),
         )
@@ -1036,6 +1171,7 @@ fn exec<Sep: Separator>(
     let input = Input::new(
         sep.clone(),
         settings.ignore_case,
+        settings.numeric.then(NumInfoParseSettings::from_locale),
         settings.check_order,
         should_use_locale_collation(),
     );

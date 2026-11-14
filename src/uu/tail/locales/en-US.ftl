@@ -6,10 +6,10 @@ tail-about = Print the last 10 lines of each FILE to standard output.
 tail-usage = tail [OPTION]... [FILE]...
 
 # Help messages
-tail-help-bytes = Number of bytes to print
+tail-help-bytes = Print the last NUM bytes; use -c +NUM to print from byte NUM onward (counting from 1)
 tail-help-debug = indicate which --follow implementation is used
 tail-help-follow = Print the file as it grows
-tail-help-lines = Number of lines to print
+tail-help-lines = Print the last NUM lines; use -n +NUM to print from line NUM onward (counting from 1)
 tail-help-pid = With -f, terminate after process ID, PID dies
 tail-help-quiet = Never output headers giving file names
 tail-help-sleep-interval = Number of seconds to sleep between polling the file when running with -f

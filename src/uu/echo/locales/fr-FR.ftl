@@ -4,7 +4,7 @@ echo-after-help = Affiche la ou les CHAÎNE(s) sur la sortie standard.
 
   Si -e est activé, les séquences suivantes sont reconnues :
 
-    - \ barre oblique inverse
+    - \\ barre oblique inverse
     - \a alerte (BEL)
     - \b retour arrière
     - \c ne produit aucune sortie supplémentaire

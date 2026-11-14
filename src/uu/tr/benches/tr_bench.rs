@@ -42,7 +42,7 @@ mod benches {
     const SIZE_MB: usize = 16;
 
     /// ASCII lowercase->uppercase range translation.
-    /// Exercises the AVX2 ASCII-range fast path on x86_64 hosts that
+    /// Exercises the AVX2 ASCII-range fast path on `x86_64` hosts that
     /// support it, and the scalar range fallback on other targets.
     #[divan::bench]
     fn tr_ascii_range_lower_to_upper(bencher: Bencher) {
@@ -72,6 +72,13 @@ mod benches {
     fn tr_delete_ascii_range(bencher: Bencher) {
         let data = text_data::generate_by_size(SIZE_MB, 80);
         bench_tr_with_stdin(bencher, &data, &["-d", "a-z"]);
+    }
+
+    /// Delete a single character (the newlines).
+    #[divan::bench]
+    fn tr_delete_single_char(bencher: Bencher) {
+        let data = text_data::generate_by_size(SIZE_MB, 80);
+        bench_tr_with_stdin(bencher, &data, &["-d", "\\n"]);
     }
 }
 

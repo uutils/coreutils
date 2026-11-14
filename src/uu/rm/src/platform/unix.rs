@@ -17,7 +17,7 @@ use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
 use uucore::prompt_yes;
-use uucore::safe_traversal::{DirFd, SymlinkBehavior};
+use uucore::safe_traversal::{DirFd, FileStat, SymlinkBehavior};
 use uucore::show_error;
 use uucore::translate;
 
@@ -38,7 +38,7 @@ fn mode_writable(mode: libc::mode_t) -> bool {
 }
 
 /// File prompt that reuses existing stat data to avoid extra statx calls
-fn prompt_file_with_stat(path: &Path, stat: &libc::stat, options: &Options) -> bool {
+fn prompt_file_with_stat(path: &Path, stat: &FileStat, options: &Options) -> bool {
     if options.interactive == InteractiveMode::Never {
         return true;
     }
@@ -438,7 +438,7 @@ fn path_push(buf: &mut Vec<u8>, name: &OsStr) {
 }
 
 /// Whether `name` is an empty directory in `dir_fd`, asked through the
-/// descriptor rather than the path: past PATH_MAX a path-based check just
+/// descriptor rather than the path: past `PATH_MAX` a path-based check just
 /// fails, and a failure counts as non-empty, so rm would prompt before
 /// descending into an empty directory and leave it behind when that prompt is
 /// declined. An unreadable directory still counts as non-empty.

@@ -8,13 +8,11 @@
 mod platform;
 
 use clap::{Arg, ArgAction, Command};
+use jiff::Timestamp;
 use jiff::tz::TimeZone;
-use jiff::{Timestamp, ToSpan};
 use std::io::{self, Write, stdout};
-use thiserror::Error;
 use uucore::error::{UError, UResult};
 use uucore::format_usage;
-use uucore::libc::time_t;
 use uucore::translate;
 use uucore::uptime::{
     OutputFormat, format_nusers, get_formatted_loadavg, get_formatted_nusers, get_formatted_time,
@@ -27,7 +25,7 @@ pub mod options {
     pub static PRETTY: &str = "pretty";
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum UptimeError {
     // io::Error wrapper
     #[error("{}", translate!("uptime-error-io", "error" => format!("{}", .0)))]
@@ -90,9 +88,9 @@ pub fn uu_app() -> Command {
 }
 
 fn uptime_since() -> UResult<()> {
-    let uptime = platform::system_uptime_seconds()?;
+    let uptime = platform::system_uptime()?;
 
-    let since_date = (Timestamp::now() - uptime.seconds()).to_zoned(TimeZone::system());
+    let since_date = (Timestamp::now() - uptime).to_zoned(TimeZone::system());
     writeln!(stdout(), "{}", since_date.strftime("%Y-%m-%d %H:%M:%S"))?;
 
     Ok(())
@@ -141,7 +139,7 @@ fn print_time() -> UResult<()> {
     Ok(())
 }
 
-fn print_uptime(boot_time: Option<time_t>) -> UResult<()> {
+fn print_uptime(boot_time: Option<i64>) -> UResult<()> {
     let localized_text = translate!("uptime-output-up-text");
     let uptime_message = get_formatted_uptime(boot_time, OutputFormat::HumanReadable)?;
 

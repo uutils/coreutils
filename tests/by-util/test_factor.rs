@@ -59,6 +59,23 @@ fn test_repeated_exponents() {
 }
 
 #[test]
+fn test_argument_whitespace() {
+    new_ucmd!()
+        .args(&["  30", "  +7"])
+        .succeeds()
+        .stdout_only("30: 2 3 5\n7: 7\n");
+    new_ucmd!()
+        .args(&["30 ", "  x"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is(
+            "factor: '30 ' is not a valid positive integer\n\
+             factor: '  x' is not a valid positive integer\n",
+        );
+    new_ucmd!().arg("\t30").fails_with_code(1).no_stdout();
+}
+
+#[test]
 fn test_trim_null_chars() {
     new_ucmd!()
         .pipe_in("42\0")
@@ -67,10 +84,10 @@ fn test_trim_null_chars() {
         .no_stderr();
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(feature = "sort")]
 #[cfg(not(target_os = "android"))]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_parallel() {
     use hex_literal::hex;
     use sha1::{Digest, Sha1};
@@ -1676,7 +1693,7 @@ fn succeeds_with_numbers_larger_than_u256() {
 }
 
 // A 301-bit product of ten primes just above 2^30. This used to come back as
-// "Factorization incomplete. Remainders exists." because the Pollard's rho
+// "Factorization incomplete. Remainders exist." because the Pollard's rho
 // budget underneath was shared by the whole factorization rather than by each
 // cofactor, so everything past the fourth split was given up on.
 #[test]

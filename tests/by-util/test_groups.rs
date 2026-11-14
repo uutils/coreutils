@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//spell-checker:ignore coreutil
+// spell-checker:ignore coreutil
 
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
@@ -29,6 +29,14 @@ fn test_groups() {
         .stdout_is(exp_result.stdout_str())
         .stderr_is(exp_result.stderr_str())
         .code_is(exp_result.code());
+}
+
+#[test]
+#[cfg(all(unix, feature = "id"))]
+fn test_groups_matches_id_gn() {
+    let ts = TestScenario::new(util_name!());
+    let id_output = ts.ccmd("id").arg("-Gn").succeeds().stdout_move_str();
+    ts.ucmd().succeeds().stdout_is(id_output).no_stderr();
 }
 
 #[test]
@@ -63,4 +71,15 @@ fn test_groups_username_multiple() {
         .stdout_is(exp_result.stdout_str())
         .stderr_is(exp_result.stderr_str())
         .code_is(exp_result.code());
+}
+
+#[test]
+#[cfg(unix)]
+fn test_groups_numeric_operand_is_not_a_uid() {
+    // No account is named "+0", so it must not be looked up as uid 0.
+    new_ucmd!()
+        .arg("+0")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("'+0': no such user");
 }

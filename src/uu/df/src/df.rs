@@ -27,7 +27,6 @@ use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 use std::ffi::OsString;
 use std::io::{BufWriter, Write, stdout};
 use std::path::Path;
-use thiserror::Error;
 
 use crate::blocks::{BlockSize, read_block_size};
 use crate::columns::{Column, ColumnError};
@@ -133,7 +132,7 @@ impl Options {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum OptionsError {
     // TODO This needs to vary based on whether `--block-size`
     // or `-B` were provided.
@@ -170,6 +169,8 @@ enum OptionsError {
 /// * `error` - What the size parser rejected the value with.
 /// * `matches` - The parsed command line, for the value as it was typed.
 /// * `diag_args` - The arguments as typed, or `None` when they were not kept.
+#[cold]
+#[inline(never)]
 fn block_size_error(
     error: &ParseSizeError,
     matches: &ArgMatches,
@@ -418,6 +419,13 @@ where
                 ));
             }
             #[cfg(not(windows))]
+            Err(FsError::StatFailed { path, error }) => {
+                show!(USimpleError::new(
+                    1,
+                    format!("{}: {error}", path.maybe_quote())
+                ));
+            }
+            #[cfg(not(windows))]
             Err(FsError::OverMounted) => {
                 show!(USimpleError::new(
                     1,
@@ -437,7 +445,7 @@ where
     Ok(result)
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum DfError {
     /// A problem while parsing command-line options.
     #[error("{}", .0)]

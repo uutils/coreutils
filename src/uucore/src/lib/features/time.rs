@@ -25,14 +25,16 @@ fn format_zoned<W: Write>(out: &mut W, zoned: Zoned, fmt: &str) -> UResult<()> {
         .map_err(|x| USimpleError::new(1, x.to_string()))
 }
 
-/// Convert a SystemTime` to a number of seconds since UNIX_EPOCH
+/// Convert a [`SystemTime`] to a number of seconds since [`UNIX_EPOCH`]
+#[must_use]
+#[inline]
 pub fn system_time_to_sec(time: SystemTime) -> (i64, u32) {
-    if time > UNIX_EPOCH {
-        let d = time.duration_since(UNIX_EPOCH).unwrap();
-        (d.as_secs() as i64, d.subsec_nanos())
-    } else {
-        let d = UNIX_EPOCH.duration_since(time).unwrap();
-        (-(d.as_secs() as i64), d.subsec_nanos())
+    match time.duration_since(UNIX_EPOCH) {
+        Ok(d) => (d.as_secs() as i64, d.subsec_nanos()),
+        Err(e) => {
+            let d = e.duration();
+            (-(d.as_secs() as i64), d.subsec_nanos())
+        }
     }
 }
 

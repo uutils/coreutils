@@ -23,15 +23,15 @@ use std::{
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
-use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
-use uucore::{display::Quotable, translate};
+use uucore::{display::Quotable, quoting_style::locale_aware_shell_escape, translate};
 
 use uucore::{
     error::{FromIo, UError, UResult},
     format_usage,
     hardware::{HardwareFeature, HasHardwareFeatures as _, SimdPolicy},
+    i18n::charmap::{Encoding, locale_encoding},
     parser::shortcut_value_parser::ShortcutValueParser,
     quoting_style::{self, QuotingStyle},
     show,
@@ -49,6 +49,7 @@ const MINIMUM_WIDTH: usize = 7;
 struct Settings<'a> {
     show_bytes: bool,
     show_chars: bool,
+    count_chars_as_bytes: bool,
     show_lines: bool,
     show_words: bool,
     show_max_line_length: bool,
@@ -63,6 +64,7 @@ impl Default for Settings<'_> {
         Self {
             show_bytes: true,
             show_chars: false,
+            count_chars_as_bytes: false,
             show_lines: true,
             show_words: true,
             show_max_line_length: false,
@@ -84,9 +86,11 @@ impl<'a> Settings<'a> {
             .map(Into::into)
             .unwrap_or_default();
 
+        let show_chars = matches.get_flag(options::CHAR);
         let settings = Self {
             show_bytes: matches.get_flag(options::BYTES),
-            show_chars: matches.get_flag(options::CHAR),
+            show_chars,
+            count_chars_as_bytes: show_chars && locale_encoding() == Encoding::SingleByte,
             show_lines: matches.get_flag(options::LINES),
             show_words: matches.get_flag(options::WORDS),
             show_max_line_length: matches.get_flag(options::MAX_LINE_LENGTH),
@@ -271,7 +275,7 @@ impl<'a> Input<'a> {
     /// Converts input into the form that appears in errors.
     fn path_display(&self) -> String {
         match self {
-            Self::Path(path) => escape_name_wrapper(path.as_os_str()),
+            Self::Path(path) => locale_aware_shell_escape(path.as_os_str()),
             Self::Stdin(_) => translate!("wc-standard-input"),
         }
     }
@@ -343,7 +347,7 @@ impl TotalWhen {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum WcError {
     #[error("{}", translate!("wc-error-files-disabled", "extra" => extra.quote()))]
     FilesDisabled { extra: Cow<'static, OsStr> },
@@ -361,7 +365,7 @@ impl WcError {
             Some((input, idx)) => {
                 let path = match input {
                     Input::Stdin(_) => STDIN_REPR.into(),
-                    Input::Path(path) => escape_name_wrapper(path.as_os_str()).into(),
+                    Input::Path(path) => locale_aware_shell_escape(path.as_os_str()).into(),
                 };
                 Self::ZeroLengthFileNameCtx { path, idx }
             }
@@ -497,9 +501,28 @@ fn word_count_from_reader<T: WordCountable>(
         (false, false, true, false, false) => {
             count_bytes_chars_and_lines_fast::<_, false, false, true>(&mut reader)
         }
+        // show_chars (single-byte locale)
+        (_, true, false, false, false) if settings.count_chars_as_bytes => {
+            let (bytes, error) = count_bytes_fast(&mut reader);
+            (
+                WordCount {
+                    bytes,
+                    chars: bytes,
+                    ..WordCount::default()
+                },
+                error,
+            )
+        }
         // show_chars
         (false, true, false, false, false) => {
             count_bytes_chars_and_lines_fast::<_, false, true, false>(&mut reader)
+        }
+        // show_chars, show_lines (single-byte locale)
+        (_, true, true, false, false) if settings.count_chars_as_bytes => {
+            let (mut count, error) =
+                count_bytes_chars_and_lines_fast::<_, true, false, true>(&mut reader);
+            count.chars = count.bytes;
+            (count, error)
         }
         // show_chars, show_lines
         (false, true, true, false, false) => {
@@ -519,51 +542,87 @@ fn word_count_from_reader<T: WordCountable>(
         }
         // show_words
         (_, false, false, false, true) => {
-            word_count_from_reader_specialized::<_, false, false, false, true>(reader)
+            word_count_from_reader_specialized::<_, false, false, false, true>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_max_line_length
         (_, false, false, true, false) => {
-            word_count_from_reader_specialized::<_, false, false, true, false>(reader)
+            word_count_from_reader_specialized::<_, false, false, true, false>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_max_line_length, show_words
         (_, false, false, true, true) => {
-            word_count_from_reader_specialized::<_, false, false, true, true>(reader)
+            word_count_from_reader_specialized::<_, false, false, true, true>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_lines, show_words
         (_, false, true, false, true) => {
-            word_count_from_reader_specialized::<_, false, true, false, true>(reader)
+            word_count_from_reader_specialized::<_, false, true, false, true>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_lines, show_max_line_length
         (_, false, true, true, false) => {
-            word_count_from_reader_specialized::<_, false, true, true, false>(reader)
+            word_count_from_reader_specialized::<_, false, true, true, false>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_lines, show_max_line_length, show_words
         (_, false, true, true, true) => {
-            word_count_from_reader_specialized::<_, false, true, true, true>(reader)
+            word_count_from_reader_specialized::<_, false, true, true, true>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_chars, show_words
         (_, true, false, false, true) => {
-            word_count_from_reader_specialized::<_, true, false, false, true>(reader)
+            word_count_from_reader_specialized::<_, true, false, false, true>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_chars, show_max_line_length
         (_, true, false, true, false) => {
-            word_count_from_reader_specialized::<_, true, false, true, false>(reader)
+            word_count_from_reader_specialized::<_, true, false, true, false>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_chars, show_max_line_length, show_words
         (_, true, false, true, true) => {
-            word_count_from_reader_specialized::<_, true, false, true, true>(reader)
+            word_count_from_reader_specialized::<_, true, false, true, true>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_chars, show_lines, show_words
         (_, true, true, false, true) => {
-            word_count_from_reader_specialized::<_, true, true, false, true>(reader)
+            word_count_from_reader_specialized::<_, true, true, false, true>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_chars, show_lines, show_max_line_length
         (_, true, true, true, false) => {
-            word_count_from_reader_specialized::<_, true, true, true, false>(reader)
+            word_count_from_reader_specialized::<_, true, true, true, false>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
         // show_chars, show_lines, show_max_line_length, show_words
         (_, true, true, true, true) => {
-            word_count_from_reader_specialized::<_, true, true, true, true>(reader)
+            word_count_from_reader_specialized::<_, true, true, true, true>(
+                reader,
+                settings.count_chars_as_bytes,
+            )
         }
     }
 }
@@ -579,6 +638,7 @@ fn process_chunk<
     current_len: &mut usize,
     in_word: &mut bool,
     is_posixly_correct: bool,
+    count_chars_as_bytes: bool,
 ) {
     for ch in text.chars() {
         if SHOW_WORDS {
@@ -614,9 +674,12 @@ fn process_chunk<
         if SHOW_LINES && ch == '\n' {
             total.lines += 1;
         }
-        if SHOW_CHARS {
+        if SHOW_CHARS && !count_chars_as_bytes {
             total.chars += 1;
         }
+    }
+    if SHOW_CHARS && count_chars_as_bytes {
+        total.chars += text.len();
     }
     total.bytes += text.len();
 
@@ -627,10 +690,14 @@ fn handle_error(
     error: BufReadDecoderError<'_>,
     total: &mut WordCount,
     in_word: &mut bool,
+    count_chars_as_bytes: bool,
 ) -> Option<io::Error> {
     match error {
         BufReadDecoderError::InvalidByteSequence(bytes) => {
             total.bytes += bytes.len();
+            if count_chars_as_bytes {
+                total.chars += bytes.len();
+            }
             if !(*in_word) {
                 *in_word = true;
                 total.words += 1;
@@ -649,6 +716,7 @@ fn word_count_from_reader_specialized<
     const SHOW_WORDS: bool,
 >(
     reader: T,
+    count_chars_as_bytes: bool,
 ) -> (WordCount, Option<io::Error>) {
     let mut total = WordCount::default();
     let mut reader = BufReadDecoder::new(reader.buffered());
@@ -664,10 +732,11 @@ fn word_count_from_reader_specialized<
                     &mut current_len,
                     &mut in_word,
                     is_posixly_correct,
+                    count_chars_as_bytes,
                 );
             }
             Err(e) => {
-                if let Some(e) = handle_error(e, &mut total, &mut in_word) {
+                if let Some(e) = handle_error(e, &mut total, &mut in_word, count_chars_as_bytes) {
                     return (total, Some(e));
                 }
             }
@@ -779,7 +848,7 @@ fn files0_iter_file<'a>(path: &Path) -> UResult<impl Iterator<Item = InputIterIt
             translate!("wc-error-cannot-open-for-reading",
                 "path" => quoting_style::locale_aware_escape_name(
                     path.as_os_str(),
-                    QuotingStyle::SHELL_ESCAPE_QUOTE,
+                    QuotingStyle::SHELL_ESCAPE_ALWAYS,
                 )
                 .into_string()
                 .expect("All escaped names with the escaping option return valid strings.")
@@ -814,7 +883,7 @@ fn files0_iter<'a>(
                     }
                 }
                 Err(e) => Err(e.map_err_context(
-                    || translate!("wc-error-read-error", "path" => escape_name_wrapper(&err_path)),
+                    || translate!("wc-error-read-error", "path" => locale_aware_shell_escape(&err_path)),
                 ) as Box<dyn UError>),
             }),
     );
@@ -828,28 +897,24 @@ fn files0_iter<'a>(
     })
 }
 
-fn escape_name_wrapper(name: &OsStr) -> String {
-    quoting_style::locale_aware_escape_name(name, QuotingStyle::SHELL_ESCAPE)
-        .into_string()
-        .expect("All escaped names with the escaping option return valid strings.")
-}
-
 fn hardware_feature_label(feature: HardwareFeature) -> &'static str {
     match feature {
         HardwareFeature::Avx512 => "AVX512F",
         HardwareFeature::Avx2 => "AVX2",
-        HardwareFeature::PclMul => "PCLMUL",
-        HardwareFeature::Vmull => "VMULL",
+        HardwareFeature::Pclmulqdq => "PCLMUL",
+        HardwareFeature::Pmull => "VMULL",
         HardwareFeature::Sse2 => "SSE2",
         HardwareFeature::Asimd => "ASIMD",
     }
 }
 
 fn is_simd_runtime_feature(feature: HardwareFeature) -> bool {
-    matches!(
-        feature,
-        HardwareFeature::Avx2 | HardwareFeature::Sse2 | HardwareFeature::Asimd
-    )
+    match feature {
+        HardwareFeature::Avx2 | HardwareFeature::Sse2 => true,
+        // bytecount v0.6.9 compiles its NEON path only on little-endian targets.
+        HardwareFeature::Asimd => cfg!(target_endian = "little"),
+        _ => false,
+    }
 }
 
 fn is_simd_debug_feature(feature: HardwareFeature) -> bool {

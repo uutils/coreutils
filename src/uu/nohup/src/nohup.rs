@@ -5,13 +5,15 @@
 
 // spell-checker:ignore (ToDO) SIGHUP cproc vprocmgr homeout
 
+#![cfg(any(unix, windows))]
+
 use clap::{Arg, ArgAction, Command};
 use std::env;
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{Error, ErrorKind};
 use std::process;
 use std::sync::LazyLock;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, set_exit_code, strip_errno};
 use uucore::translate;
@@ -35,7 +37,7 @@ mod options {
     pub const CMD: &str = "cmd";
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum NohupError {
     #[error("{}", translate!("nohup-error-open-failed", "path" => NOHUP_OUT.quote(), "err" => _1))]
     OpenFailed(i32, #[source] Error),
@@ -71,10 +73,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     platform::prepare()?;
 
     #[allow(clippy::unwrap_used, reason = "set as required by clap")]
-    let mut cmd_iter = matches.get_many::<String>(options::CMD).unwrap();
+    let mut cmd_iter = matches.get_many::<OsString>(options::CMD).unwrap();
     #[allow(clippy::unwrap_used, reason = "set as required by clap")]
     let cmd = cmd_iter.next().unwrap();
-    let args: Vec<&String> = cmd_iter.collect();
+    let args: Vec<&OsString> = cmd_iter.collect();
     let mut command = process::Command::new(cmd);
     command.args(args);
 
@@ -106,7 +108,8 @@ pub fn uu_app() -> Command {
                 .hide(true)
                 .required(true)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::CommandName),
+                .value_hint(clap::ValueHint::CommandName)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .trailing_var_arg(true)
         .infer_long_args(true)

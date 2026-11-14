@@ -134,16 +134,25 @@ fn test_chown_only_owner_colon() {
     let user_name = String::from(result.stdout_str().trim());
     assert!(!user_name.is_empty());
 
+    let result = scene.cmd("id").arg("-gn").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
+        return;
+    }
+    let login_group_name = String::from(result.stdout_str().trim());
+    let expected = format!("{user_name}:{login_group_name}");
+
     let file1 = "test_chown_file1";
     at.touch(file1);
 
+    // "username:" sets the owner and the owner's login group; the
+    // ownership is "retained" only if the group already matches.
     scene
         .ucmd()
         .arg(format!("{user_name}:"))
         .arg("--verbose")
         .arg(file1)
         .succeeds()
-        .stdout_contains("retained as")
+        .stdout_contains(&expected)
         .no_stderr();
 
     scene
@@ -152,7 +161,7 @@ fn test_chown_only_owner_colon() {
         .arg("--verbose")
         .arg(file1)
         .succeeds()
-        .stdout_contains("retained as")
+        .stdout_contains(&expected)
         .stderr_contains("warning: '.' should be ':'");
 
     scene
@@ -162,6 +171,63 @@ fn test_chown_only_owner_colon() {
         .arg(file1)
         .fails()
         .stderr_contains("failed to change");
+}
+
+/// Test that `chown USER:` sets the group to USER's login group.
+#[test]
+#[cfg(all(unix, not(target_os = "openbsd")))]
+fn test_chown_login_group() {
+    use chown::entries::usr2gid;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let file1 = "test_chown_login_group";
+    at.touch(file1);
+
+    let Ok(root_gid) = usr2gid("root") else {
+        print!("Test skipped; no root user");
+        return;
+    };
+    let other_gid = root_gid.wrapping_add(1).to_string();
+
+    // Move the file's group out of root's login group. Changing the
+    // ownership to root requires root privileges.
+    let Ok(result) = run_ucmd_as_root(&ts, &[&format!("0:{other_gid}"), file1]) else {
+        print!("Test skipped; requires root user");
+        return;
+    };
+    result.success().no_output();
+
+    // "root:" must set the group back to root's login group.
+    let Ok(result) = run_ucmd_as_root(&ts, &["root:", file1]) else {
+        print!("Test skipped; requires root user");
+        return;
+    };
+    result.success().no_output();
+
+    assert_eq!(at.metadata(file1).gid(), root_gid);
+}
+
+/// Test that an owner whose login group cannot be resolved is an invalid spec.
+#[test]
+fn test_chown_invalid_spec() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .arg("auserthatdoesntexist:")
+        .arg("f")
+        .fails()
+        .stderr_contains("chown: invalid spec: 'auserthatdoesntexist:'");
+
+    scene
+        .ucmd()
+        .arg("12345:")
+        .arg("f")
+        .fails()
+        .stderr_contains("chown: invalid spec: '12345:'");
 }
 
 #[test]
@@ -714,10 +780,10 @@ fn test_chown_recursive() {
 
     at.mkdir_all("a/b/c");
     at.mkdir("z");
-    at.touch(at.plus_as_string("a/a"));
-    at.touch(at.plus_as_string("a/b/b"));
-    at.touch(at.plus_as_string("a/b/c/c"));
-    at.touch(at.plus_as_string("z/y"));
+    at.touch(at.plus("a/a"));
+    at.touch(at.plus("a/b/b"));
+    at.touch(at.plus("a/b/c/c"));
+    at.touch(at.plus("z/y"));
 
     scene
         .ucmd()
@@ -792,9 +858,39 @@ fn test_chown_file_notexisting() {
         .fails()
         .stdout_contains(format!(
             "failed to change ownership of 'not_existing' to {user_name}"
-        ));
-    // TODO: uncomment once message changed from "cannot dereference" to "cannot access"
-    // result.stderr_contains("cannot access 'not_existing': No such file or directory");
+        ))
+        .stderr_contains("cannot access 'not_existing': No such file or directory");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "openbsd")))]
+fn test_chown_cannot_access_vs_cannot_dereference() {
+    // GNU says "cannot dereference" only for a symlink whose target is missing,
+    // and "cannot access" when the operand itself can't be reached.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("f");
+    at.symlink_file("missing", "dangling");
+    let uid = at.metadata("f").uid().to_string();
+
+    scene
+        .ucmd()
+        .arg(&uid)
+        .arg("f/")
+        .fails_with_code(1)
+        .stderr_is("chown: cannot access 'f/': Not a directory\n");
+    scene
+        .ucmd()
+        .arg(&uid)
+        .arg("dir/missing")
+        .fails_with_code(1)
+        .stderr_is("chown: cannot access 'dir/missing': No such file or directory\n");
+    scene
+        .ucmd()
+        .arg(&uid)
+        .arg("dangling")
+        .fails_with_code(1)
+        .stderr_is("chown: cannot dereference 'dangling': No such file or directory\n");
 }
 
 #[test]
@@ -947,6 +1043,10 @@ fn test_chown_no_dereference_symlink_to_dir() {
     let dir_meta_before = std::fs::metadata(at.plus("dir")).unwrap();
     let dir_ctime_before = (dir_meta_before.ctime(), dir_meta_before.ctime_nsec());
 
+    // Let the file system clock move past the link's ctime. On some systems,
+    // such as the Android emulator, it advances in coarse steps.
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
     scene
         .ucmd()
         .arg("--no-dereference")
@@ -1070,4 +1170,31 @@ fn verbose_missing_file_write_error_is_reported_not_panic() {
         .set_stdout(dev_full)
         .fails_with_code(1)
         .stderr_contains("chown: write error: No space left on device");
+}
+
+#[test]
+fn test_repeated_flags_are_accepted() {
+    use rustix::process::geteuid;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.touch("dir/file");
+
+    // GNU chown accepts a flag given more than once; the last one wins.
+    for flags in [
+        vec!["-R", "-R"],
+        vec!["-R", "--recursive"],
+        vec!["-v", "-v"],
+        vec!["-c", "-c"],
+        vec!["-f", "-f"],
+        vec!["-R", "-c", "-c"],
+    ] {
+        scene
+            .ucmd()
+            .args(&flags)
+            .arg(geteuid().to_string())
+            .arg("dir")
+            .succeeds();
+    }
 }

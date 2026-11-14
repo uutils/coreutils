@@ -79,6 +79,8 @@ fn describe(error: &BadSequence) -> Option<(Option<String>, Option<&'static str>
             Some("tr-diag-help-backwards-range"),
         )),
         BadSequence::MultipleCharRepeatInSet2
+        | BadSequence::CharRepeatInSet2WhenNotTranslating
+        | BadSequence::EquivalenceClassInSet2WhenTranslating
         | BadSequence::ClassExceptLowerUpperInSet2
         | BadSequence::ClassInSet2NotMatchedBySet1 => Some((None, None)),
         BadSequence::Set1LongerSet2EndsInClass => Some((

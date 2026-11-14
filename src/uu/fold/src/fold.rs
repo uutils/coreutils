@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDOs) ncount routput
 
 use clap::{Arg, ArgAction, Command};
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
@@ -52,18 +53,13 @@ struct FoldContext<'a, W: Write> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_lossy();
-
-    let (args, obs_width) = handle_obsolete(&args[..]);
+    let args = handle_obsolete(&args.collect::<Vec<_>>());
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let bytes = matches.get_flag(options::BYTES);
     let characters = matches.get_flag(options::CHARACTERS);
     let spaces = matches.get_flag(options::SPACES);
-    let poss_width = match matches.get_one::<String>(options::WIDTH) {
-        Some(v) => Some(v.clone()),
-        None => obs_width,
-    };
+    let poss_width = matches.get_one::<String>(options::WIDTH).cloned();
 
     let width = match poss_width {
         Some(inp_width) => match inp_width.parse::<usize>() {
@@ -90,9 +86,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => 80,
     };
 
-    let files = match matches.get_many::<String>(options::FILE) {
+    let files = match matches.get_many::<OsString>(options::FILE) {
         Some(v) => v.cloned().collect(),
-        None => vec!["-".to_owned()],
+        None => vec![OsString::from("-")],
     };
 
     fold(&files, bytes, characters, spaces, width)
@@ -105,6 +101,8 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(&translate!("fold-usage")))
         .about(translate!("fold-about"))
         .infer_long_args(true)
+        // GNU lets a later width override an earlier one, e.g. `fold -w3 -w5`.
+        .args_override_self(true)
         .arg(
             Arg::new(options::BYTES)
                 .long(options::BYTES)
@@ -139,24 +137,88 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE)
                 .hide(true)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
 }
 
-fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
-    for (i, arg) in args.iter().enumerate() {
-        let slice = &arg;
-        if slice.starts_with('-') && slice.chars().nth(1).is_some_and(|c| c.is_ascii_digit()) {
-            let mut v = args.to_vec();
-            v.remove(i);
-            return (v, Some(slice[1..].to_owned()));
-        }
+/// Whether `arg` is the obsolete `-WIDTH` form, such as `-5`.
+///
+/// The check is deliberately loose: GNU rejects `-5x` with
+/// `invalid number of columns: '5x'` rather than treating it as a file, so
+/// anything starting with a digit is taken as a (possibly invalid) width.
+fn is_obsolete_width(arg: &OsStr) -> bool {
+    let bytes = arg.as_encoded_bytes();
+    bytes.first() == Some(&b'-') && bytes.get(1).is_some_and(u8::is_ascii_digit)
+}
+
+/// Whether `arg` is a `-w`/`--width` spelling that consumes the *next*
+/// argument as its value.
+fn takes_width_value(arg: &OsStr) -> bool {
+    let bytes = arg.as_encoded_bytes();
+    if let Some(long) = bytes.strip_prefix(b"--") {
+        // `--width=5` carries its own value. A bare `--width`, or an
+        // unambiguous abbreviation of it (`infer_long_args` is enabled),
+        // takes the following argument.
+        !long.is_empty() && !long.contains(&b'=') && options::WIDTH.as_bytes().starts_with(long)
+    } else if let Some(short) = bytes.strip_prefix(b"-") {
+        // Only a trailing `w` takes the next argument: in `-sw` it does, but
+        // in `-w3` and `-wb` the value is attached to the flag instead. A
+        // bare `-` has no trailing `w` either -- `ends_with` on an empty
+        // string is false, where comparing two `find`/`checked_sub` failures
+        // (both `None`) would wrongly call it a match.
+        short.ends_with(b"w")
+    } else {
+        false
     }
-    (args.to_vec(), None)
+}
+
+/// Rewrite the obsolete `-WIDTH` syntax into the equivalent `--width=WIDTH`.
+///
+/// GNU processes options left to right, so the last width given wins no matter
+/// which spelling was used (`fold -w3 -5` folds at 5). Rewriting in place keeps
+/// that ordering and lets clap apply the same last-one-wins rule, via
+/// `args_override_self`.
+///
+/// An argument is only the obsolete form when it is not already being consumed
+/// as the value of `-w`/`--width`, and has not been placed after a `--`
+/// terminator. Otherwise `fold -w -1` would misreport the file name as the
+/// invalid width, and `fold -- -3` would silently read stdin instead of
+/// failing to open the file named `-3`.
+fn handle_obsolete(args: &[OsString]) -> Vec<OsString> {
+    let mut result = Vec::with_capacity(args.len());
+    let mut iter = args.iter();
+
+    // argv[0] is the program name, never an option.
+    if let Some(program) = iter.next() {
+        result.push(program.clone());
+    }
+
+    let mut end_of_options = false;
+    let mut expecting_width = false;
+
+    for arg in iter {
+        if end_of_options || expecting_width {
+            expecting_width = false;
+        } else if arg == "--" {
+            end_of_options = true;
+        } else if is_obsolete_width(arg) {
+            let width = arg.to_string_lossy();
+            let width = width.trim_start_matches('-');
+
+            result.push(OsString::from(format!("--{}={width}", options::WIDTH)));
+            continue;
+        } else {
+            expecting_width = takes_width_value(arg);
+        }
+        result.push(arg.clone());
+    }
+
+    result
 }
 
 fn fold(
-    filenames: &[String],
+    filenames: &[OsString],
     bytes: bool,
     characters: bool,
     spaces: bool,
@@ -165,7 +227,6 @@ fn fold(
     let mut output = BufWriter::new(stdout());
 
     for filename in filenames {
-        let filename: &str = filename;
         let mut stdin_buf;
         let mut file_buf;
         let buffer = BufReader::new(if filename == "-" {
@@ -176,7 +237,9 @@ fn fold(
             match File::open(Path::new(filename)) {
                 Ok(f) => file_buf = f,
                 Err(e) => {
-                    show!(e.map_err_context(|| filename.to_string()));
+                    show!(e.map_err_context(|| {
+                        uucore::quoting_style::locale_aware_shell_escape(filename)
+                    }));
                     continue;
                 }
             }
@@ -362,9 +425,13 @@ fn maybe_flush_unbroken_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResul
     }
 
     // Write raw bytes without inserting a newline; folding will continue
-    // based on updated column tracking in the caller.
-    ctx.writer.write_all(ctx.output)?;
-    ctx.output.clear();
+    // based on updated column tracking in the caller. Keep the last byte
+    // buffered: callers take a non-empty buffer to mean that the current
+    // line has started, and decide whether a tab or wide character folds
+    // on that.
+    let keep = ctx.output.len() - 1;
+    ctx.writer.write_all(&ctx.output[..keep])?;
+    ctx.output.drain(..keep);
     Ok(())
 }
 
@@ -381,6 +448,18 @@ fn push_bytes<W: Write>(ctx: &mut FoldContext<'_, W>, bytes: &[u8]) -> UResult<(
     }
     ctx.output.extend_from_slice(bytes);
     maybe_flush_unbroken_output(ctx)
+}
+
+fn advance_tab<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
+    loop {
+        let next_stop = next_tab_stop(*ctx.col_count);
+        if next_stop > ctx.width && !ctx.output.is_empty() {
+            emit_output(ctx)?;
+            continue;
+        }
+        *ctx.col_count = next_stop;
+        return Ok(());
+    }
 }
 
 fn process_ascii_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UResult<()> {
@@ -405,15 +484,7 @@ fn process_ascii_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UR
                 idx += 1;
             }
             TAB => {
-                loop {
-                    let next_stop = next_tab_stop(*ctx.col_count);
-                    if next_stop > ctx.width && !ctx.output.is_empty() {
-                        emit_output(ctx)?;
-                        continue;
-                    }
-                    *ctx.col_count = next_stop;
-                    break;
-                }
+                advance_tab(ctx)?;
                 if ctx.spaces {
                     *ctx.last_space = Some(ctx.output.len());
                 } else {
@@ -506,6 +577,12 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
     let mut iter = line.char_indices().peekable();
 
     while let Some((byte_idx, ch)) = iter.next() {
+        if ch == '\n' {
+            *ctx.last_space = None;
+            emit_output(ctx)?;
+            continue;
+        }
+
         // Include combining characters with the base character when we are
         // measuring by display columns. In character-counting mode every
         // scalar value must advance the counter to match `chars().count()`
@@ -523,16 +600,6 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
 
         let next_idx = iter.peek().map_or(line_bytes.len(), |(idx, _)| *idx);
 
-        if ch == '\n' {
-            *ctx.last_space = None;
-            emit_output(ctx)?;
-            continue;
-        }
-
-        if *ctx.col_count >= ctx.width {
-            emit_output(ctx)?;
-        }
-
         if ch == '\r' {
             push_bytes(ctx, &line_bytes[byte_idx..next_idx])?;
             *ctx.col_count = 0;
@@ -545,16 +612,12 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
             continue;
         }
 
+        if *ctx.col_count >= ctx.width {
+            emit_output(ctx)?;
+        }
+
         if ch == '\t' {
-            loop {
-                let next_stop = next_tab_stop(*ctx.col_count);
-                if next_stop > ctx.width && !ctx.output.is_empty() {
-                    emit_output(ctx)?;
-                    continue;
-                }
-                *ctx.col_count = next_stop;
-                break;
-            }
+            advance_tab(ctx)?;
             if ctx.spaces {
                 *ctx.last_space = Some(ctx.output.len());
             } else {
@@ -596,18 +659,14 @@ fn process_non_utf8_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) ->
             continue;
         }
 
-        if *ctx.col_count >= ctx.width {
+        if !matches!(byte, CR | 0x08) && *ctx.col_count >= ctx.width {
             emit_output(ctx)?;
         }
 
         match byte {
             CR => *ctx.col_count = 0,
             TAB => {
-                let next_stop = next_tab_stop(*ctx.col_count);
-                if next_stop > ctx.width && !ctx.output.is_empty() {
-                    emit_output(ctx)?;
-                }
-                *ctx.col_count = next_stop;
+                advance_tab(ctx)?;
                 *ctx.last_space = if ctx.spaces {
                     Some(ctx.output.len())
                 } else {
@@ -633,38 +692,39 @@ fn process_non_utf8_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) ->
 /// Process buffered bytes, emitting output for valid UTF-8 prefixes and
 /// deferring incomplete sequences until more input arrives.
 ///
-/// If the buffer contains invalid UTF-8, it is handled in non-UTF-8 mode and
-/// the buffer is fully consumed.
+/// Invalid bytes are handled in non-UTF-8 mode one sequence at a time, so the
+/// valid UTF-8 around them is still folded by character.
 fn process_pending_chunk<W: Write>(
     pending: &mut Vec<u8>,
     ctx: &mut FoldContext<'_, W>,
 ) -> UResult<()> {
-    while !pending.is_empty() {
-        match std::str::from_utf8(pending) {
+    let mut start = 0;
+    while start < pending.len() {
+        match std::str::from_utf8(&pending[start..]) {
             Ok(valid) => {
                 process_utf8_line(valid, ctx)?;
-                pending.clear();
-                break;
+                start = pending.len();
             }
             Err(err) => {
-                if err.error_len().is_some() {
-                    let res = process_non_utf8_line(pending, ctx);
-                    pending.clear();
-                    res?;
-                    break;
+                let valid_up_to = start + err.valid_up_to();
+                if valid_up_to > start {
+                    let valid =
+                        std::str::from_utf8(&pending[start..valid_up_to]).expect("valid prefix");
+                    process_utf8_line(valid, ctx)?;
+                    start = valid_up_to;
                 }
 
-                let valid_up_to = err.valid_up_to();
-                if valid_up_to == 0 {
+                // An incomplete sequence at the end waits for more input.
+                let Some(error_len) = err.error_len() else {
                     break;
-                }
+                };
 
-                let valid = std::str::from_utf8(&pending[..valid_up_to]).expect("valid prefix");
-                process_utf8_line(valid, ctx)?;
-                pending.drain(..valid_up_to);
+                process_non_utf8_line(&pending[start..start + error_len], ctx)?;
+                start += error_len;
             }
         }
     }
+    pending.drain(..start);
 
     Ok(())
 }

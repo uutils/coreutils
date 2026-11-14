@@ -191,6 +191,7 @@ fn test_empty_path_portability_message() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_pathchk_non_utf8_paths() {
@@ -198,6 +199,7 @@ fn test_pathchk_non_utf8_paths() {
     new_ucmd!().arg(&filename).succeeds();
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_not_a_directory_clean() {

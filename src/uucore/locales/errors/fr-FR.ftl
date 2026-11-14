@@ -3,7 +3,6 @@
 # chaînes uucore communes, que chaque utilitaire analyse au démarrage alors
 # que presque aucune exécution n'en a besoin.
 
-checksum-error-failed-to-read-input = échec de la lecture de l'entrée
 checksum-error-algo-bad-format = { $file }: { $line }: ligne invalide pour { $algo }
 # Messages d'analyse des chaînes de format (printf, seq, env, ...)
 format-error-invalid-spec = %{ $spec } : spécification de conversion invalide
@@ -54,3 +53,6 @@ size-diag-help-syntax = une taille est un nombre suivi d'une unité facultative 
 # compte, donc chaque utilitaire le dit avec ses propres mots.
 range-diag-label-too-large = ce nombre est trop grand
 range-diag-label-inverted = cet intervalle se termine avant de commencer
+
+# variable d'environnement QUOTING_STYLE invalide
+invalid-quoting-style-env-var = valeur invalide de la variable d'environnement QUOTING_STYLE ignorée : { $invalid }

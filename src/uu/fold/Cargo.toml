@@ -20,7 +20,7 @@ doctest = false
 clap = { workspace = true }
 fluent = { workspace = true }
 unicode-width = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["quoting-style"] }
 
 [dev-dependencies]
 divan = { workspace = true }

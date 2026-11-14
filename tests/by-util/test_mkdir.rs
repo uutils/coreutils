@@ -24,6 +24,7 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 fn test_version_no_path() {
     use std::process::Command;
@@ -146,6 +147,7 @@ fn test_mkdir_dup_dir_parent() {
 }
 
 #[cfg(not(windows))]
+#[uutests::wasi_ignore(HostSystemStateDiffers)]
 #[test]
 fn test_mkdir_parent_mode() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -173,6 +175,7 @@ fn test_mkdir_parent_mode() {
 }
 
 #[cfg(not(windows))]
+#[uutests::wasi_ignore(HostSystemStateDiffers)]
 #[test]
 fn test_mkdir_parent_mode_check_existing_parent() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -236,6 +239,7 @@ fn test_mkdir_dup_file() {
     scene.ucmd().arg("-p").arg(test_file).fails();
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(not(windows))]
 fn test_symbolic_mode() {
@@ -247,6 +251,21 @@ fn test_symbolic_mode() {
     assert_eq!(perms, 0o40777);
 }
 
+#[test]
+#[cfg(not(windows))]
+fn test_mkdir_whitespace_in_mode_is_rejected() {
+    let scene = TestScenario::new(util_name!());
+    for mode in [" 755", "u+x, +755", "u+x, ,g+w"] {
+        scene
+            .ucmd()
+            .args(&["-m", mode, "d"])
+            .fails_with_code(1)
+            .stderr_contains("invalid mode");
+        assert!(!scene.fixtures.dir_exists("d"));
+    }
+}
+
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(not(windows))]
 fn test_symbolic_alteration() {
@@ -264,6 +283,7 @@ fn test_symbolic_alteration() {
     assert_eq!(perms, 0o40577);
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(not(windows))]
 fn test_multi_symbolic() {
@@ -421,6 +441,7 @@ fn test_mkdir_p_respects_umask_without_acl() {
     assert_eq!(perms & 0o777, 0o755);
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(unix)]
 fn test_mkdir_explicit_mode_zero() {
@@ -431,6 +452,7 @@ fn test_mkdir_explicit_mode_zero() {
     assert_eq!(perms & 0o777, 0o000);
 }
 
+#[uutests::wasi_ignore(HostSystemStateDiffers)]
 #[test]
 #[cfg(unix)]
 fn test_mkdir_explicit_mode_with_umask() {
@@ -545,7 +567,7 @@ fn test_selinux() {
         new_ucmd!()
             .arg(arg)
             .arg("-v")
-            .arg(at.plus_as_string(dest))
+            .arg(at.plus(dest))
             .succeeds()
             .stdout_contains("created directory");
 
@@ -566,12 +588,68 @@ fn test_selinux_invalid() {
     let dest = "test_dir_a";
     new_ucmd!()
         .arg("--context=testtest")
-        .arg(at.plus_as_string(dest))
+        .arg(at.plus(dest))
         .fails()
         .no_stdout()
         .stderr_contains("failed to set default file creation context to 'testtest':");
     // invalid context, so, no directory
     assert!(!at.dir_exists(dest));
+}
+
+// -Z looks the name up in the policy, which lists absolute names only: a relative
+// name must get the same label as the absolute one.
+#[test]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+fn test_selinux_default_context_relative_name() {
+    use uucore::selinux::{
+        get_selinux_security_context, is_selinux_enabled, set_selinux_security_context,
+    };
+    use uutests::util::AtPath;
+
+    if !is_selinux_enabled() {
+        println!("Skipping SELinux test: SELinux is not enabled");
+        return;
+    }
+    // The policy has no default under /tmp, so both names would inherit there;
+    // target/tmp is usually under $HOME, which has one.
+    let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let at = AtPath::new(dir.path());
+    let scene = TestScenario::new(util_name!());
+    // A type the policy won't hand out here, so a missed lookup shows as inheritance.
+    at.mkdir("parent");
+    let ctx = String::from("root:object_r:etc_t:s0");
+    if set_selinux_security_context(&at.plus("parent"), Some(&ctx)).is_err() {
+        println!("Skipping SELinux test: cannot set a context on the fixture");
+        return;
+    }
+    let type_of = |p: &str| {
+        let ctx = get_selinux_security_context(&at.plus(p), false).unwrap();
+        ctx.split(':').nth(2).unwrap().to_owned()
+    };
+
+    scene
+        .ucmd()
+        .args(&["-Z", &at.plus_as_string("parent/absolute")])
+        .succeeds();
+    let expected = type_of("parent/absolute");
+    if expected == "etc_t" {
+        println!("Skipping SELinux test: the policy has no default for {dir:?}");
+        return;
+    }
+    scene
+        .ucmd()
+        .current_dir(dir.path())
+        .args(&["-Z", "parent/relative"])
+        .succeeds();
+    scene
+        .ucmd()
+        .current_dir(dir.path())
+        .args(&["-p", "-Z", "parent/new/relative"])
+        .succeeds();
+
+    for name in ["parent/relative", "parent/new", "parent/new/relative"] {
+        assert_eq!(type_of(name), expected, "{name}");
+    }
 }
 
 #[test]
@@ -814,6 +892,7 @@ fn test_mkdir_case_sensitivity() {
     scene.ucmd().arg("-p").arg("caseTEST").succeeds();
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 fn test_mkdir_network_paths() {
     // Test network path formats (UNC paths on Windows)
@@ -842,12 +921,13 @@ fn test_mkdir_environment_expansion() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    unsafe {
-        std::env::set_var("TEST_VAR", "expanded_value");
-    }
-
     // Create directory with literal $VAR (should not expand)
-    scene.ucmd().arg("-p").arg("$TEST_VAR/dir").succeeds();
+    scene
+        .ucmd()
+        .env("TEST_VAR", "expanded_value")
+        .arg("-p")
+        .arg("$TEST_VAR/dir")
+        .succeeds();
     assert!(at.dir_exists("$TEST_VAR/dir"));
 
     // Verify the literal name exists, not the expanded value
@@ -856,18 +936,16 @@ fn test_mkdir_environment_expansion() {
     // Test with braces
     scene
         .ucmd()
+        .env("TEST_VAR", "expanded_value")
         .arg("-p")
         .arg("${TEST_VAR}_braced/dir")
         .succeeds();
     assert!(at.dir_exists("${TEST_VAR}_braced/dir"));
+    assert!(!at.dir_exists("expanded_value_braced/dir"));
 
     // Test with tilde (should not expand to home directory)
     scene.ucmd().arg("-p").arg("~/test_dir").succeeds();
     assert!(at.dir_exists("~/test_dir"));
-
-    unsafe {
-        std::env::remove_var("TEST_VAR");
-    }
 }
 
 /// Test that mkdir -m creates directories with the exact requested mode,
@@ -877,6 +955,7 @@ fn test_mkdir_environment_expansion() {
 /// and then chmod afterward, leaving a brief window with wrong permissions.
 /// Now it temporarily sets umask to 0 and creates with the exact mode.
 #[cfg(not(windows))]
+#[uutests::wasi_ignore(HostSystemStateDiffers)]
 #[test]
 fn test_mkdir_mode_ignores_umask() {
     // Test that -m 0700 with restrictive umask still creates 0700
@@ -950,6 +1029,7 @@ fn test_mkdir_mode_ignores_umask() {
 /// - Parent directories use umask-derived permissions (with u+wx)
 /// - Final directory uses the exact requested mode (ignoring umask)
 #[cfg(not(windows))]
+#[uutests::wasi_ignore(HostSystemStateDiffers)]
 #[test]
 fn test_mkdir_parent_mode_with_explicit_mode() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1016,6 +1096,7 @@ fn test_mkdir_parent_inherits_setgid() {
     );
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 fn test_mkdir_concurrent_creation() {
     // Test concurrent mkdir -p operations: 10 iterations, 8 threads, 40 levels nesting
@@ -1082,6 +1163,53 @@ fn test_mkdir_inside_inexistent_dir() {
         .stderr_is("mkdir: cannot create directory 'a/b': No such file or directory\n");
 }
 
+#[test]
+fn test_mkdir_numeric_looking_name_in_error() {
+    let scene = TestScenario::new(util_name!());
+    for name in ["0042", "-0042", "7e2"] {
+        scene.fixtures.mkdir(name);
+    }
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .args(&["--", "0042", "-0042", "7e2"])
+        .fails_with_code(1)
+        .stderr_is(concat!(
+            "mkdir: cannot create directory '0042': File exists\n",
+            "mkdir: cannot create directory '-0042': File exists\n",
+            "mkdir: cannot create directory '7e2': File exists\n",
+        ));
+}
+
+#[test]
+fn test_mkdir_parents_over_existing_file() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("0077");
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .args(&["-p", "0077"])
+        .fails_with_code(1)
+        .stderr_is("mkdir: cannot create directory '0077': File exists\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_mkdir_error_escapes_special_chars() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("don't");
+    scene.fixtures.mkdir("tab\there");
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .args(&["don't", "tab\there"])
+        .fails_with_code(1)
+        .stderr_is(concat!(
+            "mkdir: cannot create directory 'don\\'t': File exists\n",
+            "mkdir: cannot create directory 'tab\\there': File exists\n",
+        ));
+}
+
 // The mode is only parsed where a mode means something.
 #[cfg(unix)]
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
@@ -1116,16 +1244,64 @@ mod diagnostics {
     #[test]
     fn test_plain_message_when_stderr_is_a_pipe() {
         // The test harness pipes stderr, so the report must not appear.
-        let result = new_ucmd!()
+        new_ucmd!()
             .args(&["-m", "u+rw?x", "some_dir"])
+            .fails_with_code(1)
+            .stderr_only("mkdir: invalid mode 'u+rw?x'\n");
+    }
+
+    #[test]
+    fn test_plain_message_quotes_control_character() {
+        new_ucmd!()
+            .args(&["-m", "a=\x01", "some_dir"])
+            .fails_with_code(1)
+            .stderr_only("mkdir: invalid mode 'a=\\001'\n");
+    }
+
+    #[test]
+    fn test_terminal_message_quotes_control_character() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-m", "a=\x01", "some_dir"])
             .fails_with_code(1);
         let stderr = result.stderr_str();
 
-        assert!(stderr.starts_with("mkdir: "), "{stderr}");
-        assert!(!stderr.contains(":1:"), "{stderr}");
+        assert!(
+            stderr.contains("invalid operator (expected +, -, or =, but found \\001)"),
+            "{stderr}"
+        );
+        assert!(stderr.contains("1 │ -m a=\\001 some_dir"), "{stderr}");
+        assert_eq!(result.caret_column(), Some(6), "{stderr}");
+        assert!(!stderr.contains('\x01'), "{stderr:?}");
+    }
+
+    #[test]
+    fn test_terminal_message_quotes_attached_mode() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--mode=a=\x01", "some_dir"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("--mode=a=\\001 some_dir"), "{stderr}");
+        assert_eq!(result.caret_column(), Some(10), "{stderr}");
+        assert!(!stderr.contains('\x01'), "{stderr:?}");
+    }
+
+    #[test]
+    fn test_terminal_message_quotes_mode_after_matching_operand() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["a=\x01", "--mode=a=\x01", "some_dir"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("--mode=a=\\001 some_dir"), "{stderr}");
+        assert_eq!(result.caret_column(), Some(14), "{stderr}");
     }
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 fn test_mkdir_concurrent_non_recursive() {
     // Test concurrent mkdir operations without -p: exactly one process must succeed per round

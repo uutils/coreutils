@@ -7,7 +7,6 @@
 
 use crate::{OPT_INODES, OPT_OUTPUT, OPT_PRINT_TYPE};
 use clap::{ArgMatches, parser::ValueSource};
-use thiserror::Error;
 use uucore::display::Quotable;
 
 /// The columns in the output table produced by `df`.
@@ -60,7 +59,7 @@ pub(crate) enum Column {
 }
 
 /// An error while defining which columns to display in the output table.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum ColumnError {
     /// If a column appears more than once in the `--output` argument.
     #[error("{}", .0.quote())]
@@ -72,7 +71,7 @@ impl Column {
     ///
     /// The set of columns that will appear in the output table can be
     /// specified by command-line arguments. This function converts
-    /// those arguments to a [`Vec`] of [`Column`] variants.
+    /// those arguments to a [`Vec<Column>`].
     ///
     /// # Errors
     ///

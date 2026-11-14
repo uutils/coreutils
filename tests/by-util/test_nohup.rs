@@ -9,7 +9,7 @@
 use std::thread::sleep;
 use uutests::new_ucmd;
 #[cfg(unix)]
-use uutests::{at_and_ucmd, util::TestScenario, util_name};
+use uutests::{util::TestScenario, util_name};
 
 // General observation: nohup.out will not be created in tests run by cargo test
 // because stdin/stdout is not attached to a TTY.
@@ -38,6 +38,8 @@ fn test_nohup_exit_codes() {
     target_os = "openbsd"
 ))]
 fn test_nohup_multiple_args_and_flags() {
+    use uutests::at_and_ucmd;
+
     let (at, mut ucmd) = at_and_ucmd!();
 
     ucmd.args(&["touch", "-t", "1006161200", "file1", "file2"])
@@ -95,14 +97,14 @@ fn test_nohup_replaced_stdin_is_not_readable() {
 
     ts.ucmd()
         .terminal_simulation(true)
-        .arg("cat")
+        .arg("tee")
         .fails_with_code(1)
         .stderr_contains("nohup: ignoring input and appending output to 'nohup.out'");
 
     sleep(std::time::Duration::from_millis(10));
 
     // cat's error message goes to stderr, which nohup redirected into nohup.out
-    let content = std::fs::read_to_string(at.plus_as_string("nohup.out")).unwrap();
+    let content = at.read("nohup.out");
     assert!(
         content.contains("Bad file descriptor"),
         "expected a read error from cat in nohup.out, got: {content:?}"
@@ -244,6 +246,52 @@ fn test_nohup_command_not_found() {
     );
 }
 
+#[test]
+#[cfg(unix)]
+fn test_nohup_command_with_non_utf8_args() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    new_ucmd!()
+        .arg("echo")
+        .arg(OsStr::from_bytes(b"a\xffb"))
+        .succeeds()
+        .stdout_only_bytes(b"a\xffb\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_nohup_non_utf8_command_not_found() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    new_ucmd!()
+        .arg(OsStr::from_bytes(b"no-such-command-\xff"))
+        .fails_with_code(127)
+        .no_stdout()
+        .stderr_contains("failed to run command")
+        .stderr_contains("no-such-command-\\xFF");
+}
+
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+fn test_nohup_non_utf8_command_path() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    // The path of the command is not valid UTF-8 and must reach exec unchanged.
+    let ts = TestScenario::new(util_name!());
+    let dir = ts.fixtures.plus(OsStr::from_bytes(b"dir-\xff"));
+    std::fs::create_dir(&dir).unwrap();
+    let cmd = dir.join("coreutils");
+    std::os::unix::fs::symlink(&ts.bin_path, &cmd).unwrap();
+    ts.ucmd()
+        .arg(&cmd)
+        .args(&["nohup", "--version"])
+        .succeeds()
+        .stdout_only(format!("nohup {}\n", uucore::crate_version!()));
+}
+
 // Test stderr is redirected to stdout
 #[test]
 #[cfg(any(
@@ -260,7 +308,7 @@ fn test_nohup_stderr_to_stdout() {
     // Create a script that outputs to both stdout and stderr
     at.write(
         "both_streams.sh",
-        "#!/bin/bash\necho 'stdout message'\necho 'stderr message' >&2",
+        "#!/bin/sh\necho 'stdout message'\necho 'stderr message' >&2",
     );
     at.set_mode("both_streams.sh", 0o755);
 
