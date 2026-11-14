@@ -1431,10 +1431,6 @@ fn enter_directory<O: LsOutput>(
             false,
         );
 
-        if !entry.is_first {
-            output.write_dir_header(&path_data, config, false)?;
-        }
-
         let mut current_read_dir = if entry.is_first {
             initial_read_dir
                 .take()
@@ -1454,6 +1450,10 @@ fn enter_directory<O: LsOutput>(
             }
         };
 
+        if !entry.is_first {
+            output.write_dir_header(&path_data, config, false)?;
+        }
+
         collect_directory_entries(entries, &path_data, config, output, &mut current_read_dir)?;
         write_directory_entries(entries, config, output)?;
 
@@ -1466,17 +1466,6 @@ fn enter_directory<O: LsOutput>(
                 let child_path = child.path().to_path_buf();
                 let child_must_dereference = child.must_dereference;
                 let child_command_line = child.command_line;
-
-                // Try to read_dir now to eagerly report errors, matching GNU.
-                if let Err(err) = fs::read_dir(&child_path) {
-                    output.flush()?;
-                    show!(LsError::IOErrorContext(
-                        child_path.clone(),
-                        err,
-                        child_command_line,
-                    ));
-                    continue;
-                }
 
                 let info = match FileInformation::from_path(&child_path, child_must_dereference) {
                     Ok(info) => info,
