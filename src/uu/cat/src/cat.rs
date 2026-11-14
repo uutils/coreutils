@@ -100,7 +100,6 @@ enum CatError {
 
 type CatResult<T> = Result<T, CatError>;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
 impl From<uucore::io::ReadWriteError> for CatError {
     fn from(error: uucore::io::ReadWriteError) -> Self {
         match error {
@@ -500,35 +499,12 @@ fn print_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
         return Ok(());
     }
 
-    // If we're not on Linux or Android, or the splice() call failed,
-    // fall back on slower writing.
-    print_unbuffered(handle, stdout)
-}
-
-#[cfg_attr(any(target_os = "linux", target_os = "android"), inline(never))] // splice fast-path does not require this allocation
-fn print_unbuffered<R: FdReadable>(
-    handle: &mut InputHandle<R>,
-    stdout: io::Stdout,
-) -> CatResult<()> {
+    // fall back on slower writing
     #[cfg(any(unix, target_os = "wasi"))]
-    let mut stdout = uucore::io::RawWriter(stdout); // use raw syscall to remove buffering
+    let stdout = uucore::io::RawWriter(stdout); // remove buffering
     #[cfg(not(any(unix, target_os = "wasi")))]
-    let mut stdout = stdout.lock();
-    let mut buf = [0; 1024 * 64];
-    loop {
-        match handle.reader.read(&mut buf) {
-            Ok(0) => return Ok(()),
-            Ok(n) => {
-                stdout.write_all(&buf[..n]).map_err(CatError::Write)?;
-                // cannot use rustix::io on Windows
-                // really bad workaround for unbuffered write <https://github.com/uutils/coreutils/issues/12188>
-                #[cfg(not(any(unix, target_os = "wasi")))]
-                stdout.flush().map_err(CatError::Write)?;
-            }
-            Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e.into()),
-            _ => {}
-        }
-    }
+    let stdout = stdout.lock();
+    Ok(uucore::io::copy(&mut handle.reader, stdout)?)
 }
 
 /// Outputs file contents to stdout in a line-by-line fashion,

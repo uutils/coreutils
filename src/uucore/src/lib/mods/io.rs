@@ -38,6 +38,29 @@ impl From<ReadWriteError> for io::Error {
     }
 }
 
+// like `std::io::copy`, but with larger buffer and without specialization e.g. `copy_file_range`.
+// This tries to remove buffering. `RawReader` or `RawWriter` is needed to avoid buffering on unix.
+#[cfg_attr(any(target_os = "linux", target_os = "android"), inline(never))] // used only on fallback from fast-path only currently
+pub fn copy(mut input: impl io::Read, mut output: impl io::Write) -> Result<(), ReadWriteError> {
+    let mut buf = [0; 32 * 1024];
+    loop {
+        match input.read(&mut buf) {
+            Ok(0) => return Ok(()),
+            Ok(n) => {
+                output.write_all(&buf[..n]).map_err(ReadWriteError::Write)?;
+                // cannot use rustix::io on Windows
+                // really bad workaround for unbuffered write <https://github.com/uutils/coreutils/issues/12188>
+                #[cfg(not(any(unix, target_os = "wasi")))]
+                output.flush().map_err(ReadWriteError::Write)?;
+            }
+            Err(e) if e.kind() != io::ErrorKind::Interrupted => {
+                return Err(ReadWriteError::Read(e));
+            }
+            _ => {}
+        }
+    }
+}
+
 #[cfg(windows)]
 type NativeType = OwnedHandle;
 #[cfg(not(windows))]
@@ -216,5 +239,21 @@ mod tests {
         let mut r = Cursor::new(b"abc".to_vec());
         // Asking for more than is available returns only what was read.
         assert_eq!(read_and_discard(&mut r, 100, 4).unwrap(), 3);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn copy_read_write_error() {
+        let broken = std::fs::File::open("/proc/self/mem").unwrap();
+        let zero = std::fs::File::open("/dev/zero").unwrap();
+        // check distinction only
+        assert!(matches!(
+            crate::io::copy(&broken, &zero),
+            Err(crate::io::ReadWriteError::Read(_))
+        ));
+        assert!(matches!(
+            crate::io::copy(&zero, &broken),
+            Err(crate::io::ReadWriteError::Write(_))
+        ));
     }
 }
