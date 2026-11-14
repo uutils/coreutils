@@ -10,7 +10,7 @@ use uucore::{
     CharByte, IntoCharByteIterator,
     i18n::{
         UEncoding,
-        collator::{AlternateHandling, CollatorOptions, locale_cmp, try_init_collator},
+        collator::{locale_cmp, locale_collator_options, try_init_collator},
         get_locale_encoding,
     },
 };
@@ -21,9 +21,7 @@ use crate::syntax_tree::{MaybeNonUtf8Str, MaybeNonUtf8String};
 /// collator.
 pub(crate) fn locale_comparison(a: &MaybeNonUtf8Str, b: &MaybeNonUtf8Str) -> Ordering {
     // Initialize the collator
-    let mut opts = CollatorOptions::default();
-    opts.alternate_handling = Some(AlternateHandling::Shifted); // This is black magic
-    let _ = try_init_collator(opts);
+    let _ = try_init_collator(locale_collator_options());
 
     locale_cmp(a, b)
 }

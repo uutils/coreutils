@@ -4044,6 +4044,38 @@ fn test_merge_locale_collation() {
 }
 
 #[test]
+fn test_sort_locale_symbols() {
+    // glibc ignores symbols like `+` and `|` at the first level, as it does punctuation
+    for (input, expected) in [("+5\n10\n", "10\n+5\n"), ("|b|\na\n", "a\n|b|\n")] {
+        new_ucmd!()
+            .env("LC_ALL", "en_US.UTF-8")
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+#[cfg(feature = "comm")]
+fn test_sort_locale_symbols_comm_check_order() {
+    // comm must accept as sorted what sort wrote in the same locale
+    let scene = TestScenario::new("sort");
+    let sorted = scene
+        .ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in("+5\n10\n")
+        .succeeds()
+        .stdout_move_str();
+    scene.fixtures.write("sorted", &sorted);
+    scene
+        .ccmd("comm")
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["--check-order", "-12", "sorted", "sorted"])
+        .succeeds()
+        .stdout_only(sorted);
+}
+
+#[test]
 fn test_sort_locale_punctuation() {
     // Punctuation gets a distinguishing collation weight, so lines differing
     // only by punctuation sort in a stable order (issue #12542) and are never
