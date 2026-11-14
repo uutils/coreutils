@@ -21,8 +21,11 @@ fluent = { workspace = true }
 itertools = { workspace = true }
 uucore = { workspace = true, features = ["fs", "pipes"] }
 
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["stdio"] }
+
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-rustix = { workspace = true, features = ["stdio", "pipe"] }
+rustix = { workspace = true, features = ["pipe"] }
 
 [lints]
 workspace = true
