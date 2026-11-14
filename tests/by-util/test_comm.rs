@@ -790,6 +790,44 @@ fn test_locale_collation() {
         .stdout_only("a1\n");
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
+#[test]
+#[cfg(unix)]
+fn test_locale_collation_accepts_the_tie_order_of_sort() {
+    // The collator gives U+200B no weight, so `ab` and `a\u{200b}b` tie there.
+    // `sort` puts the longer one first, and `comm` must read that as sorted.
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.write("one", "a\u{200b}b\nab\n");
+    ts.fixtures.write("two", "ab\n");
+
+    ts.ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["--check-order", "one", "two"])
+        .succeeds()
+        .stdout_only("a\u{200b}b\n\t\tab\n");
+}
+
+#[uutests::wasi_ignore(NoLocaleData)]
+#[test]
+#[cfg(unix)]
+fn test_locale_collation_does_not_match_punctuation_variants() {
+    // The collator gives no weight to `/` and `.`, but these lines differ.
+    let locale = "en_US.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("allowed", "/srv/uploads\n");
+    scene.fixtures.write("requested", "/srv/uploads/../..\n");
+
+    scene
+        .ucmd()
+        .env("LC_ALL", locale)
+        .args(&["-12", "allowed", "requested"])
+        .succeeds()
+        .no_stdout();
+}
+
 #[test]
 #[cfg(unix)]
 fn test_c_locale_still_orders_by_bytes() {
