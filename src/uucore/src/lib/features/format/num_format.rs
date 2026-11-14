@@ -7,11 +7,12 @@
 
 //! Utilities for formatting numbers in various formats
 
-use bigdecimal::BigDecimal;
 use bigdecimal::num_bigint::ToBigInt;
+use bigdecimal::{BigDecimal, RoundingMode};
 use num_traits::{Signed, Zero};
 use std::cmp::min;
 use std::io::Write;
+use std::num::NonZeroU64;
 
 use super::spec::{CanAsterisk, Spec};
 use super::{ExtendedBigDecimal, FormatError, check_precision};
@@ -483,16 +484,18 @@ fn format_float_decimal(
 ///   `.` (the caller must add that to get a valid scientific format number).
 /// - `e` is an integer exponent.
 fn bd_to_string_exp_with_prec(bd: &BigDecimal, precision: usize) -> (String, i64) {
-    // TODO: A lot of time is spent in `with_prec` computing the exact number
+    // TODO: A lot of time is spent in `with_precision_round` computing the exact number
     // of digits, it might be possible to save computation time by doing a rough
     // division followed by arithmetics on `digits` to round if necessary (using
     // `fast_inc`).
 
-    // Round bd to precision digits (including the leading digit)
-    // Note that `with_prec` will produce an extra digit if rounding overflows
-    // (e.g. 9995.with_prec(3) => 1000 * 10^1, but we want 100 * 10^2), we compensate
+    // Round bd to precision digits (including the leading digit), with ties
+    // going to even like C printf does.
+    // Note that rounding will produce an extra digit if it overflows
+    // (e.g. 9995 to 3 digits => 1000 * 10^1, but we want 100 * 10^2), we compensate
     // for that later.
-    let bd_round = bd.with_prec(precision as u64);
+    let precision_nz = NonZeroU64::new(precision as u64).unwrap_or(NonZeroU64::MIN);
+    let bd_round = bd.with_precision_round(precision_nz, RoundingMode::HalfEven);
 
     // Convert to the form XXX * 10^-p (XXX is precision digit long)
     let (frac, mut p) = bd_round.as_bigint_and_exponent();

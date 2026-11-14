@@ -76,6 +76,8 @@ use uutests::new_ucmd;
 #[case::sub_general_round_float(&["%g", "12345.6789"], "12345.7")]
 #[case::sub_general_round_float_to_integer(&["%g", "123456.7"], "123457")]
 #[case::sub_general_round_float_leading_zeroes(&["%g", "1.000009"], "1.00001")]
+#[case::sub_sci_round_tie_to_even(&["%.1e %.0e %.2e %.0e", "0.125", "2.5", "1.125", "3.5"], "1.2e-01 2e+00 1.12e+00 4e+00")]
+#[case::sub_general_round_tie_to_even(&["%.1g %.1G %.0g", "0.25", "2.5", "3.5"], "0.2 2 4")]
 #[case::sub_alternative_lower_hex_0(&["%#x", "0"], "0")]
 #[case::sub_alternative_lower_hex(&["%#x", "42"], "0x2a")]
 #[case::sub_alternative_upper_hex_0(&["%#X", "0"], "0")]

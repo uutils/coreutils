@@ -883,6 +883,14 @@ fn test_format_option_default_precision_short() {
 }
 
 #[test]
+fn test_format_option_scientific_round_tie_to_even() {
+    new_ucmd!()
+        .args(&["-f", "%.0e", "0.5", "1", "3.5"])
+        .succeeds()
+        .stdout_only("5e-01\n2e+00\n2e+00\n4e+00\n");
+}
+
+#[test]
 fn test_format_option_default_precision_scientific() {
     new_ucmd!()
         .args(&["-f", "%E", "0", "0.7", "2"])
