@@ -125,6 +125,11 @@ const POSITIVE: &u8 = &b'+';
 const MIN_AUTOMATIC_BUF_SIZE: usize = 512 * 1024; // 512 KiB
 const FALLBACK_AUTOMATIC_BUF_SIZE: usize = 32 * 1024 * 1024; // 32 MiB
 const MAX_AUTOMATIC_BUF_SIZE: usize = 1024 * 1024 * 1024; // 1 GiB
+// Bound the work spent on any one line, without dropping reusable keys when a
+// chunk contains many moderately long lines. ICU keys can exceed their input
+// size, so this is an input-length limit rather than a memory limit.
+#[cfg(feature = "i18n-collator")]
+const MAX_COLLATION_KEY_INPUT_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SortError {
@@ -695,10 +700,12 @@ impl<'a> Line<'a> {
     ) -> Self {
         #[cfg(feature = "i18n-collator")]
         if settings.precomputed.fast_locale_collation {
-            compute_sort_key_utf8(line, &mut line_data.collation_key_buffer);
-            line_data
-                .collation_key_ends
-                .push(line_data.collation_key_buffer.len());
+            if line.len() <= MAX_COLLATION_KEY_INPUT_BYTES {
+                compute_sort_key_utf8(line, &mut line_data.collation_key_buffer);
+                line_data.push_collation_key_end();
+            } else {
+                line_data.push_skipped_collation_key();
+            }
             return Self { line, index };
         }
 
@@ -2800,6 +2807,37 @@ fn compare_lines_with_collator(a: &Line<'_>, b: &Line<'_>, settings: &GlobalSett
     if settings.reverse { cmp.reverse() } else { cmp }
 }
 
+// Keep collation-key lookup and lazy ICU comparison out of the general
+// comparator so they do not inflate the numeric sorting fast path.
+#[cfg(feature = "i18n-collator")]
+#[inline(never)]
+fn compare_by_collation_keys<'a>(
+    a: &Line<'a>,
+    b: &Line<'a>,
+    global_settings: &GlobalSettings,
+    a_line_data: &LineData<'a>,
+    b_line_data: &LineData<'a>,
+) -> Ordering {
+    let mut cmp = match (
+        a_line_data.collation_key(a.index),
+        b_line_data.collation_key(b.index),
+    ) {
+        (Some(a_key), Some(b_key)) => a_key.cmp(b_key),
+        _ => locale_cmp(a.line, b.line),
+    };
+    // If collation keys are equal, fall back to lexicographic comparison
+    // This can be the case for inputs like `01` and `0_1`, which have equal keys
+    if cmp == Ordering::Equal {
+        // Reversing the order to match sort's sorting behaviour
+        cmp = b.line.cmp(a.line);
+    }
+    if global_settings.reverse {
+        cmp.reverse()
+    } else {
+        cmp
+    }
+}
+
 fn compare_by<'a>(
     a: &Line<'a>,
     b: &Line<'a>,
@@ -2818,20 +2856,7 @@ fn compare_by<'a>(
 
     #[cfg(feature = "i18n-collator")]
     if global_settings.precomputed.fast_locale_collation {
-        let a_key = a_line_data.collation_key(a.index);
-        let b_key = b_line_data.collation_key(b.index);
-        let mut cmp = a_key.cmp(b_key);
-        // If collation keys are equal, fall back to lexicographic comparison
-        // This can be the case for inputs like `01` and `0_1`, which have equal keys
-        if cmp == Ordering::Equal {
-            // Reversing the order to match sort's sorting behaviour
-            cmp = b.line.cmp(a.line);
-        }
-        return if global_settings.reverse {
-            cmp.reverse()
-        } else {
-            cmp
-        };
+        return compare_by_collation_keys(a, b, global_settings, a_line_data, b_line_data);
     }
 
     if global_settings.precomputed.fast_ascii_insensitive {
@@ -3413,6 +3438,56 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
 mod tests {
 
     use super::*;
+
+    #[cfg(feature = "i18n-collator")]
+    #[test]
+    fn test_long_collation_keys_do_not_share_a_budget() {
+        use uucore::i18n::collator::{CollatorOptions, try_init_collator};
+
+        try_init_collator(CollatorOptions::default());
+        let mut settings = GlobalSettings::default();
+        settings.selectors.push(FieldSelector::new(
+            KeyPosition {
+                field: 1,
+                char: 1,
+                ignore_blanks: false,
+            },
+            None,
+            KeySettings::default(),
+        ));
+        settings.init_precomputed(true);
+        let mut data = LineData::default();
+        let mut tokens = Vec::new();
+        let enormous = vec![b'a'; MAX_COLLATION_KEY_INPUT_BYTES + 1];
+        Line::create(&enormous, 0, &mut data, &mut tokens, &settings);
+        assert!(data.collation_key(0).is_none());
+        assert!(data.collation_key_buffer.is_empty());
+        // Exceed the former shared budget with moderately long lines. Every
+        // line must retain its key to avoid repeated full collation.
+        let line = vec![b'A'; 70_000];
+        let mut expected = Vec::new();
+        compute_sort_key_utf8(&line, &mut expected);
+        let count = MAX_COLLATION_KEY_INPUT_BYTES / line.len() + 2;
+        for index in 1..=count {
+            Line::create(&line, index, &mut data, &mut tokens, &settings);
+            assert!(
+                data.collation_key(index)
+                    .is_some_and(|key| key == expected.as_slice()),
+                "missing or incorrect collation key for line {index}"
+            );
+        }
+        // A skipped key must not disturb the following arena offsets.
+        Line::create(&enormous, count + 1, &mut data, &mut tokens, &settings);
+        assert!(data.collation_key(count + 1).is_none());
+        Line::create(b"a", count + 2, &mut data, &mut tokens, &settings);
+        expected.clear();
+        compute_sort_key_utf8(b"a", &mut expected);
+        assert_eq!(data.collation_key(count + 2), Some(expected.as_slice()));
+
+        let at_limit = vec![b'a'; MAX_COLLATION_KEY_INPUT_BYTES];
+        Line::create(&at_limit, count + 3, &mut data, &mut tokens, &settings);
+        assert!(data.collation_key(count + 3).is_some());
+    }
 
     fn tokenize_helper(line: &[u8], separator: Option<u8>) -> Vec<Field> {
         let mut buffer = vec![];

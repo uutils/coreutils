@@ -4087,6 +4087,64 @@ fn test_sort_locale_punctuation() {
 }
 
 #[test]
+fn test_locale_collation_long_lines() {
+    // Moderately long lines still reuse collation keys.
+    // Interleave them with short lines and exercise case and accent ordering.
+    const LONG: usize = 70_000;
+
+    let long_e_acute = "é".repeat(LONG / 2);
+    let long_upper_a = "A".repeat(LONG);
+    let long_lower_a = "a".repeat(LONG);
+    let input = format!("f\n{long_upper_a}\nb\n{long_lower_a}\n{long_e_acute}\na\n");
+    // Locale order: a < aa… < AA… < b < éé… < f.
+    // Byte order would instead yield AA… < a < aa… < b < f < éé….
+    let expected = format!("a\n{long_lower_a}\n{long_upper_a}\nb\n{long_e_acute}\nf\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_locale_collation_long_line_boundary() {
+    // Compare a precomputed key at the limit with a lazy line just over it.
+    // Distinct primary weights avoid scanning both enormous lines during lazy
+    // comparison. Case and accent ordering are covered by the smaller test above.
+    const AT_CAP: usize = 16 * 1024 * 1024;
+
+    let lower_at = "a".repeat(AT_CAP);
+    let upper_over = "B".repeat(AT_CAP + 1);
+    let input = format!("{upper_over}\nc\n{lower_at}\na\n");
+    let expected = format!("a\n{lower_at}\n{upper_over}\nc\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["--parallel", "1", "-S", "128M"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_locale_collation_over_limit_line() {
+    // A line exceeding the per-line limit is compared lazily.
+    // Keys recorded after it must retain correct arena offsets.
+    let huge = "A".repeat(17 * 1024 * 1024);
+    let long = "a".repeat(70_000);
+    let input = format!("b\n{huge}\na\n{long}\n");
+    let expected = format!("a\n{long}\n{huge}\nb\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["--parallel", "1", "-S", "64M"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
 fn test_locale_empty_env_vars_hungarian_lc_collate() {
     // Regression test for issue #11136
     let input = "gx\ngy\ngz\n";

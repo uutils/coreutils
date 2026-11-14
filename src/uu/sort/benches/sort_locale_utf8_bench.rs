@@ -7,8 +7,13 @@
 //!
 //! Note: The locale is set in `main()` BEFORE any benchmark runs because
 //! the locale is cached on first access via `OnceLock` and cannot be changed afterwards.
+//!
+//! Subprocess benchmarks have distinct names from the former in-process versions:
+//! those switched to byte comparison after warmup, so their results are not a
+//! locale-collation baseline.
 
 use divan::{Bencher, black_box};
+use std::path::Path;
 use tempfile::NamedTempFile;
 use uu_sort::uumain;
 use uucore::benchmark::{get_bench_args, run_util_function, setup_test_file, text_data};
@@ -92,13 +97,9 @@ fn sort_unique_utf8_locale(bencher: Bencher) {
         .bench_values(|args| black_box(uumain(args)));
 }
 
-/// Benchmark sorting very long lines (single repeated character per line) with UTF-8 locale.
-/// This reproduces the pathological case from issue #12138 where computing full collation
-/// sort keys for multi-megabyte lines caused a 40x slowdown vs GNU sort.
-/// We use 1 MB lines (26 lines, one per letter) to keep the benchmark fast while still
-/// exercising the prefix-based sort key optimization.
+/// Moderately long lines still retain reusable collation keys.
 #[divan::bench]
-fn sort_very_long_lines_utf8_locale(bencher: Bencher) {
+fn sort_very_long_lines_utf8_locale_subprocess(bencher: Bencher) {
     let mut data = Vec::new();
     // Create 26 lines of 1 MB each, each line is a single repeated letter
     let letters: Vec<u8> = (b'a'..=b'z').collect();
@@ -107,29 +108,26 @@ fn sort_very_long_lines_utf8_locale(bencher: Bencher) {
         data.push(b'\n');
     }
     let file_path = setup_test_file(&data);
-    let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap().to_string();
-
-    let args = [
-        "--parallel",
-        "1",
-        "-o",
-        &output_path,
-        file_path.to_str().unwrap(),
-    ];
-    // Warm up
-    black_box(run_util_function(uumain, &args));
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &args));
-    });
+    bench_sort_file_utf8(bencher, &file_path, "64M");
 }
 
-/// Benchmark sorting lines that share a long common prefix but differ after 8 KB,
-/// exercising the fallback from prefix sort keys to full locale comparison.
+/// Enormous lines with distinct initial letters should avoid full sort keys.
 #[divan::bench]
-fn sort_long_common_prefix_utf8_locale(bencher: Bencher) {
+fn sort_enormous_lines_utf8_locale(bencher: Bencher) {
     let mut data = Vec::new();
-    let prefix_len = 16 * 1024; // 16 KB common prefix (exceeds the 8 KB sort key limit)
+    for ch in b"whqbtmzc" {
+        data.extend(std::iter::repeat_n(*ch, 20 * 1024 * 1024));
+        data.push(b'\n');
+    }
+    let file_path = setup_test_file(&data);
+    bench_sort_file_utf8(bencher, &file_path, "512M");
+}
+
+/// Benchmark sorting lines that share a long common prefix.
+#[divan::bench]
+fn sort_long_common_prefix_utf8_locale_subprocess(bencher: Bencher) {
+    let mut data = Vec::new();
+    let prefix_len = 16 * 1024;
     let prefix: Vec<u8> = std::iter::repeat_n(b'x', prefix_len).collect();
     // 26 lines that share the prefix but differ in the suffix
     for ch in b'a'..=b'z' {
@@ -138,20 +136,46 @@ fn sort_long_common_prefix_utf8_locale(bencher: Bencher) {
         data.push(b'\n');
     }
     let file_path = setup_test_file(&data);
-    let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap().to_string();
+    bench_sort_file_utf8(bencher, &file_path, "64M");
+}
 
-    let args = [
-        "--parallel",
-        "1",
-        "-o",
-        &output_path,
-        file_path.to_str().unwrap(),
-    ];
-    black_box(run_util_function(uumain, &args));
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &args));
-    });
+/// Long lines differing only in case have equal primary collation weights.
+/// Reuse keys even when the input exceeds the former 16 MiB chunk budget.
+#[divan::bench(args = [128, 512, 1024])]
+fn sort_long_case_variants_utf8_locale(bencher: Bencher, num_lines: u64) {
+    let mut data = Vec::new();
+    for i in 0..num_lines {
+        let pattern = i.wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        for bit in 0..64 {
+            data.push(if pattern & (1 << bit) == 0 {
+                b'a'
+            } else {
+                b'A'
+            });
+        }
+        data.extend(std::iter::repeat_n(b'a', 70_000 - 64));
+        data.push(b'\n');
+    }
+    let file_path = setup_test_file(&data);
+    bench_sort_file_utf8(bencher, &file_path, "256M");
+}
+
+fn bench_sort_file_utf8(bencher: Bencher, file_path: &Path, buffer_size: &str) {
+    let output_file = NamedTempFile::new().unwrap();
+    // Each run needs fresh locale/collator initialization. Repeated calls to
+    // uumain in one process can switch to the byte-comparison fast path.
+    let run = || {
+        let status = std::process::Command::new(env!("CARGO_BIN_EXE_sort"))
+            .env("LC_ALL", "en_US.UTF-8")
+            .args(["--parallel", "1", "-S", buffer_size, "-o"])
+            .arg(output_file.path())
+            .arg(file_path)
+            .status()
+            .unwrap();
+        assert!(status.success());
+    };
+    run();
+    bencher.bench(run);
 }
 
 /// Benchmark merging a single pre-sorted file (`sort -m FILE`) with a UTF-8 locale.
