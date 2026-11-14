@@ -52,7 +52,8 @@ pub fn main() {
                 }
                 "default" | "macos" | "unix" | "windows" | "selinux" | "zip" | "clap_complete"
                 | "clap_mangen" | "fluent_syntax" | "openssl" => continue, // common/standard feature names
-                "nightly" | "test_unimplemented" | "expensive_tests" | "test_risky_names" => {
+                "nightly" | "test_unimplemented" | "expensive_tests" | "test_risky_names"
+                | "test_logind" => {
                     continue;
                 } // crate-local custom features
                 "uudoc" => continue, // is not a utility

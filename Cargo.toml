@@ -85,6 +85,7 @@ jiff = "0.2.18"
 jiff-icu = "0.2.2"
 jiff-tzdb = "0.1"
 libc = "0.2.191"
+libloading = "0.8.9"
 lscolors = { version = "0.21.0", default-features = false, features = [
   "gnu_legacy",
 ] }
@@ -437,6 +438,8 @@ openssl = [
 ]
 # "test_risky_names" == enable tests that create problematic file names (would make a network share inaccessible to Windows, breaks SVN on Mac OS, etc.)
 test_risky_names = []
+# Linux logind integration tests.
+test_logind = ["who", "pinky", "users", "uptime"]
 # * only build `uudoc` when `--feature uudoc` is activated
 uudoc = [
   "dep:clap_complete",
@@ -460,14 +463,6 @@ feat_diagnostics = ["uucore/diagnostics"]
 ## Optional feature for stdbuf
 # "feat_external_libstdbuf" == use an external libstdbuf.so for stdbuf instead of embedding it
 feat_external_libstdbuf = ["stdbuf/feat_external_libstdbuf"]
-# "feat_systemd_logind" == enable systemd_logind support for utmpx replacement
-feat_systemd_logind = [
-  "pinky/systemd_logind",
-  "uptime/systemd_logind",
-  "users/systemd_logind",
-  "uucore/systemd_logind",
-  "who/systemd_logind",
-]
 # "feat_selinux" == enable support for SELinux Security Context (by using `--features feat_selinux`)
 # NOTE:
 # * The selinux(-sys) crate requires `libselinux` headers and shared library to be accessible in the C toolchain at compile time.
