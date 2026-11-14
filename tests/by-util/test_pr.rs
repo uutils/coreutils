@@ -724,6 +724,18 @@ fn test_merge_with_column_separator() {
         .args(&["-m", "-t", "-s,", "-w", "10", "one", "two"])
         .succeeds()
         .stdout_is("firs,x\n2   ,y\n");
+    // -S sets the separator but keeps the padding
+    scene
+        .ucmd()
+        .args(&["-m", "-t", "-S,", "-w", "10", "one", "two"])
+        .succeeds()
+        .stdout_is("firs,x\n2   ,y\n");
+    // without -s, -w still sets the merged line width
+    scene
+        .ucmd()
+        .args(&["-m", "-t", "-w", "10", "one", "two"])
+        .succeeds()
+        .stdout_is("firs\tx\n2   \ty\n");
 }
 
 #[test]
