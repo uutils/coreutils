@@ -2879,17 +2879,12 @@ fn test_mv_cross_device_permission_denied() {
         .expect("Unable to restore directory permissions");
 }
 
-/// Regression for #10015. The cross-device fallback unlinks the destination
-/// and then creates a new file at the same path. An attacker who can write
-/// to the destination directory could race to plant a symlink in that
-/// window; without `O_NOFOLLOW` on the create, the copy would write through
-/// the symlink. The deterministic stand-in here pre-plants the symlink:
-/// `safe_copy::create_dest_restrictive` must refuse it with `ELOOP` rather
-/// than truncate `victim`.
+/// Regression for #10015: a cross-device move replaces a symlink at the
+/// destination instead of writing through it.
 #[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-fn test_mv_cross_device_refuses_planted_symlink_dest() {
+fn test_mv_cross_device_replaces_planted_symlink_dest() {
     use std::os::unix::fs::symlink;
     use tempfile::TempDir;
     use uutests::util::TestScenario;
@@ -2921,7 +2916,7 @@ fn test_mv_cross_device_refuses_planted_symlink_dest() {
     );
 }
 
-/// Directory counterpart of `test_mv_cross_device_refuses_planted_symlink_dest`.
+/// Directory counterpart of `test_mv_cross_device_replaces_planted_symlink_dest`.
 ///
 /// The cross-device directory fallback removes the destination and recreates it.
 /// Recreation must fail closed: `create_dir_all` would accept a symlink-to-directory
