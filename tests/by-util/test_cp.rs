@@ -3889,6 +3889,108 @@ fn test_copy_through_dangling_symlink() {
         .stderr_only("cp: not writing through dangling symlink 'target'\n");
 }
 
+#[rstest]
+#[case::simple("-b", "~")]
+#[case::numbered("--backup=numbered", ".~1~")]
+#[case::force("-bf", "~")]
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
+fn test_copy_backup_dangling_symlink(#[case] backup_arg: &str, #[case] suffix: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("file", "new");
+    at.symlink_file("nonexistent", "target");
+    ucmd.arg(backup_arg)
+        .arg("file")
+        .arg("target")
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("target"), "new");
+    assert!(at.is_symlink(format!("target{suffix}")));
+}
+
+#[rstest]
+#[case::regular_dest(false)]
+#[case::dangling_dest(true)]
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
+fn test_cp_backup_keeps_destination_when_source_is_missing(#[case] dangling_dest: bool) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("nonexistent", "source");
+    if dangling_dest {
+        at.symlink_file("missing", "dest");
+    } else {
+        at.write("dest", "old");
+    }
+    let result = ucmd.args(&["-b", "source", "dest"]).fails();
+    if cfg!(unix) {
+        result.stderr_contains("cannot stat 'source'");
+    }
+    assert!(at.symlink_exists("dest") || at.file_exists("dest"));
+    assert!(!at.symlink_exists("dest~") && !at.file_exists("dest~"));
+}
+
+#[test]
+fn test_cp_update_older_does_not_back_up_skipped_destination() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("file", "new");
+    at.write("dest", "old");
+    let past = filetime::FileTime::from_unix_time(0, 0);
+    filetime::set_file_times(at.plus("file"), past, past).unwrap();
+    ucmd.args(&["-b", "-u", "file", "dest"])
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("dest"), "old");
+    assert!(!at.file_exists("dest~"));
+}
+
+#[test]
+fn test_cp_interactive_update_older_backup_asks_before_backup() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("dest", "old");
+    at.write("file", "new");
+    let past = filetime::FileTime::from_unix_time(0, 0);
+    filetime::set_file_times(at.plus("dest"), past, past).unwrap();
+    ucmd.args(&["-i", "-b", "-u", "file", "dest"])
+        .pipe_in("n\n")
+        .fails()
+        .stderr_contains("overwrite 'dest'?");
+    assert_eq!(at.read("dest"), "old");
+    assert!(!at.file_exists("dest~"));
+}
+
+#[rstest]
+#[case::existing_dest(&[])]
+#[case::remove_destination(&["--remove-destination"])]
+fn test_cp_attributes_only_interactive_update_backup_declined(#[case] extra_args: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("dest", "old");
+    at.write("file", "new");
+    let past = filetime::FileTime::from_unix_time(0, 0);
+    filetime::set_file_times(at.plus("dest"), past, past).unwrap();
+    ucmd.args(&["--attributes-only", "-i", "-b", "-u"])
+        .args(extra_args)
+        .args(&["file", "dest"])
+        .pipe_in("n\n")
+        .fails()
+        .stderr_contains("overwrite 'dest'?");
+    assert_eq!(at.read("dest"), "old");
+    assert!(!at.file_exists("dest~"));
+}
+
+#[test]
+fn test_cp_interactive_update_older_backup_asks_once() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("dest", "old");
+    at.write("file", "new");
+    let past = filetime::FileTime::from_unix_time(0, 0);
+    filetime::set_file_times(at.plus("dest"), past, past).unwrap();
+    let result = ucmd
+        .args(&["-i", "-b", "-u", "file", "dest"])
+        .pipe_in("y\n")
+        .succeeds();
+    assert_eq!(result.stderr_str().matches("overwrite").count(), 1);
+    assert_eq!(at.read("dest"), "new");
+    assert_eq!(at.read("dest~"), "old");
+}
+
 #[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 fn test_copy_through_dangling_symlink_posixly_correct() {
