@@ -398,7 +398,7 @@ dependencies = [
  "getrandom 0.4.3",
  "glob",
  "libc",
- "nix",
+ "nix 0.31.3",
  "serde",
  "serde_json",
  "statrs",
@@ -519,7 +519,7 @@ dependencies = [
  "itertools 0.15.0",
  "jiff",
  "libc",
- "nix",
+ "nix 0.32.0",
  "num-prime",
  "phf",
  "phf_codegen",
@@ -774,7 +774,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e0b1fab2ae45819af2d0731d60f2afe17227ebb1a1538a236da84c93e9a60162"
 dependencies = [
  "dispatch2",
- "nix",
+ "nix 0.31.3",
  "windows-sys",
 ]
 
@@ -1837,6 +1837,18 @@ name = "nix"
 version = "0.31.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
+dependencies = [
+ "bitflags",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
+name = "nix"
+version = "0.32.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77730ed34f01f4990cb2ea67fec715ecebc6fab9a6396cf83c5529b13f581bdc"
 dependencies = [
  "bitflags",
  "cfg-if",
@@ -3234,7 +3246,7 @@ dependencies = [
  "fluent",
  "indicatif",
  "libc",
- "nix",
+ "nix 0.32.0",
  "rustix",
  "selinux",
  "tempfile",
@@ -3377,7 +3389,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "nix 0.32.0",
  "thiserror 2.0.21",
  "uucore",
 ]
@@ -3632,7 +3644,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "nix 0.32.0",
  "uucore",
 ]
 
@@ -3667,7 +3679,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "indicatif",
- "nix",
+ "nix 0.32.0",
  "rustc-hash",
  "rustix",
  "tempfile",
@@ -4060,7 +4072,7 @@ dependencies = [
  "cfg_aliases",
  "clap",
  "fluent",
- "nix",
+ "nix 0.32.0",
  "rustix",
  "uucore",
 ]
@@ -4385,7 +4397,7 @@ dependencies = [
  "libc",
  "md-5",
  "memchr",
- "nix",
+ "nix 0.32.0",
  "num-bigint",
  "num-traits",
  "openssl",
@@ -4428,7 +4440,7 @@ version = "0.13.0"
 dependencies = [
  "ctor",
  "libc",
- "nix",
+ "nix 0.32.0",
  "pretty_assertions",
  "rand 0.10.3",
  "regex",
@@ -4789,7 +4801,7 @@ dependencies = [
  "indexmap",
  "libc",
  "memchr",
- "nix",
+ "nix 0.31.3",
  "typed-path",
  "windows-sys",
  "zeroize",
