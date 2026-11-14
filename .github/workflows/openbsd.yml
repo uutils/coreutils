@@ -1,11 +1,13 @@
 name: OpenBSD
 
-# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc nextest copyback logind
+# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc mlugg nextest copyback logind zigbuild
 
 env:
   FEATURES: "feat_Tier1,feat_require_unix"
-  # * style job configuration
-  STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
+  CARGO_INCREMENTAL: "0"
+  RUSTFLAGS: "-C strip=symbols" # Avoid filling disk space
+  RUST_BACKTRACE: "1"
+  RUSTC_BOOTSTRAP: "1" # use build-std
 
 on:
   pull_request:
@@ -46,9 +48,6 @@ jobs:
     - uses: mlugg/setup-zig@v2.2.1
     - uses: taiki-e/install-action@cargo-zigbuild
     - name: cargo clippy
-      env:
-        CARGO_INCREMENTAL: "0"
-        RUSTC_BOOTSTRAP: "1"
       run: |
         # Set linker for stdbuf. env: and -Z do not work. Override `config.toml` to avoid duplicated keys.
         # We don't use `aws-lc` at here.
