@@ -4143,18 +4143,21 @@ fn test_invalid_date_escaping_depends_on_locale() {
 #[test]
 fn test_date_input_trailing_tz_abbrev_ignores_local_dst() {
     // 2024-03-10 02:30:00 does not exist on New York clocks (spring forward DST gap).
-    // An input specifying GMT should parse to epoch 1710037800 regardless of the local timezone.
-    new_ucmd!()
-        .env("LC_ALL", "C")
-        .env("TZ", "America/New_York")
-        .args(&["-d", "Sun, 10 Mar 2024 02:30:00 GMT", "+%s"])
-        .succeeds()
-        .stdout_is("1710037800\n");
+    // An input specifying GMT or UTC should parse to epoch 1710037800 regardless of the local timezone.
+    for tz in ["GMT", "UTC"] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "America/New_York")
+            .args(&["-d", &format!("Sun, 10 Mar 2024 02:30:00 {tz}"), "+%s"])
+            .succeeds()
+            .stdout_is("1710037800\n");
+    }
 
+    // Relative hours with trailing GMT, also crossing into the DST gap day.
     new_ucmd!()
         .env("LC_ALL", "C")
         .env("TZ", "America/New_York")
-        .args(&["-d", "Sun, 10 Mar 2024 02:30:00 UTC", "+%s"])
+        .args(&["-d", "2024-03-09 12:00 24 hours GMT", "+%s"])
         .succeeds()
-        .stdout_is("1710037800\n");
+        .stdout_is("1710072000\n");
 }
