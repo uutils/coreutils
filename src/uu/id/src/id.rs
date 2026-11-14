@@ -28,7 +28,7 @@ use uucore::libc::getlogin;
 use uucore::line_ending::LineEnding;
 use uucore::translate;
 
-use rustix::process::{Uid, getegid, geteuid, getgid, getuid};
+use nix::unistd::{Uid, getegid, geteuid, getgid, getuid}; // can be replaced with `rustix` after `fakeroot` supported `ptrace(2)`
 use uucore::{format_usage, show_error};
 
 macro_rules! cstr2cow {
