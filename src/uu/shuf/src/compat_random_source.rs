@@ -103,9 +103,16 @@ impl<R: BufRead> RandomSourceAdapter<R> {
     }
 
     pub fn choose_from_slice<T: Copy>(&mut self, vals: &[T]) -> UResult<T> {
-        assert!(!vals.is_empty());
-        let idx = self.generate_at_most(vals.len() as u64 - 1)? as usize;
-        Ok(vals[idx])
+        let Some(max_index) = vals.len().checked_sub(1) else {
+            return Err(USimpleError::new(
+                1,
+                translate!("shuf-error-no-lines-to-repeat"),
+            ));
+        };
+        let idx = self.generate_at_most(max_index as u64)? as usize;
+        vals.get(idx)
+            .copied()
+            .ok_or_else(|| USimpleError::new(1, translate!("shuf-error-no-lines-to-repeat")))
     }
 
     pub fn shuffle<'a, T>(&mut self, vals: &'a mut [T], amount: usize) -> UResult<&'a mut [T]> {
