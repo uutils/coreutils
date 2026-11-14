@@ -1601,27 +1601,46 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Optio
         return None;
     }
 
-    // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT.
-    let parsed = parse_datetime::parse_datetime_at_date(now.clone(), date_part).ok()?;
+    // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT,
+    // and wall-clock times are not affected by local DST transitions in the host's zone.
+    let base = now.datetime().to_zoned(tz).ok()?;
+    let parsed = parse_datetime::parse_datetime_at_date(base.clone(), date_part).ok()?;
     let zoned = parsed.into_zoned()?;
 
-    // `parse_datetime` returns the zone the input named, or `now`'s when it named
+    // `parse_datetime` returns the zone the input named, or `base`'s when it named
     // none, so a mismatch means `date_part` carries one of its own.
-    if zoned.time_zone() != now.time_zone() {
+    if zoned.time_zone() != base.time_zone() {
         return None;
     }
 
-    // That check cannot see a zone whose offset equals `now`'s ("12:00 UTC EST"
-    // under `-u`). Gated so the common case stays at one parse: `-f` runs this
-    // once per line.
-    let names_zone = date_part.contains('+')
-        || date_part.contains(|c: char| c.is_ascii_alphabetic())
-        || date_part.split_whitespace().any(|w| w.starts_with('-'));
-    if names_zone {
-        parse_datetime::parse_datetime_at_date(now.clone(), format!("{date_part} EST")).ok()?;
-    }
+    // That check cannot see a zone whose offset equals `base`'s.
+    // Detect an explicit timezone or numeric offset in `date_part` (e.g. "+0500", "-05:00",
+    // or attached directly after time like "12:00:00-05:00").
+    let has_explicit_zone = date_part.split_whitespace().any(|w| {
+        // Standalone numeric offset: e.g. "+0500", "-05:00"
+        let is_offset_token = (w.starts_with('+') || w.starts_with('-'))
+            && (w.len() == 5 || (w.len() == 6 && w.contains(':')))
+            && w[1..].chars().all(|c| c.is_ascii_digit() || c == ':');
 
-    let zoned = zoned.datetime().to_zoned(tz).ok()?;
+        // Offset attached directly after time: e.g. "12:00:00-05:00", "12:00+0200"
+        let is_offset_after_time = w.find(':').is_some_and(|pos| {
+            let after_colon = &w[pos..];
+            after_colon.rfind(['+', '-']).is_some_and(|sign| {
+                let offset = &after_colon[sign..];
+                (offset.len() == 5 || (offset.len() == 6 && offset.contains(':')))
+                    && offset[1..].chars().all(|c| c.is_ascii_digit() || c == ':')
+            })
+        });
+
+        // Standalone timezone name or abbreviation: e.g. "UTC", "GMT", "EDT", "Z"
+        let is_tz_name = w == "Z" || w == "z" || resolve_tz_abbreviation(w).is_some();
+
+        is_offset_token || is_offset_after_time || is_tz_name
+    });
+
+    if has_explicit_zone {
+        parse_datetime::parse_datetime_at_date(base, format!("{date_part} EST")).ok()?;
+    }
 
     // The trailing abbreviation only describes the *input* timezone. For display,
     // re-zone to the system timezone (i.e. `now`'s zone, which is UTC under `-u`).
