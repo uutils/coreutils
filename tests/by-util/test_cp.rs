@@ -1534,6 +1534,39 @@ fn test_cp_arg_remove_destination() {
     assert_eq!(at.read(TEST_HELLO_WORLD_DEST), "Hello, World!\n");
 }
 
+#[cfg(all(unix, not(target_os = "android")))] // Android denies hard links in the test directory.
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
+#[rstest]
+#[case::symlink_to_source(true, "source")]
+#[case::symlink_to_other(true, "other")]
+#[case::hardlink_to_source(false, "source")]
+fn test_cp_verbose_remove_destination_link(#[case] symlink: bool, #[case] target: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("source", "keep me");
+    at.write("other", "leave me alone");
+    if symlink {
+        at.symlink_file(target, "dest");
+    } else {
+        at.hard_link(target, "dest");
+    }
+
+    ucmd.args(&[
+        "--link",
+        "--remove-destination",
+        "--verbose",
+        "source",
+        "dest",
+    ])
+    .succeeds()
+    .stdout_only("removed 'dest'\n'source' -> 'dest'\n");
+
+    assert!(!at.symlink_exists("dest"));
+    assert_eq!(at.metadata("source").ino(), at.metadata("dest").ino());
+    assert_eq!(at.read("source"), "keep me");
+    assert_eq!(at.read("dest"), "keep me");
+    assert_eq!(at.read("other"), "leave me alone");
+}
+
 #[rstest]
 #[case::short(&["-b"], Some("~"))]
 #[case::combined_short_flags(&["-vbL"], Some("~"))]
