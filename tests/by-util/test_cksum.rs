@@ -1760,7 +1760,6 @@ fn test_check_untagged_flag_without_file_name() {
         .stderr_contains("WARNING: 2 lines are improperly formatted");
 }
 
-#[uutests::wasi_ignore(EmptyPathResolvesToDirectory)]
 #[test]
 #[cfg(all(not(windows), feature = "b2sum"))]
 fn test_check_untagged_without_file_name() {
