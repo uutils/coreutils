@@ -5,6 +5,7 @@
 
 // spell-checker:ignore nabcd badoption schar nosuchfile
 
+use uucore::display::Quotable;
 use uucore::posix::OBSOLETE;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -1350,4 +1351,34 @@ fn test_obsolete_skip_fields_not_read_after_double_dash() {
         .args(&["--", "-1"])
         .fails()
         .stderr_contains("-1");
+}
+
+#[test]
+fn test_overflowing_numeric_options_with_trailing_garbage_rejected() {
+    // Large values that overflow usize but have trailing non-digits must be rejected (issue #16122)
+    for (flag, opt_name) in [
+        ("-f", "skip-fields"),
+        ("-s", "skip-chars"),
+        ("-w", "check-chars"),
+    ] {
+        for bad_val in ["18446744073709551616x", "+18446744073709551616x"] {
+            new_ucmd!()
+                .args(&[flag, bad_val])
+                .pipe_in("first\nsecond\nthird\n")
+                .fails_with_code(1)
+                .stderr_is(format!(
+                    "uniq: Invalid argument for {opt_name}: {}\n",
+                    bad_val.maybe_quote()
+                ));
+        }
+    }
+
+    // Purely numeric overflowing values (with or without leading '+') remain accepted (clamped to usize::MAX)
+    for val in ["18446744073709551616", "+18446744073709551616"] {
+        new_ucmd!()
+            .args(&["-f", val])
+            .pipe_in("first\nsecond\nthird\n")
+            .succeeds()
+            .stdout_is("first\n");
+    }
 }
