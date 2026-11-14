@@ -298,6 +298,67 @@ fn test_reference_file_not_found() {
         .stderr_contains("cannot stat 'a': No such file or directory");
 }
 
+#[uutests::wasi_ignore(NoUnixDomainSockets)]
+#[test]
+#[cfg(unix)]
+fn test_reference_socket_has_no_size() {
+    use std::os::unix::net::UnixListener;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let _listener = UnixListener::bind(at.plus("sock")).expect("failed to create socket");
+    at.write(FILE1, "1234567890");
+
+    // The reason differs between platforms (ENXIO on Linux).
+    ucmd.args(&["-r", "sock", FILE1])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("truncate: cannot get the size of 'sock': ");
+    assert_eq!(at.read(FILE1), "1234567890");
+}
+
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
+#[cfg(unix)]
+fn test_reference_character_device() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(FILE1, "1234567890");
+
+    ucmd.args(&["-r", "/dev/null", FILE1])
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read(FILE1), "");
+}
+
+// Like GNU, a directory's size is where a seek to its end lands, not its
+// metadata length. The seek fails on tmpfs, gives 0 on btrfs, and on ext4
+// lands on a hash offset too large for a file.
+#[uutests::wasi_ignore(DirectorySizeFromMetadata)]
+#[test]
+#[cfg(unix)]
+fn test_reference_directory_size_is_its_end_offset() {
+    use std::io::{Seek, SeekFrom};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/entry");
+    at.write(FILE1, "1234567890");
+
+    let end = std::fs::File::open(at.plus("dir")).and_then(|mut dir| dir.seek(SeekFrom::End(0)));
+    let result = ucmd.args(&["-r", "dir", FILE1]).run();
+    if let Ok(end) = end {
+        if result.succeeded() {
+            assert_eq!(at.metadata(FILE1).len(), end);
+        } else {
+            assert_eq!(at.read(FILE1), "1234567890");
+        }
+    } else {
+        result
+            .failure()
+            .stderr_contains("truncate: cannot get the size of 'dir': ");
+        assert_eq!(at.read(FILE1), "1234567890");
+    }
+}
+
 #[test]
 fn test_reference_with_size_file_not_found() {
     new_ucmd!()
@@ -590,6 +651,20 @@ mod fifo {
             .fails()
             .no_stdout()
             .stderr_contains("cannot open 'fifo' for writing: No such device or address");
+    }
+
+    #[test]
+    fn test_fifo_as_reference_has_no_size() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkfifo("fifo");
+        at.write(FILE1, "1234567890");
+
+        // ESPIPE reads "Illegal seek" with glibc and "Invalid seek" with musl.
+        ucmd.args(&["-r", "fifo", FILE1])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("truncate: cannot get the size of 'fifo': ");
+        assert_eq!(at.read(FILE1), "1234567890");
     }
 
     #[test]
