@@ -2807,6 +2807,37 @@ fn compare_lines_with_collator(a: &Line<'_>, b: &Line<'_>, settings: &GlobalSett
     if settings.reverse { cmp.reverse() } else { cmp }
 }
 
+// Keep collation-key lookup and lazy ICU comparison out of the general
+// comparator so they do not inflate the numeric sorting fast path.
+#[cfg(feature = "i18n-collator")]
+#[inline(never)]
+fn compare_by_collation_keys<'a>(
+    a: &Line<'a>,
+    b: &Line<'a>,
+    global_settings: &GlobalSettings,
+    a_line_data: &LineData<'a>,
+    b_line_data: &LineData<'a>,
+) -> Ordering {
+    let mut cmp = match (
+        a_line_data.collation_key(a.index),
+        b_line_data.collation_key(b.index),
+    ) {
+        (Some(a_key), Some(b_key)) => a_key.cmp(b_key),
+        _ => locale_cmp(a.line, b.line),
+    };
+    // If collation keys are equal, fall back to lexicographic comparison
+    // This can be the case for inputs like `01` and `0_1`, which have equal keys
+    if cmp == Ordering::Equal {
+        // Reversing the order to match sort's sorting behaviour
+        cmp = b.line.cmp(a.line);
+    }
+    if global_settings.reverse {
+        cmp.reverse()
+    } else {
+        cmp
+    }
+}
+
 fn compare_by<'a>(
     a: &Line<'a>,
     b: &Line<'a>,
@@ -2825,24 +2856,7 @@ fn compare_by<'a>(
 
     #[cfg(feature = "i18n-collator")]
     if global_settings.precomputed.fast_locale_collation {
-        let mut cmp = match (
-            a_line_data.collation_key(a.index),
-            b_line_data.collation_key(b.index),
-        ) {
-            (Some(a_key), Some(b_key)) => a_key.cmp(b_key),
-            _ => locale_cmp(a.line, b.line),
-        };
-        // If collation keys are equal, fall back to lexicographic comparison
-        // This can be the case for inputs like `01` and `0_1`, which have equal keys
-        if cmp == Ordering::Equal {
-            // Reversing the order to match sort's sorting behaviour
-            cmp = b.line.cmp(a.line);
-        }
-        return if global_settings.reverse {
-            cmp.reverse()
-        } else {
-            cmp
-        };
+        return compare_by_collation_keys(a, b, global_settings, a_line_data, b_line_data);
     }
 
     if global_settings.precomputed.fast_ascii_insensitive {

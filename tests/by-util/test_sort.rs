@@ -4110,12 +4110,14 @@ fn test_locale_collation_long_lines() {
 #[test]
 fn test_locale_collation_long_line_boundary() {
     // Compare a precomputed key at the limit with a lazy line just over it.
+    // Distinct primary weights avoid scanning both enormous lines during lazy
+    // comparison. Case and accent ordering are covered by the smaller test above.
     const AT_CAP: usize = 16 * 1024 * 1024;
 
     let lower_at = "a".repeat(AT_CAP);
-    let upper_over = "A".repeat(AT_CAP + 1);
-    let input = format!("{upper_over}\nb\n{lower_at}\na\n");
-    let expected = format!("a\n{lower_at}\n{upper_over}\nb\n");
+    let upper_over = "B".repeat(AT_CAP + 1);
+    let input = format!("{upper_over}\nc\n{lower_at}\na\n");
+    let expected = format!("a\n{lower_at}\n{upper_over}\nc\n");
 
     new_ucmd!()
         .env("LC_ALL", "en_US.UTF-8")

@@ -7,6 +7,10 @@
 //!
 //! Note: The locale is set in `main()` BEFORE any benchmark runs because
 //! the locale is cached on first access via `OnceLock` and cannot be changed afterwards.
+//!
+//! Subprocess benchmarks have distinct names from the former in-process versions:
+//! those switched to byte comparison after warmup, so their results are not a
+//! locale-collation baseline.
 
 use divan::{Bencher, black_box};
 use std::path::Path;
@@ -95,7 +99,7 @@ fn sort_unique_utf8_locale(bencher: Bencher) {
 
 /// Moderately long lines still retain reusable collation keys.
 #[divan::bench]
-fn sort_very_long_lines_utf8_locale(bencher: Bencher) {
+fn sort_very_long_lines_utf8_locale_subprocess(bencher: Bencher) {
     let mut data = Vec::new();
     // Create 26 lines of 1 MB each, each line is a single repeated letter
     let letters: Vec<u8> = (b'a'..=b'z').collect();
@@ -121,7 +125,7 @@ fn sort_enormous_lines_utf8_locale(bencher: Bencher) {
 
 /// Benchmark sorting lines that share a long common prefix.
 #[divan::bench]
-fn sort_long_common_prefix_utf8_locale(bencher: Bencher) {
+fn sort_long_common_prefix_utf8_locale_subprocess(bencher: Bencher) {
     let mut data = Vec::new();
     let prefix_len = 16 * 1024;
     let prefix: Vec<u8> = std::iter::repeat_n(b'x', prefix_len).collect();
