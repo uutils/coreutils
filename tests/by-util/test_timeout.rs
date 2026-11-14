@@ -390,6 +390,20 @@ fn test_sigchld_ignored_by_parent() {
 
 #[test]
 #[cfg(unix)]
+fn test_timeout_signal_ignored_by_parent() {
+    let (ts, bin) = scenario_with_bin();
+    let start = std::time::Instant::now();
+    ts.cmd("sh")
+        .args(&[
+            "-c",
+            &format!("trap '' TERM; exec {bin} timeout 1 {bin} sleep 10"),
+        ])
+        .fails_with_code(124);
+    assert!(start.elapsed() < Duration::from_secs(5));
+}
+
+#[test]
+#[cfg(unix)]
 fn test_with_background_child() {
     new_ucmd!()
         .args(&[".5", "sh", "-c", "sleep .1 & sleep 2"])
