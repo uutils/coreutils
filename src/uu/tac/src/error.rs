@@ -13,7 +13,7 @@ use uucore::{translate, translate_text};
 
 fn regex_error_message(err: &BuildError) -> String {
     if let Some(limit) = err.size_limit() {
-        format!("Compiled regex exceeds size limit of {limit} bytes.")
+        translate_text!("tac-error-regex-size-limit", "limit" => limit)
     } else if let Some(syntax_err) = err.syntax_error() {
         syntax_err.to_string()
     } else {
