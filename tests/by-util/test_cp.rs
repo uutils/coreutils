@@ -4380,6 +4380,59 @@ fn test_dir_recursive_copy() {
 }
 
 #[test]
+#[cfg(windows)]
+fn test_cp_recursive_drive_root() {
+    use std::process::Command;
+
+    struct SubstDrive(String);
+
+    impl Drop for SubstDrive {
+        fn drop(&mut self) {
+            let _ = Command::new("subst").arg(&self.0).arg("/D").status();
+        }
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("src/sub");
+    at.write("src/id.dat", "root file");
+    at.write("src/sub/x.txt", "nested file");
+
+    let Some(drive) = (b'A'..=b'Z')
+        .rev()
+        .map(char::from)
+        .find(|letter| !Path::new(&format!("{letter}:\\")).exists())
+    else {
+        println!("No free drive letter available for subst; skipping test");
+        return;
+    };
+    let drive = format!("{drive}:");
+    match Command::new("subst")
+        .arg(&drive)
+        .arg(at.plus("src"))
+        .status()
+    {
+        Ok(status) if status.success() => {}
+        result => {
+            println!("subst {drive} failed ({result:?}); skipping test");
+            return;
+        }
+    }
+    let _subst_drive = SubstDrive(drive.clone());
+
+    for (source, dest) in [
+        (format!("{drive}/"), "dest_slash"),
+        (format!("{drive}\\"), "dest_backslash"),
+    ] {
+        // The bug only shows when the destination directory already exists.
+        at.mkdir(dest);
+        scene.ucmd().args(&["-r", &source, dest]).succeeds();
+        assert_eq!(at.read(format!("{dest}/id.dat")), "root file");
+        assert_eq!(at.read(format!("{dest}/sub/x.txt")), "nested file");
+    }
+}
+
+#[test]
 fn test_cp_dir_vs_file() {
     new_ucmd!()
         .arg("-R")
