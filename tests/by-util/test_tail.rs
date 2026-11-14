@@ -927,8 +927,9 @@ fn test_follow_with_pid() {
 
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let dummy_cmd = "sh";
-    let mut dummy = Command::new(dummy_cmd).spawn().unwrap();
+    // Keep the shell alive on its own pipe. Inheriting stdin can execute the
+    // remaining CI workflow when the test runner is fed a here-document.
+    let mut dummy = Command::new("sh").stdin(Stdio::piped()).spawn().unwrap();
     let pid = dummy.id();
 
     let mut child = ucmd
