@@ -50,6 +50,8 @@ impl SplitName {
 
         let format_string = format_opt.unwrap_or_else(|| format!("%0{n_digits}u"));
 
+        check_suffix_format(format_string.as_bytes())?;
+
         let format = match Format::<UnsignedInt, u64>::parse(format_string) {
             Ok(format) => Ok(format),
             Err(FormatError::TooManySpecs(_)) => Err(CsplitError::SuffixFormatTooManyPercents),
@@ -67,6 +69,88 @@ impl SplitName {
         let mut v = self.prefix.clone();
         self.format.fmt(&mut v, n as u64).unwrap();
         String::from_utf8_lossy(&v).to_string()
+    }
+}
+
+/// Validate a `--suffix-format` value the way GNU csplit does, so that the
+/// same values are rejected with the same messages: exactly one conversion,
+/// one of `d i u o x X`, with `'` only on `d i u` and `#` only on `o x X`.
+fn check_suffix_format(format: &[u8]) -> Result<(), CsplitError> {
+    let mut seen_conversion = false;
+    let mut i = 0;
+    while let Some(&c) = format.get(i) {
+        if c != b'%' {
+            i += 1;
+            continue;
+        }
+        i += 1;
+        let Some(&after_percent) = format.get(i) else {
+            return Err(CsplitError::SuffixFormatMissingSpecifier);
+        };
+        if after_percent == b'%' {
+            i += 1;
+            continue;
+        }
+        if seen_conversion {
+            return Err(CsplitError::SuffixFormatTooManyPercents);
+        }
+        seen_conversion = true;
+
+        let (mut thousands, mut alternative) = (false, false);
+        while let Some(&c) = format.get(i) {
+            match c {
+                b'-' | b'0' => {}
+                b'\'' => thousands = true,
+                b'#' => alternative = true,
+                _ => break,
+            }
+            i += 1;
+        }
+        while let Some(&c) = format.get(i) {
+            if !c.is_ascii_digit() {
+                break;
+            }
+            i += 1;
+        }
+        if let Some(&b'.') = format.get(i) {
+            i += 1;
+            while let Some(&c) = format.get(i) {
+                if !c.is_ascii_digit() {
+                    break;
+                }
+                i += 1;
+            }
+        }
+
+        let Some(&conv) = format.get(i) else {
+            return Err(CsplitError::SuffixFormatMissingSpecifier);
+        };
+        let bad_flag = match conv {
+            b'd' | b'i' | b'u' => alternative.then_some('#'),
+            b'o' | b'x' | b'X' => thousands.then_some('\''),
+            c if c.is_ascii_graphic() || c == b' ' => {
+                return Err(CsplitError::SuffixFormatInvalidSpecifier(
+                    (c as char).to_string(),
+                ));
+            }
+            c => {
+                return Err(CsplitError::SuffixFormatInvalidSpecifier(format!(
+                    "\\{c:03o}"
+                )));
+            }
+        };
+        if let Some(flag) = bad_flag {
+            return Err(CsplitError::SuffixFormatInvalidFlags(format!(
+                "%{flag}{}",
+                conv as char
+            )));
+        }
+        i += 1;
+    }
+    if seen_conversion {
+        Ok(())
+    } else {
+        Err(CsplitError::SuffixFormatMissingPercent)
     }
 }
 
@@ -89,8 +173,8 @@ mod tests {
     fn invalid_suffix_format1() {
         let split_name = SplitName::new(None, Some(String::from("no conversion string")), None);
         match split_name {
-            Err(CsplitError::SuffixFormatIncorrect) => (),
-            _ => panic!("should fail with SuffixFormatIncorrect"),
+            Err(CsplitError::SuffixFormatMissingPercent) => (),
+            _ => panic!("should fail with SuffixFormatMissingPercent"),
         }
     }
 
@@ -98,8 +182,8 @@ mod tests {
     fn invalid_suffix_format2() {
         let split_name = SplitName::new(None, Some(String::from("%042a")), None);
         match split_name {
-            Err(CsplitError::SuffixFormatIncorrect) => (),
-            _ => panic!("should fail with SuffixFormatIncorrect"),
+            Err(CsplitError::SuffixFormatInvalidSpecifier(c)) => assert_eq!(c, "a"),
+            _ => panic!("should fail with SuffixFormatInvalidSpecifier"),
         }
     }
 
