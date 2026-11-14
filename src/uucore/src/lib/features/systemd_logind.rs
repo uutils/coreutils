@@ -18,23 +18,95 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{UResult, USimpleError};
 
-/// FFI bindings for libsystemd login and D-Bus functions
+/// Dynamically loaded FFI bindings for libsystemd login functions.
 mod ffi {
     use core::ffi::{c_char, c_int, c_uint};
+    use libloading::Library;
+    use std::path::Path;
 
-    #[link(name = "systemd")]
-    unsafe extern "C" {
-        pub fn sd_get_sessions(sessions: *mut *mut *mut c_char) -> c_int;
-        pub fn sd_session_get_uid(session: *const c_char, uid: *mut c_uint) -> c_int;
-        pub fn sd_session_get_start_time(session: *const c_char, usec: *mut u64) -> c_int;
-        pub fn sd_session_get_tty(session: *const c_char, tty: *mut *mut c_char) -> c_int;
-        pub fn sd_session_get_remote_host(
-            session: *const c_char,
-            remote_host: *mut *mut c_char,
-        ) -> c_int;
-        pub fn sd_session_get_display(session: *const c_char, display: *mut *mut c_char) -> c_int;
-        pub fn sd_session_get_seat(session: *const c_char, seat: *mut *mut c_char) -> c_int;
+    type SdGetSessions = unsafe extern "C" fn(*mut *mut *mut c_char) -> c_int;
+    type SdSessionGetUid = unsafe extern "C" fn(*const c_char, *mut c_uint) -> c_int;
+    type SdSessionGetStartTime = unsafe extern "C" fn(*const c_char, *mut u64) -> c_int;
+    type SdSessionGetString = unsafe extern "C" fn(*const c_char, *mut *mut c_char) -> c_int;
 
+    pub(super) struct SystemdLoginApi {
+        // The library must remain loaded while any of these function pointers are used.
+        _library: Library,
+        pub(super) sd_get_sessions: SdGetSessions,
+        pub(super) sd_session_get_uid: SdSessionGetUid,
+        pub(super) sd_session_get_start_time: SdSessionGetStartTime,
+        pub(super) sd_session_get_tty: SdSessionGetString,
+        pub(super) sd_session_get_remote_host: SdSessionGetString,
+        pub(super) sd_session_get_display: SdSessionGetString,
+        pub(super) sd_session_get_seat: SdSessionGetString,
+    }
+
+    impl SystemdLoginApi {
+        pub(super) fn load() -> Result<Self, Box<dyn std::error::Error>> {
+            Self::load_from(Path::new("libsystemd.so.0"))
+        }
+
+        fn load_from(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+            // SAFETY: The loaded symbols use the signatures declared by libsystemd's
+            // stable public API. The Library is retained in Self for at least as long
+            // as the copied function pointers can be called.
+            unsafe {
+                let library = Library::new(path)?;
+                let sd_get_sessions = *library.get::<SdGetSessions>(b"sd_get_sessions\0")?;
+                let sd_session_get_uid =
+                    *library.get::<SdSessionGetUid>(b"sd_session_get_uid\0")?;
+                let sd_session_get_start_time =
+                    *library.get::<SdSessionGetStartTime>(b"sd_session_get_start_time\0")?;
+                let sd_session_get_tty =
+                    *library.get::<SdSessionGetString>(b"sd_session_get_tty\0")?;
+                let sd_session_get_remote_host =
+                    *library.get::<SdSessionGetString>(b"sd_session_get_remote_host\0")?;
+                let sd_session_get_display =
+                    *library.get::<SdSessionGetString>(b"sd_session_get_display\0")?;
+                let sd_session_get_seat =
+                    *library.get::<SdSessionGetString>(b"sd_session_get_seat\0")?;
+
+                Ok(Self {
+                    _library: library,
+                    sd_get_sessions,
+                    sd_session_get_uid,
+                    sd_session_get_start_time,
+                    sd_session_get_tty,
+                    sd_session_get_remote_host,
+                    sd_session_get_display,
+                    sd_session_get_seat,
+                })
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::SystemdLoginApi;
+        use std::path::Path;
+
+        #[test]
+        fn missing_library_is_reported() {
+            assert!(
+                SystemdLoginApi::load_from(Path::new("libsystemd-uutils-does-not-exist.so"))
+                    .is_err()
+            );
+        }
+
+        #[test]
+        fn invalid_library_is_reported() {
+            let library = tempfile::NamedTempFile::new().unwrap();
+            assert!(SystemdLoginApi::load_from(library.path()).is_err());
+        }
+
+        #[test]
+        #[cfg(all(target_env = "gnu", not(target_feature = "crt-static")))]
+        fn missing_login_symbols_are_reported() {
+            let error = SystemdLoginApi::load_from(Path::new("libc.so.6"))
+                .err()
+                .unwrap();
+            assert!(error.to_string().contains("sd_get_sessions"), "{error}");
+        }
     }
 }
 
@@ -47,10 +119,13 @@ mod login {
     use std::time::SystemTime;
 
     /// Get all active sessions
-    pub fn get_sessions() -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    pub fn get_sessions(
+        api: &ffi::SystemdLoginApi,
+    ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
         let mut sessions_ptr: *mut *mut c_char = ptr::null_mut();
 
-        let result = unsafe { ffi::sd_get_sessions(&raw mut sessions_ptr) };
+        // SAFETY: api retains the library, and sessions_ptr is a writable output.
+        let result = unsafe { (api.sd_get_sessions)(&raw mut sessions_ptr) };
 
         if result < 0 {
             return Err(format!("sd_get_sessions failed: {result}").into());
@@ -79,11 +154,15 @@ mod login {
     }
 
     /// Get UID for a session
-    pub fn get_session_uid(session_id: &str) -> Result<u32, Box<dyn std::error::Error>> {
+    pub fn get_session_uid(
+        api: &ffi::SystemdLoginApi,
+        session_id: &str,
+    ) -> Result<u32, Box<dyn std::error::Error>> {
         let session_cstring = CString::new(session_id)?;
         let mut uid: core::ffi::c_uint = 0;
 
-        let result = unsafe { ffi::sd_session_get_uid(session_cstring.as_ptr(), &raw mut uid) };
+        // SAFETY: api retains the library; the session is NUL-terminated and uid is writable.
+        let result = unsafe { (api.sd_session_get_uid)(session_cstring.as_ptr(), &raw mut uid) };
 
         if result < 0 {
             return Err(
@@ -95,12 +174,16 @@ mod login {
     }
 
     /// Get start time for a session (in microseconds since Unix epoch)
-    pub fn get_session_start_time(session_id: &str) -> Result<u64, Box<dyn std::error::Error>> {
+    pub fn get_session_start_time(
+        api: &ffi::SystemdLoginApi,
+        session_id: &str,
+    ) -> Result<u64, Box<dyn std::error::Error>> {
         let session_cstring = CString::new(session_id)?;
         let mut usec: u64 = 0;
 
+        // SAFETY: api retains the library; the session is NUL-terminated and usec is writable.
         let result =
-            unsafe { ffi::sd_session_get_start_time(session_cstring.as_ptr(), &raw mut usec) };
+            unsafe { (api.sd_session_get_start_time)(session_cstring.as_ptr(), &raw mut usec) };
 
         if result < 0 {
             return Err(format!(
@@ -210,6 +293,8 @@ impl SystemdLoginRecord {
 /// Read login records from systemd-logind using safe wrapper functions
 /// This matches the approach used by GNU coreutils `read_utmp_from_systemd()`
 pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
+    let api = ffi::SystemdLoginApi::load()
+        .map_err(|e| USimpleError::new(1, format!("Failed to load libsystemd: {e}")))?;
     let mut records = Vec::new();
 
     // Add boot time record first
@@ -229,7 +314,7 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
     }
 
     // Get all active sessions using safe wrapper
-    let mut sessions = login::get_sessions()
+    let mut sessions = login::get_sessions(&api)
         .map_err(|e| USimpleError::new(1, format!("Failed to get systemd sessions: {e}")))?;
 
     // Sort sessions consistently for reproducible output (reverse for TTY sessions first)
@@ -239,7 +324,7 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
     // Iterate through all sessions
     for session_id in sessions {
         // Get session UID using safe wrapper
-        let Ok(uid) = login::get_session_uid(&session_id) else {
+        let Ok(uid) = login::get_session_uid(&api, &session_id) else {
             continue;
         };
 
@@ -278,15 +363,16 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
         };
 
         // Get start time using safe wrapper, fallback to epoch if unavailable
-        let start_time = login::get_session_start_time(&session_id).map_or(UNIX_EPOCH, |usec| {
-            UNIX_EPOCH + std::time::Duration::from_micros(usec)
-        });
+        let start_time = login::get_session_start_time(&api, &session_id)
+            .map_or(UNIX_EPOCH, |usec| {
+                UNIX_EPOCH + std::time::Duration::from_micros(usec)
+            });
 
         // Get TTY using safe wrapper
-        let mut tty = login::get_session_string(&session_id, ffi::sd_session_get_tty);
+        let mut tty = login::get_session_string(&session_id, api.sd_session_get_tty);
 
         // Get seat using safe wrapper
-        let mut seat = login::get_session_string(&session_id, ffi::sd_session_get_seat);
+        let mut seat = login::get_session_string(&session_id, api.sd_session_get_seat);
 
         // Strip any existing prefixes from systemd values (if any)
         if tty.starts_with('?') {
@@ -297,10 +383,10 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
         }
 
         // Get remote host using safe wrapper
-        let remote_host = login::get_session_string(&session_id, ffi::sd_session_get_remote_host);
+        let remote_host = login::get_session_string(&session_id, api.sd_session_get_remote_host);
 
         // Get display using safe wrapper (for GUI sessions)
-        let display = login::get_session_string(&session_id, ffi::sd_session_get_display);
+        let display = login::get_session_string(&session_id, api.sd_session_get_display);
 
         // Determine host (use remote_host if available)
         // If host is local (non-remote) we use display,

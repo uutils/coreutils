@@ -305,6 +305,9 @@ jobs:
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
         RUST_BACKTRACE: "1"
+    - name: Test utmpx with systemd-logind
+      if: runner.os == 'Linux'
+      run: cargo test -p uucore --lib --locked --features systemd_logind
     - name: Upload test results to Codecov
       if: ${{ !cancelled() }}
       uses: codecov/codecov-action@v7
@@ -557,9 +560,9 @@ jobs:
         esac
         case '${{ matrix.job.os }}' in
           ubuntu-*)
-            # selinux and systemd headers needed to build tests
+            # selinux headers needed to build tests
             sudo apt-get -y update
-            sudo apt-get -y install libselinux1-dev libsystemd-dev
+            sudo apt-get -y install libselinux1-dev
             # pinky is a tool to show logged-in users from utmp, and gecos fields from /etc/passwd.
             # In GitHub Action *nix VMs, no accounts log in, even the "runner" account that runs the commands, and "system boot" entry is missing.
             # The account also has empty gecos fields.
@@ -796,10 +799,10 @@ jobs:
         ## Install/setup prerequisites
         case '${{ matrix.job.os }}' in
           ubuntu-latest)
-            # selinux and systemd headers needed to build tests
+            # selinux headers needed to build tests
             # acl: setfacl for coverage profile-trace dir default ACL (umask 0777 tests)
             sudo apt-get -y update
-            sudo apt-get -y install libselinux1-dev libsystemd-dev acl
+            sudo apt-get -y install libselinux1-dev acl
             # pinky is a tool to show logged-in users from utmp, and gecos fields from /etc/passwd.
             # In GitHub Action *nix VMs, no accounts log in, even the "runner" account that runs the commands, and "system boot" entry is missing.
             # The account also has empty gecos fields.

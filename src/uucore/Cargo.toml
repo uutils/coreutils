@@ -120,6 +120,7 @@ time = { workspace = true, optional = true, features = [
 walkdir = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+libloading = { workspace = true, optional = true }
 procfs = { workspace = true, optional = true }
 
 [target.'cfg(windows)'.dependencies]
@@ -228,7 +229,7 @@ sum = [
   "crc-fast",
   "data-encoding",
 ]
-systemd_logind = ["utmpx", "libc"]
+systemd_logind = ["utmpx", "libc", "dep:libloading"]
 # Use OpenSSL (libcrypto) for md5/sha1/sha2-family digests instead of the
 # pure-Rust crates. This dramatically speeds up checksum utilities on CPUs
 # without SHA-NI by using OpenSSL's optimized assembly implementations.
