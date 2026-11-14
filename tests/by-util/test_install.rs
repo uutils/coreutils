@@ -8,7 +8,6 @@
 
 use rstest::rstest;
 use rustix::process::{getegid, geteuid};
-use std::env::current_exe;
 use std::fs;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
@@ -913,7 +912,7 @@ fn test_install_and_strip_with_ancestor_directories() {
 
 #[test]
 fn test_install_no_strip_with_program() {
-    let source = current_exe().unwrap();
+    let source = uutests::util::get_tests_binary();
     TestScenario::new(util_name!())
         .ucmd()
         .arg("--strip-program")
@@ -1039,7 +1038,7 @@ fn test_install_on_invalid_link_at_destination_and_dev_null_at_source() {
 fn test_install_and_strip_with_invalid_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    let source = current_exe().unwrap();
+    let source = uutests::util::get_tests_binary();
 
     scene
         .ucmd()
@@ -1076,7 +1075,7 @@ fn test_install_and_strip_with_signal_terminated_program() {
 fn test_install_and_strip_with_non_existent_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    let source = current_exe().unwrap();
+    let source = uutests::util::get_tests_binary();
 
     scene
         .ucmd()

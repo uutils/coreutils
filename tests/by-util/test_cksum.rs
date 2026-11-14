@@ -45,6 +45,7 @@ fn sha_fixture_name(algo: &str, len: u32, prefix: &str, suffix: &str) -> String 
 
 #[test]
 #[cfg(feature = "openssl")]
+#[cfg_attr(target_os = "openbsd", ignore = "TODO: investigate LibreSSL's so name")]
 fn test_openssl_link() {
     let Ok(out) = std::process::Command::new("ldd")
         .arg(uutests::util::get_tests_binary())
