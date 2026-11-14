@@ -79,7 +79,7 @@ Use common functions from `src/uucore/src/lib/features/benchmark.rs`:
 ```rust
 use divan::{Bencher, black_box};
 use uu_expand::uumain;
-use uucore::benchmark::{create_test_file, run_util_function, text_data};
+use uucore::benchmark::{create_test_file, get_bench_args, text_data};
 
 #[divan::bench(args = [10_000, 100_000])]
 fn bench_expand(bencher: Bencher, num_lines: usize) {
@@ -87,9 +87,9 @@ fn bench_expand(bencher: Bencher, num_lines: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let file_path = create_test_file(&data, temp_dir.path());
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path.to_str().unwrap()]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&file_path]).into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 fn main() {

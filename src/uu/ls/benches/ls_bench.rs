@@ -7,7 +7,7 @@ use divan::{Bencher, black_box};
 use std::fs;
 use tempfile::TempDir;
 use uu_ls::uumain;
-use uucore::benchmark::{fs_tree, run_util_function};
+use uucore::benchmark::{fs_tree, get_bench_args};
 
 /// Helper to run ls with given arguments on a directory
 fn bench_ls_with_args(bencher: Bencher, temp_dir: &TempDir, args: &[&str]) {
@@ -15,10 +15,15 @@ fn bench_ls_with_args(bencher: Bencher, temp_dir: &TempDir, args: &[&str]) {
     let mut full_args = vec!["-R"];
     full_args.extend_from_slice(args);
     full_args.push(temp_path_str);
+    let full_args = full_args
+        .iter()
+        .map(|arg| arg as &dyn AsRef<std::ffi::OsStr>)
+        .collect::<Vec<_>>();
+    let full_args = get_bench_args(&full_args);
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &full_args));
-    });
+    bencher
+        .with_inputs(|| full_args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark ls -R on balanced directory tree
