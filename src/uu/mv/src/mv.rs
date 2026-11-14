@@ -44,7 +44,9 @@ use crate::hardlink::{
 };
 use uucore::backup_control::{self, backup_would_destroy_source};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::error::{
+    FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code, strip_errno,
+};
 #[cfg(unix)]
 use uucore::fs::display_permissions_unix;
 use uucore::fs::{
@@ -932,6 +934,12 @@ fn is_directory_not_empty_error(err: &io::Error) -> bool {
     err.kind() == io::ErrorKind::DirectoryNotEmpty
 }
 
+fn is_inter_device_move_error(err: &io::Error) -> bool {
+    err.get_ref()
+        .and_then(|inner| inner.downcast_ref::<MvError>())
+        .is_some_and(|e| matches!(e, MvError::InterDeviceMoveFailed(..)))
+}
+
 #[cfg(unix)]
 fn is_fifo(filetype: fs::FileType) -> bool {
     filetype.is_fifo()
@@ -947,6 +955,10 @@ fn is_fifo(_filetype: fs::FileType) -> bool {
 /// Add GNU's "cannot move" (or "cannot overwrite" for a non-empty
 /// directory) context to an error from `rename`.
 fn cannot_move_error(e: io::Error, source: &Path, target: &Path) -> Box<dyn UError> {
+    // This message already names both files, so it is shown without a context
+    if is_inter_device_move_error(&e) {
+        return USimpleError::new(1, e.to_string());
+    }
     let message = if is_directory_not_empty_error(&e) {
         translate!(
             "mv-error-cannot-overwrite-non-empty-directory",
@@ -1498,14 +1510,15 @@ fn rename_file_fallback(
     #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
 ) -> io::Result<()> {
     // Remove existing target file if it exists
-    if to.is_symlink() {
+    if to.symlink_metadata().is_ok() {
         fs::remove_file(to).map_err(|err| {
-            let inter_device_msg = translate!("mv-error-inter-device-move-failed", "from" => from.quote(), "to" => to.quote(), "err" => err);
-            io::Error::new(err.kind(), inter_device_msg)
+            let inter_device_err = MvError::InterDeviceMoveFailed(
+                from.quote().to_string(),
+                to.quote().to_string(),
+                strip_errno(&err),
+            );
+            io::Error::new(err.kind(), inter_device_err)
         })?;
-    } else if to.exists() {
-        // For non-symlinks, just remove the file without special error handling
-        fs::remove_file(to)?;
     }
 
     // Check if this file is part of a hardlink group and if so, create a hardlink instead of copying
