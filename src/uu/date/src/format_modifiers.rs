@@ -13,7 +13,11 @@
 //!
 //! ## Syntax
 //!
-//! Format: `%[flags][width]specifier`
+//! Format: `%[flags][width][E|O]specifier`
+//!
+//! `E`/`O` are locale modifiers, not padding flags: `E` selects the locale's
+//! alternative representation, `O` the alternative numerals. An invalid
+//! modifier/specifier pair (e.g. `%EB`) is not a spec at all.
 //!
 //! ### Flags
 //! - `-`: Do not pad the field
@@ -28,6 +32,15 @@
 //! ### Width
 //! - One or more digits specifying minimum field width
 //! - Field will be padded to this width using the padding character
+//!
+//! ### Locale modifiers
+//! - `E` selects the locale's alternative representation, `O` its alternative
+//!   numerals. Each is accepted on a fixed set of conversions and ignored on
+//!   some of those, where the base conversion is rendered instead;
+//!   `accepts_e_modifier` and `accepts_o_modifier` below are the
+//!   authoritative tables. `%E:z` formats the base timezone; every `%O`
+//!   colon form renders as the literal `%O:`.
+//!   Pairs outside those tables (e.g. `%EB`, `%OY`) stay literal.
 //!
 //! ### Examples
 //! - `%10Y`: Year padded to 10 digits with zeros (0000001999)
@@ -94,7 +107,8 @@ fn field_width_too_large(width: usize, specifier: &str) -> FormatError {
     }
 }
 
-/// A parsed `%`-format specifier: `%[flags][width][:colons]<letter>`.
+/// A parsed `%`-format specifier: `%[flags][width][E|O][:colons]<letter>`.
+/// Invariant: `E`/`O` are locale modifiers, never padding flags.
 pub struct ParsedSpec<'a> {
     /// Flag characters from `[_0^#+-]`.
     pub flags: &'a str,
@@ -102,18 +116,96 @@ pub struct ParsedSpec<'a> {
     /// A value that overflows `usize` is represented as `Some(usize::MAX)` so
     /// the downstream allocation check surfaces it as `FieldWidthTooLarge`.
     pub width: Option<usize>,
+    /// Locale modifier (`E`/`O`), if present. Validity depends on the
+    /// specifier letter; invalid pairs make `parse_format_spec` return `None`.
+    pub locale_modifier: Option<char>,
     /// The specifier itself, including any leading colons (e.g. `Y`, `:z`, `::z`).
     pub spec: &'a str,
     /// Total byte length of the parsed sequence including the leading `%`.
     pub len: usize,
 }
 
+/// Returns true if `spec` (final letter) accepts the `E` locale modifier.
+///
+/// Covers `%c %C %x %X %y %Y` plus `%Er`, `%E:z` (colon timezones end in
+/// `z`), and the conversions GNU accepts the modifier on but renders as the
+/// base conversion: `%Es`/`%Eq` (`%s`, `%q`), `%En` (`%n`), `%Et` (`%t`),
+/// `%Ep`/`%EP` (`%p`, `%P`), `%Eu` (`%u`), `%ER` (`%R`), `%ET` (`%T`) and
+/// `%EZ` (`%Z`). Anything else (e.g. `%EB`) stays literal.
+fn accepts_e_modifier(spec: char) -> bool {
+    matches!(
+        spec,
+        'c' | 'C'
+            | 'x'
+            | 'X'
+            | 'y'
+            | 'Y'
+            | 'r'
+            | 'z'
+            | 's'
+            | 'q'
+            | 'n'
+            | 't'
+            | 'p'
+            | 'P'
+            | 'u'
+            | 'R'
+            | 'T'
+            | 'Z'
+    )
+}
+
+/// Returns true if `spec` (final letter) accepts the `O` locale modifier.
+///
+/// Covers the POSIX numeric set plus `%Oj`, `%Oz`, `%ON`, `%Op`, `%Ob`,
+/// `%Oh`, `%OC`, `%Og`, `%OG`, `%Ok`, `%OZ`, and the pairs `%Os`, `%OR`,
+/// `%OT`, `%Or`, `%Ol`, `%On`, `%Ot` and `%OP`, which ignore the modifier
+/// and use the base conversion. Anything else (e.g. `%OY`) stays literal.
+fn accepts_o_modifier(spec: char) -> bool {
+    matches!(
+        spec,
+        'd' | 'e'
+            | 'H'
+            | 'I'
+            | 'm'
+            | 'M'
+            | 'S'
+            | 'u'
+            | 'U'
+            | 'V'
+            | 'w'
+            | 'W'
+            | 'y'
+            | 'B'
+            | 'j'
+            | 'z'
+            | 'N'
+            | 'p'
+            | 'b'
+            | 'h'
+            | 'C'
+            | 'g'
+            | 'G'
+            | 'k'
+            | 'Z'
+            | 's'
+            | 'R'
+            | 'T'
+            | 'r'
+            | 'l'
+            | 'n'
+            | 't'
+            | 'P'
+    )
+}
+
 /// Try to parse a format spec at the start of `s`.
 ///
-/// Implements the grammar `%[_0^#+-]*[0-9]*:{0,3}[a-zA-Z]` anchored at the
-/// beginning of `s`. Returns `None` if `s` does not start with `%` or no
-/// valid specifier follows.
-pub fn parse_format_spec(s: &str) -> Option<ParsedSpec<'_>> {
+/// Implements the grammar `%[_0^#+-]*[0-9]*[EO]?:{0,3}[a-zA-Z]` anchored at the
+/// beginning of `s`. Returns `None` if `s` does not start with `%`, no valid
+/// specifier follows, or an `E`/`O` modifier is paired with a specifier letter
+/// it does not apply to (e.g. `%EB`, `%Ej`); callers keep such text literal.
+fn parse_spec_core<const LOCALE_MODIFIER: bool>(s: &str) -> Option<ParsedSpec<'_>> {
     let bytes = s.as_bytes();
     bytes.first().filter(|b| *b == &b'%')?;
 
@@ -137,29 +229,82 @@ pub fn parse_format_spec(s: &str) -> Option<ParsedSpec<'_>> {
         None
     };
 
+    // Locale modifier: at most one of `E`/`O`.
+    let locale_modifier = if LOCALE_MODIFIER {
+        match bytes.get(pos) {
+            Some(b'E') => {
+                pos += 1;
+                Some('E')
+            }
+            Some(b'O') => {
+                pos += 1;
+                Some('O')
+            }
+            _ => None,
+        }
+    } else if matches!(bytes.get(pos), Some(b'E' | b'O')) {
+        // This instantiation runs on format strings that already went through
+        // `resolve_eo_modifiers` (the modifier scan and the formatter). A
+        // remaining `%E`/`%O` is never a conversion there, so reject it here
+        // instead of paying for the modifier grammar and reopening `E`/`O` as
+        // an ordinary specifier.
+        return None;
+    } else {
+        None
+    };
+
     // Specifier: up to three `:` followed by a single ASCII letter.
     let spec_start = pos;
     while bytes.get(pos) == Some(&b':') && pos - spec_start < 3 {
         pos += 1;
     }
-    bytes.get(pos).filter(|c| c.is_ascii_alphabetic())?;
+    let spec_letter = *bytes.get(pos).filter(|c| c.is_ascii_alphabetic())? as char;
     pos += 1;
     let spec = &s[spec_start..pos];
+
+    if let Some(modifier) = locale_modifier {
+        // Colons only modify the timezone `z` (`%E:z`, `%O:z`, ...). A colon
+        // before any other letter (e.g. `%O:p`, `%E:q`) is not a conversion.
+        if spec.starts_with(':') && spec_letter != 'z' {
+            return None;
+        }
+        let valid = match modifier {
+            'E' => accepts_e_modifier(spec_letter),
+            'O' => accepts_o_modifier(spec_letter),
+            _ => false,
+        };
+        if !valid {
+            return None;
+        }
+    }
 
     Some(ParsedSpec {
         flags,
         width,
+        locale_modifier,
         spec,
         len: pos,
     })
 }
 
+/// Parse a conversion at the start of `s`, including the POSIX `E`/`O`
+/// locale modifier (only the resolver needs it).
+pub fn parse_format_spec(s: &str) -> Option<ParsedSpec<'_>> {
+    parse_spec_core::<true>(s)
+}
+
+/// Parse a conversion from a format string whose `E`/`O` modifiers are already
+/// resolved: the modifier grammar is compiled out and a remaining `%E`/`%O` is
+/// rejected, so the scanners never handle E/O.
+fn parse_format_spec_plain(s: &str) -> Option<ParsedSpec<'_>> {
+    parse_spec_core::<false>(s)
+}
+
 /// Check if format string contains any GNU modifiers and format if present.
 ///
-/// This function combines modifier detection and formatting in a single pass
-/// for better performance. If no modifiers are found, returns None and the
-/// caller should use standard formatting. If modifiers are found, returns
-/// the formatted string.
+/// Detection is a lexical scan that returns immediately on a format with no
+/// `%`; the formatting pass runs only when a modifier is found. Returns `None`
+/// when there is none, so the caller can use standard formatting.
 pub fn format_with_modifiers_if_present(
     date: &Zoned,
     format_string: &str,
@@ -174,7 +319,7 @@ pub fn format_with_modifiers_if_present(
 }
 
 /// Quick check: does the format string contain any GNU modifier
-/// (a flag or width) on a `%`-spec, ignoring `%%` literals?
+/// (a flag, width, or locale modifier) on a `%`-spec, ignoring `%%` literals?
 ///
 /// Note that colon-prefixed specifiers without flags or width (e.g. `%:z`,
 /// `%::z`) are deliberately *not* considered modifiers: jiff's strftime can
@@ -189,7 +334,18 @@ fn has_gnu_modifiers(format_string: &str) -> bool {
                 i += 2;
                 continue;
             }
-            if let Some(parsed) = parse_format_spec(&format_string[i..]) {
+            // Flags and width digits are accepted only directly after the `%`,
+            // so a conversion whose next byte is neither cannot carry a
+            // modifier and needs no parse. Nothing can hide one behind those
+            // bytes: no escape or specifier form places a flag or digit later.
+            let may_carry_modifier = bytes
+                .get(i + 1)
+                .is_some_and(|b| b.is_ascii_digit() || b"_0^#+-".contains(b));
+            if may_carry_modifier && let Some(parsed) = parse_format_spec_plain(&format_string[i..])
+            {
+                // `E`/`O` never reaches this scan: `resolve_eo_modifiers` runs
+                // first and either rewrites the conversion or escapes the `%`
+                // so jiff copies the sequence through literally.
                 if !parsed.flags.is_empty() || parsed.width.is_some() {
                     return true;
                 }
@@ -238,13 +394,16 @@ fn format_with_modifiers(
                 continue;
             }
 
-            if let Some(parsed) = parse_format_spec(&format_string[i..]) {
+            if let Some(parsed) = parse_format_spec_plain(&format_string[i..]) {
                 // Format the base specifier first, reusing `base_format`.
                 base_format.clear();
                 base_format.push('%');
                 base_format.push_str(parsed.spec);
                 let formatted = broken_down.to_string_with_config(config, &base_format)?;
 
+                // `E`/`O` is resolved before this point (see
+                // `has_gnu_modifiers`), so only flags and width can select the
+                // modifier path.
                 if !parsed.flags.is_empty() || parsed.width.is_some() {
                     // Composite conversions are already expanded as a whole;
                     // timezone conversions need sign-aware width handling.
@@ -265,7 +424,6 @@ fn format_with_modifiers(
             }
         }
 
-        // Pass-through: copy a single UTF-8 code point unchanged.
         let ch_len = format_string[i..].chars().next().map_or(1, char::len_utf8);
         result.push_str(&format_string[i..i + ch_len]);
         i += ch_len;
@@ -290,25 +448,17 @@ pub fn apply_composite_modifiers(
     parsed: &ParsedSpec<'_>,
 ) -> Result<String, FormatError> {
     let mut pad = Pad::Space;
-    let mut uppercase = false;
 
     for flag in parsed.flags.chars() {
         match flag {
             '-' => pad = Pad::None,
             '_' => pad = Pad::Space,
             '0' | '+' => pad = Pad::Zero,
-            '^' => {
-                uppercase = true;
-            }
             _ => {}
         }
     }
 
-    let result = if uppercase {
-        value.to_uppercase()
-    } else {
-        value.to_string()
-    };
+    let result = apply_case_flags(value.to_string(), parsed);
 
     if matches!(pad, Pad::None) {
         return Ok(result);
@@ -514,6 +664,33 @@ fn strip_default_padding(value: &str) -> String {
 /// padding character (space for text, zero for numeric).
 /// Flags are processed in order so that when conflicting flags appear,
 /// the last one takes precedence (e.g., `_+` means `+` wins for padding).
+/// Apply GNU's case-changing flags to an already rendered value: `^` converts
+/// to upper case, `#` switches the case of names and converts `%p`/`%Z` to
+/// lower case (winning over `^` there); `%P` always stays lower case.
+fn apply_case_flags(mut result: String, parsed: &ParsedSpec<'_>) -> String {
+    let uppercase = parsed.flags.contains('^');
+    let swap_case = parsed.flags.contains('#');
+    let conversion = parsed.spec.chars().last();
+    if swap_case && matches!(conversion, Some('p' | 'Z')) {
+        result = result.to_lowercase();
+    } else if uppercase && conversion != Some('P') {
+        result = result.to_uppercase();
+    } else if swap_case && matches!(conversion, Some('a' | 'A' | 'b' | 'B' | 'h')) {
+        if result
+            .chars()
+            .all(|c| !c.is_alphabetic() || c.is_uppercase())
+        {
+            result = result.to_lowercase();
+        } else if !result
+            .chars()
+            .all(|c| !c.is_alphabetic() || c.is_lowercase())
+        {
+            result = result.to_uppercase();
+        }
+    }
+    result
+}
+
 pub fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, FormatError> {
     let flags = parsed.flags;
     let width = parsed.width;
@@ -533,8 +710,6 @@ pub fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, F
     // Process flags in order - last conflicting flag wins
     let mut pad_char = default_pad;
     let mut no_pad = false;
-    let mut uppercase = false;
-    let mut swap_case = false;
     let mut force_sign = false;
     let mut underscore_flag = false;
 
@@ -555,12 +730,6 @@ pub fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, F
                 pad_char = '0';
                 force_sign = false;
             }
-            '^' => {
-                uppercase = true;
-            }
-            '#' => {
-                swap_case = true;
-            }
             '+' => {
                 force_sign = true;
                 no_pad = false;
@@ -570,26 +739,7 @@ pub fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, F
         }
     }
 
-    // `#` only acts on names, %p and %Z; on %p and %Z it lowercases and wins
-    // over `^`. %P is always lowercase.
-    let conversion = specifier.chars().last();
-    if swap_case && matches!(conversion, Some('p' | 'Z')) {
-        result = result.to_lowercase();
-    } else if uppercase && conversion != Some('P') {
-        result = result.to_uppercase();
-    } else if swap_case && matches!(conversion, Some('a' | 'A' | 'b' | 'B' | 'h')) {
-        if result
-            .chars()
-            .all(|c| !c.is_alphabetic() || c.is_uppercase())
-        {
-            result = result.to_lowercase();
-        } else if !result
-            .chars()
-            .all(|c| !c.is_alphabetic() || c.is_lowercase())
-        {
-            result = result.to_uppercase();
-        }
-    }
+    result = apply_case_flags(result, parsed);
 
     // %N is a fraction, not an integer, so it has its own width and padding rules.
     if specifier.ends_with('N') && result.len() == 9 && result.bytes().all(|b| b.is_ascii_digit()) {
@@ -776,6 +926,7 @@ mod tests {
         ParsedSpec {
             flags,
             width,
+            locale_modifier: None,
             spec,
             len: 0,
         }
@@ -1277,43 +1428,73 @@ mod tests {
 
     #[test]
     fn test_parse_format_spec() {
-        // (input, expected: Some((flags, width, spec, len)) or None)
-        type ParsedTuple = (&'static str, Option<usize>, &'static str, usize);
+        // (input, expected: Some((flags, width, locale_modifier, spec, len)) or None)
+        type ParsedTuple = (
+            &'static str,
+            Option<usize>,
+            Option<char>,
+            &'static str,
+            usize,
+        );
         let cases: &[(&str, Option<ParsedTuple>)] = &[
-            // ---- plain single-letter specifiers ----
-            ("%Y", Some(("", None, "Y", 2))),
-            ("%a", Some(("", None, "a", 2))),
-            ("%B", Some(("", None, "B", 2))),
-            // ---- single flag, no width ----
-            ("%-d", Some(("-", None, "d", 3))),
-            ("%_m", Some(("_", None, "m", 3))),
-            ("%0e", Some(("0", None, "e", 3))),
-            ("%^B", Some(("^", None, "B", 3))),
-            ("%#Z", Some(("#", None, "Z", 3))),
-            ("%+Y", Some(("+", None, "Y", 3))),
-            // ---- combined flags ----
-            ("%_+Y", Some(("_+", None, "Y", 4))),
-            ("%-^B", Some(("-^", None, "B", 4))),
-            // ---- width only ----
-            ("%10Y", Some(("", Some(10), "Y", 4))),
-            ("%4C", Some(("", Some(4), "C", 3))),
+            // Plain single-letter specifiers.
+            ("%Y", Some(("", None, None, "Y", 2))),
+            ("%a", Some(("", None, None, "a", 2))),
+            ("%B", Some(("", None, None, "B", 2))),
+            // Single flag, no width.
+            ("%-d", Some(("-", None, None, "d", 3))),
+            ("%_m", Some(("_", None, None, "m", 3))),
+            ("%0e", Some(("0", None, None, "e", 3))),
+            ("%^B", Some(("^", None, None, "B", 3))),
+            ("%#Z", Some(("#", None, None, "Z", 3))),
+            ("%+Y", Some(("+", None, None, "Y", 3))),
+            // Combined flags.
+            ("%_+Y", Some(("_+", None, None, "Y", 4))),
+            ("%-^B", Some(("-^", None, None, "B", 4))),
+            // Width only.
+            ("%10Y", Some(("", Some(10), None, "Y", 4))),
+            ("%4C", Some(("", Some(4), None, "C", 3))),
             // `0` is a flag, then `5` is the width.
-            ("%05d", Some(("0", Some(5), "d", 4))),
-            // ---- flags + width ----
-            ("%_10m", Some(("_", Some(10), "m", 5))),
-            ("%+6Y", Some(("+", Some(6), "Y", 4))),
-            ("%-5d", Some(("-", Some(5), "d", 4))),
-            ("%+4C", Some(("+", Some(4), "C", 4))),
-            // ---- colon-prefixed specifiers (numeric timezones) ----
-            ("%:z", Some(("", None, ":z", 3))),
-            ("%::z", Some(("", None, "::z", 4))),
-            ("%:::z", Some(("", None, ":::z", 5))),
+            ("%05d", Some(("0", Some(5), None, "d", 4))),
+            // Flags and width.
+            ("%_10m", Some(("_", Some(10), None, "m", 5))),
+            ("%+6Y", Some(("+", Some(6), None, "Y", 4))),
+            ("%-5d", Some(("-", Some(5), None, "d", 4))),
+            ("%+4C", Some(("+", Some(4), None, "C", 4))),
+            // Locale modifiers.
+            ("%_10EY", Some(("_", Some(10), Some('E'), "Y", 6))),
+            ("%010Od", Some(("0", Some(10), Some('O'), "d", 6))),
+            ("%EY", Some(("", None, Some('E'), "Y", 3))),
+            ("%Oy", Some(("", None, Some('O'), "y", 3))),
+            ("%OB", Some(("", None, Some('O'), "B", 3))),
+            ("%Ey", Some(("", None, Some('E'), "y", 3))),
+            // O extensions accepted beyond POSIX.
+            ("%Oj", Some(("", None, Some('O'), "j", 3))),
+            ("%Oz", Some(("", None, Some('O'), "z", 3))),
+            ("%ON", Some(("", None, Some('O'), "N", 3))),
+            ("%Op", Some(("", None, Some('O'), "p", 3))),
+            ("%Ob", Some(("", None, Some('O'), "b", 3))),
+            ("%Oh", Some(("", None, Some('O'), "h", 3))),
+            ("%OC", Some(("", None, Some('O'), "C", 3))),
+            ("%Og", Some(("", None, Some('O'), "g", 3))),
+            ("%OG", Some(("", None, Some('O'), "G", 3))),
+            ("%Ok", Some(("", None, Some('O'), "k", 3))),
+            ("%OZ", Some(("", None, Some('O'), "Z", 3))),
+            ("%Er", Some(("", None, Some('E'), "r", 3))),
+            ("%E:z", Some(("", None, Some('E'), ":z", 4))),
+            ("%E::z", Some(("", None, Some('E'), "::z", 5))),
+            ("%O::z", Some(("", None, Some('O'), "::z", 5))),
+            ("%O:::z", Some(("", None, Some('O'), ":::z", 6))),
+            // Colon-prefixed specifiers (numeric timezones).
+            ("%:z", Some(("", None, None, ":z", 3))),
+            ("%::z", Some(("", None, None, "::z", 4))),
+            ("%:::z", Some(("", None, None, ":::z", 5))),
             ("%::::z", None),
-            ("%-3:z", Some(("-", Some(3), ":z", 5))),
-            // ---- only the spec is consumed; trailing text is ignored ----
-            ("%Y-%m-%d", Some(("", None, "Y", 2))),
-            ("%10Yhello", Some(("", Some(10), "Y", 4))),
-            // ---- invalid: should return None ----
+            ("%-3:z", Some(("-", Some(3), None, ":z", 5))),
+            // Only the spec is consumed; trailing text is ignored.
+            ("%Y-%m-%d", Some(("", None, None, "Y", 2))),
+            ("%10Yhello", Some(("", Some(10), None, "Y", 4))),
+            // Invalid input returns None.
             ("Y", None),
             ("", None),
             ("%", None),
@@ -1324,11 +1505,147 @@ mod tests {
             ("%::", None),
             ("%%", None), // %% is not a spec — caller handles it.
             ("%é", None), // non-ASCII letter
+            // Invalid locale modifier pairs stay literal.
+            ("%EB", None),
+            ("%Ej", None),
+            ("%EO", None),
+            ("%OE", None),
+            ("%Ox", None),
+            ("%Oq", None),
+            // Colon specs need `z` under a modifier.
+            ("%O:p", None),
+            ("%E:p", None),
         ];
 
         for (input, expected) in cases {
-            let actual = parse_format_spec(input).map(|p| (p.flags, p.width, p.spec, p.len));
+            let actual = parse_format_spec(input)
+                .map(|p| (p.flags, p.width, p.locale_modifier, p.spec, p.len));
             assert_eq!(actual, *expected, "input = {input:?}");
+        }
+    }
+
+    #[test]
+    fn test_plain_parser_matches_without_locale_modifiers() {
+        // `parse_format_spec_plain` is the instantiation the modifier scan and
+        // the formatter use. They run after E/O resolution, so it rejects a
+        // leftover `%E`/`%O` rather than reopening `E`/`O` as a specifier, and
+        // must otherwise agree with the full parser field for field.
+        for input in [
+            "%EY", "%OB", "%E", "%O", "%5EY", "%E\u{e9}", "%O::z", "%O:p",
+        ] {
+            assert!(
+                parse_format_spec_plain(input).is_none(),
+                "E/O must not parse here: {input:?}"
+            );
+        }
+        for input in [
+            "%Y",
+            "%_10d",
+            "%5:z",
+            "%::z",
+            "%n",
+            "%z",
+            "%-d",
+            "%^B",
+            "%10Y",
+            "%+5Y",
+            "%3:z",
+            "%EB",
+            "no percent",
+            "",
+        ] {
+            let plain = parse_format_spec_plain(input);
+            let full = parse_format_spec(input);
+            match (plain, full) {
+                (Some(p), Some(f)) => {
+                    assert_eq!(p.flags, f.flags, "{input:?}");
+                    assert_eq!(p.width, f.width, "{input:?}");
+                    assert_eq!(p.spec, f.spec, "{input:?}");
+                    assert_eq!(p.len, f.len, "{input:?}");
+                    assert!(p.locale_modifier.is_none(), "{input:?}");
+                }
+                (None, None) => {}
+                (p, f) => panic!(
+                    "disagreement for {input:?}: plain_parsed={} full_parsed={}",
+                    p.is_some(),
+                    f.is_some()
+                ),
+            }
+        }
+    }
+
+    /// The pre-fast-path modifier scan, kept in tests only so the lexical gate
+    /// can be checked against it exhaustively.
+    fn has_gnu_modifiers_full_parse(format_string: &str) -> bool {
+        let bytes = format_string.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'%' {
+                if bytes.get(i + 1) == Some(&b'%') {
+                    i += 2;
+                    continue;
+                }
+                if let Some(parsed) = parse_format_spec_plain(&format_string[i..]) {
+                    if !parsed.flags.is_empty() || parsed.width.is_some() {
+                        return true;
+                    }
+                    i += parsed.len;
+                    continue;
+                }
+            }
+            i += 1;
+        }
+        false
+    }
+
+    #[test]
+    fn test_modifier_scan_fast_path_matches_full_parse() {
+        // Exhaustive over short strings from a grammar-representative alphabet
+        // (every flag byte, a digit, specifiers with and without a width, the
+        // escape, colons, a space and a multi-byte character), plus escaped,
+        // malformed and oversized-width cases.
+        const ALPHABET: [char; 16] = [
+            '%', '_', '0', '^', '#', '+', '-', '5', 'E', 'O', 'Y', 'd', ':', ' ', '\u{e9}', 'Z',
+        ];
+        let mut inputs: Vec<String> = vec![String::new()];
+        let mut frontier: Vec<String> = vec![String::new()];
+        for _ in 0..4 {
+            let mut next = Vec::new();
+            for s in &frontier {
+                for c in ALPHABET {
+                    let mut t = String::with_capacity(s.len() + 1);
+                    t.push_str(s);
+                    t.push(c);
+                    next.push(t);
+                }
+            }
+            inputs.extend_from_slice(&next);
+            frontier = next;
+        }
+        for extra in [
+            "%%%EY",
+            "%%%_10d",
+            "%E\u{e9}",
+            "%5E\u{e9}",
+            "%O:p",
+            "%O::z",
+            "%:z",
+            "a%%b%^B",
+            "%Y %_10d",
+            "%999999999999999999d",
+            "100%%%EY",
+            "%EY%%%OY",
+            "%5E%%",
+            "%O%%d",
+        ] {
+            inputs.push(extra.to_string());
+        }
+        for input in &inputs {
+            assert_eq!(
+                has_gnu_modifiers(input),
+                has_gnu_modifiers_full_parse(input),
+                "input = {input:?}"
+            );
         }
     }
 
@@ -1336,7 +1653,7 @@ mod tests {
     fn test_has_gnu_modifiers() {
         // (input, expected)
         let cases: &[(&str, bool)] = &[
-            // ---- modifier present (flag and/or width) ----
+            // Modifier present (flag and/or width).
             ("%10Y", true),
             ("%^B", true),
             ("%-d", true),
@@ -1344,23 +1661,43 @@ mod tests {
             ("%+Y", true),
             ("today is %-d of %B", true),
             ("%5:z", true),
+            // `E`/`O` carries no modifier of its own here: the E/O resolver
+            // runs before this scan and leaves no `%E`/`%O` conversion behind.
+            ("%EY", false),
+            ("%OB", false),
+            ("%Oj", false),
+            ("%OC", false),
+            ("%Er", false),
+            ("%O::z", false),
+            // A flag or width on an E/O conversion does not count: the
+            // modifier-free instantiation rejects `%E`/`%O` where the modifier
+            // would be, and such a sequence never survives resolution anyway.
+            ("%_10EY", false),
+            ("%10OB", false),
             // %% mixed with a real modifier is still detected.
             ("%%%-d", true),
             ("%%%10Y", true),
-            // ---- no modifier: plain specs only ----
+            ("%%%EY", false),
             ("%Y-%m-%d", false),
             ("%H:%M:%S", false),
             ("%a %b %e %T %Z %Y", false),
             ("", false),
             ("no percent here", false),
-            // ---- %% literals must never count as modifiers ----
+            // `%%` literals must never count as modifiers.
             ("%%", false),
             ("100%% done", false),
             ("%%Y", false),
             ("%%10", false),
-            // ---- colon specs without flags/width are not modifiers ----
+            ("%%EY", false),
+            // Colon specs without flags/width are not modifiers.
             ("%:z", false),
             ("%::z", false),
+            // Invalid E/O pairs are literals, not modifiers.
+            ("%EB", false),
+            ("%Ej", false),
+            ("%Oq", false),
+            ("%O:p", false),
+            ("%E:p", false),
         ];
 
         for (input, expected) in cases {
