@@ -69,25 +69,35 @@ fn test_no_arg() {
 #[cfg(unix)]
 fn test_valid_arg() {
     let args_list: Vec<&[&str]> = vec![
-        &["-c"],
-        &["--clean-print"],
+        &["-d"],
+        &["--silent"],
+        &["-l"],
+        &["--logical"],
+        &["-e"],
+        &["--exit-on-eof"],
+        &["-f"],
+        &["--no-pause"],
         &["-p"],
         &["--print-over"],
+        &["-c"],
+        &["--clean-print"],
         &["-s"],
         &["--squeeze"],
         &["-u"],
         &["--plain"],
         &["-n", "10"],
         &["--lines", "0"],
-        &["--number", "0"],
-        &["-F", "10"],
         &["--from-line", "0"],
-        &["-P", "something"],
         &["--pattern", "-1"],
         &["-f"],
         &["--logical"],
         &["-l"],
         &["--no-pause"],
+        &["-0"],
+        &["+10"],
+        &["+0"],
+        &["+/something"],
+        &["+/-1"],
     ];
     for args in args_list {
         test_alive(args);
@@ -242,11 +252,8 @@ fn test_squeeze_blank_lines() {
 #[test]
 #[cfg(unix)]
 fn test_pattern_search() {
-    let (child, mut controller, output) = run_more_with_pty(
-        &["-P", "target"],
-        "test.txt",
-        "foo\nbar\nbaz\ntarget\nend\n",
-    );
+    let (child, mut controller, output) =
+        run_more_with_pty(&["+/target"], "test.txt", "foo\nbar\nbaz\ntarget\nend\n");
     assert!(output.contains("target"));
     assert!(!output.contains("foo"));
     quit_more(&mut controller, child);
@@ -256,7 +263,7 @@ fn test_pattern_search() {
 #[cfg(unix)]
 fn test_from_line_option() {
     let (child, mut controller, output) =
-        run_more_with_pty(&["-F", "2"], "test.txt", "line1\nline2\nline3\nline4\n");
+        run_more_with_pty(&["+2"], "test.txt", "line1\nline2\nline3\nline4\n");
     assert!(output.contains("line2"));
     assert!(!output.contains("line1"));
     quit_more(&mut controller, child);
