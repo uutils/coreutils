@@ -61,6 +61,8 @@ fn test_invalid_input() {
 // with -d and -s, set2 is only the set to squeeze, so any class is allowed
 #[case::delete_and_squeeze_digit_class_in_set2(&["-ds", "x", "[:digit:]"], "aab-x1122", "aab-12")]
 #[case::delete_and_squeeze_upper_class_in_set2(&["-ds", "a", "[:upper:]"], "aAAb", "Ab")]
+// the upper/lower alignment rule is about translating only
+#[case::delete_and_squeeze_misaligned_classes(&["-ds", "[:alpha:]", "[:upper:]"], "aZ1", "1")]
 #[case::set1_shorter_than_set2(&["ab", "xyz"], "abcde", "xycde")]
 #[case::truncate_multi(&["-tt", "-t", "abc", "xy"], "abcde", "xycde")]
 #[case::truncate_with_set1_shorter_than_set2(&["-t", "ab", "xyz"], "abcde", "xycde")]
@@ -330,6 +332,46 @@ fn test_translate_and_squeeze_multiple_lines() {
         .pipe_in("xxaax\nxaaxx") // spell-checker:disable-line
         .succeeds()
         .stdout_is("yaay\nyaay"); // spell-checker:disable-line
+}
+
+/// An 'upper'/'lower' in SET2 must line up with an 'upper'/'lower' in SET1;
+/// any other class there leaves the mapping undefined. GNU calls that a
+/// misaligned construct.
+#[rstest]
+#[case::alpha_to_upper(&["[:alpha:]", "[:upper:]"])]
+#[case::digit_to_upper(&["[:digit:]", "[:upper:]"])]
+#[case::chars_to_upper(&["abc", "[:upper:]"])]
+#[case::shifted_classes(&["a[:lower:]", "[:upper:]b"])]
+#[case::extra_class_in_set2(&["[:lower:]", "[:upper:][:lower:]"])]
+// -s alone still translates, so the alignment rule still applies.
+#[case::squeeze(&["-s", "[:alpha:]", "[:upper:]"])]
+fn test_misaligned_upper_lower_construct(#[case] args: &[&str]) {
+    new_ucmd!()
+        .args(args)
+        // No input: the sets are validated before stdin is read, so tr exits
+        // while the harness is still writing and the write hits a broken pipe.
+        .pipe_in("")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("tr: misaligned [:upper:] and/or [:lower:] construct\n");
+}
+
+/// A class in SET2 that is rejected for another reason keeps that reason's
+/// message instead of the misaligned-construct one.
+#[rstest]
+// plain -d takes one set, so SET2 is an extra operand
+#[case::delete(&["-d", "[:alpha:]", "[:upper:]"], "extra operand '[:upper:]'")]
+#[case::set1_longer_than_set2(
+    &["[:upper:][:lower:]", "[:lower:]"],
+    "when translating with string1 longer than string2,\n"
+)]
+fn test_class_in_set2_other_error(#[case] args: &[&str], #[case] err: &str) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in("")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains(err);
 }
 
 #[test]
@@ -1232,7 +1274,7 @@ fn test_repeat_lengths_beyond_usize() {
             "[x*18446744073709551615][:upper:]",
         ])
         .fails()
-        .stderr_contains("must be matched by");
+        .stderr_contains("misaligned [:upper:] and/or [:lower:] construct");
 }
 
 #[test]
