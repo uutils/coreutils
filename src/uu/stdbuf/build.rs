@@ -33,22 +33,6 @@ fn main() {
         ".so"
     };
 
-    // Check if we're building from the repository (where src/libstdbuf exists)
-    // or from crates.io (where it doesn't)
-    let libstdbuf_src = Path::new("src/libstdbuf");
-    if !libstdbuf_src.exists() {
-        // When building from crates.io, libstdbuf is already available as a dependency
-        // We can't build it here, so we'll need to handle this differently
-        // For now, we'll create a dummy library file to satisfy the include_bytes! macro
-        let lib_name = format!("libstdbuf{dylib_ext}");
-        let dest_path = Path::new(&out_dir).join(&lib_name);
-
-        // Create an empty file as a placeholder
-        // The actual library will be provided by the dependency
-        fs::write(&dest_path, []).expect("Failed to create placeholder libstdbuf");
-        return;
-    }
-
     // Create a separate build directory for libstdbuf to avoid conflicts
     let build_dir = Path::new(&out_dir).join("libstdbuf-build");
     fs::create_dir_all(&build_dir).expect("Failed to create build directory");
@@ -63,8 +47,29 @@ fn main() {
     // See the tracking issue: https://github.com/rust-lang/cargo/issues/9096
     let mut cmd = Command::new(&cargo);
     cmd.env_clear().envs(env::vars());
-    cmd.current_dir(libstdbuf_src)
-        .args(["build", "--target-dir", build_dir.to_str().unwrap()]);
+    let res = cmd.args([
+        "build",
+        "-p",
+        "uu_stdbuf_libstdbuf",
+        "--target-dir",
+        build_dir.to_str().unwrap(),
+    ]);
+    if !res.status().is_ok_and(|s| s.success()) {
+        assert!(
+            !Path::new("src/libstdbuf").exists(),
+            "Failed to build libstdbuf"
+        );
+        // When building from crates.io, libstdbuf is already available as a dependency
+        // We can't build it here, so we'll need to handle this differently
+        // For now, we'll create a dummy library file to satisfy the include_bytes! macro
+        let lib_name = format!("libstdbuf{dylib_ext}");
+        let dest_path = Path::new(&out_dir).join(&lib_name);
+
+        // Create an empty file as a placeholder
+        // The actual library will be provided by the dependency
+        fs::write(&dest_path, []).expect("Failed to create placeholder libstdbuf");
+        return;
+    }
 
     // Determine the actual profile from OUT_DIR since PROFILE env var only gives the base profile
     // for inherited profiles (e.g., PROFILE=release for both release and release-small).
@@ -138,27 +143,20 @@ fn main() {
     // without needing to install the library to LIBSTDBUF_DIR. This is particularly useful for
     // running tests and manual testing during development.
     #[cfg(all(unix, feature = "feat_external_libstdbuf"))]
-    {
-        // Get the main target directory (e.g., target/debug or target/release)
-        // OUT_DIR is something like target/debug/build/uu_stdbuf-<hash>/out
-        if let Some(target_dir) = profile_dir {
-            let lib_filename = format!("libstdbuf{dylib_ext}");
-            let source = target_dir.join("deps").join(&lib_filename);
-            let dest = target_dir.join(&lib_filename);
+    // Get the main target directory (e.g., target/debug or target/release)
+    // OUT_DIR is something like target/debug/build/uu_stdbuf-<hash>/out
+    if let Some(target_dir) = profile_dir {
+        let lib_filename = format!("libstdbuf{dylib_ext}");
+        let source = target_dir.join("deps").join(&lib_filename);
+        let dest = target_dir.join(&lib_filename);
 
-            // Remove old symlink if it exists (in case it points to the wrong place)
-            let _ = fs::remove_file(&dest);
+        // Remove old symlink if it exists (in case it points to the wrong place)
+        let _ = fs::remove_file(&dest);
 
-            // Create symlink if the source exists
-            if source.exists() {
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::symlink;
-                    if let Err(e) = symlink(&source, &dest) {
-                        eprintln!("Warning: Failed to create symlink for libstdbuf: {e}");
-                    }
-                }
-            }
+        // Create symlink
+        #[cfg(unix)]
+        if let Err(e) = std::os::unix::fs::symlink(&source, &dest) {
+            eprintln!("Warning: Failed to create symlink for libstdbuf: {e}");
         }
     }
 }
