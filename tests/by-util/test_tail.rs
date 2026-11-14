@@ -2276,35 +2276,33 @@ fn test_follow_name_shows_headers_on_creation() {
         "---disable-inotify",
     ];
 
-    let mut delay = 150;
+    let initial_stderr = "tail: cannot open 'log1' for reading: No such file or directory\n\
+        tail: cannot open 'log2' for reading: No such file or directory\n";
+    let first_stderr = format!("{initial_stderr}tail: 'log1' has appeared;  following new file\n");
+    let expected_stderr = format!("{first_stderr}tail: 'log2' has appeared;  following new file\n");
+    let expected_stdout = "\n==> log1 <==\nping\n\n==> log2 <==\npong\n";
+
     for _ in 0..2 {
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
-        p.make_assertion_with_delay(delay).is_alive();
+        wait_for_output(&mut p, "", initial_stderr);
 
         at.truncate(file_a, "ping\n");
-        p.delay(delay);
+        wait_for_output(&mut p, "\n==> log1 <==\nping\n", &first_stderr);
 
         at.truncate(file_b, "pong\n");
-        p.delay(delay);
-
-        let expected_stderr = "tail: cannot open 'log1' for reading: No such file or directory\n\
-                tail: cannot open 'log2' for reading: No such file or directory\n\
-                tail: 'log1' has appeared;  following new file\n\
-                tail: 'log2' has appeared;  following new file\n";
-        let expected_stdout = "\n==> log1 <==\nping\n\n==> log2 <==\npong\n";
+        wait_for_output(&mut p, expected_stdout, &expected_stderr);
 
         p.make_assertion().is_alive();
         p.kill()
             .make_assertion()
             .with_all_output()
             .stdout_is(expected_stdout)
-            .stderr_is(expected_stderr);
+            .stderr_is(&expected_stderr);
 
         at.remove(file_a);
         at.remove(file_b);
         args.pop();
-        delay /= 3;
     }
 }
 
@@ -2425,28 +2423,28 @@ fn test_follow_name_truncate1() {
         .stdout_is(expected_stdout);
 }
 
+fn wait_for_output(
+    child: &mut uutests::util::UChild,
+    expected_stdout: &str,
+    expected_stderr: &str,
+) {
+    for _ in 0..500 {
+        if child.stdout_all() == expected_stdout && child.stderr_all() == expected_stderr {
+            return;
+        }
+        child.delay(10);
+    }
+    child
+        .make_assertion()
+        .with_all_output()
+        .stdout_is(expected_stdout)
+        .stderr_is(expected_stderr);
+}
+
 #[uutests::wasi_ignore(TailFollowDisabled)]
 #[test]
 #[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))] // FIXME: for currently not working platforms
 fn test_follow_name_truncate2() {
-    fn wait_for_output(
-        child: &mut uutests::util::UChild,
-        expected_stdout: &str,
-        expected_stderr: &str,
-    ) {
-        for _ in 0..500 {
-            if child.stdout_all() == expected_stdout && child.stderr_all() == expected_stderr {
-                return;
-            }
-            child.delay(10);
-        }
-        child
-            .make_assertion()
-            .with_all_output()
-            .stdout_is(expected_stdout)
-            .stderr_is(expected_stderr);
-    }
-
     // This test triggers a truncate event while `tail --follow=name file` is running.
     // $ ((sleep 1 && echo -n "x\nx\nx\n" >> file && sleep 1 && \
     // echo -n "x\n" > file &)>/dev/null 2>&1 &) ; tail --follow=name file
@@ -2509,7 +2507,7 @@ fn test_follow_name_truncate3() {
     p.make_assertion_with_delay(delay).is_alive();
 
     at.truncate(source, "x\n");
-    p.delay(delay);
+    wait_for_output(&mut p, expected_stdout, "");
 
     p.make_assertion().is_alive();
     p.kill()
@@ -5939,7 +5937,6 @@ fn test_invalid_max_unchanged_stats_is_rejected() {
     for value in ["-1", "abc"] {
         new_ucmd!()
             .arg(format!("--max-unchanged-stats={value}"))
-            .pipe_in("a\n")
             .fails_with_code(1)
             .stderr_contains("invalid maximum number of unchanged stats between opens: '")
             .stderr_contains(value);
