@@ -151,7 +151,7 @@ impl Observer {
         update_last: bool,
     ) -> UResult<()> {
         if self.follow.is_some() {
-            let path = if path.is_relative() {
+            let path = if path.is_relative() && !path.is_stdin() {
                 std::env::current_dir()?.join(path)
             } else {
                 path.to_owned()
@@ -675,6 +675,8 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 timeout_counter += 1;
+                #[cfg(unix)]
+                paths.extend(observer.files.fifo_keys());
                 // Check if stdout pipe is still open
                 #[cfg(target_os = "linux")]
                 if let Ok(false) = ensure_stdout_not_broken() {
