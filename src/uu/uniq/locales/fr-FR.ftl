@@ -6,6 +6,7 @@ uniq-after-help = Filtrer les lignes adjacentes correspondantes de ENTRÉE (ou l
   Vous pourriez vouloir trier l'entrée d'abord, ou utiliser sort -u sans uniq.
 
 # Messages d'aide
+uniq-help-all-repeated-short = afficher toutes les lignes dupliquées
 uniq-help-all-repeated = afficher toutes les lignes dupliquées. La délimitation se fait avec des lignes vides. [défaut : none]
 uniq-help-group = afficher tous les éléments, en séparant les groupes avec une ligne vide. [défaut : separate]
 uniq-help-check-chars = comparer au maximum N caractères dans les lignes
