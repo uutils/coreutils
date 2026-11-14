@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel Secho Sprintf Cdata iCdata uFOOa sighandler putenv
+// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD Secho Sprintf Cdata iCdata uFOOa sighandler putenv
 
 #![allow(clippy::missing_errors_doc)]
 
@@ -19,13 +19,13 @@ use std::path::Path;
 use std::process::Command;
 use tempfile::tempdir;
 use uutests::new_ucmd;
-#[cfg(unix)]
-use uutests::util::TerminalSimulation;
 use uutests::util::TestScenario;
 #[cfg(unix)]
 use uutests::util::UChild;
 #[cfg(unix)]
 use uutests::util::path;
+#[cfg(unix)]
+use uutests::util::{TerminalSimulation, Winsize};
 use uutests::util_name;
 
 #[cfg(unix)]
@@ -2061,7 +2061,7 @@ fn test_simulation_of_terminal_size_information() {
         .arg("sh")
         .arg("is_a_tty.sh")
         .terminal_sim_stdio(TerminalSimulation {
-            size: Some(libc::winsize {
+            size: Some(Winsize {
                 ws_col: 40,
                 ws_row: 10,
                 ws_xpixel: 40 * 8,

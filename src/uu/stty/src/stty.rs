@@ -1138,10 +1138,9 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg(not(any(target_os = "aix", target_os = "redox", target_os = "fuchsia")))]
     fn test_apply_character_size_preserves_other_control_flags() {
-        let pty = nix::pty::openpty(None, None).unwrap();
-        let mut termios = tcgetattr(&pty.slave).unwrap();
+        let pty = rustix_openpty::openpty(None, None).unwrap();
+        let mut termios = tcgetattr(pty.user).unwrap();
         let other_flags = ControlFlags::CLOCAL | ControlFlags::CREAD;
         let sizes = [
             ("cs5", ControlFlags::CS5),
