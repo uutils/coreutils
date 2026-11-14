@@ -835,16 +835,27 @@ struct Output<'a> {
 
     /// Configuration settings for how to read and write the data.
     settings: &'a Settings,
+
+    /// What [`Output::write_blocks`] wrote before it failed.
+    failed_wstat: WriteStat,
 }
 
 impl<'a> Output<'a> {
+    fn new(dst: Dest, settings: &'a Settings) -> Self {
+        Self {
+            dst,
+            settings,
+            failed_wstat: WriteStat::default(),
+        }
+    }
+
     /// Instantiate this struct with stdout as a destination.
     fn new_stdout(settings: &'a Settings) -> UResult<Self> {
         let fx = OwnedFileDescriptorOrHandle::from(io::stdout())?;
         let mut dst = Dest::Stdout(fx.into_file());
         dst.seek(settings.seek, settings.obs)
             .map_err_context(|| translate!("dd-error-write-error"))?;
-        Ok(Self { dst, settings })
+        Ok(Self::new(dst, settings))
     }
 
     /// Instantiate this struct with the named file as a destination.
@@ -898,7 +909,7 @@ impl<'a> Output<'a> {
             dst.seek(settings.seek, settings.obs)
                 .map_err_context(|| translate!("dd-error-failed-to-seek"))?;
         }
-        Ok(Self { dst, settings })
+        Ok(Self::new(dst, settings))
     }
 
     /// Instantiate this struct with file descriptor as a destination.
@@ -946,7 +957,7 @@ impl<'a> Output<'a> {
         // indefinitely.
         if let Some(Num::Blocks(0) | Num::Bytes(0)) = settings.count {
             let dst = Dest::Sink;
-            return Ok(Self { dst, settings });
+            return Ok(Self::new(dst, settings));
         }
         // At this point, we know there is at least one block to write
         // to the output, so we open the file for writing.
@@ -958,7 +969,7 @@ impl<'a> Output<'a> {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         opts.custom_flags(make_linux_oflags(&settings.oflags).unwrap_or(0));
         let dst = Dest::Fifo(opts.open(filename)?);
-        Ok(Self { dst, settings })
+        Ok(Self::new(dst, settings))
     }
 
     /// Discard the system file cache for the given portion of the output.
@@ -971,57 +982,60 @@ impl<'a> Output<'a> {
         self.dst.discard_cache(offset, len)
     }
 
-    /// writes a block of data. optionally retries when first try didn't complete
+    /// Write a whole block, retrying after short writes and interruptions.
     ///
-    /// this is needed by gnu-test: tests/dd/stats.s
-    /// the write can be interrupted by a system signal.
-    /// e.g. SIGUSR1 which is send to report status
-    /// without retry, the data might not be fully written to destination.
-    fn write_block(&mut self, chunk: &[u8]) -> io::Result<usize> {
-        let full_len = chunk.len();
+    /// A short write happens when the destination is nearly full, when a
+    /// signal (e.g. `SIGUSR1`, sent to report status) interrupts a write to
+    /// a pipe, and so on. Like GNU dd, keep writing the rest of the block so
+    /// that a later error (e.g. `ENOSPC`) is reported instead of the rest of
+    /// the block being silently dropped.
+    ///
+    /// On error, also returns the number of bytes written before it.
+    fn write_block(&mut self, chunk: &[u8]) -> Result<usize, (usize, io::Error)> {
         let mut base_idx = 0;
-        loop {
+        while base_idx < chunk.len() {
             match self.dst.write(&chunk[base_idx..]) {
-                Ok(wlen) => {
-                    base_idx += wlen;
-                    // take iflags.fullblock as oflags shall not have this option
-                    if (base_idx >= full_len) || !self.settings.iflags.fullblock {
-                        return Ok(base_idx);
-                    }
-                }
+                Ok(0) => return Err((base_idx, io::ErrorKind::WriteZero.into())),
+                Ok(wlen) => base_idx += wlen,
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => (),
-                Err(e) => return Err(e),
+                Err(e) => return Err((base_idx, e)),
             }
         }
+        Ok(base_idx)
     }
 
     /// Write the given bytes one block at a time.
     ///
-    /// This may write partial blocks (for example, if the underlying
-    /// call to [`Write::write`] writes fewer than `buf.len()`
-    /// bytes). The returned [`WriteStat`] object will include the
-    /// number of partial and complete blocks written during execution
-    /// of this function.
+    /// Each block is written in full unless an error occurs, in which
+    /// case what was written before the error, including a partial
+    /// block, can be retrieved with [`Output::take_failed_wstat`].
     fn write_blocks(&mut self, buf: &[u8]) -> io::Result<WriteStat> {
-        let mut writes_complete = 0;
-        let mut writes_partial = 0;
-        let mut bytes_total = 0;
-
+        let mut wstat = WriteStat::default();
         for chunk in buf.chunks(self.settings.obs) {
-            let wlen = self.write_block(chunk)?;
+            let wlen = match self.write_block(chunk) {
+                Ok(wlen) => wlen,
+                Err((wlen, e)) => {
+                    if wlen > 0 {
+                        wstat.writes_partial += 1;
+                        wstat.bytes_total += wlen as u128;
+                    }
+                    self.failed_wstat = wstat;
+                    return Err(e);
+                }
+            };
             if wlen < self.settings.obs {
-                writes_partial += 1;
+                wstat.writes_partial += 1;
             } else {
-                writes_complete += 1;
+                wstat.writes_complete += 1;
             }
-            bytes_total += wlen;
+            wstat.bytes_total += wlen as u128;
         }
+        Ok(wstat)
+    }
 
-        Ok(WriteStat {
-            writes_complete,
-            writes_partial,
-            bytes_total: bytes_total.try_into().unwrap_or(0u128),
-        })
+    /// Return what the last failed [`Output::write_blocks`] wrote.
+    fn take_failed_wstat(&mut self) -> WriteStat {
+        std::mem::take(&mut self.failed_wstat)
     }
 
     /// Flush the output to disk, if configured to do so.
@@ -1060,6 +1074,13 @@ impl BlockWriter<'_> {
         match self {
             Self::Unbuffered(o) => o.discard_cache(offset, len),
             Self::Buffered(o) => o.discard_cache(offset, len),
+        }
+    }
+
+    fn take_failed_wstat(&mut self) -> WriteStat {
+        match self {
+            Self::Unbuffered(o) => o.take_failed_wstat(),
+            Self::Buffered(o) => o.take_failed_wstat(),
         }
     }
 
@@ -1285,8 +1306,14 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             None => o.write_blocks(data),
             Some(c) => write_converted(c, data, &mut conv_rstat, &mut conv_wstat, &mut o),
         };
-        let Ok(wstat_update) = written.map_err(|e| copy_error = Some(e)) else {
-            break;
+        let wstat_update = match written {
+            Ok(wstat_update) => wstat_update,
+            Err(e) => {
+                // The block was read even though writing it failed.
+                rstat += rstat_update;
+                copy_error = Some(e);
+                break;
+            }
         };
 
         // Discard the system file cache for the read portion of
@@ -1343,6 +1370,8 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     {
         copy_error = Some(e);
     }
+    // What the failed write got through before the error.
+    wstat += o.take_failed_wstat();
 
     rstat.records_truncated = conv_rstat.records_truncated;
     if let Some(e) = copy_error {
@@ -1402,17 +1431,19 @@ fn finalize<T>(
     output_thread: thread::JoinHandle<T>,
 ) -> io::Result<()> {
     // Flush the output in case a partial write has been buffered but
-    // not yet written.
-    let wstat_update = output.flush()?;
+    // not yet written, sync it if configured to do so, and, with
+    // `conv=sparse`, extend it over the trailing zero blocks that were
+    // skipped rather than written.
+    let mut wstat = wstat;
+    let result = output.flush().and_then(|wstat_update| {
+        wstat += wstat_update;
+        output.sync()?;
+        output.extend_sparse()
+    });
+    // A failed flush may still have written part of the buffered block.
+    wstat += output.take_failed_wstat();
 
-    // Sync the output, if configured to do so.
-    output.sync()?;
-
-    // With `conv=sparse`, trailing zero blocks were skipped, not written.
-    output.extend_sparse()?;
-
-    // Print the final read/write statistics.
-    let wstat = wstat + wstat_update;
+    // Print the final read/write statistics, even after an error.
     let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), ProgUpdateType::Final);
     prog_tx.send(prog_update).unwrap_or(());
     // Wait for the output thread to finish
@@ -1420,7 +1451,7 @@ fn finalize<T>(
         .join()
         .expect("Failed to join with the output thread.");
 
-    Ok(())
+    result
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]

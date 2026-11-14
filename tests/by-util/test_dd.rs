@@ -2528,6 +2528,39 @@ fn test_stats_are_reported_when_a_write_fails() {
     assert_eq!(at.metadata("capped.bin").len(), CAP);
 }
 
+// A short write is retried, so the error that cuts it short is reported even
+// when it is the last write of the copy, instead of the rest of the block
+// being dropped silently.
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+fn test_short_last_write_fails() {
+    use rlimit::Resource;
+
+    const CAP: u64 = 768 * 1024;
+
+    // GNU dd reports the bytes of the short write in all three cases. With
+    // bs=, it does not count that write as a partial record ("1+0 records
+    // out"), which is inconsistent with the obs= case, so here it is counted.
+    for (args, records_out) in [
+        (&["bs=512K", "count=2"][..], "1+1 records out"),
+        (&["ibs=512K", "obs=512K", "count=2"], "1+1 records out"),
+        // The whole output is a single 2 MiB block, written by the final flush.
+        (&["ibs=512K", "obs=2M", "count=2"], "0+1 records out"),
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let result = ucmd
+            .args(&["if=/dev/zero", "of=capped.bin"])
+            .args(args)
+            .limit(Resource::FSIZE, CAP, CAP)
+            .ignore_sigxfsz()
+            .fails();
+        result.stderr_contains("2+0 records in");
+        result.stderr_contains(records_out);
+        result.stderr_contains("786432 bytes");
+        assert_eq!(at.metadata("capped.bin").len(), CAP);
+    }
+}
+
 // `conv=block` writes a huge record in several pieces: those written before
 // the error still count.
 #[test]
@@ -2546,6 +2579,28 @@ fn test_block_stats_are_reported_when_a_write_fails() {
         .fails();
 
     // Three 64 KiB pieces are written in full, and the fourth one is cut short.
+    result.stderr_contains("3+1 records out");
+    result.stderr_contains("204800 bytes");
+    assert_eq!(at.metadata("capped.bin").len(), CAP);
+}
+
+// Same, but the record is padded at EOF, when the input does not end with a
+// newline.
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+fn test_block_stats_are_reported_when_the_eof_padding_fails() {
+    use rlimit::Resource;
+
+    const CAP: u64 = 200 * 1024;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd
+        .args(&["conv=block", "cbs=1M", "obs=64K", "of=capped.bin"])
+        .pipe_in("x")
+        .limit(Resource::FSIZE, CAP, CAP)
+        .ignore_sigxfsz()
+        .fails();
+
     result.stderr_contains("3+1 records out");
     result.stderr_contains("204800 bytes");
     assert_eq!(at.metadata("capped.bin").len(), CAP);
