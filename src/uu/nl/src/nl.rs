@@ -174,11 +174,15 @@ enum SectionDelimiter {
 
 impl SectionDelimiter {
     /// A valid section delimiter contains the pattern one to three times,
-    /// and nothing else.
+    /// and nothing else. With an empty pattern, an empty line is a header.
     fn parse(bytes: &[u8], pattern: &OsStr) -> Option<Self> {
         let pattern = pattern.as_encoded_bytes();
 
-        if bytes.is_empty() || pattern.is_empty() || !bytes.len().is_multiple_of(pattern.len()) {
+        if pattern.is_empty() {
+            return bytes.is_empty().then_some(Self::Header);
+        }
+
+        if bytes.is_empty() || !bytes.len().is_multiple_of(pattern.len()) {
             return None;
         }
 

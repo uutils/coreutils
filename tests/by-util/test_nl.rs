@@ -896,15 +896,17 @@ fn test_multi_byte_one_char_section_delimiter() {
     }
 }
 
-#[test]
-fn test_empty_section_delimiter() {
-    for arg in ["-d ''", "--section-delimiter=''"] {
-        new_ucmd!()
-            .arg(arg)
-            .pipe_in("a\n\nb")
-            .succeeds()
-            .stdout_is("     1\ta\n       \n     2\tb\n");
-    }
+#[rstest]
+#[case::short(&["-d", ""], "     1\ta\n\n       b\n\n       c\n")]
+#[case::long(&["--section-delimiter="], "     1\ta\n\n       b\n\n       c\n")]
+#[case::header_numbered(&["-d", "", "-ha"], "     1\ta\n\n     1\tb\n\n     1\tc\n")]
+#[case::no_renumber(&["-d", "", "-ha", "-p"], "     1\ta\n\n     2\tb\n\n     3\tc\n")]
+fn test_empty_section_delimiter(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in("a\n\nb\n\nc\n")
+        .succeeds()
+        .stdout_is(expected);
 }
 
 #[test]
