@@ -93,6 +93,15 @@ fn test_multiple_group_args() {
 }
 
 #[test]
+fn test_groups_unknown_group() {
+    // The group names are looked up before anything that needs root.
+    new_ucmd!()
+        .args(&["--groups=nosuchgrp1,nosuchgrp2", "/", "true"])
+        .fails_with_code(125)
+        .stderr_only("chroot: invalid group 'nosuchgrp1'\nchroot: invalid group 'nosuchgrp2'\n");
+}
+
+#[test]
 fn test_invalid_user_spec() {
     let ts = TestScenario::new(util_name!());
 
