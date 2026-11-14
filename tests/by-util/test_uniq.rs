@@ -140,6 +140,32 @@ fn test_stdin_skip_invalid_fields_obsolete() {
 }
 
 #[test]
+fn test_invalid_number_messages() {
+    for (opt, what) in [
+        ("-f", "fields to skip"),
+        ("-s", "bytes to skip"),
+        ("-w", "bytes to compare"),
+    ] {
+        new_ucmd!()
+            .args(&[opt, "1x"])
+            .fails_with_code(1)
+            .stderr_only(format!("uniq: 1x: invalid number of {what}\n"));
+    }
+    new_ucmd!()
+        .arg("--skip-fields=x")
+        .fails_with_code(1)
+        .stderr_only("uniq: x: invalid number of fields to skip\n");
+    new_ucmd!()
+        .arg("--skip-fields=")
+        .fails_with_code(1)
+        .stderr_only("uniq: : invalid number of fields to skip\n");
+    new_ucmd!()
+        .args(&["-w", "a b"])
+        .fails_with_code(1)
+        .stderr_only("uniq: a b: invalid number of bytes to compare\n");
+}
+
+#[test]
 fn test_stdin_all_repeated() {
     new_ucmd!()
         .args(&["--all-repeated"])
