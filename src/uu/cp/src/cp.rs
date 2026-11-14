@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) copydir fiemap linkgs lstat nlink nlinks pathbuf reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
-// spell-checker:ignore RDONLY futimens utimensat unioned
+// spell-checker:ignore utimensat unioned
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -1829,6 +1829,7 @@ pub(crate) fn set_selinux_context(path: &Path, context: Option<&String>) -> Copy
 ))]
 fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyResult<()> {
     use std::fs::File;
+    use std::os::unix::fs::OpenOptionsExt;
     use uucore::fsxattr::copy_xattrs;
     let metadata = fs::symlink_metadata(dest)?;
 
@@ -1840,7 +1841,7 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
     if was_readonly {
         #[allow(clippy::permissions_set_readonly_false)]
         perms.set_readonly(false);
-        fs::set_permissions(dest, perms)?;
+        set_permissions_nofollow(dest, &perms)?;
     }
 
     // Perform the xattr copy and capture any potential error,
@@ -1856,7 +1857,10 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
         // The source must be regular too: opening a FIFO here blocks until a
         // writer appears, and a device would have side effects on open.
         let source_file = File::open(source)?;
-        let dest_file = OpenOptions::new().write(true).open(dest)?;
+        let dest_file = OpenOptions::new()
+            .write(true)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(dest)?;
         copy_xattrs_fd(&source_file, &dest_file)
     } else {
         copy_xattrs(source, dest)
@@ -1869,7 +1873,7 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
     if was_readonly {
         let mut revert_perms = fs::symlink_metadata(dest)?.permissions();
         revert_perms.set_readonly(true);
-        fs::set_permissions(dest, revert_perms)?;
+        set_permissions_nofollow(dest, &revert_perms)?;
     }
 
     // If copying xattrs failed, propagate that error now with context.
@@ -1959,11 +1963,8 @@ pub(crate) fn copy_attributes(
     })?;
 
     handle_preserve(mode, || -> CopyResult<()> {
-        // The `chmod()` system call that underlies the
-        // `fs::set_permissions()` call is unable to change the
-        // permissions of a symbolic link. In that case, we just
-        // do nothing, since every symbolic link has the same
-        // permissions.
+        // Leave a symlink alone, like GNU: on FreeBSD and macOS a no-follow chmod
+        // would change the link's own mode, and the fallback elsewhere follows it.
         if !dest.is_symlink() {
             #[cfg(unix)]
             let source_perms = {
@@ -1984,7 +1985,7 @@ pub(crate) fn copy_attributes(
             #[cfg(not(unix))]
             let source_perms = source_metadata.permissions();
 
-            fs::set_permissions(dest, source_perms)
+            set_permissions_nofollow(dest, &source_perms)
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
             // GNU `cp -p` preserves POSIX ACLs as part of mode. On Linux the
             // ACLs are stored as `system.posix_acl_*` xattrs; copy just those
@@ -2011,23 +2012,12 @@ pub(crate) fn copy_attributes(
 
     handle_preserve(attributes.timestamps, || -> CopyResult<()> {
         let (atime, mtime) = source_times(&source_metadata, context)?;
-        // `set_file_times` opens the destination (O_RDONLY) before calling
-        // futimens; opening a FIFO or device with no peer blocks forever, and a
-        // socket cannot be opened at all. For symlinks and these special files
-        // use the path-based, no-follow variant, which sets the times via
-        // utimensat without opening.
+        // utimensat without following or opening: a symlink swapped in is not
+        // followed, and a FIFO or device with no peer would block on open.
         #[cfg(unix)]
-        let no_open = {
-            let ft = source_metadata.file_type();
-            dest.is_symlink()
-                || ft.is_fifo()
-                || ft.is_socket()
-                || ft.is_char_device()
-                || ft.is_block_device()
-        };
+        filetime::set_symlink_file_times(dest, atime, mtime)?;
         #[cfg(not(unix))]
-        let no_open = dest.is_symlink();
-        if no_open {
+        if dest.is_symlink() {
             filetime::set_symlink_file_times(dest, atime, mtime)?;
         } else {
             filetime::set_file_times(dest, atime, mtime)?;
@@ -2774,6 +2764,32 @@ fn calculate_dest_permissions(
     }
 }
 
+/// Apply `permissions` to `dest` without following a symlink there, which callers checked
+/// well before; finding one now is not an error.
+#[cfg(all(unix, not(target_os = "redox")))]
+fn set_permissions_nofollow(dest: &Path, permissions: &Permissions) -> io::Result<()> {
+    let Err(e) = uucore::safe_traversal::chmod_nofollow(dest, permissions.mode()) else {
+        return Ok(());
+    };
+    // A guard, not an or-pattern: ENOTSUP and EOPNOTSUPP are one value on Linux only.
+    let refused = matches!(e.raw_os_error(),
+        Some(c) if c == libc::EOPNOTSUPP || c == libc::ENOTSUP || c == libc::ELOOP);
+    if refused && fs::symlink_metadata(dest).is_ok_and(|md| md.file_type().is_symlink()) {
+        return Ok(());
+    }
+    // Linux and Android refuse only a symlink. Elsewhere, refusing anything else means
+    // the platform can't chmod without following, so do what cp did before.
+    if refused && cfg!(not(any(target_os = "linux", target_os = "android"))) {
+        return fs::set_permissions(dest, permissions.clone());
+    }
+    Err(e)
+}
+
+#[cfg(any(not(unix), target_os = "redox"))]
+fn set_permissions_nofollow(dest: &Path, permissions: &Permissions) -> io::Result<()> {
+    fs::set_permissions(dest, permissions.clone())
+}
+
 /// Copy the a file from `source` to `dest`. `source` will be dereferenced if
 /// `options.dereference` is set to true. `dest` will be dereferenced only if
 /// the source was not a symlink.
@@ -3008,7 +3024,7 @@ fn copy_file(
         //
         // FWIW, the OS will throw an error later, on the write op, if
         // the user does not have permission to write to the file.
-        fs::set_permissions(dest, dest_permissions).ok();
+        set_permissions_nofollow(dest, &dest_permissions).ok();
     }
 
     let copy_attributes_result = if options.dereference(source_in_command_line) {
@@ -3041,6 +3057,19 @@ fn copy_file(
         )
     };
 
+    // A destination that was a symlink from the start was written through, so empty
+    // its target; otherwise refuse a symlink swapped in after the copy.
+    let empty_dest = || {
+        let mut options = OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        if !dest_is_symlink {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_NOFOLLOW);
+        }
+        options.open(dest)
+    };
+
     // Empty the destination when the SELinux security context cannot be
     // preserved, but keep the copied data when preserving other attributes
     // (e.g. xattrs) fails.
@@ -3048,7 +3077,7 @@ fn copy_file(
         if matches!(
             err,
             CpError::SelinuxContext(_) | CpError::SelinuxContextIoErr(..)
-        ) && fs::File::create(dest).is_err()
+        ) && empty_dest().is_err()
         {
             // The permissions applied above may lack the write bit (e.g. a
             // read-only source), making the truncating open fail. Restore
@@ -3057,9 +3086,9 @@ fn copy_file(
             #[cfg(unix)]
             if let Ok(metadata) = fs::symlink_metadata(dest) {
                 let mode = metadata.permissions().mode();
-                if fs::set_permissions(dest, Permissions::from_mode(mode | 0o200)).is_ok() {
-                    fs::File::create(dest).ok();
-                    fs::set_permissions(dest, Permissions::from_mode(mode)).ok();
+                if set_permissions_nofollow(dest, &Permissions::from_mode(mode | 0o200)).is_ok() {
+                    empty_dest().ok();
+                    set_permissions_nofollow(dest, &Permissions::from_mode(mode)).ok();
                 }
             }
         }

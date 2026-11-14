@@ -279,6 +279,28 @@ if have_util cp; then
     fi
     echo "✓ cp -P opens source with O_NOFOLLOW"
     rm -f test_cp_src test_cp_dst
+
+    # After the copy, cp must not follow a symlink swapped in for the destination:
+    # every chmod, chown, utimensat or reopen of it by name must refuse to follow.
+    echo "cp_attr_test" > test_cp_src_attr
+    chmod 0444 test_cp_src_attr
+    if ! strace -f -e trace=open,openat,openat2,chmod,fchmodat,?fchmodat2,lchown,fchownat,utimensat \
+        -o strace_cp_dest_nofollow.log $cp_cmd -a test_cp_src_attr test_cp_dst_attr; then
+        cat strace_cp_dest_nofollow.log
+        fail_immediately "cp -a under strace failed"
+    fi
+    if ! grep -q '"test_cp_dst_attr".*NOFOLLOW' strace_cp_dest_nofollow.log; then
+        cat strace_cp_dest_nofollow.log
+        fail_immediately "strace saw no no-follow call on the cp destination"
+    fi
+    following=$(grep '"test_cp_dst_attr"' strace_cp_dest_nofollow.log \
+        | grep -vE 'O_CREAT.*, 0600\)|NOFOLLOW| lchown\(' || true)
+    if [ -n "$following" ]; then
+        cat strace_cp_dest_nofollow.log
+        fail_immediately "cp must not follow a symlink at the destination after the copy: $following"
+    fi
+    echo "✓ cp sets the destination's attributes without following a symlink"
+    rm -f test_cp_src_attr test_cp_dst_attr
 fi
 
 # split must harden its output open against TOCTOU target swaps (issue #11401 /
