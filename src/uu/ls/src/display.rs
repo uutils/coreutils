@@ -26,7 +26,6 @@ use std::{
 };
 
 use ansi_width::ansi_width;
-use glob::MatchOptions;
 #[cfg(unix)]
 use rustc_hash::FxHashMap;
 use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions};
@@ -223,30 +222,8 @@ pub fn should_display(entry: &DirEntry, config: &Config) -> bool {
         return false;
     }
 
-    // check if it is among ignore_patterns
-    let options = MatchOptions {
-        // setting require_literal_leading_dot to match behavior in GNU ls
-        require_literal_leading_dot: true,
-        require_literal_separator: false,
-        case_sensitive: true,
-    };
-
     let file_name = entry.file_name();
-    // If the decoding fails, still match best we can
-    // FIXME: use OsStrings or Paths once we have a glob crate that supports it:
-    // https://github.com/rust-lang/glob/issues/23
-    // https://github.com/rust-lang/glob/issues/78
-    // https://github.com/BurntSushi/ripgrep/issues/1250
-
-    let file_name = match file_name.to_str() {
-        Some(s) => Cow::Borrowed(s),
-        None => file_name.to_string_lossy(),
-    };
-
-    !config
-        .ignore_patterns
-        .iter()
-        .any(|p| p.matches_with(&file_name, options))
+    !crate::config::IgnorePattern::matches_any(&config.ignore_patterns, &file_name)
 }
 
 fn display_dir_entry_size(
