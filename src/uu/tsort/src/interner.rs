@@ -18,12 +18,10 @@ pub type Sym = usize;
 ///     &[u8] -> Sym
 ///     Sym    -> &[u8]
 ///
-/// Once `finish_interning()` is called, the hash table used for
-/// `&[u8] -> Sym` lookups is dropped. `Sym -> &[u8]` resolution remains
-/// available for the lifetime of the interner.
+/// The lookup table is only needed while values are being interned.
 pub struct ByteInterner {
     /// Needed only while new values are being interned.
-    table: Option<HashTable<Sym>>,
+    table: HashTable<Sym>,
 
     /// All interned byte strings packed contiguously.
     bytes: Vec<u8>,
@@ -42,7 +40,7 @@ pub struct ByteInterner {
 impl Default for ByteInterner {
     fn default() -> Self {
         Self {
-            table: Some(HashTable::new()),
+            table: HashTable::new(),
             bytes: Vec::new(),
             offsets: vec![0],
         }
@@ -66,10 +64,6 @@ impl ByteInterner {
             bytes,
             offsets,
         } = self;
-
-        let table = table
-            .as_mut()
-            .expect("cannot intern values after finish_interning()");
 
         // Check whether this byte sequence is already interned.
         if let Some(&sym) = table.find(hash, |&sym| {
@@ -99,19 +93,13 @@ impl ByteInterner {
         sym
     }
 
-    #[inline]
-    pub fn resolve(&self, sym: Sym) -> Option<&[u8]> {
-        let start = *self.offsets.get(sym)?;
-        let end = *self.offsets.get(sym + 1)?;
+    pub(crate) fn into_parts(self) -> (Vec<u8>, Vec<usize>) {
+        let Self {
+            table: _,
+            bytes,
+            offsets,
+        } = self;
 
-        Some(&self.bytes[start..end])
-    }
-
-    /// Drop the `bytes -> Sym` lookup structure.
-    ///
-    /// Call this after all input has been parsed and no more values will
-    /// be interned.
-    pub fn finish_interning(&mut self) {
-        drop(self.table.take());
+        (bytes, offsets)
     }
 }
