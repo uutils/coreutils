@@ -17,10 +17,10 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
+fancy-regex = { workspace = true, default-features = false }
 fluent = { workspace = true }
 itoa = { workspace = true }
-regex = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["bre-regex", "i18n-common"] }
 
 [dev-dependencies]
 divan = { workspace = true }

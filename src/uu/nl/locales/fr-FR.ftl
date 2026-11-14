@@ -33,5 +33,6 @@ nl-error-could-not-read-line = impossible de lire la ligne
 nl-error-could-not-write = impossible d'écrire la sortie
 nl-error-line-number-overflow = débordement du numéro de ligne
 nl-error-invalid-regex = expression régulière invalide
+nl-error-regex-match = échec de la correspondance de l'expression régulière : { $error }
 nl-error-invalid-numbering-style = style de numérotation invalide : '{ $style }'
 nl-error-is-directory = { $path } : Est un répertoire

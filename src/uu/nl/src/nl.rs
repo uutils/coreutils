@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command};
+use fancy_regex::{Regex, RegexBuilder};
+use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
@@ -11,6 +13,7 @@ use std::num::{IntErrorKind, ParseIntError};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
+use uucore::i18n::{UEncoding, get_locale_encoding};
 use uucore::{format_usage, show_error, translate, translate_text};
 
 mod helper;
@@ -82,7 +85,32 @@ enum NumberingStyle {
     All,
     NonEmpty,
     None,
-    Regex(Box<regex::bytes::Regex>),
+    Regex {
+        regex: Box<Regex>,
+        encoding: UEncoding,
+    },
+}
+
+impl NumberingStyle {
+    fn is_numbered(&self, line: &[u8]) -> Result<bool, fancy_regex::Error> {
+        match self {
+            Self::All => Ok(true),
+            Self::NonEmpty => Ok(!line.is_empty()),
+            Self::None => Ok(false),
+            Self::Regex { regex, encoding } => {
+                let line = match encoding {
+                    UEncoding::Utf8 => match std::str::from_utf8(line) {
+                        Ok(line) => Cow::Borrowed(line),
+                        Err(_) => Cow::Owned(line.iter().map(|&byte| char::from(byte)).collect()),
+                    },
+                    UEncoding::Ascii => {
+                        Cow::Owned(line.iter().map(|&byte| char::from(byte)).collect())
+                    }
+                };
+                regex.is_match(line.as_ref())
+            }
+        }
+    }
 }
 
 impl TryFrom<&str> for NumberingStyle {
@@ -93,10 +121,28 @@ impl TryFrom<&str> for NumberingStyle {
             "a" => Ok(Self::All),
             "t" => Ok(Self::NonEmpty),
             "n" => Ok(Self::None),
-            _ if s.starts_with('p') => match regex::bytes::Regex::new(&s[1..]) {
-                Ok(re) => Ok(Self::Regex(Box::new(re))),
-                Err(_) => Err(translate!("nl-error-invalid-regex")),
-            },
+            _ if s.starts_with('p') => {
+                let encoding = get_locale_encoding();
+                let pattern = match encoding {
+                    UEncoding::Utf8 => s[1..].to_owned(),
+                    UEncoding::Ascii => s[1..]
+                        .as_bytes()
+                        .iter()
+                        .map(|&byte| char::from(byte))
+                        .collect(),
+                };
+                let pattern = uucore::bre_regex::transpile(&pattern)
+                    .map_err(|_| translate!("nl-error-invalid-regex"))?;
+                let regex = RegexBuilder::new(&pattern)
+                    .oniguruma_mode(true)
+                    .leftmost_longest(true)
+                    .build()
+                    .map_err(|_| translate!("nl-error-invalid-regex"))?;
+                Ok(Self::Regex {
+                    regex: Box::new(regex),
+                    encoding,
+                })
+            }
             _ => Err(translate!("nl-error-invalid-numbering-style", "style" => s)),
         }
     }
@@ -485,10 +531,9 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                 {
                     false
                 }
-                NumberingStyle::All => true,
-                NumberingStyle::NonEmpty => !line.is_empty(),
-                NumberingStyle::None => false,
-                NumberingStyle::Regex(re) => re.is_match(&line),
+                style => style.is_numbered(&line).map_err(|error| {
+                    USimpleError::new(1, translate!("nl-error-regex-match", "error" => error))
+                })?,
             };
 
             if is_line_numbered {

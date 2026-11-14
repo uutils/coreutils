@@ -11,6 +11,8 @@
 pub mod backup_control;
 #[cfg(feature = "benchmark")]
 pub mod benchmark;
+#[cfg(feature = "bre-regex")]
+pub mod bre_regex;
 #[cfg(feature = "buf-copy")]
 pub mod buf_copy;
 pub mod char_width;

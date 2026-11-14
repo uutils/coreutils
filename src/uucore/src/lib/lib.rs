@@ -48,6 +48,8 @@ pub use crate::mods::{clap_localization, display, error, line_ending, locale, os
 pub use crate::features::backup_control;
 #[cfg(feature = "benchmark")]
 pub use crate::features::benchmark;
+#[cfg(feature = "bre-regex")]
+pub use crate::features::bre_regex;
 #[cfg(feature = "buf-copy")]
 pub use crate::features::buf_copy;
 #[cfg(feature = "checksum")]
