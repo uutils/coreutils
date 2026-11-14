@@ -175,12 +175,7 @@ fn format_timestamp(ut: &UtmpxRecord) -> String {
         /// the ISO-like one. Neither the environment nor the descriptions change
         /// while we print, so settle on one and parse it once.
         static TIME_FORMAT: Vec<time::format_description::FormatItem<'static>> = {
-            let description = if ["LC_ALL", "LC_TIME", "LANG"]
-                .into_iter()
-                .find_map(std::env::var_os)
-                .as_deref()
-                == Some(std::ffi::OsStr::new("C"))
-            {
+            let description = if uucore::locale::is_c_locale("LC_TIME") {
                 // "%b %e %H:%M"
                 "[month repr:short] [day padding:space] [hour]:[minute]"
             } else {

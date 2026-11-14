@@ -440,14 +440,36 @@ mod utmp_file {
     }
 
     fn run_who(records: &[Record], args: &[&str]) -> CmdResult {
+        run_who_in(records, args, &[("LC_ALL", "C")])
+    }
+
+    fn run_who_in(records: &[Record], args: &[&str], envs: &[(&str, &str)]) -> CmdResult {
         let (at, mut ucmd) = at_and_ucmd!();
         let bytes: Vec<u8> = records.iter().flat_map(Record::to_bytes).collect();
         at.write_bytes("utmp", &bytes);
-        ucmd.env("LC_ALL", "C")
-            .env("TZ", "UTC")
+        ucmd.env("TZ", "UTC")
+            .envs(envs.iter().copied())
             .args(args)
             .arg("utmp")
             .succeeds()
+    }
+
+    #[test]
+    fn test_date_format_follows_the_locale() {
+        // The C locale is in effect with no locale set at all, or with
+        // either of its names, and GNU then prints the month and day
+        // rather than the ISO date.
+        let unset = [("LC_ALL", ""), ("LC_TIME", ""), ("LANG", "")];
+        for envs in [
+            &unset[..],
+            &[("LC_ALL", "POSIX")],
+            &[("LC_ALL", ""), ("LC_TIME", "C"), ("LANG", "en_US.UTF-8")],
+        ] {
+            run_who_in(&records(), &[], envs)
+                .stdout_is("alice    ttyNotThere  Nov 14 22:13 (example.org)\n");
+        }
+        run_who_in(&records(), &[], &[("LC_ALL", ""), ("LANG", "C.UTF-8")])
+            .stdout_is("alice    ttyNotThere  2023-11-14 22:13 (example.org)\n");
     }
 
     #[test]
