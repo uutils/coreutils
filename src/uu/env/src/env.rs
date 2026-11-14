@@ -477,6 +477,41 @@ fn has_space(bytes: &[u8]) -> bool {
     bytes.iter().any(|b| b" \t\n\x0b\x0c\r".contains(b))
 }
 
+/// Whether a short option cluster before the first operand contains
+/// whitespace, as in `#!/usr/bin/env -v -S cat -n`. GNU getopt then sees
+/// the space as an option character and suggests -S. Option arguments,
+/// `-S` payloads and anything after the program are not looked at.
+fn has_shebang_like_option(args: &[OsString]) -> bool {
+    let mut iter = args.iter().skip(1);
+    while let Some(arg) = iter.next() {
+        let bytes = arg.as_encoded_bytes();
+        if bytes == b"--" || bytes.len() < 2 || bytes[0] != b'-' {
+            return false;
+        }
+        if let Some(long) = bytes.strip_prefix(b"--") {
+            let takes_value = [&b"argv0"[..], b"chdir", b"split-string", b"unset"]
+                .iter()
+                .any(|name| name.starts_with(long));
+            if takes_value && !long.contains(&b'=') {
+                iter.next();
+            }
+            continue;
+        }
+        for (i, b) in bytes.iter().enumerate().skip(1) {
+            if has_space(&[*b]) {
+                return true;
+            }
+            if b"aCSu".contains(b) {
+                if i + 1 == bytes.len() {
+                    iter.next();
+                }
+                break;
+            }
+        }
+    }
+    false
+}
+
 fn debug_print_args(args: &[OsString]) {
     let mut error = stderr().lock();
     let _ = writeln!(error, "input args:");
@@ -733,12 +768,7 @@ impl EnvAppData {
                     _ => {
                         // Use ErrorFormatter directly to handle error with shebang message callback
                         let formatter = uucore::clap_localization::ErrorFormatter::new("env");
-                        // GNU only adds the hint when an option contains
-                        // whitespace, e.g. `#!/usr/bin/env -v -S cat -n`.
-                        let shebang_like = original_args.iter().skip(1).any(|arg| {
-                            let bytes = arg.as_encoded_bytes();
-                            bytes.first() == Some(&b'-') && has_space(bytes)
-                        });
+                        let shebang_like = has_shebang_like_option(&original_args);
                         formatter.print_error_and_exit_with_callback(&e, 125, || {
                             if shebang_like {
                                 let _ = writeln!(

@@ -2205,6 +2205,15 @@ fn test_shebang_hint_only_for_whitespace() {
         .args(&["-v -S cat -n", "./xxx"])
         .fails_with_code(125)
         .stderr_contains("use -[v]S to pass options in shebang lines");
+    // Whitespace in a -S payload or after the program is not a shebang hint
+    new_ucmd!()
+        .args(&["--bogus", "-S", "-x y"])
+        .fails_with_code(125)
+        .stderr_does_not_contain("shebang");
+    new_ucmd!()
+        .args(&["--bogus", "cat", "-x y"])
+        .fails_with_code(125)
+        .stderr_does_not_contain("shebang");
 }
 
 #[test]
