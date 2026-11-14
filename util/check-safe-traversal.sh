@@ -401,6 +401,48 @@ if have_util mv && [ -d /dev/shm ]; then
     fi
 fi
 
+# mv cross-device must set a destination directory's owner only after its
+# contents are copied, not before. A directory chowned to the source owner
+# while it is still being filled would let that owner act on the entries mv
+# creates in it. The fix chowns each directory through a held fd (fchown)
+# after its contents; a path-based chown of the directory itself signals the
+# old before-contents ordering. The chown only fires when the source has a
+# different owner, so this needs root to set up and is skipped otherwise.
+if have_util mv && [ -d /dev/shm ] && [ "$(id -u)" = 0 ]; then
+    temp_fs_id=$(stat -f -c %i "$TEMP_DIR" 2>/dev/null || echo "")
+    shm_fs_id=$(stat -f -c %i /dev/shm 2>/dev/null || echo "")
+    if [ -z "$temp_fs_id" ] || [ -z "$shm_fs_id" ] || [ "$temp_fs_id" = "$shm_fs_id" ]; then
+        echo "WARN: mv cross-device dir-chown-order check: TMPDIR and /dev/shm are on the same filesystem; skipped"
+    else
+        chown_src=$(mktemp -d -p "$TEMP_DIR" mv_chown_src.XXXXXX)
+        chown_dst=$(mktemp -u -p /dev/shm mv_chown_dst.XXXXXX)
+        mkdir "$chown_src/sub"
+        echo payload > "$chown_src/sub/file"
+        # A non-root owner, so mv's chown to it is a real change, not a no-op.
+        chown -R 1:1 "$chown_src"
+
+        mv_cmd=$(util_cmd mv)
+        strace -f -e trace=chown,lchown,fchown,fchownat,openat -o strace_mv_chown_order.log \
+            $mv_cmd "$chown_src" "$chown_dst" 2>/dev/null || true
+
+        # The entry inside the moved directory must actually be created, or the
+        # check is testing nothing.
+        if ! grep -qE "openat\(AT_FDCWD, \"${chown_dst}/sub/file\",[^)]*O_CREAT" strace_mv_chown_order.log; then
+            cat strace_mv_chown_order.log
+            fail_immediately "mv cross-device dir-chown-order: expected entry not created — strace check broken"
+        fi
+        # No path-based chown of the destination directory or its subdirectory
+        # (the trailing quote keeps this from matching the file below them).
+        dir_path_chowns=$(grep -E "(chown|lchown)\(\"${chown_dst}(/sub)?\",|fchownat\(AT_FDCWD, \"${chown_dst}(/sub)?\"," strace_mv_chown_order.log || true)
+        if [ -n "$dir_path_chowns" ]; then
+            cat strace_mv_chown_order.log
+            fail_immediately "mv cross-device must set a directory's owner only after its contents, through an fd"
+        fi
+        echo "OK: mv cross-device chowns directories after their contents"
+        rm -rf "$chown_dst"
+    fi
+fi
+
 # mv cross-device symlink replacement must use *at syscalls against a
 # pinned parent fd (matches GNU's force_symlinkat) so a concurrent rename
 # of the parent directory cannot redirect the temp-and-rename dance, and
