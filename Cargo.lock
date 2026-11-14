@@ -3574,6 +3574,7 @@ dependencies = [
  "fluent",
  "libc",
  "uucore",
+ "windows-sys",
 ]
 
 [[package]]
