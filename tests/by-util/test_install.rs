@@ -3073,13 +3073,25 @@ fn test_install_d_dangling_symlink_in_path_errors() {
 
     at.write("file.txt", "hello");
 
-    // install -D file.txt dangling/subdir/file.txt should fail
+    // install -D file.txt dangling/subdir/file.txt should fail, naming the
+    // dangling component, like GNU does.
     scene
         .ucmd()
         .args(&["-D", "-m", "644"])
         .arg(at.plus("file.txt"))
         .arg(at.plus("dangling/subdir/file.txt"))
-        .fails();
+        .fails()
+        .stderr_only(format!(
+            "install: cannot create directory '{}': File exists\n",
+            at.plus_as_string("dangling")
+        ));
+
+    // `install -d` creates by path, but names the same component.
+    scene
+        .ucmd()
+        .args(&["-d", "dangling/subdir"])
+        .fails()
+        .stderr_only("install: cannot create directory 'dangling': File exists\n");
 
     // The dangling symlink must not have been replaced with a real directory
     assert!(
@@ -3132,6 +3144,71 @@ fn test_install_d_leading_dirs_in_write_only_directory() {
         fs::read_to_string(at.plus("wx/a/b/file.txt")).unwrap(),
         "hello"
     );
+}
+
+/// A plain file in the path is named as the failing component, with the errno
+/// of descending into it, as GNU does.
+#[rstest]
+#[case::leading_parent(&["-D", "file.txt", "regular/file.txt"])]
+#[case::leading(&["-D", "file.txt", "regular/sub/file.txt"])]
+#[case::leading_deeper(&["-D", "file.txt", "regular/sub/deeper/file.txt"])]
+#[case::dir(&["-d", "regular/sub"])]
+#[case::dir_deeper(&["-d", "regular/sub/deeper"])]
+#[cfg(unix)]
+fn test_install_leading_dir_names_non_directory_component(#[case] args: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("regular");
+    at.write("file.txt", "hello");
+
+    ucmd.args(args)
+        .fails()
+        .stderr_only("install: cannot create directory 'regular': Not a directory\n");
+}
+
+/// A symlink loop in the path is named the same way, with the libc's ELOOP text.
+#[rstest]
+#[case::leading(&["-D", "file.txt", "loop/sub/file.txt"])]
+#[case::dir(&["-d", "loop/sub"])]
+#[cfg(unix)]
+fn test_install_leading_dir_names_symlink_loop(#[case] args: &[&str]) {
+    let error = strip_errno(&std::io::Error::from_raw_os_error(libc::ELOOP));
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("file.txt", "hello");
+    at.symlink_file("loop", "loop");
+
+    ucmd.args(args).fails().stderr_only(format!(
+        "install: cannot create directory 'loop': {error}\n"
+    ));
+}
+
+/// A parent that cannot be searched is what gets named, like GNU does; one
+/// that can be searched but not written leaves the component to blame.
+#[rstest]
+#[case::read_only_dir(0o444, &["-d", "p/x"], "p")]
+#[case::read_only_leading(0o444, &["-D", "f", "p/x/f"], "p")]
+#[case::no_access_dir(0o000, &["-d", "p/x"], "p")]
+#[case::no_access_leading(0o000, &["-D", "f", "p/x/f"], "p")]
+#[case::searchable_dir(0o555, &["-d", "p/x"], "p/x")]
+#[case::searchable_leading(0o555, &["-D", "f", "p/x/f"], "p/x")]
+#[cfg(unix)]
+fn test_install_leading_dir_blames_unsearchable_parent(
+    #[case] mode: u32,
+    #[case] args: &[&str],
+    #[case] named: &str,
+) {
+    if geteuid().is_root() {
+        println!("Test skipped; root ignores directory permissions");
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    at.mkdir("p");
+    fs::set_permissions(at.plus("p"), fs::Permissions::from_mode(mode)).unwrap();
+
+    ucmd.args(args).fails().stderr_only(format!(
+        "install: cannot create directory '{named}': Permission denied\n"
+    ));
+    fs::set_permissions(at.plus("p"), fs::Permissions::from_mode(0o755)).unwrap();
 }
 
 #[test]
