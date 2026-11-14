@@ -294,6 +294,91 @@ fn get_locale_months_inner() -> Option<[Vec<u8>; 12]> {
     Some(months)
 }
 
+/// Name of the Buddhist era as glibc's `th_TH` locale defines it, used for
+/// `%EY`/`%EC` in the Thai locales.
+const THAI_ERA_NAME: &str = "\u{0E1E}.\u{0E28}.";
+
+/// Resolves locale-specific E/O conversions.
+///
+/// Returns `None` when no replacement is available.
+/// The caller handles fallback and invalid conversions.
+///
+/// `real_year` is the actual (Gregorian) year when formatting an
+/// out-of-range date whose `date` value is a surrogate used to fit it
+/// into jiff's calendar. It is `None` for ordinary in-range dates.
+// TODO(#10958): Implement POSIX era formatting and alternative digits;
+// verify standalone month formatting for %OB.
+pub fn resolve_eo_conversion(
+    modifier: char,
+    spec: char,
+    date: JiffDate,
+    real_year: Option<i64>,
+) -> Option<String> {
+    match (modifier, spec) {
+        ('E', 'Y' | 'y' | 'C') => {
+            // glibc applies the E year conversions only where the locale
+            // defines an era. The Thai (Buddhist) locales have one: `%EY` is
+            // the era name and era year, `%EC` the era name and `%Ey` the era
+            // year. The other calendars fall back to the Gregorian year,
+            // century and two-digit year (verified against GNU 9.7 `fa_IR`,
+            // where `%EY` is `1999`).
+            let (locale, _) = get_time_locale();
+            let iso_date = Date::<Iso>::convert_from(date);
+            let surrogate_year: i64 = iso_date.year().extended_year().into();
+            // Out-of-range dates are formatted through a 400-year-periodic
+            // surrogate, so a calendar year of the real date is the
+            // surrogate's calendar year plus the same year delta.
+            let delta = real_year.map_or(0, |year| year - surrogate_year);
+            let (era, alt_year) = match get_locale_calendar_type(locale) {
+                CalendarType::Buddhist => {
+                    let year: i64 = iso_date.to_calendar(Buddhist).year().extended_year().into();
+                    (Some(THAI_ERA_NAME), year + delta)
+                }
+                CalendarType::Persian | CalendarType::Gregorian => {
+                    (None, real_year.unwrap_or(surrogate_year))
+                }
+                // No oracle locale covers the Ethiopian calendar here, so keep
+                // the converted calendar year rather than guessing an era.
+                CalendarType::Ethiopian => {
+                    let year: i64 = iso_date
+                        .to_calendar(Ethiopian::new())
+                        .year()
+                        .extended_year()
+                        .into();
+                    (None, year + delta)
+                }
+            };
+            // Only the selected arm allocates. `%Ey` in an era locale is the era
+            // year itself (not a digit pair), which is also what `%EY` renders
+            // without an era; `%EC` is the era name where one is defined.
+            Some(match (spec, era) {
+                ('Y', Some(name)) => format!("{name} {alt_year}"),
+                ('Y', None) | ('y', Some(_)) => alt_year.to_string(),
+                ('y', None) => format!("{:02}", alt_year.rem_euclid(100)),
+                (_, Some(name)) => name.to_string(),
+                (_, None) => (alt_year / 100).to_string(),
+            })
+        }
+        ('E', 'c' | 'x' | 'X') => {
+            // Locale-specific composite formats are not implemented.
+            None
+        }
+        ('O', 'B') => {
+            // ICU's root locale returns month codes such as "M06".
+            // Use jiff for C/POSIX locales instead.
+            if !should_use_icu_locale() {
+                return None;
+            }
+            let iso_date = Date::<Iso>::convert_from(date);
+            format_with!(MONTH_LONG, &iso_date)
+        }
+        // `%O` numerics and anything else: no substitute. The caller decides
+        // via the parser's validity table whether to use the base conversion
+        // or stay literal.
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
