@@ -2325,6 +2325,136 @@ fn test_nocache_eof_fadvise_zero_length() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+fn test_noerror_recovers_after_read_error() {
+    use std::process::Command;
+
+    let (at, _ucmd) = at_and_ucmd!();
+    at.write("input", "AAAABBBBCCCC");
+    let input = at.plus_as_string("input");
+    let trace = at.plus_as_string("trace");
+    let run = |when: &str, extra: &[&str]| {
+        Command::new("strace")
+            .args([
+                "-qq",
+                "-o",
+                &trace,
+                "-P",
+                &input,
+                "-e",
+                "trace=read,lseek",
+                "-e",
+                &format!("inject=read:error=EIO:when={when}"),
+            ])
+            .arg(get_tests_binary())
+            .args(["dd", &format!("if={input}"), "bs=4"])
+            .args(extra)
+            .env("LC_ALL", "C")
+            .output()
+    };
+
+    // Check both strace availability and that this environment permits fault injection.
+    let Ok(probe) = run("2", &["status=none"]) else {
+        eprintln!("TEST SKIPPED: strace is unavailable");
+        return;
+    };
+    if !std::fs::read_to_string(&trace)
+        .unwrap_or_default()
+        .contains("(INJECTED)")
+    {
+        eprintln!("TEST SKIPPED: strace fault injection is unavailable");
+        return;
+    }
+    assert!(!probe.status.success());
+    assert_eq!(probe.stdout, b"AAAA");
+
+    for (when, args, expected, diagnostic) in [
+        (
+            "2",
+            &["conv=noerror", "status=noxfer"][..],
+            &b"AAAACCCC"[..],
+            true,
+        ),
+        (
+            "2",
+            &["conv=noerror,sync", "status=noxfer"],
+            &b"AAAA\0\0\0\0CCCC"[..],
+            true,
+        ),
+        (
+            "2",
+            &["conv=noerror", "count=2", "status=noxfer"],
+            &b"AAAACCCC"[..],
+            true,
+        ),
+        (
+            "2",
+            &["conv=noerror,sync", "count=2", "status=noxfer"],
+            &b"AAAA\0\0\0\0"[..],
+            true,
+        ),
+        (
+            "2",
+            &[
+                "conv=noerror",
+                "iflag=count_bytes",
+                "count=5",
+                "status=noxfer",
+            ],
+            &b"AAAAC"[..],
+            true,
+        ),
+        (
+            "2",
+            &[
+                "conv=noerror,sync",
+                "iflag=count_bytes",
+                "count=8",
+                "status=noxfer",
+            ],
+            &b"AAAA\0\0\0\0"[..],
+            true,
+        ),
+        (
+            "2",
+            &["conv=noerror", "status=none"],
+            &b"AAAACCCC"[..],
+            false,
+        ),
+        (
+            "2",
+            &["conv=noerror", "iflag=fullblock", "status=noxfer"],
+            &b"AAAACCCC"[..],
+            true,
+        ),
+        (
+            "2..3",
+            &["conv=noerror", "status=noxfer"],
+            &b"AAAA"[..],
+            true,
+        ),
+        (
+            "2..3",
+            &["conv=noerror,sync", "status=noxfer"],
+            &b"AAAA\0\0\0\0\0\0\0\0"[..],
+            true,
+        ),
+    ] {
+        let result = run(when, args).expect("failed to run strace");
+        assert!(at.read("trace").contains("(INJECTED)"), "{args:?}");
+        assert!(result.status.success(), "{args:?}: {result:?}");
+        assert_eq!(result.stdout, expected, "{args:?}");
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        if diagnostic {
+            assert!(stderr.contains("Input/output error"), "{args:?}: {stderr}");
+        } else {
+            assert!(stderr.is_empty(), "{args:?}: {stderr}");
+        }
+    }
+}
+
+#[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_iso8859_1_case_conversion() {
     use std::process::Command;

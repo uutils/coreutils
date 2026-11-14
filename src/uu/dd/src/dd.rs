@@ -228,6 +228,30 @@ enum Source {
 }
 
 impl Source {
+    fn skip_failed_read(&mut self, n: usize) -> io::Result<()> {
+        let offset = i64::try_from(n).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                translate!("dd-error-input-block-too-large"),
+            )
+        })?;
+        let result = match self {
+            Self::File(f) => f.seek(SeekFrom::Current(offset)),
+            #[cfg(unix)]
+            Self::StdinFile(f) => f.seek(SeekFrom::Current(offset)),
+            #[cfg(unix)]
+            Self::Fifo(_) => return Ok(()),
+            #[cfg(not(unix))]
+            Self::Stdin(_) => return Ok(()),
+        };
+        match result {
+            Ok(_) => Ok(()),
+            #[cfg(unix)]
+            Err(e) if e.raw_os_error() == Some(libc::ESPIPE) => Ok(()),
+            Err(e) => Err(e),
+        }
+    }
+
     /// Create a source from stdin using its raw file descriptor.
     ///
     /// This returns an instance of the `Source::StdinFile` variant,
@@ -365,6 +389,27 @@ struct Input<'a> {
 
     /// Configuration settings for how to read the data.
     settings: &'a Settings,
+    /// A failed read after a short record skips only the rest of that record.
+    previous_partial: Option<PartialRead>,
+}
+
+// Keep the skipped remainder with its short record so repeated errors
+// cannot count the same missing bytes twice.
+struct PartialRead {
+    bytes: usize,
+    skipped: bool,
+}
+
+// Recovery bytes affect count= without changing the records/bytes reported.
+#[derive(Default)]
+struct ReadRecovery {
+    failed: bool,
+    bytes: u64,
+}
+
+struct RecoveredRead {
+    after_partial: bool,
+    count_adjustment: u64,
 }
 
 impl<'a> Input<'a> {
@@ -401,7 +446,11 @@ impl<'a> Input<'a> {
         if settings.skip > 0 {
             src.skip(settings.skip, settings.ibs)?;
         }
-        Ok(Self { src, settings })
+        Ok(Self {
+            src,
+            settings,
+            previous_partial: None,
+        })
     }
 
     /// Instantiate this struct with the named file as a source.
@@ -424,7 +473,11 @@ impl<'a> Input<'a> {
         if settings.skip > 0 {
             src.skip(settings.skip, settings.ibs)?;
         }
-        Ok(Self { src, settings })
+        Ok(Self {
+            src,
+            settings,
+            previous_partial: None,
+        })
     }
 
     /// Instantiate this struct with the named pipe as a source.
@@ -438,7 +491,11 @@ impl<'a> Input<'a> {
         if settings.skip > 0 {
             src.skip(settings.skip, settings.ibs)?;
         }
-        Ok(Self { src, settings })
+        Ok(Self {
+            src,
+            settings,
+            previous_partial: None,
+        })
     }
 }
 
@@ -474,23 +531,89 @@ fn make_linux_iflags(iflags: &IFlags) -> Option<core::ffi::c_int> {
     if flag == 0 { None } else { Some(flag) }
 }
 
-impl Read for Input<'_> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+impl Input<'_> {
+    // Keep recovery metadata out of the return value so ordinary reads
+    // retain the small Result<usize> return path.
+    #[inline]
+    fn read_block<const NOERROR: bool>(
+        &mut self,
+        buf: &mut [u8],
+        recovered: &mut Option<RecoveredRead>,
+    ) -> io::Result<usize> {
         let mut base_idx = 0;
         let target_len = buf.len();
         loop {
             match self.src.read(&mut buf[base_idx..]) {
-                Ok(0) => return Ok(base_idx),
+                Ok(0) => {
+                    if NOERROR && base_idx > 0 {
+                        self.previous_partial =
+                            (base_idx < self.settings.ibs).then_some(PartialRead {
+                                bytes: base_idx,
+                                skipped: false,
+                            });
+                    }
+                    return Ok(base_idx);
+                }
                 Ok(rlen) if self.settings.iflags.fullblock => {
                     base_idx += rlen;
 
                     if base_idx >= target_len {
+                        if NOERROR {
+                            self.previous_partial =
+                                (target_len < self.settings.ibs).then_some(PartialRead {
+                                    bytes: target_len,
+                                    skipped: false,
+                                });
+                        }
                         return Ok(target_len);
                     }
                 }
-                Ok(len) => return Ok(len),
+                Ok(len) => {
+                    if NOERROR {
+                        self.previous_partial = (len < self.settings.ibs).then_some(PartialRead {
+                            bytes: len,
+                            skipped: false,
+                        });
+                    }
+                    return Ok(len);
+                }
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => (),
-                Err(_) if self.settings.iconv.noerror => return Ok(base_idx),
+                Err(e) if NOERROR => {
+                    if self.settings.status != Some(StatusLevel::None) {
+                        let file = self.settings.infile.as_ref().map_or_else(
+                            || translate!("dd-standard-input"),
+                            |name| name.quote().to_string(),
+                        );
+                        show_error!("{}: {e}", translate!("dd-error-reading", "file" => file));
+                    }
+                    let after_partial = base_idx == 0 && self.previous_partial.is_some();
+                    let (read_in_block, count_adjustment) = if base_idx > 0 {
+                        (base_idx, 0)
+                    } else if let Some(previous) = &mut self.previous_partial {
+                        // A short record's missing bytes count only once,
+                        // even if more than one subsequent read fails.
+                        let adjustment = if previous.skipped {
+                            0
+                        } else {
+                            (self.settings.ibs - previous.bytes) as u64
+                        };
+                        previous.skipped = true;
+                        (previous.bytes, adjustment)
+                    } else {
+                        (0, 0)
+                    };
+                    self.src
+                        .skip_failed_read(self.settings.ibs - read_in_block)?;
+                    *recovered = Some(RecoveredRead {
+                        after_partial,
+                        count_adjustment,
+                    });
+                    return Ok(if self.settings.iconv.sync.is_some() {
+                        base_idx
+                    } else {
+                        0
+                    });
+                }
                 Err(e) => return Err(e),
             }
         }
@@ -513,13 +636,23 @@ impl Input<'_> {
     /// The start of each ibs-sized read follows the previous one; a short
     /// read ends the fill, so the bytes received so far form one partial
     /// record for the copy loop (as in GNU dd).
-    fn fill_consecutive(&mut self, buf: &mut [u8]) -> io::Result<ReadStat> {
+    fn fill_consecutive<const NOERROR: bool>(
+        &mut self,
+        buf: &mut [u8],
+    ) -> io::Result<(ReadStat, ReadRecovery)> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut bytes_total = 0;
+        let mut recovery = ReadRecovery::default();
 
         for chunk in buf.chunks_mut(self.settings.ibs) {
-            match self.read(chunk)? {
+            let mut recovered = None;
+            let rlen = self.read_block::<NOERROR>(chunk, &mut recovered)?;
+            if NOERROR && let Some(error) = recovered {
+                recovery.failed = true;
+                recovery.bytes += error.count_adjustment;
+            }
+            match rlen {
                 rlen if rlen == self.settings.ibs => {
                     bytes_total += rlen;
                     reads_complete += 1;
@@ -538,31 +671,51 @@ impl Input<'_> {
                 _ => break,
             }
         }
-        Ok(ReadStat {
-            reads_complete,
-            reads_partial,
-            // Records are not truncated when filling.
-            records_truncated: 0,
-            bytes_total: bytes_total.try_into().unwrap(),
-        })
+        Ok((
+            ReadStat {
+                reads_complete,
+                reads_partial,
+                // Records are not truncated when filling.
+                records_truncated: 0,
+                bytes_total: bytes_total.try_into().unwrap(),
+            },
+            recovery,
+        ))
     }
 
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read is aligned to multiples of ibs; remaining space is filled with the 'pad' byte.
     /// Returns the read statistics and the total filled length (reads + padding).
-    fn fill_blocks(&mut self, buf: &mut [u8], pad: u8) -> io::Result<(ReadStat, usize)> {
+    fn fill_blocks<const NOERROR: bool>(
+        &mut self,
+        buf: &mut [u8],
+        pad: u8,
+    ) -> io::Result<(ReadStat, usize, ReadRecovery)> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut base_idx = 0;
         let mut bytes_total = 0;
+        let mut recovery = ReadRecovery::default();
 
         while base_idx < buf.len() {
             let next_blk = cmp::min(base_idx + self.settings.ibs, buf.len());
             let target_len = next_blk - base_idx;
 
-            match self.read(&mut buf[base_idx..next_blk])? {
-                0 => break,
+            let mut recovered = None;
+            let rlen = self.read_block::<NOERROR>(&mut buf[base_idx..next_blk], &mut recovered)?;
+            let failed = NOERROR && recovered.is_some();
+            if NOERROR && let Some(error) = recovered {
+                recovery.failed = true;
+                if error.after_partial {
+                    // The preceding short record was already padded.
+                    recovery.bytes += error.count_adjustment;
+                    break;
+                }
+                recovery.bytes += (self.settings.ibs - rlen) as u64;
+            }
+            match rlen {
+                0 if !failed => break,
                 rlen if rlen < target_len => {
                     bytes_total += rlen;
                     reads_partial += 1;
@@ -585,6 +738,7 @@ impl Input<'_> {
                 bytes_total: bytes_total.try_into().unwrap(),
             },
             base_idx,
+            recovery,
         ))
     }
 }
@@ -1138,13 +1292,16 @@ fn flush_caches_full_length(i: &Input, o: &Output) {
 ///
 /// If there is a problem reading from the input or writing to
 /// this output.
-fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
+// Large inlined recovery specializations can displace hot buffer accessors.
+#[inline(never)]
+fn dd_copy<const NOERROR: bool>(mut i: Input, o: Output) -> io::Result<()> {
     // The read and write statistics.
     //
     // These objects are counters, initialized to zero. After each
     // iteration of the main loop, each will be incremented by the
     // number of blocks read and written, respectively.
     let mut rstat = ReadStat::default();
+    let mut count_limit = i.settings.count;
     let mut wstat = WriteStat::default();
 
     // The time at which the main loop starts executing.
@@ -1257,19 +1414,28 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     // the progress reporting thread.
     // A failure ends the loop, so the statistics gathered so far still get reported.
     let mut copy_error = None;
-    while below_count_limit(i.settings.count, &rstat) {
+    while below_count_limit(count_limit, &rstat) {
         // Read a block from the input then write the block to the output.
         //
         // As an optimization, make an educated guess about the
         // best buffer size for reading based on the number of
         // blocks already read and the number of blocks remaining.
-        let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, i.settings.ibs, bsize);
-        let Ok((rstat_update, data)) =
-            read_helper(&mut i, &mut buf, loop_bsize).map_err(|e| copy_error = Some(e))
+        let loop_bsize = calc_loop_bsize(count_limit, &rstat, i.settings.ibs, bsize);
+        let Ok((rstat_update, data, recovery)) =
+            read_helper::<NOERROR>(&mut i, &mut buf, loop_bsize).map_err(|e| copy_error = Some(e))
         else {
             break;
         };
+        if NOERROR
+            && recovery.bytes != 0
+            && let Some(Num::Bytes(limit)) = &mut count_limit
+        {
+            *limit = limit.saturating_sub(recovery.bytes);
+        }
         if rstat_update.is_empty() {
+            if NOERROR && recovery.failed {
+                continue;
+            }
             // Dropping the cache is best-effort: a failure (a pipe cannot
             // drop its cache at all) must not fail or diagnose a copy that
             // succeeded. Only the `count=0` path reports it.
@@ -1484,37 +1650,37 @@ fn alloc_copy_buffer(bsize: usize) -> io::Result<Vec<u8>> {
 ///
 /// `read_buf` is the page-aligned scratch read into directly. The other
 /// `conv=` transformations are applied by [`Converter`].
-fn read_helper<'a>(
+fn read_helper<'a, const NOERROR: bool>(
     i: &mut Input,
     read_buf: &'a mut AlignedBuf,
     bsize: usize,
-) -> io::Result<(ReadStat, &'a [u8])> {
+) -> io::Result<(ReadStat, &'a [u8], ReadRecovery)> {
     fn perform_swab(buf: &mut [u8]) {
         for base in (1..buf.len()).step_by(2) {
             buf.swap(base, base - 1);
         }
     }
 
-    let (rstat, data_len) = {
+    let (rstat, data_len, recovery) = {
         let scratch = &mut read_buf.as_mut_bytes()[..bsize];
-        let (rstat, data_len) = if let Some(ch) = i.settings.iconv.sync {
-            i.fill_blocks(scratch, ch)?
+        let (rstat, data_len, recovery) = if let Some(ch) = i.settings.iconv.sync {
+            i.fill_blocks::<NOERROR>(scratch, ch)?
         } else {
-            let s = i.fill_consecutive(scratch)?;
+            let (s, recovery) = i.fill_consecutive::<NOERROR>(scratch)?;
             let n = s.bytes_total as usize;
-            (s, n)
+            (s, n, recovery)
         };
         if !rstat.is_empty() && i.settings.iconv.swab {
             perform_swab(&mut scratch[..data_len]);
         }
-        (rstat, data_len)
+        (rstat, data_len, recovery)
     };
 
     if rstat.is_empty() {
-        return Ok((rstat, &[]));
+        return Ok((rstat, &[], recovery));
     }
 
-    Ok((rstat, &read_buf.as_bytes()[..data_len]))
+    Ok((rstat, &read_buf.as_bytes()[..data_len], recovery))
 }
 
 // Calculate a 'good' internal buffer size.
@@ -1657,7 +1823,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None if is_stdout_redirected_to_seekable_file() => Output::new_file_from_stdout(&settings)?,
         None => Output::new_stdout(&settings)?,
     };
-    dd_copy(i, o).map_err_context(|| translate!("dd-error-io-error"))
+    if settings.iconv.noerror {
+        dd_copy::<true>(i, o)
+    } else {
+        dd_copy::<false>(i, o)
+    }
+    .map_err_context(|| translate!("dd-error-io-error"))
 }
 
 pub fn uu_app() -> Command {
@@ -1698,12 +1869,13 @@ mod tests {
         let i = Input {
             src,
             settings: &settings,
+            previous_partial: None,
         };
         let o = Output {
             dst: Dest::Sink,
             settings: &settings,
         };
-        dd_copy(i, o).unwrap();
+        dd_copy::<false>(i, o).unwrap();
 
         let mut rest = Vec::new();
         file.read_to_end(&mut rest).unwrap();
