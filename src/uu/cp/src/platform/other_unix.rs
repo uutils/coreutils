@@ -14,7 +14,7 @@ use uucore::translate;
 
 use crate::{
     CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode,
-    is_stream,
+    cannot_open_for_reading, is_stream,
 };
 
 /// Copies `source` to `dest` for systems without copy-on-write
@@ -44,8 +44,8 @@ pub(crate) fn copy_on_write(
     };
 
     if source_is_stream {
-        let mut src_file = open_source(source, nofollow)
-            .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+        let mut src_file =
+            open_source(source, nofollow).map_err(|e| cannot_open_for_reading(e, source))?;
         let mut dst_file = create_dest_restrictive(dest, false).map_err(|e| {
             CpError::IoErrContext(
                 e,
@@ -71,7 +71,7 @@ pub(crate) fn copy_on_write(
     // intentionally does not use O_NOFOLLOW so that an existing symlink at
     // dest is followed, matching GNU cp.
     let mut src_file =
-        open_source(source, nofollow).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+        open_source(source, nofollow).map_err(|e| cannot_open_for_reading(e, source))?;
     let mut dst_file = create_dest_restrictive(dest, false).map_err(|e| {
         CpError::IoErrContext(
             e,

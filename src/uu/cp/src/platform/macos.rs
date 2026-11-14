@@ -20,7 +20,7 @@ use uucore::mode::get_umask;
 
 use crate::{
     CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode,
-    is_stream,
+    cannot_open_for_reading, is_stream,
 };
 
 /// Copies `source` to `dest` using copy-on-write if possible.
@@ -109,7 +109,7 @@ pub(crate) fn copy_on_write(
         copy_debug.reflink = OffloadReflinkDebug::Yes;
         if source_is_stream {
             let mut src_file =
-                File::open(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+                File::open(source).map_err(|e| cannot_open_for_reading(e, source))?;
             let mode = 0o622 & !get_umask();
             let mut dst_file = OpenOptions::new()
                 .create(true)
@@ -139,8 +139,8 @@ pub(crate) fn copy_on_write(
                 .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
         } else {
-            let mut src_file = open_source(source, nofollow)
-                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+            let mut src_file =
+                open_source(source, nofollow).map_err(|e| cannot_open_for_reading(e, source))?;
             let mut dst_file = create_dest_restrictive(dest, false).map_err(|e| {
                 CpError::IoErrContext(
                     e,
