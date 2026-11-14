@@ -21,6 +21,9 @@ clap = { workspace = true }
 fluent = { workspace = true }
 uucore = { workspace = true }
 
+[target.'cfg(windows)'.dependencies]
+dunce = { workspace = true }
+
 [lints]
 workspace = true
 
