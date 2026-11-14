@@ -9658,3 +9658,50 @@ fn test_cp_source_in_unsearchable_dir() {
     at.set_mode("d", 0o755);
     assert!(!at.file_exists("dest"));
 }
+
+#[cfg(unix)]
+#[rstest]
+#[case::no_clobber_skip("--no-clobber", Some(200), false)]
+#[case::no_clobber_copy("--no-clobber", None, true)]
+#[case::update_none_skip("--update=none", Some(200), false)]
+#[case::update_none_copy("--update=none", None, true)]
+#[case::update_older_skip("--update=older", Some(200), false)]
+#[case::update_equal_skip("--update=older", Some(100), false)]
+#[case::update_older_copy("--update=older", Some(50), true)]
+#[case::update_missing_copy("--update=older", None, true)]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+fn test_progressbar_copy_or_skip(
+    #[case] flag: &str,
+    #[case] dest_mtime: Option<i64>,
+    #[case] copied: bool,
+    #[values("", "new contents")] content: &str,
+    #[values(false, true)] terminal: bool,
+) {
+    use filetime::FileTime;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("source", content);
+    filetime::set_file_mtime(at.plus("source"), FileTime::from_unix_time(100, 0)).unwrap();
+    if let Some(time) = dest_mtime {
+        at.write("dest", "keep me");
+        filetime::set_file_mtime(at.plus("dest"), FileTime::from_unix_time(time, 0)).unwrap();
+    }
+    if terminal {
+        ucmd.terminal_sim_stderr();
+    }
+    let result = ucmd
+        .env("TERM", "xterm")
+        .args(&[flag, "--progress", "--verbose", "-T", "source", "dest"])
+        .succeeds();
+    if copied {
+        result.stdout_is("'source' -> 'dest'\n");
+        if terminal {
+            result.stderr_contains("cp: [");
+        } else {
+            result.no_stderr();
+        }
+    } else {
+        result.no_output();
+    }
+    assert_eq!(at.read("dest"), if copied { content } else { "keep me" });
+}
