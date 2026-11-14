@@ -934,9 +934,11 @@ fn test_chmod_recursive_no_dereference_operand() {
 
 /// `chmod -R` must only descend into the directory whose mode it changed. A racer
 /// re-points the operand between two fixture directories and a file meanwhile.
-#[test]
+#[rstest::rstest]
+#[case(false)]
+#[case(true)]
 #[cfg(not(target_os = "redox"))]
-fn test_chmod_recursive_descends_only_into_the_directory_it_changed() {
+fn test_chmod_recursive_descends_only_into_the_directory_it_changed(#[case] nested: bool) {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -947,13 +949,20 @@ fn test_chmod_recursive_descends_only_into_the_directory_it_changed() {
         at.touch(format!("{dir}/f"));
     }
     at.touch("x");
-    at.relative_symlink_dir("a", "op");
+    at.mkdir("tree");
+    let operand = if nested { "tree/op" } else { "op" };
+    let targets = if nested {
+        ["../b", "../x", "../a", "../x"]
+    } else {
+        ["b", "x", "a", "x"]
+    };
+    at.relative_symlink_dir(if nested { "../a" } else { "a" }, operand);
 
     let stop = Arc::new(AtomicBool::new(false));
-    let (op, tmp) = (at.plus("op"), at.plus("op.tmp"));
+    let (op, tmp) = (at.plus(operand), at.plus("op.tmp"));
     let racer_stop = stop.clone();
     let racer = std::thread::spawn(move || {
-        for target in ["b", "x", "a", "x"].iter().cycle() {
+        for target in targets.iter().cycle() {
             if racer_stop.load(Ordering::Relaxed) {
                 break;
             }
@@ -968,7 +977,10 @@ fn test_chmod_recursive_descends_only_into_the_directory_it_changed() {
             at.set_mode(format!("{dir}/f"), 0o644);
         }
 
-        let result = scene.ucmd().args(&["-R", "700", "op"]).run();
+        let result = scene
+            .ucmd()
+            .args(&["-R", "-L", "700", if nested { "tree" } else { "op" }])
+            .run();
 
         for dir in ["a", "b"] {
             let mode = |file: &str| at.metadata(file).permissions().mode() & 0o7777;
@@ -982,9 +994,10 @@ fn test_chmod_recursive_descends_only_into_the_directory_it_changed() {
             // macOS can also fail a lookup through a symlink being replaced.
             let stderr = result.code_is(1).stderr_str();
             assert!(
-                stderr.starts_with("chmod: ")
-                    && stderr.contains("'op'")
-                    && stderr.lines().count() == 1,
+                !stderr.is_empty()
+                    && stderr.lines().all(|line| {
+                        line.starts_with("chmod: ") && line.contains(&format!("'{operand}'"))
+                    }),
                 "{stderr}"
             );
         }
@@ -992,6 +1005,28 @@ fn test_chmod_recursive_descends_only_into_the_directory_it_changed() {
 
     stop.store(true, Ordering::Relaxed);
     racer.join().unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_chmod_recursive_no_dereference_inner_directory_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("tree");
+    at.mkdir("target");
+    at.touch("target/file");
+    at.set_mode("target", 0o755);
+    at.set_mode("target/file", 0o644);
+    at.relative_symlink_dir("../target", "tree/link");
+
+    ucmd.args(&["-R", "-L", "-h", "700", "tree"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.metadata("target").permissions().mode() & 0o7777, 0o755);
+    assert_eq!(
+        at.metadata("target/file").permissions().mode() & 0o7777,
+        0o700
+    );
 }
 
 /// A directory operand the system refuses to open, as TCC or a sandbox does, gets
@@ -2141,6 +2176,209 @@ fn test_chmod_operator_only_still_calls_syscall() {
             .code_is(1)
             .stderr_contains("changing permissions of '/'");
     }
+}
+
+#[cfg(not(any(target_os = "redox", target_os = "fuchsia")))]
+#[rstest::rstest]
+#[case(20)]
+#[case(64)]
+fn test_chmod_recursive_does_not_exhaust_fds(#[case] fd_limit: u64) {
+    use rlimit::Resource;
+    use std::path::PathBuf;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let mut current = PathBuf::from("deep");
+    at.mkdir(&current);
+    let mut paths = vec![current.clone()];
+    for _ in 0..256 {
+        current.push("d");
+        at.mkdir(&current);
+        paths.push(current.clone());
+    }
+    at.touch(current.join("file"));
+    paths.push(current.join("file"));
+    // Exercise sibling processing again after returning to evicted ancestors.
+    for path in &paths[..paths.len() - 1] {
+        at.touch(path.join("sibling"));
+    }
+    for flags in ["-RP", "-RH", "-RL"] {
+        for path in &paths {
+            at.set_mode(path.to_str().unwrap(), 0o755);
+        }
+        scene
+            .ucmd()
+            .limit(Resource::NOFILE, fd_limit, fd_limit)
+            .args(&[flags, "700", "deep"])
+            .succeeds()
+            .no_stderr();
+        for path in &paths {
+            assert_eq!(
+                at.metadata(path.to_str().unwrap()).permissions().mode() & 0o777,
+                0o700
+            );
+        }
+        for path in &paths[..paths.len() - 1] {
+            assert_eq!(
+                at.metadata(path.join("sibling").to_str().unwrap())
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o700
+            );
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "redox", target_os = "fuchsia")))]
+#[rstest::rstest]
+#[case(None)]
+#[case(Some("-f"))]
+#[case(Some("-v"))]
+fn test_chmod_recursive_fd_limit_continues_after_errors(
+    #[case] flag: Option<&str>,
+    #[values(20, 64)] fd_limit: u64,
+) {
+    use rlimit::Resource;
+    use std::path::PathBuf;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let mut current = PathBuf::from("deep");
+    let mut siblings = Vec::new();
+    let mut unreadable = Vec::new();
+    for depth in 0..80 {
+        at.mkdir(&current);
+        at.set_mode(current.to_str().unwrap(), 0o700);
+        let sibling = current.join("sibling");
+        make_file(at.plus(&sibling), 0o600);
+        siblings.push(sibling);
+        if [4, 40, 78].contains(&depth) {
+            let blocked = current.join("blocked");
+            at.mkdir(&blocked);
+            at.set_mode(blocked.to_str().unwrap(), 0o311);
+            unreadable.push(blocked);
+        }
+        current.push("d");
+    }
+    make_file(at.plus("after"), 0o600);
+    let mut ucmd = scene.ucmd();
+    if let Some(flag) = flag {
+        ucmd.arg(flag);
+    }
+    let result = ucmd
+        .limit(Resource::NOFILE, fd_limit, fd_limit)
+        .args(&["-R", "o=r", "deep", "after"])
+        .fails_with_code(1);
+    if flag == Some("-f") {
+        result.no_output();
+    } else {
+        assert_eq!(result.stderr_str().lines().count(), unreadable.len());
+        for path in &unreadable {
+            result.stderr_contains(format!(
+                "chmod: cannot read directory '{}': Permission denied\n",
+                path.display()
+            ));
+            if flag == Some("-v") {
+                result.stdout_contains(format!("'{}' could not be accessed\n", path.display()));
+            }
+        }
+    }
+    // Errors in one subtree must not prevent siblings or later operands from
+    // being changed, including after returning to evicted directory frames.
+    for path in siblings.iter().chain([PathBuf::from("after")].iter()) {
+        assert_eq!(at.metadata(path).permissions().mode() & 0o777, 0o604);
+    }
+    for path in unreadable {
+        at.set_mode(path.to_str().unwrap(), 0o755);
+    }
+}
+
+#[cfg(not(any(target_os = "redox", target_os = "fuchsia")))]
+#[rstest::rstest]
+#[case(20)]
+#[case(64)]
+fn test_chmod_recursive_wide_tree_does_not_exhaust_fds(#[case] fd_limit: u64) {
+    use rlimit::Resource;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("wide");
+    for i in 0..256 {
+        at.mkdir(format!("wide/d{i}"));
+        at.touch(format!("wide/d{i}/file"));
+    }
+    scene
+        .ucmd()
+        .limit(Resource::NOFILE, fd_limit, fd_limit)
+        .args(&["-R", "700", "wide"])
+        .succeeds()
+        .no_stderr();
+    for i in 0..256 {
+        assert_eq!(
+            at.metadata(format!("wide/d{i}/file")).permissions().mode() & 0o777,
+            0o700
+        );
+    }
+}
+
+#[cfg(not(any(target_os = "redox", target_os = "fuchsia")))]
+#[rstest::rstest]
+#[case(20)]
+#[case(64)]
+fn test_chmod_recursive_symlink_chain_does_not_exhaust_fds(#[case] fd_limit: u64) {
+    use rlimit::Resource;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("targets");
+    for i in 0..256 {
+        at.mkdir(format!("targets/d{i}"));
+        at.set_mode(format!("targets/d{i}"), 0o755);
+    }
+    at.symlink_dir("targets/d0", "start");
+    for i in 0..255 {
+        at.symlink_dir(format!("targets/d{}", i + 1), format!("targets/d{i}/next"));
+    }
+    at.touch("targets/d255/file");
+    // The back edge must be detected using the open directory's identity.
+    at.symlink_dir("targets/d0", "targets/d255/cycle");
+    scene
+        .ucmd()
+        .limit(Resource::NOFILE, fd_limit, fd_limit)
+        .args(&["-RL", "700", "start"])
+        .succeeds()
+        .no_stderr();
+    for i in 0..256 {
+        assert_eq!(
+            at.metadata(format!("targets/d{i}")).permissions().mode() & 0o777,
+            0o700
+        );
+    }
+    assert_eq!(
+        at.metadata("targets/d255/file").permissions().mode() & 0o777,
+        0o700
+    );
+    // Directory-only symbolic modes must also work beyond the pathname's
+    // symlink limit; use the metadata obtained relative to the directory fd.
+    at.set_mode("targets/d255/file", 0o600);
+    for i in 0..256 {
+        at.set_mode(format!("targets/d{i}"), 0o600);
+    }
+    scene
+        .ucmd()
+        .limit(Resource::NOFILE, fd_limit, fd_limit)
+        .args(&["-RL", "u+X", "start"])
+        .succeeds()
+        .no_stderr();
+    for i in 0..256 {
+        assert_eq!(
+            at.metadata(format!("targets/d{i}")).permissions().mode() & 0o777,
+            0o700
+        );
+    }
+    assert_eq!(
+        at.metadata("targets/d255/file").permissions().mode() & 0o777,
+        0o600
+    );
 }
 
 #[test]
