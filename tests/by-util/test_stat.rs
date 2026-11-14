@@ -1139,3 +1139,13 @@ fn test_last_of_format_printf_wins(#[case] args: &[&str], #[case] expected: &str
         .succeeds()
         .stdout_is(expected);
 }
+
+#[cfg(unix)]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
+fn test_default_format_device_type_label() {
+    new_ucmd!()
+        .arg("/dev/null")
+        .succeeds()
+        .stdout_contains(" Device type: ");
+}

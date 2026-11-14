@@ -1452,12 +1452,11 @@ impl Stater {
         } else {
             let device_line = if show_dev_type {
                 format!(
-                    "{}: %Hd,%Ld\t{}: %-10i  {}: %-5h {} {}: %t,%T\n",
+                    "{}: %Hd,%Ld\t{}: %-10i  {}: %-5h {}: %t,%T\n",
                     translate!("stat-word-device"),
                     translate!("stat-word-inode"),
                     translate!("stat-word-links"),
-                    translate!("stat-word-device"),
-                    translate!("stat-word-type")
+                    translate!("stat-word-device-type")
                 )
             } else {
                 format!(
