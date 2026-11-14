@@ -101,18 +101,15 @@ pub fn version_cmp(mut a: &[u8], mut b: &[u8]) -> Ordering {
         _ => {}
     }
 
-    // Try to strip file extensions
-    let (mut a, mut b) = match (remove_file_ending(a), remove_file_ending(b)) {
-        (a_stripped, b_stripped) if a_stripped == b_stripped => {
-            // If both would be the same after stripping file extensions, don't strip them.
-            (a, b)
-        }
-        stripped => stripped,
-    };
+    // If the stems tie, the endings decide.
+    let (stem_a, stem_b) = (remove_file_ending(a), remove_file_ending(b));
+    version_parts_cmp(stem_a, stem_b).then_with(|| version_parts_cmp(a, b))
+}
 
-    // 1. Compare leading non-numerical part
-    // 2. Compare leading numerical part
-    // 3. Repeat
+/// 1. Compare leading non-numerical part
+/// 2. Compare leading numerical part
+/// 3. Repeat
+fn version_parts_cmp(mut a: &[u8], mut b: &[u8]) -> Ordering {
     while !a.is_empty() || !b.is_empty() {
         let a_numerical_start = a.iter().position(u8::is_ascii_digit).unwrap_or(a.len());
         let b_numerical_start = b.iter().position(u8::is_ascii_digit).unwrap_or(b.len());
@@ -366,6 +363,27 @@ mod tests {
             version_cmp(b"a\0a", b"a"),
             Ordering::Greater,
             "NULL bytes are handled comparison"
+        );
+    }
+
+    #[test]
+    fn test_version_cmp_endings_decide_version_equal_stems() {
+        // The stems only differ in leading zeros, so they tie as versions and the
+        // endings must decide. Equal here makes `sort -V -u` drop one of the lines.
+        for (a, b) in [
+            (&b"tool-1.00.txt"[..], &b"tool-1.0.exe"[..]),
+            (b"tool-1.00", b"tool-1.0.exe"),
+            (b"01.txt", b"1.log"),
+            (b"setup0.txt", b"setup.exe"),
+            (b"lib-2.010.so", b"lib-2.10.a"),
+            (b"app-1.00.zip", b"app-1.0.tar.gz"),
+        ] {
+            assert_ne!(version_cmp(a, b), Ordering::Equal);
+            assert_eq!(version_cmp(a, b), version_cmp(b, a).reverse());
+        }
+        assert_eq!(
+            version_cmp(b"tool-1.00.txt", b"tool-1.0.exe"),
+            Ordering::Greater
         );
     }
 }
