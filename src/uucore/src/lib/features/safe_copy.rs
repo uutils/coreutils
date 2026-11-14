@@ -121,6 +121,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
     fn open_source_rejects_symlink_with_nofollow() {
         let dir = tempdir().unwrap();
         let target = dir.path().join("target");
@@ -186,6 +187,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
     fn create_dest_rejects_symlink_with_nofollow() {
         // Without nofollow on the dest, an attacker swapping `dst` to a
         // symlink between check and open would silently truncate the

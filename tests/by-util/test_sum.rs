@@ -121,11 +121,10 @@ fn test_filename_ends_with_slash() {
         .stderr_is("sum: a/: Not a directory\n");
 }
 
-#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "openbsd")))]
+#[cfg(target_os = "linux")] // use EIO
 #[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-fn test_filename_proc_self_mem() {
-    // https://github.com/uutils/coreutils/issues/12949
+fn test_read_error() {
     let result = new_ucmd!().arg("/proc/self/mem").fails_with_code(1);
 
     let stderr = result.stderr_str();

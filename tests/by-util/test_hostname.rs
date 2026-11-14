@@ -16,6 +16,7 @@ fn test_hostname() {
 }
 
 #[test]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_hostname_ip() {
     let result = new_ucmd!().arg("-i").succeeds();
     assert!(!result.stdout_str().trim().is_empty());

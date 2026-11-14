@@ -1071,6 +1071,7 @@ fn test_chown_no_dereference_symlink_to_dir() {
 }
 
 #[test]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_chown_symlink_cycles() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
