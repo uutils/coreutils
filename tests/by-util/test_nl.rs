@@ -706,6 +706,19 @@ fn test_invalid_regex_numbering() {
     }
 }
 
+#[rstest]
+#[case::body(&["-bx", "-ba"], "invalid numbering style: 'x'")]
+#[case::header(&["-hx", "-hn"], "invalid numbering style: 'x'")]
+#[case::footer(&["-fz", "-fn"], "invalid numbering style: 'z'")]
+#[case::regex(&["-bp[", "-ba"], "invalid regular expression")]
+fn test_invalid_numbering_before_valid_one(#[case] args: &[&str], #[case] err: &str) {
+    new_ucmd!()
+        .args(args)
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains(err);
+}
+
 #[test]
 fn test_line_number_overflow() {
     new_ucmd!()
