@@ -31,7 +31,7 @@ use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
 use uucore::fs::{are_files_identical, dir_strip_dot_for_creation};
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 #[cfg(not(target_os = "redox"))]
-use uucore::safe_traversal::{DirFd, SymlinkBehavior, create_dir_all_safe};
+use uucore::safe_traversal::{DirFd, FileInfo, SymlinkBehavior, create_dir_all_safe};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::{
     SeLinuxError, contexts_differ, get_selinux_security_context, is_selinux_enabled,
@@ -816,14 +816,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                 let source_meta = metadata(source)?;
                 if let Ok(to_stat) =
                     parent_fd.stat_at(filename.as_os_str(), SymlinkBehavior::Follow)
+                    && FileInfo::from(&source_meta) == FileInfo::from_stat(&to_stat)
                 {
-                    // st_dev and st_ino types vary by platform (i32/u32 on macOS, u64 on Linux)
-                    #[allow(clippy::unnecessary_cast)]
-                    if source_meta.dev() == to_stat.st_dev as u64
-                        && source_meta.ino() == to_stat.st_ino as u64
-                    {
-                        return Err(InstallError::SameFile(source.clone(), target.clone()).into());
-                    }
+                    return Err(InstallError::SameFile(source.clone(), target.clone()).into());
                 }
 
                 let backup_path = perform_backup(source, &target, b)?;
