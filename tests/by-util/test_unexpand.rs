@@ -509,6 +509,31 @@ fn test_backspaces_before_last_tab_stop_resume_conversion() {
         .stdout_is("abcde\x08\x08\tX\n");
 }
 
+// A blank at or past the last tab stop ends conversion for the rest of the
+// line, even when backspaces later move the column back before that tab stop.
+#[rstest]
+#[case::tab_past_last_stop("2,5", "1-\t\t\x08\n", "1-\t\t\x08\n")]
+#[case::space_at_last_stop("2,5", "   x  \x08\n", "\t x  \x08\n")]
+#[case::spaces_past_last_stop("3,5", "abcd  \x08\x08\x08  X\n", "abcd  \x08\x08\x08  X\n")]
+#[case::tab_past_last_stop_then_back("2,5", "1-\t\t\x08\x08\x08   x\n", "1-\t\t\x08\x08\x08   x\n")]
+#[case::text_past_last_stop_then_back("3,5", "abcdef\x08\x08\x08  X\n", "abcdef\x08\x08\x08\tX\n")]
+#[case::next_line_converts_again(
+    "3,5",
+    "abcd  \x08\x08\x08  X\nabcd \x08\x08  X\n",
+    "abcd  \x08\x08\x08  X\nabcd \x08\x08\tX\n"
+)]
+fn test_blank_from_last_tab_stop_ends_conversion(
+    #[case] tabs: &str,
+    #[case] input: &str,
+    #[case] expected: &str,
+) {
+    new_ucmd!()
+        .args(&["-t", tabs])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected);
+}
+
 // clap treats a repeated boolean flag as a conflict unless the command
 // allows an argument to override itself.
 #[rstest]
