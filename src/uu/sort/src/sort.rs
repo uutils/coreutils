@@ -58,7 +58,7 @@ use uucore::numeric_str_cmp::{
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
-use uucore::posix::{MODERN, TRADITIONAL};
+use uucore::posix::allows_traditional_usage;
 use uucore::show_error;
 use uucore::translate;
 use uucore::translate_text;
@@ -1572,12 +1572,6 @@ pub(crate) fn current_open_fd_count() -> Option<usize> {
 }
 
 const STDIN_FILE: &str = "-";
-
-/// Legacy `+POS1 [-POS2]` syntax is permitted unless `_POSIX2_VERSION` is in
-/// the [TRADITIONAL, MODERN) range (matches GNU behaviour).
-fn allows_traditional_usage() -> bool {
-    !matches!(uucore::posix::posix_version(), Some(ver) if (TRADITIONAL..MODERN).contains(&ver))
-}
 
 #[derive(Debug, Clone)]
 struct LegacyKeyPart {

@@ -18,7 +18,7 @@ use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::io::InputReader;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
-use uucore::posix::{MODERN, TRADITIONAL, posix_version};
+use uucore::posix::allows_traditional_usage;
 use uucore::translate;
 
 pub mod options {
@@ -496,15 +496,14 @@ fn should_extract_obs_skip_fields(
 }
 
 /// Helper function to [`filter_args`]
-/// Checks if the slice is a true obsolete skip chars short option, which is
-/// allowed unless `_POSIX2_VERSION` is in [`TRADITIONAL`, `MODERN`).
+/// Checks if the slice is a true obsolete skip chars short option
 fn should_extract_obs_skip_chars(
     slice: &str,
     preceding_long_opt_req_value: bool,
     preceding_short_opt_req_value: bool,
 ) -> bool {
     slice.starts_with('+')
-        && !posix_version().is_some_and(|v| (TRADITIONAL..MODERN).contains(&v))
+        && allows_traditional_usage()
         && !preceding_long_opt_req_value
         && !preceding_short_opt_req_value
         && slice.chars().nth(1).is_some_and(|c| c.is_ascii_digit())

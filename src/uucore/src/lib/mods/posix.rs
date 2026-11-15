@@ -39,6 +39,12 @@ pub fn posix_version() -> Option<usize> {
         .and_then(|v| v.parse::<usize>().ok())
 }
 
+/// Whether obsolete usage such as `+N` is accepted: it is, unless
+/// `_POSIX2_VERSION` is in [`TRADITIONAL`, `MODERN`).
+pub fn allows_traditional_usage() -> bool {
+    !posix_version().is_some_and(|v| (TRADITIONAL..MODERN).contains(&v))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::posix::*;

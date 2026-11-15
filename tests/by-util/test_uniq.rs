@@ -6,7 +6,6 @@
 // spell-checker:ignore nabcd badoption schar nosuchfile
 
 use rstest::rstest;
-use uucore::posix::OBSOLETE;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -1151,10 +1150,6 @@ fn uniq_basic_dedup_cases() {
 
         // first - run a version of tests with regular file as input
         eprintln!("Test {}", case.name);
-        // set environment variable for obsolete skip char option tests
-        if case.name.starts_with("obs-plus") {
-            ucmd.env("_POSIX2_VERSION", OBSOLETE.to_string());
-        }
         let result = ucmd.args(case.args).arg("input-file").run();
         if let Some(stdout) = case.stdout {
             result.stdout_is(stdout);
@@ -1172,12 +1167,7 @@ fn uniq_basic_dedup_cases() {
         // For now we treat it as equivalent of piped in stdin variant
         // as in `cat input-file | uniq`
         eprintln!("Test {}.stdin", case.name);
-        // set environment variable for obsolete skip char option tests
-        let mut ucmd = new_ucmd!();
-        if case.name.starts_with("obs-plus") {
-            ucmd.env("_POSIX2_VERSION", OBSOLETE.to_string());
-        }
-        let result = ucmd.args(case.args).run_piped_stdin(case.input);
+        let result = new_ucmd!().args(case.args).run_piped_stdin(case.input);
         if let Some(stdout) = case.stdout {
             result.stdout_is(stdout);
         }
@@ -1354,21 +1344,21 @@ fn test_obsolete_skip_fields_not_read_after_double_dash() {
 }
 
 #[rstest]
-#[case::unset(None)]
-#[case::empty(Some(""))]
-#[case::before_2001(Some("200111"))]
-#[case::since_2008(Some("200809"))]
-fn test_obsolete_skip_chars_by_default(#[case] posix: Option<&str>) {
-    for args in [&["+1"][..], &["+1", "+2"]] {
-        let mut ucmd = new_ucmd!();
-        if let Some(version) = posix {
-            ucmd.env("_POSIX2_VERSION", version);
-        }
-        ucmd.args(args)
-            .pipe_in("xa\nya\nzb\n")
-            .succeeds()
-            .stdout_is(if args.len() == 1 { "xa\nzb\n" } else { "xa\n" });
+#[case::one(&["+1"], "xa\nzb\n")]
+#[case::two(&["+1", "+2"], "xa\n")]
+fn test_obsolete_skip_chars_by_default(
+    #[case] args: &[&str],
+    #[case] expected: &str,
+    #[values(None, Some(""), Some("200111"), Some("200809"))] posix: Option<&str>,
+) {
+    let mut ucmd = new_ucmd!();
+    if let Some(version) = posix {
+        ucmd.env("_POSIX2_VERSION", version);
     }
+    ucmd.args(args)
+        .pipe_in("xa\nya\nzb\n")
+        .succeeds()
+        .stdout_is(expected);
 }
 
 #[rstest]
