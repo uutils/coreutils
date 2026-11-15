@@ -1625,7 +1625,7 @@ fn test_guard_input() {
 /// `fs.protected_regular` and `fs.protected_fifos` checks apply. A dangling
 /// symlink makes that flag observable without needing a multi-user test.
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(wasi_runner)))]
 fn test_existing_output_is_reopened_with_create() {
     let (at, mut ucmd) = at_and_ucmd!();
 
