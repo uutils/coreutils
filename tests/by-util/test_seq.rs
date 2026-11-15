@@ -1320,3 +1320,16 @@ fn test_repeated_option_last_one_wins() {
         .succeeds()
         .stdout_only("1:2:3\n");
 }
+
+#[rstest]
+#[case::pos_inf_down_to_pos_inf(&["inf", "-1", "inf"], "inf\n")]
+#[case::neg_inf_up_to_neg_inf(&["--", "-inf", "3", "-inf"], "-inf\n")]
+#[case::inf_plus_neg_inf_is_nan(&["inf", "-inf", "0"], "inf\n")]
+#[ignore = "seq must stop once the value no longer changes"]
+fn test_stalled_value_stops(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .args(args)
+        .timeout(std::time::Duration::from_secs(5))
+        .succeeds()
+        .stdout_only(expected);
+}
