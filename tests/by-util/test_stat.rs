@@ -85,6 +85,19 @@ fn test_printf_size_takes_no_sign(#[case] format: &str, #[case] expected: &str) 
         .stdout_only(expected);
 }
 
+#[rstest]
+#[case::plus("%.+5s", "?5s")]
+#[case::minus("%.-2s", "?2s")]
+#[case::with_width("%5.+3s|", "?3s|")]
+#[case::leading_zero("%.05s", "00012")]
+fn test_printf_precision_takes_no_sign(#[case] format: &str, #[case] expected: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello world\n");
+    ucmd.args(&["--printf", format, "f"])
+        .succeeds()
+        .stdout_only(expected);
+}
+
 // GNU prints the free and total block and free node counts of `-f` as signed
 // numbers and the fundamental block size as an unsigned one.
 #[test]
@@ -1136,6 +1149,25 @@ fn test_last_of_format_printf_wins(#[case] args: &[&str], #[case] expected: &str
         .ucmd()
         .args(args)
         .arg("a.txt")
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[cfg(unix)]
+#[uutests::wasi_ignore(NoPermissionBits)]
+#[rstest]
+#[case::alternate("%#a", "0644\n0\n")]
+#[case::precision_with_zero("%#.4a", "0644\n0000\n")]
+#[case::precision_above("%#.5a", "00644\n00000\n")]
+#[case::precision_below("%#.2a", "0644\n00\n")]
+#[case::width("%#8.4a", "    0644\n    0000\n")]
+fn test_alternate_octal_adds_a_single_zero(#[case] format: &str, #[case] expected: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    at.set_mode("f", 0o644);
+    at.touch("z");
+    at.set_mode("z", 0o000);
+    ucmd.args(&["-c", format, "f", "z"])
         .succeeds()
         .stdout_is(expected);
 }

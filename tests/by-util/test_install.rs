@@ -3453,3 +3453,18 @@ fn test_install_will_not_overwrite_just_created() {
 
     assert_eq!(at.read("c/f"), "a");
 }
+
+#[test]
+#[ignore = "the strip program must run with the caller's umask"]
+fn test_install_strip_program_sees_caller_umask() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    write_strip_program(&scene, "recorder", "#!/bin/sh\numask > seen\n");
+    at.write("src", "x");
+    scene
+        .ucmd()
+        .umask(0o027)
+        .args(&["-s", "--strip-program=./recorder", "src", "dest"])
+        .succeeds();
+    assert_eq!(at.read("seen"), "0027\n");
+}

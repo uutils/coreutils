@@ -34,7 +34,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{env, fs};
 
-use uucore::time::{FormatSystemTimeFallback, format_system_time, system_time_to_sec};
+use uucore::time::{FormatSystemTimeFallback, format_system_time};
 
 #[derive(Debug, thiserror::Error)]
 enum StatError {
@@ -635,12 +635,17 @@ fn format_timestamp(seconds: i64, nanoseconds: u32, precision: Precision) -> Str
 }
 
 fn system_time_to_timestamp(time: SystemTime) -> (i64, u32) {
-    let (mut seconds, mut nanoseconds) = system_time_to_sec(time);
-    if time < UNIX_EPOCH && nanoseconds != 0 {
-        seconds -= 1;
-        nanoseconds = 1_000_000_000 - nanoseconds;
+    match time.duration_since(UNIX_EPOCH) {
+        Ok(d) => (d.as_secs() as i64, d.subsec_nanos()),
+        Err(e) => {
+            let d = e.duration();
+            if d.subsec_nanos() == 0 {
+                (-(d.as_secs() as i64), 0)
+            } else {
+                (-(d.as_secs() as i64) - 1, 1_000_000_000 - d.subsec_nanos())
+            }
+        }
     }
-    (seconds, nanoseconds)
 }
 
 fn format_scaled_decimal(value: i128, precision: usize, negative: bool) -> String {
@@ -717,11 +722,14 @@ fn print_unsigned_oct(
     precision: Precision,
     padding_char: Padding,
 ) {
-    let prefix = if flags.alter { "0" } else { "" };
-    let s = match precision {
-        Precision::NotSpecified | Precision::NoNumber => format!("{prefix}{num:o}"),
-        Precision::Number(p) => format!("{prefix}{num:0>p$o}"),
+    let mut s = match precision {
+        Precision::NotSpecified | Precision::NoNumber => format!("{num:o}"),
+        Precision::Number(p) => format!("{num:0>p$o}"),
     };
+    // `#` makes the number start with a 0, adding one only when needed.
+    if flags.alter && !s.starts_with('0') {
+        s.insert(0, '0');
+    }
     pad_and_print(&s, flags.left, width, padding_char);
 }
 
@@ -833,11 +841,13 @@ impl Stater {
             check_bound(format_str, bound, old, j)?;
 
             let j_byte = char_index_to_byte_index(format_str, j);
-            match format_str[j_byte..].scan_num::<i32>() {
+            // A sign after '.' is not part of the precision.
+            match format_str[j_byte..]
+                .scan_num::<i32>()
+                .filter(|_| chars[j].is_ascii_digit())
+            {
                 Some((value, offset)) => {
-                    if value >= 0 {
-                        precision = Precision::Number(value as usize);
-                    }
+                    precision = Precision::Number(value as usize);
                     j += offset;
                 }
                 None => precision = Precision::NoNumber,
@@ -1686,9 +1696,12 @@ mod tests {
                     ..Default::default()
                 },
                 width: 20,
-                precision: Precision::NotSpecified,
-                format: 'w',
+                precision: Precision::NoNumber,
+                format: '-',
             },
+            Token::Char('2'),
+            Token::Char('3'),
+            Token::Char('w'),
             Token::Byte(b'\x12'),
             Token::Byte(b'w'),
             Token::Byte(b'Z'),
