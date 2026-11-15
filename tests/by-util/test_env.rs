@@ -204,7 +204,7 @@ fn test_debug_1() {
         .succeeds();
     result.stderr_matches(
         &Regex::new(concat!(
-            r"executing: [^\n]+(\/|\\)coreutils(\.exe)?\n",
+            r"executing: '[^\n]+(\/|\\)coreutils(\.exe)?'\n",
             r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(\.exe)?'\n",
             r"   arg\[1\]= 'echo'\n",
             r"   arg\[2\]= 'hello'"
@@ -231,7 +231,7 @@ fn test_debug_2() {
             r"arg\[2\]: '[^\n]+(\/|\\)coreutils(.exe)?'\n",
             r"arg\[3\]: 'echo'\n",
             r"arg\[4\]: 'hello2'\n",
-            r"executing: [^\n]+(\/|\\)coreutils(.exe)?\n",
+            r"executing: '[^\n]+(\/|\\)coreutils(.exe)?'\n",
             r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(.exe)?'\n",
             r"   arg\[1\]= 'echo'\n",
             r"   arg\[2\]= 'hello2'"
@@ -253,7 +253,7 @@ fn test_debug1_part_of_string_arg() {
         .succeeds();
     result.stderr_matches(
         &Regex::new(concat!(
-            r"executing: [^\n]+(\/|\\)coreutils(\.exe)?\n",
+            r"executing: '[^\n]+(\/|\\)coreutils(\.exe)?'\n",
             r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(\.exe)?'\n",
             r"   arg\[1\]= 'echo'\n",
             r"   arg\[2\]= 'hello1'"
@@ -280,7 +280,7 @@ fn test_debug2_part_of_string_arg() {
             r"arg\[2\]: '[^\n]+(\/|\\)coreutils(.exe)?'\n",
             r"arg\[3\]: 'echo'\n",
             r"arg\[4\]: 'hello2'\n",
-            r"executing: [^\n]+(\/|\\)coreutils(.exe)?\n",
+            r"executing: '[^\n]+(\/|\\)coreutils(.exe)?'\n",
             r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(.exe)?'\n",
             r"   arg\[1\]= 'echo'\n",
             r"   arg\[2\]= 'hello2'"
@@ -513,6 +513,18 @@ fn test_argv0_without_command_fails() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn test_debug_always_quotes_executed_command() {
+    new_ucmd!()
+        // not "true": on Android it is our multicall binary, which can't run as "renamed"
+        .args(&["-v", "--argv0", "renamed", "sh", "-c", ":"])
+        .succeeds()
+        .stderr_only(
+            "argv0:     'renamed'\nexecuting: 'sh'\n   arg[0]= 'renamed'\n   arg[1]= '-c'\n   arg[2]= ':'\n",
+        );
+}
+
 #[cfg(not(windows))] // windows has no executable "echo", its only supported as part of a batch-file
 #[test]
 fn test_split_string_into_args_one_argument_no_quotes() {
@@ -626,7 +638,7 @@ fn test_split_string_into_args_debug_output_whitespace_handling() {
     assert_eq!(
         out.stderr_str(),
         "input args:\narg[0]: 'env'\narg[1]: $\
-        '-vvS printf x%sx\\\\n A \\t B \\x0B\\x0C\\r\\n'\nexecuting: printf\
+        '-vvS printf x%sx\\\\n A \\t B \\x0B\\x0C\\r\\n'\nexecuting: 'printf'\
         \n   arg[0]= 'printf'\n   arg[1]= $'x%sx\\n'\n   arg[2]= 'A'\n   arg[3]= 'B'\n"
     );
 }

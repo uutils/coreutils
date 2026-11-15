@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable sigset sigaddset sigemptyset
+// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable sigset sigaddset sigemptyset sigismember
 
 pub mod diagnostics;
 pub mod native_int_str;
@@ -894,7 +894,7 @@ impl EnvAppData {
 
         if do_debug_printing {
             let mut error = stderr().lock();
-            let _ = writeln!(error, "executing: {}", prog.maybe_quote());
+            let _ = writeln!(error, "executing: {}", prog.quote());
             let arg_prefix = "   arg";
             let _ = writeln!(error, "{arg_prefix}[{}]= {}", 0, arg0.quote());
             for (i, arg) in args.iter().enumerate() {
