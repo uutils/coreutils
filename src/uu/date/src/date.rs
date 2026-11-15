@@ -26,7 +26,7 @@ use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UError, UResult, strip_errno};
 #[cfg(feature = "i18n-datetime")]
-use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
+use uucore::i18n::datetime::{localize_format_string, resolve_e_conversion, should_use_icu_locale};
 use uucore::i18n::get_ctype_encoding;
 use uucore::quoting_style::{QuotingStyle, escape_bytes};
 use uucore::translate;
@@ -1094,8 +1094,20 @@ fn write_formatted_date<W: Write>(
     write_formatted_bytes(
         writer,
         format_chunks(&output.chunks, |fmt| {
-            let fmt = expand_locale_formats(&date, fmt, &output.config, skip_localization, 0)?;
-            format_date_with_locale_aware_months(&date, &fmt, &output.config, skip_localization)
+            // Resolve `E` first: the base conversion it leaves behind is what
+            // the locale layer then expands, so `%Ep` is the locale's marker
+            // and `%Ec`/`%Ex` are the locale's composites.
+            let resolved = resolve_e_modifiers(fmt, &date, None, skip_localization)?;
+            let fmt = resolved.as_deref().unwrap_or(fmt);
+            let fmt =
+                expand_locale_formats(&date, fmt, &output.config, skip_localization, 0, None)?;
+            format_date_with_locale_aware_months(
+                &date,
+                &fmt,
+                &output.config,
+                skip_localization,
+                None,
+            )
         }),
         output,
     )
@@ -1181,12 +1193,25 @@ fn format_extended_default(
     // Keep the real timestamp for `%s`; only calendar fields use the surrogate
     // year that makes the timezone formatter accept an extended date.
     let formatted = format_chunks(chunks, |fmt| {
+        // Resolve `E` before anything else: the base conversion it leaves
+        // behind is what the locale expansion, the extended composites and
+        // the year substitution then handle (`%Ec` is the locale composite,
+        // `%Es` the real epoch), and `%EY` needs the real year here.
+        let resolved = resolve_e_modifiers(fmt, &surrogate, Some(output.year as i64), false)?;
+        let fmt = resolved.as_deref().unwrap_or(fmt);
         // Expand %x, %X and %r first, so that a %Y they hold is replaced too.
-        let fmt = expand_locale_formats(&surrogate, fmt, config, false, 0)?;
+        let fmt =
+            expand_locale_formats(&surrogate, fmt, config, false, 0, Some(output.year as i64))?;
         let fmt = expand_extended_composites(fmt.as_ref(), output.year, plus_extended_year);
         let fmt = substitute_extended_year(&fmt, output.year, iso_year);
         let fmt = substitute_epoch_seconds_value(&fmt, date.unix_seconds());
-        format_date_with_locale_aware_months(&surrogate, &fmt, config, false)
+        format_date_with_locale_aware_months(
+            &surrogate,
+            &fmt,
+            config,
+            false,
+            Some(output.year as i64),
+        )
     })?;
 
     Ok(formatted)
@@ -1312,6 +1337,7 @@ fn expand_locale_formats<'a>(
     config: &Config<PosixCustom>,
     skip_localization: bool,
     depth: u8,
+    real_year: Option<i64>,
 ) -> Result<Cow<'a, str>, String> {
     let mut output = String::new();
     let mut copied = 0;
@@ -1352,8 +1378,14 @@ fn expand_locale_formats<'a>(
                 continue;
             }
         };
-        let locale_format =
-            expand_locale_formats(date, locale_format, config, skip_localization, depth + 1)?;
+        let locale_format = expand_locale_formats(
+            date,
+            locale_format,
+            config,
+            skip_localization,
+            depth + 1,
+            real_year,
+        )?;
 
         output.push_str(&format[copied..i]);
         if parsed.flags.is_empty() && parsed.width.is_none() {
@@ -1364,6 +1396,7 @@ fn expand_locale_formats<'a>(
                 &locale_format,
                 config,
                 skip_localization,
+                real_year,
             )?;
             let modified = format_modifiers::apply_composite_modifiers(&formatted, &parsed)
                 .map_err(|e| e.to_string())?;
@@ -1424,24 +1457,256 @@ fn format_extended_year_value(
     }
 }
 
+/// Returns true if `spec` (the final letter) accepts the `E` locale modifier.
+///
+/// Covers `%c %C %x %X %y %Y` plus `%Er`, `%E:z` (colon timezones end in
+/// `z`), and the conversions GNU accepts the modifier on but renders as the
+/// base conversion: `%Es`/`%Eq` (`%s`, `%q`), `%En` (`%n`), `%Et` (`%t`),
+/// `%Ep`/`%EP` (`%p`, `%P`), `%Eu` (`%u`), `%ER` (`%R`), `%ET` (`%T`) and
+/// `%EZ` (`%Z`). Anything else (e.g. `%EB`) stays literal.
+fn accepts_e_modifier(spec: char) -> bool {
+    matches!(
+        spec,
+        'c' | 'C'
+            | 'x'
+            | 'X'
+            | 'y'
+            | 'Y'
+            | 'r'
+            | 'z'
+            | 's'
+            | 'q'
+            | 'n'
+            | 't'
+            | 'p'
+            | 'P'
+            | 'u'
+            | 'R'
+            | 'T'
+            | 'Z'
+    )
+}
+
+/// The spec the shared composite formatter takes, for one
+/// `%[flags][width]spec` sequence of `len` bytes. Only `flags`, `width` and
+/// `spec` (for error text) are read.
+fn modifier_spec<'a>(
+    flags: &'a str,
+    width: Option<usize>,
+    spec: &'a str,
+    len: usize,
+) -> format_modifiers::ParsedSpec<'a> {
+    format_modifiers::ParsedSpec {
+        flags,
+        width,
+        spec,
+        len,
+    }
+}
+
+/// Resolve the POSIX `E` locale modifier in `format_string`, before the GNU
+/// modifier pass and jiff see it. An accepted pair becomes its base conversion
+/// (`%Ep` is `%p`, `%Ec` is `%c`), which the stages after this pass render,
+/// so the caller runs it before the locale layer. Substituted text is
+/// percent-doubled so those stages treat it as literal; `%%` stays escaped;
+/// an invalid pair (`%EB`, `%Ej`) stays literal. Returns `None` when
+/// `format_string` contains no `E` byte, so the caller keeps borrowing the
+/// original.
+///
+/// `O` is deliberately not handled here: it stays an ordinary specifier
+/// letter, so every `%O` sequence keeps the rendering the format string has
+/// without a locale modifier.
+///
+/// `real_year` is the actual Gregorian year for out-of-range dates whose
+/// `date` is a surrogate (see `format_extended_default`).
+fn resolve_e_modifiers<'a>(
+    format_string: &'a str,
+    date: &Zoned,
+    real_year: Option<i64>,
+    #[cfg(feature = "i18n-datetime")] skip_localization: bool,
+    #[cfg(not(feature = "i18n-datetime"))] _skip_localization: bool,
+) -> Result<Option<Cow<'a, str>>, String> {
+    // Runs once per date for every format, so it stays a plain scan: when the
+    // modifier byte does not occur the caller keeps borrowing the original.
+    if !format_string.contains('E') {
+        return Ok(None);
+    }
+
+    let mut resolved = String::with_capacity(format_string.len());
+    let bytes = format_string.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'%' {
+            let ch_len = format_string[i..].chars().next().map_or(1, char::len_utf8);
+            resolved.push_str(&format_string[i..i + ch_len]);
+            i += ch_len;
+            continue;
+        }
+        // `%%` is a literal percent: keep it escaped for the later jiff
+        // pass and never resolve inside it.
+        if bytes.get(i + 1) == Some(&b'%') {
+            resolved.push_str("%%");
+            i += 2;
+            continue;
+        }
+        let spec = scan_format_spec(format_string, i);
+        let Some(&specifier) = bytes.get(spec.index) else {
+            // A trailing `%` (or a `%` followed only by flags and a width):
+            // nothing to resolve, the later stages keep its escape handling.
+            resolved.push('%');
+            i += 1;
+            continue;
+        };
+        // The base scanner has no locale-modifier grammar: it stops on the
+        // modifier byte, so anything but `E` there is an ordinary conversion
+        // — every `%O` sequence among them — left verbatim for the month/day
+        // localization, the epoch fix and the GNU/jiff stages.
+        if specifier != b'E' {
+            resolved.push_str(&format_string[i..=spec.index]);
+            i = spec.index + 1;
+            continue;
+        }
+        // After the modifier: at most three `:` (the timezone forms) and one
+        // ASCII letter. Colons only modify the timezone `z` (`%E:z`, ...), so
+        // a colon before any other letter (e.g. `%E:q`) is not a conversion.
+        let spec_start = spec.index + 1;
+        let mut spec_end = spec_start;
+        while bytes.get(spec_end) == Some(&b':') && spec_end - spec_start < 3 {
+            spec_end += 1;
+        }
+        let accepted = bytes
+            .get(spec_end)
+            .copied()
+            .filter(u8::is_ascii_alphabetic)
+            .map(char::from)
+            .filter(|letter| {
+                (spec_end == spec_start || *letter == 'z') && accepts_e_modifier(*letter)
+            });
+        let Some(letter) = accepted else {
+            // A sequence GNU cannot use is rendered literally and padded to
+            // the requested width like a string (space default): `%10EB` is
+            // `     %10EB`, `%5E` is `  %5E` and `%10E:` is `     %10E:`. The
+            // byte after the modifier is ASCII when present, so the offset is
+            // on a character boundary; a multi-byte character after the
+            // modifier keeps no padding, matching GNU.
+            let next = bytes.get(spec.index + 1);
+            if next.is_none_or(u8::is_ascii) {
+                // A '%' after the modifier starts the next conversion, so it
+                // is not part of this literal; GNU keeps its escape handling.
+                let end = match next {
+                    Some(b'%') | None => spec.index + 1,
+                    Some(_) => spec.index + 2,
+                };
+                let literal = &format_string[i..end];
+                let padded = if let Some(width) = spec.width {
+                    // Overflowing widths are clamped to MAX and rejected by
+                    // the shared composite formatter.
+                    let parsed = modifier_spec(spec.flags, Some(width), literal, literal.len());
+                    format_modifiers::apply_composite_modifiers(literal, &parsed)
+                        .map_err(|e| e.to_string())?
+                } else {
+                    literal.to_string()
+                };
+                resolved.push_str(&padded.replace('%', "%%"));
+                i = end;
+            } else {
+                resolved.push('%');
+                i += 1;
+            }
+            continue;
+        };
+        let spec_text = &format_string[spec_start..=spec_end];
+        let spec_len = spec_end + 1 - i;
+        i = spec_end + 1;
+        // Push the base conversion (`%[flags][width]spec`) for jiff.
+        let push_base = |out: &mut String| {
+            out.push('%');
+            out.push_str(spec.flags);
+            if let Some(width) = spec.width {
+                out.push_str(&width.to_string());
+            }
+            out.push_str(spec_text);
+        };
+        #[cfg(feature = "i18n-datetime")]
+        if skip_localization {
+            // ICU off: strip the modifier to the base conversion.
+            push_base(&mut resolved);
+        } else if let Some(raw) = resolve_e_conversion(letter, date.date(), real_year) {
+            // ICU provided a substitute: apply the existing GNU flags/width
+            // to the raw value, then escape it so later stages copy it
+            // through untouched. E-modified years pad like a string (space
+            // default), matching GNU.
+            let padded = if spec.flags.is_empty() && spec.width.is_none() {
+                raw
+            } else {
+                let parsed = modifier_spec(spec.flags, spec.width, spec_text, spec_len);
+                format_modifiers::apply_composite_modifiers(&raw, &parsed)
+                    .map_err(|e| e.to_string())?
+            };
+            resolved.push_str(&padded.replace('%', "%%"));
+        } else {
+            // Standard `E` fallback: format the base `%spec` via jiff.
+            push_base(&mut resolved);
+        }
+        #[cfg(not(feature = "i18n-datetime"))]
+        {
+            // Without ICU there is no locale calendar, so an `E` year falls
+            // back to the Gregorian year while keeping GNU's formatting: the
+            // year is not zero-padded and an explicit width pads with spaces.
+            if matches!(letter, 'Y' | 'y' | 'C') {
+                let year = real_year.unwrap_or_else(|| i64::from(date.year()));
+                let raw = match letter {
+                    'Y' => year.to_string(),
+                    'y' => format!("{:02}", year.rem_euclid(100)),
+                    _ => (year / 100).to_string(),
+                };
+                let padded = if spec.flags.is_empty() && spec.width.is_none() {
+                    raw
+                } else {
+                    let parsed = modifier_spec(spec.flags, spec.width, spec_text, spec_len);
+                    format_modifiers::apply_composite_modifiers(&raw, &parsed)
+                        .map_err(|e| e.to_string())?
+                };
+                resolved.push_str(&padded.replace('%', "%%"));
+            } else {
+                push_base(&mut resolved);
+            }
+        }
+    }
+
+    Ok(Some(Cow::Owned(resolved)))
+}
+
 fn format_date_with_locale_aware_months(
     date: &Zoned,
     format_string: &str,
     config: &Config<PosixCustom>,
     #[cfg(feature = "i18n-datetime")] skip_localization: bool,
     #[cfg(not(feature = "i18n-datetime"))] _skip_localization: bool,
+    real_year: Option<i64>,
 ) -> Result<String, String> {
+    // Resolve `E` before GNU modifier processing and jiff. The top-level
+    // callers already resolved `E` before the locale expansion; a locale's
+    // own format may still carry one (a `%Ey` in `d_t_fmt`), and it must take
+    // the real year too. Substituted text comes back escaped so the later
+    // stages copy it through as literal.
+    #[cfg(feature = "i18n-datetime")]
+    let e_scan = resolve_e_modifiers(format_string, date, real_year, skip_localization)?;
+    #[cfg(not(feature = "i18n-datetime"))]
+    let e_scan = resolve_e_modifiers(format_string, date, real_year, false)?;
+    let scan_input: &str = e_scan.as_deref().unwrap_or(format_string);
+
     // Apply locale-aware name substitution (month/day names) before modifier
     // processing, so that formats like "%-e" don't bypass localization of "%b"/"%A".
     // The owned String is kept in `localized` so `fmt` can borrow from it for the
     // rest of the function without a dangling reference.
     #[cfg(feature = "i18n-datetime")]
     let localized: Option<String> = (!skip_localization && should_use_icu_locale())
-        .then(|| localize_format_string(format_string, date.date()));
+        .then(|| localize_format_string(scan_input, date.date()));
     #[cfg(feature = "i18n-datetime")]
-    let fmt: &str = localized.as_deref().unwrap_or(format_string);
+    let fmt: &str = localized.as_deref().unwrap_or(scan_input);
     #[cfg(not(feature = "i18n-datetime"))]
-    let fmt = format_string;
+    let fmt: &str = scan_input;
 
     // jiff renders `%s` by truncating toward zero, but GNU `date` floors toward
     // negative infinity (e.g. `@-1.5` → `-2`, not `-1`). Every other field jiff
