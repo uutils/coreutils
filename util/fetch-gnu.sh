@@ -23,3 +23,12 @@ for f in "${backport[@]}"; do
   grep -qF "tests/$f" Makefile.in ||
     sed -i "s|^all_tests =.*|&\n  tests/$f\t\t\t\t\\\\|" Makefile.in
 done
+
+# Tests that master moved or rewrote: the $ver copy expects the old behavior and
+# contradicts its backported replacement, so drop it from the test lists.
+superseded=(
+  misc/printenv.sh # replaced by env/printenv.sh
+)
+for f in "${superseded[@]}"; do
+  sed -i "\|^  tests/${f}[[:space:]]|d" tests/local.mk Makefile.in
+done
