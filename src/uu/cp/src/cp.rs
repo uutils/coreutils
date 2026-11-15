@@ -3070,9 +3070,10 @@ fn copy_file(
         set_selinux_context(dest, options.context.as_ref())?;
     }
 
-    // Skip tracking copied files when using --link mode since hard link
-    // structure is automatically preserved
-    if options.copy_mode != CopyMode::Link {
+    // Copied files are only looked up to preserve hard links, which --link
+    // mode does by itself. Tracking them otherwise costs a stat per file and
+    // memory for every file copied.
+    if options.preserve_hard_links() && options.copy_mode != CopyMode::Link {
         copied_files.insert(
             FileInformation::from_path(source, options.dereference(source_in_command_line))?,
             dest.to_path_buf(),
