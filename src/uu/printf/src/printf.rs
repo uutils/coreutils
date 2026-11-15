@@ -51,12 +51,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 /// swallow the first `--` wherever it appears, so insert one in front of the
 /// format operand when the caller did not write it there.
 fn mark_end_of_options(mut args: Vec<OsString>) -> Vec<OsString> {
-    match args.get(1) {
-        // `--help` and `--version` are options only when they are the sole
-        // argument; otherwise they are the format.
-        Some(arg) if args.len() == 2 && (arg == "--help" || arg == "--version") => {}
-        Some(arg) if arg != "--" => args.insert(1, OsString::from("--")),
-        _ => {}
+    // `--help` and `--version` are options only when they are the sole
+    // argument; otherwise they are the format.
+    let sole_option = args.len() == 2 && (args[1] == "--help" || args[1] == "--version");
+    if args.len() > 1 && args[1] != "--" && !sole_option {
+        args.insert(1, OsString::from("--"));
     }
     args
 }
