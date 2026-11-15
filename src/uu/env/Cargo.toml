@@ -27,6 +27,9 @@ nix = { workspace = true, features = ["process", "signal"] }
 [features]
 diagnostics = ["uucore/diagnostics"]
 
+[dev-dependencies]
+temp-env = { workspace = true }
+
 [lints]
 workspace = true
 

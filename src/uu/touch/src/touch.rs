@@ -981,16 +981,13 @@ mod tests {
     use tempfile::tempdir;
 
     #[cfg(windows)]
-    use std::env;
-    #[cfg(windows)]
     use uucore::locale;
     #[cfg(windows)]
     #[test]
     fn test_get_pathbuf_from_stdout_fails_if_stdout_is_not_a_file() {
-        unsafe {
-            env::set_var("LANG", "C");
-        }
-        let _ = locale::setup_localization("touch");
+        temp_env::with_var("LANG", Some("C"), || {
+            let _ = locale::setup_localization("touch");
+        });
         // We can trigger an error by not setting stdout to anything (will
         // fail with code 1)
         assert!(

@@ -3199,6 +3199,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
+ "temp-env",
  "uucore",
 ]
 
@@ -3308,6 +3309,7 @@ dependencies = [
  "libc",
  "num-integer",
  "rustix",
+ "temp-env",
  "tempfile",
  "thiserror 2.0.21",
  "uucore",
@@ -3321,6 +3323,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "rustix",
+ "temp-env",
  "tempfile",
  "thiserror 2.0.21",
  "unicode-width",
@@ -3386,6 +3389,7 @@ dependencies = [
  "clap",
  "fluent",
  "nix",
+ "temp-env",
  "thiserror 2.0.21",
  "uucore",
 ]
@@ -4173,6 +4177,7 @@ dependencies = [
  "libc",
  "parse_datetime",
  "rustix",
+ "temp-env",
  "tempfile",
  "thiserror 2.0.21",
  "uucore",
