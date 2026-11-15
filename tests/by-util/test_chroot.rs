@@ -3,8 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) araba newroot userspec chdir pwd's isroot
+// spell-checker:ignore (words) araba newroot userspec chdir pwd's isroot nosuchgrp
 
+use uucore::entries::{Group, gid2grp};
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 #[cfg(not(target_os = "android"))]
@@ -99,6 +100,17 @@ fn test_groups_unknown_group() {
         .args(&["--groups=nosuchgrp1,nosuchgrp2", "/", "true"])
         .fails_with_code(125)
         .stderr_only("chroot: invalid group 'nosuchgrp1'\nchroot: invalid group 'nosuchgrp2'\n");
+}
+
+#[test]
+fn test_groups_known_and_unknown_group() {
+    let known_group = gid2grp(0).unwrap();
+    assert_eq!(Group::locate_name(&known_group).unwrap().gid, 0);
+
+    new_ucmd!()
+        .args(&[&format!("--groups={known_group},nosuchgrp1"), "/", "true"])
+        .fails_with_code(125)
+        .stderr_only("chroot: invalid group 'nosuchgrp1'\n");
 }
 
 #[test]
