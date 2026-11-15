@@ -988,19 +988,22 @@ fn test_suffix_start_too_large_missing_input() {
     "--numeric-suffixes=99999999999999999999",
     "numerical suffix start value is too large for the suffix length"
 )]
+#[case::hex_overflow(
+    "--hex-suffixes=ffffffffffffffffff",
+    "numerical suffix start value is too large for the suffix length"
+)]
 fn test_invalid_suffix_start(#[case] arg: &str, #[case] error: &str) {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(arg).fails().usage_error(error);
     assert!(!at.file_exists("x05"));
 }
 
-#[test]
-fn test_empty_suffix_start_is_zero() {
+#[rstest]
+#[case::numeric("--numeric-suffixes=")]
+#[case::hex("--hex-suffixes=")]
+fn test_empty_suffix_start_is_zero(#[case] arg: &str) {
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.arg("--numeric-suffixes=")
-        .pipe_in("a\n")
-        .succeeds()
-        .no_output();
+    ucmd.arg(arg).pipe_in("a\n").succeeds().no_output();
     assert_eq!(at.read("x00"), "a\n");
 }
 

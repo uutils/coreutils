@@ -327,7 +327,8 @@ impl SettingsError {
                 | Self::Suffix(
                     SuffixError::ContainsSeparator(_)
                         | SuffixError::StartTooLarge
-                        | SuffixError::InvalidStart(..)
+                        | SuffixError::InvalidNumericStart(_)
+                        | SuffixError::InvalidHexStart(_)
                 )
         )
     }

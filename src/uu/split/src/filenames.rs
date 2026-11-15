@@ -102,14 +102,13 @@ pub enum SuffixError {
     #[error("{}", translate!("split-error-numerical-suffix-start-too-large"))]
     StartTooLarge,
 
-    /// The start value of numeric (`false`) or hexadecimal (`true`) suffixes
-    /// is not a number.
-    #[error("{}", if *.1 {
-        translate!("split-error-invalid-hex-suffix-start", "value" => .0.quote())
-    } else {
-        translate!("split-error-invalid-numeric-suffix-start", "value" => .0.quote())
-    })]
-    InvalidStart(String, bool),
+    /// The start value of numeric suffixes is not a decimal number
+    #[error("{}", translate!("split-error-invalid-numeric-suffix-start", "value" => .0.quote()))]
+    InvalidNumericStart(String),
+
+    /// The start value of hexadecimal suffixes is not a hexadecimal number
+    #[error("{}", translate!("split-error-invalid-hex-suffix-start", "value" => .0.quote()))]
+    InvalidHexStart(String),
 }
 
 /// Parse the start value of numeric or hexadecimal suffixes: digits only, and
@@ -117,8 +116,11 @@ pub enum SuffixError {
 fn parse_start(value: &str, stype: SuffixType) -> Result<usize, SuffixError> {
     let radix = u32::from(stype.radix());
     if !value.chars().all(|c| c.is_digit(radix)) {
-        let hex = matches!(stype, SuffixType::Hexadecimal);
-        return Err(SuffixError::InvalidStart(value.to_owned(), hex));
+        return Err(if matches!(stype, SuffixType::Hexadecimal) {
+            SuffixError::InvalidHexStart(value.to_owned())
+        } else {
+            SuffixError::InvalidNumericStart(value.to_owned())
+        });
     }
     if value.is_empty() {
         return Ok(0);
