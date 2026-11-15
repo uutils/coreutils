@@ -904,7 +904,7 @@ impl EnvAppData {
 
         if do_debug_printing {
             let mut error = stderr().lock();
-            let _ = writeln!(error, "executing: {}", prog.maybe_quote());
+            let _ = writeln!(error, "executing: {}", prog.quote());
             let arg_prefix = "   arg";
             let _ = writeln!(error, "{arg_prefix}[{}]= {}", 0, arg0.quote());
             for (i, arg) in args.iter().enumerate() {
