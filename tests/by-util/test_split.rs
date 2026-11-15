@@ -2600,7 +2600,6 @@ fn test_number_with_plus_prefix(
 
 #[cfg(unix)]
 #[test]
-#[ignore = "a --filter that exits early must not abort the other -n chunks"]
 fn test_number_filter_exiting_early_keeps_other_chunks() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut data = vec![b'k'; 200_000];
