@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable sigset sigaddset sigemptyset
+// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable sigset sigaddset sigemptyset sigismember
 
 pub mod diagnostics;
 pub mod native_int_str;
@@ -1279,12 +1279,13 @@ mod tests {
 
     #[test]
     fn test_split_string_environment_vars_test() {
-        unsafe { env::set_var("FOO", "BAR") };
-        assert_eq!(
-            NCvt::convert(vec!["FOO=bar", "sh", "-c", "echo xBARx =$FOO="]),
-            parse_args_from_str(&NCvt::convert(r#"FOO=bar sh -c "echo x${FOO}x =\$FOO=""#))
-                .unwrap(),
-        );
+        temp_env::with_var("FOO", Some("BAR"), || {
+            assert_eq!(
+                NCvt::convert(vec!["FOO=bar", "sh", "-c", "echo xBARx =$FOO="]),
+                parse_args_from_str(&NCvt::convert(r#"FOO=bar sh -c "echo x${FOO}x =\$FOO=""#))
+                    .unwrap(),
+            );
+        });
     }
 
     #[test]
@@ -1310,7 +1311,9 @@ mod tests {
 
     #[test]
     fn test_error_cases() {
-        let _ = locale::setup_localization("env");
+        temp_env::with_var("LANG", Some("C"), || {
+            let _ = locale::setup_localization("env");
+        });
 
         // Test EnvBackslashCNotAllowedInDoubleQuotes
         let result = parse_args_from_str(&NCvt::convert(r#"sh -c "echo \c""#));
