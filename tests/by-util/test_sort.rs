@@ -1519,6 +1519,49 @@ fn test_spill_write_error_does_not_panic() {
         .stderr_does_not_contain("panicked");
 }
 
+// Regression test for #15738: sort -m must flush temp files before closing them.
+// On a nearly-full filesystem the flush surfaces ENOSPC instead of silently
+// discarding data when the BufWriter is dropped.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+fn test_merge_write_error_on_full_tmpfs() {
+    let mut scene = TestScenario::new("sort");
+
+    let tmp_dir = "tmp_dir_merge";
+    scene.fixtures.mkdir(tmp_dir);
+    if scene.mount_temp_fs(tmp_dir).is_err() {
+        return;
+    }
+
+    // Create 300 small pre-sorted files so that sort -m needs temporary files
+    // for the merge tree.
+    for i in 0..300 {
+        let name = format!("input_{i:03}.txt");
+        let mut content = String::new();
+        for line in 0..100 {
+            writeln!(content, "{line:06}").expect("writing to a String cannot fail");
+        }
+        scene.fixtures.write(&name, &content);
+    }
+
+    let mut args: Vec<String> = vec![
+        "--merge".to_string(),
+        format!("--temporary-directory={tmp_dir}"),
+    ];
+    for i in 0..300 {
+        args.push(format!("input_{i:03}.txt"));
+    }
+
+    let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+
+    scene
+        .ucmd()
+        .args(&arg_refs)
+        .fails()
+        .stderr_contains("No space left on device")
+        .stderr_does_not_contain("panicked");
+}
+
 // A read error must be reported with context and without the raw io::Error suffix.
 // It used to print `sort: Input/output error (os error 5)`.
 #[uutests::wasi_ignore(HostPathsNotVisible)]
