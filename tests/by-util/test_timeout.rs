@@ -391,15 +391,17 @@ fn test_sigchld_ignored_by_parent() {
 #[test]
 #[cfg(unix)]
 fn test_timeout_signal_ignored_by_parent() {
-    let (ts, bin) = scenario_with_bin();
-    let start = std::time::Instant::now();
-    ts.cmd("sh")
-        .args(&[
-            "-c",
-            &format!("trap '' TERM; exec {bin} timeout 1 {bin} sleep 10"),
-        ])
-        .fails_with_code(124);
-    assert!(start.elapsed() < Duration::from_secs(5));
+    for (sig, opt) in [("TERM", ""), ("INT", "-s INT")] {
+        let (ts, bin) = scenario_with_bin();
+        let start = std::time::Instant::now();
+        ts.cmd("sh")
+            .args(&[
+                "-c",
+                &format!("trap '' {sig}; exec {bin} timeout {opt} 1 {bin} sleep 10"),
+            ])
+            .fails_with_code(124);
+        assert!(start.elapsed() < Duration::from_secs(5), "{sig}");
+    }
 }
 
 #[test]
