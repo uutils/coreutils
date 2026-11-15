@@ -336,7 +336,10 @@ pub fn uu_app() -> Command {
             Arg::new(options::DEBUG)
                 .short('v')
                 .long(options::DEBUG)
-                .action(ArgAction::Count)
+                // Not ArgAction::Count: clap would show "--debug..." in --help
+                .action(ArgAction::Append)
+                .num_args(0)
+                .default_missing_value("")
                 .help(translate!("env-help-debug")),
         )
         .arg(
@@ -602,7 +605,13 @@ impl EnvAppData {
         let app = uu_app();
         let args_with_values: Vec<&Arg> = app
             .get_arguments()
-            .filter(|arg| arg.get_action().takes_values() && !arg.is_require_equals_set())
+            .filter(|arg| {
+                arg.get_action().takes_values()
+                    && !arg.is_require_equals_set()
+                    && arg
+                        .get_num_args()
+                        .is_none_or(|range| range.max_values() > 0)
+            })
             .collect();
         let short_flags_with_args: Vec<u8> = args_with_values
             .iter()
@@ -802,10 +811,11 @@ impl EnvAppData {
             signal_apply_all,
         } = self.parse_arguments(original_args)?;
 
-        self.do_debug_printing = self.do_debug_printing || (0 != matches.get_count("debug"));
-        self.do_input_debug_printing = self
-            .do_input_debug_printing
-            .or(Some(matches.get_count("debug") >= 2));
+        let debug_level = matches
+            .get_many::<String>(options::DEBUG)
+            .map_or(0, Iterator::count);
+        self.do_debug_printing = self.do_debug_printing || debug_level != 0;
+        self.do_input_debug_printing = self.do_input_debug_printing.or(Some(debug_level >= 2));
         if Some(true) == self.do_input_debug_printing {
             debug_print_args(&original_args);
             self.do_input_debug_printing = Some(false);
