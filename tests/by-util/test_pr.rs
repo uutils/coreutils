@@ -1696,3 +1696,18 @@ fn test_expand_tabs_line_too_long() {
         .fails_with_code(1)
         .stderr_only("pr: integer overflow\n");
 }
+
+#[test]
+#[ignore = "a character wider than the page width must be dropped"]
+fn test_page_width_narrower_than_leading_tab() {
+    new_ucmd!()
+        .args(&["-t", "-W", "5"])
+        .pipe_in("\tone\n\ttwo\n\tthree\n")
+        .succeeds()
+        .stdout_only("\n\n\n");
+    new_ucmd!()
+        .args(&["-t", "-n", "-W", "5"])
+        .pipe_in("\tone\n\ttwo\n")
+        .succeeds()
+        .stdout_only("    1\t\n    2\t\n");
+}
