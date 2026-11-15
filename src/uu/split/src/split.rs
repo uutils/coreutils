@@ -1081,7 +1081,7 @@ fn n_chunks_by_byte(
             } else {
                 let idx = (i - 1) as usize;
                 let writer = out_files.get_writer(idx, settings)?;
-                writer.write_all(&buf)?;
+                custom_write_all(&buf, writer, settings)?;
             }
         } else {
             break;
