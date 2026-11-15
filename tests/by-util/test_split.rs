@@ -2565,3 +2565,18 @@ fn test_number_with_plus_prefix(
         .collect();
     assert_eq!(files, expected_files, "-n {number}");
 }
+
+#[cfg(unix)]
+#[test]
+#[ignore = "a --filter that exits early must not abort the other -n chunks"]
+fn test_number_filter_exiting_early_keeps_other_chunks() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut data = vec![b'k'; 200_000];
+    data.extend(vec![b'm'; 200_000]);
+    data.extend(vec![b'n'; 200_000]);
+    at.write_bytes("three", &data);
+    ucmd.args(&["-n", "3", "--filter=head -c1 > $FILE", "three"])
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("xaa") + &at.read("xab") + &at.read("xac"), "kmn");
+}
