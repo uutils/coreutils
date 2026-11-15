@@ -1677,6 +1677,7 @@ fn is_empty_dir(path: &Path) -> bool {
 }
 
 /// If target is a symlink mode should be overwritten to 777
+#[cfg(unix)]
 fn get_symlink_mode(metadata: &fs::Metadata) -> u32 {
     if metadata.is_symlink() {
         0o777
