@@ -7,6 +7,7 @@ use std::fmt;
 use std::io::{self, Write};
 
 use uucore::error::{UResult, USimpleError};
+use uucore::translate;
 
 /// Returns `offset + n`, or an error if the sum does not fit in an `i64`
 /// (offsets are signed 64-bit file positions).
@@ -14,7 +15,7 @@ pub fn checked_offset_add(offset: u64, n: u64) -> UResult<u64> {
     let sum = offset.saturating_add(n);
     i64::try_from(sum)
         .map(|_| sum)
-        .map_err(|e| USimpleError::new(1, e.to_string()))
+        .map_err(|_| USimpleError::new(1, translate!("od-error-offset-overflow")))
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
