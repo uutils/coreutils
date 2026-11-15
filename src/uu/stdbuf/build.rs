@@ -65,6 +65,10 @@ fn main() {
     cmd.env_clear().envs(env::vars());
     cmd.current_dir(libstdbuf_src)
         .args(["build", "--target-dir", build_dir.to_str().unwrap()]);
+    // Give the nested build its own build directory too. A build directory configured for the
+    // outer build (build.build-dir or CARGO_BUILD_BUILD_DIR) would otherwise be shared, and the
+    // nested build would wait forever for the lock which the outer build holds.
+    cmd.env("CARGO_BUILD_BUILD_DIR", &build_dir);
 
     // Determine the actual profile from OUT_DIR since PROFILE env var only gives the base profile
     // for inherited profiles (e.g., PROFILE=release for both release and release-small).
