@@ -1432,3 +1432,19 @@ fn test_zero_precision_above_formatter_limit() {
         .succeeds()
         .stdout_only(format!("0.{}", &zeros[1..]));
 }
+
+#[test]
+#[ignore = "the ignored characters must be quoted in the warning"]
+fn test_ignored_chars_warning_is_quoted() {
+    let warning = "character(s) following character constant have been ignored";
+    new_ucmd!()
+        .args(&["%x\n", "'ABC"])
+        .succeeds()
+        .stdout_is("41\n")
+        .stderr_is(format!("printf: warning: 'BC': {warning}\n"));
+    new_ucmd!()
+        .args(&["%d\n", "'Z\tW"])
+        .succeeds()
+        .stdout_is("90\n")
+        .stderr_is(format!("printf: warning: '\\tW': {warning}\n"));
+}
