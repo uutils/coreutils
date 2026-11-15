@@ -4433,6 +4433,7 @@ dependencies = [
  "xattr",
  "xxhash-rust",
  "z85",
+ "zerocopy",
 ]
 
 [[package]]

@@ -97,6 +97,8 @@ pub use crate::features::update_control;
 pub use crate::features::uptime;
 #[cfg(feature = "version-cmp")]
 pub use crate::features::version_cmp;
+#[cfg(feature = "zeroed-alloc")]
+pub use crate::features::zeroed_alloc;
 pub use crate::features::{char_width, diagnostics};
 
 // * (platform-specific) feature-gated modules
