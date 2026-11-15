@@ -707,9 +707,14 @@ fn has_shebang_like_option(args: &[OsString]) -> bool {
             return false;
         }
         if let Some(long) = bytes.strip_prefix(b"--") {
-            let takes_value = [&b"argv0"[..], b"chdir", b"split-string", b"unset"]
-                .iter()
-                .any(|name| name.starts_with(long));
+            let takes_value = [
+                options::ARGV0,
+                options::CHDIR,
+                options::SPLIT_STRING,
+                options::UNSET,
+            ]
+            .iter()
+            .any(|name| name.as_bytes().starts_with(long));
             if takes_value && !long.contains(&b'=') {
                 iter.next();
             }
