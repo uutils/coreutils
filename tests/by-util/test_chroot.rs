@@ -108,9 +108,20 @@ fn test_groups_known_and_unknown_group() {
     assert_eq!(Group::locate_name(&known_group).unwrap().gid, 0);
 
     new_ucmd!()
-        .args(&[&format!("--groups={known_group},nosuchgrp1"), "/", "true"])
+        .arg(format!("--groups={known_group},nosuchgrp1"))
+        .args(&["/", "true"])
         .fails_with_code(125)
         .stderr_only("chroot: invalid group 'nosuchgrp1'\n");
+}
+
+#[test]
+fn test_group_list_diagnostic_before_newroot() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("jail");
+
+    ucmd.args(&["--groups=,", "jail", "id"])
+        .fails_with_code(125)
+        .stderr_only("chroot: invalid group list: ','\n");
 }
 
 #[test]

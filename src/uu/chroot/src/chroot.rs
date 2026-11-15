@@ -88,7 +88,7 @@ fn parse_group_list(list_str: &str) -> Result<Vec<String>, ChrootError> {
         }
     } else if split.iter().all(|s| s.is_empty()) {
         // --groups=","
-        // chroot: invalid group list ','
+        // chroot: invalid group list: ','
         Err(ChrootError::InvalidGroupList(list_str.to_string()))
     } else {
         let mut result = vec![];
