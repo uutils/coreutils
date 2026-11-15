@@ -7,17 +7,14 @@ use std::fmt;
 use std::io::{self, Write};
 
 use uucore::error::{UResult, USimpleError};
-use uucore::translate;
 
-/// The largest offset `od` reports: offsets are signed 64-bit file positions.
-const MAX_OFFSET: u64 = i64::MAX as u64;
-
-/// Returns `offset + n`, or an "offset overflow" error past [`MAX_OFFSET`].
+/// Returns `offset + n`, or an error if the sum does not fit in an `i64`
+/// (offsets are signed 64-bit file positions).
 pub fn checked_offset_add(offset: u64, n: u64) -> UResult<u64> {
-    offset
-        .checked_add(n)
-        .filter(|&sum| sum <= MAX_OFFSET)
-        .ok_or_else(|| USimpleError::new(1, translate!("od-error-offset-overflow")))
+    let sum = offset.saturating_add(n);
+    i64::try_from(sum)
+        .map(|_| sum)
+        .map_err(|e| USimpleError::new(1, e.to_string()))
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -147,9 +144,10 @@ fn test_input_offset_with_label() {
 
 #[test]
 fn test_increase_position_overflow() {
-    let mut sut = InputOffset::new(Radix::Decimal, MAX_OFFSET - 16, None);
+    let max = i64::MAX as u64;
+    let mut sut = InputOffset::new(Radix::Decimal, max - 16, None);
     assert!(sut.increase_position(16).is_ok());
-    assert_eq!(MAX_OFFSET.to_string(), sut.format_byte_offset());
+    assert_eq!(max.to_string(), sut.format_byte_offset());
     assert!(sut.increase_position(1).is_err());
     assert!(checked_offset_add(u64::MAX, 1).is_err());
 }
