@@ -1,6 +1,6 @@
 name: OpenBSD
 
-# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc nextest copyback logind
+# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc nextest copyback logind mlugg zigbuild liblibc rlib
 
 env:
   FEATURES: "feat_Tier1,feat_require_unix"
@@ -153,9 +153,16 @@ jobs:
             cargo test --features ${{ env.FEATURES }} || FAULT=1
             echo "::endgroup::"
           fi
+          # TEMPORARY diagnostic: find which phase removes files from target/debug/deps
           if (test -z "\$FAULT"); then
             echo "::group::cargo test (uucore)"
-            cargo test --all-features -p uucore || FAULT=1
+            echo "[deps] after workspace: \$(ls target/debug/deps | wc -l) files; \$(ls -l target/debug/deps/liblibc-*.rlib 2>&1)"
+            cargo test --all-features -p uucore --no-run || FAULT=1
+            echo "[deps] after uucore build: \$(ls target/debug/deps | wc -l) files; \$(ls -l target/debug/deps/liblibc-*.rlib 2>&1)"
+            cargo test --all-features -p uucore --lib || FAULT=1
+            echo "[deps] after uucore unit tests: \$(ls target/debug/deps | wc -l) files; \$(ls -l target/debug/deps/liblibc-*.rlib 2>&1)"
+            cargo test --all-features -p uucore --doc || FAULT=1
+            echo "[deps] after uucore doc tests: \$(ls target/debug/deps | wc -l) files; \$(ls -l target/debug/deps/liblibc-*.rlib 2>&1)"
             echo "::endgroup::"
           fi
           # Test building with make
