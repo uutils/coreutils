@@ -40,6 +40,7 @@ uucore = { workspace = true, features = ["fsxattr"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 selinux = { workspace = true, optional = true }
+uucore = { workspace = true, features = ["zeroed-alloc"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android", target_os = "wasi"))'.dependencies]
 rustix = { workspace = true, features = ["fs"] }

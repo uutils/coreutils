@@ -656,7 +656,7 @@ impl ByteChunkWriter<'_> {
         // different underlying writers. In that case, each iteration of
         // this loop writes to the underlying writer that corresponds to
         // the current chunk number.
-        let mut io_blk = vec![0u8; io_blksize];
+        let mut io_blk = uucore::zeroed_alloc::try_new_vec(io_blksize)?;
         while let mut buf = reader.read(&mut io_blk).map(|n| &io_blk[..n])?
             && !buf.is_empty()
         {
@@ -796,7 +796,7 @@ impl<'a> LineChunkWriter<'a> {
         // multiple different underlying writers. In that case, each
         // run of lines is written to the underlying writer that
         // corresponds to its chunk number.
-        let mut io_blk = vec![0u8; io_blksize];
+        let mut io_blk = uucore::zeroed_alloc::try_new_vec(io_blksize)?;
         while let buf = reader.read(&mut io_blk).map(|n| &io_blk[..n])?
             && !buf.is_empty()
         {

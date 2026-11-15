@@ -141,6 +141,7 @@ wild = "2.2.1"
 windows-sys = { version = ">=0.60, <0.62", default-features = false }
 xattr = { version = "1.3.1", default-features = false }
 z85 = "3.0.5"
+zerocopy = { version = "0.8.57", default-features = false }
 zip = { version = "9.0.0", default-features = false, features = [
   "deflate-flate2-zlib-rs",
 ] }
