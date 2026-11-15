@@ -3688,6 +3688,275 @@ fn test_date_format_modifier_edge_cases() {
     }
 }
 
+// GNU accepts the POSIX `O` locale modifier on a fixed set of conversions. In
+// the C locale there are no alternative numerals, so GNU renders the base
+// conversion; those are the reference values below.
+
+#[test]
+fn test_date_strftime_o_modifier_fallback() {
+    for (tz, date, format, expected) in [
+        // `-d 1999-06-01`, TZ=UTC (midnight).
+        ("UTC", "1999-06-01", "%OB", "June\n"),
+        ("UTC", "1999-06-01", "%Od", "01\n"),
+        ("UTC", "1999-06-01", "%Om", "06\n"),
+        ("UTC", "1999-06-01", "%OH", "00\n"),
+        ("UTC", "1999-06-01", "%OS", "00\n"),
+        ("UTC", "1999-06-01", "%Oj", "152\n"),
+        ("UTC", "1999-06-01", "%Oz", "+0000\n"),
+        ("UTC", "1999-06-01", "%ON", "000000000\n"),
+        ("UTC", "1999-06-01", "%Op", "AM\n"),
+        ("UTC", "1999-06-01", "%Ob", "Jun\n"),
+        ("UTC", "1999-06-01", "%Oh", "Jun\n"),
+        ("UTC", "1999-06-01", "%OC", "19\n"),
+        ("UTC", "1999-06-01", "%Og", "99\n"),
+        ("UTC", "1999-06-01", "%OG", "1999\n"),
+        ("UTC", "1999-06-01", "%OZ", "UTC\n"),
+        // `-d 1999-06-01 12:34:56`, TZ=UTC: more fields and a composite.
+        ("UTC", "1999-06-01 12:34:56", "%Ok", "12\n"),
+        // `%OH` keeps the hour it renders: 00 at midnight, 12 at noon.
+        ("UTC", "1999-06-01 12:34:56", "%OH", "12\n"),
+        // `-d 2024-06-01 12:34:56`, TZ=UTC0: GNU ignores the modifier on these
+        // pairs and renders the base conversion.
+        ("UTC0", "2024-06-01 12:34:56", "%Os", "1717245296\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%OR", "12:34\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%OT", "12:34:56\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%Or", "12:34:56 PM\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%Ol", "12\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%On", "\n\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%Ot", "\t\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%OP", "pm\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%Op", "PM\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", tz)
+            .env("LC_ALL", "C")
+            .args(&["-d", date, &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+/// The `%O` resolver is a separate pass over the format string: when the
+/// format carries no modifier the base conversion is rendered untouched,
+/// so an accepted pair that falls back equals its base conversion exactly.
+#[test]
+fn test_date_strftime_o_fallback_matches_base_conversion() {
+    let base = new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "C")
+        .args(&["-d", "1999-06-01 12:34:56", "+%B"])
+        .succeeds()
+        .stdout_str()
+        .to_string();
+    let resolved = new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "C")
+        .args(&["-d", "1999-06-01 12:34:56", "+%OB"])
+        .succeeds()
+        .stdout_str()
+        .to_string();
+    assert_eq!(base, resolved, "+%B vs +%OB");
+}
+
+#[test]
+fn test_date_strftime_o_invalid_and_dangling_literal() {
+    // An invalid pair or a dangling modifier is not a conversion: GNU keeps
+    // it literal, and an explicit width pads that literal like a string.
+    for (tz, date, format, expected) in [
+        // GNU rejects `O` on colon timezones and collapses `%O:z`, `%O::z`
+        // and `%O:::z` to the literal `%O:`.
+        ("UTC", "1999-06-01", "%O:z", "%O:\n"),
+        ("UTC", "1999-06-01", "%O::z", "%O:\n"),
+        ("UTC", "1999-06-01", "%O:::z", "%O:\n"),
+        // A colon before a non-timezone letter is not a conversion at all.
+        ("UTC", "1999-06-01", "%O:p", "%O:p\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%10OY", "     %10OY\n"),
+        ("UTC0", "2024-06-01", "%O", "%O\n"),
+        ("UTC0", "2024-06-01", "%O😀", "%O😀\n"),
+        ("UTC0", "1999-12-31 12:00:00", "%5O", "  %5O\n"),
+        ("UTC0", "1999-12-31 12:00:00", "%5O:", " %5O:\n"),
+        ("UTC0", "1999-12-31 12:00:00", "%10O:", "     %10O:\n"),
+        ("UTC0", "1999-12-31 12:00:00", "%#5O", " %#5O\n"),
+        ("UTC0", "1999-12-31 12:00:00", "%-5O", "%-5O\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", tz)
+            .env("LC_ALL", "C")
+            .args(&["-d", date, &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
+
+    // Absurd widths on a literal must fail with an error, never abort or OOM:
+    // the shared composite formatter caps the allocation.
+    for format in ["+%999999999999999999O:z", "+%70000O:z"] {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .env("LC_ALL", "C")
+            .args(&["-d", "1999-06-01", format])
+            .fails()
+            .code_is(1);
+    }
+}
+
+#[test]
+fn test_date_strftime_o_width_and_flags() {
+    for (tz, date, format, expected) in [
+        // `%O` on a numeric field pads the field's own rendering, so
+        // `%010Od` is the zero-filled `%d` rather than a year-like field.
+        ("UTC", "1999-06-01", "%010Od", "0000000001\n"),
+        // The `%O:` literal pads like a string: space by default, `0` for a
+        // zero pad, `-` for no pad.
+        ("UTC", "1999-06-01", "%10O:z", "       %O:\n"),
+        ("UTC", "1999-06-01", "%_4O:z", " %O:\n"),
+        ("UTC", "1999-06-01", "%010O:::z", "0000000%O:\n"),
+        ("UTC", "1999-06-01", "%-10O::z", "%O:\n"),
+        // Conflicting padding flags: the last one wins.
+        ("UTC", "1999-06-01", "%-010O:z", "0000000%O:\n"),
+        ("UTC", "1999-06-01", "%0-10O:z", "%O:\n"),
+        ("UTC", "1999-06-01", "%0_10O:z", "       %O:\n"),
+        ("UTC", "1999-06-01", "%_010O:z", "0000000%O:\n"),
+        ("UTC", "1999-06-01", "%+10O:z", "0000000%O:\n"),
+        // An `%O` fallback drops the whole field spec when `-` wins, and a
+        // width-less `_` is dropped too; otherwise flags and width apply.
+        ("UTC0", "2024-06-01 12:34:56", "%_Om", "06\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%-Om", "06\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%-10Om", "06\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%-10OR", "12:34\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%0-10OR", "12:34\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%-10Ol", "12\n"),
+        // `%O` pads like text around the field's own rendering: `%5Od` is
+        // three spaces and `05` where `%5d` is `00005`, and `%2Oj` keeps the
+        // three-digit day of year. `%Os` and `%ON` are numeric in GNU too, so
+        // their width counts digits and the base conversion still applies.
+        ("UTC0", "2024-02-05 12:34:56", "%5Od", "   05\n"),
+        ("UTC0", "2024-02-05 12:34:56", "%5Om", "   02\n"),
+        ("UTC0", "2024-02-05 12:34:56", "%5Oj", "  036\n"),
+        ("UTC0", "2024-02-05 12:34:56", "%2Oj", "036\n"),
+        ("UTC0", "2024-02-05 12:34:56", "%10Oj", "       036\n"),
+        ("UTC0", "2024-02-05 12:34:56", "%5Ou", "    1\n"),
+        ("UTC0", "2024-02-05 12:34:56", "%5OG", " 2024\n"),
+        ("UTC0", "2024-02-05 12:34:56", "%5Oy", "   24\n"),
+        ("UTC0", "2024-02-05 12:34:56", "%5OC", "   20\n"),
+        ("UTC0", "2024-02-05 12:34:56", "%5Oe", "    5\n"),
+        ("UTC0", "2024-02-05 12:34:56", "%10Oe", "         5\n"),
+        ("UTC0", "2024-02-05 12:34:56", "%5OZ", "  UTC\n"),
+        ("UTC0", "2024-02-05 12:34:56", "%5Oz", "+0000\n"),
+        ("UTC0", "2024-02-05 12:34:56", "%_5Od", "   05\n"),
+        ("UTC0", "2024-02-05 12:34:56", "%05Oj", "00036\n"),
+        ("UTC0", "2024-02-05 12:34:56", "%-5Oj", "036\n"),
+        ("UTC0", "2024-02-05 12:34:56", "%+5Od", "00005\n"),
+        ("UTC0", "2024-02-05 12:34:56", "%5ON", "00000\n"),
+        ("UTC0", "2024-02-05 12:34:56", "%12ON", "000000000000\n"),
+        ("UTC0", "2024-02-05 12:34:56", "%5Os", "1707136496\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", tz)
+            .env("LC_ALL", "C")
+            .args(&["-d", date, &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+/// `%Os` reports the real epoch seconds, never the surrogate year that
+/// jiff's calendar range substitutes for out-of-range dates.
+#[test]
+fn test_date_strftime_o_extended_years() {
+    // `%s` and `%Os` both report the real epoch seconds of an out-of-range
+    // date, not the epoch of the surrogate year.
+    for (date, expected) in [
+        ("10000-06-01 12:34:56", "253415478896\n"),
+        ("12000-06-01 12:34:56", "316529382896\n"),
+    ] {
+        for format in ["%s", "%Os"] {
+            new_ucmd!()
+                .env("TZ", "UTC0")
+                .env("LC_ALL", "C")
+                .args(&["-d", date, &format!("+{format}")])
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
+}
+
+/// `%OB` is the month name as the month stands alone, and it honours the
+/// same flags and width as any other `%O` conversion.
+///
+/// The month formatter this code already uses for `%B` is the
+/// stand-alone month form from `icu_datetime` (`M::long()`), so `%OB`
+/// resolves to the same name as `%B` here.
+///
+/// `ru_RU` is deliberately not asserted: glibc's `alt_mon` there is
+/// capitalized while the stand-alone form is lowercase.
+///
+/// `#` on a locale-rendered name is not asserted either: here it swaps the
+/// case of a name (an all-lowercase name is left alone) while GNU upper-cases
+/// it. Flags and widths on plain `%B` already skip localization for the same
+/// kind of reason. Neither case is asserted here: the expected values below
+/// are this implementation's, not GNU's.
+///
+/// `LC_ALL` (not `LC_TIME`) must be set: the test harness pins `LC_ALL=C`,
+/// which overrides `LC_TIME`.
+#[test]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
+fn test_date_strftime_ob_uses_locale_standalone_month() {
+    for (locale, cases) in [
+        (
+            "fr_FR.UTF-8",
+            &[
+                ("%OB", "juin\n"),
+                ("%5OB", " juin\n"),
+                ("%10OB", "      juin\n"),
+                ("%^OB", "JUIN\n"),
+                ("%^5OB", " JUIN\n"),
+                ("%-5OB", "juin\n"),
+                ("%_10OB", "      juin\n"),
+                ("%05OB", "0juin\n"),
+            ][..],
+        ),
+        (
+            "de_DE.UTF-8",
+            &[
+                ("%OB", "Juni\n"),
+                ("%5OB", " Juni\n"),
+                ("%^OB", "JUNI\n"),
+                ("%^5OB", " JUNI\n"),
+                ("%05OB", "0Juni\n"),
+            ][..],
+        ),
+    ] {
+        if !is_locale_available(locale) {
+            println!("Skipping %OB locale test - {locale} locale not available");
+            continue;
+        }
+        // Probe `%B` first: without ICU month names the fallback renders
+        // English, and the assertions below would pin nothing. When the
+        // locale's own `%B` renders, `%OB` must render too, so an English
+        // `%OB` is then a failure rather than a skip.
+        let probe = new_ucmd!()
+            .env("LC_ALL", locale)
+            .env("TZ", "UTC")
+            .args(&["-d", "1999-06-01", "+%B"])
+            .succeeds()
+            .stdout_str()
+            .trim()
+            .to_string();
+        if probe == "June" {
+            println!("skipping %OB locale check for {locale}: i18n not available");
+            continue;
+        }
+        for (format, expected) in cases {
+            new_ucmd!()
+                .env("LC_ALL", locale)
+                .env("TZ", "UTC")
+                .args(&["-d", "1999-06-01", &format!("+{format}")])
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
+}
+
 // Tests for --debug flag
 #[test]
 fn test_date_debug_basic() {
