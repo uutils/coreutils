@@ -1814,7 +1814,6 @@ fn test_strings_with_type_option_is_error() {
 
 #[cfg(target_os = "linux")]
 #[test]
-#[ignore = "an offset overflow must be diagnosed"]
 fn test_skip_near_max_offset_reports_overflow() {
     let skip = (i64::MAX - 3).to_string();
     new_ucmd!()
