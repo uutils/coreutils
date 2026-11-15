@@ -11,7 +11,6 @@ mktemp-help-tmpdir = interpréter MODÈLE relativement à RÉP ; si RÉP n'est p
 mktemp-help-t = Générer un modèle (en utilisant le préfixe fourni et TMPDIR (TMP sur windows) si défini) pour créer un modèle de nom de fichier [obsolète]
 
 # Messages d'erreur
-mktemp-error-persist-file = impossible de conserver le fichier { $path }
 mktemp-error-must-end-in-x = avec --suffix, le modèle { $template } doit se terminer par X
 mktemp-error-too-few-xs = trop peu de X dans le modèle { $template }
 mktemp-error-prefix-contains-separator = modèle invalide, { $template }, contient un séparateur de répertoire
@@ -19,6 +18,7 @@ mktemp-error-suffix-contains-separator = suffixe invalide { $suffix }, contient 
 mktemp-error-invalid-template = modèle invalide, { $template } ; avec --tmpdir, il ne peut pas être absolu
 mktemp-error-too-many-templates = trop de modèles
 mktemp-error-not-found = échec de la création de { $template_type } via le modèle { $template } : Aucun fichier ou répertoire de ce type
+mktemp-error-create-failed = échec de la création de { $template_type } via le modèle { $template } : { $error }
 
 # Types de modèle
 mktemp-template-type-directory = répertoire
