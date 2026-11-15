@@ -603,8 +603,8 @@ impl<'a> ParaWords<'a> {
                         word: x,
                         word_start: 0,
                         word_nchars: byte_width(x),
-                        before_tab: None,
-                        after_tab: 0,
+                        space_width: 0,
+                        space_has_tab: false,
                         sentence_start: false,
                         ends_punct: false,
                         new_line: false,
@@ -614,21 +614,30 @@ impl<'a> ParaWords<'a> {
             // first line
             self.words.extend(if self.opts.crown || self.opts.tagged {
                 // crown and tagged mode has the "init" in the first line, so slice from there
-                WordSplit::new(self.opts, &self.para.lines[0][self.para.init_end..])
+                WordSplit::new(
+                    self.opts,
+                    &self.para.lines[0][self.para.init_end..],
+                    self.para.init_len,
+                )
             } else {
                 // otherwise we slice from the indent
-                WordSplit::new(self.opts, &self.para.lines[0][self.para.indent_end..])
+                WordSplit::new(
+                    self.opts,
+                    &self.para.lines[0][self.para.indent_end..],
+                    self.para.indent_len,
+                )
             });
 
             if self.para.lines.len() > 1 {
                 let indent_end = self.para.indent_end;
+                let indent_len = self.para.indent_len;
                 let opts = self.opts;
                 self.words.extend(
                     self.para
                         .lines
                         .iter()
                         .skip(1)
-                        .flat_map(|x| WordSplit::new(opts, &x[indent_end..])),
+                        .flat_map(|x| WordSplit::new(opts, &x[indent_end..], indent_len)),
                 );
             }
         }
@@ -644,33 +653,30 @@ struct WordSplit<'a> {
     bytes: &'a [u8],
     length: usize,
     position: usize,
+    /// input column of `position`, with tabs expanded
+    column: usize,
     prev_punct: bool,
 }
 
 impl WordSplit<'_> {
-    fn analyze_tabs(&self, bytes: &[u8]) -> (Option<usize>, usize, Option<usize>) {
-        let mut beforetab = None;
-        let mut aftertab = 0;
-        let mut word_start = None;
-        for (idx, b) in bytes.iter().enumerate() {
-            if !is_fmt_whitespace_byte(*b) {
-                word_start = Some(idx);
-                break;
-            } else if *b == b'\t' {
-                if beforetab.is_none() {
-                    beforetab = Some(aftertab);
-                    aftertab = 0;
-                } else {
-                    aftertab = (aftertab / self.opts.tabwidth + 1) * self.opts.tabwidth;
-                }
-            } else {
-                aftertab += 1;
+    /// Returns the input width of the whitespace at the start of `bytes` (tabs
+    /// expanded from `self.column`), whether it contains a tab, and where the
+    /// next word starts.
+    fn analyze_tabs(&self, bytes: &[u8]) -> (usize, bool, Option<usize>) {
+        let mut column = self.column;
+        let mut has_tab = false;
+        for (idx, &b) in bytes.iter().enumerate() {
+            if !is_fmt_whitespace_byte(b) {
+                return (column - self.column, has_tab, Some(idx));
             }
+            has_tab |= b == b'\t';
+            (column, _) = advance_indent(column, bytes, idx, self.opts.tabwidth);
         }
-        (beforetab, aftertab, word_start)
+        (column - self.column, has_tab, None)
     }
 
-    fn new<'b>(opts: &'b FmtOptions, bytes: &'b [u8]) -> WordSplit<'b> {
+    /// `column` is the input column at which `bytes` starts.
+    fn new<'b>(opts: &'b FmtOptions, bytes: &'b [u8], column: usize) -> WordSplit<'b> {
         let start = bytes
             .iter()
             .position(|&b| !is_fmt_whitespace_byte(b))
@@ -681,6 +687,7 @@ impl WordSplit<'_> {
             bytes: trimmed,
             length: trimmed.len(),
             position: 0,
+            column,
             prev_punct: false,
         }
     }
@@ -715,8 +722,10 @@ pub struct WordInfo<'a> {
     pub word: &'a [u8],
     pub word_start: usize,
     pub word_nchars: usize,
-    pub before_tab: Option<usize>,
-    pub after_tab: usize,
+    /// input width of the whitespace before the word, with tabs expanded
+    pub space_width: usize,
+    /// whether that whitespace contains a tab
+    pub space_has_tab: bool,
     pub sentence_start: bool,
     pub ends_punct: bool,
     pub new_line: bool,
@@ -735,9 +744,9 @@ impl<'a> Iterator for WordSplit<'a> {
         let new_line = old_position == 0;
 
         // find the start of the next word, and record if we find a tab character
-        let (before_tab, after_tab, word_start) =
-            if let (b, a, Some(s)) = self.analyze_tabs(&self.bytes[old_position..]) {
-                (b, a, s + old_position)
+        let (space_width, space_has_tab, word_start) =
+            if let (w, t, Some(s)) = self.analyze_tabs(&self.bytes[old_position..]) {
+                (w, t, s + old_position)
             } else {
                 self.position = self.length;
                 return None;
@@ -748,24 +757,24 @@ impl<'a> Iterator for WordSplit<'a> {
         // points to whitespace character OR end of string
         let (next_position, word_nchars, last_ascii) = self.scan_word_end(word_start);
         self.position = next_position;
+        self.column += space_width + word_nchars;
 
         let word_start_relative = word_start - old_position;
         // if the previous sentence was punctuation and this sentence has >2 whitespace or one tab, is a new sentence.
-        let is_start_of_sentence =
-            self.prev_punct && (before_tab.is_some() || word_start_relative > 1);
+        let is_start_of_sentence = self.prev_punct && (space_has_tab || word_start_relative > 1);
 
         // now record whether this word ends in punctuation
         let ends_punct = last_ascii.is_some_and(WordSplit::is_punctuation_byte);
         self.prev_punct = ends_punct;
 
-        let (word, word_start_relative, before_tab, after_tab) = if self.opts.uniform {
-            (&self.bytes[word_start..self.position], 0, None, 0)
+        let (word, word_start_relative, space_width, space_has_tab) = if self.opts.uniform {
+            (&self.bytes[word_start..self.position], 0, 0, false)
         } else {
             (
                 &self.bytes[old_position..self.position],
                 word_start_relative,
-                before_tab,
-                after_tab,
+                space_width,
+                space_has_tab,
             )
         };
 
@@ -773,8 +782,8 @@ impl<'a> Iterator for WordSplit<'a> {
             word,
             word_start: word_start_relative,
             word_nchars,
-            before_tab,
-            after_tab,
+            space_width,
+            space_has_tab,
             sentence_start: is_start_of_sentence,
             ends_punct,
             new_line,
