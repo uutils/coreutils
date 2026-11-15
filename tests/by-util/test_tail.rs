@@ -2374,6 +2374,25 @@ fn test_follow_name_remove() {
     }
 }
 
+/// Polls a running tail until its output matches, for up to 5 s, then asserts it.
+fn wait_for_output(
+    child: &mut uutests::util::UChild,
+    expected_stdout: &str,
+    expected_stderr: &str,
+) {
+    for _ in 0..500 {
+        if child.stdout_all() == expected_stdout && child.stderr_all() == expected_stderr {
+            return;
+        }
+        child.delay(10);
+    }
+    child
+        .make_assertion()
+        .with_all_output()
+        .stdout_is(expected_stdout)
+        .stderr_is(expected_stderr);
+}
+
 #[uutests::wasi_ignore(TailFollowDisabled)]
 #[test]
 #[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))] // FIXME: for currently not working platforms
@@ -2403,12 +2422,7 @@ fn test_follow_name_truncate1() {
     // appears the truncate/restore below are guaranteed to be observed as events.
     // A fixed delay isn't enough here: a slow-starting child process (observed on
     // macOS CI, see #12335) can otherwise race ahead of tail's own startup.
-    for _ in 0..500 {
-        if p.stdout_all() == initial_stdout {
-            break;
-        }
-        p.delay(10);
-    }
+    wait_for_output(&mut p, initial_stdout, "");
 
     at.copy(source, backup);
     p.delay(delay);
@@ -2434,24 +2448,6 @@ fn test_follow_name_truncate1() {
 #[test]
 #[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))] // FIXME: for currently not working platforms
 fn test_follow_name_truncate2() {
-    fn wait_for_output(
-        child: &mut uutests::util::UChild,
-        expected_stdout: &str,
-        expected_stderr: &str,
-    ) {
-        for _ in 0..500 {
-            if child.stdout_all() == expected_stdout && child.stderr_all() == expected_stderr {
-                return;
-            }
-            child.delay(10);
-        }
-        child
-            .make_assertion()
-            .with_all_output()
-            .stdout_is(expected_stdout)
-            .stderr_is(expected_stderr);
-    }
-
     // This test triggers a truncate event while `tail --follow=name file` is running.
     // $ ((sleep 1 && echo -n "x\nx\nx\n" >> file && sleep 1 && \
     // echo -n "x\n" > file &)>/dev/null 2>&1 &) ; tail --follow=name file
@@ -5730,21 +5726,8 @@ fn test_follow_symlink_appends() {
     // Appends to the target of a symlink reach tail through the link, by
     // descriptor and by name alike: under --follow=name a symlink given on
     // the command line is not a file that was replaced by a symlink.
-    //
-    // Each step waits for the output instead of sleeping a fixed time: on
-    // macOS the first process a test spawns can take longer than a second to
-    // reach `main`, so a fixed delay appends before tail has even started.
-    // Tail watches the file before its initial read, so once "a" is printed
-    // every later append must arrive through the watch.
-    fn wait_for_stdout(child: &mut uutests::util::UChild, expected: &str) {
-        for _ in 0..500 {
-            if child.stdout_all() == expected {
-                return;
-            }
-            child.delay(10);
-        }
-    }
-
+    // Wait for output, not a fixed delay: on macOS tail can take over a second to start.
+    // It watches the file before its first read, so later appends must arrive via the watch.
     for follow in ["-f", "-F"] {
         let (at, mut ucmd) = at_and_ucmd!();
         at.write("2026-09-01.log", "a\n");
@@ -5752,11 +5735,11 @@ fn test_follow_symlink_appends() {
         let mut p = ucmd
             .args(&["-s.1", "--max-unchanged-stats=1", follow, "latest.log"])
             .run_no_wait();
-        wait_for_stdout(&mut p, "a\n");
+        wait_for_output(&mut p, "a\n", "");
         at.append("2026-09-01.log", "b\n");
-        wait_for_stdout(&mut p, "a\nb\n");
+        wait_for_output(&mut p, "a\nb\n", "");
         at.append("2026-09-01.log", "c\n");
-        wait_for_stdout(&mut p, "a\nb\nc\n");
+        wait_for_output(&mut p, "a\nb\nc\n", "");
         p.kill()
             .make_assertion()
             .with_all_output()
