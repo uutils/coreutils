@@ -927,8 +927,13 @@ fn test_follow_with_pid() {
 
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let dummy_cmd = "sh";
-    let mut dummy = Command::new(dummy_cmd).spawn().unwrap();
+    // A process that just waits; with stdin detached, so it can't read from
+    // whatever feeds the test runner (on CI, the rest of the job script).
+    let mut dummy = Command::new("sleep")
+        .arg("100000")
+        .stdin(Stdio::null())
+        .spawn()
+        .unwrap();
     let pid = dummy.id();
 
     let mut child = ucmd
@@ -5426,9 +5431,11 @@ fn test_following_with_pid() {
 
     let ts = TestScenario::new(util_name!());
 
+    // Plain seconds: a "d" suffix is a GNU extension the BSD sleep rejects.
     #[cfg(not(windows))]
     let mut sleep_command = Command::new("sleep")
-        .arg("999d")
+        .arg("100000")
+        .stdin(Stdio::null())
         .spawn()
         .expect("failed to start sleep command");
     #[cfg(windows)]
