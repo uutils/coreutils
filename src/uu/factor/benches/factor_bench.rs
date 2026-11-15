@@ -66,8 +66,8 @@ mod batch {
         factor_all(bencher, (1u128 << 64)..(1u128 << 64) + 2000);
     }
 
-    /// 500 products of two primes just above 2^31, where all the time goes
-    /// into Pollard's rho.
+    /// The 496 products of two distinct primes taken among 32 primes just
+    /// above 2^31, where all the time goes into Pollard's rho.
     #[divan::bench(sample_count = 10, sample_size = 1)]
     fn factor_batch_of_semiprimes(bencher: Bencher) {
         // The first primes above 2^31, 2^31 + 2^20, 2^31 + 2^21, ...
@@ -85,10 +85,11 @@ mod batch {
                     .unwrap()
             })
             .collect();
+        // Each pair once, with p < q: the primes are in increasing order.
         let products = primes
             .iter()
-            .flat_map(|&p| primes.iter().map(move |&q| p * q))
-            .take(500);
+            .enumerate()
+            .flat_map(|(i, &p)| primes[i + 1..].iter().map(move |&q| p * q));
         factor_all(bencher, products);
     }
 }
