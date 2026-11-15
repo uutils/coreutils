@@ -1698,7 +1698,6 @@ fn test_expand_tabs_line_too_long() {
 }
 
 #[test]
-#[ignore = "a character wider than the page width must be dropped"]
 fn test_page_width_narrower_than_leading_tab() {
     new_ucmd!()
         .args(&["-t", "-W", "5"])

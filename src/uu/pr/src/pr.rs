@@ -1653,6 +1653,7 @@ fn get_line_for_printing(
 
     // The content is kept as raw bytes, so input that is not valid UTF-8 is
     // written out unchanged.
+    let prefix_len = formatted_line_number.len();
     let mut complete_line = formatted_line_number.into_bytes();
     complete_line.extend_from_slice(&file_line.line_content);
 
@@ -1669,12 +1670,18 @@ fn get_line_for_printing(
     let is_last_cell = (index + 1) == indexes;
     if let Some(i) = line_width {
         let min_width = i.saturating_sub(columns - 1) / columns;
-        // Like GNU pr, the last cell of a row is not padded, so the line has
-        // no trailing spaces.
-        if display_length < min_width && !is_last_cell {
-            complete_line.resize(complete_line.len() + (min_width - display_length), b' ');
+        // A leading tab that is wider than the page width cannot be printed.
+        // GNU pr drops the content but keeps any line-number prefix.
+        if file_line.line_content.first() == Some(&(TAB as u8)) && 8 > min_width {
+            complete_line.truncate(prefix_len);
+        } else {
+            // Like GNU pr, the last cell of a row is not padded, so the line has
+            // no trailing spaces.
+            if display_length < min_width && !is_last_cell {
+                complete_line.resize(complete_line.len() + (min_width - display_length), b' ');
+            }
+            complete_line.truncate(char_prefix_len(&complete_line, min_width));
         }
-        complete_line.truncate(char_prefix_len(&complete_line, min_width));
     }
 
     if !is_last_cell {
