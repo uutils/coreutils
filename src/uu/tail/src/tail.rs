@@ -468,16 +468,21 @@ fn forwards_thru_file(
 /// Iterate over bytes in the file, in reverse, until we find the
 /// `num_delimiters` instance of `delimiter`, starting from `end`. The `file` is
 /// left seek'd to the position just after that delimiter.
-fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8, end: SeekFrom) {
+fn backwards_thru_file(
+    file: &mut File,
+    num_delimiters: u64,
+    delimiter: u8,
+    end: SeekFrom,
+) -> io::Result<()> {
     if num_delimiters == 0 {
-        file.seek(end).unwrap();
-        return;
+        file.seek(end)?;
+        return Ok(());
     }
     // This variable counts the number of delimiters found in the file
     // so far (reading from the end of the file toward the beginning).
     let mut counter = 0;
     let mut first_slice = true;
-    for slice in ReverseChunks::new(file, end) {
+    for slice in ReverseChunks::new(file, end)? {
         // Iterate over each byte in the slice in reverse order.
         let mut iter = memrchr_iter(delimiter, &slice);
 
@@ -502,11 +507,12 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8, end:
                 // cursor in the file is at the *beginning* of the
                 // block, so seeking forward by `i + 1` bytes puts
                 // us right after the found delimiter.
-                file.seek(SeekFrom::Current((i + 1) as i64)).unwrap();
-                return;
+                file.seek(SeekFrom::Current((i + 1) as i64))?;
+                return Ok(());
             }
         }
     }
+    Ok(())
 }
 
 /// When tail'ing a file, we do not need to read the whole file from start to
@@ -518,6 +524,7 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8, end:
 /// If `end` is given, nothing at or beyond that offset is printed.
 fn bounded_tail(file: &mut File, settings: &Settings, end: Option<u64>) -> UResult<()> {
     debug_assert!(!settings.presume_input_pipe);
+    let start = file.stream_position()?;
     let mut limit = None;
     // Counting from the end starts at `end`: our own output, such as the
     // header, may already have been appended beyond it.
@@ -526,28 +533,19 @@ fn bounded_tail(file: &mut File, settings: &Settings, end: Option<u64>) -> UResu
     // Find the position in the file to start printing from.
     match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), delimiter) => {
-            backwards_thru_file(file, *count, *delimiter, eof);
+            backwards_thru_file(file, *count, *delimiter, eof)?;
         }
         FilterMode::Lines(Signum::Positive(count), delimiter) if count > &1 => {
             let i = forwards_thru_file(file, *count - 1, *delimiter).unwrap();
-            file.seek(SeekFrom::Start(i as u64)).unwrap();
+            file.seek(SeekFrom::Start(start + i as u64))?;
         }
         FilterMode::Lines(Signum::MinusZero, _) | FilterMode::Bytes(Signum::MinusZero) => {
             file.seek(eof).unwrap();
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
-            // A count that does not fit into an `i64` cannot be negated for
-            // the seek; like a seek before the start, it means the whole file.
-            match i64::try_from(*count) {
-                Ok(count)
-                    if file
-                        .seek(eof)
-                        .and_then(|_| file.seek(SeekFrom::Current(-count)))
-                        .is_ok() => {}
-                _ => {
-                    file.seek(SeekFrom::Start(0)).unwrap();
-                }
-            }
+            // Never include bytes preceding the current input position.
+            let end = file.seek(eof)?;
+            file.seek(SeekFrom::Start(end.saturating_sub(*count).max(start)))?;
             limit = Some(*count);
         }
         FilterMode::Bytes(Signum::Positive(count)) if count > &1 => {
@@ -556,7 +554,7 @@ fn bounded_tail(file: &mut File, settings: &Settings, end: Option<u64>) -> UResu
             // A start offset past the largest seekable position makes the
             // underlying `lseek` fail with `EINVAL`; treat that like a start
             // beyond the end of the file and produce no output.
-            file.seek(SeekFrom::Start(*count - 1))
+            file.seek(SeekFrom::Start(start.saturating_add(*count - 1)))
                 .or_else(|_| file.seek(SeekFrom::End(0)))
                 .unwrap();
         }
