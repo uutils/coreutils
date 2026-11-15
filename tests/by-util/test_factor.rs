@@ -1767,7 +1767,7 @@ fn test_stdin_clean_error_message() {
 // The values around the limits of the `u64` code path, and the shapes of
 // number each of its steps has to handle.
 #[test]
-fn factors_the_extremes_of_u64() {
+fn test_factors_the_extremes_of_u64() {
     new_ucmd!()
         .args(&[
             // 19 and 20 digits
@@ -1800,7 +1800,7 @@ fn factors_the_extremes_of_u64() {
 // the largest value and the largest prime, and the shapes of number each of
 // its steps has to handle.
 #[test]
-fn factors_the_extremes_of_u128() {
+fn test_factors_the_extremes_of_u128() {
     new_ucmd!()
         .args(&[
             // 2^64 and 2^64 + 1

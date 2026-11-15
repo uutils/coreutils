@@ -195,7 +195,7 @@ impl Montgomery {
     /// `a / 2 mod n`
     #[inline]
     fn halve(&self, a: u128) -> u128 {
-        if a % 2 == 0 {
+        if a.is_multiple_of(2) {
             a / 2
         } else {
             // `(a + n) / 2`, without overflowing: both are odd.
