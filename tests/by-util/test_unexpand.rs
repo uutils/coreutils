@@ -534,6 +534,24 @@ fn test_blank_from_last_tab_stop_ends_conversion(
         .stdout_only(expected);
 }
 
+// A line that goes on in the next file keeps its state: once a blank past the
+// last tab stop has ended conversion, backspaces in the next file do not
+// resume it.
+#[rstest]
+#[case::backspace("\x08\n", "1-\t\t\x08\n")]
+#[case::backspaces_then_spaces("\x08\x08\x08   x\n", "1-\t\t\x08\x08\x08   x\n")]
+fn test_blank_from_last_tab_stop_ends_conversion_across_files(
+    #[case] second: &str,
+    #[case] expected: &str,
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("first", "1-\t\t");
+    at.write("second", second);
+    ucmd.args(&["-t", "2,5", "first", "second"])
+        .succeeds()
+        .stdout_only(expected);
+}
+
 // clap treats a repeated boolean flag as a conflict unless the command
 // allows an argument to override itself.
 #[rstest]
