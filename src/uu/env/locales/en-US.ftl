@@ -30,7 +30,6 @@ env-error-invalid-signal = { $signal }: invalid signal
 env-error-generic = Error: { $error }
 env-error-no-such-file = { $program }: No such file or directory
 env-error-use-s-shebang = use -[v]S to pass options in shebang lines
-env-error-cannot-unset = cannot unset '{ $name }': Invalid argument
 env-error-cannot-unset-invalid = cannot unset { $name }: Invalid argument
 env-error-must-specify-command-with-chdir = must specify command with --chdir (-C)
 env-error-must-specify-command-with-argv0 = must specify command with --argv0 (-a)

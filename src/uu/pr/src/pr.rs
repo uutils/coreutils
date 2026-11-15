@@ -1043,7 +1043,7 @@ fn build_options(
     let column_mode_options = column_option_value.map(|columns| ColumnModeOptions {
         columns,
         width: column_width,
-        column_separator,
+        column_separator: column_separator.clone(),
         across_mode,
     });
 
@@ -1073,7 +1073,7 @@ fn build_options(
     let col_sep_for_printing = column_mode_options.as_ref().map_or_else(
         || {
             merge_files_print
-                .map(|_k| DEFAULT_COLUMN_SEPARATOR.to_string())
+                .map(|_k| column_separator.clone())
                 .unwrap_or_default()
         },
         |i| i.column_separator.clone(),
@@ -1082,13 +1082,20 @@ fn build_options(
     let columns_to_print =
         merge_files_print.unwrap_or_else(|| column_mode_options.as_ref().map_or(1, |i| i.columns));
 
-    let line_width = if join_lines {
+    // Like GNU pr, -s without -w or -W merges files unpadded and untruncated.
+    let merge_with_char_separator = merge_files_print.is_some()
+        && matches.contains_id(options::COLUMN_CHAR_SEPARATOR)
+        && !matches.contains_id(options::COLUMN_WIDTH)
+        && !matches.contains_id(options::PAGE_WIDTH);
+
+    let line_width = if join_lines || merge_with_char_separator {
         None
     } else if columns_to_print > 1 {
         Some(
             column_mode_options
                 .as_ref()
-                .map_or(DEFAULT_COLUMN_WIDTH, |i| i.width),
+                // -W sets the merged line width and takes precedence over -w.
+                .map_or(page_width.unwrap_or(column_width), |i| i.width),
         )
     } else {
         page_width

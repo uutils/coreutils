@@ -1402,11 +1402,7 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     }
 
     // Check if the contents of the source and destination files differ.
-    if !are_files_identical(from, to).unwrap_or(false) {
-        return true;
-    }
-
-    false
+    !are_files_identical(from, to).unwrap_or(false)
 }
 
 /// Sets the `SELinux` security context for install's -Z flag behavior.

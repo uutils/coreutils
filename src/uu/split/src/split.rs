@@ -1275,11 +1275,10 @@ fn n_chunks_by_line_round_robin(
         out_files = OutFiles::init(num_chunks, settings, settings.elide_empty_files)?;
     }
 
-    let num_chunks: usize = num_chunks.try_into().unwrap();
     let sep = settings.separator;
     let mut closed_writers = 0;
 
-    let mut i = 0;
+    let mut i: u64 = 0;
     let mut line = Vec::new();
     loop {
         line.clear();
@@ -1292,11 +1291,11 @@ fn n_chunks_by_line_round_robin(
 
         let bytes = line.as_slice();
         if let Some(chunk_number) = kth_chunk {
-            if (i % num_chunks) == (chunk_number - 1) as usize {
+            if (i % num_chunks) == chunk_number - 1 {
                 stdout_writer.write_all(bytes)?;
             }
         } else {
-            let writer = out_files.get_writer(i % num_chunks, settings)?;
+            let writer = out_files.get_writer((i % num_chunks) as usize, settings)?;
             let writer_stdin_open = custom_write_all(bytes, writer, settings)?;
             if !writer_stdin_open {
                 closed_writers += 1;

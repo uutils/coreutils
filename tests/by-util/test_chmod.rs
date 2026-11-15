@@ -2482,3 +2482,21 @@ fn test_chmod_changes_does_not_report_inaccessible_operand() {
         .no_stdout()
         .stderr_is("chmod: cannot access 'missing': No such file or directory\n");
 }
+
+#[cfg(unix)]
+#[test]
+#[ignore = "chmod -R --dereference must change the target of symlinks found while recursing"]
+fn test_recursive_dereference_changes_link_targets() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("tree");
+    at.touch("target");
+    set_permissions(at.plus("target"), Permissions::from_mode(0o600)).unwrap();
+    at.symlink_file("../target", "tree/link");
+    scene
+        .ucmd()
+        .args(&["-R", "--dereference", "g+r", "tree"])
+        .succeeds()
+        .no_output();
+    assert_eq!(at.metadata("target").permissions().mode() & 0o777, 0o640);
+}

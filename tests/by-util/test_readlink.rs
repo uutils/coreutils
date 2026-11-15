@@ -5,6 +5,7 @@
 
 // spell-checker:ignore regfile parentdir
 
+use rstest::rstest;
 use uutests::util::{TestScenario, get_root_path};
 use uutests::{at_and_ucmd, new_ucmd, path_concat, util_name};
 
@@ -78,6 +79,37 @@ fn test_canonicalize_existing_keeps_going_after_a_missing_operand() {
         + &path_concat!(at.root_dir_resolved(), "c")
         + "\n";
     assert_eq!(actual, expect);
+}
+
+#[uutests::wasi_ignore(GuestRootPathResolution)]
+#[rstest]
+#[case::canonicalize("-f")]
+#[case::canonicalize_existing("-e")]
+#[case::canonicalize_missing("-m")]
+fn test_canonicalize_empty_operand(#[case] mode: &str) {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    let dir = path_concat!(at.root_dir_resolved(), "dir") + "\n";
+
+    // An empty operand is a missing file, not the current directory, and
+    // does not stop the operands after it.
+    scene
+        .ucmd()
+        .args(&[mode, "", "dir"])
+        .fails_with_code(1)
+        .stdout_is(&dir)
+        .no_stderr();
+
+    let result = scene
+        .ucmd()
+        .args(&["-v", mode, "", "dir"])
+        .fails_with_code(1);
+    result.stdout_is(&dir);
+    #[cfg(not(windows))]
+    result.stderr_is("readlink: '': No such file or directory\n");
+    #[cfg(windows)]
+    result.stderr_contains("readlink: '': ");
 }
 
 #[uutests::wasi_ignore(GuestRootPathResolution)]
