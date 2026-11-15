@@ -5739,9 +5739,10 @@ fn test_follow_symlink_appends() {
             .run_no_wait();
         p.delay(500);
         at.append("2026-09-01.log", "b\n");
-        p.delay(500);
+        // macOS reports changes late (FSEvents), so wait the platform default
+        p.delay(DEFAULT_SLEEP_INTERVAL_MILLIS);
         at.append("2026-09-01.log", "c\n");
-        p.delay(500);
+        p.delay(DEFAULT_SLEEP_INTERVAL_MILLIS);
         p.kill()
             .make_assertion()
             .with_all_output()
