@@ -503,6 +503,24 @@ fn test_fail_change_directory() {
 }
 
 #[test]
+fn test_help_lists_debug_without_ellipsis() {
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("-v, --debug ")
+        .stdout_does_not_contain("--debug...");
+}
+
+#[test]
+fn test_debug_counts_repeated_flags() {
+    // a second -v (in any spelling) also prints the input arguments
+    new_ucmd!()
+        .args(&["-v", "--debug", "-i"])
+        .succeeds()
+        .stderr_contains("input args:");
+}
+
+#[test]
 fn test_argv0_without_command_fails() {
     for arg in ["-a", "--argv0"] {
         let out = new_ucmd!()
