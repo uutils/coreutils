@@ -7,6 +7,7 @@
 
 use std::ffi::{OsStr, OsString};
 use std::fmt;
+use std::io::IsTerminal;
 
 use os_display::Quotable;
 
@@ -217,6 +218,17 @@ pub fn quoting_style_from_env() -> Option<QuotingStyle> {
     };
 
     Some(qs)
+}
+
+/// Return `cli_style` (from `--quoting-style`) if given, otherwise the style
+/// from `QUOTING_STYLE`, which is only honored when stdout is a terminal.
+pub fn quoting_style_or_tty_env(cli_style: Option<QuotingStyle>) -> Option<QuotingStyle> {
+    cli_style.or_else(|| {
+        std::io::stdout()
+            .is_terminal()
+            .then(quoting_style_from_env)
+            .flatten()
+    })
 }
 
 /// Common interface of quoting mechanisms.

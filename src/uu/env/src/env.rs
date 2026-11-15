@@ -39,9 +39,11 @@ use std::mem::zeroed;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 
-use uucore::display::{Quotable, print_all_env_vars};
+use uucore::display::{Quotable, print_all_env_vars, print_all_env_vars_quoted};
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, strip_errno};
+use uucore::i18n::get_ctype_encoding;
 use uucore::line_ending::LineEnding;
+use uucore::quoting_style::{QuotingStyle, parser as qs_parser, quoting_style_or_tty_env};
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::signals::{
     realtime_signal_bounds, signal_by_name_or_value, signal_name_by_value,
@@ -99,6 +101,7 @@ mod options {
 struct Options<'a> {
     ignore_env: bool,
     line_ending: LineEnding,
+    quoting_style: Option<QuotingStyle>,
     running_directory: Option<&'a OsStr>,
     unsets: Vec<&'a OsStr>,
     sets: Vec<(Cow<'a, OsStr>, Cow<'a, OsStr>)>,
@@ -322,6 +325,7 @@ pub fn uu_app() -> Command {
                 .help(translate!("env-help-null"))
                 .action(ArgAction::SetTrue),
         )
+        .arg(qs_parser::clap_quoting_argument())
         .arg(
             Arg::new(options::UNSET)
                 .short('u')
@@ -859,7 +863,15 @@ impl EnvAppData {
 
         apply_change_directory(&opts)?;
         if opts.program.is_empty() {
-            print_all_env_vars(io::stdout(), opts.line_ending)?;
+            match quoting_style_or_tty_env(opts.quoting_style) {
+                Some(style) => print_all_env_vars_quoted(
+                    io::stdout(),
+                    opts.line_ending,
+                    style,
+                    get_ctype_encoding(),
+                )?,
+                None => print_all_env_vars(io::stdout(), opts.line_ending)?,
+            }
         } else {
             return self.run_program(&opts, self.do_debug_printing);
         }
@@ -999,6 +1011,9 @@ fn make_options<'a>(
 ) -> UResult<Options<'a>> {
     let ignore_env = matches.get_flag("ignore-environment");
     let line_ending = LineEnding::from_zero_flag(matches.get_flag("null"));
+    let quoting_style = matches
+        .get_one::<String>(qs_parser::QUOTING_STYLE)
+        .and_then(QuotingStyle::parse);
     let running_directory = matches
         .get_one::<OsString>("chdir")
         .map(OsString::as_os_str);
@@ -1018,6 +1033,7 @@ fn make_options<'a>(
     let mut opts = Options {
         ignore_env,
         line_ending,
+        quoting_style,
         running_directory,
         unsets,
         sets: vec![],

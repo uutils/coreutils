@@ -13,6 +13,7 @@ use nix::libc;
 use nix::sys::signal::Signal;
 #[cfg(feature = "echo")]
 use regex::Regex;
+use rstest::rstest;
 use std::env;
 use std::path::Path;
 #[cfg(unix)]
@@ -541,6 +542,27 @@ fn test_debug_always_quotes_executed_command() {
         .stderr_only(
             "argv0:     'renamed'\nexecuting: 'sh'\n   arg[0]= 'renamed'\n   arg[1]= '-c'\n   arg[2]= ':'\n",
         );
+}
+
+#[rstest]
+#[case::literal("literal", "my key=a value\n")]
+#[case::shell_always("shell-always", "'my key'='a value'\n")]
+#[case::c("c", "\"my key\"=\"a value\"\n")]
+fn test_quoting_style_option(#[case] style: &str, #[case] expected: &str) {
+    new_ucmd!()
+        .args(&["-i", &format!("--quoting-style={style}"), "my key=a value"])
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
+fn test_quoting_style_env_var_ignored_when_redirected() {
+    new_ucmd!()
+        .args(&["-i", "QUOTING_STYLE=shell-always", "my key=a value"])
+        .succeeds()
+        // the order of the variables is platform dependent
+        .stdout_contains_line("QUOTING_STYLE=shell-always")
+        .stdout_contains_line("my key=a value");
 }
 
 #[cfg(not(windows))] // windows has no executable "echo", its only supported as part of a batch-file
