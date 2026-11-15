@@ -195,7 +195,7 @@ i18n-datetime = [
 ]
 mode = ["libc", "quoting-style", "rustix/process"]
 numeric-str-cmp = ["i18n-decimal"]
-perms = ["entries", "libc", "safe-traversal", "walkdir"]
+perms = ["entries", "safe-traversal", "walkdir"]
 buf-copy = ["pipes"]
 parser-num = ["extendedbigdecimal", "num-traits"]
 parser-size = ["parser-num", "procfs"]

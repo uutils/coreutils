@@ -581,7 +581,9 @@ fn test_cp_arg_no_target_directory() {
         .arg("-T")
         .arg(TEST_COPY_TO_FOLDER)
         .fails()
-        .stderr_contains("cannot overwrite directory");
+        .stderr_is(format!(
+            "cp: cannot overwrite directory '{TEST_COPY_TO_FOLDER}' with non-directory '{TEST_HELLO_WORLD_SOURCE}'\n"
+        ));
 }
 
 #[test]

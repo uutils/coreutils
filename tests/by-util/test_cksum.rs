@@ -3993,3 +3993,39 @@ fn test_check_improperly_formatted_line_does_not_select_format() {
         .stdout_is("a: OK\n")
         .stderr_contains("1 line is improperly formatted");
 }
+
+#[cfg(unix)]
+#[test]
+#[ignore = "file names must be quoted when stdout is a terminal"]
+fn test_terminal_output_quotes_names() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("my file.txt");
+    let md5 = "d41d8cd98f00b204e9800998ecf8427e";
+    for (args, style, expected) in [
+        (
+            &["-a", "md5"][..],
+            None,
+            format!("MD5 ('my file.txt') = {md5}\r\n"),
+        ),
+        (
+            &["-a", "md5", "--untagged"][..],
+            None,
+            format!("{md5}  'my file.txt'\r\n"),
+        ),
+        (
+            &["-a", "md5"][..],
+            Some("c"),
+            format!("MD5 (\"my file.txt\") = {md5}\r\n"),
+        ),
+    ] {
+        let mut cmd = scene.ucmd();
+        if let Some(style) = style {
+            cmd.env("QUOTING_STYLE", style);
+        }
+        cmd.args(args)
+            .arg("my file.txt")
+            .terminal_simulation(true)
+            .succeeds()
+            .stdout_only(expected);
+    }
+}

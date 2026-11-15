@@ -3,12 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use crate::platform::open_file_error;
 use std::ffi::OsStr;
 use std::fs::{File, OpenOptions};
 use std::io::{Error, ErrorKind, Result};
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::strip_errno;
 use uucore::fs::{FileInformation, infos_refer_to_same_file};
 use uucore::translate;
 
@@ -68,9 +68,4 @@ fn check_not_input(input: &OsStr, filename: &OsStr, output: &File) -> Result<()>
         ));
     }
     Ok(())
-}
-
-fn open_file_error(filename: &OsStr, e: Error) -> Error {
-    let e = strip_errno(&e);
-    Error::other(format!("{}: {e}", filename.quote()))
 }

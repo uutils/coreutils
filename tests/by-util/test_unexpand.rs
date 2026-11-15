@@ -580,3 +580,16 @@ fn test_line_continues_past_unreadable_file() {
         .stdout_is("\tx\n")
         .stderr_contains("unexpand: dir: Is a directory");
 }
+
+#[cfg(unix)]
+#[test]
+#[ignore = "a multi-byte char split across reads must count as one column"]
+fn test_multibyte_char_split_across_reads() {
+    let scene = uutests::util::TestScenario::new(uutests::util_name!());
+    scene
+        .cmd_shell("(printf '\\303'; sleep 0.3; printf '\\251       z\\n') | \"$BIN\" unexpand -a")
+        .env("BIN", &scene.bin_path)
+        .env("LC_ALL", "C.UTF-8")
+        .succeeds()
+        .stdout_only("\u{e9}\tz\n");
+}
