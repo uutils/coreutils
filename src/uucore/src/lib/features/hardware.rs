@@ -52,6 +52,8 @@ pub enum HardwareFeature {
     Avx512,
     /// AVX2 support (`x86/x86_64` only)
     Avx2,
+    /// AVX support (`x86/x86_64` only)
+    Avx,
     /// PCLMULQDQ support for CRC acceleration (`x86/x86_64` only)
     Pclmulqdq,
     /// PMULL (polynomial multiply) support for CRC acceleration (aarch64 only)
@@ -68,10 +70,11 @@ impl TryFrom<&str> for HardwareFeature {
     type Error = InvalidHardwareFeature;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        use HardwareFeature::{Asimd, Avx2, Avx512, Pclmulqdq, Pmull, Sse2};
+        use HardwareFeature::{Asimd, Avx, Avx2, Avx512, Pclmulqdq, Pmull, Sse2};
         match value {
             "AVX512" | "AVX512F" => Ok(Avx512),
             "AVX2" => Ok(Avx2),
+            "AVX" => Ok(Avx),
             "PCLMUL" | "PCLMULQDQ" => Ok(Pclmulqdq),
             "PMULL" | "VMULL" => Ok(Pmull),
             "SSE2" => Ok(Sse2),
@@ -101,6 +104,12 @@ pub trait HasHardwareFeatures {
     #[inline]
     fn has_avx2(&self) -> bool {
         self.has_feature(HardwareFeature::Avx2)
+    }
+
+    /// Check if AVX is available (`x86/x86_64` only)
+    #[inline]
+    fn has_avx(&self) -> bool {
+        self.has_feature(HardwareFeature::Avx)
     }
 
     /// Check if PCLMULQDQ is available (`x86/x86_64` only)
@@ -146,6 +155,7 @@ impl CpuFeatures {
         let set = [
             (HardwareFeature::Avx512, detect_avx512 as fn() -> bool),
             (HardwareFeature::Avx2, detect_avx2),
+            (HardwareFeature::Avx, detect_avx),
             (HardwareFeature::Pclmulqdq, detect_pclmulqdq),
             (HardwareFeature::Pmull, detect_pmull),
             (HardwareFeature::Sse2, detect_sse2),
@@ -261,6 +271,16 @@ fn detect_avx2() -> bool {
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+fn detect_avx() -> bool {
+    std::arch::is_x86_feature_detected!("avx")
+}
+
+#[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+fn detect_avx() -> bool {
+    false
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn detect_pclmulqdq() -> bool {
     std::arch::is_x86_feature_detected!("pclmulqdq")
 }
@@ -368,6 +388,22 @@ mod tests {
         assert_eq!(
             result,
             BTreeSet::from([HardwareFeature::Pclmulqdq, HardwareFeature::Pmull])
+        );
+    }
+
+    #[test]
+    fn test_parse_disabled_features_avx() {
+        assert_eq!(
+            parse_disabled_features("glibc.cpu.hwcaps=-AVX"),
+            BTreeSet::from([HardwareFeature::Avx])
+        );
+    }
+
+    #[test]
+    fn test_parse_disabled_features_pmull_is_not_pclmulqdq() {
+        assert_eq!(
+            parse_disabled_features("glibc.cpu.hwcaps=-PMULL"),
+            BTreeSet::from([HardwareFeature::Pmull])
         );
     }
 
