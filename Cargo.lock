@@ -4426,6 +4426,7 @@ dependencies = [
  "windows-sys",
  "xattr",
  "z85",
+ "zerocopy",
 ]
 
 [[package]]

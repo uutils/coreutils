@@ -69,6 +69,8 @@ pub mod update_control;
 pub mod uptime;
 #[cfg(feature = "version-cmp")]
 pub mod version_cmp;
+#[cfg(feature = "zeroed-alloc")]
+pub mod zeroed_alloc;
 
 // * (platform-specific) feature-gated modules
 // ** non-windows (i.e. Unix + Fuchsia)

@@ -68,21 +68,10 @@ pub trait Digest {
     }
 
     fn result(&mut self) -> io::Result<DigestOutput> {
-        let mut buf: Vec<u8> = Vec::new();
-        try_reserve_zeroed(&mut buf, self.output_bytes())?;
+        let mut buf = crate::zeroed_alloc::try_new_vec(self.output_bytes())?;
         self.hash_finalize(&mut buf);
         Ok(DigestOutput::Vec(buf))
     }
-}
-
-/// Grows `buf` to `len` zero bytes, returning an [`io::Error`] with
-/// [`io::ErrorKind::OutOfMemory`] instead of aborting the process if the
-/// allocation can't be satisfied (e.g. an absurdly large `--length`, #12869).
-fn try_reserve_zeroed(buf: &mut Vec<u8>, len: usize) -> io::Result<()> {
-    buf.try_reserve_exact(len)
-        .map_err(|e| io::Error::new(io::ErrorKind::OutOfMemory, e))?;
-    buf.resize(len, 0);
-    Ok(())
 }
 
 /// first element of the tuple is the blake2b state
@@ -454,8 +443,7 @@ macro_rules! impl_digest_shake {
             }
 
             fn result(&mut self) -> io::Result<DigestOutput> {
-                let mut bytes = Vec::new();
-                try_reserve_zeroed(&mut bytes, self.output_bits().div_ceil(8))?;
+                let mut bytes = crate::zeroed_alloc::try_new_vec(self.output_bits().div_ceil(8))?;
                 self.hash_finalize(&mut bytes);
                 Ok(DigestOutput::Vec(bytes))
             }
