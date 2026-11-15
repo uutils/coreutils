@@ -524,7 +524,7 @@ impl WriteableTmpFile for WriteablePlainTmpFile {
     fn finished_writing(mut self) -> UResult<Self::Closed> {
         self.file
             .flush()
-            .map_err(|error| SortError::OpenTmpFileFailed { error })?;
+            .map_err(|error| SortError::WriteTmpFileFailed { error })?;
         Ok(ClosedPlainTmpFile { path: self.path })
     }
 
@@ -604,7 +604,7 @@ impl WriteableTmpFile for WriteableCompressedTmpFile {
     fn finished_writing(mut self) -> UResult<Self::Closed> {
         self.child_stdin
             .flush()
-            .map_err(|error| SortError::OpenTmpFileFailed { error })?;
+            .map_err(|error| SortError::WriteTmpFileFailed { error })?;
         drop(self.child_stdin);
         check_child_success(self.child, &self.compress_prog)?;
         Ok(ClosedCompressedTmpFile {
