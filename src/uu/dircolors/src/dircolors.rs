@@ -398,7 +398,9 @@ where
                 }
                 if state != ParseState::Pass {
                     append_entry(&mut result, fmt, key, &lower, val)
-                        .map_err(|()| unrecognized_keyword(fp, num, key))?;
+                        .map_err(|()| {
+                            translate!("dircolors-error-unrecognized-keyword", "file" => fp.maybe_quote(), "line" => num, "keyword" => key)
+                        })?;
                 }
             }
         }
@@ -451,12 +453,6 @@ fn append_entry(
             }
         }
     }
-}
-
-/// GNU prefixes the message with the database name and line number,
-/// like the "missing second token" error.
-fn unrecognized_keyword(fp: &str, num: usize, key: &str) -> String {
-    translate!("dircolors-error-unrecognized-keyword", "file" => fp.maybe_quote(), "line" => num, "keyword" => key)
 }
 
 /// Escape single quotes because they are not allowed between single quotes in shell code, and code
