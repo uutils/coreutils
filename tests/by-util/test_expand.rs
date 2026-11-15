@@ -534,17 +534,41 @@ fn test_column_kept_across_read_buffers() {
         .stdout_only(format!("{prefix}\tx\n"));
 }
 
-#[cfg(unix)]
 #[test]
-#[ignore = "a multi-byte char split across reads must count as one column"]
 fn test_multibyte_char_split_across_reads() {
-    let scene = TestScenario::new(util_name!());
-    scene
-        .cmd_shell("(printf '\\303'; sleep 0.3; printf '\\251\\tz\\n') | \"$BIN\" expand")
-        .env("BIN", &scene.bin_path)
-        .env("LC_ALL", "C.UTF-8")
+    // A slow pipe delivers the two bytes of `é` in two reads.
+    #[cfg(unix)]
+    {
+        let scene = TestScenario::new(util_name!());
+        scene
+            .cmd_shell("(printf '\\303'; sleep 0.3; printf '\\251\\tz\\n') | \"$BIN\" expand")
+            .env("BIN", &scene.bin_path)
+            .env("LC_ALL", "C.UTF-8")
+            .succeeds()
+            .stdout_only("\u{e9}       z\n");
+    }
+
+    // In a file, 8191 ASCII bytes put the two bytes of `é` on both sides of
+    // the 8 KiB read buffer.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let prefix = "a".repeat(8191);
+    at.write("split", &format!("{prefix}\u{e9}\tz\n"));
+    ts.ucmd()
+        .arg("split")
         .succeeds()
-        .stdout_only("\u{e9}       z\n");
+        .stdout_only(format!("{prefix}\u{e9}{}z\n", " ".repeat(8)));
+}
+
+#[test]
+fn test_file_ending_inside_a_multibyte_char() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write_bytes("cut", b"a\tb\xC3");
+    ts.ucmd()
+        .arg("cut")
+        .succeeds()
+        .stdout_only_bytes(b"a       b\xC3");
 }
 
 #[test]
