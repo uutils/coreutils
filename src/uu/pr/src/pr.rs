@@ -1815,8 +1815,9 @@ fn write_columns(
                     line.flush_spaces()?;
                 }
             }
-            let (content, cell_width) =
+            let (content, cell_width, number_len) =
                 get_line_for_printing(options, line_to_print, columns, i, line_width);
+            let cell_start = line.end_column();
             line.write(&content)?;
             if i + 1 != indexes {
                 // Like GNU pr, only a column that is followed by another one
@@ -1827,7 +1828,16 @@ fn write_columns(
                 // GNU pr counts each byte of the separator as one column, a
                 // TAB included, and starts every column with fresh spaces.
                 let separator = options.col_sep_for_printing.as_bytes();
-                let next_column = line.end_column() + display_width(separator);
+                let mut next_column = line.end_column() + display_width(separator);
+                if cell_width.is_none() {
+                    next_column = unpadded_column_end(
+                        options,
+                        &content,
+                        cell_start,
+                        line.end_column(),
+                        number_len,
+                    ) + display_width(separator);
+                }
                 line.write(separator)?;
                 line.flush_spaces()?;
                 line.column = next_column;
@@ -1844,6 +1854,46 @@ fn write_columns(
     }
 
     Ok(())
+}
+
+/// Where GNU pr takes a column that is not padded to end, which is not
+/// always where its text ends (`text_end`): a line number is counted as if a TAB followed it,
+/// and, printing across with a TAB between columns, each TAB of the text is
+/// counted as 8 columns.
+fn unpadded_column_end(
+    options: &OutputOptions,
+    content: &[u8],
+    cell_start: usize,
+    text_end: usize,
+    number_len: usize,
+) -> usize {
+    let number_width = match &options.number {
+        Some(number) if number_len > 0 && content.len() > number_len => {
+            number.width + 8 - number.width % 8
+        }
+        _ => 0,
+    };
+    let across = options
+        .column_mode_options
+        .as_ref()
+        .is_some_and(|i| i.across_mode);
+    let text = &content[number_len..];
+    if across && options.col_sep_for_printing == TAB.to_string() {
+        let tabs = memchr::memchr_iter(TAB as u8, text).count();
+        cell_start + number_width + display_width(text) + 7 * tabs
+    } else if number_width > 0 {
+        let mut end = cell_start + number_width;
+        for &byte in text {
+            end = if byte == TAB as u8 {
+                end + 8 - end % 8
+            } else {
+                end + 1
+            };
+        }
+        end
+    } else {
+        text_end
+    }
 }
 
 /// The width of the line number and its separator in output of more than one
@@ -1872,7 +1922,7 @@ fn get_line_for_printing(
     columns: usize,
     index: usize,
     line_width: Option<usize>,
-) -> (Vec<u8>, Option<usize>) {
+) -> (Vec<u8>, Option<usize>, usize) {
     let mut complete_line =
         get_formatted_line_number(options, file_line.line_number, index).into_bytes();
     if columns > 1 && complete_line.last() == Some(&(TAB as u8)) {
@@ -1886,13 +1936,17 @@ fn get_line_for_printing(
     // written out unchanged.
     let content = &file_line.line_content;
     let Some(width) = line_width else {
-        complete_line.extend_from_slice(content);
-        return (complete_line, None);
+        // Like GNU pr, a line of spaces only after a line number in
+        // unpadded columns is printed as an empty one.
+        if columns == 1 || number_len == 0 || content.iter().any(|&b| b != b' ') {
+            complete_line.extend_from_slice(content);
+        }
+        return (complete_line, None, number_len);
     };
     if columns == 1 {
         complete_line.extend_from_slice(content);
         complete_line.truncate(char_prefix_len(&complete_line, width));
-        return (complete_line, None);
+        return (complete_line, None, number_len);
     }
     // The separators between the columns take their share of the line.
     let separators = (columns - 1) * display_width(options.col_sep_for_printing.as_bytes());
@@ -1909,9 +1963,16 @@ fn get_line_for_printing(
         };
 
     if let Some(expand_tabs) = &options.column_tabs {
-        for &byte in content {
+        for (i, &byte) in content.iter().enumerate() {
             let before = complete_line.len();
-            apply_expand_tab(&mut complete_line, byte, expand_tabs);
+            if i == 0 && (byte == TAB as u8 || byte == expand_tabs.input_char as u8) {
+                // Like GNU pr, a TAB that starts the line is expanded as if
+                // the line number were not there.
+                let spaces = expanded_byte_width(0, byte, expand_tabs);
+                complete_line.resize(before + spaces, b' ');
+            } else {
+                apply_expand_tab(&mut complete_line, byte, expand_tabs);
+            }
             // Spaces past the column width are cut off anyway, and so is
             // everything after them.
             if complete_line.len() - before > content_width {
@@ -1924,7 +1985,11 @@ fn get_line_for_printing(
     }
     let kept = char_prefix_len(&complete_line[number_len..], content_width);
     complete_line.truncate(number_len + kept);
-    (complete_line, Some(cell_width))
+    // Like GNU pr, text of spaces only after a line number is not printed.
+    if number_len > 0 && complete_line[number_len..].iter().all(|&b| b == b' ') {
+        complete_line.truncate(number_len);
+    }
+    (complete_line, Some(cell_width), number_len)
 }
 
 /// Returns the length in bytes of the first `n` characters of `bytes`. A byte

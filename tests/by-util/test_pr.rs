@@ -1808,3 +1808,51 @@ fn test_invalid_output_tab_arguments() {
             ));
     }
 }
+
+#[test]
+fn test_columns_leading_tab_with_line_numbers() {
+    // Like GNU pr, a TAB that starts the line is expanded as if the line
+    // number were not there.
+    new_ucmd!()
+        .args(&["-t", "-2", "-n:3", "-e3"])
+        .pipe_in("\tb\nx\n")
+        .succeeds()
+        .stdout_only("  1:   b\t\t\t      2:x\n");
+    new_ucmd!()
+        .args(&["-t", "-2", "-n:3"])
+        .pipe_in("\tb\nx\n")
+        .succeeds()
+        .stdout_only("  1:\t    b\t\t\t      2:x\n");
+}
+
+#[test]
+fn test_join_lines_column_position() {
+    // Without padding, GNU pr counts a line number as if a TAB followed it.
+    new_ucmd!()
+        .args(&["-t", "-2", "-n:3", "-J"])
+        .pipe_in("djhefi   hibdefab\ncgedcg\n")
+        .succeeds()
+        .stdout_only("  1:djhefi   hibdefab\t  2:cgedcg\n");
+    // Printing across, it counts each TAB of the text as 8 columns.
+    new_ucmd!()
+        .args(&["-t", "-2", "-J", "-a"])
+        .pipe_in("\txyy\txx\ny y   x\n")
+        .succeeds()
+        .stdout_only("\txyy\txx\ty y   x\n");
+}
+
+#[test]
+fn test_join_lines_blank_line_with_line_number() {
+    // A line number before an empty line is not counted as if a TAB
+    // followed it, and a line of spaces only is printed as an empty one.
+    new_ucmd!()
+        .args(&["-t", "-4", "-w", "26", "-n:3", "-J"])
+        .pipe_in("\niahajff\ndcighcaeadafjd fbgfg\nbc e\n agfj \nd\n")
+        .succeeds()
+        .stdout_only("  1:\t  3:dcighcaeadafjd fbgfg\t  5: agfj \t  6:d\n  2:iahajff\t  4:bc e\n");
+    new_ucmd!()
+        .args(&["-t", "-4", "-w", "20", "-s:", "-n:3", "-e"])
+        .pipe_in(" \n\n")
+        .succeeds()
+        .stdout_only("  1::  2:\n");
+}
