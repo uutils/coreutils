@@ -2865,6 +2865,19 @@ fn test_date_strftime_o_modifier() {
 }
 
 #[test]
+fn test_date_non_gnu_specifiers_are_literal() {
+    // %f, %.f, %Q and %:Q are jiff extensions; GNU prints them unchanged.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("@1.5")
+        .arg("+%Q %:Q %f %.3f %-f %%Q %s")
+        .succeeds()
+        .stdout_is("%Q %:Q %f %.3f %-f %Q 1\n");
+}
+
+#[test]
 fn test_date_bare_timezone_abbreviation() {
     // GNU and uutils accept bare UT/GMT abbreviations as UTC.
     for input in ["ut", "UT", "gmt", "GMT"] {

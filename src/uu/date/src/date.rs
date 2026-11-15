@@ -990,6 +990,59 @@ fn strip_o_modifier(fmt: &str) -> String {
     out
 }
 
+/// Escape conversions that jiff understands but GNU `date` does not.
+///
+/// jiff renders `%f`, `%.f` (with an optional precision) as fractional
+/// seconds and `%Q`, `%:Q` as the IANA time zone name. GNU `date` has none of
+/// them and prints an unknown conversion literally, so `+%Q` must stay `%Q`.
+/// Turn the leading `%` of such a conversion into `%%` before jiff sees it.
+fn escape_non_gnu_specifiers(fmt: &str) -> String {
+    if !fmt.contains('%') {
+        return fmt.to_string();
+    }
+
+    let bytes = fmt.as_bytes();
+    let mut out = String::with_capacity(fmt.len() + 2);
+    let mut start = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'%' {
+            i += 1;
+            continue;
+        }
+        if bytes.get(i + 1) == Some(&b'%') {
+            i += 2;
+            continue;
+        }
+        // flags, width, colons and a precision, then the conversion letter
+        let mut j = i + 1;
+        while j < bytes.len() && b"-_0^#+".contains(&bytes[j]) {
+            j += 1;
+        }
+        while j < bytes.len() && bytes[j].is_ascii_digit() {
+            j += 1;
+        }
+        while j < bytes.len() && bytes[j] == b':' {
+            j += 1;
+        }
+        let has_precision = bytes.get(j) == Some(&b'.');
+        if has_precision {
+            j += 1;
+            while j < bytes.len() && bytes[j].is_ascii_digit() {
+                j += 1;
+            }
+        }
+        if has_precision || matches!(bytes.get(j), Some(b'f' | b'Q')) {
+            out.push_str(&fmt[start..i]);
+            out.push('%');
+            start = i;
+        }
+        i = j.max(i + 1);
+    }
+    out.push_str(&fmt[start..]);
+    out
+}
+
 /// A piece of a format string.
 ///
 /// A format string is not necessarily valid UTF-8: a locale using a legacy
@@ -1447,7 +1500,8 @@ fn format_date_with_locale_aware_months(
     // negative infinity (e.g. `@-1.5` → `-2`, not `-1`). Every other field jiff
     // produces already agrees with GNU, so only `%s` needs correcting; rewrite it
     // to the floored epoch second before jiff sees the format string.
-    let fmt_owned = strip_o_modifier(&substitute_epoch_seconds(fmt, date));
+    let fmt_owned =
+        escape_non_gnu_specifiers(&strip_o_modifier(&substitute_epoch_seconds(fmt, date)));
     let fmt = fmt_owned.as_str();
 
     // Check if format string has GNU modifiers (width/flags) and format if present
