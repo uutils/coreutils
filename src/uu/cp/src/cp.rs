@@ -1883,6 +1883,25 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
     Ok(())
 }
 
+/// Whether a failure to preserve ownership must be reported. Permission-style
+/// errors are expected for unprivileged users (EPERM/EACCES), for IDs that are
+/// not mapped in a user namespace (EINVAL) and on filesystems without
+/// ownership support (ENOTSUP/EOPNOTSUPP), so those stay silent.
+#[cfg(unix)]
+fn is_chown_error_fatal(error: &io::Error) -> bool {
+    // ENOTSUP and EOPNOTSUPP are equal on some platforms, so compare instead of matching.
+    error.raw_os_error().is_none_or(|errno| {
+        ![
+            libc::EPERM,
+            libc::EACCES,
+            libc::EINVAL,
+            libc::ENOTSUP,
+            libc::EOPNOTSUPP,
+        ]
+        .contains(&errno)
+    })
+}
+
 /// Copy the specified attributes from one path to another.
 /// If `skip_selinux_xattr` is true, the security.selinux xattr will not be copied
 /// (used when -Z is specified to set the default context instead).
@@ -1921,42 +1940,36 @@ pub(crate) fn copy_attributes(
     let ownership_preserved = std::cell::Cell::new(true);
 
     // Ownership must be changed first to avoid interfering with mode change.
+    // A failure is reported only after the mode is applied, so the destination
+    // never keeps looser permissions than the source.
     #[cfg(unix)]
-    handle_preserve(attributes.ownership, || -> CopyResult<()> {
+    let ownership_result = handle_preserve(attributes.ownership, || -> CopyResult<()> {
+        use std::os::unix::fs::lchown;
         use std::os::unix::prelude::MetadataExt;
-        use uucore::perms::Verbosity;
-        use uucore::perms::VerbosityLevel;
-        use uucore::perms::wrap_chown;
 
         let dest_uid = source_metadata.uid();
         let dest_gid = source_metadata.gid();
-        let meta = &dest
-            .symlink_metadata()
-            .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
-        let try_chown = {
-            |uid| {
-                wrap_chown(
-                    dest,
-                    meta,
-                    uid,
-                    Some(dest_gid),
-                    false,
-                    Verbosity {
-                        groups_only: false,
-                        level: VerbosityLevel::Silent,
-                    },
-                )
-            }
-        };
-        // gnu compatibility: cp doesn't report an error if it fails to set the ownership,
-        // and will fall back to changing only the gid if possible.
-        if try_chown(Some(dest_uid)).is_err() {
+        // gnu compatibility: cp doesn't report a permission-style failure to set the
+        // ownership, and will fall back to changing only the gid if possible.
+        // Other errors (e.g. EIO) are reported.
+        if let Err(e) = lchown(dest, Some(dest_uid), Some(dest_gid)) {
             ownership_preserved.set(false);
-            let _ = try_chown(None);
+            let e = if is_chown_error_fatal(&e) {
+                e
+            } else {
+                match lchown(dest, None, Some(dest_gid)) {
+                    Err(e) if is_chown_error_fatal(&e) => e,
+                    _ => return Ok(()),
+                }
+            };
+            return Err(CpError::IoErrContext(
+                e,
+                translate!("cp-error-failed-to-preserve-ownership", "path" => dest.quote()),
+            ));
         }
         Ok(())
-    })?;
+    });
 
     handle_preserve(mode, || -> CopyResult<()> {
         // The `chmod()` system call that underlies the
@@ -2008,6 +2021,9 @@ pub(crate) fn copy_attributes(
 
         Ok(())
     })?;
+
+    #[cfg(unix)]
+    ownership_result?;
 
     handle_preserve(attributes.timestamps, || -> CopyResult<()> {
         let (atime, mtime) = source_times(&source_metadata, context)?;
@@ -3354,6 +3370,24 @@ mod tests {
             (Path::new("a/b"), Path::new("d/a/b")),
         ];
         assert_eq!(actual, expected);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_is_chown_error_fatal() {
+        use crate::is_chown_error_fatal;
+        use std::io::Error;
+        assert!(is_chown_error_fatal(&Error::from_raw_os_error(libc::EIO)));
+        assert!(is_chown_error_fatal(&Error::from_raw_os_error(libc::EROFS)));
+        for errno in [
+            libc::EPERM,
+            libc::EACCES,
+            libc::EINVAL,
+            libc::ENOTSUP,
+            libc::EOPNOTSUPP,
+        ] {
+            assert!(!is_chown_error_fatal(&Error::from_raw_os_error(errno)));
+        }
     }
     #[test]
     fn test_diff_attrs() {
