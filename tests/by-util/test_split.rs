@@ -355,6 +355,22 @@ fn test_filter_with_env_var_set() {
 }
 
 #[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[rstest]
+#[case::lines(&["-l1"], "executing with FILE=xaa\nexecuting with FILE=xab\n")]
+#[case::bytes(&["-b2"], "executing with FILE=xaa\nexecuting with FILE=xab\n")]
+#[case::line_bytes(&["-C2"], "executing with FILE=xaa\nexecuting with FILE=xab\n")]
+#[case::quoted_prefix(&["-l1", "-", "x y"], "executing with FILE='x yaa'\nexecuting with FILE='x yab'\n")]
+#[cfg(unix)]
+fn test_filter_verbose(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .args(&["--verbose", "--filter=cat > /dev/null"])
+        .args(args)
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 #[cfg(unix)]
 fn test_filter_command_fails() {
