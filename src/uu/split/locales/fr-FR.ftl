@@ -15,6 +15,7 @@ split-after-help = Sortir des morceaux de taille fixe d'ENTRÉE vers PREFIXEaa, 
     - r/N comme 'l' mais utiliser la distribution round robin
     - r/K/N pareillement mais ne sortir que le Kème de N vers stdout
 
+# Messages
 split-executing-with-file = exécution avec FILE={ $file }
 # Messages d'erreur
 split-error-suffix-not-parsable = longueur de suffixe invalide : { $value }
