@@ -517,7 +517,7 @@ dependencies = [
  "glob",
  "hex-literal",
  "itertools 0.15.0",
- "jiff",
+ "jiff 0.2.45",
  "libc",
  "nix",
  "num-prime",
@@ -1595,14 +1595,28 @@ version = "0.2.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34e6d07feb763c647199bd9072192b9639da3b5ffde49afd73c08b1d5ceb1469"
 dependencies = [
- "jiff-core",
- "jiff-static",
+ "jiff-core 0.1.7",
+ "jiff-static 0.2.45",
  "jiff-tzdb-platform",
  "log",
  "portable-atomic",
  "portable-atomic-util",
  "serde_core",
  "windows-link",
+]
+
+[[package]]
+name = "jiff"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9cc767b5763de45e810109520123bb2829a653f3a7ed9be40b2bc4f81158f595"
+dependencies = [
+ "jiff-core 1.0.0",
+ "jiff-static 1.0.0",
+ "log",
+ "portable-atomic",
+ "portable-atomic-util",
+ "serde_core",
 ]
 
 [[package]]
@@ -1615,14 +1629,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "jiff-icu"
-version = "0.2.4"
+name = "jiff-core"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72fe268c5e5b3c96397a29f209fe662576f25bf537584274b1aaf201477ad499"
+checksum = "894f7ac42105f584100691b3bf6e6b92dd12fcfa225f6c397f95c8a94b47b68f"
+dependencies = [
+ "log",
+]
+
+[[package]]
+name = "jiff-icu"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e23fad13729c57bfbf770e467e92ed700cd80941ee4c6ecbbae5dfbc38d9143f"
 dependencies = [
  "icu_calendar",
  "icu_time",
- "jiff",
+ "jiff 1.0.0",
 ]
 
 [[package]]
@@ -1631,10 +1654,22 @@ version = "0.2.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d93b8289f811027d18f228ae410cbadc766419d50b79185fa0084b10cc172d03"
 dependencies = [
- "jiff-core",
+ "jiff-core 0.1.7",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "jiff-static"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "955491488dc99b572ea6d67b172dcd98787d00744b1fb44a5689b4e6413695a6"
+dependencies = [
+ "jiff-core 1.0.0",
+ "proc-macro2",
+ "quote",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -2109,7 +2144,7 @@ version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb51967a779ef73b125a243688e53e4bb2474f91cae72734ee5051e857fb2645"
 dependencies = [
- "jiff",
+ "jiff 0.2.45",
  "num-traits",
  "winnow",
 ]
@@ -3277,7 +3312,7 @@ dependencies = [
  "fluent",
  "icu_calendar",
  "icu_locale",
- "jiff",
+ "jiff 0.2.45",
  "jiff-icu",
  "jiff-tzdb",
  "libc",
@@ -4160,7 +4195,7 @@ dependencies = [
  "clap",
  "filetime",
  "fluent",
- "jiff",
+ "jiff 0.2.45",
  "libc",
  "parse_datetime",
  "rustix",
@@ -4278,7 +4313,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "jiff",
+ "jiff 0.2.45",
  "thiserror 2.0.21",
  "uucore",
 ]
@@ -4379,7 +4414,7 @@ dependencies = [
  "icu_locale",
  "icu_provider",
  "itertools 0.15.0",
- "jiff",
+ "jiff 0.2.45",
  "jiff-icu",
  "libc",
  "md-5",
