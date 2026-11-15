@@ -4000,6 +4000,7 @@ fn test_mv_symlink_writability() {
 
 #[test]
 #[cfg(unix)]
+#[cfg(not(wasi_runner))]
 fn test_mv_symlink_overwrite_interactive() {
     let (at, mut ucmd) = at_and_ucmd!();
 
