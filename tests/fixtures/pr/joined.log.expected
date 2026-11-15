@@ -13,7 +13,7 @@
 127.0.0.1 Techopss-MacBook-Pro.local	Mon Dec 10 11:42:56.856 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
 127.0.0.1	tilakpr	Mon Dec 10 11:42:57.002 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
 255.255.255.255	broadcasthost	Mon Dec 10 11:42:57.003 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
-::1             localhost	Mon Dec 10 11:42:57.003 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+::1		localhost	Mon Dec 10 11:42:57.003 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
 	Mon Dec 10 11:42:57.152 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
 	Mon Dec 10 11:42:57.154 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
 	Mon Dec 10 11:42:57.154 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars

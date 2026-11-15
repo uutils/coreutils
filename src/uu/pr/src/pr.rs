@@ -61,6 +61,7 @@ mod options {
     pub const HELP: &str = "help";
     pub const FILES: &str = "files";
     pub const EXPAND_TABS: &str = "expand-tabs";
+    pub const OUTPUT_TABS: &str = "output-tabs";
 }
 
 struct OutputOptions {
@@ -83,6 +84,11 @@ struct OutputOptions {
     col_sep_for_printing: String,
     line_width: Option<usize>,
     expand_tabs: Option<ExpandTabsOptions>,
+    /// Tabs expanded within each padded column, counted from the start of the
+    /// column, so that the column can be measured and padded.
+    column_tabs: Option<ExpandTabsOptions>,
+    /// Runs of spaces in the output are replaced with tabs (`-i`).
+    output_tabs: Option<OutputTabsOptions>,
 }
 
 /// One line of an input file, annotated with file, page, and line number.
@@ -169,6 +175,23 @@ impl Default for ExpandTabsOptions {
         Self {
             width: 8,
             input_char: TAB,
+        }
+    }
+}
+
+/// Settings of `-i`: spaces are written as `output_char` wherever that takes
+/// the output to a multiple of `width`.
+#[derive(Debug)]
+struct OutputTabsOptions {
+    output_char: u8,
+    width: usize,
+}
+
+impl Default for OutputTabsOptions {
+    fn default() -> Self {
+        Self {
+            output_char: TAB as u8,
+            width: 8,
         }
     }
 }
@@ -398,6 +421,14 @@ pub fn uu_app() -> Command {
                 .value_name("[CHAR][WIDTH]")
                 .help(translate!("pr-help-expand-tabs")),
         )
+        .arg(
+            Arg::new(options::OUTPUT_TABS)
+                .long(options::OUTPUT_TABS)
+                .short('i')
+                .num_args(1)
+                .value_name("[CHAR][WIDTH]")
+                .help(translate!("pr-help-output-tabs")),
+        )
 }
 
 #[uucore::main]
@@ -454,6 +485,7 @@ fn recreate_arguments(args: &[OsString], cmd: &Command) -> (Vec<OsString>, Colum
     // `-e` ends a cluster of short flags that take no value of their own, as in `-tre`.
     // Options that do take a value are excluded so that `-se` keeps meaning `-s e`.
     let e_regex = Regex::new(r"^-[dtTrFfabmJ]*e$").unwrap();
+    let i_regex = Regex::new(r"^-[dtTrFfabmJ]*i$").unwrap();
     let mut arguments = args.to_owned();
     let num_option = args
         .iter()
@@ -468,27 +500,38 @@ fn recreate_arguments(args: &[OsString], cmd: &Command) -> (Vec<OsString>, Colum
         arguments.insert(pos + 2, could_be_file);
     }
 
-    // `-e` takes an optional attached argument, which clap cannot express, so it is filled in
-    // here. Without it clap would report a missing value for `-tre`, or swallow the following
-    // argument, usually a file name, for a bare `-e`. clap also drops the `=` of `-e=VALUE`,
-    // yet for `-e` it is the CHAR to expand, so that value is handed over as its own argument.
-    let expand_tabs_option = arguments
+    // `-e` and `-i` take an optional attached argument, which clap cannot express, so it is
+    // filled in here. Without it clap would report a missing value for `-tre`, or swallow the
+    // following argument, usually a file name, for a bare `-e`. clap also drops the `=` of
+    // `-e=VALUE`, yet for `-e` it is the CHAR to expand, so that value is handed over as its
+    // own argument.
+    for (regex, flag_eq) in [(&e_regex, "e="), (&i_regex, "i=")] {
+        let tab_option = arguments
+            .iter()
+            .take_while(|arg| *arg != "--")
+            .enumerate()
+            .find_map(|(pos, value)| {
+                let value = value.to_str()?;
+                if regex.is_match(value.trim()) {
+                    return Some((pos, vec![format!("{}\t8", value.trim())]));
+                }
+                let split = value.find(flag_eq)? + 1;
+                let (flags, char_value) = value.split_at(split);
+                regex
+                    .is_match(flags)
+                    .then(|| (pos, vec![flags.to_string(), char_value.to_string()]))
+            });
+        if let Some((pos, replacement)) = tab_option {
+            arguments.splice(pos..=pos, replacement.into_iter().map(OsString::from));
+        }
+    }
+    // Like `-i`, `--output-tabs` may be given without a value.
+    if let Some(pos) = arguments
         .iter()
         .take_while(|arg| *arg != "--")
-        .enumerate()
-        .find_map(|(pos, value)| {
-            let value = value.to_str()?;
-            if e_regex.is_match(value.trim()) {
-                return Some((pos, vec![format!("{}\t8", value.trim())]));
-            }
-            let split = value.find("e=")? + 1;
-            let (flags, char_value) = value.split_at(split);
-            e_regex
-                .is_match(flags)
-                .then(|| (pos, vec![flags.to_string(), char_value.to_string()]))
-        });
-    if let Some((pos, replacement)) = expand_tabs_option {
-        arguments.splice(pos..=pos, replacement.into_iter().map(OsString::from));
+        .position(|arg| arg == "--output-tabs")
+    {
+        arguments[pos] = "--output-tabs=\t8".into();
     }
 
     // Take out the whole-token legacy operands before `--`, keeping the first
@@ -875,43 +918,21 @@ fn build_options(
     let expand_tabs = matches
         .get_one::<String>(options::EXPAND_TABS)
         .map(|s| {
-            s.chars()
-                .next()
-                .map_or(Ok(ExpandTabsOptions::default()), |c| {
-                    let invalid = |arg: &str| PrError::EncounteredErrors {
-                        msg: format!(
-                            "{}\n{}",
-                            translate!("pr-error-invalid-expand-tab-argument", "arg" => arg.quote()),
-                            translate!("pr-try-help-message")
-                        ),
-                    };
-                    if c.is_ascii_digit() {
-                        let width: i32 = s.parse().map_err(|_e| invalid(s))?;
-                        if width <= 0 {
-                            return Err(invalid(s));
-                        }
-                        Ok(ExpandTabsOptions {
-                            input_char: TAB,
-                            width,
-                        })
-                    } else if !c.is_ascii() {
-                        Err(invalid(s))
-                    } else if s.len() > 1 {
-                        let width: i32 = s[1..].parse().map_err(|_e| invalid(&s[1..]))?;
-                        if width <= 0 {
-                            return Err(invalid(&s[1..]));
-                        }
-                        Ok(ExpandTabsOptions {
-                            input_char: c,
-                            width,
-                        })
-                    } else {
-                        Ok(ExpandTabsOptions {
-                            input_char: c,
-                            width: 8,
-                        })
-                    }
-                })
+            parse_tab_argument(s, 'e')
+                .map(|(input_char, width)| ExpandTabsOptions { input_char, width })
+        })
+        .transpose()?;
+
+    let explicit_output_tabs = matches
+        .get_one::<String>(options::OUTPUT_TABS)
+        .map(|s| {
+            parse_tab_argument(s, 'i').map(|(c, width)| {
+                OutputTabsOptions {
+                    // The argument parser only accepts an ASCII CHAR.
+                    output_char: c as u8,
+                    width: width as usize,
+                }
+            })
         })
         .transpose()?;
 
@@ -1082,8 +1103,9 @@ fn build_options(
     let columns_to_print =
         merge_files_print.unwrap_or_else(|| column_mode_options.as_ref().map_or(1, |i| i.columns));
 
-    // Like GNU pr, -s without -w or -W merges files unpadded and untruncated.
-    let merge_with_char_separator = merge_files_print.is_some()
+    // Like GNU pr, -s without -w or -W prints columns and merged files
+    // unpadded and untruncated.
+    let merge_with_char_separator = columns_to_print > 1
         && matches.contains_id(options::COLUMN_CHAR_SEPARATOR)
         && !matches.contains_id(options::COLUMN_WIDTH)
         && !matches.contains_id(options::PAGE_WIDTH);
@@ -1099,6 +1121,23 @@ fn build_options(
         )
     } else {
         page_width
+    };
+
+    // As POSIX says, output in more than one column implies -e and -i. A
+    // padded column has its tabs expanded from where the column starts, and
+    // a TAB between padded columns takes up a single space.
+    let padded_columns = columns_to_print > 1 && line_width.is_some();
+    let (expand_tabs, column_tabs) = if padded_columns {
+        (None, Some(expand_tabs.unwrap_or_default()))
+    } else {
+        (expand_tabs, None)
+    };
+    let output_tabs =
+        explicit_output_tabs.or_else(|| (columns_to_print > 1).then(OutputTabsOptions::default));
+    let col_sep_for_printing = if padded_columns && col_sep_for_printing == "\t" {
+        " ".to_string()
+    } else {
+        col_sep_for_printing
     };
 
     Ok(OutputOptions {
@@ -1120,7 +1159,35 @@ fn build_options(
         col_sep_for_printing,
         line_width,
         expand_tabs,
+        column_tabs,
+        output_tabs,
     })
+}
+
+/// Parses the `[CHAR][WIDTH]` argument of `-e` or `-i`, as given by `option`. A missing CHAR is a
+/// TAB and a missing WIDTH is 8.
+fn parse_tab_argument(s: &str, option: char) -> Result<(char, i32), PrError> {
+    let invalid = |arg: &str| {
+        let message = if option == 'i' {
+            translate!("pr-error-invalid-output-tab-argument", "arg" => arg.quote())
+        } else {
+            translate!("pr-error-invalid-expand-tab-argument", "arg" => arg.quote())
+        };
+        PrError::EncounteredErrors {
+            msg: format!("{message}\n{}", translate!("pr-try-help-message")),
+        }
+    };
+    let parse_width = |digits: &str| match digits.parse::<i32>() {
+        Ok(width) if width > 0 => Ok(width),
+        _ => Err(invalid(digits)),
+    };
+    match s.chars().next() {
+        None => Ok((TAB, 8)),
+        Some(c) if c.is_ascii_digit() => Ok((TAB, parse_width(s)?)),
+        Some(c) if !c.is_ascii() => Err(invalid(s)),
+        Some(c) if s.len() > 1 => Ok((c, parse_width(&s[1..])?)),
+        Some(c) => Ok((c, 8)),
+    }
 }
 
 /// Read the entire contents of the given path into memory.
@@ -1519,14 +1586,129 @@ fn to_table_short_file(
 
 /// Write `n` space characters to `out` in fixed-size chunks, so the indent is
 /// streamed rather than allocated up front.
-fn write_offset_spaces(out: &mut impl Write, mut n: usize) -> io::Result<()> {
-    const SPACES: [u8; 256] = [b' '; 256];
-    while n > 0 {
-        let chunk = n.min(SPACES.len());
-        out.write_all(&SPACES[..chunk])?;
-        n -= chunk;
+/// Writes one line of output. With `-i`, runs of spaces are held back and
+/// written as tabs wherever that reaches a tab stop, and spaces that end the
+/// line are dropped.
+struct LineWriter<'a, W: Write> {
+    out: &'a mut W,
+    buf: Vec<u8>,
+    tabs: Option<&'a OutputTabsOptions>,
+    /// The output column reached by what has been written so far.
+    column: usize,
+    /// Spaces held back, to be written from `column` on.
+    spaces: usize,
+}
+
+impl<'a, W: Write> LineWriter<'a, W> {
+    const BUF_LIMIT: usize = 64 * 1024;
+
+    fn new(out: &'a mut W, tabs: Option<&'a OutputTabsOptions>) -> Self {
+        Self {
+            out,
+            buf: Vec::new(),
+            tabs,
+            column: 0,
+            spaces: 0,
+        }
     }
-    Ok(())
+
+    /// The column the line has reached, held back spaces included.
+    fn end_column(&self) -> usize {
+        self.column + self.spaces
+    }
+
+    fn write_repeated(&mut self, byte: u8, mut n: usize) -> io::Result<()> {
+        while n > 0 {
+            let chunk = n.min(Self::BUF_LIMIT);
+            self.buf.resize(self.buf.len() + chunk, byte);
+            n -= chunk;
+            self.drain_if_full()?;
+        }
+        Ok(())
+    }
+
+    fn drain_if_full(&mut self) -> io::Result<()> {
+        if self.buf.len() >= Self::BUF_LIMIT {
+            self.out.write_all(&self.buf)?;
+            self.buf.clear();
+        }
+        Ok(())
+    }
+
+    fn write_spaces(&mut self, n: usize) -> io::Result<()> {
+        if self.tabs.is_some() {
+            self.spaces += n;
+            Ok(())
+        } else {
+            self.column += n;
+            self.write_repeated(b' ', n)
+        }
+    }
+
+    fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
+        if self.tabs.is_none() {
+            self.buf.extend_from_slice(bytes);
+            return self.drain_if_full();
+        }
+        for chunk in bytes.utf8_chunks() {
+            for &byte in chunk.valid().as_bytes() {
+                if byte == b' ' {
+                    self.spaces += 1;
+                    continue;
+                }
+                self.flush_spaces()?;
+                self.buf.push(byte);
+                self.column = if byte == TAB as u8 {
+                    self.column + 8 - self.column % 8
+                } else {
+                    self.column + 1
+                };
+            }
+            // Like GNU pr, a byte that is not part of a valid UTF-8 sequence
+            // is not printable and takes no width.
+            if !chunk.invalid().is_empty() {
+                self.flush_spaces()?;
+                self.buf.extend_from_slice(chunk.invalid());
+            }
+        }
+        self.drain_if_full()
+    }
+
+    /// Writes the spaces held back, as tabs where they reach a tab stop. Like
+    /// GNU pr, a single space before the end of the run stays a space.
+    fn flush_spaces(&mut self) -> io::Result<()> {
+        let Some(tabs) = self.tabs else {
+            return Ok(());
+        };
+        let goal = self.end_column();
+        let mut column = self.column;
+        let mut tab_count = 0;
+        while goal - column > 1 {
+            let next = column + tabs.width - column % tabs.width;
+            if next > goal {
+                break;
+            }
+            column = next;
+            tab_count += 1;
+        }
+        self.write_repeated(tabs.output_char, tab_count)?;
+        self.write_repeated(b' ', goal - column)?;
+        self.column = goal;
+        self.spaces = 0;
+        Ok(())
+    }
+
+    /// Ends the line, dropping the spaces still held back.
+    fn finish(self, line_separator: &[u8]) -> io::Result<()> {
+        self.out.write_all(&self.buf)?;
+        self.out.write_all(line_separator)
+    }
+}
+
+/// The number of columns `bytes` take up when padding a column: a byte that
+/// is not part of a valid UTF-8 sequence takes none.
+fn display_width(bytes: &[u8]) -> usize {
+    bytes.utf8_chunks().map(|chunk| chunk.valid().len()).sum()
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -1595,8 +1777,13 @@ fn write_columns(
     for row in table {
         // Merged files are padded with empty cells to fill the page; once
         // every file has run out there is nothing left to print.
-        if merge && no_trailer && row.iter().all(Option::is_none) {
-            break;
+        if merge && row.iter().all(Option::is_none) {
+            if no_trailer {
+                break;
+            }
+            // Like GNU pr, the rest of the page is filled with empty lines.
+            writer.write_all(line_separator)?;
+            continue;
         }
         // On a page that is not completely filled the last row stops part way
         // through, and its final cell must not be followed by a column
@@ -1607,6 +1794,7 @@ fn write_columns(
         } else {
             row.iter().take_while(|cell| cell.is_some()).count()
         };
+        let mut line = LineWriter::new(writer, options.output_tabs.as_ref());
         let mut cells_written = 0;
         for (i, cell) in row.iter().enumerate() {
             let line_to_print = match cell {
@@ -1618,15 +1806,32 @@ fn write_columns(
                 Some(file_line) => file_line,
             };
 
-            write_offset_spaces(writer, options.offset_spaces)?;
-            writer.write_all(&get_line_for_printing(
-                options,
-                line_to_print,
-                columns,
-                i,
-                line_width,
-                indexes,
-            ))?;
+            if i == 0 {
+                // The margin is written once, before the first column. Like
+                // GNU pr, its spaces only join those of the text that follows
+                // when there is a single column.
+                line.write_spaces(options.offset_spaces)?;
+                if columns > 1 {
+                    line.flush_spaces()?;
+                }
+            }
+            let (content, cell_width) =
+                get_line_for_printing(options, line_to_print, columns, i, line_width);
+            line.write(&content)?;
+            if i + 1 != indexes {
+                // Like GNU pr, only a column that is followed by another one
+                // is padded, so the line has no trailing spaces.
+                if let Some(cell_width) = cell_width {
+                    line.write_spaces(cell_width.saturating_sub(display_width(&content)))?;
+                }
+                // GNU pr counts each byte of the separator as one column, a
+                // TAB included, and starts every column with fresh spaces.
+                let separator = options.col_sep_for_printing.as_bytes();
+                let next_column = line.end_column() + display_width(separator);
+                line.write(separator)?;
+                line.flush_spaces()?;
+                line.column = next_column;
+            }
             cells_written += 1;
         }
         // The last row of a partly filled page has content in its leading
@@ -1635,52 +1840,91 @@ fn write_columns(
         if cells_written == 0 && not_found_break && no_trailer {
             break;
         }
-        writer.write_all(line_separator)?;
+        line.finish(line_separator)?;
     }
 
     Ok(())
 }
 
+/// The width of the line number and its separator in output of more than one
+/// column, where a TAB after the number reaches the next tab stop.
+fn number_field_width(opts: &OutputOptions) -> usize {
+    opts.number.as_ref().map_or(0, |number| {
+        if number.separator == TAB.to_string() {
+            number.width + 8 - number.width % 8
+        } else {
+            number.width + display_width(number.separator.as_bytes())
+        }
+    })
+}
+
+/// Returns the line number and content of a cell, and the width it is padded
+/// to when another column follows.
+///
+/// Like GNU pr, output of more than one column has the TAB after a line
+/// number expanded from where the column starts. A padded column also has the
+/// tabs of its content expanded, and its content cut to the space left by the
+/// line number. When merging files the number only precedes the first column,
+/// and the columns share what is left of the line.
 fn get_line_for_printing(
     options: &OutputOptions,
     file_line: &FileLine,
     columns: usize,
     index: usize,
     line_width: Option<usize>,
-    indexes: usize,
-) -> Vec<u8> {
-    let formatted_line_number = get_formatted_line_number(options, file_line.line_number, index);
+) -> (Vec<u8>, Option<usize>) {
+    let mut complete_line =
+        get_formatted_line_number(options, file_line.line_number, index).into_bytes();
+    if columns > 1 && complete_line.last() == Some(&(TAB as u8)) {
+        complete_line.pop();
+        let width = complete_line.len();
+        complete_line.resize(width + 8 - width % 8, b' ');
+    }
+    let number_len = complete_line.len();
 
     // The content is kept as raw bytes, so input that is not valid UTF-8 is
     // written out unchanged.
-    let mut complete_line = formatted_line_number.into_bytes();
-    complete_line.extend_from_slice(&file_line.line_content);
+    let content = &file_line.line_content;
+    let Some(width) = line_width else {
+        complete_line.extend_from_slice(content);
+        return (complete_line, None);
+    };
+    if columns == 1 {
+        complete_line.extend_from_slice(content);
+        complete_line.truncate(char_prefix_len(&complete_line, width));
+        return (complete_line, None);
+    }
+    // The separators between the columns take their share of the line.
+    let separators = (columns - 1) * display_width(options.col_sep_for_printing.as_bytes());
+    let (content_width, cell_width) =
+        if options.merge_files_print.is_some() && options.number.is_some() {
+            let field = number_field_width(options);
+            let column_width = width.saturating_sub(field + separators) / columns;
+            let field = if index == 0 { field } else { 0 };
+            (column_width, field + column_width)
+        } else {
+            let column_width = width.saturating_sub(separators) / columns;
+            let field = display_width(&complete_line);
+            (column_width.saturating_sub(field).max(1), column_width)
+        };
 
-    let tab_count = memchr::memchr_iter(TAB as u8, &complete_line).count();
-    // Like GNU pr, a byte that is not part of a valid UTF-8 sequence is not
-    // printable and takes no width.
-    let invalid_count: usize = complete_line
-        .utf8_chunks()
-        .map(|chunk| chunk.invalid().len())
-        .sum();
-
-    let display_length = complete_line.len() - invalid_count + (tab_count * 7);
-
-    let is_last_cell = (index + 1) == indexes;
-    if let Some(i) = line_width {
-        let min_width = i.saturating_sub(columns - 1) / columns;
-        // Like GNU pr, the last cell of a row is not padded, so the line has
-        // no trailing spaces.
-        if display_length < min_width && !is_last_cell {
-            complete_line.resize(complete_line.len() + (min_width - display_length), b' ');
+    if let Some(expand_tabs) = &options.column_tabs {
+        for &byte in content {
+            let before = complete_line.len();
+            apply_expand_tab(&mut complete_line, byte, expand_tabs);
+            // Spaces past the column width are cut off anyway, and so is
+            // everything after them.
+            if complete_line.len() - before > content_width {
+                complete_line.truncate(before + content_width);
+                break;
+            }
         }
-        complete_line.truncate(char_prefix_len(&complete_line, min_width));
+    } else {
+        complete_line.extend_from_slice(content);
     }
-
-    if !is_last_cell {
-        complete_line.extend_from_slice(options.col_sep_for_printing.as_bytes());
-    }
-    complete_line
+    let kept = char_prefix_len(&complete_line[number_len..], content_width);
+    complete_line.truncate(number_len + kept);
+    (complete_line, Some(cell_width))
 }
 
 /// Returns the length in bytes of the first `n` characters of `bytes`. A byte
