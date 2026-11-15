@@ -544,6 +544,16 @@ fn test_debug_always_quotes_executed_command() {
         );
 }
 
+#[test]
+fn test_split_string_after_assignment_is_an_assignment() {
+    // options end at the first NAME=VALUE, so "-Sx=y" sets a variable named "-Sx"
+    new_ucmd!()
+        .args(&["-i", "FIRST=1", "-Sx=y"])
+        .succeeds()
+        .stdout_contains_line("FIRST=1")
+        .stdout_contains_line("-Sx=y");
+}
+
 #[rstest]
 #[case::literal("literal", "my key=a value\n")]
 #[case::shell_always("shell-always", "'my key'='a value'\n")]

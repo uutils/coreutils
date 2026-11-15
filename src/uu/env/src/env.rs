@@ -603,8 +603,9 @@ impl EnvAppData {
         original_args: &Vec<OsString>,
     ) -> UResult<Vec<OsString>> {
         let mut all_args: Vec<OsString> = Vec::new();
-        let mut process_flags = true;
         let mut expecting_arg = false;
+        // Set by scan_option at "--" or at the first operand (NAME=VALUE or
+        // the command); later arguments are passed through untouched.
         let mut options_ended = false;
         let app = uu_app();
         let args_with_values: Vec<&Arg> = app
@@ -633,15 +634,7 @@ impl EnvAppData {
                 consumed_split_payload_arg = None;
                 continue;
             }
-            let arg_str = arg.to_string_lossy();
-            // Stop processing env flags once we reach the command or -- argument
-            if 0 < n
-                && !expecting_arg
-                && (arg == "--" || !(arg_str.starts_with('-') || arg_str.contains('=')))
-            {
-                process_flags = false;
-            }
-            if !process_flags {
+            if options_ended {
                 all_args.push(arg.clone());
                 continue;
             }
