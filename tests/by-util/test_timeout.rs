@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore dont SIGBREAK
+// spell-checker:ignore dont SIGBREAK sigwait
 
 use rstest::rstest;
 use std::time::Duration;
@@ -89,6 +89,29 @@ fn test_verbose() {
             .no_stdout()
             .stderr_contains("timeout: sending signal 0 to command")
             .stderr_contains("timeout: sending signal KILL to command");
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_signal_not_swallowed_by_own_group() {
+    // timeout blocks these signals to sigwait for them, and a blocked signal is
+    // queued even when ignored, so it used to read back the signal it sent to its
+    // own group and jump to SIGKILL. SIGQUIT is left out: dumping core can be slow.
+    for signal in ["INT", "PIPE", "USR1"] {
+        new_ucmd!()
+            .args(&[
+                "--verbose",
+                "-k5",
+                &format!("--signal={signal}"),
+                ".1",
+                "sleep",
+                "10",
+            ])
+            .fails_with_code(124)
+            .stderr_only(format!(
+                "timeout: sending signal {signal} to command 'sleep'\n"
+            ));
     }
 }
 
