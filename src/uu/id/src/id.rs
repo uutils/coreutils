@@ -600,7 +600,7 @@ fn auditid() -> io::Result<()> {
 
     let mut auditinfo: MaybeUninit<audit::c_auditinfo_addr_t> = MaybeUninit::uninit();
     let address = auditinfo.as_mut_ptr();
-    if unsafe { audit::getaudit(address) } < 0 {
+    if unsafe { libc::getaudit(address) } < 0 {
         writeln!(lock, "{}", translate!("id-error-audit-retrieve"))?;
         return Ok(());
     }
@@ -720,44 +720,4 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
     }
 
     Ok(())
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "openbsd")))]
-mod audit {
-    use super::libc::{c_int, c_uint, dev_t, pid_t, uid_t};
-
-    pub type au_id_t = uid_t;
-    pub type au_asid_t = pid_t;
-    pub type au_event_t = c_uint;
-    pub type au_emod_t = c_uint;
-    pub type au_class_t = c_int;
-    pub type au_flag_t = u64;
-
-    #[repr(C)]
-    pub struct au_mask {
-        pub am_success: c_uint,
-        pub am_failure: c_uint,
-    }
-    pub type au_mask_t = au_mask;
-
-    #[repr(C)]
-    pub struct au_tid_addr {
-        pub port: dev_t,
-    }
-    pub type au_tid_addr_t = au_tid_addr;
-
-    #[repr(C)]
-    #[expect(clippy::struct_field_names)]
-    pub struct c_auditinfo_addr {
-        pub ai_auid: au_id_t,         // Audit user ID
-        pub ai_mask: au_mask_t,       // Audit masks.
-        pub ai_termid: au_tid_addr_t, // Terminal ID.
-        pub ai_asid: au_asid_t,       // Audit session ID.
-        pub ai_flags: au_flag_t,      // Audit session flags
-    }
-    pub type c_auditinfo_addr_t = c_auditinfo_addr;
-
-    unsafe extern "C" {
-        pub fn getaudit(auditinfo_addr: *mut c_auditinfo_addr_t) -> c_int;
-    }
 }
