@@ -49,7 +49,9 @@ jobs:
         echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
         echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - uses: mlugg/setup-zig@v2.2.1
-    - uses: taiki-e/install-action@cargo-zigbuild
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: cargo-zigbuild
     - name: cargo clippy
       run: |
         # Set linker for stdbuf. env: and -Z do not work. Override `config.toml` to avoid duplicated keys.
