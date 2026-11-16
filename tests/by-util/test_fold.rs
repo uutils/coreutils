@@ -1012,8 +1012,6 @@ fn test_fold_after_long_line_is_flushed(
         .stdout_is_bytes(expected);
 }
 
-// --punctuation (-p was dropped to avoid clashing with future GNU short options).
-
 #[test]
 fn test_punctuation_fold_at_sentence_end() {
     new_ucmd!()
@@ -1112,4 +1110,23 @@ fn test_punctuation_preserves_newline_after_sentence_end() {
         .pipe_in("foo. bar baz\n")
         .succeeds()
         .stdout_is("foo. bar baz\n");
+}
+
+#[test]
+fn test_punctuation_non_ascii_break_keeps_char_whole() {
+    // The em dash is a 3-byte char; the break after it must not split it.
+    new_ucmd!()
+        .args(&["--punctuation", "-w", "6"])
+        .pipe_in("abcd\u{2014}efghij")
+        .succeeds()
+        .stdout_is("abcd\u{2014}\nefghij");
+}
+
+#[test]
+fn test_punctuation_non_ascii_break_in_utf8_text() {
+    new_ucmd!()
+        .args(&["--punctuation", "-w", "8"])
+        .pipe_in("caf\u{e9}\u{2026}na\u{ef}ve words")
+        .succeeds()
+        .stdout_is("caf\u{e9}\u{2026}\nna\u{ef}ve \nwords");
 }

@@ -166,7 +166,7 @@ pub fn uu_app() -> Command {
             // could clash with one of them.
             Arg::new(options::PUNCTUATION)
                 .long(options::PUNCTUATION)
-                .help("break at punctuation boundaries (tiered: sentence-end, clause, space, non-alphanumeric)")
+                .help(translate!("fold-punctuation-help"))
                 .conflicts_with(options::SPACES)
                 .action(ArgAction::SetTrue),
         )
@@ -465,8 +465,7 @@ fn clear_break_trackers<W: Write>(ctx: &mut FoldContext<'_, W>) {
 }
 
 /// Record `byte` at position `pos` as the newest candidate break point for
-/// whichever tier it belongs to. This replaces the per-byte match that was
-/// duplicated across the ASCII, UTF-8, and non-UTF-8 processors.
+/// whichever tier it belongs to.
 fn track_punctuation<W: Write>(ctx: &mut FoldContext<'_, W>, byte: u8, pos: usize) {
     match byte {
         b'.' | b'!' | b'?' | b':' => *ctx.last_sentence_end = Some(pos),
@@ -766,7 +765,9 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
                 if ch.is_ascii() {
                     track_punctuation(ctx, ch as u8, pos);
                 } else if !ch.is_alphanumeric() {
-                    *ctx.last_non_alnum = Some(pos);
+                    // Anchor on the char's last byte so the break (`pos + 1`)
+                    // falls after the whole char, never inside it.
+                    *ctx.last_non_alnum = Some(pos + ch.len_utf8() - 1);
                 }
             }
             BreakMode::Spaces => {
@@ -809,7 +810,7 @@ fn process_non_utf8_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) ->
                 let pos = ctx.output.len();
                 match ctx.break_mode {
                     BreakMode::Punctuation => track_punctuation(ctx, byte, pos),
-                    BreakMode::Spaces if byte.is_ascii_whitespace() && byte != CR => {
+                    BreakMode::Spaces if byte.is_ascii_whitespace() => {
                         *ctx.last_space = Some(pos);
                     }
                     _ => {}
