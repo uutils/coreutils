@@ -311,3 +311,20 @@ fn test_print_database_ignores_term() {
         .succeeds()
         .stdout_is_fixture("internal.expected");
 }
+
+#[test]
+#[ignore = "--csh must escape '!' to prevent history substitution"]
+fn test_csh_output_escapes_bang() {
+    let scene = uutests::util::TestScenario::new(uutests::util_name!());
+    scene.fixtures.write("db", "*.hey! 01;33\n");
+    scene
+        .ucmd()
+        .args(&["-c", "db"])
+        .succeeds()
+        .stdout_only("setenv LS_COLORS '*.hey\\!=01;33:'\n");
+    scene
+        .ucmd()
+        .args(&["-b", "db"])
+        .succeeds()
+        .stdout_only("LS_COLORS='*.hey!=01;33:';\nexport LS_COLORS\n");
+}

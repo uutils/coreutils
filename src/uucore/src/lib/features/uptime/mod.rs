@@ -180,10 +180,9 @@ mod tests {
 
     #[test]
     fn test_format_nusers() {
-        unsafe {
-            std::env::set_var("LANG", "en_US.UTF-8");
-        }
-        let _ = locale::setup_localization("uptime");
+        temp_env::with_var("LANG", Some("en_US.UTF-8"), || {
+            let _ = locale::setup_localization("uptime");
+        });
         assert_eq!("0 users", format_nusers(0));
         assert_eq!("1 user", format_nusers(1));
         assert_eq!("2 users", format_nusers(2));
@@ -191,10 +190,9 @@ mod tests {
 
     #[test]
     fn test_human_readable_uptime_hours_not_zero_padded() {
-        unsafe {
-            std::env::set_var("LANG", "en_US.UTF-8");
-        }
-        let _ = locale::setup_localization("uptime");
+        temp_env::with_var("LANG", Some("en_US.UTF-8"), || {
+            let _ = locale::setup_localization("uptime");
+        });
         // Hours below 10 are not zero-padded (issue #13027).
         assert_eq!(
             "1:27",

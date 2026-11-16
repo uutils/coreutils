@@ -11,7 +11,7 @@ use memchr::{Memchr3, memchr_iter, memmem::Finder};
 use std::cmp::Ordering;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, Split, Stdin, Write, stdin, stdout};
+use std::io::{self, BufRead, BufReader, BufWriter, Stdin, Write, stdin, stdout};
 use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -60,8 +60,8 @@ enum SepSetting {
 }
 
 trait Separator: Clone {
-    /// Using this separator, return the start and end index of all fields in the haystack.
-    fn field_ranges(&self, haystack: &[u8], len_guess: usize) -> Vec<(usize, usize)>;
+    /// Using this separator, populate `field_ranges` with the start and end index of all fields in `haystack`.
+    fn fill_field_ranges(&self, haystack: &[u8], field_ranges: &mut Vec<(usize, usize)>);
     /// The separator as it appears when in the output.
     fn output_separator(&self) -> &[u8];
 }
@@ -73,8 +73,8 @@ struct OneByteSep {
 }
 
 impl Separator for OneByteSep {
-    fn field_ranges(&self, haystack: &[u8], len_guess: usize) -> Vec<(usize, usize)> {
-        let mut field_ranges = Vec::with_capacity(len_guess);
+    fn fill_field_ranges(&self, haystack: &[u8], field_ranges: &mut Vec<(usize, usize)>) {
+        field_ranges.clear();
         let mut last_end = 0;
 
         for i in memchr_iter(self.byte[0], haystack) {
@@ -82,7 +82,6 @@ impl Separator for OneByteSep {
             last_end = i + 1;
         }
         field_ranges.push((last_end, haystack.len()));
-        field_ranges
     }
 
     fn output_separator(&self) -> &[u8] {
@@ -97,8 +96,8 @@ struct MultiByteSep<'a> {
 }
 
 impl Separator for MultiByteSep<'_> {
-    fn field_ranges(&self, haystack: &[u8], len_guess: usize) -> Vec<(usize, usize)> {
-        let mut field_ranges = Vec::with_capacity(len_guess);
+    fn fill_field_ranges(&self, haystack: &[u8], field_ranges: &mut Vec<(usize, usize)>) {
+        field_ranges.clear();
         let mut last_end = 0;
 
         for i in self.finder.find_iter(haystack) {
@@ -106,7 +105,6 @@ impl Separator for MultiByteSep<'_> {
             last_end = i + self.finder.needle().len();
         }
         field_ranges.push((last_end, haystack.len()));
-        field_ranges
     }
 
     fn output_separator(&self) -> &[u8] {
@@ -119,8 +117,9 @@ impl Separator for MultiByteSep<'_> {
 struct LineSep {}
 
 impl Separator for LineSep {
-    fn field_ranges(&self, haystack: &[u8], _len_guess: usize) -> Vec<(usize, usize)> {
-        vec![(0, haystack.len())]
+    fn fill_field_ranges(&self, haystack: &[u8], field_ranges: &mut Vec<(usize, usize)>) {
+        field_ranges.clear();
+        field_ranges.push((0, haystack.len()));
     }
 
     fn output_separator(&self) -> &[u8] {
@@ -133,8 +132,8 @@ impl Separator for LineSep {
 struct WhitespaceSep {}
 
 impl Separator for WhitespaceSep {
-    fn field_ranges(&self, haystack: &[u8], len_guess: usize) -> Vec<(usize, usize)> {
-        let mut field_ranges = Vec::with_capacity(len_guess);
+    fn fill_field_ranges(&self, haystack: &[u8], field_ranges: &mut Vec<(usize, usize)>) {
+        field_ranges.clear();
         let mut last_end = 0;
 
         // GNU join used Bourne shell field splitters by default
@@ -151,7 +150,6 @@ impl Separator for WhitespaceSep {
         if last_end < haystack.len() || field_ranges.is_empty() {
             field_ranges.push((last_end, haystack.len()));
         }
-        field_ranges
     }
 
     fn output_separator(&self) -> &[u8] {
@@ -398,21 +396,13 @@ impl Spec {
     }
 }
 
+#[derive(Default)]
 struct Line {
     field_ranges: Vec<(usize, usize)>,
     string: Vec<u8>,
 }
 
 impl Line {
-    fn new<Sep: Separator>(string: Vec<u8>, separator: &Sep, len_guess: usize) -> Self {
-        let field_ranges = separator.field_ranges(&string, len_guess);
-
-        Self {
-            field_ranges,
-            string,
-        }
-    }
-
     /// Get field at index.
     fn get_field(&self, index: usize) -> Option<&[u8]> {
         if index < self.field_ranges.len() {
@@ -429,9 +419,10 @@ struct State<'a> {
     file_name: &'a OsString,
     file_num: FileNum,
     print_unpaired: bool,
-    lines: Split<Box<dyn BufRead + 'a>>,
-    max_len: usize,
+    reader: Box<dyn BufRead + 'a>,
+    line_ending: u8,
     seq: Vec<Line>,
+    free_lines: Vec<Line>,
     line_num: usize,
     has_failed: bool,
     has_unpaired: bool,
@@ -446,7 +437,7 @@ impl<'a> State<'a> {
         line_ending: LineEnding,
         print_unpaired: bool,
     ) -> UResult<Self> {
-        let file_buf = if name == "-" {
+        let reader = if name == "-" {
             Box::new(stdin.lock()) as Box<dyn BufRead>
         } else {
             let file = File::open(name).map_err_context(|| format!("{}", name.maybe_quote()))?;
@@ -458,9 +449,10 @@ impl<'a> State<'a> {
             file_name: name,
             file_num,
             print_unpaired,
-            lines: file_buf.split(line_ending as u8),
-            max_len: 1,
+            reader,
+            line_ending: line_ending as u8,
             seq: Vec::new(),
+            free_lines: Vec::new(),
             line_num: 0,
             has_failed: false,
             has_unpaired: false,
@@ -560,7 +552,7 @@ impl<'a> State<'a> {
 
     /// Reset with the next line.
     fn reset(&mut self, next_line: Option<Line>) {
-        self.seq.clear();
+        self.free_lines.append(&mut self.seq);
 
         if let Some(line) = next_line {
             self.seq.push(line);
@@ -624,17 +616,18 @@ impl<'a> State<'a> {
 
     /// Get the next line without the order check.
     fn read_line<Sep: Separator>(&mut self, sep: &Sep) -> io::Result<Option<Line>> {
-        match self.lines.next() {
-            Some(value) => {
-                self.line_num += 1;
-                let line = Line::new(value?, sep, self.max_len);
-                if line.field_ranges.len() > self.max_len {
-                    self.max_len = line.field_ranges.len();
-                }
-                Ok(Some(line))
-            }
-            None => Ok(None),
+        let mut line = self.free_lines.pop().unwrap_or_default();
+        line.string.clear();
+        if self.reader.read_until(self.line_ending, &mut line.string)? == 0 {
+            self.free_lines.push(line);
+            return Ok(None);
         }
+        if line.string.last() == Some(&self.line_ending) {
+            line.string.pop();
+        }
+        self.line_num += 1;
+        sep.fill_field_ranges(&line.string, &mut line.field_ranges);
+        Ok(Some(line))
     }
 
     /// Get the next line with the order check.
@@ -916,32 +909,33 @@ fn count_operands(args: &[OsString]) -> usize {
 }
 
 /// Merge separate `-o` field operands into one value so clap does not treat
-/// them as file operands (`join -o 1.1 1.2 2.2 f1 f2`). As many are taken as
-/// can be while still leaving two file operands.
+/// them as file operands (`join -o 1.1 1.2 2.2 f1 f2`), but only while the
+/// missing file operands still follow.
 fn coalesce_o_fields(args: Vec<OsString>) -> Vec<OsString> {
-    let mut spare = count_operands(args.get(1..).unwrap_or_default()).saturating_sub(2);
     let mut out = Vec::with_capacity(args.len());
-    let mut iter = args.into_iter().peekable();
+    let mut i = 0;
 
-    while let Some(arg) = iter.next() {
-        if arg != "-o" {
-            out.push(arg);
-            continue;
-        }
-
-        out.push(arg);
+    while i < args.len() {
+        let is_o = args[i] == "-o";
+        out.push(args[i].clone());
+        i += 1;
 
         // if there is at least one o-field, consume and join them
-        if let Some(mut joined) = iter.next_if(|f| looks_like_o_field(f)) {
-            while spare > 0
-                && let Some(field) = iter.next_if(|f| looks_like_o_field(f))
-            {
-                spare -= 1;
-                joined.push(" ");
-                joined.push(field);
-            }
-            out.push(joined);
+        if !is_o || !args.get(i).is_some_and(|f| looks_like_o_field(f)) {
+            continue;
         }
+        let files_needed = 2_usize.saturating_sub(count_operands(&out[1..]));
+        let mut joined = args[i].clone();
+        i += 1;
+        while files_needed > 0
+            && args.get(i).is_some_and(|f| looks_like_o_field(f))
+            && count_operands(&args[i + 1..]) >= files_needed
+        {
+            joined.push(" ");
+            joined.push(&args[i]);
+            i += 1;
+        }
+        out.push(joined);
     }
     out
 }
