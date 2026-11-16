@@ -224,11 +224,29 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
     }
 }
 
+/// Flushes `out` once a utility is done and returns its final exit code.
+///
+/// A failed flush is reported as a "write error" and makes the exit code 1,
+/// except when the utility already failed (it has shown its own error) or on
+/// a broken pipe, the normal way for a pipeline to stop.
+pub fn flush_at_exit<W: std::io::Write>(out: &mut W, code: i32) -> i32 {
+    match out.flush() {
+        Err(e) if code == 0 && e.kind() != std::io::ErrorKind::BrokenPipe => {
+            show_error!(
+                "{}: {}",
+                translate!("common-write-error"),
+                error::strip_errno(&e)
+            );
+            1
+        }
+        _ => code,
+    }
+}
+
 #[macro_export]
 macro_rules! bin_inner {
     ($util:ident, $post:expr) => {
         pub fn main() {
-            use std::io::Write;
             use uucore::locale;
 
             // Preserve inherited SIGPIPE settings (e.g., from env --default-signal=PIPE)
@@ -262,16 +280,13 @@ macro_rules! bin_inner {
 /// Exits with code returned by `uumain`.
 #[macro_export]
 macro_rules! bin {
+    // stdout is flushed by `#[uucore::main]`, use `#[uucore::main(no_flush)]`
+    // to opt out; `no_flush` is still accepted here for compatibility.
     ($util:ident, no_flush) => {
         ::uucore::bin_inner! {$util, {}}
     };
     ($util:ident) => {
-        ::uucore::bin_inner! {$util, {
-            // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
-            if let Err(e) = std::io::stdout().flush() {
-                eprintln!("Error flushing stdout: {e}");
-            }
-        }}
+        ::uucore::bin_inner! {$util, {}}
     };
 }
 
@@ -724,6 +739,42 @@ impl<'a> IntoCharByteIterator<'a> for &'a [u8] {
 mod tests {
     use super::*;
     use std::ffi::OsStr;
+
+    struct FailingWriter(std::io::ErrorKind);
+
+    impl std::io::Write for FailingWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Err(std::io::Error::from(self.0))
+        }
+    }
+
+    #[test]
+    fn test_flush_at_exit_ok() {
+        assert_eq!(flush_at_exit(&mut Vec::new(), 0), 0);
+        assert_eq!(flush_at_exit(&mut Vec::new(), 2), 2);
+    }
+
+    #[test]
+    fn test_flush_at_exit_ignores_broken_pipe() {
+        let mut out = FailingWriter(std::io::ErrorKind::BrokenPipe);
+        assert_eq!(flush_at_exit(&mut out, 0), 0);
+    }
+
+    #[test]
+    fn test_flush_at_exit_reports_error() {
+        let mut out = FailingWriter(std::io::ErrorKind::StorageFull);
+        assert_eq!(flush_at_exit(&mut out, 0), 1);
+    }
+
+    #[test]
+    fn test_flush_at_exit_keeps_failure_code() {
+        let mut out = FailingWriter(std::io::ErrorKind::StorageFull);
+        assert_eq!(flush_at_exit(&mut out, 3), 3);
+    }
 
     fn make_os_vec(os_str: &OsStr) -> Vec<OsString> {
         vec![

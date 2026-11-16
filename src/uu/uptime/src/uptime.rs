@@ -42,7 +42,7 @@ impl UError for UptimeError {
     }
 }
 
-#[uucore::main(no_signals)]
+#[uucore::main(no_signals, no_flush)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 

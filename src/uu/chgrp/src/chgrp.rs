@@ -103,7 +103,7 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
     })
 }
 
-#[uucore::main]
+#[uucore::main(no_flush)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     chown_base(uu_app(), args, options::ARG_GROUP, parse_gid_and_uid, true)
 }

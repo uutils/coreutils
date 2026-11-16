@@ -80,7 +80,7 @@ fn maybe_sanitize_length(
     }
 }
 
-#[uucore::main]
+#[uucore::main(no_flush)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
