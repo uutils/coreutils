@@ -1201,28 +1201,65 @@ fn test_repeated_flags_are_accepted() {
 }
 
 #[cfg(unix)]
-#[test]
-#[ignore = "chown -v must print +ID specs as plain IDs"]
-fn test_chown_verbose_broken_symlink_plus_ids() {
+#[rstest::rstest]
+#[case::user("+0", "ownership", "0")]
+#[case::group(":+0", "group", "0")]
+#[case::user_and_group("+0012345:+0054321", "ownership", "12345:54321")]
+#[case::named_user_with_group_id("root:+0", "ownership", "root:0")]
+#[case::group_without_plus(":54321", "group", "54321")]
+#[case::dot_user_and_group("+0012345.+0054321", "ownership", "12345.54321")]
+#[case::dot_named_user_with_group_id("root.+0", "ownership", "root.0")]
+#[case::dot_group(".+0054321", "group", "54321")]
+#[case::dot_group_without_plus(".54321", "group", "54321")]
+fn test_chown_verbose_broken_symlink_plus_ids(
+    #[case] spec: &str,
+    #[case] what: &str,
+    #[case] expected: &str,
+) {
     let scene = TestScenario::new(util_name!());
     scene.fixtures.symlink_file("absent", "ghost");
-    let uid = rustix::process::geteuid().as_raw();
-    let gid = rustix::process::getegid().as_raw();
-    for (spec, expected) in [
-        (
-            format!("+{uid}"),
-            format!("failed to change ownership of 'ghost' to {uid}\n"),
-        ),
-        (
-            format!(":+{gid}"),
-            format!("failed to change group of 'ghost' to {gid}\n"),
-        ),
-    ] {
-        scene
-            .ucmd()
-            .args(&["-v", &spec, "ghost"])
-            .fails_with_code(1)
-            .stdout_is(expected)
-            .stderr_contains("chown: cannot dereference 'ghost': ");
-    }
+    scene
+        .ucmd()
+        .args(&["-v", spec, "ghost"])
+        .fails_with_code(1)
+        .stdout_is(format!(
+            "failed to change {what} of 'ghost' to {expected}\n"
+        ))
+        .stderr_contains("chown: cannot dereference 'ghost': ");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_chown_verbose_broken_symlink_named_group() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.symlink_file("absent", "ghost");
+    scene
+        .ucmd()
+        .args(&["-v", &format!(":{ROOT_GROUP}"), "ghost"])
+        .fails_with_code(1)
+        .stdout_is(format!(
+            "failed to change group of 'ghost' to {ROOT_GROUP}\n"
+        ))
+        .stderr_contains("chown: cannot dereference 'ghost': ");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_chown_verbose_broken_symlink_reference() {
+    use std::os::unix::fs::MetadataExt;
+
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.symlink_file("absent", "ghost");
+    scene.fixtures.touch("reference");
+    let meta = scene.fixtures.metadata("reference");
+    let owner = chown::entries::uid2usr(meta.uid()).unwrap_or_else(|_| meta.uid().to_string());
+    let group = chown::entries::gid2grp(meta.gid()).unwrap_or_else(|_| meta.gid().to_string());
+    scene
+        .ucmd()
+        .args(&["-v", "--reference=reference", "ghost"])
+        .fails_with_code(1)
+        .stdout_is(format!(
+            "failed to change ownership of 'ghost' to {owner}:{group}\n"
+        ))
+        .stderr_contains("chown: cannot dereference 'ghost': ");
 }
