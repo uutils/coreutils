@@ -463,11 +463,11 @@ pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     // argv[2] might contain an input file, which may follow `--` when argv[1]
     // starts with '-' (`tail -10 -- FILE`); more operands aren't allowed in
     // obsolete mode
-    let input = match args_vec.len() {
-        2 => None,
-        3 => Some(&args_vec[2]),
-        4 if args_vec[2] == "--" && args_vec[1].as_encoded_bytes().first() == Some(&b'-') => {
-            Some(&args_vec[3])
+    let input = match &args_vec[..] {
+        [_, _] => None,
+        [_, _, file] => Some(file),
+        [_, first, sep, file] if sep == "--" && first.as_encoded_bytes().first() == Some(&b'-') => {
+            Some(file)
         }
         _ => return clap_result,
     };
@@ -515,7 +515,10 @@ fn digit_option_error(err: &clap::Error) -> Option<Box<dyn uucore::error::UError
         return None;
     };
     let digit = arg.strip_prefix('-')?;
-    if digit.len() != 1 || !digit.as_bytes()[0].is_ascii_digit() {
+    let [byte] = digit.as_bytes()[..] else {
+        return None;
+    };
+    if !byte.is_ascii_digit() {
         return None;
     }
     Some(USimpleError::new(
