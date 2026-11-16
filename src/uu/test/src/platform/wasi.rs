@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::ffi::{CString, OsStr};
+use std::ffi::OsStr;
 use std::fs;
 
 use crate::{PathCondition, modified_since_read};
@@ -51,15 +51,9 @@ pub fn path(path: &OsStr, condition: &PathCondition) -> bool {
 /// Whether `a` and `b` are the same file, the condition behind `-ef`.
 /// `std::os::wasi`'s dev/ino accessors are unstable, so go through `stat`.
 pub fn same_file(a: &OsStr, b: &OsStr) -> bool {
-    fn stat(path: &OsStr) -> Option<libc::stat> {
-        // WASI paths are UTF-8; anything else cannot name a file here.
-        let path = CString::new(path.to_str()?).ok()?;
-        let mut stat = unsafe { std::mem::zeroed::<libc::stat>() };
-        (unsafe { libc::stat(path.as_ptr(), &raw mut stat) } == 0).then_some(stat)
-    }
-
+    use rustix::fs::stat;
     match (stat(a), stat(b)) {
-        (Some(a), Some(b)) => a.st_dev == b.st_dev && a.st_ino == b.st_ino,
+        (Ok(a), Ok(b)) => a.st_dev == b.st_dev && a.st_ino == b.st_ino,
         _ => false,
     }
 }
