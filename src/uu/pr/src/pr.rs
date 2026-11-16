@@ -918,7 +918,7 @@ fn build_options(
     let expand_tabs = matches
         .get_one::<String>(options::EXPAND_TABS)
         .map(|s| {
-            parse_tab_argument(s, 'e')
+            parse_tab_argument(s, "pr-error-invalid-expand-tab-argument")
                 .map(|(input_char, width)| ExpandTabsOptions { input_char, width })
         })
         .transpose()?;
@@ -926,7 +926,7 @@ fn build_options(
     let explicit_output_tabs = matches
         .get_one::<String>(options::OUTPUT_TABS)
         .map(|s| {
-            parse_tab_argument(s, 'i').map(|(c, width)| {
+            parse_tab_argument(s, "pr-error-invalid-output-tab-argument").map(|(c, width)| {
                 OutputTabsOptions {
                     // The argument parser only accepts an ASCII CHAR.
                     output_char: c as u8,
@@ -1164,18 +1164,16 @@ fn build_options(
     })
 }
 
-/// Parses the `[CHAR][WIDTH]` argument of `-e` or `-i`, as given by `option`. A missing CHAR is a
-/// TAB and a missing WIDTH is 8.
-fn parse_tab_argument(s: &str, option: char) -> Result<(char, i32), PrError> {
-    let invalid = |arg: &str| {
-        let message = if option == 'i' {
-            translate!("pr-error-invalid-output-tab-argument", "arg" => arg.quote())
-        } else {
-            translate!("pr-error-invalid-expand-tab-argument", "arg" => arg.quote())
-        };
-        PrError::EncounteredErrors {
-            msg: format!("{message}\n{}", translate!("pr-try-help-message")),
-        }
+/// Parses the `[CHAR][WIDTH]` argument of `-e` or `-i`. An invalid argument is
+/// reported with the message `error_key`. A missing CHAR is a TAB and a missing
+/// WIDTH is 8.
+fn parse_tab_argument(s: &str, error_key: &str) -> Result<(char, i32), PrError> {
+    let invalid = |arg: &str| PrError::EncounteredErrors {
+        msg: format!(
+            "{}\n{}",
+            translate!(error_key, "arg" => arg.quote()),
+            translate!("pr-try-help-message")
+        ),
     };
     let parse_width = |digits: &str| match digits.parse::<i32>() {
         Ok(width) if width > 0 => Ok(width),
@@ -1584,8 +1582,11 @@ fn to_table_short_file(
     table
 }
 
-/// Write `n` space characters to `out` in fixed-size chunks, so the indent is
-/// streamed rather than allocated up front.
+/// The first tab stop after `column`, with a tab stop every `width` columns.
+fn next_tab_stop(column: usize, width: usize) -> usize {
+    column + width - column % width
+}
+
 /// Writes one line of output. With `-i`, runs of spaces are held back and
 /// written as tabs wherever that reaches a tab stop, and spaces that end the
 /// line are dropped.
@@ -1659,7 +1660,7 @@ impl<'a, W: Write> LineWriter<'a, W> {
                 self.flush_spaces()?;
                 self.buf.push(byte);
                 self.column = if byte == TAB as u8 {
-                    self.column + 8 - self.column % 8
+                    next_tab_stop(self.column, 8)
                 } else {
                     self.column + 1
                 };
@@ -1684,7 +1685,7 @@ impl<'a, W: Write> LineWriter<'a, W> {
         let mut column = self.column;
         let mut tab_count = 0;
         while goal - column > 1 {
-            let next = column + tabs.width - column % tabs.width;
+            let next = next_tab_stop(column, tabs.width);
             if next > goal {
                 break;
             }
@@ -1869,7 +1870,7 @@ fn unpadded_column_end(
 ) -> usize {
     let number_width = match &options.number {
         Some(number) if number_len > 0 && content.len() > number_len => {
-            number.width + 8 - number.width % 8
+            next_tab_stop(number.width, 8)
         }
         _ => 0,
     };
@@ -1878,14 +1879,14 @@ fn unpadded_column_end(
         .as_ref()
         .is_some_and(|i| i.across_mode);
     let text = &content[number_len..];
-    if across && options.col_sep_for_printing == TAB.to_string() {
+    if across && options.col_sep_for_printing == "\t" {
         let tabs = memchr::memchr_iter(TAB as u8, text).count();
         cell_start + number_width + display_width(text) + 7 * tabs
     } else if number_width > 0 {
         let mut end = cell_start + number_width;
         for &byte in text {
             end = if byte == TAB as u8 {
-                end + 8 - end % 8
+                next_tab_stop(end, 8)
             } else {
                 end + 1
             };
@@ -1900,8 +1901,8 @@ fn unpadded_column_end(
 /// column, where a TAB after the number reaches the next tab stop.
 fn number_field_width(opts: &OutputOptions) -> usize {
     opts.number.as_ref().map_or(0, |number| {
-        if number.separator == TAB.to_string() {
-            number.width + 8 - number.width % 8
+        if number.separator == "\t" {
+            next_tab_stop(number.width, 8)
         } else {
             number.width + display_width(number.separator.as_bytes())
         }
@@ -1928,7 +1929,7 @@ fn get_line_for_printing(
     if columns > 1 && complete_line.last() == Some(&(TAB as u8)) {
         complete_line.pop();
         let width = complete_line.len();
-        complete_line.resize(width + 8 - width % 8, b' ');
+        complete_line.resize(next_tab_stop(width, 8), b' ');
     }
     let number_len = complete_line.len();
 
