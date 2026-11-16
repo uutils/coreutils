@@ -293,8 +293,12 @@ impl SystemdLoginRecord {
 /// Read login records from systemd-logind using safe wrapper functions
 /// This matches the approach used by GNU coreutils `read_utmp_from_systemd()`
 pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
-    let api = ffi::SystemdLoginApi::load()
-        .map_err(|e| USimpleError::new(1, format!("Failed to load libsystemd: {e}")))?;
+    let api = ffi::SystemdLoginApi::load().map_err(|e| {
+        USimpleError::new(
+            1,
+            crate::translate!("systemd-logind-error-load-library", "error" => e),
+        )
+    })?;
     let mut records = Vec::new();
 
     // Add boot time record first
