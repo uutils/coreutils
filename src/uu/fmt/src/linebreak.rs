@@ -32,11 +32,6 @@ impl BreakArgs<'_> {
         }
     }
 
-    /// Width of the whitespace before a word: the same as in the input.
-    fn compute_width(winfo: &WordInfo, fresh: bool) -> usize {
-        if fresh { 0 } else { winfo.space_width }
-    }
-
     /// Write a newline and add the indent.
     fn write_newline(&mut self) -> std::io::Result<()> {
         self.ostream.write_all(b"\n")?;
@@ -156,7 +151,7 @@ fn accum_words_simple<'a>(
     winfo: &'a WordInfo<'a>,
 ) -> std::io::Result<(usize, bool)> {
     // compute the length of this word, including the whitespace before it
-    let wlen = winfo.word_nchars + BreakArgs::compute_width(winfo, false);
+    let wlen = winfo.word_nchars + winfo.space_width;
 
     let slen = args.compute_slen(winfo.new_line, winfo.sentence_start, prev_punct);
 
@@ -335,8 +330,8 @@ fn find_kp_breakpoints<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
             }
 
             // get the new length
-            let tlen =
-                w.word_nchars + BreakArgs::compute_width(w, active.fresh) + slen + active.length;
+            let space_width = if active.fresh { 0 } else { w.space_width };
+            let tlen = w.word_nchars + space_width + slen + active.length;
 
             // if tlen is longer than args.opts.width, we drop this break from the active list
             // otherwise, we extend the break, and possibly add a new break at this point
