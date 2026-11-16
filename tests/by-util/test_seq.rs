@@ -751,14 +751,6 @@ fn test_width_floats() {
     &["infinity"],
     b"1\n2\n3\n"
 )]
-#[case::inf_width(
-    &["-w", "1.000", "inf", "inf"],
-    b"1.000\n  inf\n  inf\n  inf\n"
-)]
-#[case::neg_inf_width(
-    &["-w", "1.000", "-inf", "-inf"],
-    b"1.000\n -inf\n -inf\n -inf\n"
-)]
 #[case::precision_inf(
     &["1", "1.2", "inf"],
     b"1.0\n2.2\n3.4\n"
@@ -1336,9 +1328,11 @@ fn test_repeated_option_last_one_wins() {
 
 #[rstest]
 #[case::pos_inf_down_to_pos_inf(&["inf", "-1", "inf"], "inf\n")]
+#[case::pos_inf_up_to_pos_inf(&["inf", "1", "inf"], "inf\n")]
 #[case::neg_inf_up_to_neg_inf(&["--", "-inf", "3", "-inf"], "-inf\n")]
 #[case::inf_plus_neg_inf_is_nan(&["inf", "-inf", "0"], "inf\n")]
-#[ignore = "seq must stop once the value no longer changes"]
+#[case::inf_width(&["-w", "1.000", "inf", "inf"], "1.000\n  inf\n")]
+#[case::neg_inf_width(&["-w", "1.000", "-inf", "-inf"], "1.000\n -inf\n")]
 fn test_stalled_value_stops(#[case] args: &[&str], #[case] expected: &str) {
     new_ucmd!()
         .args(args)
