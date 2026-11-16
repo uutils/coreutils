@@ -461,10 +461,12 @@ pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     // therefore, we want to check further for obsolete arguments.
     // argv[0] is always present, argv[1] might be obsolete arguments
     // argv[2] might contain an input file, which may follow `--` when argv[1]
-    // starts with '-' (`tail -10 -- FILE`); more operands aren't allowed in
-    // obsolete mode
+    // starts with '-' (`tail -10 -- FILE`, or `tail -10 --` for standard
+    // input); more operands aren't allowed in obsolete mode
     let input = match &args_vec[..] {
         [_, _] => None,
+        // `tail -10 --` reads standard input, like `tail -10`.
+        [_, first, sep] if sep == "--" && first.as_encoded_bytes().first() == Some(&b'-') => None,
         [_, _, file] => Some(file),
         [_, first, sep, file] if sep == "--" && first.as_encoded_bytes().first() == Some(&b'-') => {
             Some(file)
