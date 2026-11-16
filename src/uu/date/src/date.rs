@@ -1569,13 +1569,44 @@ fn resolve_o_modifiers<'a>(
                 // `%Os` and `%ON` are numeric in GNU too - their width counts
                 // digits - so they keep the base conversion below.
                 let raw = render_base_field(date, config, spec, skip_localization)?;
+                // GNU case flags (`#` swap-cases names and lowercases `%p`/`%Z`
+                // winning over `^`; `^` never upper-cases `%P`) live in
+                // `apply_modifiers`, not `apply_composite_modifiers`. Run the
+                // case flags through `apply_modifiers` once with no width, then
+                // let the composite pass pad the already-cased text; the case
+                // flags are removed from the padding pass so it cannot
+                // uppercase `%P` or undo a `#` on `%p`/`%Z`.
+                let case_flags: String = field
+                    .flags
+                    .chars()
+                    .filter(|c| *c == '#' || *c == '^')
+                    .collect();
+                let cased = if case_flags.is_empty() {
+                    raw
+                } else {
+                    format_modifiers::apply_modifiers(
+                        &raw,
+                        &format_modifiers::ParsedSpec {
+                            flags: case_flags.as_str(),
+                            width: None,
+                            spec,
+                            len: spec_end - i,
+                        },
+                    )
+                    .map_err(|e| e.to_string())?
+                };
+                let pad_flags: String = field
+                    .flags
+                    .chars()
+                    .filter(|c| *c != '#' && *c != '^')
+                    .collect();
                 let parsed = format_modifiers::ParsedSpec {
-                    flags: field.flags,
+                    flags: pad_flags.as_str(),
                     width: field.width,
                     spec,
                     len: spec_end - i,
                 };
-                let padded = format_modifiers::apply_composite_modifiers(&raw, &parsed)
+                let padded = format_modifiers::apply_composite_modifiers(&cased, &parsed)
                     .map_err(|e| e.to_string())?;
                 o_resolved.push_str(&padded.replace('%', "%%"));
                 i = spec_end;
@@ -1589,11 +1620,35 @@ fn resolve_o_modifiers<'a>(
                 // would only pad to the natural width and strip the leading
                 // zero; otherwise flags and width are kept, so `%_10Om` still
                 // pads to ten columns.
-                o_resolved.push('%');
                 let last_pad = field
                     .flags
                     .chars()
                     .rfind(|c| matches!(*c, '-' | '_' | '0' | '+'));
+                // GNU trims the `O` fraction when the pair carries `-` or `_`:
+                // measured `%-ON` on a zero fraction is `0`, on `.05` it is
+                // `05`, on `.000000001` it is `000000001` (trailing zeros only),
+                // and `%_ON` space-pads the trimmed value to the width (9
+                // without one). The bare `%-N` conversion is not trimmed, so
+                // this stays on the `O` path. Routing through `apply_modifiers`
+                // with the pair's own flags reuses its `%N` fraction handling
+                // (width truncation, trailing-zero trim, `-`/`_` semantics).
+                if spec == "N" && matches!(last_pad, Some('-' | '_')) {
+                    let raw = render_base_field(date, config, spec, skip_localization)?;
+                    let padded = format_modifiers::apply_modifiers(
+                        &raw,
+                        &format_modifiers::ParsedSpec {
+                            flags: field.flags,
+                            width: Some(field.width.unwrap_or(9)),
+                            spec,
+                            len: spec_end - i,
+                        },
+                    )
+                    .map_err(|e| e.to_string())?;
+                    o_resolved.push_str(&padded.replace('%', "%%"));
+                    i = spec_end;
+                    continue;
+                }
+                o_resolved.push('%');
                 let drop_field = match last_pad {
                     Some('-') => true,
                     Some('_') if field.width.is_none() => true,
@@ -1622,9 +1677,19 @@ fn resolve_o_modifiers<'a>(
                     Some(_) => mod_at + 2,
                 };
                 let literal = &format_string[i..end];
-                // An overflowing width is clamped to the maximum and rejected
-                // by the shared composite formatter below.
-                let padded = if field.width.is_some() {
+                // GNU strips the flags from an `%Oq` literal and keeps the
+                // width as padding: measured `%5Oq` is `  %Oq`, `%-5Oq` is
+                // `%Oq`, `%05Oq` is `00%Oq`, `%^Oq` is `%OQ`.
+                let padded = if bytes.get(mod_at + 1) == Some(&b'q') {
+                    let parsed = format_modifiers::ParsedSpec {
+                        flags: field.flags,
+                        width: field.width,
+                        spec: "%Oq",
+                        len: 3,
+                    };
+                    format_modifiers::apply_composite_modifiers("%Oq", &parsed)
+                        .map_err(|e| e.to_string())?
+                } else if field.width.is_some() {
                     let parsed = format_modifiers::ParsedSpec {
                         flags: field.flags,
                         width: field.width,
@@ -1634,7 +1699,20 @@ fn resolve_o_modifiers<'a>(
                     format_modifiers::apply_composite_modifiers(literal, &parsed)
                         .map_err(|e| e.to_string())?
                 } else {
-                    literal.to_string()
+                    // GNU upper-cases the literal's trailing letter under
+                    // `^`, even for rejected pairs (`%^Oo` is `%^OO`); the
+                    // width path above already does this through
+                    // `apply_composite_modifiers`. Only an ASCII lowercase
+                    // tail changes (`%^Oé` and `%^O中` stay verbatim, and
+                    // digits, `:` and `%` are not letters).
+                    let mut lit = literal.to_string();
+                    if field.flags.contains('^')
+                        && matches!(lit.as_bytes().last(), Some(b'a'..=b'z'))
+                    {
+                        let len = lit.len();
+                        lit[len - 1..].make_ascii_uppercase();
+                    }
+                    lit
                 };
                 o_resolved.push_str(&padded.replace('%', "%%"));
                 i = end;

@@ -3880,6 +3880,109 @@ fn test_date_strftime_o_extended_years() {
     }
 }
 
+/// GNU case flags survive the `O` modifier: `#` swap-cases the name (and
+/// lowercases `%p`/`%Z`, winning over `^`), `^` uppercases but never touches
+/// `%P`, and widths pad the cased text. All values are GNU `date` 9.4
+/// behavior in the C locale, measured on the same corpus as the audit.
+#[test]
+fn test_date_strftime_o_case_flags() {
+    for (format, expected) in [
+        ("%#OB", "JUNE\n"),
+        ("%#5OB", " JUNE\n"),
+        ("%#Ob", "JUN\n"),
+        ("%#Op", "am\n"),
+        ("%#OZ", "utc\n"),
+        ("%#5Op", "   am\n"),
+        ("%^#Op", "am\n"),
+        ("%^#OZ", "utc\n"),
+        ("%^OP", "am\n"),
+        ("%^5OP", "   am\n"),
+        ("%^#OP", "am\n"),
+        ("%^OB", "JUNE\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .env("LC_ALL", "C")
+            .args(&["-d", "1999-06-01 04:00:00", &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+/// GNU treats `%ON` as a fraction: `-` strips the trailing zeros of the
+/// rendered digits and `_` space-pads the trimmed value to the width (nine
+/// digits when no width is given). The width truncates before the trim.
+/// Fractional behavior measured against GNU `date` 9.4 on `@-1.5`.
+#[test]
+fn test_date_strftime_o_nano_fraction_flags() {
+    for (date, format, expected) in [
+        // All-zero fraction: `-` renders the single digit, `_` pads to nine.
+        ("1999-06-01 04:00:00", "%-ON", "0\n"),
+        ("1999-06-01 04:00:00", "%_ON", "0        \n"),
+        ("1999-06-01 04:00:00", "%-5ON", "0\n"),
+        ("1999-06-01 04:00:00", "%_5ON", "0    \n"),
+        // Half-second (negative epoch floor): trailing zeros stripped.
+        ("@-1.5", "%-ON", "5\n"),
+        ("@-1.5", "%_ON", "5        \n"),
+        ("@-1.5", "%-5ON", "5\n"),
+        ("@-1.5", "%_5ON", "5    \n"),
+        // A fraction ending in a nonzero digit keeps its digits.
+        ("@123.000000001", "%-ON", "000000001\n"),
+        // Width truncates before the trim, exactly as GNU.
+        ("@928555200.123456789", "%-5ON", "12345\n"),
+        // Without `-`/`_`, the nine-digit zero-padded fraction stays.
+        ("1999-06-01 04:00:00", "%ON", "000000000\n"),
+        ("1999-06-01 04:00:00", "%5ON", "00000\n"),
+        ("1999-06-01 04:00:00", "%12ON", "000000000000\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .env("LC_ALL", "C")
+            .args(&["-d", date, &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+/// `%Oq`: `%q` is a real conversion (the quarter) that rejects the `O`
+/// modifier. GNU drops the flags from the literal but keeps padding it as
+/// text at the width; `^` uppercases the letter in the literal, so the
+/// rejected pair renders `%OQ`. Known conversions and base-unknown letters
+/// that reject `O` keep their spec verbatim. Measured against GNU `date` 9.4.
+#[test]
+fn test_date_strftime_o_rejected_quarter_flags() {
+    for (format, expected) in [
+        ("%5Oq", "  %Oq\n"),
+        ("%-5Oq", "%Oq\n"),
+        ("%05Oq", "00%Oq\n"),
+        ("%-02Oq", "%Oq\n"),
+        ("%#5Oq", "  %Oq\n"),
+        ("%^Oq", "%OQ\n"),
+        ("%^5Oq", "  %OQ\n"),
+        // Known conversions that reject `O` keep their spec verbatim.
+        ("%5OY", " %5OY\n"),
+        ("%-5OY", "%-5OY\n"),
+        // Base-unknown letters keep the spec verbatim too (`%o` is not a
+        // conversion, but its pair behaves like `%OY`).
+        ("%5Oo", " %5Oo\n"),
+        ("%-5Oo", "%-5Oo\n"),
+        // `^` upper-cases the literal's trailing ASCII letter, even for a
+        // base-unknown letter; digits, `:`, `%` and multibyte tails stay
+        // verbatim (measured `%^O2`, `%^O:`, `%^O%`, `%^Oé`, `%^O中`).
+        ("%^Oo", "%^OO\n"),
+        ("%^Ox", "%^OX\n"),
+        ("%^Oc", "%^OC\n"),
+        ("%^#Oo", "%^#OO\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .env("LC_ALL", "C")
+            .args(&["-d", "1999-06-01 04:00:00", &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
 /// `%OB` is the month name as the month stands alone, and it honours the
 /// same flags and width as any other `%O` conversion.
 ///
@@ -3951,6 +4054,72 @@ fn test_date_strftime_ob_uses_locale_standalone_month() {
                 .env("LC_ALL", locale)
                 .env("TZ", "UTC")
                 .args(&["-d", "1999-06-01", &format!("+{format}")])
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
+}
+
+/// The `fa_IR` locale's glibc `D_FMT` template itself carries `O` fields
+/// (`nl_langinfo(D_FMT)` is `%Oy/%Om/%Od`), so a bare `%x` reaches the
+/// `O` resolver with no user-written `%O`. This pins the pipeline the
+/// audit measured: template expansion, the `O`-pair resolution before the
+/// ICU layer, and the calendar the ICU layer substitutes for Persian
+/// locales (`fa` maps to `CalendarType::Persian`).
+///
+/// The expected values are what this implementation renders, recorded from
+/// the audit's binaries; GNU `date` 9.4 renders the Gregorian date with
+/// Persian digits (`۹۹/۰۶/۰۵`) instead, so this test documents a known
+/// divergence from GNU, it does not assert compatibility.
+///
+/// Guards mirror `test_date_strftime_ob_uses_locale_standalone_month`:
+/// the locale must be installed and the base `%y/%m/%d` triple must render
+/// the Persian-calendar date before the assertions below are checked.
+#[test]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
+fn test_date_strftime_fa_ir_template_carries_o_fields() {
+    let locale = "fa_IR.UTF-8";
+    if !is_locale_available(locale) {
+        println!("Skipping fa_IR template test - {locale} locale not available");
+        return;
+    }
+    // The base triple must render Persian-calendar values (month 3, day 15
+    // for 1999-06-05); when ICU is compiled out the fallback is
+    // the Gregorian `99/06/05` and the assertions below would pin nothing.
+    let cmd = new_ucmd!()
+        .env("LC_ALL", locale)
+        .env("TZ", "UTC0")
+        .args(&["-d", "1999-06-05", "+%y/%m/%d"])
+        .succeeds();
+    let triple = cmd.stdout_str();
+    if triple != "99/03/15\n" {
+        println!(
+            "skipping fa_IR template check: base triple renders {triple:?} (i18n not available)"
+        );
+        return;
+    }
+    // Hand-written template rows: the three `O` pairs resolve to their
+    // base conversions and then render Persian-calendar values; these do
+    // not depend on the glibc template read.
+    for (format, expected) in [("%Oy/%Om/%Od", "99/03/15\n"), ("%Od|%Om|%Oy", "15|03|99\n")] {
+        new_ucmd!()
+            .env("LC_ALL", locale)
+            .env("TZ", "UTC0")
+            .args(&["-d", "1999-06-05", &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
+    // A bare `%x` expands through nl_langinfo(D_FMT), which carries the
+    // `O` fields only on glibc (`cfg_nl_langinfo!` gates that read to
+    // linux/glibc); other platforms fall back to the POSIX template, so
+    // these two rows run only there. They pin the audit's F7 finding:
+    // `%x` with no user-written `O` changes with the resolver in place.
+    if cfg!(all(target_os = "linux", not(target_env = "musl"))) {
+        for (format, expected) in [("%x", "99/03/15\n"), ("pre %x post", "pre 99/03/15 post\n")] {
+            new_ucmd!()
+                .env("LC_ALL", locale)
+                .env("TZ", "UTC0")
+                .args(&["-d", "1999-06-05", &format!("+{format}")])
                 .succeeds()
                 .stdout_is(expected);
         }
