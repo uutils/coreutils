@@ -242,6 +242,9 @@ impl Uniq {
     /// are not valid UTF-8 count as one character each, so they cannot change
     /// how the characters before them are counted.
     fn char_prefix_len(bytes: &[u8], limit: usize) -> usize {
+        // A character is at most 4 bytes, so the first `limit` characters
+        // always fit in the first `4 * limit` bytes; don't walk the rest.
+        let bytes = &bytes[..bytes.len().min(limit.saturating_mul(4))];
         let mut remaining = limit;
         let mut pos = 0;
         for chunk in bytes.utf8_chunks() {
