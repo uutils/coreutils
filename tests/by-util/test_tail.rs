@@ -5224,6 +5224,25 @@ fn test_tail_obsolete_number_before_double_dash() {
         .stdout_only("2\n3\n");
 }
 
+#[test]
+fn test_tail_obsolete_number_before_double_dash_reads_stdin() {
+    new_ucmd!()
+        .args(&["-2", "--"])
+        .pipe_in("1\n2\n3\n")
+        .succeeds()
+        .stdout_only("2\n3\n");
+}
+
+#[test]
+fn test_tail_plus_number_before_double_dash_is_a_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "1\n2\n3\n");
+    ucmd.args(&["+2", "--", "a"])
+        .fails_with_code(1)
+        .stdout_is("==> a <==\n1\n2\n3\n")
+        .stderr_is("tail: cannot open '+2' for reading: No such file or directory\n");
+}
+
 #[rstest]
 #[case::two_files(&["-15", "a", "b"], '1')]
 #[case::bytes_two_files(&["-5c", "a", "b"], '5')]
