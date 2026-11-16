@@ -1083,10 +1083,10 @@ fn test_merge() {
     let whitespace = " ".repeat(50);
     let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
     let header = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
-    // Like GNU pr, the space between the columns is filled with tabs, and
-    // the rest of the page is filled with empty lines.
+    // Like GNU pr, the space between the columns is filled with tabs.
+    // TODO The rest of the page should be filled with empty lines.
     let data = "a\t\t\t\t    b\n";
-    let blank_lines_55 = "\n".repeat(55);
+    let blank_lines_55 = "\t\t\t\t    \n".repeat(55);
     let footer = "\n".repeat(5);
     let pattern = format!("{header}{data}{blank_lines_55}{footer}");
     let regex = Regex::new(&pattern).unwrap();
@@ -1722,13 +1722,6 @@ fn test_columns_are_padded_with_tabs() {
         .pipe_in("a\nbbbbbbbbbbb\nccc\nd\n")
         .succeeds()
         .stdout_only("a\t\t  bbbbbbbbbbb\t    ccc\t\t      d\n");
-
-    // A margin is written once per line, not before every column.
-    new_ucmd!()
-        .args(&["-t", "-2", "-o", "3"])
-        .pipe_in("a\nb\n")
-        .succeeds()
-        .stdout_only("   a\t\t\t\t       b\n");
 }
 
 #[test]

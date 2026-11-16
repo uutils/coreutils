@@ -1778,13 +1778,8 @@ fn write_columns(
     for row in table {
         // Merged files are padded with empty cells to fill the page; once
         // every file has run out there is nothing left to print.
-        if merge && row.iter().all(Option::is_none) {
-            if no_trailer {
-                break;
-            }
-            // Like GNU pr, the rest of the page is filled with empty lines.
-            writer.write_all(line_separator)?;
-            continue;
+        if merge && no_trailer && row.iter().all(Option::is_none) {
+            break;
         }
         // On a page that is not completely filled the last row stops part way
         // through, and its final cell must not be followed by a column
@@ -1807,14 +1802,9 @@ fn write_columns(
                 Some(file_line) => file_line,
             };
 
-            if i == 0 {
-                // The margin is written once, before the first column. Like
-                // GNU pr, its spaces only join those of the text that follows
-                // when there is a single column.
-                line.write_spaces(options.offset_spaces)?;
-                if columns > 1 {
-                    line.flush_spaces()?;
-                }
+            line.write_spaces(options.offset_spaces)?;
+            if columns > 1 {
+                line.flush_spaces()?;
             }
             let (content, cell_width, number_len) =
                 get_line_for_printing(options, line_to_print, columns, i, line_width);
@@ -1949,8 +1939,7 @@ fn get_line_for_printing(
         complete_line.truncate(char_prefix_len(&complete_line, width));
         return (complete_line, None, number_len);
     }
-    // The separators between the columns take their share of the line.
-    let separators = (columns - 1) * display_width(options.col_sep_for_printing.as_bytes());
+    let separators = columns - 1;
     let (content_width, cell_width) =
         if options.merge_files_print.is_some() && options.number.is_some() {
             let field = number_field_width(options);
