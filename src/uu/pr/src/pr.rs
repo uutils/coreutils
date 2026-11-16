@@ -1634,7 +1634,11 @@ fn write_columns(
                 Some(file_line) => file_line,
             };
 
-            write_offset_spaces(writer, options.offset_spaces)?;
+            // Like GNU pr, the margin is written once per line, before the
+            // first column.
+            if i == 0 {
+                write_offset_spaces(writer, options.offset_spaces)?;
+            }
             writer.write_all(&get_line_for_printing(
                 options,
                 line_to_print,
