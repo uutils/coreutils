@@ -555,12 +555,15 @@ fn test_split_string_after_assignment_is_an_assignment() {
 }
 
 #[rstest]
-#[case::literal("literal", "my key=a value\n")]
-#[case::shell_always("shell-always", "'my key'='a value'\n")]
-#[case::c("c", "\"my key\"=\"a value\"\n")]
-fn test_quoting_style_option(#[case] style: &str, #[case] expected: &str) {
+#[case::literal(&["--quoting-style=literal"], "my key=a value\n")]
+#[case::shell_always(&["--quoting-style=shell-always"], "'my key'='a value'\n")]
+#[case::c(&["--quoting-style=c"], "\"my key\"=\"a value\"\n")]
+#[case::c_detached(&["--quoting-style", "c"], "\"my key\"=\"a value\"\n")]
+fn test_quoting_style_option(#[case] style: &[&str], #[case] expected: &str) {
     new_ucmd!()
-        .args(&["-i", &format!("--quoting-style={style}"), "my key=a value"])
+        .arg("-i")
+        .args(style)
+        .arg("my key=a value")
         .succeeds()
         .stdout_only(expected);
 }
@@ -568,11 +571,44 @@ fn test_quoting_style_option(#[case] style: &str, #[case] expected: &str) {
 #[test]
 fn test_quoting_style_env_var_ignored_when_redirected() {
     new_ucmd!()
-        .args(&["-i", "QUOTING_STYLE=shell-always", "my key=a value"])
+        .env("QUOTING_STYLE", "shell-always")
+        .args(&["-i", "my key=a value"])
         .succeeds()
-        // the order of the variables is platform dependent
-        .stdout_contains_line("QUOTING_STYLE=shell-always")
-        .stdout_contains_line("my key=a value");
+        .stdout_only("my key=a value\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_quoting_style_env_var_read_before_clearing_env() {
+    new_ucmd!()
+        .env("QUOTING_STYLE", "shell-always")
+        .args(&["-i", "my key=a value"])
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("'my key'='a value'\r\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_quoting_style_env_var_ignored_with_null() {
+    new_ucmd!()
+        .env("QUOTING_STYLE", "shell-always")
+        .args(&["-i", "-0", "my key=a value"])
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("my key=a value\0");
+}
+
+#[rstest]
+#[case::null_last(&["--quoting-style=c", "-0"], "my key=a value\0")]
+#[case::style_last(&["-0", "--quoting-style=c"], "\"my key\"=\"a value\"\0")]
+fn test_quoting_style_and_null_order(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .arg("-i")
+        .args(args)
+        .arg("my key=a value")
+        .succeeds()
+        .stdout_only(expected);
 }
 
 #[cfg(not(windows))] // windows has no executable "echo", its only supported as part of a batch-file
