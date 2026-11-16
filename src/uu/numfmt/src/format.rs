@@ -560,7 +560,21 @@ fn round_with_precision(n: f64, method: RoundMethod, precision: usize) -> f64 {
         return n;
     }
 
-    method.round(p * n) / p
+    method.round(snap_to_whole(p * n)) / p
+}
+
+/// `0.07 * 100.0` is `7.000000000000001`, and `1.005 * 1000.0` is
+/// `1004.9999999999999`: the decimal the user wrote is a whole number of
+/// units, but the binary product misses it by an ulp or two. Rounding up or
+/// truncating that product moves the result by a whole unit, so snap it back
+/// first. A miss of a few ulps is far below what the input can express.
+fn snap_to_whole(x: f64) -> f64 {
+    let snapped = x.round();
+    if (x - snapped).abs() <= x.abs() * 4.0 * f64::EPSILON {
+        snapped
+    } else {
+        x
+    }
 }
 
 fn consider_suffix(
@@ -1175,6 +1189,22 @@ mod tests {
         assert_eq!(0.123, round_with_precision(0.12345, rm, 3));
         assert_eq!(0.1234, round_with_precision(0.12345, rm, 4));
         assert_eq!(0.12345, round_with_precision(0.12345, rm, 5));
+    }
+
+    #[test]
+    fn test_round_with_precision_exact_decimals() {
+        let rm = RoundMethod::FromZero;
+        assert_eq!(0.07, round_with_precision(0.07, rm, 2));
+        assert_eq!(0.14, round_with_precision(0.14, rm, 2));
+        assert_eq!(0.28, round_with_precision(0.28, rm, 2));
+        assert_eq!(1.09, round_with_precision(1.09, rm, 2));
+        assert_eq!(-0.07, round_with_precision(-0.07, rm, 2));
+        // a value just above the last digit still rounds away from zero
+        assert_eq!(0.08, round_with_precision(0.070_000_1, rm, 2));
+
+        let rm = RoundMethod::TowardsZero;
+        assert_eq!(1.005, round_with_precision(1.005, rm, 3));
+        assert_eq!(-1.005, round_with_precision(-1.005, rm, 3));
     }
 
     #[test]
