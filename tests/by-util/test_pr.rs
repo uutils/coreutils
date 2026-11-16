@@ -1724,3 +1724,21 @@ fn test_double_space_last_line_without_newline() {
             .stdout_only(expected);
     }
 }
+
+#[test]
+fn test_column_width_with_long_separator() {
+    // Like GNU pr, a separator longer than one byte takes its full length
+    // from the page width: (30 - 6) / 2 = 12 columns of text each.
+    new_ucmd!()
+        .args(&["-t", "-2", "-Sdivide", "-w", "30"])
+        .pipe_in("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nc\n")
+        .succeeds()
+        .stdout_only("aaaaaaaaaaaadividec\nbbbbbbbbbbbb\n");
+
+    // (30 - 2 * 2) / 3 = 8.
+    new_ucmd!()
+        .args(&["-t", "-3", "-S::", "-w", "30"])
+        .pipe_in("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nc\n")
+        .succeeds()
+        .stdout_only("aaaaaaaa::bbbbbbbb::c\n");
+}
