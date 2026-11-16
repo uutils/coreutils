@@ -62,6 +62,8 @@ unsafe extern "C" {
 /// group id (egid) to the first entry in the returned Vector.
 /// If `arg_id` is `Some(x)`, `get_groups_gnu` moves the id with value `x`
 /// to the first entry in the returned Vector.
+/// The chosen ID appears only once, followed by the supplementary IDs
+/// with consecutive duplicates removed.
 ///
 /// From: `<https://www.man7.org/linux/man-pages/man3/getgroups.3p.html>`
 /// > As implied by the definition of supplementary groups, the
@@ -111,11 +113,9 @@ fn sort_real_gid_first(rgid: gid_t, egid: gid_t, supplementary: Vec<gid_t>) -> V
 
 #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
 fn sort_groups(mut groups: Vec<gid_t>, egid: gid_t) -> Vec<gid_t> {
-    if let Some(index) = groups.iter().position(|&x| x == egid) {
-        groups[..=index].rotate_right(1);
-    } else {
-        groups.insert(0, egid);
-    }
+    groups.retain(|&gid| gid != egid);
+    groups.dedup();
+    groups.insert(0, egid);
     groups
 }
 
@@ -393,15 +393,14 @@ mod test {
 
     #[test]
     #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
-    fn test_entries_get_groups_gnu() {
-        if let Ok(mut groups) = rustix::process::getgroups().map(|g| {
-            g.into_iter()
-                .map(rustix::fs::Gid::as_raw)
-                .collect::<Vec<_>>()
-        }) && let Some(last) = groups.pop()
-        {
-            groups.insert(0, last);
-            assert_eq!(get_groups_gnu(Some(last)).unwrap(), groups);
-        }
+    fn test_sort_groups_duplicates() {
+        // Unmapped groups in a user namespace share the overflow group ID.
+        assert_eq!(sort_groups(vec![65534; 5], 65534), vec![65534]);
+        assert_eq!(sort_groups(vec![1, 1, 2, 2, 3, 3], 4), vec![4, 1, 2, 3]);
+        assert_eq!(sort_groups(vec![1, 2, 2, 3], 2), vec![2, 1, 3]);
+        assert_eq!(sort_groups(vec![1, 2, 1, 2], 2), vec![2, 1]);
+        // GNU preserves nonconsecutive supplementary group duplicates.
+        assert_eq!(sort_groups(vec![1, 2, 1, 2], 3), vec![3, 1, 2, 1, 2]);
+        assert_eq!(sort_groups(vec![], 42), vec![42]);
     }
 }
