@@ -1214,6 +1214,20 @@ fn test_stdin_w1_multibyte() {
         .stdout_is("à\ná\n");
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
+#[rstest]
+#[case::distinct_first_chars(b"\xc3\xa0\xff\n\xc3\xa1\xff\n", b"\xc3\xa0\xff\n\xc3\xa1\xff\n")]
+#[case::same_first_char(b"\xc3\xa0\n\xc3\xa0\xff\n", b"\xc3\xa0\n")]
+#[case::invalid_byte_inside_prefix(b"\xff\xc3\xa0\n\xff\xc3\xa1\n", b"\xff\xc3\xa0\n")]
+fn test_w1_invalid_utf8_after_prefix(#[case] input: &[u8], #[case] expected: &[u8]) {
+    new_ucmd!()
+        .args(&["-w1"])
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(expected);
+}
+
 #[test]
 fn test_c_locale_counts_bytes() {
     let input = "가나다라마\n가나다바사\n";

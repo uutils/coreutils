@@ -230,25 +230,31 @@ impl Uniq {
                 if self.is_c_locale {
                     // for C or POSIX we count bytes
                     key_start + remainder.len().min(limit)
-                } else if let Ok(valid) = std::str::from_utf8(remainder) {
-                    // for UTF-8 we count characters
-                    let prefix_len = Self::char_prefix_len(valid, limit);
-                    key_start + prefix_len
                 } else {
-                    // for invalid UTF-8 we count bytes
-                    key_start + remainder.len().min(limit)
+                    // for UTF-8 we count characters; an invalid byte counts as one
+                    key_start + Self::char_prefix_len(remainder, limit)
                 }
             }
         }
     }
 
-    fn char_prefix_len(text: &str, limit: usize) -> usize {
-        for (count, (idx, _)) in text.char_indices().enumerate() {
-            if count == limit {
-                return idx;
+    /// Length in bytes of the first `limit` characters of `bytes`. Bytes that
+    /// are not valid UTF-8 count as one character each, so they cannot change
+    /// how the characters before them are counted.
+    fn char_prefix_len(bytes: &[u8], limit: usize) -> usize {
+        let mut pos = 0;
+        for _ in 0..limit {
+            if pos == bytes.len() {
+                break;
             }
+            let chunk = &bytes[pos..bytes.len().min(pos + 4)];
+            let valid = match std::str::from_utf8(chunk) {
+                Ok(text) => text,
+                Err(e) => std::str::from_utf8(&chunk[..e.valid_up_to()]).unwrap_or(""),
+            };
+            pos += valid.chars().next().map_or(1, char::len_utf8);
         }
-        text.len()
+        pos
     }
 
     fn build_meta(&self, line: &[u8], meta: &mut LineMeta) {
