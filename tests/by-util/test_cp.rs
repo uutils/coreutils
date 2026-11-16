@@ -1771,6 +1771,72 @@ fn test_cp_backup_numbered_allows_source_named_like_backup() {
     assert_eq!(at.read(TEST_HELLO_WORLD_SOURCE), "source content");
 }
 
+// The VERSION_CONTROL branches are unit tested in uucore's backup_control;
+// these check that cp passes the variable through.
+#[test]
+fn test_cp_backup_short_reads_env() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.env("VERSION_CONTROL", "numbered")
+        .arg("-b")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(
+        at.read(format!("{TEST_HOW_ARE_YOU_SOURCE}.~1~")),
+        "How are you?\n"
+    );
+}
+
+const VALID_BACKUP_TYPES: &str = "Valid arguments are:
+  - 'none', 'off'
+  - 'simple', 'never'
+  - 'existing', 'nil'
+  - 'numbered', 't'";
+
+// A rejected backup type is reported once (not "cp: cp: ..."), followed by the
+// --help hint, like GNU, mv and ln.
+#[test]
+fn test_cp_backup_invalid_env() {
+    new_ucmd!()
+        .env("VERSION_CONTROL", "bogus")
+        .arg("-b")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .fails_with_code(1)
+        .usage_error(format!(
+            "invalid argument 'bogus' for '$VERSION_CONTROL'\n{VALID_BACKUP_TYPES}"
+        ));
+}
+
+#[test]
+fn test_cp_backup_invalid_option() {
+    new_ucmd!()
+        .arg("--backup=bogus")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .fails_with_code(1)
+        .usage_error(format!(
+            "invalid argument 'bogus' for 'backup type'\n{VALID_BACKUP_TYPES}"
+        ));
+}
+
+// "n" could be "none" or "numbered", so it must be rejected
+#[test]
+fn test_cp_backup_env_ambiguous() {
+    new_ucmd!()
+        .env("VERSION_CONTROL", "n")
+        .arg("--backup")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .fails_with_code(1)
+        .usage_error(format!(
+            "ambiguous argument 'n' for '$VERSION_CONTROL'\n{VALID_BACKUP_TYPES}"
+        ));
+}
+
 #[test]
 fn test_cp_backup_no_clobber_conflicting_options() {
     new_ucmd!()
