@@ -79,12 +79,32 @@ pub fn create_dest_restrictive<P: AsRef<Path>>(path: P, nofollow: bool) -> io::R
     Ok(File::from(fd))
 }
 
+/// The permission bits to give a copy of a file whose mode is `src_mode`.
+///
+/// If the chown of the copy did not take, it belongs to whoever ran the
+/// copy, and keeping setuid/setgid would hand them a binary running as
+/// themselves that used to run as someone else, so those bits are dropped.
+pub fn preserved_mode(src_mode: u32, ownership_preserved: bool) -> u32 {
+    let mode = src_mode & 0o7777;
+    if ownership_preserved {
+        mode
+    } else {
+        mode & !0o6000
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::{Read, Write};
     use std::os::unix::fs::{MetadataExt, OpenOptionsExt, symlink};
     use tempfile::tempdir;
+
+    #[test]
+    fn preserved_mode_drops_setuid_setgid_only_without_ownership() {
+        assert_eq!(preserved_mode(0o10_7755, true), 0o7755);
+        assert_eq!(preserved_mode(0o10_7755, false), 0o1755);
+    }
 
     #[test]
     fn open_source_follows_when_not_nofollow() {

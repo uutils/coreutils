@@ -8,11 +8,12 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, Read, Stdin, Stdout, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Stdin, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use uucore::char_width::char_info_at;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
+use uucore::io::InputReader;
 use uucore::translate;
 use uucore::{format_usage, show};
 
@@ -284,21 +285,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-enum Input {
-    Stdin(Stdin),
-    File(File),
-}
-
-impl Read for Input {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            Self::Stdin(s) => s.read(buf),
-            Self::File(f) => f.read(buf),
-        }
-    }
-}
-
-fn open(path: &OsString) -> UResult<BufReader<Input>> {
+fn open(path: &OsString) -> UResult<BufReader<InputReader<File, Stdin>>> {
     // some platforms show different read error
     #[cfg(any(target_os = "wasi", windows))]
     {
@@ -311,12 +298,12 @@ fn open(path: &OsString) -> UResult<BufReader<Input>> {
         }
     }
     if path == "-" {
-        return Ok(BufReader::new(Input::Stdin(stdin())));
+        return Ok(BufReader::new(InputReader::Stdin(stdin())));
     }
     let f = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
     let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
-    Ok(BufReader::new(Input::File(f)))
+    Ok(BufReader::new(InputReader::File(f)))
 }
 
 fn next_tabstop(tab_config: &TabConfig, col: usize) -> Option<usize> {
@@ -497,9 +484,24 @@ struct PrintState {
     // width, bytes). They are absorbed into a tab when a run reaches a tab stop
     // and otherwise emitted verbatim by write_tabs. Empty for ASCII-only input.
     pending_wide: Vec<(usize, usize, Vec<u8>)>,
+    // Set once a blank is reached at or past the last tab stop: from there on
+    // the rest of the line is written as is, even if backspaces later move the
+    // column back before that tab stop.
+    past_last_stop: bool,
 }
 
 impl PrintState {
+    fn new() -> Self {
+        Self {
+            col: 0,
+            scol: 0,
+            leading: true,
+            pctype: CharType::Other,
+            pending_wide: Vec::new(),
+            past_last_stop: false,
+        }
+    }
+
     // reinitializes the PrintState struct to beginning of line values
     fn new_line(&mut self) {
         self.col = 0;
@@ -507,6 +509,7 @@ impl PrintState {
         self.leading = true;
         self.pctype = CharType::Other;
         self.pending_wide.clear();
+        self.past_last_stop = false;
     }
 }
 
@@ -590,8 +593,15 @@ fn unexpand_buf(
 
     while byte < buf.len() {
         // when we have a finite number of columns, never convert past the last column,
-        // but only fast forward if there are no backspaces that could move col back
-        if lastcol > 0 && print_state.col >= lastcol && !buf[byte..].contains(&b'\x08') {
+        // but only fast forward if there are no backspaces that could move col back,
+        // or once a blank there has ended conversion for the rest of the line. A
+        // line that goes on in the next read keeps its state, so it is only
+        // fast forwarded once it ends here.
+        if lastcol > 0
+            && print_state.col >= lastcol
+            && (print_state.past_last_stop
+                || (buf.last() == Some(&b'\n') && !buf[byte..].contains(&b'\x08')))
+        {
             write_tabs(output, tab_config, print_state, true)?;
             output.write_all(&buf[byte..])?;
             print_state.scol = print_state.col;
@@ -620,6 +630,13 @@ fn unexpand_buf(
         // now figure out how many columns this char takes up, and maybe print it
         let tabs_buffered = print_state.leading || options.aflag;
         match ctype {
+            CharType::Space | CharType::Tab if lastcol > 0 && print_state.col >= lastcol => {
+                // A blank at or past the last tab stop ends conversion for the
+                // rest of the line: the fast path above writes the blanks
+                // buffered up to it and copies the rest, this blank included.
+                print_state.past_last_stop = true;
+                continue;
+            }
             CharType::Space | CharType::Tab => {
                 // A buffered multibyte blank must be remembered so it can be
                 // emitted verbatim if its run is not converted to a tab.
@@ -674,22 +691,41 @@ fn unexpand_file(
     options: &Options,
     lastcol: usize,
     tab_config: &TabConfig,
+    line_state: &mut PrintState,
 ) -> UResult<()> {
     let mut input = open(file)?;
-    let mut print_state = PrintState {
-        col: 0,
-        scol: 0,
-        leading: true,
-        pctype: CharType::Other,
-        pending_wide: Vec::new(),
-    };
+    // Work on a local copy of the line state, so it can stay in registers
+    // while unexpanding, and hand it back when done with this file.
+    let mut print_state = std::mem::replace(line_state, PrintState::new());
+    let result = unexpand_input(
+        &mut input,
+        file,
+        output,
+        options,
+        lastcol,
+        tab_config,
+        &mut print_state,
+    );
+    *line_state = print_state;
+    result
+}
 
+/// Unexpands everything `input` yields, carrying the line state in `print_state`.
+fn unexpand_input(
+    input: &mut impl BufRead,
+    file: &OsString,
+    output: &mut BufWriter<Stdout>,
+    options: &Options,
+    lastcol: usize,
+    tab_config: &TabConfig,
+    print_state: &mut PrintState,
+) -> UResult<()> {
     while let buf @ [_, ..] = input
         .fill_buf()
         .map_err(|e| e.map_err_context(|| file.maybe_quote().to_string()) as Box<dyn UError>)?
     {
         for line in buf.split_inclusive(|b| *b == b'\n') {
-            unexpand_buf(line, output, options, lastcol, tab_config, &mut print_state)?;
+            unexpand_buf(line, output, options, lastcol, tab_config, print_state)?;
             if let Some(b'\n') = line.last() {
                 print_state.new_line();
             }
@@ -697,8 +733,7 @@ fn unexpand_file(
         let len = buf.len();
         input.consume(len);
     }
-    // write out anything remaining
-    write_tabs(output, tab_config, &mut print_state, options.aflag)
+    Ok(())
 }
 
 fn unexpand(options: &Options) -> UResult<()> {
@@ -713,12 +748,25 @@ fn unexpand(options: &Options) -> UResult<()> {
         0
     };
 
+    // Input files form a single stream: a line that does not end in a
+    // newline continues in the next file.
+    let mut print_state = PrintState::new();
+
     for file in &options.files {
-        if let Err(e) = unexpand_file(file, &mut output, options, lastcol, tab_config) {
+        if let Err(e) = unexpand_file(
+            file,
+            &mut output,
+            options,
+            lastcol,
+            tab_config,
+            &mut print_state,
+        ) {
             show!(e);
             set_exit_code(1);
         }
     }
+    // write out anything remaining
+    write_tabs(&mut output, tab_config, &mut print_state, options.aflag)?;
     output.flush()?;
     Ok(())
 }

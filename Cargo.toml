@@ -34,7 +34,7 @@ members = [
 [workspace.package]
 categories = ["command-line-utilities"]
 edition = "2024"
-rust-version = "1.88.0"
+rust-version = "1.89"
 homepage = "https://github.com/uutils/coreutils"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 license = "MIT"
@@ -124,7 +124,9 @@ selinux = "0.6"
 syn = { version = "3.0", features = ["full"] }
 tempfile = "3.15.0"
 terminal_size = "0.4.0"
-textwrap = { version = "0.16.1", features = ["terminal_size"] }
+textwrap = { version = "0.16.1", default-features = false, features = [
+  "terminal_size",
+] }
 thiserror = "2.0.3"
 time = { version = "0.3.36" }
 quote = "1.0.36"
@@ -625,6 +627,31 @@ feat_os_unix_android = [
   "feat_Tier1",
   #
   "feat_require_unix",
+]
+# "feat_os_unix_illumos" == set of utilities which can be built on the "x86_64-unknown-illumos" target
+feat_os_unix_illumos = [
+  "feat_common_core",
+  # todo: use feat_Tier1 if whoami and uptime were supported <https://github.com/uutils/coreutils/issues/15520>
+  # mknod, stat: wrong unsafe? <https://github.com/rust-lang/libc/issues/5646>
+  "chgrp",
+  "chmod",
+  "chown",
+  "df",
+  "du",
+  "env",
+  "groups",
+  "hostname",
+  # "id" has wrong cfg?
+  "install",
+  "kill",
+  "logname",
+  "mkfifo",
+  "more",
+  "nohup",
+  "nproc",
+  "stty",
+  "sync",
+  "timeout",
 ]
 ## feature sets with requirements (restricting cross-platform availability)
 #

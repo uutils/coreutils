@@ -858,9 +858,39 @@ fn test_chown_file_notexisting() {
         .fails()
         .stdout_contains(format!(
             "failed to change ownership of 'not_existing' to {user_name}"
-        ));
-    // TODO: uncomment once message changed from "cannot dereference" to "cannot access"
-    // result.stderr_contains("cannot access 'not_existing': No such file or directory");
+        ))
+        .stderr_contains("cannot access 'not_existing': No such file or directory");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "openbsd")))]
+fn test_chown_cannot_access_vs_cannot_dereference() {
+    // GNU says "cannot dereference" only for a symlink whose target is missing,
+    // and "cannot access" when the operand itself can't be reached.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("f");
+    at.symlink_file("missing", "dangling");
+    let uid = at.metadata("f").uid().to_string();
+
+    scene
+        .ucmd()
+        .arg(&uid)
+        .arg("f/")
+        .fails_with_code(1)
+        .stderr_is("chown: cannot access 'f/': Not a directory\n");
+    scene
+        .ucmd()
+        .arg(&uid)
+        .arg("dir/missing")
+        .fails_with_code(1)
+        .stderr_is("chown: cannot access 'dir/missing': No such file or directory\n");
+    scene
+        .ucmd()
+        .arg(&uid)
+        .arg("dangling")
+        .fails_with_code(1)
+        .stderr_is("chown: cannot dereference 'dangling': No such file or directory\n");
 }
 
 #[test]
@@ -1166,5 +1196,32 @@ fn test_repeated_flags_are_accepted() {
             .arg(geteuid().to_string())
             .arg("dir")
             .succeeds();
+    }
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "chown -v must print +ID specs as plain IDs"]
+fn test_chown_verbose_broken_symlink_plus_ids() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.symlink_file("absent", "ghost");
+    let uid = rustix::process::geteuid().as_raw();
+    let gid = rustix::process::getegid().as_raw();
+    for (spec, expected) in [
+        (
+            format!("+{uid}"),
+            format!("failed to change ownership of 'ghost' to {uid}\n"),
+        ),
+        (
+            format!(":+{gid}"),
+            format!("failed to change group of 'ghost' to {gid}\n"),
+        ),
+    ] {
+        scene
+            .ucmd()
+            .args(&["-v", &spec, "ghost"])
+            .fails_with_code(1)
+            .stdout_is(expected)
+            .stderr_contains("chown: cannot dereference 'ghost': ");
     }
 }

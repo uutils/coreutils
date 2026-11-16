@@ -1,8 +1,8 @@
 name: Android
 
 # spell-checker:ignore (people) reactivecircus juliangruber
-# spell-checker:ignore (shell/tools) TERMUX nextest udevadm pkill
-# spell-checker:ignore (misc) swiftshader playstore DATALOSS noaudio
+# spell-checker:ignore (shell/tools) TERMUX nextest udevadm pkill cmdline commandlinetools sdkmanager
+# spell-checker:ignore (misc) swiftshader playstore noaudio
 
 on:
   pull_request:
@@ -29,7 +29,7 @@ env:
 
 jobs:
   test_android:
-    name: Test builds
+    name: ${{ matrix.test-suite == 'all' && 'Test builds' || 'Checksum and wc tests' }} (API ${{ matrix.api-level }}, ${{ matrix.arch }})
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -37,9 +37,16 @@ jobs:
         os: [ubuntu-latest] # , macos-latest
         cores: [4] # , 6
         ram: [4096]
-        api-level: [28]
+        api-level: [28, "37.0"]
         target: [google_apis_playstore]
         arch: [x86_64] # ,x86 ,arm64-v8a
+        include:
+          - api-level: 28
+            test-suite: all
+          # Keep full-suite coverage on API 28. API 37 has separate filesystem
+          # and libc compatibility failures; cover the CPU-feature consumers here.
+          - api-level: "37.0"
+            test-suite: cksum-wc
     runs-on: ${{ matrix.os }}
     env:
       EMULATOR_RAM_SIZE: ${{ matrix.ram }}
@@ -64,7 +71,6 @@ jobs:
       continue-on-error: true
       run: |
         ls -lah /mnt/
-        cat /mnt/DATALOSS_WARNING_README.txt
         sudo mkdir /mnt/data
         sudo chmod a+rwx /mnt/data
         mkdir /mnt/data/.android && ln -s /mnt/data/.android ~/.android
@@ -78,6 +84,14 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
+    - name: Install Android SDK command-line tools 22.0
+      run: |
+        curl --fail --location --retry 3 --output "$RUNNER_TEMP/commandlinetools.zip" \
+          https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip
+        unzip -q "$RUNNER_TEMP/commandlinetools.zip" -d "$RUNNER_TEMP/android-tools"
+        mv "$ANDROID_HOME/cmdline-tools/latest" "$RUNNER_TEMP/android-tools-previous"
+        mv "$RUNNER_TEMP/android-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+        "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --version
     - name: Collect information about runner
       if: always()
       continue-on-error: true
@@ -121,6 +135,7 @@ jobs:
         disk-size: ${{ env.EMULATOR_DISK_SIZE }}
         cores: ${{ env.EMULATOR_CORES }}
         force-avd-creation: true
+        disable-animations: false
         emulator-options: ${{ env.COMMON_EMULATOR_OPTIONS }} -no-snapshot-load
         emulator-boot-timeout: ${{ env.EMULATOR_BOOT_TIMEOUT }}
         script: |
@@ -166,15 +181,16 @@ jobs:
         disk-size: ${{ env.EMULATOR_DISK_SIZE }}
         cores: ${{ env.EMULATOR_CORES }}
         force-avd-creation: false
+        disable-animations: false
         emulator-options: ${{ env.COMMON_EMULATOR_OPTIONS }} -no-snapshot-save -snapshot ${{ env.AVD_CACHE_KEY }}
         emulator-boot-timeout: ${{ env.EMULATOR_BOOT_TIMEOUT }}
         # This is not a usual script. Every line is executed in a separate shell with `sh -c`. If
         # one of the lines returns with error the whole script is failed (like running a script with
         # set -e) and in consequences the other lines (shells) are not executed.
         script: |
-          util/android-commands.sh sync_host
+          timeout --verbose --kill-after=30s 10m util/android-commands.sh sync_host
           util/android-commands.sh build
-          util/android-commands.sh tests
+          util/android-commands.sh tests "${{ matrix.test-suite }}"
           if [ "${{ steps.rust-cache.outputs.cache-hit }}" != 'true' ]; then util/android-commands.sh sync_image; fi; exit 0
     - name: Collect information about runner resources
       if: always()

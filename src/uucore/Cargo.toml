@@ -59,6 +59,7 @@ blake3 = { workspace = true, optional = true }
 sm3 = { workspace = true, optional = true }
 crc-fast = { workspace = true, optional = true, features = ["std"] }
 bigdecimal = { workspace = true, optional = true }
+num-bigint = { workspace = true, optional = true }
 num-traits = { workspace = true, optional = true }
 
 # icu stuff
@@ -156,7 +157,13 @@ backup-control = ["fs"]
 colors = []
 diagnostics = ["dep:ariadne"]
 checksum = ["base64-simd", "quoting-style", "rustix/fs", "sum"]
-encoding = ["data-encoding", "data-encoding-macro", "z85", "base64-simd"]
+encoding = [
+  "data-encoding",
+  "data-encoding-macro",
+  "z85",
+  "base64-simd",
+  "num-bigint",
+]
 entries = ["libc", "rustix/fs", "rustix/process"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
 fast-inc = []
@@ -188,7 +195,7 @@ i18n-datetime = [
 ]
 mode = ["libc", "quoting-style", "rustix/process"]
 numeric-str-cmp = ["i18n-decimal"]
-perms = ["entries", "libc", "safe-traversal", "walkdir"]
+perms = ["entries", "safe-traversal", "walkdir"]
 buf-copy = ["pipes"]
 parser-num = ["extendedbigdecimal", "num-traits"]
 parser-size = ["parser-num", "procfs"]
@@ -196,7 +203,7 @@ parser-glob = ["glob"]
 parser = ["parser-num", "parser-size", "parser-glob"]
 pipes = ["fs", "rustix/pipe"]
 process = ["libc", "nix/user", "rustix/process", "windows-sys"]
-proc-info = ["tty", "walkdir"]
+proc-info = ["rustix/process", "rustix/thread", "tty", "walkdir"]
 quoting-style = ["i18n-common"]
 ranges = []
 ringbuffer = []

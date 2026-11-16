@@ -419,21 +419,10 @@ fn ignorable_io_error(error: &io::Error, settings: &Settings) -> bool {
     error.kind() == ErrorKind::BrokenPipe && settings.filter.is_some()
 }
 
-/// Custom wrapper for `write()` method
-/// Follows similar approach to GNU implementation
-/// If ignorable io error occurs, return number of bytes as if all bytes written
-/// Should not be used for Kth chunk number sub-strategies
-/// as those do not work with `--filter` option
-fn custom_write<T: Write>(bytes: &[u8], writer: &mut T, settings: &Settings) -> io::Result<usize> {
-    match writer.write(bytes) {
-        Ok(n) => Ok(n),
-        Err(e) if ignorable_io_error(&e, settings) => Ok(bytes.len()),
-        Err(e) => Err(e),
-    }
-}
-
 /// Custom wrapper for `write_all()` method
-/// Similar to [`custom_write`], but returns true or false
+/// Follows similar approach to GNU implementation: an ignorable io error is
+/// treated as if all bytes were written.
+/// Returns true or false
 /// depending on if `--filter` stdin is still open (no [`ErrorKind::BrokenPipe`] error)
 /// Should not be used for Kth chunk number sub-strategies
 /// as those do not work with `--filter` option
@@ -635,13 +624,13 @@ impl<'a> ByteChunkWriter<'a> {
     /// Without the flush, a write failure on a full device would only surface
     /// when the buffer happens to be flushed, by which point we have moved on
     /// to another chunk and would blame the wrong file.
-    fn write_chunk(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        let written = custom_write(bytes, &mut self.inner, self.settings)
-            .and_then(|n| self.inner.flush().map(|()| n));
+    fn write_chunk(&mut self, bytes: &[u8]) -> io::Result<()> {
+        let written = custom_write_all(bytes, &mut self.inner, self.settings)
+            .and_then(|_| self.inner.flush());
         match written {
-            Err(e) if ignorable_io_error(&e, self.settings) => Ok(bytes.len()),
+            Err(e) if ignorable_io_error(&e, self.settings) => Ok(()),
             Err(e) => Err(self.report_error(&e)),
-            ok => ok,
+            Ok(()) => Ok(()),
         }
     }
 }
@@ -693,8 +682,8 @@ impl ByteChunkWriter<'_> {
                 // write enough bytes to fill the current chunk, then increment
                 // the chunk number and repeat.
                 if (buf.len() as u64) < self.num_bytes_remaining_in_current_chunk {
-                    let num_bytes_written = self.write_chunk(buf)?;
-                    self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
+                    self.write_chunk(buf)?;
+                    self.num_bytes_remaining_in_current_chunk -= buf.len() as u64;
                     break;
                 }
 
@@ -704,14 +693,8 @@ impl ByteChunkWriter<'_> {
                 // self.num_bytes_remaining_in_current_chunk is lower than
                 // n, which is already usize.
                 let i = self.num_bytes_remaining_in_current_chunk as usize;
-                let num_bytes_written = self.write_chunk(&buf[..i])?;
-                self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
-
-                // It's possible that the underlying writer did not
-                // write all the bytes.
-                if num_bytes_written < i {
-                    break;
-                }
+                self.write_chunk(&buf[..i])?;
+                self.num_bytes_remaining_in_current_chunk = 0;
 
                 // Move the window to look at only the remaining bytes.
                 buf = &buf[i..];
@@ -783,47 +766,63 @@ impl<'a> LineChunkWriter<'a> {
         }
         settings.instantiate_current_writer(&filename, true)
     }
+    /// Writes `buf[start..end]` to the current chunk, then starts a new one.
+    fn flush_and_start_new_chunk(
+        &mut self,
+        buf: &[u8],
+        start: usize,
+        end: usize,
+    ) -> io::Result<()> {
+        if start < end {
+            custom_write_all(&buf[start..end], &mut self.inner, self.settings)?;
+        }
+        self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
+        self.num_lines_remaining_in_current_chunk = self.chunk_size;
+        Ok(())
+    }
+
     /// Implements `--lines=NUMBER`. GNU is unbuffered.
+    ///
+    /// Like GNU, all the lines of `buf` that belong to the same chunk are
+    /// written with a single call instead of one write per line.
     fn copy(&mut self, mut reader: impl Read, io_blksize: usize) -> io::Result<()> {
         // If the number of lines in `buf` exceeds the number of lines
         // remaining in the current chunk, we will need to write to
         // multiple different underlying writers. In that case, each
-        // iteration of this loop writes to the underlying writer that
-        // corresponds to the current chunk number.
+        // run of lines is written to the underlying writer that
+        // corresponds to its chunk number.
         let mut io_blk = vec![0u8; io_blksize];
         while let buf = reader.read(&mut io_blk).map(|n| &io_blk[..n])?
             && !buf.is_empty()
         {
+            // Start of the bytes not yet written to the current chunk.
+            let mut start = 0;
+            // Position right *after* the last separator seen.
             let mut prev = 0;
             let sep = self.settings.separator;
             for i in memchr::memchr_iter(sep, buf) {
                 // If we have exceeded the number of lines to write in the
-                // current chunk, then start a new chunk and its
-                // corresponding writer.
+                // current chunk, then write the pending lines and start a
+                // new chunk and its corresponding writer.
                 if self.num_lines_remaining_in_current_chunk == 0 {
+                    self.flush_and_start_new_chunk(buf, start, prev)?;
+                    start = prev;
                     self.num_chunks_written += 1;
-                    self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
-                    self.num_lines_remaining_in_current_chunk = self.chunk_size;
                 }
 
-                // Write the line, starting from *after* the previous
-                // separator character and ending *after* the current
-                // separator character.
-                custom_write(&buf[prev..=i], &mut self.inner, self.settings)?;
                 prev = i + 1;
                 self.num_lines_remaining_in_current_chunk -= 1;
             }
 
-            // There might be bytes remaining in the buffer, and we write
-            // them to the current chunk. But first, we may need to rotate
-            // the current chunk in case it has already reached its line
-            // limit.
-            if prev < buf.len() {
-                if self.num_lines_remaining_in_current_chunk == 0 {
-                    self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
-                    self.num_lines_remaining_in_current_chunk = self.chunk_size;
-                }
-                custom_write(&buf[prev..buf.len()], &mut self.inner, self.settings)?;
+            // There might be bytes remaining in the buffer after the last
+            // separator. They go to the current chunk, unless it has
+            // already reached its line limit, in which case we rotate.
+            if prev < buf.len() && self.num_lines_remaining_in_current_chunk == 0 {
+                self.flush_and_start_new_chunk(buf, start, prev)?;
+                start = prev;
+            }
+            if start < buf.len() {
+                custom_write_all(&buf[start..], &mut self.inner, self.settings)?;
             }
         }
         Ok(())
@@ -1292,11 +1291,10 @@ fn n_chunks_by_line_round_robin(
         out_files = OutFiles::init(num_chunks, settings, settings.elide_empty_files)?;
     }
 
-    let num_chunks: usize = num_chunks.try_into().unwrap();
     let sep = settings.separator;
     let mut closed_writers = 0;
 
-    let mut i = 0;
+    let mut i: u64 = 0;
     let mut line = Vec::new();
     loop {
         line.clear();
@@ -1309,11 +1307,11 @@ fn n_chunks_by_line_round_robin(
 
         let bytes = line.as_slice();
         if let Some(chunk_number) = kth_chunk {
-            if (i % num_chunks) == (chunk_number - 1) as usize {
+            if (i % num_chunks) == chunk_number - 1 {
                 stdout_writer.write_all(bytes)?;
             }
         } else {
-            let writer = out_files.get_writer(i % num_chunks, settings)?;
+            let writer = out_files.get_writer((i % num_chunks) as usize, settings)?;
             let writer_stdin_open = custom_write_all(bytes, writer, settings)?;
             if !writer_stdin_open {
                 closed_writers += 1;

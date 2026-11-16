@@ -773,6 +773,24 @@ fn test_du_dereference_args() {
     result.stdout_contains("0\tsublink\n");
 }
 
+#[cfg(not(windows))]
+#[test]
+fn test_du_symlink_dir_operand_trailing_slash() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir");
+    at.write("dir/file", "content");
+    at.symlink_dir("dir", "link");
+
+    // The trailing slash resolves the symlink even without -D, as in GNU du.
+    ts.ucmd()
+        .arg("-a")
+        .arg("link/")
+        .succeeds()
+        .stdout_contains("link/file\n");
+}
+
 #[cfg(target_vendor = "apple")]
 fn du_dereference(s: &str) {
     assert_eq!(s, "4\tsubdir/links/deeper_dir\n16\tsubdir/links\n");
@@ -3006,4 +3024,50 @@ du: invalid suffix in --block-size argument '1fb'
             .fails_with_code(1)
             .stderr_is("du: invalid suffix in --block-size argument '1fb'\n");
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn test_last_of_dereference_args_no_dereference_wins() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.symlink_file("missing", "dangling");
+    // -P last wins: the dangling symlink argument is not dereferenced, so du succeeds.
+    scene
+        .ucmd()
+        .args(&["--dereference-args", "-P", "dangling"])
+        .succeeds()
+        .stdout_contains("dangling");
+    // --dereference-args last wins: dereferencing the dangling argument fails.
+    scene
+        .ucmd()
+        .args(&["-P", "--dereference-args", "dangling"])
+        .fails()
+        .stderr_contains("cannot access 'dangling'");
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_dereference_args_after_dereference_wins() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.mkdir("outside");
+    at.write("outside/file", "x");
+    at.symlink_dir("outside", "dir/link");
+
+    // `--dereference-args` last wins over `-L`: only command-line arguments
+    // are dereferenced, so the symlink inside `dir` is not followed.
+    scene
+        .ucmd()
+        .args(&["-L", "--dereference-args", "dir"])
+        .succeeds()
+        .stdout_does_not_contain("dir/link");
+
+    // `-L` last wins: the symlink inside `dir` is followed and reported.
+    scene
+        .ucmd()
+        .args(&["--dereference-args", "-L", "dir"])
+        .succeeds()
+        .stdout_contains("dir/link");
 }

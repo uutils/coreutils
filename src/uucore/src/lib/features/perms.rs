@@ -14,7 +14,6 @@ use crate::{show_error, translate};
 
 use clap::{Arg, ArgMatches, Command};
 
-use libc::{gid_t, uid_t};
 use options::traverse;
 #[cfg(target_os = "linux")]
 use std::collections::HashSet;
@@ -25,22 +24,18 @@ use walkdir::WalkDir;
 
 #[cfg(target_os = "linux")]
 use crate::features::fs::FileInformation;
-use crate::features::fs::path_is_root_dir;
+use crate::features::fs::{metadata_is_root_dir, path_is_root_dir};
 #[cfg(target_os = "linux")]
 use crate::features::safe_traversal::{DirFd, FileInfo, SymlinkBehavior};
 
-use std::ffi::CString;
 use std::fs::Metadata;
-use std::io::{Error as IOError, Result as IOResult};
 use std::os::unix::fs::MetadataExt;
-
-use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
 #[derive(Debug, thiserror::Error)]
 enum PermsError {
     #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
-    Write(IOError),
+    Write(std::io::Error),
 }
 
 /// The various level of verbosity
@@ -67,24 +62,6 @@ impl Default for Verbosity {
     }
 }
 
-/// Actually perform the change of owner on a path
-fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IOResult<()> {
-    let path = path.as_ref();
-    let s = CString::new(path.as_os_str().as_bytes()).unwrap();
-    let ret = unsafe {
-        if follow {
-            libc::chown(s.as_ptr(), uid, gid)
-        } else {
-            libc::lchown(s.as_ptr(), uid, gid)
-        }
-    };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(IOError::last_os_error())
-    }
-}
-
 /// Perform the change of owner on a path
 /// with the various options
 /// and error messages management
@@ -101,7 +78,12 @@ pub fn wrap_chown<P: AsRef<Path>>(
     let path = path.as_ref();
     let mut out: String = String::new();
 
-    if let Err(e) = chown(path, dest_uid, dest_gid, follow) {
+    let res = if follow {
+        std::os::unix::fs::chown(path, Some(dest_uid), Some(dest_gid))
+    } else {
+        std::os::unix::fs::lchown(path, Some(dest_uid), Some(dest_gid))
+    };
+    if let Err(e) = res {
         match verbosity.level {
             VerbosityLevel::Silent => (),
             level => {
@@ -243,7 +225,11 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
     if !path_is_root_dir(path, would_traverse_symlink) {
         return false;
     }
+    report_root(path);
+    true
+}
 
+fn report_root(path: &Path) {
     if path.as_os_str() == "/" {
         show_error!("it is dangerous to operate recursively on '/'");
     } else {
@@ -253,7 +239,6 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
         );
     }
     show_error!("use --no-preserve-root to override this failsafe");
-    true
 }
 
 /// Whether `dir_fd` refers to the very object `meta` describes.
@@ -261,7 +246,7 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
 /// A pathname can be re-pointed between the stat and the open, so comparing
 /// (device, inode) is what detects the swap. The descriptor cannot be re-pointed after.
 #[cfg(target_os = "linux")]
-fn fd_is(dir_fd: &DirFd, meta: &Metadata) -> IOResult<bool> {
+fn fd_is(dir_fd: &DirFd, meta: &Metadata) -> std::io::Result<bool> {
     let opened = FileInfo::from_stat(&dir_fd.fstat()?);
     Ok(opened == FileInfo::new(meta.dev(), meta.ino()))
 }
@@ -305,10 +290,14 @@ impl ChownExecutor {
             return 1;
         };
 
+        // `meta` pins the descent below, so a later swap cannot slip "/" past; the
+        // path lookup still catches a symlink to "/", which `meta` did not follow.
         if self.recursive
             && self.preserve_root
-            && is_root(path, self.traverse_symlinks != TraverseSymlinks::None)
+            && (path_is_root_dir(path, self.traverse_symlinks != TraverseSymlinks::None)
+                || metadata_is_root_dir(&meta))
         {
+            report_root(path);
             // Fail-fast, do not attempt to recurse.
             return 1;
         }
@@ -747,9 +736,19 @@ impl ChownExecutor {
         get_metadata(path, follow)
             .inspect_err(|e| {
                 if self.verbosity.level != VerbosityLevel::Silent {
+                    // Like GNU, only say "dereference" when the operand itself
+                    // exists and is a symlink whose target can't be reached.
+                    let dangling_symlink = follow
+                        && path
+                            .symlink_metadata()
+                            .is_ok_and(|m| m.file_type().is_symlink());
                     show_error!(
                         "cannot {} {}: {}",
-                        if follow { "dereference" } else { "access" },
+                        if dangling_symlink {
+                            "dereference"
+                        } else {
+                            "access"
+                        },
                         path.quote(),
                         strip_errno(e)
                     );
@@ -759,7 +758,7 @@ impl ChownExecutor {
     }
 
     #[inline]
-    fn matched(&self, uid: uid_t, gid: gid_t) -> bool {
+    fn matched(&self, uid: u32, gid: u32) -> bool {
         match self.filter {
             IfFrom::All => true,
             IfFrom::User(u) => u == uid,

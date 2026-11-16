@@ -120,9 +120,14 @@ impl FileHandling {
         As a workaround, we always reopen the file even though this might not always
         be necessary.
         */
+        // A FIFO without a writer blocks `open`, and this runs on the thread that
+        // serves every followed file. Open FIFOs without waiting for a writer.
+        #[cfg(unix)]
+        let file = crate::open_file(path, true)?;
+        #[cfg(not(unix))]
+        let file = File::open(path)?;
         let data = self.get_mut(path);
-        data.reader
-            .replace(Box::new(BufReader::new(File::open(path)?)));
+        data.reader.replace(Box::new(BufReader::new(file)));
         data.symlink = path.is_symlink();
         Ok(())
     }

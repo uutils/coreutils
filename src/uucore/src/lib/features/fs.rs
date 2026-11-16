@@ -636,6 +636,14 @@ pub fn path_is_root_dir<P: AsRef<Path>>(path: P, dereference: bool) -> bool {
     }
 }
 
+/// Whether `meta`, a stat already taken, describes `/`. Unlike [`path_is_root_dir`],
+/// it does not look the path up again, which a rename could have re-pointed.
+#[cfg(unix)]
+pub fn metadata_is_root_dir(meta: &impl MetadataExt) -> bool {
+    root_file_information()
+        .is_some_and(|root| root.dev() == meta.dev() && root.inode() == meta.ino())
+}
+
 /// Check if two files are identical by comparing their contents.
 ///
 /// Returns `Ok(true)` if both files exist, are regular files, and have identical contents.
@@ -1642,6 +1650,9 @@ mod tests {
         assert!(!path_is_root_dir(dir.path(), true));
         assert!(!path_is_root_dir(dir.path().join("nonexistent"), true));
         assert!(!path_is_root_dir("", true));
+
+        assert!(metadata_is_root_dir(&fs::metadata("/").unwrap()));
+        assert!(!metadata_is_root_dir(&fs::metadata(dir.path()).unwrap()));
     }
 
     /// A symlink to `/` counts only when the caller would follow it.
