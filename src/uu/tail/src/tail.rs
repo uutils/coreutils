@@ -453,7 +453,12 @@ fn forwards_thru_file(
 /// Iterate over bytes in the file, in reverse, until we find the
 /// `num_delimiters` instance of `delimiter`, starting from `end`. The `file` is
 /// left seek'd to the position just after that delimiter.
-fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8, end: SeekFrom) -> UResult<()> {
+fn backwards_thru_file(
+    file: &mut File,
+    num_delimiters: u64,
+    delimiter: u8,
+    end: SeekFrom,
+) -> UResult<()> {
     if num_delimiters == 0 {
         file.seek(end)?;
         return Ok(());
