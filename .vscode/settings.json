@@ -2,5 +2,6 @@
     "cSpell.import": [
         "./.vscode/cSpell.json"
     ],
-    "rust-analyzer.check.command": "clippy"
+    "rust-analyzer.check.command": "clippy",
+		"rust-analyzer.vfs.extraIncludes": ["${workspaceFolder}/cfg_aliases.rs"]
 }

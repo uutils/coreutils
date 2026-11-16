@@ -12,5 +12,15 @@ pub fn register() {
             target_os = "netbsd",
             target_os = "openbsd"
         ) },
+        has_o_path: { any(target_os = "linux", target_os = "android") },
+        has_o_search: { any(
+            target_vendor = "apple",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "illumos",
+            target_os = "solaris"
+        ) },
+        selinux: { all(feature = "selinux", any(target_os = "android", target_os = "linux")) },
+        smack: { all(feature = "smack", target_os = "linux") },
     }
 }

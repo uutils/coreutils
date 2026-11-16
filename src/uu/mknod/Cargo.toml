@@ -23,6 +23,9 @@ fluent = { workspace = true }
 nix = { workspace = true, features = ["fs"] }
 uucore = { workspace = true, features = ["fs", "mode"] }
 
+[build-dependencies]
+cfg_aliases = { workspace = true }
+
 [features]
 diagnostics = ["uucore/diagnostics"]
 selinux = ["uucore/selinux"]
