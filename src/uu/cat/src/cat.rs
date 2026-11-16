@@ -101,11 +101,11 @@ enum CatError {
 type CatResult<T> = Result<T, CatError>;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-impl From<uucore::pipes::PipeError> for CatError {
-    fn from(error: uucore::pipes::PipeError) -> Self {
+impl From<uucore::io::ReadWriteError> for CatError {
+    fn from(error: uucore::io::ReadWriteError) -> Self {
         match error {
-            uucore::pipes::PipeError::Read(error) => Self::Io(error),
-            uucore::pipes::PipeError::Write(error) => Self::Write(error),
+            uucore::io::ReadWriteError::Read(error) => Self::Io(error),
+            uucore::io::ReadWriteError::Write(error) => Self::Write(error),
         }
     }
 }

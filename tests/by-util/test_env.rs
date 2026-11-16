@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel Secho sighandler putenv
+// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel Secho Sprintf Cdata iCdata uFOOa sighandler putenv
 
 #![allow(clippy::missing_errors_doc)]
 
@@ -429,6 +429,31 @@ fn test_change_directory() {
     assert_eq!(out.trim(), temporary_path.as_os_str());
 }
 
+#[cfg(not(windows))]
+#[test]
+fn test_short_option_attached_value_keeps_leading_equals() {
+    let scene = TestScenario::new(util_name!());
+    for dir in ["=d", "="] {
+        scene.fixtures.mkdir(dir);
+    }
+    for (args, dir) in [
+        (&["-C=d", "pwd"][..], "=d"),
+        (&["-vC=d", "pwd"], "=d"),
+        (&["-S-C=d pwd"], "=d"),
+        (&["-C=", "pwd"], "="),
+    ] {
+        let expected = std::fs::canonicalize(scene.fixtures.plus(dir)).unwrap();
+        let out = scene.ucmd().args(args).succeeds().stdout_move_str();
+        assert_eq!(out.trim(), expected.as_os_str(), "args: {args:?}");
+    }
+
+    scene
+        .ucmd()
+        .args(&["-a=name", "sh", "-c", "echo $0"])
+        .succeeds()
+        .stdout_is("=name\n");
+}
+
 #[cfg(windows)]
 #[test]
 fn test_change_directory() {
@@ -727,6 +752,69 @@ fn test_split_string_unset_variable_does_not_start_a_word() {
         .arg("-Sprintf [%s] a ${UU_EMPTY}")
         .succeeds()
         .stdout_is("[a][]");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_option_value_starting_with_split_string_is_not_split() {
+    let scene = TestScenario::new(util_name!());
+    let dir = "-Sprintf X";
+    scene.fixtures.mkdir(dir);
+
+    // GNU env takes the value of a detached -C, -u or -a as is
+    for args in [
+        ["-C", dir, "pwd"],
+        ["--chdir", dir, "pwd"],
+        ["--ch", dir, "pwd"],
+        ["-iC", dir, "pwd"],
+    ] {
+        scene
+            .ucmd()
+            .args(&args)
+            .succeeds()
+            .stdout_contains("/-Sprintf X\n");
+    }
+
+    for opt in ["-u", "--unset", "--un"] {
+        scene
+            .ucmd()
+            .args(&[opt, dir, "printf", "ok"])
+            .succeeds()
+            .stdout_is("ok");
+    }
+
+    // A multicall binary such as the coreutils one on Android would dispatch on
+    // the argv0, so let the shell print it.
+    for opt in ["-a", "--argv0"] {
+        scene
+            .ucmd()
+            .args(&[opt, dir, "sh", "-c", "echo \"$0\""])
+            .succeeds()
+            .stdout_is("-Sprintf X\n");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn test_attached_option_value_does_not_consume_command() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("data");
+
+    // `-Cdata` and `-uFOOa` carry their value: `printf` is the command and
+    // its `-S...` argument is passed through unchanged.
+    for opt in ["-Cdata", "-uFOOa", "-iCdata", "--chdir=data"] {
+        scene
+            .ucmd()
+            .args(&[opt, "printf", "%s", "-Sx y"])
+            .succeeds()
+            .stdout_is("-Sx y");
+    }
+
+    scene
+        .ucmd()
+        .args(&["-u", "-uX=1", "true"])
+        .fails_with_code(125)
+        .stderr_contains("cannot unset '-uX=1'");
 }
 
 #[test]
@@ -1222,6 +1310,10 @@ fn disallow_equals_sign_on_short_unset_option() {
         .stderr_contains("env: cannot unset '=': Invalid argument");
     ts.ucmd()
         .arg("-u=A1B2C3")
+        .fails_with_code(125)
+        .stderr_contains("env: cannot unset '=A1B2C3': Invalid argument");
+    ts.ucmd()
+        .arg("-vu=A1B2C3")
         .fails_with_code(125)
         .stderr_contains("env: cannot unset '=A1B2C3': Invalid argument");
     ts.ucmd().arg("--split-string=A1B=2C3=").succeeds();

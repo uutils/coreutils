@@ -191,6 +191,39 @@ impl Hash for FileInformation {
     }
 }
 
+/// The device and inode numbers of a file, which together identify it.
+#[cfg(unix)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct FileInfo {
+    pub dev: u64,
+    pub ino: u64,
+}
+
+#[cfg(unix)]
+impl FileInfo {
+    /// Create [`FileInfo`] from device and inode numbers
+    pub fn new(dev: u64, ino: u64) -> Self {
+        Self { dev, ino }
+    }
+
+    /// Get the device number
+    pub fn device(&self) -> u64 {
+        self.dev
+    }
+
+    /// Get the inode number
+    pub fn inode(&self) -> u64 {
+        self.ino
+    }
+}
+
+#[cfg(unix)]
+impl From<&fs::Metadata> for FileInfo {
+    fn from(metadata: &fs::Metadata) -> Self {
+        Self::new(metadata.dev(), metadata.ino())
+    }
+}
+
 /// Controls how symbolic links should be handled when canonicalizing a path.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MissingHandling {
@@ -1772,6 +1805,24 @@ mod tests {
         // Source symlink resolves (stat) to the target, matched against the
         // target's own lstat.
         assert!(are_hardlinks_or_one_way_symlink_to_same_file(&link, &file));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_file_info_from_metadata() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("file");
+        let link = dir.path().join("link");
+        let other = dir.path().join("other");
+        fs::write(&file, "a").unwrap();
+        fs::hard_link(&file, &link).unwrap();
+        fs::write(&other, "a").unwrap();
+
+        let info = FileInfo::from(&fs::metadata(&file).unwrap());
+        let meta = fs::metadata(&file).unwrap();
+        assert_eq!(info, FileInfo::new(meta.dev(), meta.ino()));
+        assert_eq!(info, FileInfo::from(&fs::metadata(&link).unwrap()));
+        assert_ne!(info, FileInfo::from(&fs::metadata(&other).unwrap()));
     }
 
     #[cfg(unix)]

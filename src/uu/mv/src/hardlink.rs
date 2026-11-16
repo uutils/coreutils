@@ -16,16 +16,17 @@ use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
 use uucore::display::Quotable;
+use uucore::fs::FileInfo;
 use uucore::translate;
 
 /// Tracks hardlinks during cross-partition moves to preserve them
 #[derive(Debug, Default)]
 pub struct HardlinkTracker {
     /// Maps (device, inode) -> destination path for the first occurrence
-    inode_map: FxHashMap<(u64, u64), PathBuf>,
+    inode_map: FxHashMap<FileInfo, PathBuf>,
 }
 
-type HardlinkGroups = FxHashMap<(u64, u64), Vec<PathBuf>>;
+type HardlinkGroups = FxHashMap<FileInfo, Vec<PathBuf>>;
 
 /// Groups the files being moved by hardlink, scanning them on first use
 #[derive(Debug, Default)]
@@ -89,8 +90,6 @@ impl HardlinkTracker {
         scanner: &HardlinkGroupScanner,
         options: &HardlinkOptions,
     ) -> Option<PathBuf> {
-        use std::os::unix::fs::MetadataExt;
-
         // Scan now, before this first copy removes its source, so that every
         // member of a hardlink group is still in place.
         let groups = scanner.groups();
@@ -110,7 +109,7 @@ impl HardlinkTracker {
             }
         };
 
-        let key = (metadata.dev(), metadata.ino());
+        let key = FileInfo::from(&metadata);
 
         // Check if we've already processed a file with this inode
         if let Some(existing_path) = self.inode_map.get(&key) {
@@ -201,7 +200,7 @@ impl HardlinkGroupScanner {
             // Recursively scan directory contents
             Self::scan_directory_recursive(path, groups)?;
         } else if metadata.is_file() && metadata.nlink() > 1 {
-            let key = (metadata.dev(), metadata.ino());
+            let key = FileInfo::from(&metadata);
             groups.entry(key).or_default().push(path.to_path_buf());
         }
         Ok(())
@@ -220,7 +219,7 @@ impl HardlinkGroupScanner {
             } else {
                 let metadata = entry.metadata()?;
                 if metadata.is_file() && metadata.nlink() > 1 {
-                    let key = (metadata.dev(), metadata.ino());
+                    let key = FileInfo::from(&metadata);
                     groups.entry(key).or_default().push(entry.path());
                 }
             }

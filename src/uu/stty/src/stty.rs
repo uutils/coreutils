@@ -569,11 +569,14 @@ fn print_terminal_size(
         );
     }
 
-    #[cfg(any(target_os = "linux", target_os = "redox"))]
-    {
-        let line = termios.line_discipline;
-        printer.print(&translate!("stty-output-line", "line" => line));
-    }
+    #[cfg(any(
+        target_os = "android",
+        target_os = "fuchsia",
+        target_os = "haiku",
+        target_os = "linux",
+        target_os = "redox"
+    ))]
+    printer.print(&translate!("stty-output-line", "line" => termios.line_discipline));
     printer.flush();
 }
 
@@ -891,7 +894,11 @@ fn apply_saved_state(termios: &mut Termios, state: &(CFlags, CCFlags)) {
 }
 
 fn apply_special_setting(
-    _termios: &mut Termios,
+    #[cfg_attr(
+        not(any(target_os = "linux", target_os = "android")),
+        expect(unused_variables)
+    )]
+    termios: &mut Termios,
     setting: &SpecialSetting,
     fd: impl AsFd,
 ) -> io::Result<()> {
@@ -907,7 +914,7 @@ fn apply_special_setting(
             // nix only defines Termios's `line_discipline` field on these platforms
             #[cfg(any(target_os = "linux", target_os = "android"))]
             {
-                _termios.line_discipline = *n;
+                termios.line_discipline = *n;
             }
         }
     }

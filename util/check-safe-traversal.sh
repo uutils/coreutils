@@ -318,6 +318,30 @@ if have_util split; then
     fi
     echo "✓ split refuses to overwrite its input via a swapped output symlink"
     rm -f split_victim split_swap_*
+
+    # Existing outputs take the EEXIST fallback after O_CREAT|O_EXCL. The
+    # reopen must retain O_CREAT so Linux's protected-file checks apply
+    # (issue #15821).
+    printf '0123456789abcdef' > split_input
+    : > split_exist_aa
+    : > split_exist_ab
+    strace -f -e trace=openat -o strace_split_existing_output.log \
+        $split_cmd -b 4 split_input split_exist_ 2>/dev/null || true
+
+    # Select the EEXIST fallback, excluding O_EXCL create attempts and unrelated
+    # O_APPEND reopens.
+    split_reopens=$(grep -E 'openat\(AT_FDCWD, "split_exist_[a-z]+",' strace_split_existing_output.log \
+        | grep -v 'O_EXCL' | grep -v 'O_APPEND' || true)
+    if [ -z "$split_reopens" ]; then
+        cat strace_split_existing_output.log
+        fail_immediately "split did not reopen the existing outputs - strace check broken (issue #15821)"
+    fi
+    if echo "$split_reopens" | grep -vq 'O_CREAT'; then
+        cat strace_split_existing_output.log
+        fail_immediately "split must reopen existing outputs with O_CREAT so fs.protected_regular applies (issue #15821)"
+    fi
+    echo "✓ split reopens existing outputs with O_CREAT"
+    rm -f split_input split_exist_*
 fi
 
 # mv cross-device (EXDEV) must use fd-based *xattr ops (issue #10014).
