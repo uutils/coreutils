@@ -13,7 +13,7 @@ mkdir-help-context = comme -Z, ou si CTX est spécifié, définir le contexte de
 mkdir-error-invalid-mode = mode invalide { $mode }
 mkdir-error-empty-directory-name = impossible de créer le répertoire '' : Aucun fichier ou répertoire de ce type
 mkdir-error-failed-to-create-tree = échec de la création de l'arborescence complète
-mkdir-error-cannot-set-permissions = impossible de définir les permissions { $path }
+mkdir-error-cannot-set-permissions = impossible de modifier les permissions de { $path }
 mkdir-error-cannot-create-directory = impossible de créer le répertoire { $path }
 
 # Sortie détaillée
