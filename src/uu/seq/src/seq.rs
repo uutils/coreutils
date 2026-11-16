@@ -5,13 +5,13 @@
 
 // spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat biguint
 
+use std::cmp::Ordering;
 use std::ffi::{OsStr, OsString};
 use std::io::{BufWriter, Write, stdout};
 
 use clap::{Arg, ArgAction, Command};
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
-use num_traits::Zero;
 
 use uucore::error::{FromIo, UResult};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
@@ -409,12 +409,15 @@ fn fast_print_seq(
     Ok(())
 }
 
-fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> bool {
-    if increment >= &T::zero() {
-        next > last
+/// Whether `next` is past `last`, given the value of `next.partial_cmp(last)`.
+/// A NaN value (e.g. `inf + -inf`) does not compare, and is never within the range.
+fn done_printing(ordering: Option<Ordering>, increasing: bool) -> bool {
+    let past = if increasing {
+        Ordering::Greater
     } else {
-        next < last
-    }
+        Ordering::Less
+    };
+    ordering.is_none_or(|ord| ord == past)
 }
 
 /// Arbitrary precision decimal number code path ("slow" path)
@@ -455,15 +458,25 @@ fn print_seq(
 
     let mut value = first;
 
+    let increasing = increment >= ExtendedBigDecimal::zero();
     let mut is_first_iteration = true;
-    while !done_printing(&value, &increment, &last) {
+    loop {
+        let ordering = value.partial_cmp(&last);
+        if done_printing(ordering, increasing) {
+            break;
+        }
         if !is_first_iteration {
             stdout.write_all(separator.as_encoded_bytes())?;
         }
         format.fmt(&mut stdout, &value)?;
+        is_first_iteration = false;
+        // Nothing follows the last value. Stopping here also ends `seq inf -1 inf`,
+        // where adding the increment leaves the value unchanged.
+        if ordering == Some(Ordering::Equal) {
+            break;
+        }
         // TODO Implement augmenting addition.
         value = value + increment.clone();
-        is_first_iteration = false;
     }
     if !is_first_iteration {
         stdout.write_all(terminator.as_encoded_bytes())?;
