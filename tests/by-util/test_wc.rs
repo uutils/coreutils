@@ -825,6 +825,51 @@ fn test_posixly_correct_whitespace() {
         .stdout_is("1\n");
 }
 
+#[test]
+fn test_words_with_all_ascii_whitespace_across_blocks() {
+    // Each repetition has 8 words, separated by every ASCII whitespace byte.
+    // Control characters other than whitespace are part of words.
+    let input = "a\tb\nc\x0bd\x0ce\rf g\x01 \x7f\n".repeat(5_000);
+    for posixly_correct in [false, true] {
+        let mut cmd = new_ucmd!();
+        if posixly_correct {
+            cmd.env("POSIXLY_CORRECT", "1");
+        }
+        cmd.args(&["-lw"])
+            .pipe_in(input.clone())
+            .succeeds()
+            .stdout_only("  10000   40000\n");
+    }
+}
+
+#[rstest]
+#[case::words(&["-w"], false, "40000\n")]
+#[case::lines_words(&["-lw"], false, "  10000   40000\n")]
+#[case::chars_words(&["-mw"], false, "  40000  200000\n")]
+#[case::all_but_width(&["-lmw"], false, "  10000   40000  200000\n")]
+#[case::with_width(&["-lmwL"], false, "  10000   40000  200000      23\n")]
+#[case::posix_words(&["-lw"], true, "  10000   30000\n")]
+fn test_words_with_multibyte_text_across_buffers(
+    #[case] args: &[&str],
+    #[case] posixly_correct: bool,
+    #[case] expected: &str,
+) {
+    // Each line has 4 words, 20 chars and 26 bytes, and is 23 columns wide as
+    // U+3000 is double width. U+3000 and U+2028 are whitespace except under
+    // POSIXLY_CORRECT. The input is large enough that multi-byte characters
+    // and words straddle the reader's buffer boundaries.
+    let input = "héllo\u{3000}wörld\tdone \u{2028}x\n".repeat(10_000);
+    let mut cmd = new_ucmd!();
+    cmd.env("LC_ALL", "C.UTF-8");
+    if posixly_correct {
+        cmd.env("POSIXLY_CORRECT", "1");
+    }
+    cmd.args(args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected);
+}
+
 #[cfg(unix)]
 #[rstest::rstest]
 #[case::partial(6, 1)]
