@@ -1575,3 +1575,18 @@ fn test_hard_link_source_permission_denied() {
         .stderr_only("ln: failed to access 'dir/x': Permission denied\n");
     assert!(!at.file_exists("link"));
 }
+
+#[test]
+fn test_logical_dangling_source_backup_keeps_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("dest", "CURRENT\n");
+    at.write("dest~", "PREVIOUS\n");
+    at.symlink_file("missing", "src");
+
+    ucmd.args(&["-L", "--backup=simple", "--suffix=~", "src", "dest"])
+        .fails()
+        .stderr_contains("failed to access 'src'");
+
+    assert_eq!(at.read("dest"), "CURRENT\n");
+    assert_eq!(at.read("dest~"), "PREVIOUS\n");
+}
