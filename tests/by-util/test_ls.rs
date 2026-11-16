@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline onetwo somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE NOTCAPABLE iproduct newfstatat isox
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE NOTCAPABLE iproduct newfstatat isox abmon alef wcswidth
 
 #![allow(
     clippy::similar_names,
@@ -32,6 +32,8 @@ use uutests::unwrap_or_return;
 use uutests::util::TestScenario;
 #[cfg(any(unix, feature = "selinux"))]
 use uutests::util::expected_result;
+#[cfg(unix)]
+use uutests::util::is_locale_available;
 use uutests::{at_and_ucmd, path, util_name};
 
 const LONG_ARGS: &[&str] = &[
@@ -2640,6 +2642,220 @@ fn test_ls_time_recent_future() {
         .arg("--time-style=+RECENT")
         .succeeds()
         .stdout_contains("RECENT");
+}
+
+/// A non-C locale case for `ls -l --time-style=locale` on a March 2025 file.
+#[cfg(unix)]
+struct LocaleTimeStyleCase {
+    locale: &'static str,
+    /// Stdout must contain a char in this range (the locale's script).
+    script_range: Option<(char, char)>,
+    /// Non-UTF-8 locales keep the C names until ICU names are transcoded to
+    /// the locale's codeset (GNU prints them in that codeset).
+    c_names: bool,
+    /// Whether `2025` may appear, false for non-Gregorian calendars.
+    allow_gregorian_year: bool,
+}
+
+/// `ls -l --time-style=locale` localizes month names and calendars; locales
+/// that are not installed are skipped.
+#[test]
+#[cfg(unix)]
+fn test_ls_time_style_locale() {
+    // 2025-03-12 10:20:00 UTC.
+    const MTIME_SECS: u64 = 1_741_774_800;
+    const C_LOCALE_OUTPUT: &str = "Mar 12  2025";
+
+    // C, and a locale ICU has no data for, give the English abbreviation.
+    for locale in ["C", "xx_YY.UTF-8"] {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let f = at.make_file("probe");
+        f.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(MTIME_SECS))
+            .unwrap();
+
+        let result = scene
+            .ucmd()
+            .env("LC_ALL", locale)
+            .env("TZ", "UTC")
+            .arg("-l")
+            .arg("--time-style=locale")
+            .arg("probe")
+            .succeeds();
+
+        let stdout_lossy = String::from_utf8_lossy(result.stdout());
+        assert!(
+            stdout_lossy.contains(C_LOCALE_OUTPUT),
+            "[{locale}] expected stdout to contain {C_LOCALE_OUTPUT:?}, got: {stdout_lossy}"
+        );
+    }
+
+    let cases: &[LocaleTimeStyleCase] = &[
+        LocaleTimeStyleCase {
+            locale: "ru_RU.KOI8-R",
+            script_range: None,
+            c_names: true,
+            allow_gregorian_year: true,
+        },
+        LocaleTimeStyleCase {
+            locale: "fa_IR.UTF-8",
+            // Persian/Arabic script: U+0600..=U+06FF
+            script_range: Some(('\u{0600}', '\u{06FF}')),
+            c_names: false,
+            // Persian calendar: March 12 2025 → 1403, never 2025.
+            allow_gregorian_year: false,
+        },
+        LocaleTimeStyleCase {
+            locale: "am_ET.UTF-8",
+            // Ethiopic script: U+1200..=U+137F
+            script_range: Some(('\u{1200}', '\u{137F}')),
+            c_names: false,
+            // Ethiopian calendar: March 12 2025 → 2017.
+            allow_gregorian_year: false,
+        },
+        LocaleTimeStyleCase {
+            locale: "th_TH.UTF-8",
+            // Thai script: U+0E00..=U+0E7F
+            script_range: Some(('\u{0E00}', '\u{0E7F}')),
+            c_names: false,
+            // Buddhist calendar: 2025 + 543 = 2568.
+            allow_gregorian_year: false,
+        },
+        LocaleTimeStyleCase {
+            locale: "zh_CN.GB18030",
+            script_range: None,
+            c_names: true,
+            allow_gregorian_year: true,
+        },
+    ];
+
+    for case in cases {
+        if !is_locale_available(case.locale) {
+            println!("Skipping: {} locale not available", case.locale);
+            continue;
+        }
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let f = at.make_file("probe");
+        f.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(MTIME_SECS))
+            .unwrap();
+
+        let result = scene
+            .ucmd()
+            .env("LC_ALL", case.locale)
+            .env("TZ", "UTC")
+            .arg("-l")
+            .arg("--time-style=locale")
+            .arg("probe")
+            .succeeds();
+
+        let bytes = result.stdout();
+        let stdout_lossy = String::from_utf8_lossy(bytes);
+        let locale = case.locale;
+
+        if case.c_names {
+            assert!(
+                stdout_lossy.contains(C_LOCALE_OUTPUT) && bytes.is_ascii(),
+                "[{locale}] expected the C names ({C_LOCALE_OUTPUT:?}), got: {stdout_lossy}"
+            );
+            continue;
+        }
+        assert!(
+            !stdout_lossy.contains(C_LOCALE_OUTPUT),
+            "[{locale}] stdout should not contain {C_LOCALE_OUTPUT:?} (C-locale fallback), got: {stdout_lossy}"
+        );
+        if let Some((lo, hi)) = case.script_range {
+            assert!(
+                stdout_lossy.chars().any(|c| (lo..=hi).contains(&c)),
+                "[{locale}] stdout should contain a char in U+{lo_u:04X}..=U+{hi_u:04X}, got: {stdout_lossy}",
+                lo_u = lo as u32,
+                hi_u = hi as u32
+            );
+        }
+        if !case.allow_gregorian_year {
+            assert!(
+                !stdout_lossy.contains("2025"),
+                "[{locale}] stdout should not contain Gregorian year 2025 \
+                 (alternate calendar expected), got: {stdout_lossy}"
+            );
+        }
+    }
+}
+
+/// Like GNU `tests/ls/abmon-align.sh`: abbreviated month names have the same
+/// display width and are all distinct.
+#[cfg(unix)]
+#[test]
+fn test_ls_abmon_align() {
+    use std::collections::HashSet;
+    use unicode_width::UnicodeWidthChar;
+
+    let filenames: Vec<String> = (1..=12).map(|i| format!("{i:02}.ts")).collect();
+    let timestamps: Vec<u64> = (1..=12)
+        .map(|mon| {
+            jiff::civil::date(2025, mon, 15)
+                .to_zoned(jiff::tz::TimeZone::UTC)
+                .unwrap()
+                .timestamp()
+                .as_second() as u64
+        })
+        .collect();
+
+    for locale in ["C", "fi_FI.UTF-8", "fr_FR.UTF-8", "ar_SY.UTF-8"] {
+        if !is_locale_available(locale) {
+            continue;
+        }
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        for (name, &ts) in filenames.iter().zip(timestamps.iter()) {
+            at.make_file(name)
+                .set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(ts))
+                .unwrap();
+        }
+
+        let mut cmd = scene.ucmd();
+        cmd.env("LC_ALL", locale)
+            .env("TZ", "UTC")
+            .args(&["-lgG", "--time-style=+%b"]);
+        for f in &filenames {
+            cmd.arg(f);
+        }
+        let stdout = String::from_utf8_lossy(cmd.succeeds().stdout()).to_string();
+
+        // Each line is "perms links size month NN.ts": skip the first three
+        // fields and the " NN.ts" suffix, keeping the month's padding.
+        let months: Vec<String> = stdout
+            .lines()
+            .filter_map(|l| {
+                let mut rest = l.get(..l.len().checked_sub(6)?)?;
+                for _ in 0..3 {
+                    rest = rest.trim_start();
+                    rest = &rest[rest.find(' ')?..];
+                }
+                Some(rest[1..].to_string())
+            })
+            .collect();
+
+        // Per-character width, like glibc's wcswidth (see uucore's
+        // display_width for the lam-alef case).
+        let widths: Vec<usize> = months
+            .iter()
+            .map(|m| {
+                m.chars()
+                    .map(|c| UnicodeWidthChar::width(c).unwrap_or(0))
+                    .sum::<usize>()
+            })
+            .collect();
+        let unique: HashSet<&str> = months.iter().map(|m| m.trim_end()).collect();
+
+        assert_eq!(months.len(), 12, "[{locale}] expected 12 lines");
+        assert!(
+            widths.iter().all(|&w| w == widths[0]),
+            "[{locale}] widths not uniform: {widths:?}\n{stdout}"
+        );
+        assert_eq!(unique.len(), 12, "[{locale}] duplicate months\n{stdout}");
+    }
 }
 
 #[test]

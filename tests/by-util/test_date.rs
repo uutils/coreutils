@@ -3107,6 +3107,51 @@ fn test_date_thai_locale_solar_calendar() {
     assert!(rfc_output.starts_with(&current_year.to_string()));
 }
 
+/// Until ICU names are transcoded, a non-UTF-8 locale keeps the C names
+/// rather than printing UTF-8 bytes (GNU prints them in the locale's codeset).
+#[cfg(unix)]
+#[test]
+fn test_date_non_utf8_locale_keeps_c_names() {
+    for locale in ["ru_RU.KOI8-R", "zh_CN.GB18030"] {
+        if !is_locale_available(locale) {
+            continue;
+        }
+        new_ucmd!()
+            .env("LC_ALL", locale)
+            .arg("-d")
+            .arg("2025-03-12")
+            .arg("+%a %A %b %B")
+            .succeeds()
+            .stdout_only("Wed Wednesday Mar March\n");
+    }
+}
+
+/// The month name padding of `ls` must not leak into `date` output.
+#[cfg(unix)]
+#[test]
+fn test_date_month_weekday_names_no_trailing_spaces() {
+    // Every month, and seven consecutive days for the weekdays.
+    let dates: String = (1..=12)
+        .map(|m| format!("2025-{m:02}-01\n"))
+        .chain((6..=12).map(|d| format!("2025-04-{d:02}\n")))
+        .collect();
+
+    for locale in ["fr_FR.UTF-8", "th_TH.UTF-8", "fi_FI.UTF-8"] {
+        if !is_locale_available(locale) {
+            continue;
+        }
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("dates", &dates);
+        let result = ucmd
+            .env("LC_ALL", locale)
+            .args(&["-f", "dates", "+[%B][%b][%A][%a]"])
+            .succeeds();
+        for line in result.stdout_str().lines() {
+            assert!(!line.contains(" ]"), "[{locale}] padded name: {line:?}");
+        }
+    }
+}
+
 #[cfg(unix)]
 fn check_date(locale: &str, date: &str, fmt: &str, expected: &str) {
     let actual = new_ucmd!()

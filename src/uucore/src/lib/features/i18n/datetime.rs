@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fieldsets prefs febr abmon langinfo uppercased
+// spell-checker:ignore newlocale uselocale freelocale fieldsets fset prefs febr abmon langinfo uppercased wcswidth alef Pagume
 
 //! Locale-aware datetime formatting utilities using ICU and jiff-icu
 
@@ -19,6 +19,15 @@ use std::sync::OnceLock;
 
 use crate::i18n::get_locale_from_env;
 
+/// Controls whether localized abbreviated month names are padded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NamePadding {
+    /// Raw names with no trailing padding, for `date` and similar utilities.
+    Raw,
+    /// Abbreviated month names padded to the widest one, for `ls` columns.
+    Padded,
+}
+
 /// Get the locale for time/date formatting from `LC_TIME` environment variable
 pub fn get_time_locale() -> &'static (Locale, super::UEncoding) {
     static TIME_LOCALE: OnceLock<(Locale, super::UEncoding)> = OnceLock::new();
@@ -32,11 +41,11 @@ pub fn get_time_locale() -> &'static (Locale, super::UEncoding) {
 pub fn should_use_icu_locale() -> bool {
     use icu_locale::locale;
 
-    let (locale, _encoding) = get_time_locale();
-
+    // Cached: ls asks once per file.
+    static USE_ICU: OnceLock<bool> = OnceLock::new();
     // Use ICU for non-default locales (anything other than C/POSIX)
     // The default locale is "und" (undefined) representing C/POSIX
-    *locale != locale!("und")
+    *USE_ICU.get_or_init(|| get_time_locale().0 != locale!("und"))
 }
 
 /// Determine the appropriate calendar system for a given locale
@@ -111,8 +120,150 @@ macro_rules! format_with {
     };
 }
 
-/// Transform a strftime format string to use locale-specific calendar values
-pub fn localize_format_string(format: &str, date: JiffDate) -> String {
+/// ICU's medium month format may include trailing periods (e.g., "febr." for
+/// Hungarian), which when combined with locale format strings that also add
+/// periods after %b (e.g., "%Y. %b. %d") results in double periods ("febr..").
+/// The standard C/POSIX locale via `nl_langinfo` returns abbreviations WITHOUT
+/// trailing periods, so we strip them for consistency.
+fn strip_abbrev_dots(name: &str) -> &str {
+    name.trim_end_matches('.')
+}
+
+/// Sum of the per-character display widths of `s`.
+///
+/// Not `UnicodeWidthStr::width`, which counts the Arabic lam-alef sequence
+/// as one cell where glibc's `wcswidth` (used by GNU ls) counts two.
+fn display_width(s: &str) -> usize {
+    use unicode_width::UnicodeWidthChar;
+    s.chars().map(|c| c.width().unwrap_or(0)).sum()
+}
+
+/// Whether the `LC_TIME` locale writes its names in UTF-8, like ICU does.
+///
+/// Other codesets (`ru_RU.KOI8-R`, `zh_CN.GB18030`) keep the C names until
+/// ICU names are transcoded: written as UTF-8, they would be mojibake. The
+/// codeset comes from the locale itself, not from its name, since a locale
+/// such as `fa_IR` is UTF-8 without saying so.
+fn time_locale_is_utf8() -> bool {
+    static IS_UTF8: OnceLock<bool> = OnceLock::new();
+    *IS_UTF8.get_or_init(|| {
+        let Some(name) = ["LC_ALL", "LC_TIME", "LANG"]
+            .iter()
+            .find_map(|&key| std::env::var(key).ok().filter(|l| !l.is_empty()))
+        else {
+            return true;
+        };
+        // A locale that is not installed: trust the codeset in its name.
+        locale_codeset_is_utf8(&name).unwrap_or_else(|| {
+            let name = name.split('@').next().unwrap_or_default();
+            name.split_once('.')
+                .is_none_or(|(_, codeset)| is_utf8_codeset(codeset.as_bytes()))
+        })
+    })
+}
+
+fn is_utf8_codeset(codeset: &[u8]) -> bool {
+    codeset.eq_ignore_ascii_case(b"UTF-8") || codeset.eq_ignore_ascii_case(b"UTF8")
+}
+
+/// `nl_langinfo(CODESET)` of the locale `name`, `None` if it is not installed.
+#[cfg(all(
+    unix,
+    not(target_os = "android"),
+    not(target_os = "cygwin"),
+    not(target_os = "netbsd"),
+    not(target_os = "redox")
+))]
+fn locale_codeset_is_utf8(name: &str) -> Option<bool> {
+    use core::ffi::CStr;
+    use nix::libc;
+
+    let name = std::ffi::CString::new(name).ok()?;
+    // SAFETY: the locale object is only installed for this thread, while
+    // `nl_langinfo` is read, and the previous one is restored before freeing it.
+    unsafe {
+        let loc = libc::newlocale(libc::LC_CTYPE_MASK, name.as_ptr(), std::ptr::null_mut());
+        if loc.is_null() {
+            return None;
+        }
+        let previous = libc::uselocale(loc);
+        let codeset = libc::nl_langinfo(libc::CODESET);
+        let is_utf8 = !codeset.is_null() && is_utf8_codeset(CStr::from_ptr(codeset).to_bytes());
+        libc::uselocale(previous);
+        libc::freelocale(loc);
+        Some(is_utf8)
+    }
+}
+
+/// Without `newlocale`, fall back to the codeset in the locale name.
+#[cfg(not(all(
+    unix,
+    not(target_os = "android"),
+    not(target_os = "cygwin"),
+    not(target_os = "netbsd"),
+    not(target_os = "redox")
+)))]
+fn locale_codeset_is_utf8(_name: &str) -> Option<bool> {
+    None
+}
+
+thread_local! {
+    // ICU falls back to placeholder names ("M01", "Mon") for a language it
+    // has no data for: keep the C names then, like glibc does. Keep them too
+    // when the locale is not UTF-8 (see `time_locale_is_utf8`).
+    static HAS_NAMES: bool = time_locale_is_utf8()
+        && Date::try_new_iso(2001, 1, 1)
+            .ok()
+            .and_then(|d| format_with!(MONTH_LONG, &d))
+            .is_some_and(|name| name != "M01");
+    // Widest abbreviated month name, only computed for padded output. One
+    // date every five days reaches every month of every supported calendar,
+    // including the five-day Ethiopian Pagume.
+    static MONTH_MEDIUM_WIDTH: usize = MONTH_MEDIUM.with(|f| {
+        f.as_ref().map_or(0, |f| {
+            jiff::civil::date(2001, 1, 1)
+                .series(jiff::Span::new().days(5))
+                .take(74)
+                .map(|d| f.format(&Date::<Iso>::convert_from(d)).to_string())
+                .map(|name| display_width(strip_abbrev_dots(&name)))
+                .max()
+                .unwrap_or(0)
+        })
+    });
+}
+
+/// Pad an abbreviated month name to the width of the widest one. Like GNU ls,
+/// a name starting with a digit (e.g. "3月") is right-aligned.
+fn pad_month_abbrev(name: &str) -> String {
+    let fill = MONTH_MEDIUM_WIDTH.with(|w| w.saturating_sub(display_width(name)));
+    if name.starts_with(|c: char| c.is_ascii_digit()) {
+        format!("{:fill$}{name}", "")
+    } else {
+        format!("{name}{:fill$}", "")
+    }
+}
+
+/// Transform a strftime format string to use locale-specific calendar values.
+/// With [`NamePadding::Padded`], `%b` is padded to a uniform width.
+pub fn localize_format_string(format: &str, date: JiffDate, padding: NamePadding) -> String {
+    type Entry = (String, JiffDate, NamePadding, String);
+    thread_local! {
+        // `ls -l` asks for the same date over and over: keep the last one.
+        static LAST: std::cell::RefCell<Option<Entry>> = const { std::cell::RefCell::new(None) };
+    }
+    LAST.with_borrow_mut(|last| {
+        if let Some((f, d, p, out)) = last
+            && (f.as_str(), *d, *p) == (format, date, padding)
+        {
+            return out.clone();
+        }
+        let out = localize_format_string_uncached(format, date, padding);
+        *last = Some((format.to_string(), date, padding, out.clone()));
+        out
+    })
+}
+
+fn localize_format_string_uncached(format: &str, date: JiffDate, padding: NamePadding) -> String {
     const PERCENT_PLACEHOLDER: &str = "\x00\x00";
 
     let (locale, _) = get_time_locale();
@@ -157,6 +308,10 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
             .replace("%e", &format!("{cal_day:2}"));
     }
 
+    if !HAS_NAMES.with(|h| *h) {
+        return fmt.replace(PERCENT_PLACEHOLDER, "%%");
+    }
+
     // Format localized names using ICU DateTimeFormatter
     if fmt.contains("%B")
         && let Some(name) = format_with!(MONTH_LONG, &iso_date)
@@ -164,14 +319,12 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
         fmt = fmt.replace("%B", &name);
     }
     if (fmt.contains("%b") || fmt.contains("%h"))
-        && let Some(month_abbrev) = format_with!(MONTH_MEDIUM, &iso_date)
+        && let Some(name) = format_with!(MONTH_MEDIUM, &iso_date)
     {
-        // ICU's medium format may include trailing periods (e.g., "febr." for Hungarian),
-        // which when combined with locale format strings that also add periods after
-        // %b (e.g., "%Y. %b. %d") results in double periods ("febr..").
-        // The standard C/POSIX locale via nl_langinfo returns abbreviations
-        // WITHOUT trailing periods, so we strip them here for consistency.
-        let month_abbrev = month_abbrev.trim_end_matches('.').to_string();
+        let month_abbrev = match padding {
+            NamePadding::Raw => strip_abbrev_dots(&name).to_string(),
+            NamePadding::Padded => pad_month_abbrev(strip_abbrev_dots(&name)),
+        };
         fmt = fmt
             .replace("%b", &month_abbrev)
             .replace("%h", &month_abbrev);
