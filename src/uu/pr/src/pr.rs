@@ -1599,8 +1599,13 @@ fn write_columns(
     for row in table {
         // Merged files are padded with empty cells to fill the page; once
         // every file has run out there is nothing left to print.
-        if merge && no_trailer && row.iter().all(Option::is_none) {
-            break;
+        if merge && row.iter().all(Option::is_none) {
+            if no_trailer {
+                break;
+            }
+            // Like GNU pr, the rest of the page is filled with empty lines.
+            writer.write_all(line_separator)?;
+            continue;
         }
         // On a page that is not completely filled the last row stops part way
         // through, and its final cell must not be followed by a column
