@@ -28,3 +28,30 @@ fn test_invalid_flag() {
         .fails_with_code(1)
         .no_stdout();
 }
+
+#[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
+#[test]
+fn test_hostname_is_ipv4_address() {
+    use std::process::Command;
+    use uutests::{util::TestScenario, util_name};
+
+    let can_unshare = Command::new("unshare")
+        .args(["-rmu", "hostname", "127.0.0.1"])
+        .status()
+        .is_ok_and(|status| status.success());
+    if !can_unshare {
+        eprintln!("TEST SKIPPED: unshare -rmu hostname does not work");
+        return;
+    }
+
+    let ts = TestScenario::new(util_name!());
+    let output = Command::new("unshare")
+        .args(["-rmu", "sh", "-c"])
+        .arg(r#"hostname 127.0.0.1 && mount -t tmpfs tmpfs /etc && exec "$0" hostid"#)
+        .arg(&ts.bin_path)
+        .output()
+        .expect("failed to spawn unshare");
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "007f0100\n");
+}
