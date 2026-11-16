@@ -8,7 +8,8 @@
 use std::ops::Range;
 
 use crate::csplit_error::{CsplitError, PatternProblem};
-use regex::{Regex, bytes::Regex as BytesRegex};
+use regex::{Regex, bytes::Regex as BytesRegex, bytes::RegexBuilder as BytesRegexBuilder};
+use uucore::i18n::{UEncoding, get_ctype_encoding};
 use uucore::show_warning;
 use uucore::translate;
 
@@ -152,11 +153,11 @@ fn extract_patterns(args: &[&str]) -> Result<Vec<Pattern>, CsplitError> {
                     .map_err(|_| CsplitError::LineOutOfRange(arg.to_owned()))?,
             };
             if let Some(up_to_match) = captures.name("UPTO") {
-                let pattern = BytesRegex::new(up_to_match.as_str())
+                let pattern = build_regex(up_to_match.as_str())
                     .map_err(|e| invalid_regex(arg, up_to_match.range(), &e))?;
                 patterns.push(Pattern::UpToMatch(pattern, offset, execute_ntimes));
             } else if let Some(skip_to_match) = captures.name("SKIPTO") {
-                let pattern = BytesRegex::new(skip_to_match.as_str())
+                let pattern = build_regex(skip_to_match.as_str())
                     .map_err(|e| invalid_regex(arg, skip_to_match.range(), &e))?;
                 patterns.push(Pattern::SkipToMatch(pattern, offset, execute_ntimes));
             }
@@ -174,6 +175,15 @@ fn extract_patterns(args: &[&str]) -> Result<Vec<Pattern>, CsplitError> {
         }
     }
     Ok(patterns)
+}
+
+/// Compiles a `/REGEXP/` or `%REGEXP%` body. Outside a UTF-8 locale (e.g.
+/// `LC_ALL=C`) a character is one byte, so `.` and `[^a]` match any single
+/// byte, including one half of a UTF-8 sequence or an invalid byte.
+fn build_regex(pattern: &str) -> Result<BytesRegex, regex::Error> {
+    BytesRegexBuilder::new(pattern)
+        .unicode(get_ctype_encoding() == UEncoding::Utf8)
+        .build()
 }
 
 /// The error for a `/REGEXP/` or `%REGEXP%` operand whose regex did not

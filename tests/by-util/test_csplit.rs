@@ -2007,3 +2007,36 @@ fn test_match_offset_overflow() {
         .fails_with_code(1)
         .stderr_is("csplit: '/9$/-2147483649': line number out of range\n");
 }
+
+#[test]
+fn test_c_locale_matches_bytes() {
+    // In the C locale `é` is two characters, so `^.$` matches only `a`.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.env("LC_ALL", "C")
+        .args(&["-", "/^.$/"])
+        .pipe_in(b"\xc3\xa9\na\n".as_slice())
+        .succeeds()
+        .stdout_only("3\n2\n");
+    assert_eq!(at.read_bytes("xx00"), b"\xc3\xa9\n");
+    assert_eq!(at.read_bytes("xx01"), b"a\n");
+
+    // A byte that is not valid UTF-8 is still a character that `[^a]` matches.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.env("LC_ALL", "C")
+        .args(&["-", "/[^a]/"])
+        .pipe_in(b"\xff\na\n".as_slice())
+        .succeeds()
+        .stdout_only("0\n4\n");
+    assert_eq!(at.read_bytes("xx01"), b"\xff\na\n");
+}
+
+#[test]
+fn test_utf8_locale_matches_characters() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.env("LC_ALL", "C.UTF-8")
+        .args(&["-", "/^.$/"])
+        .pipe_in(b"\xc3\xa9\na\n".as_slice())
+        .succeeds()
+        .stdout_only("0\n5\n");
+    assert_eq!(at.read_bytes("xx01"), b"\xc3\xa9\na\n");
+}
