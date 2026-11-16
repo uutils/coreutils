@@ -27,6 +27,7 @@ use uucore::translate;
 
 use std::cmp;
 use std::env;
+#[cfg(not(unix))]
 use std::ffi::OsString;
 #[cfg(unix)]
 use std::fs::Metadata;
@@ -1546,6 +1547,7 @@ fn below_count_limit(count: Option<Num>, rstat: &ReadStat) -> bool {
 /// `"/dev/stdout"`. However, if this process were invoked as `dd >
 /// outfile`, then this function returns the canonicalized path to
 /// `outfile`, something like `"/path/to/outfile"`.
+#[cfg(not(unix))]
 fn stdout_canonicalized() -> OsString {
     match Path::new("/dev/stdout").canonicalize() {
         Ok(p) => p.into_os_string(),
@@ -1570,13 +1572,27 @@ fn stdout_canonicalized() -> OsString {
 ///
 /// then this function would return false.
 fn is_stdout_redirected_to_seekable_file() -> bool {
-    let s = stdout_canonicalized();
-    let p = Path::new(&s);
-    match File::open(p) {
-        Ok(mut f) => {
-            f.stream_position().is_ok() && f.seek(SeekFrom::End(0)).is_ok() && f.rewind().is_ok()
+    #[cfg(unix)]
+    {
+        // `lseek` with `SEEK_CUR` and offset 0 returns the current position
+        // without modifying it.  A negative return value means ESPIPE (pipe,
+        // tty, socket — not seekable).  Unlike `File::open`, this works on
+        // write-only file descriptors and does not require read permission.
+        // SAFETY: STDOUT_FILENO (1) is always a valid fd to pass to lseek.
+        (unsafe { libc::lseek(libc::STDOUT_FILENO, 0, libc::SEEK_CUR) }) >= 0
+    }
+    #[cfg(not(unix))]
+    {
+        let s = stdout_canonicalized();
+        let p = Path::new(&s);
+        match File::open(p) {
+            Ok(mut f) => {
+                f.stream_position().is_ok()
+                    && f.seek(SeekFrom::End(0)).is_ok()
+                    && f.rewind().is_ok()
+            }
+            Err(_) => false,
         }
-        Err(_) => false,
     }
 }
 
