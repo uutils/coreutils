@@ -947,62 +947,27 @@ fn format_epoch_seconds(seconds: i64, flags: &str, width: Option<usize>) -> Stri
     }
 }
 
-/// Remove the `O` strftime modifier from `fmt`.
+/// Rewrite the parts of `fmt` where GNU `date` and jiff disagree, in one pass.
 ///
-/// In the C locale `%O` requests alternative numeric symbols that do not
-/// exist, so GNU `date` treats it as a no-op: `%Om` renders exactly like
-/// `%m` (issue #11656). jiff does not know the modifier and would emit it
-/// literally, so strip it before jiff sees the format string.
+/// - In the C locale `%O` requests alternative numeric symbols that do not
+///   exist, so GNU `date` treats it as a no-op: `%Om` renders exactly like
+///   `%m` (issue #11656). jiff does not know the modifier and would emit it
+///   literally, so it is dropped when a specifier letter follows it. A
+///   dangling `%O` stays literal.
+/// - jiff renders `%f`, `%.f` (with an optional precision) as fractional
+///   seconds and `%Q`, `%:Q` as the IANA time zone name. GNU `date` has none
+///   of them and prints an unknown conversion literally, so the leading `%`
+///   of such a conversion becomes `%%`.
 ///
-/// The `O` is only dropped when it actually modifies something, that is,
-/// when a specifier letter follows it. A dangling `%O` (at the end of the
-/// string, or followed by a non-letter) stays literal, as does any `O`
-/// that merely follows the `%%` escape.
-fn strip_o_modifier(fmt: &str) -> String {
-    if !fmt.contains("%O") {
-        return fmt.to_string();
-    }
-
-    let mut out = String::with_capacity(fmt.len());
-    let mut chars = fmt.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c != '%' {
-            out.push(c);
-            continue;
-        }
-        match chars.peek() {
-            Some('O') => {
-                let mut lookahead = chars.clone();
-                lookahead.next();
-                if lookahead.peek().is_some_and(char::is_ascii_alphabetic) {
-                    chars.next();
-                }
-                out.push('%');
-            }
-            // Keep `%%` intact: an `O` after a literal percent is plain text.
-            Some('%') => {
-                chars.next();
-                out.push_str("%%");
-            }
-            _ => out.push('%'),
-        }
-    }
-    out
-}
-
-/// Escape conversions that jiff understands but GNU `date` does not.
-///
-/// jiff renders `%f`, `%.f` (with an optional precision) as fractional
-/// seconds and `%Q`, `%:Q` as the IANA time zone name. GNU `date` has none of
-/// them and prints an unknown conversion literally, so `+%Q` must stay `%Q`.
-/// Turn the leading `%` of such a conversion into `%%` before jiff sees it.
-fn escape_non_gnu_specifiers(fmt: &str) -> String {
-    if !fmt.contains('%') {
-        return fmt.to_string();
+/// `%%` escapes are kept as they are. The format is returned unchanged
+/// without allocating when none of this applies.
+fn adapt_format_for_jiff(fmt: &str) -> Cow<'_, str> {
+    if !fmt.contains('%') || !fmt.contains(['O', 'f', 'Q', '.']) {
+        return Cow::Borrowed(fmt);
     }
 
     let bytes = fmt.as_bytes();
-    let mut out = String::with_capacity(fmt.len() + 2);
+    let mut out = String::new();
     let mut start = 0;
     let mut i = 0;
     while i < bytes.len() {
@@ -1011,6 +976,20 @@ fn escape_non_gnu_specifiers(fmt: &str) -> String {
             continue;
         }
         if bytes.get(i + 1) == Some(&b'%') {
+            i += 2;
+            continue;
+        }
+        if bytes.get(i + 1) == Some(&b'O') && bytes.get(i + 2).is_some_and(u8::is_ascii_alphabetic)
+        {
+            if matches!(bytes[i + 2], b'f' | b'Q') {
+                // `%Of` and `%OQ` are unknown to GNU as a whole
+                out.push_str(&fmt[start..i]);
+                out.push('%');
+                start = i;
+            } else {
+                out.push_str(&fmt[start..=i]);
+                start = i + 2;
+            }
             i += 2;
             continue;
         }
@@ -1037,10 +1016,13 @@ fn escape_non_gnu_specifiers(fmt: &str) -> String {
             out.push('%');
             start = i;
         }
-        i = j.max(i + 1);
+        i = j;
+    }
+    if start == 0 {
+        return Cow::Borrowed(fmt);
     }
     out.push_str(&fmt[start..]);
-    out
+    Cow::Owned(out)
 }
 
 /// A piece of a format string.
@@ -1500,9 +1482,9 @@ fn format_date_with_locale_aware_months(
     // negative infinity (e.g. `@-1.5` → `-2`, not `-1`). Every other field jiff
     // produces already agrees with GNU, so only `%s` needs correcting; rewrite it
     // to the floored epoch second before jiff sees the format string.
-    let fmt_owned =
-        escape_non_gnu_specifiers(&strip_o_modifier(&substitute_epoch_seconds(fmt, date)));
-    let fmt = fmt_owned.as_str();
+    let fmt_owned = substitute_epoch_seconds(fmt, date);
+    let fmt_adapted = adapt_format_for_jiff(&fmt_owned);
+    let fmt = fmt_adapted.as_ref();
 
     // Check if format string has GNU modifiers (width/flags) and format if present
     if let Some(result) = format_modifiers::format_with_modifiers_if_present(date, fmt, config) {

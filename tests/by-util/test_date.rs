@@ -2872,9 +2872,9 @@ fn test_date_non_gnu_specifiers_are_literal() {
         .env("TZ", "UTC")
         .arg("-d")
         .arg("@1.5")
-        .arg("+%Q %:Q %f %.3f %-f %%Q %s")
+        .arg("+%Q %:Q %f %.3f %-f %%Q %Of %OQ %s")
         .succeeds()
-        .stdout_is("%Q %:Q %f %.3f %-f %Q 1\n");
+        .stdout_is("%Q %:Q %f %.3f %-f %Q %Of %OQ 1\n");
 }
 
 #[test]
