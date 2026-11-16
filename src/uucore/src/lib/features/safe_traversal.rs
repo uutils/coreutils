@@ -17,10 +17,11 @@
 use std::os::unix::ffi::OsStringExt;
 
 use std::ffi::{CStr, CString, OsStr, OsString};
+use std::fs::OpenOptions;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::mem::MaybeUninit;
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt as _};
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -254,17 +255,19 @@ impl DirFd {
     /// * `path` - The path to the directory to open
     /// * `symlink_behavior` - Whether to follow symlinks when opening
     pub fn open(path: &Path, symlink_behavior: SymlinkBehavior) -> io::Result<Self> {
-        let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC | LARGEFILE;
+        let mut flags = OFlag::O_DIRECTORY;
         if !symlink_behavior.should_follow() {
             flags |= OFlag::O_NOFOLLOW;
         }
-        let fd = nix::fcntl::open(path, flags, Mode::empty()).map_err(|e| {
-            SafeTraversalError::OpenFailed {
+        let file = OpenOptions::new()
+            .read(true)
+            .custom_flags(flags.bits() as _)
+            .open(path)
+            .map_err(|e| SafeTraversalError::OpenFailed {
                 path: path.into(),
-                source: io::Error::from_raw_os_error(e as i32),
-            }
-        })?;
-        Ok(Self { fd })
+                source: e,
+            })?;
+        Ok(Self { fd: file.into() })
     }
 
     /// Open a directory to anchor `*at` calls, following symlinks.
@@ -295,14 +298,15 @@ impl DirFd {
             return Err(denied);
         };
 
-        let flags = search_only | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC | LARGEFILE;
-        let fd = nix::fcntl::open(path, flags, Mode::empty()).map_err(|e| {
-            SafeTraversalError::OpenFailed {
+        let flags = search_only | OFlag::O_DIRECTORY;
+        let file = OpenOptions::new()
+            .custom_flags(flags.bits() as _)
+            .open(path)
+            .map_err(|e| SafeTraversalError::OpenFailed {
                 path: path.into(),
-                source: io::Error::from_raw_os_error(e as i32),
-            }
-        })?;
-        Ok(Self { fd })
+                source: e,
+            })?;
+        Ok(Self { fd: file.into() })
     }
 
     /// Open a subdirectory relative to this directory
