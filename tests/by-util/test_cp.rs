@@ -9445,6 +9445,22 @@ fn test_cp_preserve_setuid_when_chown_succeeds() {
     );
 }
 
+// A non-root user cannot give the copy root's ownership. Like GNU, that
+// permission failure is not reported.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
+#[cfg(unix)]
+fn test_cp_preserve_root_owned_file_as_non_root_is_silent() {
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-p", "/etc/passwd", "dst"])
+        .succeeds()
+        .no_stderr();
+    assert!(at.file_exists("dst"));
+}
+
 // The setuid/setgid bits are only applied once the ownership has been set
 // (like GNU), so a mode-preserving copy must still end up with them, while a
 // plain copy drops them.

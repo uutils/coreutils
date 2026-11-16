@@ -1953,22 +1953,21 @@ pub(crate) fn copy_attributes(
         // gnu compatibility: cp doesn't report a permission-style failure to set the
         // ownership, and will fall back to changing only the gid if possible.
         // Other errors (e.g. EIO) are reported.
-        if let Err(e) = lchown(dest, Some(dest_uid), Some(dest_gid)) {
+        let result = lchown(dest, Some(dest_uid), Some(dest_gid)).or_else(|e| {
             ownership_preserved.set(false);
-            let e = if is_chown_error_fatal(&e) {
-                e
+            if is_chown_error_fatal(&e) {
+                Err(e)
             } else {
-                match lchown(dest, None, Some(dest_gid)) {
-                    Err(e) if is_chown_error_fatal(&e) => e,
-                    _ => return Ok(()),
-                }
-            };
-            return Err(CpError::IoErrContext(
+                lchown(dest, None, Some(dest_gid))
+            }
+        });
+        match result {
+            Err(e) if is_chown_error_fatal(&e) => Err(CpError::IoErrContext(
                 e,
                 translate!("cp-error-failed-to-preserve-ownership", "path" => dest.quote()),
-            ));
+            )),
+            _ => Ok(()),
         }
-        Ok(())
     });
 
     handle_preserve(mode, || -> CopyResult<()> {
@@ -3389,6 +3388,7 @@ mod tests {
             assert!(!is_chown_error_fatal(&Error::from_raw_os_error(errno)));
         }
     }
+
     #[test]
     fn test_diff_attrs() {
         assert_eq!(
