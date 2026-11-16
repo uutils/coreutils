@@ -55,7 +55,8 @@ fn test_openssl_link() {
     let dynamic = String::from_utf8_lossy(&out.stdout).contains("crypto"); // covering MSYS/MinGW too
     assert_eq!(
         std::env::var("OPENSSL_NO_VENDOR") == Ok("1".to_string()),
-        dynamic
+        dynamic,
+        "unexpected linkage of static/dynamic OpenSSL. Set OPENSSL_STATIC=0 too!"
     );
 }
 
