@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind
+// spell-checker:ignore sigaction sigemptyset SIGBUS SIGSEGV extendedbigdecimal myutil logind
 
 //! library ~ (core/bundler file)
 
@@ -175,12 +175,6 @@ pub use crate::features::smack;
 
 //## core functions
 
-#[cfg(unix)]
-use nix::errno::Errno;
-#[cfg(unix)]
-use nix::sys::signal::{
-    SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGSEGV, sigaction,
-};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader};
@@ -196,20 +190,44 @@ use std::{iter, str};
 /// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
 /// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
 #[cfg(unix)]
-pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
-    unsafe {
-        sigaction(
-            SIGSEGV,
-            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
-        )
-    }?;
-    unsafe {
-        sigaction(
-            SIGBUS,
-            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
-        )
-    }?;
+pub fn disable_rust_signal_handlers() -> std::io::Result<()> {
+    for signal in [libc::SIGSEGV, libc::SIGBUS] {
+        set_sigaction(signal, libc::SIG_DFL, 0)?;
+    }
     Ok(())
+}
+
+/// Sets the action of `sig` to `handler` with `flags` and an empty mask, and
+/// returns the previous action. rustix leaves signal dispositions to libc (see
+/// its `not_implemented::libc_internals`), so this goes straight to libc.
+///
+/// `handler` must be `SIG_DFL`, `SIG_IGN` or an async-signal-safe handler.
+#[cfg(unix)]
+pub(crate) fn set_sigaction(
+    sig: libc::c_int,
+    handler: libc::sighandler_t,
+    flags: libc::c_int,
+) -> std::io::Result<libc::sigaction> {
+    // SAFETY: a zeroed sigaction is valid once its mask is emptied.
+    let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
+    action.sa_sigaction = handler;
+    action.sa_flags = flags;
+    unsafe { libc::sigemptyset(&raw mut action.sa_mask) };
+    replace_sigaction(sig, &action)
+}
+
+/// Installs `action` for `sig` and returns the previous one.
+#[cfg(unix)]
+pub(crate) fn replace_sigaction(
+    sig: libc::c_int,
+    action: &libc::sigaction,
+) -> std::io::Result<libc::sigaction> {
+    // SAFETY: `action` is a valid sigaction and `old` is only written to.
+    let mut old: libc::sigaction = unsafe { std::mem::zeroed() };
+    if unsafe { libc::sigaction(sig, action, &raw mut old) } == -1 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(old)
 }
 
 pub fn get_canonical_util_name(util_name: &str) -> &str {

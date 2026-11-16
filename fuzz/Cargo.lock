@@ -1673,7 +1673,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "libc",
  "thiserror",
  "uucore",
 ]

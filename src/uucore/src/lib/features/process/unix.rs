@@ -3,17 +3,18 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore sigset sigemptyset sigaddset sigismember pthread sigmask
 // spell-checker:ignore sigwait KTIME timeval itimerval setitimer itimer timerid
 // spell-checker:ignore sigevent sigev sigval itimerspec signo clockid sevp
 
 #[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use libc::pid_t;
+use rustix::process::Signal;
 #[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
-use nix::sys::signal::{self as nix_signal, SigHandler};
-use nix::sys::signal::{SigSet, Signal};
-#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
-use nix::unistd::Pid;
-use rustix::process::Signal as RixSignal;
+use rustix::process::{
+    Pid, kill_current_process_group, kill_process, test_kill_current_process_group,
+    test_kill_process,
+};
 use std::io;
 #[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use std::process::Child;
@@ -25,18 +26,36 @@ use timer::Timer;
 #[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use super::{ChildExt, TimeoutRet};
 
+/// Build a rustix [`Signal`] from a raw number. Real-time signals are not
+/// "named", so [`Signal::from_named_raw`] rejects them: accept those by range.
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
+fn signal_from_value(signal: usize) -> io::Result<Signal> {
+    let invalid = || io::Error::from_raw_os_error(libc::EINVAL);
+    let raw = i32::try_from(signal)
+        .ok()
+        .filter(|&s| s > 0)
+        .ok_or_else(invalid)?;
+    if let Some(sig) = Signal::from_named_raw(raw) {
+        return Ok(sig);
+    }
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if (libc::SIGRTMIN()..=libc::SIGRTMAX()).contains(&raw) {
+        // SAFETY: `raw` is a real-time signal of this platform.
+        return Ok(unsafe { Signal::from_raw_unchecked(raw) });
+    }
+    Err(invalid())
+}
+
 #[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 impl ChildExt for Child {
     fn send_signal(&mut self, signal: usize) -> io::Result<()> {
-        let pid = Pid::from_raw(self.id() as pid_t);
-        let result = if signal == 0 {
-            nix_signal::kill(pid, None)
-        } else {
-            let signal = Signal::try_from(signal as i32)
-                .map_err(|_| io::Error::from_raw_os_error(libc::EINVAL))?;
-            nix_signal::kill(pid, Some(signal))
-        };
-        result.map_err(|e| io::Error::from_raw_os_error(e as i32))
+        let pid = Pid::from_raw(self.id() as pid_t)
+            .ok_or_else(|| io::Error::from_raw_os_error(libc::EINVAL))?;
+        // signal == 0 only probes whether the pid is still alive.
+        if signal == 0 {
+            return test_kill_process(pid).map_err(io::Error::from);
+        }
+        kill_process(pid, signal_from_value(signal)?).map_err(io::Error::from)
     }
 
     fn send_signal_group(&mut self, signal: usize) -> io::Result<()> {
@@ -46,23 +65,21 @@ impl ChildExt for Child {
         // in the group. If the child has created its own process group (via setpgid),
         // it won't receive this group signal, but will have received the direct signal.
 
-        // Signal 0 is special - it just checks if process exists, doesn't send anything.
+        // Signal 0 is special - it just checks if the group exists, doesn't send anything.
         // No need to manipulate signal handlers for it.
         if signal == 0 {
-            return nix_signal::kill(Pid::from_raw(0), None)
-                .map_err(|e| io::Error::from_raw_os_error(e as i32));
+            return test_kill_current_process_group().map_err(io::Error::from);
         }
 
-        let signal = Signal::try_from(signal as i32)
-            .map_err(|_| io::Error::from_raw_os_error(libc::EINVAL))?;
+        let sig = signal_from_value(signal)?;
+        let sig_raw = sig.as_raw();
 
         // Ignore the signal temporarily so we don't receive it ourselves.
-        let old_handler = unsafe { nix_signal::signal(signal, SigHandler::SigIgn) }
-            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
-        let result = nix_signal::kill(Pid::from_raw(0), Some(signal));
-        // Restore the old handler
-        let _ = unsafe { nix_signal::signal(signal, old_handler) };
-        result.map_err(|e| io::Error::from_raw_os_error(e as i32))
+        let old = crate::set_sigaction(sig_raw, libc::SIG_IGN, 0)?;
+        let res = kill_current_process_group(sig);
+        let restored = crate::replace_sigaction(sig_raw, &old);
+        res?;
+        restored.map(drop)
     }
 
     fn wait_or_timeout(&mut self, timeout: Duration, ignore_term: bool) -> io::Result<TimeoutRet> {
@@ -78,13 +95,13 @@ impl ChildExt for Child {
         loop {
             match timer.timed_sigwait(remaining) {
                 Ok(None) => break Ok(TimeoutRet::TimedOut),
-                Ok(Some(Signal::SIGCHLD)) => {
+                Ok(Some(Signal::CHILD)) => {
                     if let Some(status) = self.try_wait()? {
                         break Ok(TimeoutRet::Exited(status));
                     } // otherwise waits again
                 }
-                Ok(Some(Signal::SIGTERM)) if ignore_term => {} // waits again
-                Ok(Some(signal)) => break Ok(TimeoutRet::Interrupted(signal as usize)),
+                Ok(Some(Signal::TERM)) if ignore_term => {} // waits again
+                Ok(Some(signal)) => break Ok(TimeoutRet::Interrupted(signal.as_raw() as usize)),
                 Err(e) => break Err(e),
             }
             if remaining.is_some() {
@@ -94,29 +111,78 @@ impl ChildExt for Child {
     }
 }
 
+/// A set of signals, i.e. a `sigset_t`. rustix leaves the signal mask to libc.
+pub struct SignalSet(libc::sigset_t);
+
+impl SignalSet {
+    /// An empty set.
+    pub fn empty() -> Self {
+        // SAFETY: `sigemptyset` initializes the zeroed set.
+        unsafe {
+            let mut set = std::mem::zeroed();
+            libc::sigemptyset(&raw mut set);
+            Self(set)
+        }
+    }
+
+    /// Adds `signal` to the set.
+    pub fn add(&mut self, signal: Signal) {
+        // SAFETY: the set is initialized and `signal` is a valid signal number.
+        unsafe { libc::sigaddset(&raw mut self.0, signal.as_raw()) };
+    }
+
+    /// Blocks every signal of the set for the calling thread.
+    pub fn thread_block(&self) -> io::Result<()> {
+        self.mask(libc::SIG_BLOCK)
+    }
+
+    /// Unblocks every signal of the set for the calling thread. Async-signal-safe,
+    /// so it can be called from a pre-exec hook.
+    pub fn thread_unblock(&self) -> io::Result<()> {
+        self.mask(libc::SIG_UNBLOCK)
+    }
+
+    fn mask(&self, how: libc::c_int) -> io::Result<()> {
+        // SAFETY: the set is initialized and `how` is one of the documented values.
+        let res = unsafe { libc::pthread_sigmask(how, &raw const self.0, std::ptr::null_mut()) };
+        if res == 0 {
+            Ok(())
+        } else {
+            Err(io::Error::from_raw_os_error(res))
+        }
+    }
+
+    #[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
+    fn as_raw(&self) -> *const libc::sigset_t {
+        &raw const self.0
+    }
+}
+
 /// These signals must be blocked before calling [`ChildExt::wait_or_timeout`].
 /// Consider unblocking them in the child's pre-exec hook.
-pub fn timeout_signal_set() -> SigSet {
-    let mut set = SigSet::empty();
-    set.add(Signal::SIGALRM);
-    set.add(Signal::SIGINT);
-    set.add(Signal::SIGQUIT);
-    set.add(Signal::SIGHUP);
-    set.add(Signal::SIGTERM);
-    set.add(Signal::SIGPIPE);
-    set.add(Signal::SIGUSR1);
-    set.add(Signal::SIGUSR2);
-    set.add(Signal::SIGCHLD);
+pub fn timeout_signal_set() -> SignalSet {
+    let mut set = SignalSet::empty();
+    for signal in [
+        Signal::ALARM,
+        Signal::INT,
+        Signal::QUIT,
+        Signal::HUP,
+        Signal::TERM,
+        Signal::PIPE,
+        Signal::USR1,
+        Signal::USR2,
+        Signal::CHILD,
+    ] {
+        set.add(signal);
+    }
     set
 }
 
 /// Unblocks a signal from the current thread.
-pub fn unblock_signal(signal: RixSignal) -> io::Result<()> {
-    let mut set = SigSet::empty();
-    // SAFETY: rustix's Signal is also a valid nix Signal.
-    set.add(unsafe { Signal::try_from(signal.as_raw()).unwrap_unchecked() });
-
-    set.thread_unblock().map_err(Into::into)
+pub fn unblock_signal(signal: Signal) -> io::Result<()> {
+    let mut set = SignalSet::empty();
+    set.add(signal);
+    set.thread_unblock()
 }
 
 /// Ensures there is no overflow on `time_t` operations. Some BSDs (notably XNU)
@@ -270,7 +336,6 @@ mod timer {
 ))]
 mod timer {
     use super::MAX_KTIME_T;
-    use nix::errno::Errno;
     use std::io;
     use std::ptr::null_mut;
     use std::time::Duration;
@@ -297,9 +362,9 @@ mod timer {
             };
 
             // SAFETY: All values are properly initialized.
-            Errno::result(unsafe {
-                libc::setitimer(libc::ITIMER_REAL, &raw const time, null_mut())
-            })?;
+            if unsafe { libc::setitimer(libc::ITIMER_REAL, &raw const time, null_mut()) } == -1 {
+                return Err(io::Error::last_os_error());
+            }
             Ok(())
         }
     }
@@ -315,14 +380,64 @@ impl Timer {
         let set = timeout_signal_set();
         let mut sig = 0;
         // SAFETY: All values are properly initialized.
-        let res = unsafe { libc::sigwait(set.as_ref(), &raw mut sig) };
+        let res = unsafe { libc::sigwait(set.as_raw(), &raw mut sig) };
 
         if res != 0 {
             Err(io::Error::from_raw_os_error(res))
         } else if sig == libc::SIGALRM {
             Ok(None)
         } else {
-            Ok(Some(Signal::try_from(sig)?))
+            // SAFETY: `sigwait` only reports a signal of the set we passed it.
+            Ok(Some(unsafe { Signal::from_raw_unchecked(sig) }))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn is_blocked(sig: Signal) -> bool {
+        // SAFETY: a null new mask only queries the current one into `mask`.
+        unsafe {
+            let mut mask: libc::sigset_t = std::mem::zeroed();
+            libc::pthread_sigmask(libc::SIG_BLOCK, std::ptr::null(), &raw mut mask);
+            libc::sigismember(&raw const mask, sig.as_raw()) == 1
+        }
+    }
+
+    #[test]
+    fn test_signal_set_block_unblock() {
+        // Run on its own thread so the mask change can't leak into other tests.
+        std::thread::spawn(|| {
+            let mut set = SignalSet::empty();
+            set.add(Signal::USR2);
+            assert!(!is_blocked(Signal::USR2));
+            set.thread_block().unwrap();
+            assert!(is_blocked(Signal::USR2));
+            assert!(!is_blocked(Signal::USR1));
+            set.thread_unblock().unwrap();
+            assert!(!is_blocked(Signal::USR2));
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
+    #[test]
+    fn test_signal_from_value() {
+        assert_eq!(
+            signal_from_value(libc::SIGTERM as usize).unwrap(),
+            Signal::TERM
+        );
+        assert!(signal_from_value(0).is_err());
+        assert!(signal_from_value(usize::MAX).is_err());
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        assert_eq!(
+            signal_from_value(libc::SIGRTMIN() as usize)
+                .unwrap()
+                .as_raw(),
+            libc::SIGRTMIN()
+        );
     }
 }
