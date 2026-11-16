@@ -242,17 +242,22 @@ impl Uniq {
     /// are not valid UTF-8 count as one character each, so they cannot change
     /// how the characters before them are counted.
     fn char_prefix_len(bytes: &[u8], limit: usize) -> usize {
+        let mut remaining = limit;
         let mut pos = 0;
-        for _ in 0..limit {
-            if pos == bytes.len() {
-                break;
+        for chunk in bytes.utf8_chunks() {
+            for (idx, _) in chunk.valid().char_indices() {
+                if remaining == 0 {
+                    return pos + idx;
+                }
+                remaining -= 1;
             }
-            let chunk = &bytes[pos..bytes.len().min(pos + 4)];
-            let valid = match std::str::from_utf8(chunk) {
-                Ok(text) => text,
-                Err(e) => std::str::from_utf8(&chunk[..e.valid_up_to()]).unwrap_or(""),
-            };
-            pos += valid.chars().next().map_or(1, char::len_utf8);
+            pos += chunk.valid().len();
+            let invalid = chunk.invalid().len();
+            if remaining <= invalid {
+                return pos + remaining;
+            }
+            remaining -= invalid;
+            pos += invalid;
         }
         pos
     }
