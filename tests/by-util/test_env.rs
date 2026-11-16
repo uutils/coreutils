@@ -429,6 +429,31 @@ fn test_change_directory() {
     assert_eq!(out.trim(), temporary_path.as_os_str());
 }
 
+#[cfg(not(windows))]
+#[test]
+fn test_short_option_attached_value_keeps_leading_equals() {
+    let scene = TestScenario::new(util_name!());
+    for dir in ["=d", "="] {
+        scene.fixtures.mkdir(dir);
+    }
+    for (args, dir) in [
+        (&["-C=d", "pwd"][..], "=d"),
+        (&["-vC=d", "pwd"], "=d"),
+        (&["-S-C=d pwd"], "=d"),
+        (&["-C=", "pwd"], "="),
+    ] {
+        let expected = std::fs::canonicalize(scene.fixtures.plus(dir)).unwrap();
+        let out = scene.ucmd().args(args).succeeds().stdout_move_str();
+        assert_eq!(out.trim(), expected.as_os_str(), "args: {args:?}");
+    }
+
+    scene
+        .ucmd()
+        .args(&["-a=name", "sh", "-c", "echo $0"])
+        .succeeds()
+        .stdout_is("=name\n");
+}
+
 #[cfg(windows)]
 #[test]
 fn test_change_directory() {
@@ -1285,6 +1310,10 @@ fn disallow_equals_sign_on_short_unset_option() {
         .stderr_contains("env: cannot unset '=': Invalid argument");
     ts.ucmd()
         .arg("-u=A1B2C3")
+        .fails_with_code(125)
+        .stderr_contains("env: cannot unset '=A1B2C3': Invalid argument");
+    ts.ucmd()
+        .arg("-vu=A1B2C3")
         .fails_with_code(125)
         .stderr_contains("env: cannot unset '=A1B2C3': Invalid argument");
     ts.ucmd().arg("--split-string=A1B=2C3=").succeeds();

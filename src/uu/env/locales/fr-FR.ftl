@@ -30,7 +30,6 @@ env-error-invalid-signal = { $signal } : signal invalide
 env-error-generic = Erreur : { $error }
 env-error-no-such-file = { $program } : Aucun fichier ou répertoire de ce type
 env-error-use-s-shebang = utilisez -[v]S pour passer des options dans les lignes shebang
-env-error-cannot-unset = impossible de supprimer '{ $name }' : Argument invalide
 env-error-cannot-unset-invalid = impossible de supprimer { $name } : Argument invalide
 env-error-must-specify-command-with-chdir = doit spécifier une commande avec --chdir (-C)
 env-error-cannot-change-directory = impossible de changer de répertoire vers { $directory } : { $error }

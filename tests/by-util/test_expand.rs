@@ -533,3 +533,16 @@ fn test_column_kept_across_read_buffers() {
         .succeeds()
         .stdout_only(format!("{prefix}\tx\n"));
 }
+
+#[cfg(unix)]
+#[test]
+#[ignore = "a multi-byte char split across reads must count as one column"]
+fn test_multibyte_char_split_across_reads() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .cmd_shell("(printf '\\303'; sleep 0.3; printf '\\251\\tz\\n') | \"$BIN\" expand")
+        .env("BIN", &scene.bin_path)
+        .env("LC_ALL", "C.UTF-8")
+        .succeeds()
+        .stdout_only("\u{e9}       z\n");
+}

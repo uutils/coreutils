@@ -1189,6 +1189,22 @@ fn test_split_number_with_io_blksize() {
     assert_eq!(at.read("xae"), "wxyz\n");
 }
 
+/// A small `--io-blksize` forces reads that split lines across buffers and
+/// chunk boundaries that fall in the middle of a read, rather than aligning
+/// with it.
+#[test]
+fn test_split_lines_with_small_io_blksize() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-l", "2", "---io-blksize", "5"])
+        .pipe_in("1\n2\n3\n4\n5\n6\n")
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("xaa"), "1\n2\n");
+    assert_eq!(at.read("xab"), "3\n4\n");
+    assert_eq!(at.read("xac"), "5\n6\n");
+    assert!(!at.plus("xad").exists());
+}
+
 #[test]
 fn test_split_default_with_io_blksize() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2564,4 +2580,19 @@ fn test_number_with_plus_prefix(
         .map(|(name, contents)| (name.to_string(), contents.to_string()))
         .collect();
     assert_eq!(files, expected_files, "-n {number}");
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "a --filter that exits early must not abort the other -n chunks"]
+fn test_number_filter_exiting_early_keeps_other_chunks() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut data = vec![b'k'; 200_000];
+    data.extend(vec![b'm'; 200_000]);
+    data.extend(vec![b'n'; 200_000]);
+    at.write_bytes("three", &data);
+    ucmd.args(&["-n", "3", "--filter=head -c1 > $FILE", "three"])
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("xaa") + &at.read("xab") + &at.read("xac"), "kmn");
 }
