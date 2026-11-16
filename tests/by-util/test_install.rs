@@ -855,38 +855,6 @@ fn test_install_and_strip() {
 }
 
 #[test]
-fn test_install_strip_program_sees_zeroed_umask() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    write_strip_program(&scene, "probe", "#!/bin/sh\numask > \"$1\"\n");
-    at.write("source", "file contents");
-
-    scene
-        .ucmd()
-        .umask(0o077)
-        .args(&[
-            "-s",
-            "--strip-program",
-            "./probe",
-            "source",
-            STRIP_TARGET_FILE,
-        ])
-        .succeeds()
-        .no_stderr();
-
-    // Follow GNU's behavior: the strip program sees a zeroed umask. Shells
-    // differ on whether they print it as 000 or 0000, so compare the value.
-    let reported = at.read(STRIP_TARGET_FILE);
-    let reported = reported.trim();
-    assert_eq!(
-        u32::from_str_radix(reported, 8).unwrap(),
-        0,
-        "strip program saw umask {reported}"
-    );
-}
-
-#[test]
 fn test_install_and_strip_with_ancestor_directories() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -3455,7 +3423,6 @@ fn test_install_will_not_overwrite_just_created() {
 }
 
 #[test]
-#[ignore = "the strip program must run with the caller's umask"]
 fn test_install_strip_program_sees_caller_umask() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

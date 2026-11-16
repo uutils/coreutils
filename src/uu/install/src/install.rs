@@ -56,6 +56,7 @@ pub struct Behavior {
     compare: bool,
     strip: bool,
     strip_program: String,
+    caller_umask: u32,
     create_leading: bool,
     target_dir: Option<OsString>,
     no_target_dir: bool,
@@ -210,8 +211,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let behavior = behavior(&matches, diag_args.as_deref())?;
 
-    // Like GNU, work with the umask cleared: new ancestor directories get
-    // exactly DEFAULT_MODE and the strip program sees a umask of 0.
+    // Like GNU, work with the umask cleared for new ancestor directories and
+    // file creation. The strip program keeps the caller's umask.
     uucore::mode::with_umask(0, || match behavior.main_function {
         MainFunction::Directory => directory(&paths, &behavior),
         MainFunction::Standard => standard(paths, &behavior),
@@ -482,6 +483,7 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
         compare,
         strip,
         strip_program,
+        caller_umask: uucore::mode::get_umask(),
         create_leading: matches.get_flag(OPT_CREATE_LEADING),
         target_dir,
         no_target_dir,
@@ -1116,7 +1118,11 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
     } else {
         to.to_path_buf()
     };
-    match process::Command::new(&b.strip_program).arg(&to).status() {
+    // GNU runs the strip program with the caller's umask rather than the
+    // zeroed umask used for the installed file.
+    match uucore::mode::with_umask(b.caller_umask, || {
+        process::Command::new(&b.strip_program).arg(&to).status()
+    }) {
         Ok(status) => {
             if !status.success() {
                 // Follow GNU's behavior: if strip fails, removes the target
