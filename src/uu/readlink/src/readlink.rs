@@ -22,6 +22,12 @@ use uucore::{format_usage, show_error};
 const OPT_CANONICALIZE: &str = "canonicalize";
 const OPT_CANONICALIZE_MISSING: &str = "canonicalize-missing";
 const OPT_CANONICALIZE_EXISTING: &str = "canonicalize-existing";
+// GNU: the last of -e/-f/-m wins, so each one overrides the other two.
+const CANONICALIZE_FLAGS: [&str; 3] = [
+    OPT_CANONICALIZE,
+    OPT_CANONICALIZE_EXISTING,
+    OPT_CANONICALIZE_MISSING,
+];
 const OPT_NO_NEWLINE: &str = "no-newline";
 const OPT_QUIET: &str = "quiet";
 const OPT_SILENT: &str = "silent";
@@ -124,12 +130,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_CANONICALIZE)
                 .help(translate!("readlink-help-canonicalize"))
                 .action(ArgAction::SetTrue)
-                // GNU: the last of -e/-f/-m wins.
-                .overrides_with_all([
-                    OPT_CANONICALIZE,
-                    OPT_CANONICALIZE_EXISTING,
-                    OPT_CANONICALIZE_MISSING,
-                ]),
+                .overrides_with_all(CANONICALIZE_FLAGS),
         )
         .arg(
             Arg::new(OPT_CANONICALIZE_EXISTING)
@@ -137,12 +138,7 @@ pub fn uu_app() -> Command {
                 .long("canonicalize-existing")
                 .help(translate!("readlink-help-canonicalize-existing"))
                 .action(ArgAction::SetTrue)
-                // GNU: the last of -e/-f/-m wins.
-                .overrides_with_all([
-                    OPT_CANONICALIZE,
-                    OPT_CANONICALIZE_EXISTING,
-                    OPT_CANONICALIZE_MISSING,
-                ]),
+                .overrides_with_all(CANONICALIZE_FLAGS),
         )
         .arg(
             Arg::new(OPT_CANONICALIZE_MISSING)
@@ -150,12 +146,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_CANONICALIZE_MISSING)
                 .help(translate!("readlink-help-canonicalize-missing"))
                 .action(ArgAction::SetTrue)
-                // GNU: the last of -e/-f/-m wins.
-                .overrides_with_all([
-                    OPT_CANONICALIZE,
-                    OPT_CANONICALIZE_EXISTING,
-                    OPT_CANONICALIZE_MISSING,
-                ]),
+                .overrides_with_all(CANONICALIZE_FLAGS),
         )
         .arg(
             Arg::new(OPT_NO_NEWLINE)
