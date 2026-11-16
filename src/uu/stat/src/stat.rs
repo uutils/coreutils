@@ -7,7 +7,7 @@
 
 use std::ops::Range;
 use uucore::diagnostics::OptionValue;
-use uucore::error::{UError, UResult, USimpleError};
+use uucore::error::{UError, UResult, USimpleError, set_exit_code};
 use uucore::i18n::get_ctype_encoding;
 use uucore::quoting_style::{QuotingStyle, escape_name, quoting_style_from_env};
 use uucore::translate;
@@ -483,6 +483,27 @@ fn print_os_str(s: &OsString, flags: Flags, width: usize, precision: Precision) 
         let lossy_string = s.to_string_lossy();
         print_str(&lossy_string, flags, width, precision);
     }
+}
+
+/// The SELinux security context of `file`, or why it cannot be read.
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+fn security_context(file: &OsStr, follow_symbolic_links: bool) -> Result<String, String> {
+    use uucore::selinux::{SeLinuxError, get_selinux_security_context};
+
+    match get_selinux_security_context(Path::new(file), follow_symbolic_links) {
+        Ok(context) => Ok(context),
+        Err(SeLinuxError::SELinuxNotEnabled) => Err(context_not_supported()),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+#[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
+fn security_context(_file: &OsStr, _follow_symbolic_links: bool) -> Result<String, String> {
+    Err(context_not_supported())
+}
+
+fn context_not_supported() -> String {
+    strip_errno(&io::Error::from_raw_os_error(uucore::libc::ENOTSUP))
 }
 
 fn quote_file_name(file_name: &OsStr, quoting_style: QuotingStyle) -> String {
@@ -1146,10 +1167,7 @@ impl Stater {
         display_name: &str,
         file: &OsString,
         file_type: FileType,
-        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
         follow_symbolic_links: bool,
-        #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
-        _: bool,
     ) -> Result<(), i32> {
         match *t {
             Token::Byte(byte) => print_raw_byte(byte),
@@ -1176,34 +1194,24 @@ impl Stater {
                     // See coreutils/gnulib/lib/stat-size.h ST_NBLOCKSIZE // spell-checker:disable-line
                     'B' => OutputType::Unsigned(512),
                     // SELinux security context string
-                    'C' => {
-                        #[cfg(all(
-                            feature = "selinux",
-                            any(target_os = "linux", target_os = "android")
-                        ))]
-                        {
-                            if uucore::selinux::is_selinux_enabled() {
-                                match uucore::selinux::get_selinux_security_context(
-                                    Path::new(file),
-                                    follow_symbolic_links,
-                                ) {
-                                    Ok(ctx) => OutputType::Str(ctx),
-                                    Err(_) => OutputType::Str(translate!(
-                                        "stat-selinux-failed-get-context"
-                                    )),
-                                }
-                            } else {
-                                OutputType::Str(translate!("stat-selinux-unsupported-system"))
-                            }
+                    'C' => match security_context(file, follow_symbolic_links) {
+                        Ok(context) => OutputType::Str(context),
+                        Err(error) => {
+                            show_error!(
+                                "{}",
+                                translate!(
+                                    "stat-selinux-failed-get-context",
+                                    "file" => quote_file_name(
+                                        OsStr::new(display_name),
+                                        QuotingStyle::SHELL_ESCAPE_ALWAYS
+                                    ),
+                                    "error" => error
+                                )
+                            );
+                            set_exit_code(1);
+                            OutputType::Str("?".to_string())
                         }
-                        #[cfg(not(all(
-                            feature = "selinux",
-                            any(target_os = "linux", target_os = "android")
-                        )))]
-                        {
-                            OutputType::Str(translate!("stat-selinux-unsupported-os"))
-                        }
-                    }
+                    },
                     // device number in decimal
                     'd' if flag.major => OutputType::Unsigned(major(meta.dev() as _) as u64),
                     'd' if flag.minor => OutputType::Unsigned(minor(meta.dev() as _) as u64),

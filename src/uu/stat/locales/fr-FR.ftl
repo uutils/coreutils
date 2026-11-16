@@ -109,9 +109,7 @@ stat-warning-unrecognized-escape = séquence d'échappement non reconnue '\{$esc
 
 ## Messages de contexte SELinux
 
-stat-selinux-failed-get-context = impossible d'obtenir le contexte de sécurité
-stat-selinux-unsupported-system = non pris en charge sur ce système
-stat-selinux-unsupported-os = non pris en charge pour ce système d'exploitation
+stat-selinux-failed-get-context = impossible d'obtenir le contexte de sécurité de {$file} : {$error}
 
 # Diagnostics
 stat-diag-help-directive = une directive s'écrit %[DRAPEAUX][LARGEUR][.PRÉCISION]LETTRE, comme dans %-10.2s ; un % littéral s'écrit %%
