@@ -639,7 +639,20 @@ fn process_chunk<
     in_word: &mut bool,
     is_posixly_correct: bool,
     count_chars_as_bytes: bool,
+    simd_allowed: bool,
 ) {
+    if !SHOW_MAX_LINE_LENGTH {
+        process_chunk_without_widths::<SHOW_CHARS, SHOW_LINES, SHOW_WORDS>(
+            total,
+            text,
+            in_word,
+            is_posixly_correct,
+            count_chars_as_bytes,
+            simd_allowed,
+        );
+        return;
+    }
+
     for ch in text.chars() {
         if SHOW_WORDS {
             let is_space = if is_posixly_correct {
@@ -686,6 +699,130 @@ fn process_chunk<
     total.max_line_length = max(*current_len, total.max_line_length);
 }
 
+/// Counts a chunk when no display widths are needed.
+///
+/// Lines and characters are counted over the raw bytes, which is valid because
+/// `text` is UTF-8: a newline byte never occurs inside a multi-byte character
+/// and every character has exactly one non-continuation byte.
+fn process_chunk_without_widths<
+    const SHOW_CHARS: bool,
+    const SHOW_LINES: bool,
+    const SHOW_WORDS: bool,
+>(
+    total: &mut WordCount,
+    text: &str,
+    in_word: &mut bool,
+    is_posixly_correct: bool,
+    count_chars_as_bytes: bool,
+    simd_allowed: bool,
+) {
+    let bytes = text.as_bytes();
+    if SHOW_LINES {
+        total.lines += if simd_allowed {
+            bytecount::count(bytes, b'\n')
+        } else {
+            bytecount::naive_count(bytes, b'\n')
+        };
+    }
+    if SHOW_CHARS {
+        total.chars += if count_chars_as_bytes {
+            bytes.len()
+        } else if simd_allowed {
+            bytecount::num_chars(bytes)
+        } else {
+            bytecount::naive_num_chars(bytes)
+        };
+    }
+    total.bytes += bytes.len();
+
+    if SHOW_WORDS {
+        let (words, ends_in_space) = count_words(text, !*in_word, is_posixly_correct);
+        total.words += words;
+        *in_word = !ends_in_space;
+    }
+}
+
+/// Whether an ASCII byte is whitespace. This is the same set as
+/// `char::is_whitespace` and the POSIX space class for ASCII.
+#[inline]
+fn is_ascii_space(b: u8) -> bool {
+    b == b' ' || b.wrapping_sub(b'\t') < 5
+}
+
+/// Counts the words starting in `text`, that is the non-space characters
+/// following a space, where `prev_space` tells whether the character before
+/// `text` was a space. Also returns whether `text` ends in a space.
+///
+/// This also counts control characters! (As of GNU coreutils 9.5)
+///
+/// The text is walked in blocks. Runs of ASCII blocks take a fast path that
+/// compilers vectorize, while blocks with multi-byte characters are decoded.
+fn count_words(text: &str, mut prev_space: bool, is_posixly_correct: bool) -> (usize, bool) {
+    // Long enough to amortize checking a block, short enough that occasional
+    // multi-byte characters keep most of an ASCII text on the fast path.
+    const ASCII_BLOCK: usize = 64;
+    // Once a block has multi-byte characters, decode this many bytes before
+    // looking for ASCII again, as such text tends to continue.
+    const DECODE_SPAN: usize = 256;
+
+    let bytes = text.as_bytes();
+    let mut words = 0;
+    let mut start = 0;
+    while start < bytes.len() {
+        let mut end = (start + ASCII_BLOCK).min(bytes.len());
+        if bytes[start..end].is_ascii() {
+            while end + ASCII_BLOCK <= bytes.len() && bytes[end..end + ASCII_BLOCK].is_ascii() {
+                end += ASCII_BLOCK;
+            }
+            words += count_ascii_word_starts(&bytes[start..end], prev_space);
+            prev_space = is_ascii_space(bytes[end - 1]);
+        } else {
+            end = (start + DECODE_SPAN).min(bytes.len());
+            while !text.is_char_boundary(end) {
+                end += 1;
+            }
+            let mut in_word = !prev_space;
+            for ch in text[start..end].chars() {
+                let is_space = if is_posixly_correct {
+                    matches!(ch, '\t'..='\r' | ' ')
+                } else {
+                    ch.is_whitespace()
+                };
+                if is_space {
+                    in_word = false;
+                } else if !in_word {
+                    in_word = true;
+                    words += 1;
+                }
+            }
+            prev_space = !in_word;
+        }
+        start = end;
+    }
+    (words, prev_space)
+}
+
+/// Counts the non-space bytes in ASCII `run` that follow a space, where
+/// `prev_space` tells whether the byte before the run was a space.
+fn count_ascii_word_starts(run: &[u8], prev_space: bool) -> usize {
+    let Some((&first, _)) = run.split_first() else {
+        return 0;
+    };
+    let mut words = usize::from(prev_space && !is_ascii_space(first));
+    // Sum per-pair flags into a `u8` over chunks short enough not to overflow
+    // it, which lets the compiler process many pairs per instruction.
+    let pairs = run[..run.len() - 1].chunks(128).zip(run[1..].chunks(128));
+    for (prev, cur) in pairs {
+        let starts = prev
+            .iter()
+            .zip(cur)
+            .map(|(&p, &c)| u8::from(is_ascii_space(p)) & u8::from(!is_ascii_space(c)))
+            .fold(0u8, u8::wrapping_add);
+        words += usize::from(starts);
+    }
+    words
+}
+
 fn handle_error(
     error: BufReadDecoderError<'_>,
     total: &mut WordCount,
@@ -723,6 +860,7 @@ fn word_count_from_reader_specialized<
     let mut in_word = false;
     let mut current_len = 0;
     let is_posixly_correct = *IS_POSIXLY_CORRECT;
+    let simd_allowed = wc_simd_allowed(SimdPolicy::detect());
     while let Some(chunk) = reader.next_strict() {
         match chunk {
             Ok(text) => {
@@ -733,6 +871,7 @@ fn word_count_from_reader_specialized<
                     &mut in_word,
                     is_posixly_correct,
                     count_chars_as_bytes,
+                    simd_allowed,
                 );
             }
             Err(e) => {
