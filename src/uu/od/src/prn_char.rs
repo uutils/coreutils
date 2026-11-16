@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use std::iter::repeat_n;
+
 use crate::formatter_item_info::{FormatWriter, FormatterItemInfo};
 
 pub static FORMAT_ITEM_A: FormatterItemInfo = FormatterItemInfo {
@@ -28,10 +30,16 @@ static A_CHARS: [&str; 128] = [
     "z", "{", "|", "}", "~", "del",
 ];
 
-fn format_item_a(p: u64) -> String {
+/// Appends `s` right-aligned to the 4 columns of a character item.
+fn push_right_aligned(out: &mut String, s: &str) {
+    out.extend(repeat_n(' ', 4usize.saturating_sub(s.len())));
+    out.push_str(s);
+}
+
+fn format_item_a(p: u64, out: &mut String) {
     // item-bytes == 1
     let b = (p & 0x7f) as u8;
-    format!("{:>4}", A_CHARS.get(b as usize).unwrap_or(&"??"))
+    push_right_aligned(out, A_CHARS.get(b as usize).unwrap_or(&"??"));
 }
 
 static C_CHARS: [&str; 128] = [
@@ -45,19 +53,19 @@ static C_CHARS: [&str; 128] = [
     "v", "w", "x", "y", "z", "{", "|", "}", "~", "177",
 ];
 
-fn format_item_c(bytes: &[u8]) -> String {
+fn format_item_c(bytes: &[u8], out: &mut String) {
     // item-bytes == 1
     let b = bytes[0];
 
     if b & 0x80 == 0x00 {
         // ASCII byte (0xxxxxxx)
-        match C_CHARS.get(b as usize) {
-            Some(s) => format!("{s:>4}"),
-            None => format!("{b:>4}"),
-        }
+        push_right_aligned(out, C_CHARS[b as usize]);
     } else {
         // Continuation or leading byte of a multibyte UTF-8 sequence — treat as raw byte
-        format!(" {b:03o}")
+        out.push(' ');
+        for shift in [6, 3, 0] {
+            out.push(char::from(b'0' + ((b >> shift) & 7)));
+        }
     }
 }
 
@@ -77,52 +85,68 @@ pub fn format_ascii_dump(bytes: &[u8]) -> String {
     result
 }
 
+/// Runs `format_item_a` on its own, for the tests.
+#[cfg(test)]
+fn formatted_a(p: u64) -> String {
+    let mut out = String::new();
+    format_item_a(p, &mut out);
+    out
+}
+
+/// Runs `format_item_c` on its own, for the tests.
+#[cfg(test)]
+fn formatted_c(bytes: &[u8]) -> String {
+    let mut out = String::new();
+    format_item_c(bytes, &mut out);
+    out
+}
+
 #[test]
 #[allow(clippy::cognitive_complexity)]
 fn test_format_item_a() {
-    assert_eq!(" nul", format_item_a(0x00));
-    assert_eq!(" soh", format_item_a(0x01));
-    assert_eq!("  sp", format_item_a(0x20));
-    assert_eq!("   A", format_item_a(0x41));
-    assert_eq!("   ~", format_item_a(0x7e));
-    assert_eq!(" del", format_item_a(0x7f));
+    assert_eq!(" nul", formatted_a(0x00));
+    assert_eq!(" soh", formatted_a(0x01));
+    assert_eq!("  sp", formatted_a(0x20));
+    assert_eq!("   A", formatted_a(0x41));
+    assert_eq!("   ~", formatted_a(0x7e));
+    assert_eq!(" del", formatted_a(0x7f));
 
-    assert_eq!(" nul", format_item_a(0x80));
-    assert_eq!("   A", format_item_a(0xc1));
-    assert_eq!("   ~", format_item_a(0xfe));
-    assert_eq!(" del", format_item_a(0xff));
+    assert_eq!(" nul", formatted_a(0x80));
+    assert_eq!("   A", formatted_a(0xc1));
+    assert_eq!("   ~", formatted_a(0xfe));
+    assert_eq!(" del", formatted_a(0xff));
 }
 
 #[test]
 #[allow(clippy::cognitive_complexity)]
 fn test_format_item_c() {
-    assert_eq!("  \\0", format_item_c(&[0x00]));
-    assert_eq!(" 001", format_item_c(&[0x01]));
-    assert_eq!("    ", format_item_c(&[0x20]));
-    assert_eq!("   A", format_item_c(&[0x41]));
-    assert_eq!("   ~", format_item_c(&[0x7e]));
-    assert_eq!(" 177", format_item_c(&[0x7f]));
-    assert_eq!("   A", format_item_c(&[0x41, 0x21]));
+    assert_eq!("  \\0", formatted_c(&[0x00]));
+    assert_eq!(" 001", formatted_c(&[0x01]));
+    assert_eq!("    ", formatted_c(&[0x20]));
+    assert_eq!("   A", formatted_c(&[0x41]));
+    assert_eq!("   ~", formatted_c(&[0x7e]));
+    assert_eq!(" 177", formatted_c(&[0x7f]));
+    assert_eq!("   A", formatted_c(&[0x41, 0x21]));
 
-    assert_eq!(" 200", format_item_c(&[0x80]));
-    assert_eq!(" 237", format_item_c(&[0x9f]));
+    assert_eq!(" 200", formatted_c(&[0x80]));
+    assert_eq!(" 237", formatted_c(&[0x9f]));
 
-    assert_eq!(" 303", format_item_c(&[0xc3, 0x9f]));
-    assert_eq!(" 303", format_item_c(&[0xc3, 0x9f, 0x21]));
+    assert_eq!(" 303", formatted_c(&[0xc3, 0x9f]));
+    assert_eq!(" 303", formatted_c(&[0xc3, 0x9f, 0x21]));
 
-    assert_eq!(" 341", format_item_c(&[0xe1, 0x80, 0x80]));
+    assert_eq!(" 341", formatted_c(&[0xe1, 0x80, 0x80]));
 
-    assert_eq!(" 360", format_item_c(&[0xf0, 0x9f, 0x92, 0x96]));
+    assert_eq!(" 360", formatted_c(&[0xf0, 0x9f, 0x92, 0x96]));
 
-    assert_eq!(" 300", format_item_c(&[0xc0, 0x80])); // invalid utf-8 (UTF-8 null)
-    assert_eq!(" 301", format_item_c(&[0xc1, 0xa1])); // invalid utf-8
-    assert_eq!(" 303", format_item_c(&[0xc3, 0xc3])); // invalid utf-8
-    assert_eq!(" 360", format_item_c(&[0xf0, 0x82, 0x82, 0xac])); // invalid utf-8 (overlong)
-    assert_eq!(" 360", format_item_c(&[0xf0, 0x9f, 0x92])); // invalid utf-8 (missing octet)
-    assert_eq!(" 364", format_item_c(&[0xf4, 0x8f, 0xbf, 0xbd])); // largest valid utf-8   // spell-checker:ignore 10FFFD FFFD
-    assert_eq!(" 364", format_item_c(&[0xf4, 0x90, 0x00, 0x00])); // invalid utf-8
-    assert_eq!(" 365", format_item_c(&[0xf5, 0x80, 0x80, 0x80])); // invalid utf-8
-    assert_eq!(" 377", format_item_c(&[0xff])); // invalid utf-8
+    assert_eq!(" 300", formatted_c(&[0xc0, 0x80])); // invalid utf-8 (UTF-8 null)
+    assert_eq!(" 301", formatted_c(&[0xc1, 0xa1])); // invalid utf-8
+    assert_eq!(" 303", formatted_c(&[0xc3, 0xc3])); // invalid utf-8
+    assert_eq!(" 360", formatted_c(&[0xf0, 0x82, 0x82, 0xac])); // invalid utf-8 (overlong)
+    assert_eq!(" 360", formatted_c(&[0xf0, 0x9f, 0x92])); // invalid utf-8 (missing octet)
+    assert_eq!(" 364", formatted_c(&[0xf4, 0x8f, 0xbf, 0xbd])); // largest valid utf-8   // spell-checker:ignore 10FFFD FFFD
+    assert_eq!(" 364", formatted_c(&[0xf4, 0x90, 0x00, 0x00])); // invalid utf-8
+    assert_eq!(" 365", formatted_c(&[0xf5, 0x80, 0x80, 0x80])); // invalid utf-8
+    assert_eq!(" 377", formatted_c(&[0xff])); // invalid utf-8
 }
 
 #[test]

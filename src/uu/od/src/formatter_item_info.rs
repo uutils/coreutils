@@ -11,11 +11,14 @@ use std::fmt;
 #[allow(unpredictable_function_pointer_comparisons)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum FormatWriter {
-    IntWriter(fn(u64) -> String),
+    /// Appends the formatted item to the string, which avoids allocating a
+    /// string per item for these frequently used formats.
+    IntWriter(fn(u64, &mut String)),
     FloatWriter(fn(f64) -> String),
     LongDoubleWriter(fn(f64) -> String), // On most platforms, long double is f64 or emulated
     BFloatWriter(fn(f64) -> String),
-    MultibyteWriter(fn(&[u8]) -> String),
+    /// Appends the formatted item to the string, like `IntWriter`.
+    MultibyteWriter(fn(&[u8], &mut String)),
 }
 
 impl fmt::Debug for FormatWriter {
