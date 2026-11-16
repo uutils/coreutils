@@ -259,36 +259,7 @@ impl Utmpx {
 
     /// Canonicalize host name using DNS
     pub fn canon_host(&self) -> IOResult<String> {
-        let host = self.host();
-
-        let (hostname, display) = host.split_once(':').unwrap_or((&host, ""));
-
-        if !hostname.is_empty() {
-            use dns_lookup::{AddrInfoHints, getaddrinfo};
-
-            const AI_CANONNAME: i32 = 0x2;
-            let hints = AddrInfoHints {
-                flags: AI_CANONNAME,
-                ..AddrInfoHints::default()
-            };
-            if let Ok(sockets) = getaddrinfo(Some(hostname), None, Some(hints)) {
-                let sockets = sockets.collect::<IOResult<Vec<_>>>()?;
-                for socket in sockets {
-                    if let Some(ai_canonname) = socket.canonname {
-                        return Ok(if display.is_empty() {
-                            ai_canonname
-                        } else {
-                            format!("{ai_canonname}:{display}")
-                        });
-                    }
-                }
-            } else {
-                // GNU coreutils has this behavior
-                return Ok(hostname.to_string());
-            }
-        }
-
-        Ok(host)
+        canonicalize_host(self.host())
     }
 
     /// Iterate through all the utmp records.
@@ -365,6 +336,37 @@ impl Utmpx {
         }
         iter
     }
+}
+
+pub(crate) fn canonicalize_host(host: String) -> IOResult<String> {
+    let (hostname, display) = host.split_once(':').unwrap_or((&host, ""));
+
+    if !hostname.is_empty() {
+        use dns_lookup::{AddrInfoHints, getaddrinfo};
+
+        const AI_CANONNAME: i32 = 0x2;
+        let hints = AddrInfoHints {
+            flags: AI_CANONNAME,
+            ..AddrInfoHints::default()
+        };
+        if let Ok(sockets) = getaddrinfo(Some(hostname), None, Some(hints)) {
+            let sockets = sockets.collect::<IOResult<Vec<_>>>()?;
+            for socket in sockets {
+                if let Some(ai_canonname) = socket.canonname {
+                    return Ok(if display.is_empty() {
+                        ai_canonname
+                    } else {
+                        format!("{ai_canonname}:{display}")
+                    });
+                }
+            }
+        } else {
+            // GNU coreutils has this behavior
+            return Ok(hostname.to_string());
+        }
+    }
+
+    Ok(host)
 }
 
 // On some systems these functions are not thread-safe. On others they're
@@ -519,7 +521,7 @@ impl UtmpxRecord {
         match self {
             Self::Traditional(utmpx) => utmpx.canon_host(),
             #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
-            Self::Systemd(systemd) => Ok(systemd.canon_host()),
+            Self::Systemd(systemd) => systemd.try_canon_host(),
         }
     }
 }
