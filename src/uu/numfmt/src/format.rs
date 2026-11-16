@@ -9,7 +9,7 @@ use std::fmt::Write as _;
 use std::io::Write as _;
 
 use uucore::display::Quotable;
-use uucore::i18n::decimal::{locale_decimal_separator, locale_grouping_separator};
+use uucore::i18n::decimal::{group_digits, locale_decimal_separator, locale_grouping_separator};
 use uucore::{show, translate};
 
 use crate::errors::NumfmtError;
@@ -324,11 +324,16 @@ fn apply_grouping_in_place(buf: &mut String, sep: &str, dec_sep: &str) {
         return;
     }
     let start = usize::from(buf.starts_with('-'));
-    let mut pos = buf[start..].find(dec_sep).map_or(buf.len(), |i| start + i);
-    while pos >= start + 4 {
-        pos -= 3;
-        buf.insert_str(pos, sep);
+    let end = buf[start..].find(dec_sep).map_or(buf.len(), |i| start + i);
+    if end - start < 4 {
+        return;
     }
+    let digits = group_digits(&buf.as_bytes()[start..end], sep.as_bytes());
+    // Both inputs are UTF-8, so the grouped digits are too.
+    buf.replace_range(
+        start..end,
+        std::str::from_utf8(&digits).expect("grouped digits are UTF-8"),
+    );
 }
 
 fn split_next_field(s: &str) -> (&str, &str, &str) {

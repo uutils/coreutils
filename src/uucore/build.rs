@@ -23,6 +23,15 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             target_os = "solaris",
             target_vendor = "apple"
         ) },
+        // The C library reports the locale's grouping separator. musl always
+        // returns an empty one, so it goes through ICU instead.
+        libc_grouping_separator: { any(
+            all(target_os = "linux", not(target_env = "musl")),
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "illumos",
+            target_os = "solaris"
+        ) },
     }
 
     let out_dir = env::var("OUT_DIR")?;
