@@ -1724,3 +1724,24 @@ fn test_double_space_last_line_without_newline() {
             .stdout_only(expected);
     }
 }
+
+#[test]
+fn test_offset_written_once_per_line() {
+    // Like GNU pr, the margin of -o is written before the first column only.
+    for (args, expected) in [
+        (
+            ["-t", "-2", "-o", "3", "-S|", "-w", "20"],
+            "   aaaaaaaaa|c\n   bbbbbbbbb\n",
+        ),
+        (
+            ["-t", "-3", "-o", "2", "-S|", "-w", "20"],
+            "  aaaaaa|bbbbbb|c\n",
+        ),
+    ] {
+        new_ucmd!()
+            .args(&args)
+            .pipe_in("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nc\n")
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
