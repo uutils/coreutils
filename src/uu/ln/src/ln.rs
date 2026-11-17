@@ -12,8 +12,8 @@ use uucore::error::{UError, UIoError, UResult};
 
 use uucore::fs::replace_link;
 use uucore::fs::{make_path_relative_to, paths_refer_to_same_file};
-use uucore::translate;
 use uucore::{format_usage, prompt_yes, show_error};
+use uucore::{translate, translate_text};
 
 use std::borrow::Cow;
 use std::collections::HashSet;
@@ -69,7 +69,7 @@ pub enum LnError {
     #[error("{}", translate!("ln-error-extra-operand", "operand" => _0.quote(), "program" => _1))]
     ExtraOperand(OsString, String),
 
-    #[error("{}", translate!("ln-failed-to-create-hard-link-dir", "source" => _0.to_string_lossy()))]
+    #[error("{}", translate_text!("ln-failed-to-create-hard-link-dir", "source" => _0.to_string_lossy()))]
     FailedToCreateHardLinkDir(PathBuf),
 
     #[error("{}", translate!("ln-error-cannot-overwrite-directory", "dest" => _0.maybe_quote()))]
