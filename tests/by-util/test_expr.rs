@@ -686,8 +686,7 @@ fn test_integer_syntax_is_optional_minus_and_digits() {
         (&["-00", "=", "0"], "1\n"),
         (&["01", "+", "1"], "2\n"),
     ] {
-        let result = new_ucmd!().args(args).run();
-        result.stdout_only(expected);
+        new_ucmd!().args(args).run().stdout_only(expected);
     }
 
     new_ucmd!()
