@@ -836,7 +836,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let (sources, target) = parse_path_args(paths, &options)?;
 
-    if let Err(error) = copy(&sources, &target, &options) {
+    // Nothing changes the umask during the copy: read it once rather than
+    // with two syscalls for every file.
+    #[cfg(unix)]
+    let result = uucore::mode::with_umask(uucore::mode::get_umask(), || {
+        copy(&sources, &target, &options)
+    });
+    #[cfg(not(unix))]
+    let result = copy(&sources, &target, &options);
+    if let Err(error) = result {
         match error {
             CpError::NotAllFilesCopied => {
                 // non-fatal; exit code still EXIT_ERR
