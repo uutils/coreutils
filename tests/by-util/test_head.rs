@@ -316,6 +316,36 @@ fn test_obsolete_extras() {
 }
 
 #[test]
+fn test_obsolete_lines_suffix() {
+    // `l` selects lines and keeps the multiplier of an earlier suffix.
+    for (arg, expected) in [
+        ("-2l", "a\nb\n"),
+        ("-0l", ""),
+        ("-2cl", "a\nb\n"),
+        ("-2lc", "a\n"),
+        ("-3lq", "a\nb\nc\n"),
+    ] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\nb\nc\nd\n")
+            .succeeds()
+            .stdout_only(expected);
+    }
+
+    let input = "x\n".repeat(600);
+    new_ucmd!()
+        .arg("-1bl")
+        .pipe_in(input.as_str())
+        .succeeds()
+        .stdout_only("x\n".repeat(512));
+    new_ucmd!()
+        .arg("-1lb")
+        .pipe_in(input.as_str())
+        .succeeds()
+        .stdout_only("x\n".repeat(256));
+}
+
+#[test]
 fn test_multiple_files() {
     new_ucmd!()
         .args(&["emptyfile.txt", "emptyfile.txt"])
