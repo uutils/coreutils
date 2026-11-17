@@ -3433,5 +3433,9 @@ fn test_install_strip_program_sees_caller_umask() {
         .umask(0o027)
         .args(&["-s", "--strip-program=./recorder", "src", "dest"])
         .succeeds();
+
+    #[cfg(not(target_os = "openbsd"))]
     assert_eq!(at.read("seen"), "0027\n");
+    #[cfg(target_os = "openbsd")]
+    assert_eq!(at.read("seen"), "027\n");
 }
