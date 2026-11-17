@@ -11,7 +11,7 @@ use crate::formatter_item_info::{FormatWriter, FormatterItemInfo};
 // themselves rather than going through the `fmt` machinery.
 
 /// Appends a space and `p` in octal, zero-padded to `width` digits.
-fn push_oct(out: &mut String, p: u64, width: usize) {
+pub(crate) fn push_oct(out: &mut String, p: u64, width: usize) {
     push_power_of_two_radix(out, p, width, 3);
 }
 
@@ -67,7 +67,7 @@ fn push_dec(out: &mut String, mut magnitude: u64, negative: bool, width: usize) 
 }
 
 /// Appends a space and `p` in decimal, right-aligned to `width` characters.
-fn push_dec_unsigned(out: &mut String, p: u64, width: usize) {
+fn push_udec(out: &mut String, p: u64, width: usize) {
     push_dec(out, p, false, width);
 }
 
@@ -76,7 +76,7 @@ fn push_dec_unsigned(out: &mut String, p: u64, width: usize) {
 /// Used to format unsigned integer types with help of a function called `$function`
 /// `$byte_size` is the size of the type, `$print_width` is the maximum width in
 /// human-readable format. `$push` is one of `push_oct`, `push_hex` or
-/// `push_dec_unsigned`
+/// `push_udec`
 macro_rules! int_writer_unsigned {
     ($NAME:ident, $byte_size:expr, $print_width:expr, $function:ident, $push:ident) => {
         fn $function(p: u64, out: &mut String) {
@@ -127,34 +127,10 @@ int_writer_unsigned!(FORMAT_ITEM_HEX16, 2, 5, format_item_hex16, push_hex); // m
 int_writer_unsigned!(FORMAT_ITEM_HEX32, 4, 9, format_item_hex32, push_hex); // max: ffffffff
 int_writer_unsigned!(FORMAT_ITEM_HEX64, 8, 17, format_item_hex64, push_hex); // max: ffffffffffffffff
 
-int_writer_unsigned!(
-    FORMAT_ITEM_DEC8U,
-    1,
-    4,
-    format_item_dec_u8,
-    push_dec_unsigned
-); // max: 255
-int_writer_unsigned!(
-    FORMAT_ITEM_DEC16U,
-    2,
-    6,
-    format_item_dec_u16,
-    push_dec_unsigned
-); // max: 65535
-int_writer_unsigned!(
-    FORMAT_ITEM_DEC32U,
-    4,
-    11,
-    format_item_dec_u32,
-    push_dec_unsigned
-); // max: 4294967295
-int_writer_unsigned!(
-    FORMAT_ITEM_DEC64U,
-    8,
-    21,
-    format_item_dec_u64,
-    push_dec_unsigned
-); // max: 18446744073709551615
+int_writer_unsigned!(FORMAT_ITEM_DEC8U, 1, 4, format_item_dec_u8, push_udec); // max: 255
+int_writer_unsigned!(FORMAT_ITEM_DEC16U, 2, 6, format_item_dec_u16, push_udec); // max: 65535
+int_writer_unsigned!(FORMAT_ITEM_DEC32U, 4, 11, format_item_dec_u32, push_udec); // max: 4294967295
+int_writer_unsigned!(FORMAT_ITEM_DEC64U, 8, 21, format_item_dec_u64, push_udec); // max: 18446744073709551615
 
 int_writer_signed!(FORMAT_ITEM_DEC8S, 1, 5, format_item_dec_s8); // max: -128
 int_writer_signed!(FORMAT_ITEM_DEC16S, 2, 7, format_item_dec_s16); // max: -32768
@@ -297,42 +273,53 @@ fn test_writers_match_std_formatting() {
         0x8000_0000_0000_0000,
         0xffff_ffff_ffff_ffff,
     ]);
+    // (item bytes, [oct, hex, dec_u, dec_s] writers, [oct, hex, dec_u, dec_s] widths)
+    let table: [(usize, [Writer; 4], [usize; 4]); 4] = [
+        (
+            1,
+            [
+                format_item_oct8,
+                format_item_hex8,
+                format_item_dec_u8,
+                format_item_dec_s8,
+            ],
+            [3, 2, 3, 4],
+        ),
+        (
+            2,
+            [
+                format_item_oct16,
+                format_item_hex16,
+                format_item_dec_u16,
+                format_item_dec_s16,
+            ],
+            [6, 4, 5, 6],
+        ),
+        (
+            4,
+            [
+                format_item_oct32,
+                format_item_hex32,
+                format_item_dec_u32,
+                format_item_dec_s32,
+            ],
+            [11, 8, 10, 11],
+        ),
+        (
+            8,
+            [
+                format_item_oct64,
+                format_item_hex64,
+                format_item_dec_u64,
+                format_item_dec_s64,
+            ],
+            [22, 16, 20, 20],
+        ),
+    ];
     for p in values {
-        for (bytes, mask) in [(1, 0xff), (2, 0xffff), (4, 0xffff_ffff), (8, u64::MAX)] {
-            let p = p & mask;
+        for &(bytes, [oct, hex, dec_u, dec_s], [oct_w, hex_w, dec_u_w, dec_s_w]) in &table {
+            let p = p & (u64::MAX >> (64 - bytes * 8));
             let s = sign_extend(p, bytes);
-            let (oct, hex, dec_u, dec_s): (Writer, Writer, Writer, Writer) = match bytes {
-                1 => (
-                    format_item_oct8,
-                    format_item_hex8,
-                    format_item_dec_u8,
-                    format_item_dec_s8,
-                ),
-                2 => (
-                    format_item_oct16,
-                    format_item_hex16,
-                    format_item_dec_u16,
-                    format_item_dec_s16,
-                ),
-                4 => (
-                    format_item_oct32,
-                    format_item_hex32,
-                    format_item_dec_u32,
-                    format_item_dec_s32,
-                ),
-                _ => (
-                    format_item_oct64,
-                    format_item_hex64,
-                    format_item_dec_u64,
-                    format_item_dec_s64,
-                ),
-            };
-            let (oct_w, hex_w, dec_u_w, dec_s_w) = match bytes {
-                1 => (3, 2, 3, 4),
-                2 => (6, 4, 5, 6),
-                4 => (11, 8, 10, 11),
-                _ => (22, 16, 20, 20),
-            };
             assert_eq!(formatted(oct, p), format!(" {p:0oct_w$o}"));
             assert_eq!(formatted(hex, p), format!(" {p:0hex_w$x}"));
             assert_eq!(formatted(dec_u, p), format!(" {p:dec_u_w$}"));

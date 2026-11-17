@@ -6,6 +6,7 @@
 use std::iter::repeat_n;
 
 use crate::formatter_item_info::{FormatWriter, FormatterItemInfo};
+use crate::prn_int::push_oct;
 
 pub static FORMAT_ITEM_A: FormatterItemInfo = FormatterItemInfo {
     byte_size: 1,
@@ -62,10 +63,7 @@ fn format_item_c(bytes: &[u8], out: &mut String) {
         push_right_aligned(out, C_CHARS[b as usize]);
     } else {
         // Continuation or leading byte of a multibyte UTF-8 sequence — treat as raw byte
-        out.push(' ');
-        for shift in [6, 3, 0] {
-            out.push(char::from(b'0' + ((b >> shift) & 7)));
-        }
+        push_oct(out, b.into(), 3);
     }
 }
 
