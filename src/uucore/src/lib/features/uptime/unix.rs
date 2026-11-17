@@ -295,7 +295,7 @@ mod tests {
         // Reasonable upper bound: system hasn't been up for more than 365 days
         // (This is just a sanity check)
         assert!(
-            uptime < Duration::from_secs(365 * 86400),
+            uptime < Duration::from_hours(365 * 24),
             "Uptime seems unreasonably high: {uptime:?}"
         );
     }

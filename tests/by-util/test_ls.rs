@@ -2334,7 +2334,7 @@ fn test_ls_time_styles() {
     // Create a recent and old (<6 months) file, as format can be different.
     at.touch("test");
     let f3 = at.make_file("test-old");
-    f3.set_modified(SystemTime::now() - Duration::from_secs(3600 * 24 * 365))
+    f3.set_modified(SystemTime::now() - Duration::from_hours(24 * 365))
         .unwrap();
 
     let re_full_recent = Regex::new(
@@ -2584,7 +2584,7 @@ fn test_ls_time_recent_future() {
         .stdout_matches(&re_iso_recent);
 
     // 100 days ago is still recent (<0.5 years)
-    f.set_modified(SystemTime::now() - Duration::from_secs(3600 * 24 * 100))
+    f.set_modified(SystemTime::now() - Duration::from_hours(24 * 100))
         .unwrap();
     scene
         .ucmd()
@@ -2594,7 +2594,7 @@ fn test_ls_time_recent_future() {
         .stdout_matches(&re_iso_recent);
 
     // 200 days ago is not recent
-    f.set_modified(SystemTime::now() - Duration::from_secs(3600 * 24 * 200))
+    f.set_modified(SystemTime::now() - Duration::from_hours(24 * 200))
         .unwrap();
     scene
         .ucmd()
@@ -2624,7 +2624,7 @@ fn test_ls_time_recent_future() {
         .stdout_contains("RECENT");
 
     // Old file
-    f.set_modified(SystemTime::now() - Duration::from_secs(3600 * 24 * 200))
+    f.set_modified(SystemTime::now() - Duration::from_hours(24 * 200))
         .unwrap();
     scene
         .ucmd()
