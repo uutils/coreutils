@@ -298,15 +298,12 @@ fn get_locale_months_inner() -> Option<[Vec<u8>; 12]> {
 /// `%EY`/`%EC` in the Thai locales.
 const THAI_ERA_NAME: &str = "\u{0E1E}.\u{0E28}.";
 
-/// Resolves the locale-specific `E` conversions for `%EY`, `%Ey` and `%EC`.
-///
-/// Returns `None` when no replacement is available.
-/// The caller handles fallback and invalid conversions.
+/// Resolves the locale-specific `E` conversions for `%EY`, `%Ey` and `%EC`;
+/// returns `None` when the caller should fall back to the base conversion.
 ///
 /// `real_year` is the actual (Gregorian) year when formatting an
-/// out-of-range date whose `date` value is the surrogate that jiff's
-/// calendar range substitutes for it. It is `None` for ordinary in-range
-/// dates.
+/// out-of-range date whose `date` is the surrogate jiff's calendar range
+/// substitutes for it; `None` for ordinary in-range dates.
 pub fn resolve_e_conversion(spec: char, date: JiffDate, real_year: Option<i64>) -> Option<String> {
     match spec {
         'Y' | 'y' | 'C' => {
@@ -340,12 +337,11 @@ pub fn resolve_e_conversion(spec: char, date: JiffDate, real_year: Option<i64>) 
                     (None, year + delta)
                 }
             };
-            // Only the selected arm allocates. `%Ey` in an era locale is the era
-            // year itself (not a digit pair), which is also what `%EY` renders
-            // without an era; `%EC` is the era name where one is defined.
-            // glibc pads an era year to two digits (`พ.ศ. 08` for era year 8),
-            // while the Gregorian fallback keeps the year as it is (`%EY` at
-            // year 5 is `5`, not `05`).
+            // `%Ey` in an era locale is the era year itself (not a digit
+            // pair), which is also what `%EY` renders without an era; `%EC` is
+            // the era name where one is defined. glibc pads an era year to two
+            // digits (`พ.ศ. 08` for era year 8), while the Gregorian fallback
+            // keeps the year as it is (`%EY` at year 5 is `5`, not `05`).
             Some(match (spec, era) {
                 ('Y', Some(name)) => format!("{name} {alt_year:02}"),
                 ('Y', None) => alt_year.to_string(),
