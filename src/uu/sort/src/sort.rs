@@ -352,7 +352,7 @@ impl GlobalSettings {
             ])
             .with_default_unit("K")
             .with_b_byte_count(true)
-            .parse(input.trim())?;
+            .parse(input.trim_start())?;
 
         usize::try_from(size).map_err(|_| {
             ParseSizeError::SizeTooBig(translate!("sort-error-buffer-size-too-big", "size" => size))

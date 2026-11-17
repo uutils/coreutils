@@ -101,6 +101,27 @@ fn test_buffer_size_limits_both_chunks() {
 }
 
 #[test]
+fn test_buffer_size_trailing_whitespace_is_rejected() {
+    for size in [" 1 ", "1 ", "1M ", "50% "] {
+        new_ucmd!()
+            .arg(format!("--buffer-size={size}"))
+            .fails_with_code(2)
+            .stderr_only(format!(
+                "sort: invalid suffix in --buffer-size argument '{size}'\n"
+            ));
+    }
+
+    // Leading whitespace is still skipped.
+    for size in [" 1M", "\t1M"] {
+        new_ucmd!()
+            .arg(format!("--buffer-size={size}"))
+            .pipe_in("b\na\n")
+            .succeeds()
+            .stdout_only("a\nb\n");
+    }
+}
+
+#[test]
 fn test_invalid_buffer_size() {
     new_ucmd!()
         .arg("-S")
