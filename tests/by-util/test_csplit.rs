@@ -1984,7 +1984,7 @@ fn test_repeat_count_overflow() {
     new_ucmd!()
         .args(&["numbers50.txt", "10", "{99999999999999999999999999999999}"])
         .fails_with_code(1)
-        .stderr_contains("invalid pattern");
+        .stderr_is("csplit: '{99999999999999999999999999999999}': invalid pattern\n");
 }
 
 #[test]
