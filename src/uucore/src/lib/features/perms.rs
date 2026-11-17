@@ -270,61 +270,66 @@ impl ChownExecutor {
         Ok(())
     }
 
+    fn format_target_ownership(&self) -> (&'static str, String) {
+        let action = if self.verbosity.groups_only
+            || (self.dest_uid.is_none() && self.dest_gid.is_some())
+        {
+            "group"
+        } else {
+            "ownership"
+        };
+
+        let dest = if let Some((u, g)) = self.raw_owner.split_once(':') {
+            let user = if let Some(uid) = self.dest_uid {
+                if u.starts_with('+') {
+                    uid.to_string()
+                } else {
+                    u.to_string()
+                }
+            } else {
+                String::new()
+            };
+            let group = if let Some(gid) = self.dest_gid {
+                if g.starts_with('+') {
+                    gid.to_string()
+                } else {
+                    g.to_string()
+                }
+            } else {
+                String::new()
+            };
+            if user.is_empty() {
+                group
+            } else if group.is_empty() {
+                user
+            } else {
+                format!("{user}:{group}")
+            }
+        } else if let Some(uid) = self.dest_uid {
+            if self.raw_owner.starts_with('+') {
+                uid.to_string()
+            } else {
+                self.raw_owner.clone()
+            }
+        } else if let Some(gid) = self.dest_gid {
+            if self.raw_owner.starts_with('+') {
+                gid.to_string()
+            } else {
+                self.raw_owner.clone()
+            }
+        } else {
+            self.raw_owner.clone()
+        };
+
+        (action, dest)
+    }
+
     #[allow(clippy::cognitive_complexity)]
     fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
         let path = root.as_ref();
         let Some(meta) = self.obtain_meta(path, self.dereference) else {
             if self.verbosity.level == VerbosityLevel::Verbose {
-                let action = if self.verbosity.groups_only
-                    || (self.dest_uid.is_none() && self.dest_gid.is_some())
-                {
-                    "group"
-                } else {
-                    "ownership"
-                };
-
-                let dest = if let Some((u, g)) = self.raw_owner.split_once(':') {
-                    let user = if let Some(uid) = self.dest_uid {
-                        if u.starts_with('+') {
-                            uid.to_string()
-                        } else {
-                            u.to_string()
-                        }
-                    } else {
-                        String::new()
-                    };
-                    let group = if let Some(gid) = self.dest_gid {
-                        if g.starts_with('+') {
-                            gid.to_string()
-                        } else {
-                            g.to_string()
-                        }
-                    } else {
-                        String::new()
-                    };
-                    if user.is_empty() {
-                        group
-                    } else if group.is_empty() {
-                        user
-                    } else {
-                        format!("{user}:{group}")
-                    }
-                } else if let Some(uid) = self.dest_uid {
-                    if self.raw_owner.starts_with('+') {
-                        uid.to_string()
-                    } else {
-                        self.raw_owner.clone()
-                    }
-                } else if let Some(gid) = self.dest_gid {
-                    if self.raw_owner.starts_with('+') {
-                        gid.to_string()
-                    } else {
-                        self.raw_owner.clone()
-                    }
-                } else {
-                    self.raw_owner.clone()
-                };
-
+                let (action, dest) = self.format_target_ownership();
                 self.write_verbose_line(&format!(
                     "failed to change {action} of {} to {dest}",
                     path.quote()
