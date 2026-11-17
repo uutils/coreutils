@@ -2348,6 +2348,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.check = check_silent || check_diagnose;
     settings.check_silent = check_silent;
 
+    if settings.check && settings.debug {
+        let opts = if settings.check_silent {
+            "C --debug"
+        } else {
+            "c --debug"
+        };
+        return Err(incompatible_options_error(opts));
+    }
+
     if matches.contains_id(options::OUTPUT) && settings.check {
         let opts = if settings.check_silent { "Co" } else { "co" };
         return Err(incompatible_options_error(opts));
