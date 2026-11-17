@@ -298,7 +298,11 @@ fn comm(
         }
     }
 
-    if opts.get_flag(options::TOTAL) {
+    // With --check-order the comparison stops at the first unsorted line, so
+    // there is no total to report.
+    let stopped_early = mode == CheckOrder::Always && (checker1.has_error || checker2.has_error);
+
+    if opts.get_flag(options::TOTAL) && !stopped_early {
         let line_ending = LineEnding::from_zero_flag(opts.get_flag(options::ZERO_TERMINATED));
         write!(
             writer,

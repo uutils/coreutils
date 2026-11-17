@@ -327,6 +327,25 @@ fn check_order() {
 }
 
 #[test]
+fn check_order_failure_prints_no_total() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("unsorted", "a\nc\nb\nd\n");
+    at.write("sorted", "a\nb\nc\nd\n");
+    scene
+        .ucmd()
+        .args(&["--total", "--check-order", "unsorted", "sorted"])
+        .fails_with_code(1)
+        .stdout_is("\t\ta\n\tb\n\t\tc\n")
+        .stderr_is("comm: file 1 is not in sorted order\n");
+    scene
+        .ucmd()
+        .args(&["--total", "--check-order", "sorted", "sorted"])
+        .succeeds()
+        .stdout_is("\t\ta\n\t\tb\n\t\tc\n\t\td\n0\t0\t4\ttotal\n");
+}
+
+#[test]
 fn nocheck_order() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
