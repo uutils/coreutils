@@ -1,4 +1,4 @@
-// This file is part of the uutils coreutils package.
+﻿// This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
@@ -271,6 +271,14 @@ impl ChownExecutor {
     }
 
     fn format_target_ownership(&self) -> (&'static str, String) {
+        // Returns the numeric ID if the spec part starts with '+', otherwise the spec itself.
+        fn resolve_part(spec: &str, id: Option<u32>) -> String {
+            match id {
+                Some(n) if spec.starts_with('+') => n.to_string(),
+                _ => spec.to_string(),
+            }
+        }
+
         let action = if self.verbosity.groups_only
             || (self.dest_uid.is_none() && self.dest_gid.is_some())
         {
@@ -279,22 +287,19 @@ impl ChownExecutor {
             "ownership"
         };
 
-        let dest = if let Some((u, g)) = self.raw_owner.split_once(':') {
-            let user = if let Some(uid) = self.dest_uid {
-                if u.starts_with('+') {
-                    uid.to_string()
-                } else {
-                    u.to_string()
-                }
+        // Handle both ':' and '.' as user/group separators (e.g. "user:group" or "user.group").
+        let dest = if let Some((u, g)) = self
+            .raw_owner
+            .split_once(':')
+            .or_else(|| self.raw_owner.split_once('.'))
+        {
+            let user = if self.dest_uid.is_some() {
+                resolve_part(u, self.dest_uid)
             } else {
                 String::new()
             };
-            let group = if let Some(gid) = self.dest_gid {
-                if g.starts_with('+') {
-                    gid.to_string()
-                } else {
-                    g.to_string()
-                }
+            let group = if self.dest_gid.is_some() {
+                resolve_part(g, self.dest_gid)
             } else {
                 String::new()
             };
@@ -305,18 +310,10 @@ impl ChownExecutor {
             } else {
                 format!("{user}:{group}")
             }
-        } else if let Some(uid) = self.dest_uid {
-            if self.raw_owner.starts_with('+') {
-                uid.to_string()
-            } else {
-                self.raw_owner.clone()
-            }
-        } else if let Some(gid) = self.dest_gid {
-            if self.raw_owner.starts_with('+') {
-                gid.to_string()
-            } else {
-                self.raw_owner.clone()
-            }
+        } else if self.dest_uid.is_some() {
+            resolve_part(&self.raw_owner, self.dest_uid)
+        } else if self.dest_gid.is_some() {
+            resolve_part(&self.raw_owner, self.dest_gid)
         } else {
             self.raw_owner.clone()
         };
