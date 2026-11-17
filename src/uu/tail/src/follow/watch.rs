@@ -682,6 +682,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             Ok(Err(notify::Error {
                 kind: notify::ErrorKind::Io(ref e),
                 paths,
+                ..
             })) if e.kind() == std::io::ErrorKind::NotFound => {
                 if let Some(event_path) = paths.first().filter(|p| observer.files.contains_key(p)) {
                     let _ = observer
