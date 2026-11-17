@@ -82,6 +82,7 @@ struct OutputOptions {
     form_feed_used: bool,
     col_sep_for_printing: String,
     line_width: Option<usize>,
+    header_width: usize,
     expand_tabs: Option<ExpandTabsOptions>,
 }
 
@@ -1101,6 +1102,12 @@ fn build_options(
         page_width
     };
 
+    // The header is laid out on the page width, which -J leaves alone.
+    let header_width = matches
+        .get_one::<String>(options::PAGE_WIDTH)
+        .and_then(|raw| raw.parse().ok())
+        .unwrap_or(column_width);
+
     Ok(OutputOptions {
         number,
         header,
@@ -1119,6 +1126,7 @@ fn build_options(
         form_feed_used,
         col_sep_for_printing,
         line_width,
+        header_width,
         expand_tabs,
     })
 }
@@ -1735,8 +1743,7 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<Vec<u8>> {
     let filename = &options.header;
     let page_part = format!("{} {page}", translate!("pr-page"));
 
-    // Use the line width if available, otherwise use default of 72
-    let total_width = options.line_width.unwrap_or(DEFAULT_COLUMN_WIDTH);
+    let total_width = options.header_width;
 
     let date_len = date_part.chars().count();
     let filename_len = filename.to_string_lossy().chars().count();

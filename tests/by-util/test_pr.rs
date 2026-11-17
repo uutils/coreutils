@@ -859,12 +859,26 @@ fn test_b_flag_backwards_compat() {
 
 #[test]
 fn test_page_header_width() {
-    let whitespace = " ".repeat(50);
     let blank_lines = "\n".repeat(61);
     let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
-    let pattern = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\na{blank_lines}");
-    let regex = Regex::new(&pattern).unwrap();
-    new_ucmd!().pipe_in("a").succeeds().stdout_matches(&regex);
+    // The header fills the page width, with or without -J.
+    for (args, padding) in [
+        (&[][..], 50),
+        (&["-W", "40"], 18),
+        (&["-w", "40"], 18),
+        (&["-J", "-W", "40"], 18),
+        (&["-J", "-w", "40"], 18),
+        (&["-J", "-W", "100"], 78),
+    ] {
+        let whitespace = " ".repeat(padding);
+        let pattern = format!("^\n\n{datetime_pattern}{whitespace}Page 1\n\n\na{blank_lines}$");
+        let regex = Regex::new(&pattern).unwrap();
+        new_ucmd!()
+            .args(args)
+            .pipe_in("a")
+            .succeeds()
+            .stdout_matches(&regex);
+    }
 }
 
 #[test]
