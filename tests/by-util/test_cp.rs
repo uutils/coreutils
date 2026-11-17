@@ -3880,6 +3880,7 @@ fn test_copy_through_just_created_symlink() {
     }
 }
 
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 fn test_copy_through_dangling_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3889,6 +3890,121 @@ fn test_copy_through_dangling_symlink() {
         .arg("target")
         .fails()
         .stderr_only("cp: not writing through dangling symlink 'target'\n");
+}
+
+#[rstest]
+#[cfg(unix)]
+#[uutests::wasi_ignore(NoPermissionBits)]
+fn test_copy_through_inaccessible_symlink_target(
+    #[values(false, true)] directory: bool,
+    #[values("", "-f", "-P", "--attributes-only")] flag: &str,
+) {
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("source", "new contents");
+    at.mkdir("private");
+    if directory {
+        at.mkdir("private/target");
+    } else {
+        at.write("private/target", "old contents");
+    }
+    at.relative_symlink_file("private/target", "link");
+    at.set_mode("private", 0);
+    let mut cmd = scene.ucmd();
+    if !flag.is_empty() {
+        cmd.arg(flag);
+    }
+    let result = cmd.args(&["source", "link"]).run();
+    at.set_mode("private", 0o755);
+
+    result
+        .code_is(1)
+        .stderr_only("cp: cannot stat 'link': Permission denied\n");
+    assert!(at.is_symlink("link"));
+    if directory {
+        assert!(at.dir_exists("private/target"));
+    } else {
+        assert_eq!(at.read("private/target"), "old contents");
+    }
+}
+
+#[rstest]
+#[cfg(unix)]
+#[uutests::wasi_ignore(NoPermissionBits)]
+#[case::backup(&["--backup"], true)]
+#[case::hard_link(&["-l"], false)]
+#[case::symlink(&["-s"], false)]
+#[cfg_attr(
+    target_os = "android",
+    ignore = "Android's app-private filesystem refuses hard links"
+)]
+#[case::force_hard_link(&["-fl"], true)]
+#[case::force_symlink(&["-fs"], true)]
+#[cfg_attr(
+    target_os = "android",
+    ignore = "Android's app-private filesystem refuses hard links"
+)]
+#[case::backup_hard_link(&["--backup", "-l"], true)]
+#[case::backup_symlink(&["--backup", "-s"], true)]
+fn test_replace_inaccessible_symlink_target(
+    #[case] flags: &[&str],
+    #[case] succeeds: bool,
+    #[values(false, true)] directory: bool,
+) {
+    use std::os::unix::fs::MetadataExt;
+
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("source", "new contents");
+    at.mkdir("private");
+    if directory {
+        at.mkdir("private/target");
+    } else {
+        at.write("private/target", "old contents");
+    }
+    at.relative_symlink_file("private/target", "link");
+    at.set_mode("private", 0);
+    let result = scene.ucmd().args(flags).args(&["source", "link"]).run();
+    at.set_mode("private", 0o755);
+
+    if succeeds {
+        result.success().no_output();
+        assert_eq!(at.read("link"), "new contents");
+        if flags.iter().any(|flag| flag.ends_with('s')) {
+            assert_eq!(
+                std::fs::read_link(at.plus("link")).unwrap(),
+                Path::new("source")
+            );
+        } else {
+            assert!(!at.is_symlink("link"));
+            if flags.iter().any(|flag| flag.ends_with('l')) {
+                assert_eq!(at.metadata("source").ino(), at.metadata("link").ino());
+            }
+        }
+        if flags.contains(&"--backup") {
+            assert_eq!(
+                std::fs::read_link(at.plus("link~")).unwrap(),
+                Path::new("private/target")
+            );
+        }
+    } else {
+        result.code_is(1).no_stdout().stderr_contains("File exists");
+        assert_eq!(
+            std::fs::read_link(at.plus("link")).unwrap(),
+            Path::new("private/target")
+        );
+    }
+    if directory {
+        assert!(at.dir_exists("private/target"));
+    } else {
+        assert_eq!(at.read("private/target"), "old contents");
+    }
 }
 
 #[uutests::wasi_ignore(SymlinkHardlinkCaps)]
@@ -3950,6 +4066,7 @@ fn test_cp_symlink_overwrite_detection() {
     }
 }
 
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 fn test_cp_dangling_symlink_inside_directory() {
     let ts = TestScenario::new(util_name!());
@@ -4004,6 +4121,7 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     }
 }
 
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 fn test_copy_through_dangling_symlink_no_dereference_2() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -4015,6 +4133,7 @@ fn test_copy_through_dangling_symlink_no_dereference_2() {
 }
 
 /// Test that copy through a dangling symbolic link fails, even with --force.
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 #[cfg(not(windows))]
 fn test_copy_through_dangling_symlink_force() {

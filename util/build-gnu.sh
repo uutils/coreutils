@@ -97,7 +97,6 @@ else
     for binary in $("${UU_BUILD_DIR}"/coreutils --list)
         do ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
     done
-    ln -vf "${UU_BUILD_DIR}"/deps/libstdbuf.* -t "${UU_BUILD_DIR}"
 fi
 ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use ginstall
 ##
@@ -219,8 +218,7 @@ sed -i "s|skip_|true|g" tests/install/stdin.sh
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 sed -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
 
-# our messages are better
-sed -i "s|cp: cannot stat 'symlink': .*|cp: not writing through dangling symlink 'symlink'|" tests/cp/fail-perm.sh
+# Account for the different target-directory diagnostic.
 sed -i "s|cp: target directory 'symlink': .*|cp: 'symlink' is not a directory|" tests/cp/fail-perm.sh
 
 # Our message is a bit better
