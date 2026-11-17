@@ -3946,6 +3946,119 @@ fn test_date_strftime_e_year_fields_use_thai_era() {
     }
 }
 
+#[test]
+fn test_date_strftime_e_rejected_pair_uppercase_flag() {
+    // GNU applies `^` to the trailing conversion letter of a rejected pair,
+    // with or without a width, and `#` alone does not change its case. The
+    // flag must not leak into the text around the pair.
+    for (format, expected) in [
+        ("%^Ej", "%^EJ\n"),
+        ("%^Eo", "%^EO\n"),
+        ("%^#Ej", "%^#EJ\n"),
+        ("%^5Ej", "%^5EJ\n"),
+        ("%^Ejx", "%^EJx\n"),
+        ("%^Ej%Ej", "%^EJ%Ej\n"),
+        ("%#Ej", "%#Ej\n"),
+        ("%^EY", "1999\n"),
+        ("%^EB", "%^EB\n"),
+        ("%^E2", "%^E2\n"),
+        ("%^E:", "%^E:\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .env("LC_ALL", "C")
+            .args(&["-d", "1999-06-01", &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+#[uutests::wasi_ignore(NoLocaleData)]
+#[cfg(unix)]
+fn test_date_strftime_e_era_year_is_two_digit_padded() {
+    // glibc pads an era year to two digits: Buddhist era year 8 is `พ.ศ. 08`,
+    // and the `%Ey` field the Thai `d_fmt` template carries pads the same way.
+    // An era year of three or more digits is unaffected.
+    if !is_locale_available("th_TH.UTF-8") {
+        println!("Skipping Thai locale test - th_TH.UTF-8 locale not available");
+        return;
+    }
+    // Probe `%B` first: without ICU data the fallback renders English month
+    // names, and the era rows below would pin nothing.
+    let probe = new_ucmd!()
+        .env("LC_ALL", "th_TH.UTF-8")
+        .env("TZ", "UTC0")
+        .args(&["-d", "1999-12-31", "+%B"])
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .to_string();
+    if probe == "December" {
+        println!("skipping Thai era check: i18n not available");
+        return;
+    }
+    for (ts, format, expected) in [
+        // Era year 1 and 8, the first values a two-digit field changes.
+        ("-79258089600", "%EY", "\u{0E1E}.\u{0E28}. 01\n"),
+        ("-79037164800", "%EY", "\u{0E1E}.\u{0E28}. 08\n"),
+        ("-79037164800", "%Ey", "08\n"),
+        // The Thai `d_fmt` template carries the same `%Ey` field.
+        ("-79037164800", "%x", "31/05/08\n"),
+        ("-79005628800", "%EY", "\u{0E1E}.\u{0E28}. 09\n"),
+        // Three-digit era years keep their own width.
+        ("-61996320000", "%EY", "\u{0E1E}.\u{0E28}. 548\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .env("LC_ALL", "th_TH.UTF-8")
+            .args(&["-d", &format!("@{ts}"), &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+#[uutests::wasi_ignore(NoLocaleData)]
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+fn test_date_strftime_e_era_time_composite() {
+    // The era time format only exists where the accessor reads it from the
+    // locale (glibc `nl_langinfo` on linux/glibc), so the expectations below
+    // hold only there. A locale that defines `ERA_T_FMT` (glibc's Thai
+    // locale) is what GNU renders `%EX` through. The era *date* composites
+    // stay on the base composite: their templates interpolate names that ICU
+    // spells with the same `วัน` the templates add themselves.
+    if !is_locale_available("th_TH.UTF-8") {
+        println!("Skipping Thai locale test - th_TH.UTF-8 locale not available");
+        return;
+    }
+    // Probe `%B` first, so a build without ICU data does not pin nothing.
+    let probe = new_ucmd!()
+        .env("LC_ALL", "th_TH.UTF-8")
+        .env("TZ", "UTC0")
+        .args(&["-d", "1999-12-31", "+%B"])
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .to_string();
+    if probe == "December" {
+        println!("skipping Thai era check: i18n not available");
+        return;
+    }
+    for (ts, expected) in [
+        ("928555200", "04.00.00 น.\n"),
+        ("1736924096", "06.54.56 น.\n"),
+        ("1736900000", "00.13.20 น.\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .env("LC_ALL", "th_TH.UTF-8")
+            .args(&["-d", &format!("@{ts}"), "+%EX"])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
 // Tests for --debug flag
 #[test]
 fn test_date_debug_basic() {

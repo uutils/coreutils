@@ -1604,6 +1604,18 @@ fn resolve_e_modifiers<'a>(
                     let parsed = modifier_spec(spec.flags, Some(width), literal, literal.len());
                     format_modifiers::apply_composite_modifiers(literal, &parsed)
                         .map_err(|e| e.to_string())?
+                } else if spec.flags.contains('^') {
+                    // GNU applies `^` to the trailing conversion letter of a
+                    // rejected pair even without a width (`%^Ej` is `%^EJ`); the
+                    // width path gets the same rule from the composite
+                    // formatter. Only the last character is touched, and only
+                    // when it is ASCII, so `%^E2`, `%^E:` and `%^E%Y` stay as
+                    // they are.
+                    let mut literal = literal.to_string();
+                    if let Some(last) = literal.pop() {
+                        literal.push(last.to_ascii_uppercase());
+                    }
+                    literal
                 } else {
                     literal.to_string()
                 };
@@ -1628,9 +1640,29 @@ fn resolve_e_modifiers<'a>(
             out.push_str(spec_text);
         };
         #[cfg(feature = "i18n-datetime")]
+        // GNU renders `%EX` through the locale's era time format where it
+        // defines one (glibc's Thai locale). Only the time composite can be
+        // reused like this: `ERA_D_T_FMT` spells the weekday with a literal
+        // `วัน` plus `%A`, and ICU's long weekday already is `วันเสาร์`, so
+        // sharing that template would double the prefix; `ERA_D_FMT` (the
+        // `%Ex` template) instead lands in the pre-existing ICU abbreviation
+        // layer, where ICU's `%b` carries no trailing dot. A flagged or padded
+        // pair keeps the base composite, which the shared modifier pass below
+        // then handles.
+        let era_format = (spec_end == spec_start
+            && letter == 'X'
+            && spec.flags.is_empty()
+            && spec.width.is_none())
+        .then(|| locale::get_era_locale_format(letter))
+        .flatten();
+        #[cfg(feature = "i18n-datetime")]
         if skip_localization {
             // ICU off: strip the modifier to the base conversion.
             push_base(&mut resolved);
+        } else if let Some(era_format) = era_format {
+            // The era format is itself a format string, so its specifiers stay
+            // live for the locale expansion and the modifier passes below.
+            resolved.push_str(era_format);
         } else if let Some(raw) = resolve_e_conversion(letter, date.date(), real_year) {
             // ICU provided a substitute: apply the existing GNU flags/width
             // to the raw value, then escape it so later stages copy it
