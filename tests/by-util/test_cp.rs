@@ -100,6 +100,7 @@ fn test_cp_stream_to_full() {
         .stderr_contains("No space");
 }
 
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_cp_verbose_write_error_is_reported() {
@@ -1328,7 +1329,7 @@ fn test_cp_recursive_dir_applies_umask() {
 
 // The umask alone never covers setuid/setgid, so a non-preserving `cp -r`
 // must clear them on the directories it creates. The sticky bit survives.
-#[uutests::wasi_ignore(DirectoryModesUmaskNotFaithful)]
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(unix)]
 fn test_cp_recursive_dir_drops_setuid_setgid() {
@@ -3284,6 +3285,7 @@ fn test_cp_conflicting_update() {
         .stderr_contains("--backup is mutually exclusive with -n or --update=none-fail");
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_reflink_insufficient_permission() {
@@ -3302,6 +3304,7 @@ fn test_cp_reflink_insufficient_permission() {
 }
 
 #[cfg(target_os = "linux")]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_closes_file_descriptors() {
     use rlimit::Resource;
@@ -9620,9 +9623,9 @@ fn test_cp_p_preserves_posix_acls() {
 // `cp -r` without -p only copies the mode bits of the directories it
 // creates, like GNU; it must not copy their access or default ACLs.
 // `cp -rp` preserves them, as ACLs are part of the mode.
+#[uutests::wasi_ignore(AclXattrPreservationFails)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: ACL/xattr syscalls are not implemented")]
 fn test_cp_r_copies_dir_posix_acls_only_with_p() {
     use std::process::Command;
 

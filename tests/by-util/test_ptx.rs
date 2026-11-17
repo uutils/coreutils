@@ -238,6 +238,7 @@ fn test_format() {
 }
 
 #[cfg(target_os = "linux")]
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 fn test_failed_write_is_reported() {
     new_ucmd!()

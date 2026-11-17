@@ -103,11 +103,17 @@ fn test_uname_operating_system() {
         .arg("--operating-system")
         .succeeds()
         .stdout_is("Android\n");
-    #[cfg(target_vendor = "apple")]
+    // Under the WASI runner, the binary under test reports "WASI", not the host OS.
+    #[cfg(all(target_vendor = "apple", not(wasi_runner)))]
     new_ucmd!()
         .arg("--operating-system")
         .succeeds()
         .stdout_is("Darwin\n");
+    #[cfg(all(target_vendor = "apple", wasi_runner))]
+    new_ucmd!()
+        .arg("--operating-system")
+        .succeeds()
+        .stdout_is("WASI\n");
     #[cfg(target_os = "freebsd")]
     new_ucmd!()
         .arg("--operating-system")

@@ -8,18 +8,24 @@
 #[cfg(unix)]
 use uutests::new_ucmd;
 
-#[test]
 #[cfg(unix)]
 #[cfg(not(target_os = "android"))]
+#[test]
 fn test_get_current_niceness() {
-    // Test that the nice command with no arguments returns the default nice value
+    // Test that the nice command with no arguments returns the default nice value.
+    // WASI has no getpriority syscall, so nice always reports a fixed niceness of 0
+    // there, regardless of the host's actual value.
+    #[cfg(wasi_runner)]
+    let nice = 0;
+    #[cfg(not(wasi_runner))]
     let nice = rustix::process::getpriority_process(None).unwrap();
     new_ucmd!().succeeds().stdout_is(format!("{nice}\n"));
 }
 
-#[test]
 #[cfg(unix)]
 #[cfg(not(target_os = "android"))]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[test]
 fn test_nice_adj_negative() {
     // This assumes the test suite is run as a normal (non-root) user, and as
     // such attempting to set a negative niceness value will be rejected by
@@ -41,14 +47,16 @@ fn test_adjustment_with_no_command_should_error() {
         .usage_error("A command must be given with an adjustment.");
 }
 
-#[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[test]
 fn test_command_with_no_adjustment() {
     new_ucmd!().args(&["echo", "a"]).succeeds().stdout_is("a\n");
 }
 
-#[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[test]
 fn test_command_with_no_args() {
     new_ucmd!()
         .args(&["-n", "19", "echo"])
@@ -56,8 +64,9 @@ fn test_command_with_no_args() {
         .stdout_is("\n");
 }
 
-#[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[test]
 fn test_command_with_args() {
     new_ucmd!()
         .args(&["-n", "19", "echo", "a", "b", "c"])
@@ -65,8 +74,9 @@ fn test_command_with_args() {
         .stdout_is("a b c\n");
 }
 
-#[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[test]
 fn test_command_where_command_takes_n_flag() {
     new_ucmd!()
         .args(&["-n", "19", "echo", "-n", "a"])
@@ -74,8 +84,9 @@ fn test_command_where_command_takes_n_flag() {
         .stdout_is("a");
 }
 
-#[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
+#[test]
 fn test_command_with_non_utf8_args() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -87,8 +98,9 @@ fn test_command_with_non_utf8_args() {
         .stdout_only_bytes(b"a\xffb\n");
 }
 
-#[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[test]
 fn test_non_utf8_command_not_found() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -127,8 +139,9 @@ fn test_invalid_argument() {
     new_ucmd!().arg("--invalid").fails_with_code(125);
 }
 
-#[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[test]
 fn test_bare_adjustment() {
     new_ucmd!()
         .args(&["-1", "echo", "-n", "a"])
@@ -148,8 +161,9 @@ fn test_trailing_empty_adjustment() {
     );
 }
 
-#[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[test]
 fn test_nice_huge() {
     new_ucmd!()
         .args(&[
@@ -161,15 +175,17 @@ fn test_nice_huge() {
         .no_stdout();
 }
 
-#[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[test]
 fn test_nice_huge_negative() {
     new_ucmd!().args(&["-n", "-9999999999", "true"]).succeeds();
     //.stderr_contains("Permission denied"); Depending on platform?
 }
 
-#[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[test]
 fn test_sign_middle() {
     new_ucmd!()
         .args(&["-n", "-2+4", "true"])

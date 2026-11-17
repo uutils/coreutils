@@ -619,7 +619,6 @@ fn test_missing_file_is_named_in_error() {
         .stderr_only("paste: missing.txt: No such file or directory\n");
 }
 
-#[uutests::wasi_ignore(ErrnoMessageMismatch)]
 #[test]
 #[cfg(not(windows))]
 fn test_read_error_names_the_file() {

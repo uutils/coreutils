@@ -1788,6 +1788,7 @@ fn repeat_everything() {
 }
 
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoFifo)]
 #[test]
 fn test_named_pipe_input_file() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1845,6 +1846,7 @@ fn test_stdin_no_trailing_newline() {
         .stdout_only("2\n5\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_csplit_non_utf8_paths() {
@@ -1858,6 +1860,7 @@ fn test_csplit_non_utf8_paths() {
 }
 
 /// Test write error detection using /dev/full
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_write_error_dev_full() {
@@ -1874,6 +1877,7 @@ fn test_write_error_dev_full() {
 }
 
 /// Test write error with -k keeps files
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_write_error_dev_full_keep_files() {

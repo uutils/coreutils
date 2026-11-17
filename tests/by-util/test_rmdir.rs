@@ -61,6 +61,7 @@ fn test_rmdir_empty_directory_with_parents() {
     assert!(!at.dir_exists(DIR));
 }
 
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_rmdir_verbose_write_error() {
@@ -89,6 +90,7 @@ fn test_rmdir_verbose_write_error() {
     assert!(at.dir_exists("nonempty/child"));
 }
 
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_rmdir_verbose_write_error_with_removal_error() {
