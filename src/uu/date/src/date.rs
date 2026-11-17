@@ -360,6 +360,9 @@ fn parse_military_timezone_with_offset(s: &str) -> Option<(i32, DayDelta)> {
     } else {
         0
     };
+    if additional_hours > 23 {
+        return None;
+    }
 
     // Map military timezone letter to UTC offset
     let tz_offset = match letter {
@@ -2410,6 +2413,7 @@ mod tests {
         assert_eq!(parse_military_timezone_with_offset("j"), None); // Reserved for local time
         assert_eq!(parse_military_timezone_with_offset(""), None); // Empty
         assert_eq!(parse_military_timezone_with_offset("m999"), None); // Too long
+        assert_eq!(parse_military_timezone_with_offset("z24"), None); // Not an hour
         assert_eq!(parse_military_timezone_with_offset("9m"), None); // Starts with digit
     }
 
