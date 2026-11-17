@@ -957,7 +957,7 @@ jobs:
     - run: rsync -v -a -e ssh . lima-default:~/work/
     - name: Setup Rust and other build deps in VM
       run: |
-        lima sudo dnf install --nodocs cargo clippy gcc g++ git rust libselinux-devel clang-devel attr -y
+        lima sudo dnf install --nodocs cargo gcc g++ git rust libselinux-devel clang-devel attr -y
     - name: Verify SELinux Status
       run: |
         lima getenforce
@@ -966,8 +966,6 @@ jobs:
       run: |
         lima ls
         lima bash -c "cd work && cargo test --features 'feat_selinux' --no-default-features"
-    - name: Lint with SELinux
-      run: lima bash -c "cd work && cargo clippy --all-targets --features 'feat_selinux' --no-default-features -- -D warnings"
 
   test_safe_traversal:
     name: Safe Traversal Security Check

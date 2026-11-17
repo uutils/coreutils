@@ -867,6 +867,33 @@ fn test_width_invalid() {
     }
 }
 
+#[rstest]
+#[case::space(" 3")]
+#[case::space_and_plus(" +3")]
+#[case::all_blanks("\t\n\x0B\x0C\r 3")]
+fn test_width_leading_blanks(#[case] width: &str) {
+    new_ucmd!()
+        .args(&["-w", width])
+        .pipe_in("abcdef\n")
+        .succeeds()
+        .stdout_only("abc\ndef\n");
+}
+
+#[rstest]
+#[case::trailing_space("3 ", "fold: invalid number of columns: '3 '\n")]
+#[case::space_and_minus(" -3", "fold: invalid number of columns: ' -3'\n")]
+#[case::space_and_letter(" 3x", "fold: invalid number of columns: ' 3x'\n")]
+#[case::space_and_zero(
+    " 0",
+    "fold: invalid number of columns: ' 0': Numerical result out of range\n"
+)]
+fn test_width_blanks_rejected(#[case] width: &str, #[case] expected: &str) {
+    new_ucmd!()
+        .args(&["-w", width])
+        .fails_with_code(1)
+        .stderr_only(expected);
+}
+
 #[test]
 fn test_width_overflow() {
     new_ucmd!()
