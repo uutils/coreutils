@@ -1888,18 +1888,17 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
 /// not mapped in a user namespace (EINVAL) and on filesystems without
 /// ownership support (ENOTSUP/EOPNOTSUPP), so those stay silent.
 #[cfg(unix)]
-fn is_chown_error_fatal(error: &io::Error) -> bool {
-    // ENOTSUP and EOPNOTSUPP are equal on some platforms, so compare instead of matching.
-    error.raw_os_error().is_none_or(|errno| {
-        ![
-            libc::EPERM,
-            libc::EACCES,
-            libc::EINVAL,
-            libc::ENOTSUP,
-            libc::EOPNOTSUPP,
-        ]
-        .contains(&errno)
-    })
+fn is_chown_error_fatal(error: &CpError) -> bool {
+    // `is_enotsup_error` covers EOPNOTSUPP; ENOTSUP differs from it on some
+    // platforms (e.g. macOS), so it is listed here too.
+    let expected = |e: &io::Error| {
+        matches!(
+            e.raw_os_error(),
+            Some(libc::EPERM | libc::EACCES | libc::EINVAL | libc::ENOTSUP)
+        )
+    };
+    !is_enotsup_error(error)
+        && !matches!(error, CpError::IoErr(e) | CpError::IoErrContext(e, _) if expected(e))
 }
 
 /// Copy the specified attributes from one path to another.
@@ -1950,24 +1949,22 @@ pub(crate) fn copy_attributes(
         let dest_uid = source_metadata.uid();
         let dest_gid = source_metadata.gid();
 
-        // gnu compatibility: cp doesn't report a permission-style failure to set the
-        // ownership, and will fall back to changing only the gid if possible.
-        // Other errors (e.g. EIO) are reported.
-        let result = lchown(dest, Some(dest_uid), Some(dest_gid)).or_else(|e| {
-            ownership_preserved.set(false);
-            if is_chown_error_fatal(&e) {
-                Err(e)
-            } else {
-                lchown(dest, None, Some(dest_gid))
-            }
-        });
-        match result {
-            Err(e) if is_chown_error_fatal(&e) => Err(CpError::IoErrContext(
-                e,
-                translate!("cp-error-failed-to-preserve-ownership", "path" => dest.quote()),
-            )),
-            _ => Ok(()),
+        let Err(e) = lchown(dest, Some(dest_uid), Some(dest_gid)) else {
+            return Ok(());
+        };
+        ownership_preserved.set(false);
+        let error = CpError::IoErrContext(
+            e,
+            translate!("cp-error-failed-to-preserve-ownership", "path" => dest.quote()),
+        );
+        // gnu compatibility: other errors (e.g. EIO) are reported, but a
+        // permission-style failure is not, and cp then tries to preserve only
+        // the group, ignoring the result.
+        if is_chown_error_fatal(&error) {
+            return Err(error);
         }
+        let _ = lchown(dest, None, Some(dest_gid));
+        Ok(())
     });
 
     handle_preserve(mode, || -> CopyResult<()> {
@@ -3374,10 +3371,11 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn test_is_chown_error_fatal() {
-        use crate::is_chown_error_fatal;
+        use crate::{CpError, is_chown_error_fatal};
         use std::io::Error;
-        assert!(is_chown_error_fatal(&Error::from_raw_os_error(libc::EIO)));
-        assert!(is_chown_error_fatal(&Error::from_raw_os_error(libc::EROFS)));
+        let fatal = |errno| is_chown_error_fatal(&CpError::IoErr(Error::from_raw_os_error(errno)));
+        assert!(fatal(libc::EIO));
+        assert!(fatal(libc::EROFS));
         for errno in [
             libc::EPERM,
             libc::EACCES,
@@ -3385,7 +3383,7 @@ mod tests {
             libc::ENOTSUP,
             libc::EOPNOTSUPP,
         ] {
-            assert!(!is_chown_error_fatal(&Error::from_raw_os_error(errno)));
+            assert!(!fatal(errno));
         }
     }
 
