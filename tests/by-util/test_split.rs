@@ -1067,6 +1067,26 @@ fn test_suffix_length_req() {
 }
 
 #[test]
+fn test_suffix_length_req_huge_chunk_count() {
+    // The suffix start plus a chunk count near u64::MAX used to overflow.
+    for (suffixes, required) in [("--numeric-suffixes=5", 20), ("--hex-suffixes=5", 16)] {
+        new_ucmd!()
+            .args(&[
+                "-n",
+                "18446744073709551615",
+                suffixes,
+                "-a",
+                "2",
+                "asciilowercase.txt",
+            ])
+            .fails()
+            .stderr_only(format!(
+                "split: the suffix length needs to be at least {required}\n"
+            ));
+    }
+}
+
+#[test]
 fn test_large_suffix_length_is_rejected() {
     new_ucmd!()
         .args(&["-a", "66542562175252"])
