@@ -243,7 +243,14 @@ fn test_with_page_range() {
     let test_file_path = "test.log";
     let expected_test_file_path = "test_page_range_1.log.expected";
     let expected_test_file_path1 = "test_page_range_2.log.expected";
-    for arg in ["--pages=15", "+15", "--pages=+15", "--pages= 15", "++15"] {
+    for arg in [
+        "--pages=15",
+        "+15",
+        "--pages=+15",
+        "--pages= 15",
+        "--pages=\x0B15",
+        "++15",
+    ] {
         let mut scenario = new_ucmd!();
         let value = file_last_modified_time(&scenario, test_file_path);
         scenario
