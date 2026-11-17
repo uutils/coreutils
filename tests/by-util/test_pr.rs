@@ -1795,6 +1795,7 @@ fn test_invalid_output_tab_arguments() {
         new_ucmd!()
             .args(&["-t", arg])
             .pipe_in("a\n")
+            .ignore_stdin_write_error()
             .fails_with_code(1)
             .stderr_contains(format!(
                 "pr: '-i' extra characters or invalid number in the argument: '{field}'\nTry 'pr --help' for more information."
