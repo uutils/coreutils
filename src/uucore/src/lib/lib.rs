@@ -211,6 +211,9 @@ macro_rules! bin_inner {
             let code = $util::uumain(uucore::args_os());
             $post
 
+            // WASI's proc_exit traps on exit statuses outside [0, 126); remap first.
+            #[cfg(target_os = "wasi")]
+            let code = uucore::error::wasi_safe_exit_code(code);
             std::process::exit(code);
         }
     };
