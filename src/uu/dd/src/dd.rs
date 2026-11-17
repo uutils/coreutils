@@ -1593,12 +1593,8 @@ fn stdout_canonicalized() -> OsString {
 fn is_stdout_redirected_to_seekable_file() -> bool {
     #[cfg(unix)]
     {
-        // `lseek` with `SEEK_CUR` and offset 0 returns the current position
-        // without modifying it.  A negative return value means ESPIPE (pipe,
-        // tty, socket — not seekable).  Unlike `File::open`, this works on
-        // write-only file descriptors and does not require read permission.
-        // SAFETY: STDOUT_FILENO (1) is always a valid fd to pass to lseek.
-        (unsafe { libc::lseek(libc::STDOUT_FILENO, 0, libc::SEEK_CUR) }) >= 0
+        // Seeking the fd works on write-only stdout; reopening the path needs read access.
+        rustix::fs::seek(io::stdout(), rustix::fs::SeekFrom::Current(0)).is_ok()
     }
     #[cfg(not(unix))]
     {

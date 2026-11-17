@@ -20,6 +20,7 @@ clap = { workspace = true }
 fluent = { workspace = true }
 libc = { workspace = true }
 num-integer = { workspace = true }
+rustix = { workspace = true, features = ["fs"] }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "format",
@@ -28,9 +29,6 @@ uucore = { workspace = true, features = [
   "fs",
   "signals",
 ] }
-
-[target.'cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))'.dependencies]
-rustix = { workspace = true, features = ["fs"] }
 
 [[bin]]
 name = "dd"
