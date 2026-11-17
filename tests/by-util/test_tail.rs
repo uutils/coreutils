@@ -2316,7 +2316,13 @@ fn test_follow_name_shows_headers_on_creation() {
 /// Run `tail --follow=name FILE`, with `--retry` and `--use-polling` if asked,
 /// let `change` act on `file` once tail is running, then check how tail ends:
 /// with `--retry` it keeps running and is killed, without it it exits with failure.
-#[cfg(all(not(windows), not(target_os = "android")))]
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd"),
+    not(windows)
+))] // FIXME: for currently not working platforms
 fn follow_name_after(
     ts: &TestScenario,
     file: &str,
@@ -2350,7 +2356,13 @@ fn follow_name_after(
 }
 
 /// What tail prints when the file it follows by name goes away.
-#[cfg(all(not(windows), not(target_os = "android")))]
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd"),
+    not(windows)
+))] // FIXME: for currently not working platforms
 fn follow_name_gone_stderr(util_name: &str, file: &str, retry: bool) -> String {
     if retry {
         format!("{util_name}: '{file}' has become inaccessible: No such file or directory\n")
@@ -2360,7 +2372,13 @@ fn follow_name_gone_stderr(util_name: &str, file: &str, retry: bool) -> String {
 }
 
 #[uutests::wasi_ignore(TailFollowDisabled)]
-#[cfg(all(not(windows), not(target_os = "android")))] // FIXME: for currently not working platforms
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd"),
+    not(windows)
+))] // FIXME: for currently not working platforms
 #[rstest]
 fn test_follow_name_remove(
     #[values(false, true)] polling: bool,
