@@ -1653,6 +1653,16 @@ fn test_numeric_option_diagnostics() {
             &["--pages=99999999999999999999"],
             "pr: --pages argument '99999999999999999999' too large\n",
         ),
+        (&["-80"], "pr: page width too narrow\n"),
+        (&["-37"], "pr: page width too narrow\n"),
+        (&["-2", "-w", "2"], "pr: page width too narrow\n"),
+        (&["-2", "-W", "2", "-J"], "pr: page width too narrow\n"),
+        (&["-3", "-w", "6", "-Sxx"], "pr: page width too narrow\n"),
+        (&["-3", "-w", "2", "-S"], "pr: page width too narrow\n"),
+        (
+            &["--columns=2", "-w", "2", "-a"],
+            "pr: page width too narrow\n",
+        ),
         (&["+x"], "pr: invalid + argument 'x'\n"),
         (&["+1:"], "pr: invalid + argument '1:'\n"),
         (&["+1:3x"], "pr: invalid suffix in + argument '1:3x'\n"),
@@ -1671,6 +1681,26 @@ fn test_numeric_option_diagnostics() {
             .arg("test_one_page.log")
             .fails()
             .stderr_only(stderr);
+    }
+}
+
+#[test]
+fn test_narrowest_page_width_for_columns() {
+    // Each column needs one character, plus the separators between them.
+    for args in [
+        &["-36"][..],
+        &["-2", "-w", "3"],
+        &["-3", "-w", "7", "-Sxx"],
+        &["-3", "-w", "3", "-S"],
+        &["-2", "-w", "2", "-s"],
+        &["-1", "-w", "1"],
+        &["-m", "-w", "1"],
+    ] {
+        new_ucmd!()
+            .args(args)
+            .args(&["-t", "test_one_page.log"])
+            .succeeds()
+            .no_stderr();
     }
 }
 

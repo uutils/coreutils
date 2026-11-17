@@ -1047,6 +1047,31 @@ fn build_options(
             .transpose()?,
     };
 
+    // Every column needs at least one character next to the separators.
+    if let Some(columns) = column_option_value {
+        // -W counts here even with -J
+        let width = matches
+            .get_one::<String>(options::PAGE_WIDTH)
+            .and_then(|raw| raw.parse().ok())
+            .unwrap_or(column_width);
+        // A bare -s or -S takes no room. Clap reports it as its default
+        // value, so an explicit tab or space is counted the same way.
+        let separator_width = match (
+            matches.get_one::<String>(options::COLUMN_STRING_SEPARATOR),
+            matches.get_one::<String>(options::COLUMN_CHAR_SEPARATOR),
+        ) {
+            (Some(string), _) if string == " " => 0,
+            (None, Some(char)) if char == "\t" => 0,
+            _ => column_separator.chars().count(),
+        };
+        let separators = (columns - 1).saturating_mul(separator_width);
+        if width.saturating_sub(separators) < columns {
+            return Err(PrError::EncounteredErrors {
+                msg: translate!("pr-error-page-width-too-narrow"),
+            });
+        }
+    }
+
     let column_mode_options = column_option_value.map(|columns| ColumnModeOptions {
         columns,
         width: column_width,
