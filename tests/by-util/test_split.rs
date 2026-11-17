@@ -2598,9 +2598,9 @@ fn test_number_with_plus_prefix(
     assert_eq!(files, expected_files, "-n {number}");
 }
 
-#[cfg(unix)]
-#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
+#[cfg(all(unix, not(target_os = "openbsd")))] // head has no -c option on OpenBSD
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 fn test_number_filter_exiting_early_keeps_other_chunks() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut data = vec![b'k'; 200_000];
