@@ -210,7 +210,8 @@ impl Suffix {
         if let Strategy::Number(number_type) = strategy {
             let chunks = number_type.num_chunks();
             if (start as u64) < chunks {
-                let required_length = ((start as u64 + chunks) as f64)
+                // u128 keeps the sum from overflowing for a chunk count near u64::MAX.
+                let required_length = ((start as u128 + chunks as u128) as f64)
                     .log(stype.radix() as f64)
                     .ceil() as usize;
 
