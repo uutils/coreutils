@@ -358,7 +358,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let all_delimiters = matches
         .get_many::<String>(options::DELIMITER)
         .unwrap()
-        .map(String::from)
+        .cloned()
         .collect::<Vec<_>>();
     for delim in &all_delimiters[1..] {
         // Note that this check is very different from ".conflicts_with_self(true).action(ArgAction::Set)",

@@ -112,10 +112,8 @@ impl FmtOptions {
         let xprefix = matches.get_flag(options::EXACT_PREFIX);
         let xanti_prefix = matches.get_flag(options::EXACT_SKIP_PREFIX);
 
-        let prefix = matches.get_one::<String>(options::PREFIX).map(String::from);
-        let anti_prefix = matches
-            .get_one::<String>(options::SKIP_PREFIX)
-            .map(String::from);
+        let prefix = matches.get_one::<String>(options::PREFIX).cloned();
+        let anti_prefix = matches.get_one::<String>(options::SKIP_PREFIX).cloned();
 
         let width_opt = extract_width(matches)?;
         let goal_opt_str = matches.get_one::<String>(options::GOAL);

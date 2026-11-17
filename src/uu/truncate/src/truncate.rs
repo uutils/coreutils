@@ -163,10 +163,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let io_blocks = matches.get_flag(options::IO_BLOCKS);
     let no_create = matches.get_flag(options::NO_CREATE);
-    let reference = matches
-        .get_one::<OsString>(options::REFERENCE)
-        .map(OsString::from);
-    let size = matches.get_one::<String>(options::SIZE).map(String::from);
+    let reference = matches.get_one::<OsString>(options::REFERENCE).cloned();
+    let size = matches.get_one::<String>(options::SIZE).cloned();
 
     truncate(
         &files,

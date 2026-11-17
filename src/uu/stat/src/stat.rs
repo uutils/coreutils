@@ -1014,7 +1014,7 @@ impl Stater {
         #[expect(clippy::unwrap_used, reason = "set as required by clap")]
         let files: Vec<OsString> = matches
             .get_many::<OsString>(options::FILES)
-            .map(|v| v.map(OsString::from).collect())
+            .map(|v| v.cloned().collect())
             .unwrap();
         let format_str = if matches.contains_id(options::PRINTF) {
             matches
