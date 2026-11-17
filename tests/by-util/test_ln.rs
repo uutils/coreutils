@@ -1436,8 +1436,6 @@ fn test_ln_hard_link_dir_numeric_looking_name() {
     let scene = TestScenario::new(util_name!());
     for name in ["007", "1e3"] {
         scene.fixtures.mkdir(name);
-    }
-    for name in ["007", "1e3"] {
         scene
             .ucmd()
             .env("LC_ALL", "C")
