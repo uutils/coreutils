@@ -2220,6 +2220,26 @@ expr: syntax error: expecting ')' after '7'
 
     #[cfg(unix)]
     #[test]
+    fn test_snippet_points_at_the_unexpected_closing_parenthesis() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["6", "+", ")"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+expr: syntax error: unexpected ')'
+   ╭─[ expr:1:5 ]
+   │
+ 1 │ 6 + )
+   │     ─
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn test_errors_without_a_position_stay_plain() {
         // Division by zero is raised once the expression is already parsed and
         // carries no operand, so there is nothing to point at. The terminal
