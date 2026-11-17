@@ -493,6 +493,11 @@ fn security_context(file: &OsStr, follow_symbolic_links: bool) -> Result<String,
     match get_selinux_security_context(Path::new(file), follow_symbolic_links) {
         Ok(context) => Ok(context),
         Err(SeLinuxError::SELinuxNotEnabled) => Err(context_not_supported()),
+        // These wrap the cause in a sentence of their own; the caller
+        // already says what failed.
+        Err(
+            SeLinuxError::FileOpenFailure(cause) | SeLinuxError::ContextRetrievalFailure(cause),
+        ) => Err(cause),
         Err(error) => Err(error.to_string()),
     }
 }
