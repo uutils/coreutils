@@ -3433,5 +3433,8 @@ fn test_install_strip_program_sees_caller_umask() {
         .umask(0o027)
         .args(&["-s", "--strip-program=./recorder", "src", "dest"])
         .succeeds();
-    assert_eq!(at.read("seen"), "0027\n");
+    assert_eq!(
+        u32::from_str_radix(at.read("seen").trim(), 8).unwrap(),
+        0o027
+    );
 }
