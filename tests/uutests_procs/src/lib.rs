@@ -30,9 +30,6 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
         "CannotExecShellFromDeletedCwd" => {
             "WASI: wasmtime cannot exec the binary via a raw shell from a deleted cwd"
         }
-        "ClosedStdoutGenericIoError" => {
-            "WASI: closed stdout reports a generic I/O error rather than BrokenPipe"
-        }
         "CompressProgramBypassed" => {
             "WASI: ext_sort bypasses --compress-program entirely (single-threaded in-memory path)"
         }

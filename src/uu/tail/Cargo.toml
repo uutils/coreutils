@@ -20,6 +20,7 @@ doctest = false
 [dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
+libc = { workspace = true }
 memchr = { workspace = true }
 uucore = { workspace = true, features = [
   "fs",
@@ -29,7 +30,6 @@ uucore = { workspace = true, features = [
 ] }
 
 [target.'cfg(not(target_os = "wasi"))'.dependencies]
-libc = { workspace = true }
 notify = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
