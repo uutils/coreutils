@@ -288,6 +288,16 @@ fn comm(
                     .read_line(rb)
                     .map_err_context(|| filename2.maybe_quote().to_string())?;
                 total_col_3 += 1;
+
+                // Both files moved on. With --check-order, look at file 1
+                // first, so it is the one reported when both new lines are
+                // out of order.
+                if mode == CheckOrder::Always
+                    && ((na != 0 && !checker1.verify_order(ra, files_differ))
+                        || (nb != 0 && !checker2.verify_order(rb, files_differ)))
+                {
+                    break;
+                }
             }
         }
 
