@@ -76,22 +76,12 @@ impl LineData<'_> {
         Some(&self.collation_key_buffer[start..end])
     }
 
-    /// Record that the current end of `collation_key_buffer` terminates the
-    /// precomputed collation key of the line being appended.
+    /// Record the current key-buffer end and whether this line's key was skipped.
     #[inline]
-    pub fn push_collation_key_end(&mut self) {
+    pub fn push_collation_key_end(&mut self, skipped: bool) {
         let end = self.collation_key_buffer.len();
         self.collation_key_ends.push(end);
-        self.collation_key_skipped.push(false);
-    }
-
-    /// Record a line whose collation key was not precomputed; `collation_key`
-    /// returns `None` for it so it is compared lazily via the locale collator.
-    #[inline]
-    pub fn push_skipped_collation_key(&mut self) {
-        let end = self.collation_key_buffer.len();
-        self.collation_key_ends.push(end);
-        self.collation_key_skipped.push(true);
+        self.collation_key_skipped.push(skipped);
     }
 }
 

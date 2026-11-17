@@ -125,11 +125,18 @@ const POSITIVE: &u8 = &b'+';
 const MIN_AUTOMATIC_BUF_SIZE: usize = 512 * 1024; // 512 KiB
 const FALLBACK_AUTOMATIC_BUF_SIZE: usize = 32 * 1024 * 1024; // 32 MiB
 const MAX_AUTOMATIC_BUF_SIZE: usize = 1024 * 1024 * 1024; // 1 GiB
-// Bound the work spent on any one line, without dropping reusable keys when a
-// chunk contains many moderately long lines. ICU keys can exceed their input
-// size, so this is an input-length limit rather than a memory limit.
+// A 64 KiB cutoff makes long case variants repeatedly rescan the whole line.
+// The 16 MiB heuristic retains reusable keys for multi-MiB lines while avoiding
+// eager key generation for enormous lines such as the 200 MiB inputs in #12138.
+// Apply the limit per line so that a chunk with many long lines keeps its keys.
+// ICU keys can exceed the input size; this is not a memory limit.
 #[cfg(feature = "i18n-collator")]
-const MAX_COLLATION_KEY_INPUT_BYTES: usize = 16 * 1024 * 1024;
+const MAX_COLLATION_KEY_INPUT_BYTES: usize = if cfg!(test) {
+    // Exercise the boundary without generating multi-MiB keys in debug builds.
+    1024
+} else {
+    16 * 1024 * 1024
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum SortError {
@@ -700,12 +707,11 @@ impl<'a> Line<'a> {
     ) -> Self {
         #[cfg(feature = "i18n-collator")]
         if settings.precomputed.fast_locale_collation {
-            if line.len() <= MAX_COLLATION_KEY_INPUT_BYTES {
+            let skipped = line.len() > MAX_COLLATION_KEY_INPUT_BYTES;
+            if !skipped {
                 compute_sort_key_utf8(line, &mut line_data.collation_key_buffer);
-                line_data.push_collation_key_end();
-            } else {
-                line_data.push_skipped_collation_key();
             }
+            line_data.push_collation_key_end(skipped);
             return Self { line, index };
         }
 
@@ -3441,7 +3447,7 @@ mod tests {
 
     #[cfg(feature = "i18n-collator")]
     #[test]
-    fn test_long_collation_keys_do_not_share_a_budget() {
+    fn test_collation_key_input_limit() {
         use uucore::i18n::collator::{CollatorOptions, try_init_collator};
 
         try_init_collator(CollatorOptions::default());
@@ -3458,48 +3464,45 @@ mod tests {
         settings.init_precomputed(true);
         let mut data = LineData::default();
         let mut tokens = Vec::new();
-        let enormous = vec![b'b'; MAX_COLLATION_KEY_INPUT_BYTES + 1];
-        let enormous_line = Line::create(&enormous, 0, &mut data, &mut tokens, &settings);
+        let over_limit = vec![b'b'; MAX_COLLATION_KEY_INPUT_BYTES + 1];
+        let skipped_line = Line::create(&over_limit, 0, &mut data, &mut tokens, &settings);
         assert!(data.collation_key(0).is_none());
         assert!(data.collation_key_buffer.is_empty());
-        // Exceed the per-line limit in total with moderately long lines. Every
-        // line must retain its key to avoid repeated full collation.
-        let line = vec![b'A'; 70_000];
+
+        let below_limit = vec![b'A'; MAX_COLLATION_KEY_INPUT_BYTES - 1];
+        let at_limit = vec![b'A'; MAX_COLLATION_KEY_INPUT_BYTES];
         let mut expected = Vec::new();
-        compute_sort_key_utf8(&line, &mut expected);
-        let count = MAX_COLLATION_KEY_INPUT_BYTES / line.len() + 2;
-        for index in 1..=count {
-            Line::create(&line, index, &mut data, &mut tokens, &settings);
-            assert!(
-                data.collation_key(index)
-                    .is_some_and(|key| key == expected.as_slice()),
-                "missing or incorrect collation key for line {index}"
-            );
+        // Each boundary value keeps its key even though their combined input
+        // exceeds the per-line limit.
+        for (index, line) in [&below_limit, &at_limit].into_iter().enumerate() {
+            expected.clear();
+            compute_sort_key_utf8(line, &mut expected);
+            Line::create(line, index + 1, &mut data, &mut tokens, &settings);
+            assert_eq!(data.collation_key(index + 1), Some(expected.as_slice()));
         }
+
         // A skipped key must not disturb the following arena offsets.
-        Line::create(&enormous, count + 1, &mut data, &mut tokens, &settings);
-        assert!(data.collation_key(count + 1).is_none());
-        let small_line = Line::create(b"a", count + 2, &mut data, &mut tokens, &settings);
+        let key_bytes = data.collation_key_buffer.len();
+        Line::create(&over_limit, 3, &mut data, &mut tokens, &settings);
+        assert!(data.collation_key(3).is_none());
+        assert_eq!(data.collation_key_buffer.len(), key_bytes);
+        let small_line = Line::create(b"a", 4, &mut data, &mut tokens, &settings);
         expected.clear();
         compute_sort_key_utf8(b"a", &mut expected);
-        assert_eq!(data.collation_key(count + 2), Some(expected.as_slice()));
-
-        let at_limit = vec![b'a'; MAX_COLLATION_KEY_INPUT_BYTES];
-        Line::create(&at_limit, count + 3, &mut data, &mut tokens, &settings);
-        assert!(data.collation_key(count + 3).is_some());
+        assert_eq!(data.collation_key(4), Some(expected.as_slice()));
 
         // Cached and skipped keys must be comparable in either order.
         assert_eq!(
-            compare_by(&small_line, &enormous_line, &settings, &data, &data),
+            compare_by(&small_line, &skipped_line, &settings, &data, &data),
             Ordering::Less
         );
         assert_eq!(
-            compare_by(&enormous_line, &small_line, &settings, &data, &data),
+            compare_by(&skipped_line, &small_line, &settings, &data, &data),
             Ordering::Greater
         );
         settings.reverse = true;
         assert_eq!(
-            compare_by(&small_line, &enormous_line, &settings, &data, &data),
+            compare_by(&small_line, &skipped_line, &settings, &data, &data),
             Ordering::Greater
         );
     }
