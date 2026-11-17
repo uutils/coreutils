@@ -448,13 +448,8 @@ impl SystemdUtmpxCompat {
         self.record.is_user_process()
     }
 
-    /// Canonical host name
-    pub fn canon_host(&self) -> String {
-        self.try_canon_host().unwrap_or_else(|_| self.host())
-    }
-
-    /// Canonical host name, propagating DNS errors.
-    pub fn try_canon_host(&self) -> std::io::Result<String> {
+    /// Canonicalize host name using DNS
+    pub fn canon_host(&self) -> std::io::Result<String> {
         crate::utmpx::canonicalize_host(self.record.host.clone())
     }
 }
@@ -533,11 +528,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn canonical_host_preserves_display_suffix() {
-        // localhost is resolved locally. Its canonical spelling makes returning
-        // the unmodified host fail this regression without a DNS server.
-        let host = "LOCALHOST:0";
-        let expected = "localhost:0";
+    fn canonical_host_preserves_local_display() {
+        // A local display has no hostname to resolve.
+        let host = ":0";
         let record = SystemdUtmpxCompat::new(SystemdLoginRecord {
             user: "user".into(),
             session_id: "session".into(),
@@ -549,13 +542,12 @@ mod tests {
             session_leader_pid: 0,
             record_type: SystemdRecordType::UserProcess,
         });
-        assert_eq!(record.try_canon_host().unwrap(), expected);
-        assert_eq!(record.canon_host(), expected);
+        assert_eq!(record.canon_host().unwrap(), host);
         assert_eq!(
             crate::utmpx::UtmpxRecord::Systemd(record)
                 .canon_host()
                 .unwrap(),
-            expected
+            host
         );
     }
 
