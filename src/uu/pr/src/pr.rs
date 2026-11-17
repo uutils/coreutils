@@ -607,6 +607,9 @@ enum PageSpecError {
 fn parse_page_spec(spec: &str) -> Result<(usize, Option<usize>), PageSpecError> {
     use PageSpecError::{InvalidSuffix, NotANumber, NotARange, TooLarge};
     fn number(part: &str) -> Result<(usize, &str), PageSpecError> {
+        // Blanks and one `+` may come before the digits.
+        let part = part.trim_start_matches(|c: char| c.is_ascii_whitespace());
+        let part = part.strip_prefix('+').unwrap_or(part);
         let digits_end = part
             .bytes()
             .position(|b| !b.is_ascii_digit())

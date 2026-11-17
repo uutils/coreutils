@@ -242,7 +242,7 @@ fn test_with_page_range() {
     let test_file_path = "test.log";
     let expected_test_file_path = "test_page_range_1.log.expected";
     let expected_test_file_path1 = "test_page_range_2.log.expected";
-    for arg in ["--pages=15", "+15"] {
+    for arg in ["--pages=15", "+15", "--pages=+15", "--pages= 15", "++15"] {
         let mut scenario = new_ucmd!();
         let value = file_last_modified_time(&scenario, test_file_path);
         scenario
@@ -253,7 +253,7 @@ fn test_with_page_range() {
                 &[("{last_modified_time}", &value)],
             );
     }
-    for arg in ["--pages=15:17", "+15:17"] {
+    for arg in ["--pages=15:17", "+15:17", "--pages=+15:+17", "+15: 17"] {
         let mut scenario = new_ucmd!();
         let value = file_last_modified_time(&scenario, test_file_path);
         scenario
@@ -1589,6 +1589,9 @@ fn test_numeric_option_diagnostics() {
         (&["--pages=1:x"], "pr: invalid --pages argument '1:x'\n"),
         (&["--pages=1:0"], "pr: invalid page range '1:0'\n"),
         (&["--pages=1x"], "pr: invalid page range '1x'\n"),
+        (&["--pages=+0"], "pr: invalid page range '+0'\n"),
+        (&["--pages=++1"], "pr: invalid --pages argument '++1'\n"),
+        (&["--pages=+ 1"], "pr: invalid --pages argument '+ 1'\n"),
         (
             &["--pages=99999999999999999999"],
             "pr: --pages argument '99999999999999999999' too large\n",
