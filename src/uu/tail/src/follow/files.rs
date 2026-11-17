@@ -8,13 +8,13 @@
 use crate::args::Settings;
 use crate::chunks::BytesChunkBuffer;
 use crate::open_file;
-use crate::paths::{HeaderPrinter, PathExtTail};
+use crate::paths::{HeaderPrinter, PathExtTail, stdout_writer};
 use crate::read::ReadAvailable;
 use crate::text;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::collections::hash_map::Keys;
 use std::fs::Metadata;
-use std::io::{BufRead, BufReader, BufWriter, Write, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
 
@@ -161,7 +161,7 @@ impl FileHandling {
                 self.header_printer.print(display_name.as_str())?;
             }
 
-            let mut writer = BufWriter::new(stdout().lock());
+            let mut writer = BufWriter::new(stdout_writer());
             chunks.write(&mut writer)?;
             writer.flush()?;
 

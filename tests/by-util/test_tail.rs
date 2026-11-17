@@ -5616,7 +5616,6 @@ fn test_when_piped_input_then_no_broken_pipe() {
     }
 }
 
-#[uutests::wasi_ignore(ClosedStdoutGenericIoError)]
 #[test]
 #[cfg(unix)]
 fn test_when_output_closed_then_no_broken_pipe() {
@@ -5630,6 +5629,38 @@ fn test_when_output_closed_then_no_broken_pipe() {
     // Dropping the stdout should not lead to an error.
     // The "Broken pipe" error should be silently ignored.
     child.close_stdout();
+    child.wait().unwrap().fails_silently();
+}
+
+#[test]
+fn test_when_output_closed_then_no_broken_pipe_with_verbose_header() {
+    let (at, mut cmd) = at_and_ucmd!();
+    at.make_file("input").set_len(10_000_000).unwrap();
+
+    let mut child = cmd
+        .args(&["-v", "-c", "10000000", "input"])
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+    // Dropping the stdout should not lead to an error, even when the first
+    // write is the "==> input <==" header rather than file content.
+    child.close_stdout();
+    child.wait().unwrap().fails_silently();
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+fn test_when_output_closed_then_no_broken_pipe_while_following() {
+    let (at, mut cmd) = at_and_ucmd!();
+    at.write("input", "line1\n");
+
+    let mut child = cmd
+        .args(&["-f", "input"])
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+    // Dropping the stdout should not lead to an error once new data
+    // arrives for the followed file to write out.
+    child.close_stdout();
+    at.append("input", "line2\n");
     child.wait().unwrap().fails_silently();
 }
 
@@ -5651,6 +5682,7 @@ fn test_child_when_run_with_stderr_to_stdout() {
 }
 
 #[cfg(target_os = "linux")]
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 fn test_failed_write_is_reported() {
     new_ucmd!()
@@ -5661,6 +5693,7 @@ fn test_failed_write_is_reported() {
 }
 
 #[cfg(target_os = "linux")]
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 fn test_multiple_input_files_failed_write_is_reported() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -5685,6 +5718,7 @@ fn test_failed_warning_write_is_reported() {
 }
 
 #[cfg(target_os = "linux")]
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 fn test_failed_write_is_reported_on_seekable_input() {
     let ts = TestScenario::new("tail");
