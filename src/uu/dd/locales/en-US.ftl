@@ -84,6 +84,7 @@ dd-error-failed-to-open = failed to open { $path }
 dd-error-write-error = write error
 dd-error-failed-to-seek = failed to seek in output file
 dd-error-failed-to-truncate = failed to truncate to { $size } bytes in output file { $file }
+dd-error-cannot-fstat = cannot fstat { $file }
 dd-error-io-error = IO error
 dd-error-cannot-skip-offset = '{ $file }': cannot skip to specified offset
 dd-error-cannot-skip-invalid = '{ $file }': cannot skip: Invalid argument
