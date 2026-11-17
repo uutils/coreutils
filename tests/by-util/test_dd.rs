@@ -1270,7 +1270,7 @@ fn test_bytes_oseek_bytes_oflag() {
 #[test]
 #[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_bytes_oseek_bytes_trunc_oflag() {
-    // The test harness hands stdout over as a regular file. On Unix, dd now
+    // The test harness hands stdout over as a regular file. On Unix, dd
     // detects that via lseek(1, 0, SEEK_CUR) and seeks in the file without
     // writing zeros, matching GNU behaviour. On Windows the seek is emulated
     // by writing zeros.
@@ -2890,12 +2890,6 @@ fn test_ascii_ebcdic_without_cbs_still_convert() {
 }
 
 /// `dd seek=N count=0` via a write-only stdout fd must not corrupt the file.
-///
-/// When stdout is a write-only file (no read permission on the path),
-/// `is_stdout_redirected_to_seekable_file` previously called `File::open`,
-/// which requires read access and fails with EACCES.  The false return caused
-/// the seek to be emulated by writing N blocks of zeros, clobbering the
-/// existing content.  The fix tests seekability on the inherited fd instead.
 #[test]
 #[cfg(unix)]
 fn test_seek_on_write_only_stdout_does_not_corrupt() {
