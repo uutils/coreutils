@@ -782,17 +782,30 @@ impl Chmoder {
         for entry_name in entries {
             let entry_path = dir_path.join(&entry_name);
 
+            // Checked through the fd, as the path may exceed PATH_MAX.
+            let is_symlink = || {
+                dir_fd
+                    .metadata_at(&entry_name, SymlinkBehavior::NoFollow)
+                    .is_ok_and(|m| m.file_type().is_symlink())
+            };
             let meta = match dir_fd.metadata_at(&entry_name, should_follow_symlink.into()) {
                 Ok(meta) => meta,
+                // Removed since the directory was listed: skip it, like GNU.
+                // Only a followed stat can also fail on a dangling symlink.
+                Err(err)
+                    if err.kind() == std::io::ErrorKind::NotFound
+                        && !(should_follow_symlink && is_symlink()) =>
+                {
+                    continue;
+                }
                 Err(err) => {
-                    let error =
-                        if err.kind() == std::io::ErrorKind::NotFound && entry_path.is_symlink() {
-                            ChmodError::DanglingSymlink(entry_path.clone())
-                        } else if err.kind() == std::io::ErrorKind::PermissionDenied {
-                            ChmodError::PermissionDenied(entry_path.clone())
-                        } else {
-                            ChmodError::CannotStat(entry_path.clone(), err)
-                        };
+                    let error = if err.kind() == std::io::ErrorKind::NotFound && is_symlink() {
+                        ChmodError::DanglingSymlink(entry_path.clone())
+                    } else if err.kind() == std::io::ErrorKind::PermissionDenied {
+                        ChmodError::PermissionDenied(entry_path.clone())
+                    } else {
+                        ChmodError::CannotStat(entry_path.clone(), err)
+                    };
                     self.report_failure(error.into());
                     self.report_not_accessed(&entry_path);
                     continue;
@@ -832,6 +845,7 @@ impl Chmoder {
                         Ok(child_dir_fd) => {
                             self.safe_traverse_dir(&child_dir_fd, &entry_path, ancestors);
                         }
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
                         Err(err) => self.report_unreadable_dir(&entry_path, err),
                     }
                 }
@@ -906,7 +920,10 @@ impl Chmoder {
 
         // Use safe traversal to change the mode
         if let Err(e) = dir_fd.chmod_at(entry_name, new_mode, symlink_behavior) {
-            self.report_failed_change(file_path, e, current_mode, new_mode);
+            // Removed since the directory was listed: skip it, like GNU.
+            if e.kind() != std::io::ErrorKind::NotFound {
+                self.report_failed_change(file_path, e, current_mode, new_mode);
+            }
             return Ok(());
         }
 

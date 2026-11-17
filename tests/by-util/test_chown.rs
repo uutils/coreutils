@@ -1226,3 +1226,53 @@ fn test_chown_verbose_broken_symlink_plus_ids() {
             .stderr_contains("chown: cannot dereference 'ghost': ");
     }
 }
+
+/// `chown -R` skips an entry removed after its directory was listed, like GNU.
+/// `strace` fakes the removal by failing the change of `gone` with ENOENT;
+/// any other error (EIO) is still reported.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_recursive_skips_entry_removed_during_traversal() {
+    use std::process::{Command, ExitStatus};
+
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkdir("tree");
+    ts.fixtures.touch("tree/gone");
+    let bin = ts.bin_path.to_string_lossy().into_owned();
+    let arg = rustix::process::getuid().as_raw().to_string();
+    // Returns the status and stderr, minus strace's note on resolving `gone`.
+    let run = |error: &str, args: &[&str]| -> Option<(ExitStatus, String)> {
+        Command::new("strace")
+            .args(["-qq", "-o", "/dev/null", "-P", "gone", "-e"])
+            .arg(format!("inject=?chown,?lchown,fchownat:error={error}"))
+            .args([bin.as_str(), util_name!(), arg.as_str()])
+            .args(args)
+            .current_dir(ts.fixtures.plus("tree"))
+            .output()
+            .ok()
+            .map(|o| {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                let stderr = stderr.lines().filter(|l| !l.starts_with("strace: "));
+                (o.status, stderr.collect::<Vec<_>>().join("\n"))
+            })
+    };
+
+    // Probe: the injection must make a plain `chown gone` fail, else skip.
+    // A strace that cannot trace (blocked ptrace) also fails, so check the error.
+    if run("EIO", &["gone"])
+        .is_none_or(|(status, err)| status.success() || !err.contains("Input/output error"))
+    {
+        eprintln!("TEST SKIPPED: strace syscall injection is not available");
+        return;
+    }
+
+    let (status, stderr) = run("ENOENT", &["-R", "."]).unwrap();
+    assert!(status.success() && stderr.is_empty(), "{stderr}");
+
+    let (status, stderr) = run("EIO", &["-R", "."]).unwrap();
+    assert!(!status.success(), "{stderr}");
+    assert!(
+        stderr.contains("gone") && stderr.contains("Input/output error"),
+        "{stderr}"
+    );
+}
