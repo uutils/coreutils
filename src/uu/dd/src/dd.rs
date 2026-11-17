@@ -849,12 +849,18 @@ impl<'a> Output<'a> {
 
     /// Instantiate this struct with the named file as a destination.
     fn new_file(filename: &Path, settings: &'a Settings) -> UResult<Self> {
-        fn open_dst(path: &Path, cflags: &OConvFlags, oflags: &OFlags) -> Result<File, io::Error> {
+        fn open_dst(
+            path: &Path,
+            cflags: &OConvFlags,
+            oflags: &OFlags,
+            truncate: bool,
+        ) -> Result<File, io::Error> {
             let mut opts = OpenOptions::new();
             opts.write(true)
                 .create(!cflags.nocreat)
                 .create_new(cflags.excl)
-                .append(oflags.append);
+                .append(oflags.append)
+                .truncate(truncate);
 
             #[cfg(any(target_os = "linux", target_os = "android"))]
             if let Some(libc_flags) = make_linux_oflags(oflags) {
@@ -864,14 +870,30 @@ impl<'a> Output<'a> {
             opts.open(path)
         }
 
-        let dst = open_dst(filename, &settings.oconv, &settings.oflags).map_err_context(
-            || translate!("dd-error-failed-to-open", "path" => filename.quote()),
-        )?;
+        // Without a seek, truncate when opening so that no `set_len()` is needed.
+        // `OpenOptions` does not allow truncating together with appending.
+        let truncate_on_open =
+            !settings.oconv.notrunc && settings.seek == 0 && !settings.oflags.append;
+        let dst = open_dst(
+            filename,
+            &settings.oconv,
+            &settings.oflags,
+            truncate_on_open,
+        )
+        .map_err_context(|| translate!("dd-error-failed-to-open", "path" => filename.quote()))?;
 
+        // Check the file type before truncating, and fail before writing
+        // anything if that is not possible.
         // Failures on special outputs such as `/dev/null` are ignored, as GNU does.
         if !settings.oconv.notrunc
+            && !truncate_on_open
+            && dst
+                .metadata()
+                .map_err_context(
+                    || translate!("dd-error-cannot-fstat", "file" => filename.quote()),
+                )?
+                .is_file()
             && let Err(e) = dst.set_len(settings.seek)
-            && dst.metadata().is_ok_and(|m| m.is_file())
         {
             show_error!(
                 "{}",
