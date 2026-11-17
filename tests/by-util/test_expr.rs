@@ -663,6 +663,40 @@ fn test_num_str_comparison() {
 }
 
 #[test]
+fn test_integer_syntax_is_optional_minus_and_digits() {
+    // Anything else, like a leading `+` or a `_` separator, is a string.
+    for args in [
+        &["+1", "+", "1"],
+        &["1", "+", "+1"],
+        &["1_0", "+", "5"],
+        &["1_", "+", "1"],
+        &["6", "/", "+2"],
+    ] {
+        new_ucmd!()
+            .args(args)
+            .fails_with_code(2)
+            .stderr_only("expr: non-integer argument\n");
+    }
+
+    for (args, expected) in [
+        (&["+5", "=", "5"], "0\n"),
+        (&["1_0", "=", "10"], "0\n"),
+        (&["1_0", "<", "9"], "1\n"),
+        (&["+5", "!=", "5"], "1\n"),
+        (&["-00", "=", "0"], "1\n"),
+        (&["01", "+", "1"], "2\n"),
+    ] {
+        let result = new_ucmd!().args(args).run();
+        result.stdout_only(expected);
+    }
+
+    new_ucmd!()
+        .args(&["substr", "abcdef", "+2", "3"])
+        .fails_with_code(1)
+        .stdout_only("\n");
+}
+
+#[test]
 fn test_missing_closing_parenthesis_reports_syntax_error() {
     new_ucmd!()
         .args(&["(", "1", "/", "0"])
