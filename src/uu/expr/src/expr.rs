@@ -48,6 +48,8 @@ pub enum ExprError {
     UnexpectedArgument(String),
     #[error("{}", translate!("expr-error-missing-argument", "arg" => _0.quote()))]
     MissingArgument(String),
+    #[error("{}", translate!("expr-error-unexpected-closing-parenthesis"))]
+    UnexpectedClosingParenthesis,
     // The offending operand is carried for diagnostics only; GNU prints the bare
     // message, so it is deliberately absent from `Display`. Raw bytes, so that a
     // non-UTF-8 operand can still be matched back to its argument.
