@@ -56,7 +56,7 @@ jobs:
         [target.x86_64-unknown-openbsd]
         linker = "cargo-zigbuild"
         [unstable]
-        build-std = ["std", "panic_abort"]
+        build-std = ["std"]
         EOF
         UTILS=$(cargo tree --depth 1 --features ${{ env.FEATURES }} --format '{lib}' --prefix none | sed -n 's/^uu_/-p uu_/p')
         cargo-zigbuild clippy --target x86_64-unknown-openbsd --features ${{ env.FEATURES }} -p coreutils ${UTILS} --all-targets --tests --benches -- -D warnings

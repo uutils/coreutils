@@ -532,11 +532,9 @@ mod tests {
     /// The error messages go through `translate!`, which needs the English
     /// strings loaded to give back more than the message key.
     fn load_english_messages() {
-        // SAFETY: test-only; like the uptime tests, it always sets the same value.
-        unsafe {
-            env::set_var("LANG", "en_US.UTF-8");
-        }
-        let _ = crate::locale::setup_localization("mv");
+        temp_env::with_var("LANG", Some("en_US.UTF-8"), || {
+            let _ = crate::locale::setup_localization("mv");
+        });
     }
 
     fn make_app() -> Command {

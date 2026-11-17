@@ -465,7 +465,21 @@ fn test_missing_file_error_contains_filename() {
     new_ucmd!()
         .arg("zxc")
         .fails()
-        .stderr_is("ptx: 'zxc': No such file or directory\n");
+        .stderr_is("ptx: zxc: No such file or directory\n");
+}
+
+#[test]
+fn test_file_errors_quote_names_only_when_needed() {
+    // File names are quoted only when they need it, so plain names stay bare.
+    new_ucmd!()
+        .arg("a b")
+        .fails()
+        .stderr_is("ptx: 'a b': No such file or directory\n");
+    new_ucmd!()
+        .args(&["-G", "-", "missing/out"])
+        .pipe_in("hello\n")
+        .fails()
+        .stderr_is("ptx: missing/out: No such file or directory\n");
 }
 
 #[test]

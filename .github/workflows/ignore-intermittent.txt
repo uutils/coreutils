@@ -16,7 +16,6 @@ tests/timeout/timeout-group
 tests/tty/tty-eof
 tests/misc/stdbuf
 tests/misc/tty-eof
-tests/misc/usage_vs_getopt
 tests/misc/tee
 tests/tail/follow-name
 tests/rm/isatty

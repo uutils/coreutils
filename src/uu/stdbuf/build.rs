@@ -65,6 +65,10 @@ fn main() {
     cmd.env_clear().envs(env::vars());
     cmd.current_dir(libstdbuf_src)
         .args(["build", "--target-dir", build_dir.to_str().unwrap()]);
+    // Give the nested build its own build directory too. A build directory configured for the
+    // outer build (build.build-dir or CARGO_BUILD_BUILD_DIR) would otherwise be shared, and the
+    // nested build would wait forever for the lock which the outer build holds.
+    cmd.env("CARGO_BUILD_BUILD_DIR", &build_dir);
 
     // Determine the actual profile from OUT_DIR since PROFILE env var only gives the base profile
     // for inherited profiles (e.g., PROFILE=release for both release and release-small).
@@ -95,70 +99,24 @@ fn main() {
 
     // Copy the built library to OUT_DIR for include_bytes! to find
     let lib_name = if target_os == "cygwin" {
+        // <https://github.com/rust-lang/rust/issues/148913>
         format!("stdbuf{dylib_ext}")
     } else {
         format!("libstdbuf{dylib_ext}")
     };
-    let dest_path = Path::new(&out_dir).join(format!("libstdbuf{dylib_ext}"));
-
-    // Check multiple possible locations for the built library
-    let possible_paths = if !target.is_empty() && target != "unknown" {
-        vec![
-            build_dir.join(&target).join(profile).join(&lib_name),
-            build_dir
-                .join(&target)
-                .join(profile)
-                .join("deps")
-                .join(&lib_name),
-        ]
-    } else {
-        vec![
-            build_dir.join(profile).join(&lib_name),
-            build_dir.join(profile).join("deps").join(&lib_name),
-        ]
-    };
-
-    // Try to find the library in any of the possible locations
-    let mut found = false;
-    for source_path in &possible_paths {
-        if source_path.exists() {
-            fs::copy(source_path, &dest_path).expect("Failed to copy libstdbuf library");
-            found = true;
-            break;
-        }
-    }
-
-    assert!(
-        found,
-        "Could not find built libstdbuf library. Searched in: {possible_paths:?}."
-    );
-
-    // Create a symlink to libstdbuf in the main target directory for development convenience
-    // This allows running stdbuf directly from the build directory (e.g., target/debug/coreutils)
-    // without needing to install the library to LIBSTDBUF_DIR. This is particularly useful for
-    // running tests and manual testing during development.
-    #[cfg(all(unix, feature = "feat_external_libstdbuf"))]
-    {
-        // Get the main target directory (e.g., target/debug or target/release)
-        // OUT_DIR is something like target/debug/build/uu_stdbuf-<hash>/out
-        if let Some(target_dir) = profile_dir {
-            let lib_filename = format!("libstdbuf{dylib_ext}");
-            let source = target_dir.join("deps").join(&lib_filename);
-            let dest = target_dir.join(&lib_filename);
-
-            // Remove old symlink if it exists (in case it points to the wrong place)
-            let _ = fs::remove_file(&dest);
-
-            // Create symlink if the source exists
-            if source.exists() {
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::symlink;
-                    if let Err(e) = symlink(&source, &dest) {
-                        eprintln!("Warning: Failed to create symlink for libstdbuf: {e}");
-                    }
-                }
-            }
-        }
-    }
+    let mut source_path = build_dir.clone();
+    source_path.push(&target);
+    source_path.push(profile);
+    source_path.push(&lib_name);
+    // align name for simplicity
+    let lib_name = format!("libstdbuf{dylib_ext}");
+    // This path contains hash
+    let dest_path = Path::new(&out_dir).join(&lib_name);
+    fs::copy(&source_path, &dest_path).expect("Failed to copy libstdbuf");
+    // copy to the main target directory (e.g., target/debug) too.
+    let target_dir = profile_dir.expect("Failed to get target directory");
+    let easy_dest_path = target_dir.join(lib_name);
+    let _ = fs::remove_file(&easy_dest_path);
+    fs::copy(&source_path, &easy_dest_path)
+        .expect("Failed to copy libstdbuf library to target profile root");
 }

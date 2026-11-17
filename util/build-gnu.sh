@@ -304,8 +304,9 @@ sed -i -e "s~  sed -n \"1s/'\\\/'/'OPT'/p\" < err >> pat || framework_failure_~ 
 sed -i -e "s/rcexp=1$/rcexp=1\n  case \"\$prg\" in runcon|stdbuf) return;; esac/" tests/misc/usage_vs_getopt.sh
 # GNU has option=[SUFFIX], clap is <SUFFIX>
 sed -i -e "s/cat opts/sed -i -e \"s| <.\*$||g\" opts/" tests/misc/usage_vs_getopt.sh
-# for some reasons, some stuff are duplicated, strip that
-sed -i -e "s/provoked error./provoked error\ncat pat |sort -u > pat/" tests/misc/usage_vs_getopt.sh
+# for some reasons, some stuff are duplicated, strip that (sort -o, as a
+# pipe back into pat could truncate it before it is read)
+sed -i -e "s/provoked error./provoked error\nsort -u -o pat pat/" tests/misc/usage_vs_getopt.sh
 
 # install verbose messages shows ginstall as command
 sed -i -e "s/ginstall: creating directory/install: creating directory/g" tests/install/basic-1.sh

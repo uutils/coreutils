@@ -323,6 +323,14 @@ fn next_tabstop(tabstops: &[usize], col: usize, remaining_mode: &RemainingMode) 
     }
 }
 
+/// Where the output is in the current line.
+struct LineState {
+    /// The column of the cursor.
+    col: usize,
+    /// Whether only blanks have been seen so far, for `--initial`.
+    init: bool,
+}
+
 #[derive(PartialEq, Eq, Debug)]
 enum CharType {
     Backspace,
@@ -381,26 +389,30 @@ fn expand_buf(
     output: &mut BufWriter<std::io::Stdout>,
     tabstops: &[usize],
     options: &Options,
-    col: &mut usize,
+    line: &mut LineState,
 ) -> std::io::Result<()> {
     use self::CharType::{Backspace, Other, Tab};
 
+    // The state carries over to the next buffer and the next file, as they
+    // continue the same line. Copied into locals so that the loop does not
+    // reload it through the reference after every write.
+    let LineState { mut col, mut init } = *line;
+    let mut byte = 0;
+
     // Fast path: if there are no tabs, backspaces, and (in UTF-8 mode or no carriage returns),
-    // we can write the buffer directly without character-by-character processing.
+    // the lines can be written directly without character-by-character processing.
     // Single pass with early exit instead of up to 3 separate .contains() scans.
+    // Only the complete lines are written this way, the rest of the buffer goes
+    // through the loop below so that the column is known when the line goes on.
     let needs_processing = buf
         .iter()
         .any(|&b| b == b'\t' || b == b'\x08' || (!options.utf8 && b == b'\r'));
-    if !needs_processing {
-        output.write_all(buf)?;
-        if let Some(n) = buf.iter().rposition(|&b| b == b'\n') {
-            *col = buf.len() - n - 1;
-        }
-        return Ok(());
+    if !needs_processing && let Some(n) = buf.iter().rposition(|&b| b == b'\n') {
+        output.write_all(&buf[..=n])?;
+        col = 0;
+        init = true;
+        byte = n + 1;
     }
-
-    let mut byte = 0;
-    let mut init = true;
 
     while byte < buf.len() {
         // Write a run of plain one-column ASCII bytes at once.
@@ -413,7 +425,7 @@ fn expand_buf(
             if init {
                 init = plain.iter().all(|&b| b == b' ');
             }
-            *col += plain.len();
+            col += plain.len();
             output.write_all(plain)?;
             byte = end;
             continue;
@@ -425,8 +437,8 @@ fn expand_buf(
         match ctype {
             Tab => {
                 // figure out how many spaces to the next tabstop
-                let nts = next_tabstop(tabstops, *col, &options.remaining_mode);
-                *col += nts;
+                let nts = next_tabstop(tabstops, col, &options.remaining_mode);
+                col += nts;
 
                 // now dump out either spaces if we're expanding, or a literal tab if we're not
                 if init || !options.iflag {
@@ -436,7 +448,7 @@ fn expand_buf(
                 }
             }
             Backspace => {
-                *col = col.saturating_sub(1);
+                col = col.saturating_sub(1);
 
                 // if we're writing anything other than a space, then we're
                 // done with the line's leading spaces
@@ -447,7 +459,7 @@ fn expand_buf(
                 output.write_all(&buf[byte..byte + nbytes])?;
             }
             Other => {
-                *col += cwidth;
+                col += cwidth;
 
                 // if we're writing anything other than a space, then we're
                 // done with the line's leading spaces
@@ -456,7 +468,7 @@ fn expand_buf(
                 }
 
                 if buf[byte] == b'\n' {
-                    *col = 0;
+                    col = 0;
                     init = true;
                 }
 
@@ -467,6 +479,7 @@ fn expand_buf(
         byte += nbytes; // advance the pointer
     }
 
+    *line = LineState { col, init };
     Ok(())
 }
 
@@ -474,15 +487,15 @@ fn expand_file(
     file: &OsString,
     output: &mut BufWriter<std::io::Stdout>,
     options: &Options,
+    line: &mut LineState,
 ) -> UResult<()> {
     let mut input = open(file)?;
     let ts = options.tabstops.as_ref();
-    let mut col = 0;
     loop {
         match input.fill_buf() {
             Ok([]) => break,
             Ok(buf) => {
-                expand_buf(buf, output, ts, options, &mut col)
+                expand_buf(buf, output, ts, options, line)
                     .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
                 let len = buf.len();
                 input.consume(len);
@@ -495,9 +508,12 @@ fn expand_file(
 
 fn expand(options: &Options) -> UResult<()> {
     let mut output = BufWriter::new(stdout());
+    // The files are one stream: a line without a newline at the end of a file
+    // goes on in the next one.
+    let mut line = LineState { col: 0, init: true };
 
     for file in &options.files {
-        if let Err(e) = expand_file(file, &mut output, options) {
+        if let Err(e) = expand_file(file, &mut output, options, &mut line) {
             show!(e);
             set_exit_code(1);
         }

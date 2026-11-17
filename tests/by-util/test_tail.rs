@@ -460,7 +460,7 @@ fn test_follow_redirect_stdin_name_retry() {
 
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
+    any(not(target_vendor = "apple"), wasi_runner),
     not(target_os = "android"),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
@@ -502,7 +502,7 @@ fn test_stdin_redirect_dir() {
 //  redirected directories like linux show the correct message like in
 //  `test_stdin_redirect_dir`
 #[test]
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", not(wasi_runner)))]
 fn test_stdin_redirect_dir_when_target_os_is_macos() {
     // $ mkdir dir
     // $ tail < dir, $ tail - < dir
@@ -927,8 +927,13 @@ fn test_follow_with_pid() {
 
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let dummy_cmd = "sh";
-    let mut dummy = Command::new(dummy_cmd).spawn().unwrap();
+    // A process that just waits; with stdin detached, so it can't read from
+    // whatever feeds the test runner (on CI, the rest of the job script).
+    let mut dummy = Command::new("sleep")
+        .arg("100000")
+        .stdin(Stdio::null())
+        .spawn()
+        .unwrap();
     let pid = dummy.id();
 
     let mut child = ucmd
@@ -5426,9 +5431,11 @@ fn test_following_with_pid() {
 
     let ts = TestScenario::new(util_name!());
 
+    // Plain seconds: a "d" suffix is a GNU extension the BSD sleep rejects.
     #[cfg(not(windows))]
     let mut sleep_command = Command::new("sleep")
-        .arg("999d")
+        .arg("100000")
+        .stdin(Stdio::null())
         .spawn()
         .expect("failed to start sleep command");
     #[cfg(windows)]
@@ -5732,9 +5739,10 @@ fn test_follow_symlink_appends() {
             .run_no_wait();
         p.delay(500);
         at.append("2026-09-01.log", "b\n");
-        p.delay(500);
+        // macOS reports changes late (FSEvents), so wait the platform default
+        p.delay(DEFAULT_SLEEP_INTERVAL_MILLIS);
         at.append("2026-09-01.log", "c\n");
-        p.delay(500);
+        p.delay(DEFAULT_SLEEP_INTERVAL_MILLIS);
         p.kill()
             .make_assertion()
             .with_all_output()

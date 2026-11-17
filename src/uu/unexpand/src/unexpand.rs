@@ -484,6 +484,10 @@ struct PrintState {
     // width, bytes). They are absorbed into a tab when a run reaches a tab stop
     // and otherwise emitted verbatim by write_tabs. Empty for ASCII-only input.
     pending_wide: Vec<(usize, usize, Vec<u8>)>,
+    // Set once a blank is reached at or past the last tab stop: from there on
+    // the rest of the line is written as is, even if backspaces later move the
+    // column back before that tab stop.
+    past_last_stop: bool,
 }
 
 impl PrintState {
@@ -494,6 +498,7 @@ impl PrintState {
             leading: true,
             pctype: CharType::Other,
             pending_wide: Vec::new(),
+            past_last_stop: false,
         }
     }
 
@@ -504,6 +509,7 @@ impl PrintState {
         self.leading = true;
         self.pctype = CharType::Other;
         self.pending_wide.clear();
+        self.past_last_stop = false;
     }
 }
 
@@ -587,8 +593,15 @@ fn unexpand_buf(
 
     while byte < buf.len() {
         // when we have a finite number of columns, never convert past the last column,
-        // but only fast forward if there are no backspaces that could move col back
-        if lastcol > 0 && print_state.col >= lastcol && !buf[byte..].contains(&b'\x08') {
+        // but only fast forward if there are no backspaces that could move col back,
+        // or once a blank there has ended conversion for the rest of the line. A
+        // line that goes on in the next read keeps its state, so it is only
+        // fast forwarded once it ends here.
+        if lastcol > 0
+            && print_state.col >= lastcol
+            && (print_state.past_last_stop
+                || (buf.last() == Some(&b'\n') && !buf[byte..].contains(&b'\x08')))
+        {
             write_tabs(output, tab_config, print_state, true)?;
             output.write_all(&buf[byte..])?;
             print_state.scol = print_state.col;
@@ -617,6 +630,13 @@ fn unexpand_buf(
         // now figure out how many columns this char takes up, and maybe print it
         let tabs_buffered = print_state.leading || options.aflag;
         match ctype {
+            CharType::Space | CharType::Tab if lastcol > 0 && print_state.col >= lastcol => {
+                // A blank at or past the last tab stop ends conversion for the
+                // rest of the line: the fast path above writes the blanks
+                // buffered up to it and copies the rest, this blank included.
+                print_state.past_last_stop = true;
+                continue;
+            }
             CharType::Space | CharType::Tab => {
                 // A buffered multibyte blank must be remembered so it can be
                 // emitted verbatim if its run is not converted to a tab.
