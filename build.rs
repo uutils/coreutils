@@ -36,6 +36,8 @@ pub fn main() {
         println!("cargo:rustc-cfg=build={profile:?}");
     }
 
+    embed_windows_manifest();
+
     let mut crates = Vec::new();
 
     let out_dir = env::var("OUT_DIR").unwrap();
@@ -113,4 +115,25 @@ pub fn main() {
     mf.write_all(b"\n}\n").unwrap();
 
     mf.flush().unwrap();
+}
+
+fn embed_windows_manifest() {
+    let target_os = env::var("CARGO_CFG_TARGET_OS");
+    let target_env = env::var("CARGO_CFG_TARGET_ENV");
+    if Ok("windows") == target_os.as_deref() && Ok("msvc") == target_env.as_deref() {
+        static WINDOWS_MANIFEST_FILE: &str = "windows.manifest.xml";
+
+        let mut manifest = env::current_dir().unwrap();
+        manifest.push(WINDOWS_MANIFEST_FILE);
+
+        println!("cargo:rerun-if-changed={WINDOWS_MANIFEST_FILE}");
+        // Embed the Windows application manifest file.
+        println!("cargo:rustc-link-arg-bin=coreutils=/MANIFEST:EMBED");
+        println!(
+            "cargo:rustc-link-arg-bin=coreutils=/MANIFESTINPUT:{}",
+            manifest.to_str().unwrap()
+        );
+        // Turn linker warnings into errors.
+        println!("cargo:rustc-link-arg-bin=coreutils=/WX");
+    }
 }
