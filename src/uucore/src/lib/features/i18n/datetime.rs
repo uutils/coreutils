@@ -343,9 +343,13 @@ pub fn resolve_e_conversion(spec: char, date: JiffDate, real_year: Option<i64>) 
             // Only the selected arm allocates. `%Ey` in an era locale is the era
             // year itself (not a digit pair), which is also what `%EY` renders
             // without an era; `%EC` is the era name where one is defined.
+            // glibc pads an era year to two digits (`พ.ศ. 08` for era year 8),
+            // while the Gregorian fallback keeps the year as it is (`%EY` at
+            // year 5 is `5`, not `05`).
             Some(match (spec, era) {
-                ('Y', Some(name)) => format!("{name} {alt_year}"),
-                ('Y', None) | ('y', Some(_)) => alt_year.to_string(),
+                ('Y', Some(name)) => format!("{name} {alt_year:02}"),
+                ('Y', None) => alt_year.to_string(),
+                ('y', Some(_)) => format!("{alt_year:02}"),
                 ('y', None) => format!("{:02}", alt_year.rem_euclid(100)),
                 (_, Some(name)) => name.to_string(),
                 (_, None) => (alt_year / 100).to_string(),
