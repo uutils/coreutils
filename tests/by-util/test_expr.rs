@@ -622,7 +622,6 @@ fn test_substr_large_length_capacity_overflow() {
         .stdout_only("abc\n");
 }
 
-#[uutests::wasi_ignore(Usize32BitOverflow)]
 #[test]
 fn test_substr_length_beyond_usize_takes_the_rest() {
     let huge = usize::MAX.to_string() + "0";
