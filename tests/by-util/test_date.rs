@@ -3695,7 +3695,6 @@ fn test_date_format_modifier_edge_cases() {
 #[test]
 fn test_date_strftime_e_modifier_fallback() {
     for (tz, date, format, expected) in [
-        // `-d 1999-06-01`, TZ=UTC (midnight).
         ("UTC", "1999-06-01", "%EY", "1999\n"),
         ("UTC", "1999-06-01", "%EC", "19\n"),
         ("UTC", "1999-06-01", "%Ey", "99\n"),
@@ -3734,9 +3733,7 @@ fn test_date_strftime_e_modifier_fallback() {
     }
 }
 
-/// The `E` resolver is a separate pass over the format string: when the
-/// format carries no modifier the base conversion is rendered untouched,
-/// so an accepted pair that falls back equals its base conversion exactly.
+/// An accepted pair that falls back equals its base conversion byte for byte.
 #[test]
 fn test_date_strftime_e_fallback_matches_base_conversion() {
     for (format, modified) in [("%Y", "%EY"), ("%c", "%Ec"), ("%x", "%Ex")] {
@@ -3764,9 +3761,7 @@ fn test_date_strftime_e_invalid_and_dangling_literal() {
     // it literal, and an explicit width pads that literal like a string.
     for (tz, date, format, expected) in [
         ("UTC", "1999-06-01", "%EB", "%EB\n"),
-        // `%%` consumes the escape, so `%%EY` is the literal `%EY`.
         ("UTC", "1999-06-01", "%%EY", "%EY\n"),
-        // A colon before a non-timezone letter is not a conversion at all.
         ("UTC", "1999-06-01", "%E:p", "%E:p\n"),
         ("UTC0", "2024-06-01 12:34:56", "%10EB", "     %10EB\n"),
         // `-` suppresses the padding while the literal keeps its own text.
@@ -3789,8 +3784,8 @@ fn test_date_strftime_e_invalid_and_dangling_literal() {
             .stdout_is(expected);
     }
 
-    // Absurd widths on a literal must fail with an error, never abort or OOM:
-    // the shared composite formatter caps the allocation.
+    // Absurd widths fail with an error instead of allocating: the shared
+    // composite formatter caps the width.
     for format in ["+%999999999999999999EB", "+%70000EB"] {
         new_ucmd!()
             .env("TZ", "UTC")
@@ -3902,15 +3897,15 @@ fn test_date_strftime_e_year_ignored_in_gregorian_locale() {
 #[test]
 #[cfg(unix)]
 fn test_date_strftime_e_year_fields_use_thai_era() {
-    // glibc's `th_TH` defines a Buddhist era, so `%EY` is the era name and
-    // era year, `%EC` the era name and `%Ey` the era year (a four-digit field
-    // there, not a digit pair). Values are GNU 9.4 output.
+    // glibc's `th_TH` defines a Buddhist era: `%EY` is the era name and era
+    // year, `%EC` the era name and `%Ey` the era year (a four-digit field
+    // there, not a digit pair).
     if !is_locale_available("th_TH.UTF-8") {
         println!("Skipping Thai locale test - th_TH.UTF-8 locale not available");
         return;
     }
-    // Probe `%B` first: without ICU data the fallback renders English month
-    // names, and the era assertions below would pin nothing.
+    // Probe `%B` first: without ICU data the assertions below would pin
+    // nothing.
     let probe = new_ucmd!()
         .env("LC_ALL", "th_TH.UTF-8")
         .env("TZ", "UTC0")
@@ -3925,8 +3920,6 @@ fn test_date_strftime_e_year_fields_use_thai_era() {
     }
     // The 10000 rows also cover the 400-year surrogate path: the era year is
     // the real Gregorian year plus 543, not the surrogate year plus 543.
-    // The `%Ec`, `%Ex` and `%EX` era composites are still unimplemented, so no
-    // row asserts them.
     for (date, format, expected) in [
         ("1999-12-31 12:00:00", "%EY", "\u{0E1E}.\u{0E28}. 2542\n"),
         ("1999-12-31 12:00:00", "%Ey", "2542\n"),

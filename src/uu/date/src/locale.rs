@@ -158,9 +158,8 @@ cfg_langinfo! {
     });
 
     /// Returns the locale's era format for `%Ex`, `%EX` or `%Ec`, and `None`
-    /// for any other specifier or when the locale does not define one. Only
-    /// `%EX` is rendered from it so far: the era *date* formats interpolate
-    /// names that the ICU-based localization spells differently.
+    /// when the locale does not define one. Only `%EX` is rendered from it
+    /// so far.
     pub fn get_era_locale_format(specifier: char) -> Option<&'static str> {
         let index = match specifier {
             'x' => 0,
@@ -174,10 +173,9 @@ cfg_langinfo! {
 
 #[cfg(feature = "i18n-datetime")]
 cfg_langinfo! { else
-    /// `date` queries the era format items only on linux/glibc, where the
-    /// gate above compiles this accessor in; other platforms — including
-    /// macOS, where Apple libc also exports the items — keep the base
-    /// composite, which is the behavior this stub returns.
+    /// `date` queries the era items only on linux/glibc (the gate above);
+    /// other platforms — macOS included, where Apple libc also exports them —
+    /// keep the base composite.
     pub fn get_era_locale_format(_specifier: char) -> Option<&'static str> {
         None
     }
