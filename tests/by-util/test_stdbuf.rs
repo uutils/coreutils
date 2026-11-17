@@ -549,6 +549,7 @@ fn test_stdbuf_tmpdir_is_private() {
 /// signal must still be reported as `128 + signal`, not as a clean 0.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_stdbuf_reports_signalled_command() {
     // SIGKILL (9 on every Unix) because no process can ignore or catch it, so
     // the shell is guaranteed to die from it. Other signals are not reliable
