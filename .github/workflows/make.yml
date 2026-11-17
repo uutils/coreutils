@@ -76,6 +76,7 @@ jobs:
         ! test -e target/debug/coreutils
         # build (host)
         make build
+        test -f target/debug/libstdbuf.so
         echo "Check that target directory will be ignored by backup tools"
         test -f target/CACHEDIR.TAG
         # Restore cache for target/release (we only did a debug build)
@@ -93,6 +94,7 @@ jobs:
         DESTDIR=/tmp/ make PROFILE=release install
         # Check that the utils are present
         test -f /tmp/usr/local/bin/tty
+        test -f /tmp/usr/local/libexec/coreutils/libstdbuf.so
         # Check that the manpage is present
         test -f /tmp/usr/local/share/man/man1/md5sum.1
         # Check that the completion is present
@@ -136,7 +138,7 @@ jobs:
       shell: bash
       run: |
         # Check that libstdbuf is present too
-        mv target/release/deps/libstdbuf.so -t /tmp/individual/usr/local/bin
+        mv target/release/libstdbuf.so -t /tmp/individual/usr/local/bin
         ZSTD_CLEVEL=19 tar --zstd -caf individual-x86_64-unknown-linux-gnu.tar.zst -C /tmp/individual/usr/local bin
     - name: Publish
       uses: softprops/action-gh-release@v3
@@ -341,7 +343,7 @@ jobs:
         ! test -f /tmp/c/usr/local/share/bash-completion/completions/uu-head.bash
         ! test -f /tmp/c/usr/local/share/fish/vendor_completions.d/uu-cat.fish
         # package
-        mv target/release-small/deps/stdbuf.dll -t /tmp/c/usr/local/bin
+        mv target/release-small/stdbuf.dll -t /tmp/c/usr/local/bin
         bsdtar -caf individual-x86_64-pc-cygwin.tar.zst -C /tmp/c/usr/local bin
       env:
         CHERE_INVOKING: 1

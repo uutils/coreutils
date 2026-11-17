@@ -1225,3 +1225,25 @@ fn test_chown_verbose_broken_symlink_plus_ids() {
             .stderr_contains("chown: cannot dereference 'ghost': ");
     }
 }
+
+#[test]
+fn test_unknown_non_utf8_account_reports_lookup_error() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    for (spec, message) in [
+        (b"unknown_\xff".as_slice(), "invalid user:"),
+        (b":unknown_\xff".as_slice(), "invalid group:"),
+    ] {
+        new_ucmd!()
+            .arg(OsStr::from_bytes(spec))
+            .arg("file")
+            .fails_with_code(1)
+            .stderr_contains(message);
+        new_ucmd!()
+            .arg("--from")
+            .arg(OsStr::from_bytes(spec))
+            .args(&["0", "file"])
+            .fails_with_code(1)
+            .stderr_contains(message);
+    }
+}
