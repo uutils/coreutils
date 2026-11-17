@@ -275,7 +275,8 @@ fn extract_files(matches: &ArgMatches) -> UResult<Vec<OsString>> {
     let in_first_pos = matches
         .index_of(options::FILES_OR_WIDTH)
         .is_some_and(|x| x == 1);
-    let is_neg = |s: &str| s.parse::<isize>().is_ok_and(|w| w < 0);
+    // `-0` is a `-WIDTH` argument too, although it does not parse as negative
+    let is_neg = |s: &str| s.starts_with('-') && s.parse::<isize>().is_ok_and(|w| w <= 0);
 
     let files: UResult<Vec<OsString>> = matches
         .get_many::<OsString>(options::FILES_OR_WIDTH)
