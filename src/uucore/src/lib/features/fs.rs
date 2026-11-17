@@ -1270,19 +1270,29 @@ mod tests {
     #[cfg(unix)]
     use tempfile::{NamedTempFile, tempdir};
 
-    // `tempfile` is unusable on WASI (`std::env::temp_dir` aborts there), so
-    // tests create a uniquely named directory under the current (preopened,
-    // on WASI) directory and clean it up on drop.
+    // Keep fixtures outside the crate so Cargo's concurrent doctest/build-script
+    // scans cannot race their removal. WASI needs the preopened current directory
+    // because `std::env::temp_dir` aborts there.
     struct ScratchDir(PathBuf);
 
     impl ScratchDir {
         fn new(tag: &str) -> Self {
-            use std::sync::atomic::{AtomicU32, Ordering};
-            static COUNTER: AtomicU32 = AtomicU32::new(0);
-            let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-            let path = PathBuf::from(format!("uucore_fs_test_{tag}_{n}"));
-            let _ = fs::remove_dir_all(&path);
-            fs::create_dir(&path).unwrap();
+            #[cfg(not(target_os = "wasi"))]
+            let path = tempfile::Builder::new()
+                .prefix(&format!("uucore_fs_test_{tag}_"))
+                .tempdir()
+                .unwrap()
+                .keep();
+            #[cfg(target_os = "wasi")]
+            let path = {
+                use std::sync::atomic::{AtomicU32, Ordering};
+                static COUNTER: AtomicU32 = AtomicU32::new(0);
+                let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+                let path = PathBuf::from(format!("uucore_fs_test_{tag}_{n}"));
+                let _ = fs::remove_dir_all(&path);
+                fs::create_dir(&path).unwrap();
+                path
+            };
             Self(path)
         }
 
@@ -1295,6 +1305,21 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[cfg(not(target_os = "wasi"))]
+    #[test]
+    fn test_scratch_dir_uses_temp_directory_and_cleans_up() {
+        let first = ScratchDir::new("isolation");
+        let second = ScratchDir::new("isolation");
+        let path = first.0.clone();
+        assert_eq!(path.parent(), Some(env::temp_dir().as_path()));
+        assert_ne!(path, second.0);
+        fs::write(first.join("fixture"), "test").unwrap();
+        drop(second);
+        assert_eq!(fs::read_to_string(first.join("fixture")).unwrap(), "test");
+        drop(first);
+        assert!(!path.exists());
     }
 
     struct NormalizePathTestCase<'a> {
