@@ -2878,6 +2878,20 @@ fn test_date_non_gnu_specifiers_are_literal() {
 }
 
 #[test]
+fn test_date_non_gnu_specifier_at_start_is_literal() {
+    for format in ["+%Q", "+%f", "+%.3f"] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg("@1.5")
+            .arg(format)
+            .succeeds()
+            .stdout_is(format!("{}\n", &format[1..]));
+    }
+}
+
+#[test]
 fn test_date_bare_timezone_abbreviation() {
     // GNU and uutils accept bare UT/GMT abbreviations as UTC.
     for input in ["ut", "UT", "gmt", "GMT"] {

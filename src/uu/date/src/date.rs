@@ -969,6 +969,7 @@ fn adapt_format_for_jiff(fmt: &str) -> Cow<'_, str> {
     let bytes = fmt.as_bytes();
     let mut out = String::new();
     let mut start = 0;
+    let mut changed = false;
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] != b'%' {
@@ -983,13 +984,12 @@ fn adapt_format_for_jiff(fmt: &str) -> Cow<'_, str> {
         {
             if matches!(bytes[i + 2], b'f' | b'Q') {
                 // `%Of` and `%OQ` are unknown to GNU as a whole
-                out.push_str(&fmt[start..i]);
-                out.push('%');
-                start = i;
+                escape_percent(fmt, &mut out, &mut start, i);
             } else {
                 out.push_str(&fmt[start..=i]);
                 start = i + 2;
             }
+            changed = true;
             i += 2;
             continue;
         }
@@ -1012,17 +1012,24 @@ fn adapt_format_for_jiff(fmt: &str) -> Cow<'_, str> {
             }
         }
         if has_precision || matches!(bytes.get(j), Some(b'f' | b'Q')) {
-            out.push_str(&fmt[start..i]);
-            out.push('%');
-            start = i;
+            escape_percent(fmt, &mut out, &mut start, i);
+            changed = true;
         }
         i = j;
     }
-    if start == 0 {
+    if !changed {
         return Cow::Borrowed(fmt);
     }
     out.push_str(&fmt[start..]);
     Cow::Owned(out)
+}
+
+/// Copy the text before the `%` at `i` plus an extra `%`, so that the
+/// conversion starting at `i` is printed literally.
+fn escape_percent(fmt: &str, out: &mut String, start: &mut usize, i: usize) {
+    out.push_str(&fmt[*start..i]);
+    out.push('%');
+    *start = i;
 }
 
 /// A piece of a format string.
