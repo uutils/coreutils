@@ -92,7 +92,9 @@ memchr = "2.7.2"
 memmap2 = "0.9.4"
 nix = { version = "0.31.3", default-features = false }
 nom = "8.0.0"
-notify = { version = "8.2.0", default-features = false, features = ["macos_kqueue"] }
+notify = { version = "9.0.0", default-features = false, features = [
+  "macos_kqueue",
+] }
 num-bigint = "0.4.4"
 num-integer = "0.1.47"
 num-prime = "0.7.0"
