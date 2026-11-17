@@ -1711,3 +1711,14 @@ fn test_page_width_narrower_than_leading_tab() {
         .succeeds()
         .stdout_only("    1\t\n    2\t\n");
 }
+
+#[test]
+fn test_double_space_last_line_without_newline() {
+    for (input, expected) in [("a", "a\n"), ("a\nb", "a\n\nb\n"), ("a\nb\n", "a\n\nb\n\n")] {
+        new_ucmd!()
+            .args(&["-t", "-d"])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
