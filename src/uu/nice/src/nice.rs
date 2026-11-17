@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (ToDO) getpriority setpriority nstr PRIO
 
+#![cfg(any(unix, windows))]
+
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::io::{ErrorKind, Write, stdout};
@@ -125,7 +127,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Ok(());
     };
 
-    #[cfg(any(unix, windows))]
     let adjustment = match matches.get_one::<String>(options::ADJUSTMENT) {
         None => 10,
         Some(nstr) => match nstr.parse::<i32>() {
@@ -141,7 +142,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
     };
 
-    #[cfg(any(unix, windows))]
     let new_niceness = current_niceness.saturating_add(adjustment);
     // We can't use `show_warning` because that will panic if stderr
     // isn't writable. The GNU test suite checks specifically that the
@@ -175,10 +175,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let err = command.exec();
     #[cfg(windows)]
     let Err(err) = command.creation_flags(priority_class).spawn() else {
-        return Ok(());
-    };
-    #[cfg(not(any(unix, windows)))]
-    let Err(err) = command.status() else {
         return Ok(());
     };
 
