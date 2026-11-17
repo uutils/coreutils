@@ -320,7 +320,6 @@ fn test_obsolete_lines_suffix() {
     // `l` selects lines and keeps the multiplier of an earlier suffix.
     for (arg, expected) in [
         ("-2l", "a\nb\n"),
-        ("-0l", ""),
         ("-2cl", "a\nb\n"),
         ("-2lc", "a\n"),
         ("-3lq", "a\nb\nc\n"),
@@ -331,6 +330,10 @@ fn test_obsolete_lines_suffix() {
             .succeeds()
             .stdout_only(expected);
     }
+    new_ucmd!()
+        .args(&["-0l", "lorem_ipsum.txt"])
+        .succeeds()
+        .no_output();
 
     let input = "x\n".repeat(600);
     new_ucmd!()
