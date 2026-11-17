@@ -323,7 +323,31 @@ fn check_order() {
         .args(&["--check-order", "bad_order_1", "bad_order_2"])
         .fails()
         .stdout_is("\t\te\n")
-        .stderr_is("comm: file 2 is not in sorted order\n");
+        .stderr_is("comm: file 1 is not in sorted order\n");
+}
+
+#[test]
+fn check_order_reports_file_1_first() {
+    // After a common line both files move on. If both next lines are out of
+    // order, file 1 is the one reported, whichever line sorts first.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("d", "e\nd\n");
+    at.write("c", "e\nc\n");
+    at.write("ok", "e\nf\n");
+    for (file1, file2, expected) in [
+        ("d", "c", "1"),
+        ("c", "d", "1"),
+        ("d", "ok", "1"),
+        ("ok", "d", "2"),
+    ] {
+        scene
+            .ucmd()
+            .args(&["--check-order", file1, file2])
+            .fails_with_code(1)
+            .stdout_is("\t\te\n")
+            .stderr_is(format!("comm: file {expected} is not in sorted order\n"));
+    }
 }
 
 #[test]
