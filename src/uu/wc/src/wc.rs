@@ -38,7 +38,7 @@ use uucore::{
 };
 
 use crate::{
-    count_fast::{count_bytes_chars_and_lines_fast, count_bytes_fast},
+    count_fast::{count_bytes_chars_and_lines_fast, count_bytes_fast, count_chars, count_lines},
     countable::WordCountable,
     word_count::WordCount,
 };
@@ -655,13 +655,7 @@ fn process_chunk<
 
     for ch in text.chars() {
         if SHOW_WORDS {
-            let is_space = if is_posixly_correct {
-                matches!(ch, '\t'..='\r' | ' ')
-            } else {
-                ch.is_whitespace()
-            };
-
-            if is_space {
+            if is_word_separator(ch, is_posixly_correct) {
                 *in_word = false;
             } else if !(*in_word) {
                 // This also counts control characters! (As of GNU coreutils 9.5)
@@ -669,19 +663,17 @@ fn process_chunk<
                 total.words += 1;
             }
         }
-        if SHOW_MAX_LINE_LENGTH {
-            match ch {
-                '\n' | '\r' | '\x0c' => {
-                    total.max_line_length = max(*current_len, total.max_line_length);
-                    *current_len = 0;
-                }
-                '\t' => {
-                    *current_len -= *current_len % 8;
-                    *current_len += 8;
-                }
-                _ => {
-                    *current_len += ch.width().unwrap_or(0);
-                }
+        match ch {
+            '\n' | '\r' | '\x0c' => {
+                total.max_line_length = max(*current_len, total.max_line_length);
+                *current_len = 0;
+            }
+            '\t' => {
+                *current_len -= *current_len % 8;
+                *current_len += 8;
+            }
+            _ => {
+                *current_len += ch.width().unwrap_or(0);
             }
         }
         if SHOW_LINES && ch == '\n' {
@@ -718,19 +710,13 @@ fn process_chunk_without_widths<
 ) {
     let bytes = text.as_bytes();
     if SHOW_LINES {
-        total.lines += if simd_allowed {
-            bytecount::count(bytes, b'\n')
-        } else {
-            bytecount::naive_count(bytes, b'\n')
-        };
+        total.lines += count_lines(bytes, simd_allowed);
     }
     if SHOW_CHARS {
         total.chars += if count_chars_as_bytes {
             bytes.len()
-        } else if simd_allowed {
-            bytecount::num_chars(bytes)
         } else {
-            bytecount::naive_num_chars(bytes)
+            count_chars(bytes, simd_allowed)
         };
     }
     total.bytes += bytes.len();
@@ -739,6 +725,17 @@ fn process_chunk_without_widths<
         let (words, ends_in_space) = count_words(text, !*in_word, is_posixly_correct);
         total.words += words;
         *in_word = !ends_in_space;
+    }
+}
+
+/// Whether `ch` separates words: the POSIX space class when
+/// `is_posixly_correct`, otherwise any Unicode whitespace.
+#[inline]
+fn is_word_separator(ch: char, is_posixly_correct: bool) -> bool {
+    if is_posixly_correct {
+        matches!(ch, '\t'..='\r' | ' ')
+    } else {
+        ch.is_whitespace()
     }
 }
 
@@ -783,12 +780,7 @@ fn count_words(text: &str, mut prev_space: bool, is_posixly_correct: bool) -> (u
             }
             let mut in_word = !prev_space;
             for ch in text[start..end].chars() {
-                let is_space = if is_posixly_correct {
-                    matches!(ch, '\t'..='\r' | ' ')
-                } else {
-                    ch.is_whitespace()
-                };
-                if is_space {
+                if is_word_separator(ch, is_posixly_correct) {
                     in_word = false;
                 } else if !in_word {
                     in_word = true;
