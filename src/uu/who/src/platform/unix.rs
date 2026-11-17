@@ -217,7 +217,46 @@ fn format_timestamp(ut: &UtmpxRecord) -> String {
         )
         .unwrap()
     };
+    #[cfg(target_os = "linux")]
+    if let UtmpxRecord::Systemd(systemd) = ut {
+        return systemd
+            .try_login_time()
+            .map_or_else(|| "?".into(), |time| time.format(&pattern).unwrap());
+    }
     ut.login_time().format(&pattern).unwrap()
+}
+
+fn format_pid(ut: &UtmpxRecord) -> String {
+    #[cfg(target_os = "linux")]
+    if let UtmpxRecord::Systemd(systemd) = ut {
+        return systemd
+            .try_pid()
+            .map_or_else(|| "?".into(), |pid| pid.to_string());
+    }
+    ut.pid().to_string()
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod logind_tests {
+    use super::*;
+    use uucore::systemd_logind::{SystemdLoginRecord, SystemdRecordType, SystemdUtmpxCompat};
+
+    #[test]
+    fn unavailable_time_and_pid_are_question_marks() {
+        let record = UtmpxRecord::Systemd(SystemdUtmpxCompat::new(SystemdLoginRecord {
+            user: "user".into(),
+            session_id: "legacy".into(),
+            seat_or_tty: "pts/test".into(),
+            raw_device: "pts/test".into(),
+            host: String::new(),
+            login_time: std::time::UNIX_EPOCH,
+            pid: 0,
+            session_leader_pid: 0,
+            record_type: SystemdRecordType::UserProcess,
+        }));
+        assert_eq!(format_timestamp(&record), "?");
+        assert_eq!(format_pid(&record), "?");
+    }
 }
 
 fn current_tty() -> String {
@@ -301,7 +340,7 @@ impl Who {
 
     fn emit_event(&self, ut: &UtmpxRecord, event: Event) -> UResult<()> {
         let time = format_timestamp(ut);
-        let pid = format!("{}", ut.pid());
+        let pid = format_pid(ut);
         let note = translate!("who-login-id", "id" => ut.terminal_suffix());
 
         // Held outside the match so the borrows below outlive it.
@@ -420,7 +459,7 @@ impl Who {
             line: &ut.tty_device(),
             time: &format_timestamp(ut),
             idle: &idle,
-            pid: &format!("{}", ut.pid()),
+            pid: &format_pid(ut),
             note: &note,
             exit: "",
         })?;
