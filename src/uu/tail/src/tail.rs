@@ -536,11 +536,11 @@ fn bounded_tail(file: &mut File, settings: &Settings, end: Option<u64>) -> UResu
             backwards_thru_file(file, *count, *delimiter, eof)?;
         }
         FilterMode::Lines(Signum::Positive(count), delimiter) if count > &1 => {
-            let i = forwards_thru_file(file, *count - 1, *delimiter).unwrap();
+            let i = forwards_thru_file(file, *count - 1, *delimiter)?;
             file.seek(SeekFrom::Start(start + i as u64))?;
         }
         FilterMode::Lines(Signum::MinusZero, _) | FilterMode::Bytes(Signum::MinusZero) => {
-            file.seek(eof).unwrap();
+            file.seek(eof)?;
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
             // Never include bytes preceding the current input position.
@@ -555,8 +555,7 @@ fn bounded_tail(file: &mut File, settings: &Settings, end: Option<u64>) -> UResu
             // underlying `lseek` fail with `EINVAL`; treat that like a start
             // beyond the end of the file and produce no output.
             file.seek(SeekFrom::Start(start.saturating_add(*count - 1)))
-                .or_else(|_| file.seek(SeekFrom::End(0)))
-                .unwrap();
+                .or_else(|_| file.seek(SeekFrom::End(0)))?;
         }
         _ => {}
     }

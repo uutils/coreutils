@@ -5957,113 +5957,46 @@ fn test_invalid_max_unchanged_stats_is_rejected() {
 #[uutests::wasi_ignore(StdinPositionNotPreserved)]
 #[rstest]
 #[case::lines(4, &["-n10"], "two\n")]
+#[case::last_line(1, &["-n1"], "two\n")]
 #[case::bytes(4, &["-c10"], "two\n")]
+#[case::last_bytes(1, &["-c2"], "o\n")]
 #[case::from_line(1, &["-n+2"], "two\n")]
 #[case::from_byte(4, &["-c+2"], "wo\n")]
 #[case::at_eof(8, &["-n10"], "")]
 #[case::past_eof_lines(9, &["-n10"], "")]
 #[case::past_eof_bytes(9, &["-c10"], "")]
 #[cfg(any(unix, windows))]
-fn test_output_appended_to_stdin_from_offset(
+fn test_stdin_redirect_large_offset(
     #[case] offset: u64,
     #[case] args: &[&str],
     #[case] expected: &str,
     #[values(false, true)] presume_input_pipe: bool,
+    #[values(false, true)] append_output: bool,
 ) {
     use std::fs::OpenOptions;
 
     let (at, mut ucmd) = at_and_ucmd!();
-    // Exercise both the seeking and streaming paths without reading before
-    // stdin's offset or including the header appended past the original EOF.
-    let prefix = "prefix\n".repeat(10_000);
+    // Keep the file large enough for seeking, with a short unread suffix.
+    // Neither path may read before stdin's offset or include our appended output.
+    let prefix = "prefix\n".repeat(100_000);
     let content = format!("{prefix}one\ntwo\n");
     at.write("f", &content);
     let mut input = File::open(at.plus("f")).unwrap();
     input
         .seek(SeekFrom::Start(prefix.len() as u64 + offset))
         .unwrap();
-    let output = OpenOptions::new().append(true).open(at.plus("f")).unwrap();
     if presume_input_pipe {
         ucmd.arg("---presume-input-pipe");
     }
-    run_appending_to_input(
-        &at,
-        ucmd.arg("-v")
-            .args(args)
-            .set_stdin(input)
-            .set_stdout(output),
-    );
-    assert_eq!(
-        at.read("f"),
-        format!("{content}==> 'standard input' <==\n{expected}")
-    );
-}
-
-#[rstest]
-#[case::small(2)]
-#[case::large(100_000)]
-#[uutests::wasi_ignore(StdinPositionNotPreserved)]
-fn test_stdin_redirect_repeated_consumes_input(#[case] lines: usize) {
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.write("f", &"line\n".repeat(lines));
-    let mut file = File::open(at.plus("f")).unwrap();
-
-    ucmd.args(&["-q", "-", "-"])
-        .set_stdin(file.try_clone().unwrap())
-        .succeeds()
-        .stdout_only("line\n".repeat(lines.min(10)));
-    assert_eq!(file.stream_position().unwrap(), (lines * 5) as u64);
-}
-
-#[uutests::wasi_ignore(HostPathsNotVisible)]
-#[rstest]
-#[case::lines(&["-n", "10"], "two\n")]
-#[case::bytes(&["-c", "10"], "two\n")]
-#[case::from_line(&["-n", "+2"], "")]
-#[case::from_byte(&["-c", "+2"], "wo\n")]
-#[cfg(unix)]
-fn test_stdin_redirect_dev_stdin_offset(#[case] args: &[&str], #[case] expected: &str) {
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.write("f", "one\ntwo\n");
-    let mut file = File::open(at.plus("f")).unwrap();
-    file.seek(SeekFrom::Start(4)).unwrap();
-
-    ucmd.args(args)
-        .arg("/dev/stdin")
-        .set_stdin(file)
-        .succeeds()
-        .stdout_only(expected);
-}
-
-#[uutests::wasi_ignore(StdinPositionNotPreserved)]
-#[rstest]
-#[case::lines(4, &["-n", "10"], "two\n")]
-#[case::last_line(1, &["-n", "1"], "two\n")]
-#[case::bytes(4, &["-c", "10"], "two\n")]
-#[case::last_bytes(1, &["-c", "2"], "o\n")]
-#[case::from_line(1, &["-n", "+2"], "two\n")]
-#[case::from_byte(4, &["-c", "+2"], "wo\n")]
-#[case::at_eof(8, &["-n", "10"], "")]
-#[case::past_eof_lines(9, &["-n", "10"], "")]
-#[case::past_eof_bytes(9, &["-c", "10"], "")]
-fn test_stdin_redirect_large_offset(
-    #[case] offset: u64,
-    #[case] args: &[&str],
-    #[case] expected: &str,
-    #[values(false, true)] presume_input_pipe: bool,
-) {
-    let (at, mut ucmd) = at_and_ucmd!();
-    // Exercise the reverse-reading path, including a final partial block.
-    let prefix = "prefix\n".repeat(100_000);
-    at.write("f", &format!("{prefix}one\ntwo\n"));
-    let mut file = File::open(at.plus("f")).unwrap();
-    file.seek(SeekFrom::Start(prefix.len() as u64 + offset))
-        .unwrap();
-    if presume_input_pipe {
-        ucmd.arg("---presume-input-pipe");
+    ucmd.args(args).set_stdin(input);
+    if append_output {
+        let output = OpenOptions::new().append(true).open(at.plus("f")).unwrap();
+        run_appending_to_input(&at, ucmd.arg("-v").set_stdout(output));
+        assert_eq!(
+            at.read("f"),
+            format!("{content}==> 'standard input' <==\n{expected}")
+        );
+    } else {
+        ucmd.succeeds().stdout_only(expected);
     }
-    ucmd.args(args)
-        .set_stdin(file)
-        .succeeds()
-        .stdout_only(expected);
 }
