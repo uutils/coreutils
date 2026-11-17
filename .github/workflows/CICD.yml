@@ -30,7 +30,7 @@ permissions:
 # End the current execution if there is a new changeset in the PR.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
 
 jobs:
   cargo-deny:
@@ -48,6 +48,7 @@ jobs:
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         job:
           # note: `cargo-udeps` panics when processing stdbuf/libstdbuf ("uu_stdbuf_libstdbuf"); either b/c of the 'cpp' crate or 'libstdbuf' itself
@@ -60,7 +61,10 @@ jobs:
       with:
         persist-credentials: false
     - uses: taiki-e/install-action@cargo-udeps
-    - uses: Swatinem/rust-cache@v2
+    - uses: ./.github/actions/rust-cache
+      with:
+        key: deps-${{ matrix.job.os }}-${{ matrix.job.features }}
+        sccache: false
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -108,16 +112,9 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.11
-      continue-on-error: true
-    - name: Export sccache
-      if: steps.sccache-setup.outcome == 'success'
-      run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - uses: ./.github/actions/rust-cache
+      with:
+        key: docs-${{ matrix.job.os }}-${{ matrix.job.features }}
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -155,6 +152,7 @@ jobs:
     name: MinRustV # Minimum supported rust version (aka, MinSRV or MSRV)
     runs-on: ${{ matrix.job.os }}
     strategy:
+      max-parallel: 2
       matrix:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
@@ -169,16 +167,9 @@ jobs:
         toolchain: ${{ env.RUST_MIN_SRV }}
         components: rustfmt
     - uses: taiki-e/install-action@nextest
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.11
-      continue-on-error: true
-    - name: Export sccache
-      if: steps.sccache-setup.outcome == 'success'
-      run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - uses: ./.github/actions/rust-cache
+      with:
+        key: msrv-${{ matrix.job.features }}
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -250,12 +241,7 @@ jobs:
 
   deps:
     name: Dependencies
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-latest , features: feat_os_unix }
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -278,6 +264,7 @@ jobs:
     timeout-minutes: 90
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         job:
           - { os: ubuntu-latest  , name: feat_os_unix    , features: feat_os_unix }
@@ -291,16 +278,9 @@ jobs:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
     - uses: taiki-e/install-action@nextest
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.11
-      continue-on-error: true
-    - name: Export sccache
-      if: steps.sccache-setup.outcome == 'success'
-      run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - uses: ./.github/actions/rust-cache
+      with:
+        key: stable-${{ matrix.job.os }}-${{ matrix.job.features }}
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
@@ -323,6 +303,7 @@ jobs:
     timeout-minutes: 90
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         job:
           - { os: ubuntu-latest  , features: feat_os_unix }
@@ -334,16 +315,9 @@ jobs:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@nightly
     - uses: taiki-e/install-action@nextest
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.11
-      continue-on-error: true
-    - name: Export sccache
-      if: steps.sccache-setup.outcome == 'success'
-      run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - uses: ./.github/actions/rust-cache
+      with:
+        key: nightly-${{ matrix.job.os }}-${{ matrix.job.features }}
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
@@ -421,18 +395,11 @@ jobs:
       with:
         toolchain: ${{ env.RUST_MIN_SRV }}
         targets: ${{ matrix.job.target }}
-    - uses: Swatinem/rust-cache@v2
+    - uses: ./.github/actions/rust-cache
       with:
-        key: "${{ matrix.job.os }}_${{ matrix.job.target }}"
-    - name: Run sccache-cache
-      id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.11
-      continue-on-error: true
-    - name: Export sccache
-      if: steps.sccache-setup.outcome == 'success'
-      run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        # These jobs pass --target explicitly, so keep their target/<triple>
+        # cache separate from the implicit-host target/debug caches above.
+        key: build-${{ matrix.job.os }}-${{ matrix.job.target }}-${{ matrix.job.features }}-${{ matrix.job.default-features }}-${{ matrix.job.use-cross }}
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -751,16 +718,9 @@ jobs:
     - uses: taiki-e/install-action@v2
       with:
         tool: nextest,grcov@0.8.24
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.11
-      continue-on-error: true
-    - name: Export sccache
-      if: steps.sccache-setup.outcome == 'success'
-      run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - uses: ./.github/actions/rust-cache
+      with:
+        key: coverage-${{ matrix.job.os }}-${{ matrix.job.features }}
 
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
     #   run: git checkout ${{ github.head_ref }}
@@ -874,16 +834,9 @@ jobs:
       with:
         persist-credentials: false
     - uses: taiki-e/install-action@nextest
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.11
-      continue-on-error: true
-    - name: Export sccache
-      if: steps.sccache-setup.outcome == 'success'
-      run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - uses: ./.github/actions/rust-cache
+      with:
+        key: openssl-${{ matrix.job.os }}-${{ matrix.job.features }}
     - name: Test checksum utilities with OpenSSL (system / dynamic)
       shell: bash
       env:
@@ -903,16 +856,9 @@ jobs:
       with:
         persist-credentials: false
     - uses: taiki-e/install-action@nextest
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.11
-      continue-on-error: true
-    - name: Export sccache
-      if: steps.sccache-setup.outcome == 'success'
-      run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - uses: ./.github/actions/rust-cache
+      with:
+        key: no-diagnostics
     # The caret diagnostics (`feat_diagnostics`) are on by default; packagers
     # who want the smaller dependency tree build with them off, so that build
     # must stay green. The caret snapshot tests are gated on the feature and
@@ -947,8 +893,9 @@ jobs:
     - name: Setup Lima
       uses: lima-vm/lima-actions/setup@v1
       id: lima-actions-setup
-    - name: Cache ~/.cache/lima
-      uses: actions/cache@v6
+    - name: Restore Lima cache
+      id: lima-cache
+      uses: actions/cache/restore@v6
       with:
         path: ~/.cache/lima
         key: lima-${{ steps.lima-actions-setup.outputs.version }}
@@ -968,6 +915,12 @@ jobs:
         lima bash -c "cd work && cargo test --features 'feat_selinux' --no-default-features"
     - name: Lint with SELinux
       run: lima bash -c "cd work && cargo clippy --all-targets --features 'feat_selinux' --no-default-features -- -D warnings"
+    - name: Save Lima cache
+      if: steps.lima-cache.outputs.cache-hit != 'true' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+      uses: actions/cache/save@v6
+      with:
+        path: ~/.cache/lima
+        key: lima-${{ steps.lima-actions-setup.outputs.version }}
 
   test_safe_traversal:
     name: Safe Traversal Security Check
@@ -978,7 +931,10 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    - uses: Swatinem/rust-cache@v2
+    - uses: ./.github/actions/rust-cache
+      with:
+        key: safe-traversal
+        sccache: false
     - name: Install strace and libselinux headers (needed to build chcon)
       run: sudo apt-get update && sudo apt-get install -y strace libselinux1-dev
     - name: Build utilities with safe traversal
@@ -995,7 +951,10 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    - uses: Swatinem/rust-cache@v2
+    - uses: ./.github/actions/rust-cache
+      with:
+        key: libc-interposition
+        sccache: false
     - name: Install fakeroot
       run: sudo apt-get update && sudo apt-get install -y fakeroot
     - name: Build utilities that must stay interposable
@@ -1012,7 +971,10 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    - uses: Swatinem/rust-cache@v2
+    - uses: ./.github/actions/rust-cache
+      with:
+        key: open-once
+        sccache: false
     - name: Install strace
       run: sudo apt-get update && sudo apt-get install -y strace
     - name: Build utilities for redundant open checks
@@ -1029,7 +991,10 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    - uses: Swatinem/rust-cache@v2
+    - uses: ./.github/actions/rust-cache
+      with:
+        key: toctou
+        sccache: false
     - name: Install strace
       run: sudo apt-get update && sudo apt-get install -y strace
     - name: Build utilities for TOCTOU checks

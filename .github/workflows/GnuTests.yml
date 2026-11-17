@@ -23,7 +23,7 @@ permissions:
 # End the current execution if there is a new changeset in the PR.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
 
 env:
   DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
@@ -48,9 +48,11 @@ jobs:
       with:
         path: 'uutils'
         persist-credentials: false
-    - uses: Swatinem/rust-cache@v2
+    - uses: ./uutils/.github/actions/rust-cache
       with:
         workspaces: "./uutils -> target"
+        key: gnu-native
+        sccache: false
     - name: Checkout code (GNU coreutils)
       run: (mkdir -p gnu && cd gnu && bash ../uutils/util/fetch-gnu.sh)
     #### Build environment setup
@@ -203,8 +205,9 @@ jobs:
     - name: Setup Lima
       uses: lima-vm/lima-actions/setup@v1
       id: lima-actions-setup
-    - name: Cache ~/.cache/lima
-      uses: actions/cache@v6
+    - name: Restore Lima cache
+      id: lima-cache
+      uses: actions/cache/restore@v6
       with:
         path: ~/.cache/lima
         key: lima-${{ steps.lima-actions-setup.outputs.version }}
@@ -296,6 +299,12 @@ jobs:
         path: |
           gnu/tests-selinux/*.log
           gnu/tests-selinux/*/*.log.gz
+    - name: Save Lima cache
+      if: steps.lima-cache.outputs.cache-hit != 'true' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+      uses: actions/cache/save@v6
+      with:
+        path: ~/.cache/lima
+        key: lima-${{ steps.lima-actions-setup.outputs.version }}
 
   qemu:
     name: Run GNU tests (SMACK/ROOTFS)
@@ -306,9 +315,11 @@ jobs:
       with:
         path: 'uutils'
         persist-credentials: false
-    - uses: Swatinem/rust-cache@v2
+    - uses: ./uutils/.github/actions/rust-cache
       with:
         workspaces: "./uutils -> target"
+        key: gnu-qemu
+        sccache: false
     - name: Checkout code (GNU coreutils)
       run: (mkdir -p gnu && cd gnu && bash ../uutils/util/fetch-gnu.sh)
     - name: Install dependencies

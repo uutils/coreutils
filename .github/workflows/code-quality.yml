@@ -20,18 +20,13 @@ permissions:
 # End the current execution if there is a new changeset in the PR.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
 
 jobs:
 
   style_format:
     name: Style/format
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-latest , features: feat_os_unix }
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -69,6 +64,7 @@ jobs:
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
+      max-parallel: 4
       matrix:
         job:
           - { os: ubuntu-latest  , features: all             , workspace: true }
@@ -86,16 +82,9 @@ jobs:
         toolchain: stable
         components: clippy
         targets: ${{ matrix.job.target || '' }}
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.11
-      continue-on-error: true
-    - name: Export sccache
-      if: steps.sccache-setup.outcome == 'success'
-      run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - uses: ./.github/actions/rust-cache
+      with:
+        key: clippy-${{ matrix.job.os }}-${{ matrix.job.target || 'host' }}-${{ matrix.job.features }}
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -150,16 +139,12 @@ jobs:
 
   style_spellcheck:
     name: Style/spelling
-    runs-on: ${{ matrix.job.os }}
+    runs-on: ubuntu-latest
     env:
       # Spelling is enforced locally by the cspell pre-commit hook, where it is
       # cheap to fix. Here it is advisory: unknown words show up as annotations
       # on the diff instead of blocking the merge.
       STYLE_FAIL_ON_FAULT: false
-    strategy:
-      matrix:
-        job:
-          - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -243,14 +228,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-
       - name: Install prek
         run: pip install prek
 
-      - name: Cache prek environments
-        uses: actions/cache@v6
+      - name: Restore prek environments
+        id: prek-cache
+        uses: actions/cache/restore@v6
         with:
           path: ~/.cache/prek
           key: prek-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
@@ -263,3 +246,10 @@ jobs:
           # hooks are already covered by the Style/format and Style/lint jobs.
           SKIP: cspell,rust-linting,rust-clippy,cargo-lock-check
         run: prek run --all-files --show-diff-on-failure
+
+      - name: Save prek environments
+        if: steps.prek-cache.outputs.cache-hit != 'true' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/prek
+          key: prek-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}

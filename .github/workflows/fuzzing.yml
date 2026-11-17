@@ -16,6 +16,7 @@ on:
       - 'src/uucore_procs/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.github/actions/rust-cache/action.yml'
       - '.github/workflows/fuzzing.yml'
   push:
     branches:
@@ -28,7 +29,7 @@ permissions:
 # End the current execution if there is a new changeset in the PR.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
 
 jobs:
   detect:
@@ -119,9 +120,11 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    - uses: Swatinem/rust-cache@v2
+    - uses: ./.github/actions/rust-cache
       with:
         workspaces: "fuzz -> target"
+        key: fuzz-examples
+        sccache: false
     - name: fetch gnu-coreutils .deb
       run: |
         curl -fsSL --retry 2 -o coreutils.deb ${GNU_COREUTILS_DEB_URL}
@@ -166,9 +169,11 @@ jobs:
       uses: taiki-e/install-action@v2
       with:
         tool: cargo-fuzz
-    - uses: Swatinem/rust-cache@v2
+    - uses: ./.github/actions/rust-cache
       with:
         workspaces: "fuzz -> target"
+        key: fuzz-build
+        sccache: false
     - name: Emulate a nightly toolchain
       run: |
         echo "RUSTC_BOOTSTRAP=1" >> "${GITHUB_ENV}"
@@ -188,7 +193,7 @@ jobs:
     strategy:
       fail-fast: false
       # Stagger the jobs: all the targets at once hammer the GitHub cache API.
-      max-parallel: 10
+      max-parallel: 6
       matrix:
         target: ${{ fromJson(needs.detect.outputs.targets) }}
 
@@ -209,9 +214,12 @@ jobs:
       uses: taiki-e/install-action@v2
       with:
         tool: cargo-fuzz
-    - uses: Swatinem/rust-cache@v2
+    - uses: ./.github/actions/rust-cache
       with:
         workspaces: "fuzz -> target"
+        key: fuzz-build
+        save-if: false
+        sccache: false
     - name: Emulate a nightly toolchain
       run: |
         echo "RUSTC_BOOTSTRAP=1" >> "${GITHUB_ENV}"
