@@ -1490,12 +1490,19 @@ fn make_format_string(settings: &Settings) -> &[u8] {
 /// Checked first because the abbreviation encodes the exact offset
 /// (e.g., EDT always means UTC-4, even in winter when New York observes EST).
 /// Offset is in seconds to support half-hour zones like IST (UTC+5:30).
-/// All other timezones (JST, CET, etc.) are dynamically resolved from IANA database.
+/// All other timezones (JST, etc.) are dynamically resolved from IANA database.
 // spell-checker:disable
 static FIXED_OFFSET_ABBREVIATIONS: &[(&str, i32)] = &[
     ("UTC", 0),
     ("GMT", 0),
     ("MEST", 7200), // UTC+2 Middle European Summer Time
+    // European timezones: the IANA zones of the same name observe DST,
+    // but the abbreviation names one offset all year.
+    ("WET", 0),     // UTC+0 Western European Time
+    ("WEST", 3600), // UTC+1 Western European Summer Time
+    ("CET", 3600),  // UTC+1 Central European Time
+    ("MET", 3600),  // UTC+1 Middle European Time
+    ("EET", 7200),  // UTC+2 Eastern European Time
     // US timezones (GNU compatible)
     ("PST", -28800), // UTC-8
     ("PDT", -25200), // UTC-7
