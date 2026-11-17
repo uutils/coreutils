@@ -2000,6 +2000,28 @@ fn test_c_locale_matches_bytes() {
 }
 
 #[test]
+fn test_c_locale_non_ascii_pattern() {
+    // In the C locale `[é]` is a bracket of the two bytes C3 and A9, so it
+    // matches the line holding a lone A9 byte.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.env("LC_ALL", "C")
+        .args(&["-", "/[é]/"])
+        .pipe_in(b"a\n\xa9z\nb\n".as_slice())
+        .succeeds()
+        .stdout_only("2\n5\n");
+    assert_eq!(at.read_bytes("xx01"), b"\xa9z\nb\n");
+
+    // Outside a bracket, `é` is its two bytes in a row.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.env("LC_ALL", "C")
+        .args(&["-", "/é/"])
+        .pipe_in(b"a\n\xa9\n\xc3\xa9\n".as_slice())
+        .succeeds()
+        .stdout_only("4\n3\n");
+    assert_eq!(at.read_bytes("xx01"), b"\xc3\xa9\n");
+}
+
+#[test]
 fn test_utf8_locale_matches_characters() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.env("LC_ALL", "C.UTF-8")
