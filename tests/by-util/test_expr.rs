@@ -622,6 +622,27 @@ fn test_substr_large_length_capacity_overflow() {
         .stdout_only("abc\n");
 }
 
+#[uutests::wasi_ignore(Usize32BitOverflow)]
+#[test]
+fn test_substr_length_beyond_usize_takes_the_rest() {
+    let huge = usize::MAX.to_string() + "0";
+    for (pos, expected) in [("1", "abc\n"), ("2", "bc\n"), ("3", "c\n")] {
+        new_ucmd!()
+            .args(&["substr", "abc", pos, &huge])
+            .succeeds()
+            .stdout_only(expected);
+    }
+
+    new_ucmd!()
+        .args(&["substr", "abc", "4", &huge])
+        .fails_with_code(1)
+        .stdout_only("\n");
+    new_ucmd!()
+        .args(&["substr", "abc", "1", &format!("-{huge}")])
+        .fails_with_code(1)
+        .stdout_only("\n");
+}
+
 #[test]
 fn test_escape() {
     new_ucmd!().args(&["+", "1"]).succeeds().stdout_only("1\n");
