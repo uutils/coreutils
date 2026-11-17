@@ -5885,6 +5885,26 @@ mod diagnostics {
 }
 
 #[test]
+fn test_count_with_trailing_blank_is_rejected() {
+    // Blanks are skipped before the count, not after it.
+    new_ucmd!()
+        .args(&["-c", " 2"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_is("bc");
+    for count in ["2 ", "2K "] {
+        new_ucmd!()
+            .args(&["-c", count, "/dev/null"])
+            .fails_with_code(1)
+            .stderr_is(format!("tail: invalid number of bytes: '{count}'\n"));
+        new_ucmd!()
+            .args(&["-n", count, "/dev/null"])
+            .fails_with_code(1)
+            .stderr_is(format!("tail: invalid number of lines: '{count}'\n"));
+    }
+}
+
+#[test]
 fn test_invalid_count_keeps_its_leading_zeros() {
     // Leading zeros are stripped only so the count is read as decimal rather
     // than octal. That is internal, so GNU still names the argument as typed.
