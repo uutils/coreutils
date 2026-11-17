@@ -150,11 +150,10 @@ fn main() {
             let source = target_dir.join("deps").join(&lib_filename);
             let dest = target_dir.join(&lib_filename);
 
-            // Remove old symlink if it exists (in case it points to the wrong place)
-            let _ = fs::remove_file(&dest);
-
             // Create symlink if the source exists
             if source.exists() {
+                // Keep a primary-package artifact when Cargo no longer uses deps/.
+                let _ = fs::remove_file(&dest);
                 #[cfg(unix)]
                 {
                     use std::os::unix::fs::symlink;

@@ -101,6 +101,10 @@ UTILS ?= $(filter-out $(SKIP_UTILS),$(PROGS))
 ifneq ($(findstring stdbuf,$(UTILS)),)
     # Use external libstdbuf per default. It is more robust than embedding libstdbuf.
 	CARGOFLAGS += --features feat_external_libstdbuf
+ifeq (,$(findstring windows,$(OS)))
+    # Primary packages have stable artifact paths; dependency build paths are private to Cargo.
+	LIBSTDBUF_PACKAGE := -p uu_stdbuf_libstdbuf
+endif
 endif
 
 # Programs with usable tests
@@ -138,14 +142,14 @@ all: build
 build-pkgs:
 ifneq (${MULTICALL}, y)
 ifdef BUILD_SPEC_FEATURE
-	${CARGO} build ${CARGOFLAGS} --features "$(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg))
+	${CARGO} build ${CARGOFLAGS} --features "$(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg)) $(LIBSTDBUF_PACKAGE)
 else
-	${CARGO} build ${CARGOFLAGS} ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg))
+	${CARGO} build ${CARGOFLAGS} ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg)) $(LIBSTDBUF_PACKAGE)
 endif
 endif
 
 build-coreutils:
-	${CARGO} build ${CARGOFLAGS} --features "${EXES} $(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} --no-default-features
+	${CARGO} build ${CARGOFLAGS} --features "${EXES} $(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} --no-default-features -p coreutils $(LIBSTDBUF_PACKAGE)
 
 ifeq (${MULTICALL}, y)
 build: build-coreutils locales
@@ -305,12 +309,12 @@ install: build install-manpages install-completions install-locales
 ifneq (,$(and $(findstring stdbuf,$(UTILS)),$(findstring feat_external_libstdbuf,$(CARGOFLAGS))))
 ifneq (,$(findstring cygwin,$(OS)))
 	$(INSTALL) -d $(DESTDIR)$(LIBSTDBUF_DIR)
-	$(INSTALL) -m 755 $(BUILDDIR)/deps/stdbuf.dll $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf.dll
+	$(INSTALL) -m 755 $(BUILDDIR)/stdbuf.dll $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf.dll
 else ifneq (,$(findstring windows,$(OS)))
 	@echo "NOTE: Windows stdbuf depends on Cygwin's libstdbuf.dll"
 else
 	$(INSTALL) -d $(DESTDIR)$(LIBSTDBUF_DIR)
-	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf.* $(DESTDIR)$(LIBSTDBUF_DIR)/
+	$(INSTALL) -m 755 $(BUILDDIR)/libstdbuf.$(if $(findstring apple,$(OS)),dylib,so) $(DESTDIR)$(LIBSTDBUF_DIR)/
 endif
 endif
 ifeq (${MULTICALL}, y)

@@ -68,21 +68,25 @@ fn test_stdbuf_search_order_exe_dir_first() {
     // Determine the correct library extension for this platform
     let lib_extension = if cfg!(target_vendor = "apple") {
         "dylib"
+    } else if cfg!(target_os = "cygwin") {
+        "dll"
     } else {
         "so"
     };
     let lib_name = format!("libstdbuf.{lib_extension}");
+    let artifact_name = if cfg!(target_os = "cygwin") {
+        "stdbuf.dll"
+    } else {
+        &lib_name
+    };
 
-    // Look for libstdbuf in the build directory deps folder
-    // During build, libstdbuf.so is in target/debug/deps/ or target/release/deps/
-    // This allows running tests without requiring installation to a root-owned path
-    // ts.bin_path is the path to the binary file, so we get its parent directory first
+    // `make build` builds libstdbuf as a primary package, beside the binary.
+    // Dependency artifact directories are private to Cargo.
     let source_lib = ts
         .bin_path
         .parent()
         .expect("Binary should have a parent directory")
-        .join("deps")
-        .join(&lib_name);
+        .join(artifact_name);
 
     // Fail test if the library doesn't exist - it should have been built
     assert!(
