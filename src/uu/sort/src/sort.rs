@@ -2278,9 +2278,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         PathBuf::from,
     ));
 
-    settings.compress_prog = matches
-        .get_one::<String>(options::COMPRESS_PROG)
-        .map(String::from);
+    settings.compress_prog = matches.get_one::<String>(options::COMPRESS_PROG).cloned();
 
     if let Some(n_merge) = matches.get_one::<String>(options::BATCH_SIZE) {
         // `None` means the value does not even fit in a `usize`, which is always too large.
