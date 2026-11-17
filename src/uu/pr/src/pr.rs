@@ -1553,11 +1553,7 @@ fn write_columns(
 ) -> io::Result<()> {
     let line_separator = options.content_line_separator.as_bytes();
 
-    let content_lines_per_page = if options.double_space {
-        options.content_lines_per_page / 2
-    } else {
-        options.content_lines_per_page
-    };
+    let content_lines_per_page = text_lines_per_page(options);
 
     let columns = options
         .merge_files_print
@@ -1835,12 +1831,16 @@ fn get_start_line_number(opts: &OutputOptions) -> usize {
 /// If double space -d is used lines are halved.
 /// If columns --columns is used the lines are multiplied by the value.
 fn lines_to_read_for_page(opts: &OutputOptions) -> usize {
-    let content_lines_per_page = opts.content_lines_per_page;
-    let columns = get_columns(opts);
+    text_lines_per_page(opts) * get_columns(opts)
+}
+
+/// Returns how many lines of text fit on a page. With -d every other line is
+/// blank, but a page always holds at least one line of text.
+fn text_lines_per_page(opts: &OutputOptions) -> usize {
     if opts.double_space {
-        (content_lines_per_page / 2) * columns
+        (opts.content_lines_per_page / 2).max(1)
     } else {
-        content_lines_per_page * columns
+        opts.content_lines_per_page
     }
 }
 
