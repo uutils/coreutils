@@ -365,13 +365,6 @@ fn parse_change(mode: &str, fperm: u32, considering_dir: bool) -> (u32, usize) {
     (srwx, pos)
 }
 
-/// Strip one leading `+`, `-`, or `=` from a mode clause.
-fn strip_operators(mode: &str) -> Option<&str> {
-    mode.strip_prefix('+')
-        .or_else(|| mode.strip_prefix('-'))
-        .or_else(|| mode.strip_prefix('='))
-}
-
 /// Whether a single mode clause is numeric.
 ///
 /// In a comma-separated list, GNU only treats a numeric clause as a number
@@ -383,15 +376,10 @@ pub fn is_numeric_clause(mode: &str, in_list: bool) -> bool {
     if !in_list {
         return mode.chars().any(|c| c.is_ascii_digit());
     }
-    let Some(mut rest) = strip_operators(mode) else {
-        return false;
-    };
     // GNU accepts a run of operators before the number, as in `=+755`, but
     // does not allow whitespace between them.
-    while let Some(stripped) = strip_operators(rest) {
-        rest = stripped;
-    }
-    !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit())
+    let rest = mode.trim_start_matches(['+', '-', '=']);
+    rest.len() < mode.len() && !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit())
 }
 
 /// Modify a file mode based on a user-supplied string.
