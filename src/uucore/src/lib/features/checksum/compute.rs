@@ -37,6 +37,11 @@ pub struct ChecksumComputeOptions {
 
     /// Whether to finish lines with '\n' or '\0'.
     pub line_ending: LineEnding,
+
+    /// Whether any file operand was given on the command line. GNU prints the
+    /// file name for an explicit "-" in legacy output, but not for the implicit
+    /// stdin used when no operand is provided.
+    pub has_file_operands: bool,
 }
 
 /// Whether to write the digest as hexadecimal or encoded in base64.
@@ -165,8 +170,9 @@ fn write_legacy_checksum(
         (algo, output) => unreachable!("Bug: Invalid legacy checksum ({algo:?}, {output:?})"),
     }
 
-    // Print the filename after a space if not stdin
-    if escaped_filename != "-" {
+    // Print the filename after a space if a file operand was given explicitly
+    // (GNU prints "-" for an explicit "-", but omits it for implicit stdin).
+    if options.has_file_operands {
         write!(w, " ")?;
         w.write_all(escaped_filename.as_bytes())?;
     }

@@ -597,6 +597,36 @@ fn test_chmod_readonly_filesystem() {
 }
 
 #[test]
+fn test_chmod_recursive_reports_real_error_below_operand() {
+    use rustix::process::geteuid;
+
+    // '-L' makes chmod follow the link to a root-owned file: EPERM
+    let target = "/etc/passwd";
+    let Ok(meta) = metadata(target) else { return };
+    if geteuid().is_root() || meta.uid() != 0 {
+        return;
+    }
+    let mode = meta.mode() & 0o7777;
+
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkdir("tree");
+    ts.fixtures.symlink_file(target, "tree/link");
+
+    ts.ucmd()
+        .args(&["-R", "-L", "u+r", "tree"])
+        .fails_with_code(1)
+        .stderr_is("chmod: changing permissions of 'tree/link': Operation not permitted\n");
+
+    ts.ucmd()
+        .args(&["-v", "-R", "-L", "u+r", "tree"])
+        .fails_with_code(1)
+        .stdout_contains(format!(
+            "failed to change mode of 'tree/link' from {mode:04o} ("
+        ))
+        .stdout_contains(format!(") to {:04o} (", mode | 0o400));
+}
+
+#[test]
 #[allow(clippy::unreadable_literal)]
 fn test_chmod_recursive_correct_exit_code() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2174,7 +2204,7 @@ fn test_chmod_reports_every_failing_operand() {
         .args(&["-v", "-f", "0", "/", "/"])
         .fails_with_code(1)
         .no_stderr()
-        .stdout_contains("failed to change mode of file '/' from");
+        .stdout_contains("failed to change mode of '/' from");
 }
 
 #[test]
@@ -2481,4 +2511,22 @@ fn test_chmod_changes_does_not_report_inaccessible_operand() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("chmod: cannot access 'missing': No such file or directory\n");
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "chmod -R --dereference must change the target of symlinks found while recursing"]
+fn test_recursive_dereference_changes_link_targets() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("tree");
+    at.touch("target");
+    set_permissions(at.plus("target"), Permissions::from_mode(0o600)).unwrap();
+    at.symlink_file("../target", "tree/link");
+    scene
+        .ucmd()
+        .args(&["-R", "--dereference", "g+r", "tree"])
+        .succeeds()
+        .no_output();
+    assert_eq!(at.metadata("target").permissions().mode() & 0o777, 0o640);
 }

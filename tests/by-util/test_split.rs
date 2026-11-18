@@ -7,7 +7,7 @@
 
 use rand::{RngExt as _, SeedableRng, rng};
 use regex::Regex;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
 use rlimit::Resource;
 use rstest::rstest;
 #[cfg(target_os = "linux")]
@@ -132,6 +132,7 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
 fn test_split_to_non_seekable() {
@@ -309,6 +310,7 @@ fn test_split_additional_suffix_hyphen_value() {
 // the `cmd` call right
 // see https://github.com/rust-lang/rust/issues/29494
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 #[cfg(unix)]
 fn test_filter() {
@@ -352,6 +354,23 @@ fn test_filter_with_env_var_set() {
     assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[rstest]
+#[case::lines(&["-l1"], "executing with FILE=xaa\nexecuting with FILE=xab\n")]
+#[case::bytes(&["-b2"], "executing with FILE=xaa\nexecuting with FILE=xab\n")]
+#[case::line_bytes(&["-C2"], "executing with FILE=xaa\nexecuting with FILE=xab\n")]
+#[case::quoted_prefix(&["-l1", "-", "x y"], "executing with FILE='x yaa'\nexecuting with FILE='x yab'\n")]
+#[cfg(unix)]
+fn test_filter_verbose(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .args(&["--verbose", "--filter=cat > /dev/null"])
+        .args(args)
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 #[cfg(unix)]
 fn test_filter_command_fails() {
@@ -1080,7 +1099,7 @@ fn test_number_n() {
     assert_eq!(at.read("xac"), "mnopq");
     assert_eq!(at.read("xad"), "rstuv");
     assert_eq!(at.read("xae"), "wxyz\n");
-    #[cfg(unix)]
+    #[cfg(all(unix, not(wasi_runner)))]
     new_ucmd!()
         .args(&["--number=100", "/dev/null"])
         .succeeds()
@@ -1101,7 +1120,7 @@ fn test_number_kth_of_n() {
         .args(&["-e", "--number=99/100", "asciilowercase.txt"])
         .succeeds()
         .stdout_only("");
-    #[cfg(unix)]
+    #[cfg(all(unix, not(wasi_runner)))]
     new_ucmd!()
         .args(&["--number=3/10", "/dev/null"])
         .succeeds()
@@ -1186,6 +1205,22 @@ fn test_split_number_with_io_blksize() {
     assert_eq!(at.read("xae"), "wxyz\n");
 }
 
+/// A small `--io-blksize` forces reads that split lines across buffers and
+/// chunk boundaries that fall in the middle of a read, rather than aligning
+/// with it.
+#[test]
+fn test_split_lines_with_small_io_blksize() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-l", "2", "---io-blksize", "5"])
+        .pipe_in("1\n2\n3\n4\n5\n6\n")
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("xaa"), "1\n2\n");
+    assert_eq!(at.read("xab"), "3\n4\n");
+    assert_eq!(at.read("xac"), "5\n6\n");
+    assert!(!at.plus("xad").exists());
+}
+
 #[test]
 fn test_split_default_with_io_blksize() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1215,6 +1250,7 @@ fn test_split_invalid_io_blksize() {
         .stderr_only("split: invalid IO block size: '2146435072'\n");
 }
 
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
 fn test_split_number_oversized_stdin() {
     new_ucmd!()
@@ -1224,6 +1260,7 @@ fn test_split_number_oversized_stdin() {
         .stdout_only("a".repeat(163));
 }
 
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
 fn test_split_number_by_lines_oversized_stdin() {
     new_ucmd!()
@@ -1233,6 +1270,7 @@ fn test_split_number_by_lines_oversized_stdin() {
         .stdout_only("x\n".repeat(75));
 }
 
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
 fn test_split_number_piped_stdin_files() {
     let scene = TestScenario::new(util_name!());
@@ -1251,6 +1289,7 @@ fn test_split_number_piped_stdin_files() {
     assert_eq!(at.read("xac"), "a".repeat(217));
 }
 
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
 fn test_split_number_lines_piped_stdin_files() {
     let scene = TestScenario::new(util_name!());
@@ -1343,6 +1382,7 @@ fn test_elide_empty_files_n_chunks() {
     assert!(!at.plus("xad").exists());
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(unix)]
 fn test_elide_dev_null_n_chunks() {
@@ -1355,6 +1395,7 @@ fn test_elide_dev_null_n_chunks() {
     assert!(!at.plus("xac").exists());
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(unix)]
 fn test_dev_zero() {
@@ -1382,6 +1423,7 @@ fn test_elide_empty_files_l_chunks() {
     assert!(!at.plus("xag").exists());
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(unix)]
 fn test_elide_dev_null_l_chunks() {
@@ -1410,6 +1452,7 @@ fn test_elide_empty_files_preserves_line_chunks() {
     assert!(!at.plus("xaf").exists());
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(unix)]
 fn test_number_by_bytes_dev_zero() {
@@ -1469,6 +1512,7 @@ fn test_number_by_lines_kth_huge_number_of_chunks() {
         .stdout_only("a");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(unix)]
 fn test_number_by_lines_kth_dev_null() {
@@ -1607,6 +1651,33 @@ fn test_guard_input() {
         .fails()
         .stderr_only("split: 'xaa' would overwrite input; aborting\n");
     assert_eq!(at.read("xaa"), "1\n2\n3\n");
+}
+
+/// Reopening an existing output must retain `O_CREAT` so Linux's
+/// `fs.protected_regular` and `fs.protected_fifos` checks apply. A dangling
+/// symlink makes that flag observable without needing a multi-user test.
+#[test]
+#[cfg(all(unix, not(wasi_runner)))]
+fn test_existing_output_is_reopened_with_create() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("input", "AB");
+
+    // An existing caller-owned output must still be truncated.
+    at.write("xaa", "stale contents that are longer than the chunk\n");
+
+    at.symlink_file("xab_target", "xab");
+    assert!(!at.file_exists("xab_target"));
+
+    ucmd.args(&["-b", "1", "input"]).succeeds().no_output();
+
+    assert_eq!(at.read("xaa"), "A");
+    assert!(at.plus("xab").is_symlink());
+    assert_eq!(
+        fs::read_link(at.plus("xab")).unwrap(),
+        at.plus("xab_target")
+    );
+    assert_eq!(at.read("xab_target"), "B");
 }
 
 #[test]
@@ -1860,7 +1931,7 @@ fn test_round_robin() {
 
 #[test]
 // TODO(#7542): Re-enable on Android once we figure out why rlimit is broken.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
 fn test_round_robin_limited_file_descriptors() {
     new_ucmd!()
         .args(&["-n", "r/40", "onehundredlines.txt"])
@@ -1871,7 +1942,7 @@ fn test_round_robin_limited_file_descriptors() {
 // A short write on the last chunk must not be silently dropped: the rest
 // has to be retried so that the resulting error is reported.
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
 fn test_short_write_on_last_chunk_is_reported() {
     for args in [&["-b", "8192"][..], &["-l", "1"][..]] {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -1920,6 +1991,7 @@ fn test_split_invalid_input() {
 
 /// Test if there are invalid (non UTF-8) in the arguments - unix
 /// clap is expected to fail/panic
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_split_non_utf8_argument_unix() {
@@ -2215,6 +2287,7 @@ fn test_long_lines() {
     assert!(!at.plus("xad").exists());
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_split_non_utf8_paths() {
@@ -2229,6 +2302,7 @@ fn test_split_non_utf8_paths() {
     assert!(at.plus("xaa").exists());
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_split_non_utf8_prefix_is_byte_preserving() {
@@ -2268,6 +2342,7 @@ fn test_split_non_utf8_prefix_is_byte_preserving() {
     assert_eq!(at.read("p�ab"), "keep-ab");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_split_non_utf8_additional_suffix_is_byte_preserving() {
@@ -2369,6 +2444,7 @@ fn test_split_directory_already_exists() {
     }
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 fn test_io_error() {
@@ -2381,6 +2457,7 @@ fn test_io_error() {
 }
 
 /// Writing a chunk to a full device must be reported and must stop the split.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_write_error_on_full_device() {
@@ -2519,4 +2596,25 @@ fn test_number_with_plus_prefix(
         .map(|(name, contents)| (name.to_string(), contents.to_string()))
         .collect();
     assert_eq!(files, expected_files, "-n {number}");
+}
+
+#[cfg(unix)]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[test]
+fn test_number_filter_exiting_early_keeps_other_chunks() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut data = vec![b'k'; 200_000];
+    data.extend(vec![b'm'; 200_000]);
+    data.extend(vec![b'n'; 200_000]);
+    at.write_bytes("three", &data);
+    // `head -c` is not POSIX and OpenBSD's head lacks it; dd also stops after one byte.
+    ucmd.args(&[
+        "-n",
+        "3",
+        "--filter=dd bs=1 count=1 2>/dev/null > $FILE",
+        "three",
+    ])
+    .succeeds()
+    .no_output();
+    assert_eq!(at.read("xaa") + &at.read("xab") + &at.read("xac"), "kmn");
 }

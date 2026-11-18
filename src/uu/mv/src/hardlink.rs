@@ -15,20 +15,21 @@ use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
 use uucore::display::Quotable;
+use uucore::fs::FileInfo;
 use uucore::translate;
 
 /// Tracks hardlinks during cross-partition moves to preserve them
 #[derive(Debug, Default)]
 pub struct HardlinkTracker {
     /// Maps (device, inode) -> destination path for the first occurrence
-    inode_map: FxHashMap<(u64, u64), PathBuf>,
+    inode_map: FxHashMap<FileInfo, PathBuf>,
 }
 
 /// Pre-scans files to identify hardlink groups with optimized memory usage
 #[derive(Debug, Default)]
 pub struct HardlinkGroupScanner {
     /// Maps (device, inode) -> list of source paths that are hardlinked together
-    hardlink_groups: FxHashMap<(u64, u64), Vec<PathBuf>>,
+    hardlink_groups: FxHashMap<FileInfo, Vec<PathBuf>>,
     /// List of source files/directories being moved (for destination mapping)
     source_files: Vec<PathBuf>,
     /// Whether scanning has been performed
@@ -85,8 +86,6 @@ impl HardlinkTracker {
         scanner: &HardlinkGroupScanner,
         options: &HardlinkOptions,
     ) -> Option<PathBuf> {
-        use std::os::unix::fs::MetadataExt;
-
         let metadata = match source.symlink_metadata() {
             Ok(meta) => meta,
             Err(e) => {
@@ -102,7 +101,7 @@ impl HardlinkTracker {
             }
         };
 
-        let key = (metadata.dev(), metadata.ino());
+        let key = FileInfo::from(&metadata);
 
         // Check if we've already processed a file with this inode
         if let Some(existing_path) = self.inode_map.get(&key) {
@@ -186,7 +185,7 @@ impl HardlinkGroupScanner {
             // Recursively scan directory contents
             self.scan_directory_recursive(path)?;
         } else if metadata.is_file() && metadata.nlink() > 1 {
-            let key = (metadata.dev(), metadata.ino());
+            let key = FileInfo::from(&metadata);
             self.hardlink_groups
                 .entry(key)
                 .or_default()
@@ -208,7 +207,7 @@ impl HardlinkGroupScanner {
             } else {
                 let metadata = entry.metadata()?;
                 if metadata.is_file() && metadata.nlink() > 1 {
-                    let key = (metadata.dev(), metadata.ino());
+                    let key = FileInfo::from(&metadata);
                     self.hardlink_groups
                         .entry(key)
                         .or_default()

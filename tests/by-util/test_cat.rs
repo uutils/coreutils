@@ -754,15 +754,27 @@ fn test_cat_rw_self_conflict_fails() {
     assert_eq!(dest_contents, "acde");
 }
 
-#[uutests::wasi_ignore(SymlinkLoopNoEloop)]
 #[test]
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
 fn test_error_loop() {
     let (at, mut ucmd) = at_and_ucmd!();
-    at.symlink_file("2", "1");
-    at.symlink_file("3", "2");
-    at.symlink_file("1", "3");
+    // Relative targets keep the links inside the WASI sandbox.
+    at.relative_symlink_file("2", "1");
+    at.relative_symlink_file("3", "2");
+    at.relative_symlink_file("1", "3");
+    ucmd.arg("1")
+        .fails()
+        .stderr_is("cat: 1: Too many levels of symbolic links\n");
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg(not(target_os = "openbsd"))]
+fn test_error_self_loop() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // A relative target keeps the link inside the WASI sandbox.
+    at.relative_symlink_file("1", "1");
     ucmd.arg("1")
         .fails()
         .stderr_is("cat: 1: Too many levels of symbolic links\n");
