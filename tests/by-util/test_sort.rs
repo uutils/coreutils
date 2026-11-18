@@ -101,6 +101,27 @@ fn test_buffer_size_limits_both_chunks() {
 }
 
 #[test]
+fn test_buffer_size_trailing_whitespace_is_rejected() {
+    for size in [" 1 ", "1 ", "1M ", "50% "] {
+        new_ucmd!()
+            .arg(format!("--buffer-size={size}"))
+            .fails_with_code(2)
+            .stderr_only(format!(
+                "sort: invalid suffix in --buffer-size argument '{size}'\n"
+            ));
+    }
+
+    // Leading whitespace is still skipped.
+    for size in [" 1M", "\t1M"] {
+        new_ucmd!()
+            .arg(format!("--buffer-size={size}"))
+            .pipe_in("b\na\n")
+            .succeeds()
+            .stdout_only("a\nb\n");
+    }
+}
+
+#[test]
 fn test_invalid_buffer_size() {
     new_ucmd!()
         .arg("-S")
@@ -2323,6 +2344,67 @@ fn test_output_is_input() {
     assert_eq!(at.read("file"), input);
 }
 
+#[rstest]
+#[case::newline('\n', &[])]
+#[case::newline_unique('\n', &["-u"])]
+#[case::nul('\0', &["-z"])]
+#[case::nul_unique('\0', &["-z", "-u"])]
+// Android's app-private filesystem refuses hard links.
+#[cfg(not(target_os = "android"))]
+fn test_merge_output_is_hard_link_to_input(#[case] separator: char, #[case] args: &[&str]) {
+    // Exceed the merge reader's read-ahead so truncation cannot be hidden
+    // by input that has already been buffered.
+    let mut input = String::new();
+    for i in 0..10_000 {
+        write!(input, "{i:06}{separator}").unwrap();
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input", &input);
+    at.hard_link("input", "output");
+
+    ucmd.args(&["-m", "-o", "output", "input"])
+        .args(args)
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("input"), input);
+    assert_eq!(at.read("output"), input);
+}
+
+#[rstest]
+#[case::single_batch(&[])]
+#[case::multiple_batches(&["--batch-size=2"])]
+// Android's app-private filesystem refuses hard links.
+#[cfg(not(target_os = "android"))]
+fn test_merge_output_is_hard_link_to_multiple_inputs(#[case] args: &[&str]) {
+    let mut input = String::new();
+    let mut other = String::new();
+    let mut expected = String::new();
+    for i in 0..10_000 {
+        let even = 2 * i;
+        let odd = even + 1;
+        writeln!(input, "{even:06}").unwrap();
+        writeln!(other, "{odd:06}").unwrap();
+        write!(expected, "{even:06}\n{even:06}\n{odd:06}\n").unwrap();
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input", &input);
+    at.write("other", &other);
+    at.hard_link("input", "alias");
+    at.hard_link("input", "output");
+
+    ucmd.args(&["-m", "-o", "output", "input", "alias", "other"])
+        .args(args)
+        .succeeds()
+        .no_output();
+
+    for file in ["input", "alias", "output"] {
+        assert_eq!(at.read(file), expected);
+    }
+    assert_eq!(at.read("other"), other);
+}
+
 #[test]
 fn test_output_file_is_truncated() {
     // The output file is opened without O_TRUNC (so it can also be an input),
@@ -4371,7 +4453,6 @@ fn test_numeric_looking_file_names_are_kept_verbatim(
 fn test_debug_incompatible_with_output() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-o", "out", "--debug"])
-        .pipe_in("b\na\n")
         .fails_with_code(2)
         .stderr_only("sort: options '-o --debug' are incompatible\n");
     assert!(!at.file_exists("out"));

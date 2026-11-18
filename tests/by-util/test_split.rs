@@ -355,6 +355,22 @@ fn test_filter_with_env_var_set() {
 }
 
 #[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[rstest]
+#[case::lines(&["-l1"], "executing with FILE=xaa\nexecuting with FILE=xab\n")]
+#[case::bytes(&["-b2"], "executing with FILE=xaa\nexecuting with FILE=xab\n")]
+#[case::line_bytes(&["-C2"], "executing with FILE=xaa\nexecuting with FILE=xab\n")]
+#[case::quoted_prefix(&["-l1", "-", "x y"], "executing with FILE='x yaa'\nexecuting with FILE='x yab'\n")]
+#[cfg(unix)]
+fn test_filter_verbose(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .args(&["--verbose", "--filter=cat > /dev/null"])
+        .args(args)
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 #[cfg(unix)]
 fn test_filter_command_fails() {
@@ -1189,6 +1205,22 @@ fn test_split_number_with_io_blksize() {
     assert_eq!(at.read("xae"), "wxyz\n");
 }
 
+/// A small `--io-blksize` forces reads that split lines across buffers and
+/// chunk boundaries that fall in the middle of a read, rather than aligning
+/// with it.
+#[test]
+fn test_split_lines_with_small_io_blksize() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-l", "2", "---io-blksize", "5"])
+        .pipe_in("1\n2\n3\n4\n5\n6\n")
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("xaa"), "1\n2\n");
+    assert_eq!(at.read("xab"), "3\n4\n");
+    assert_eq!(at.read("xac"), "5\n6\n");
+    assert!(!at.plus("xad").exists());
+}
+
 #[test]
 fn test_split_default_with_io_blksize() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1625,7 +1657,7 @@ fn test_guard_input() {
 /// `fs.protected_regular` and `fs.protected_fifos` checks apply. A dangling
 /// symlink makes that flag observable without needing a multi-user test.
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(wasi_runner)))]
 fn test_existing_output_is_reopened_with_create() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2564,4 +2596,25 @@ fn test_number_with_plus_prefix(
         .map(|(name, contents)| (name.to_string(), contents.to_string()))
         .collect();
     assert_eq!(files, expected_files, "-n {number}");
+}
+
+#[cfg(unix)]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[test]
+fn test_number_filter_exiting_early_keeps_other_chunks() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut data = vec![b'k'; 200_000];
+    data.extend(vec![b'm'; 200_000]);
+    data.extend(vec![b'n'; 200_000]);
+    at.write_bytes("three", &data);
+    // `head -c` is not POSIX and OpenBSD's head lacks it; dd also stops after one byte.
+    ucmd.args(&[
+        "-n",
+        "3",
+        "--filter=dd bs=1 count=1 2>/dev/null > $FILE",
+        "three",
+    ])
+    .succeeds()
+    .no_output();
+    assert_eq!(at.read("xaa") + &at.read("xab") + &at.read("xac"), "kmn");
 }

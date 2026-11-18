@@ -98,6 +98,24 @@ fn test_printf_precision_takes_no_sign(#[case] format: &str, #[case] expected: &
         .stdout_only(expected);
 }
 
+// Like GNU, a width or precision above `INT_MAX` drops the whole directive.
+#[rstest]
+#[case::width("A%99999999999999999999sB")]
+#[case::precision("A%.99999999999999999999dB")]
+#[case::both("A%99999999999999999999.99999999999999999999sB")]
+#[case::width_above_int_max("A%2147483648sB")]
+#[case::precision_above_int_max("A%.2147483648sB")]
+#[case::unknown_conversion("A%99999999999999999999zB")]
+#[case::quoted_name("A%99999999999999999999QnB")]
+#[case::major_device("A%99999999999999999999HdB")]
+fn test_printf_width_above_int_max_drops_directive(#[case] format: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello world\n");
+    ucmd.args(&["--printf", format, "f"])
+        .succeeds()
+        .stdout_only("AB");
+}
+
 // GNU prints the free and total block and free node counts of `-f` as signed
 // numbers and the fundamental block size as an unsigned one.
 #[test]
@@ -370,6 +388,7 @@ fn test_timestamp_format_preserves_nanoseconds() {
 }
 
 #[test]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_timestamp_format_before_epoch() {
     let ts = TestScenario::new(util_name!());
     let path = ts.fixtures.plus("timestamp");
@@ -813,6 +832,11 @@ fn test_printf_invalid_directive() {
         .args(&["--printf=%9%", "."])
         .fails_with_code(1)
         .stderr_contains("'%9%': invalid directive");
+
+    ts.ucmd()
+        .args(&["--printf=%99999999999999999999%", "."])
+        .fails_with_code(1)
+        .stderr_contains("'%99999999999999999999%': invalid directive");
 }
 
 #[test]
@@ -898,6 +922,8 @@ fn test_unknown_multibyte_directive_keeps_trailing_bytes() {
         ("a%\u{e9}b", &b"a?\xa9b"[..]),
         ("%\u{20ac}%n", &b"?\x82\xac."[..]),
         ("%5\u{20ac}", &b"?\x82\xac"[..]),
+        // GNU keeps it even when the width would drop the directive.
+        ("%99999999999999999999\u{e9}", &b"?\xa9"[..]),
     ] {
         ts.ucmd()
             .arg(format!("--printf={fmt}"))
@@ -1005,6 +1031,7 @@ fn test_percent_escaping() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_correct_metadata() {
     use uucore::fs::{major, minor};
 
