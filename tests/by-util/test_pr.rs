@@ -1582,6 +1582,10 @@ fn test_numeric_option_diagnostics() {
             "pr: '-W PAGE_WIDTH' invalid number of characters: 'x'\n",
         ),
         (
+            &["-J", "-W", "x"],
+            "pr: '-W PAGE_WIDTH' invalid number of characters: 'x'\n",
+        ),
+        (
             &["-N", "x"],
             "pr: '-N NUMBER' invalid starting line number: 'x'\n",
         ),
@@ -1599,6 +1603,8 @@ fn test_numeric_option_diagnostics() {
         (&["-2", "-W", "2", "-J"], "pr: page width too narrow\n"),
         (&["-3", "-w", "6", "-Sxx"], "pr: page width too narrow\n"),
         (&["-3", "-w", "2", "-S"], "pr: page width too narrow\n"),
+        (&["-3", "-w", "4", "-S "], "pr: page width too narrow\n"),
+        (&["-2", "-w", "2", "-s\t"], "pr: page width too narrow\n"),
         (
             &["--columns=2", "-w", "2", "-a"],
             "pr: page width too narrow\n",
@@ -1625,6 +1631,17 @@ fn test_numeric_option_diagnostics() {
 }
 
 #[test]
+fn test_join_lines_sep_string_without_value() {
+    for option in ["-S", "--sep-string="] {
+        new_ucmd!()
+            .args(&["-3", "-J", "-t", option])
+            .pipe_in("1\n2\n3\n4\n5\n6\n")
+            .succeeds()
+            .stdout_only("135\n246\n");
+    }
+}
+
+#[test]
 fn test_narrowest_page_width_for_columns() {
     // Each column needs one character, plus the separators between them.
     for args in [
@@ -1632,6 +1649,9 @@ fn test_narrowest_page_width_for_columns() {
         &["-2", "-w", "3"],
         &["-3", "-w", "7", "-Sxx"],
         &["-3", "-w", "3", "-S"],
+        &["-3", "-w", "3", "--sep-string="],
+        &["-3", "-w", "5", "-S "],
+        &["-2", "-w", "3", "-s\t"],
         &["-2", "-w", "2", "-s"],
         &["-1", "-w", "1"],
         &["-m", "-w", "1"],
