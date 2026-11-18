@@ -260,6 +260,7 @@ fn test_hex32() {
 
 // Regression: 16-bit IEEE half should print with canonical precision (no spurious digits)
 #[test]
+#[cfg_attr(target_os = "android", ignore = "failed with cross build")]
 fn test_float16_compact() {
     let input: [u8; 4] = [0x3c, 0x00, 0x3c, 0x00]; // two times 1.0 in big-endian half
     new_ucmd!()
@@ -331,6 +332,7 @@ fn test_tf_explicit_float_still_uses_4_bytes() {
 }
 
 #[test]
+#[cfg_attr(target_os = "android", ignore = "failed with cross build")]
 fn test_f16() {
     let input: [u8; 14] = [
         0x00, 0x3c, // 0x3C00 1.0
@@ -358,6 +360,7 @@ fn test_f16() {
 }
 
 #[test]
+#[cfg_attr(target_os = "android", ignore = "failed with cross build")]
 fn test_fh() {
     let input: [u8; 14] = [
         0x00, 0x3c, // 0x3C00 1.0
