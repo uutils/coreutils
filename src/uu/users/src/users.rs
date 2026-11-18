@@ -92,7 +92,11 @@ pub fn uu_app() -> Command {
     #[cfg(not(target_env = "musl"))]
     let about = translate!("users-about");
     #[cfg(target_env = "musl")]
-    let about = translate!("users-about") + &translate!("users-about-musl-warning");
+    let about = format!(
+        "{}\n\n{}",
+        translate!("users-about"),
+        translate!("users-about-musl-warning")
+    );
 
     Command::new("users")
         .version(uucore::crate_version!())

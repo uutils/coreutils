@@ -124,6 +124,10 @@ walkdir = { workspace = true, optional = true }
 libloading = { workspace = true, optional = true }
 procfs = { workspace = true, optional = true }
 
+[target.'cfg(all(target_os = "linux", target_env = "musl"))'.dependencies]
+zbus = { version = "6.2.1", default-features = false, features = ["default-rt"], optional = true }
+zruntime = { version = "0.2.2", default-features = false, features = ["helper"], optional = true }
+
 [target.'cfg(windows)'.dependencies]
 wild = { workspace = true }
 windows-sys = { workspace = true, optional = true, default-features = false, features = [
@@ -237,7 +241,7 @@ openssl = ["dep:openssl"]
 update-control = ["parser"]
 utf8 = []
 utmpx = ["time", "time/macros", "libc", "dns-lookup"]
-systemd-logind = ["utmpx", "dep:libloading"]
+systemd-logind = ["utmpx", "dep:libloading", "dep:zbus", "dep:zruntime"]
 version-cmp = []
 wide = []
 tty = []

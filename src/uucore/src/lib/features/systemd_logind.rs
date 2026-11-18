@@ -13,13 +13,15 @@
 //! empty. If systemd-logind is unavailable, callers fall back to the traditional
 //! implementation.
 
-use core::ffi::CStr;
-use std::mem::MaybeUninit;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{UResult, USimpleError};
 
+#[cfg(all(target_env = "musl", target_feature = "crt-static"))]
+mod bus;
+
 /// Dynamically loaded FFI bindings for libsystemd login functions.
+#[cfg(not(all(target_env = "musl", target_feature = "crt-static")))]
 mod ffi {
     use core::ffi::{c_char, c_int, c_uint};
     use libloading::Library;
@@ -123,12 +125,12 @@ mod ffi {
 }
 
 /// Safe wrapper functions for libsystemd FFI calls
+#[cfg(not(all(target_env = "musl", target_feature = "crt-static")))]
 mod login {
     use super::ffi;
     use core::ffi::{CStr, c_char, c_int};
     use std::ffi::CString;
     use std::ptr;
-    use std::time::SystemTime;
 
     /// Get all active sessions
     pub fn get_sessions(
@@ -245,27 +247,6 @@ mod login {
         unsafe { libc::free(value_ptr.cast()) };
         value
     }
-
-    /// Get system boot time using systemd random-seed file fallback
-    ///
-    /// TODO: This replicates GNU coreutils' fallback behavior for compatibility.
-    /// GNU coreutils uses the mtime of /var/lib/systemd/random-seed as a heuristic for boot time
-    /// when utmp is unavailable, rather than querying systemd's authoritative `KernelTimestamp`.
-    /// This creates inconsistency: `uptime -s` shows the actual kernel boot time
-    /// while `who -b` shows ~1 minute later when systemd services start.
-    ///
-    /// Ideally, both should use the same source (`KernelTimestamp`) for semantic consistency.
-    /// Consider proposing to GNU coreutils to use systemd's `KernelTimestamp` property instead.
-    pub fn get_boot_time() -> Result<SystemTime, Box<dyn std::error::Error>> {
-        use std::fs;
-
-        let metadata = fs::metadata("/var/lib/systemd/random-seed")
-            .map_err(|e| format!("Failed to read /var/lib/systemd/random-seed: {e}"))?;
-
-        metadata
-            .modified()
-            .map_err(|e| format!("Failed to get modification time: {e}").into())
-    }
 }
 
 /// Login record compatible with utmpx structure
@@ -321,6 +302,11 @@ impl SystemdLoginRecord {
 /// Read login records from systemd-logind using safe wrapper functions
 /// This matches the approach used by GNU coreutils `read_utmp_from_systemd()`
 pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
+    #[cfg(all(target_env = "musl", target_feature = "crt-static"))]
+    let api = bus::BusLogin::connect(zbus::connection::Builder::system()).map_err(|e| {
+        USimpleError::new(1, format!("Failed to read logind sessions over D-Bus: {e}"))
+    })?;
+    #[cfg(not(all(target_env = "musl", target_feature = "crt-static")))]
     let api = ffi::SystemdLoginApi::load()
         .map_err(|e| USimpleError::new(1, format!("Failed to load libsystemd: {e}")))?;
     read_login_records_with_api(&api)
@@ -337,12 +323,13 @@ struct SessionInfo {
     leader: Option<u32>,
 }
 
-/// The safe boundary between sd-login and record assembly.
+/// The boundary between logind session retrieval and record assembly.
 trait LoginApi {
     fn sessions(&self) -> UResult<Vec<String>>;
     fn session(&self, id: &str) -> Option<SessionInfo>;
 }
 
+#[cfg(not(all(target_env = "musl", target_feature = "crt-static")))]
 impl LoginApi for ffi::SystemdLoginApi {
     fn sessions(&self) -> UResult<Vec<String>> {
         login::get_sessions(self)
@@ -350,6 +337,9 @@ impl LoginApi for ffi::SystemdLoginApi {
     }
 
     fn session(&self, session_id: &str) -> Option<SessionInfo> {
+        use core::ffi::CStr;
+        use std::mem::MaybeUninit;
+
         let uid = login::get_session_uid(self, session_id).ok()?;
         // SAFETY: passwd and result are writable outputs, and buf remains alive
         // while getpwuid_r fills them. Only a successful, non-NULL result is read.
@@ -401,8 +391,10 @@ impl LoginApi for ffi::SystemdLoginApi {
 fn read_login_records_with_api(api: &impl LoginApi) -> UResult<Vec<SystemdLoginRecord>> {
     let mut records = Vec::new();
 
-    // Add boot time record first
-    if let Ok(boot_time) = login::get_boot_time() {
+    // Use the random-seed mtime for the boot record to match existing output.
+    if let Ok(boot_time) =
+        std::fs::metadata("/var/lib/systemd/random-seed").and_then(|metadata| metadata.modified())
+    {
         let boot_record = SystemdLoginRecord {
             user: "reboot".to_string(),
             session_id: "boot".to_string(),

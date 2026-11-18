@@ -1,8 +1,6 @@
 who-about = Affiche des informations sur les utilisateurs actuellement connectés.
 who-usage = who [OPTION]... [ FICHIER | ARG1 ARG2 ]
-who-about-musl-warning = Note : Lors de la compilation avec musl libc, l'utilitaire `who` n'affichera aucune
-    information sur les utilisateurs connectés. Ceci est dû à l'implémentation
-    stub des fonctions `utmpx` de musl, qui empêche l'accès aux données nécessaires.
+who-about-musl-warning = Avec musl libc, l’affichage des utilisateurs connectés nécessite un accès à systemd-logind.
 
 who-long-usage = Si FICHIER n'est pas spécifié, utilise { $default_file }. /var/log/wtmp comme FICHIER est courant.
     Si ARG1 ARG2 sont donnés, -m est présumé : 'am i' ou 'mom likes' sont usuels.

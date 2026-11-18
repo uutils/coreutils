@@ -10,13 +10,21 @@ use uutests::unwrap_or_return;
 use uutests::util::{TestScenario, expected_result, gnu_cmd_result};
 use uutests::util_name;
 
-#[cfg(all(target_os = "linux", target_env = "gnu", feature = "test_logind"))]
+#[cfg(all(
+    target_os = "linux",
+    any(
+        target_env = "gnu",
+        all(target_env = "musl", target_feature = "crt-static")
+    ),
+    feature = "test_logind"
+))]
 mod logind {
     use std::collections::HashMap;
     use std::process::{Child, Command, Stdio};
     use std::time::{Duration, Instant};
     use uutests::util::TestScenario;
 
+    #[cfg(target_env = "gnu")]
     mod support {
         include!(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -139,7 +147,8 @@ mod logind {
         assert_eq!(&record.user, name);
         let version = systemd("systemctl", &["--version"]);
         let version: u32 = version.split_whitespace().nth(1).unwrap().parse().unwrap();
-        let has_metadata = version >= 254;
+        // The D-Bus properties also exist on logind versions older than 254.
+        let has_metadata = cfg!(target_env = "musl") || version >= 254;
         assert_eq!(record.try_login_time_offset().is_some(), has_metadata);
         assert_eq!(record.pid, if has_metadata { pid } else { 0 });
         let displayed = if let Some(timestamp) = record.try_login_time_offset() {
@@ -197,6 +206,12 @@ mod logind {
             .succeeds()
             .stdout_contains(format!("{users} user"));
 
+        #[cfg(target_env = "gnu")]
+        check_traditional_records(&ts);
+    }
+
+    #[cfg(target_env = "gnu")]
+    fn check_traditional_records(ts: &TestScenario) {
         let traditional = support::utmpx_record("traditional");
         let custom = ts.fixtures.plus("custom-utmp");
         std::fs::write(&custom, &traditional).unwrap();
@@ -231,6 +246,20 @@ mod logind {
             .arg("-q")
             .env("LC_ALL", "C")
             .env("LD_LIBRARY_PATH", invalid_library.path())
+            .succeeds()
+            .stdout_is("\n# users=0\n")
+            .no_stderr();
+    }
+
+    #[cfg(all(target_env = "musl", target_feature = "crt-static"))]
+    #[test]
+    fn unavailable_bus_leaves_the_login_list_empty() {
+        let ts = TestScenario::new("who");
+        let missing_bus = format!("unix:path={}", ts.fixtures.plus("missing-bus").display());
+        ts.ucmd()
+            .arg("-q")
+            .env("LC_ALL", "C")
+            .env("DBUS_SYSTEM_BUS_ADDRESS", missing_bus)
             .succeeds()
             .stdout_is("\n# users=0\n")
             .no_stderr();
