@@ -1653,6 +1653,10 @@ fn test_numeric_option_diagnostics() {
             "pr: '-W PAGE_WIDTH' invalid number of characters: 'x'\n",
         ),
         (
+            &["-J", "-W", "x"],
+            "pr: '-W PAGE_WIDTH' invalid number of characters: 'x'\n",
+        ),
+        (
             &["-N", "x"],
             "pr: '-N NUMBER' invalid starting line number: 'x'\n",
         ),
