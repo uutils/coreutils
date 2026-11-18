@@ -1354,10 +1354,7 @@ fn test_invalid_overridden_count_is_rejected() {
             &["--line", "1,2", "-c1"][..],
             "head: invalid number of lines: '1,2'\n",
         ),
-        (
-            &["-vc1-3"][..],
-            "head: invalid number of bytes: '1-3'\n",
-        ),
+        (&["-vc1-3"][..], "head: invalid number of bytes: '1-3'\n"),
     ] {
         new_ucmd!().args(args).fails_with_code(1).stderr_is(message);
     }
