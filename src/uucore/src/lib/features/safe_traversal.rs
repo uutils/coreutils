@@ -247,6 +247,163 @@ const SEARCH_ONLY: Option<OFlag> = Some(OFlag::O_SEARCH);
 #[cfg(not(any(has_o_path, has_o_search)))]
 const SEARCH_ONLY: Option<OFlag> = None;
 
+/// Maximum number of open directory descriptors kept while descending a tree.
+pub const OPEN_DIR_FDS: usize = 16;
+
+/// View a Unix byte buffer as a [`Path`].
+pub fn path_of(buf: &[u8]) -> &Path {
+    Path::new(OsStr::from_bytes(buf))
+}
+
+/// Append a path component onto a shared byte buffer in place.
+pub fn path_push(buf: &mut Vec<u8>, name: &OsStr) {
+    if !buf.is_empty() && buf.last() != Some(&b'/') {
+        buf.push(b'/');
+    }
+    buf.extend_from_slice(name.as_bytes());
+}
+
+struct DirFrame {
+    dir_fd: Option<DirFd>,
+    path_len: usize,
+    dir_info: Option<FileInfo>,
+    entries: std::vec::IntoIter<OsString>,
+}
+
+/// Event yielded by [`DirWalker::next_step`].
+pub enum WalkStep<'a> {
+    /// Visit an entry `(parent_fd, entry_name, entry_path, depth)`.
+    Entry(&'a DirFd, OsString, &'a Path, usize),
+    /// Finished a subdirectory `(dir_path, depth)`.
+    Leave(&'a Path, usize),
+    /// Failed to read or reopen a directory `(dir_path, error)`.
+    Error(&'a Path, io::Error),
+}
+
+/// Bounded-descriptor iterative walker over a directory hierarchy.
+pub struct DirWalker {
+    path_buf: Vec<u8>,
+    stack: Vec<DirFrame>,
+    ancestors: std::collections::HashSet<FileInfo>,
+    aborted: bool,
+    pending_err: Option<(usize, io::Error)>,
+}
+
+impl DirWalker {
+    /// Start walking `root` from an already-open `dir_fd`.
+    pub fn new(dir_fd: DirFd, root: &Path) -> Self {
+        let path_buf = root.as_os_str().as_bytes().to_vec();
+        let mut ancestors = std::collections::HashSet::new();
+        let dir_info = dir_fd.metadata().ok().map(|m| m.file_info());
+        if let Some(info) = dir_info {
+            ancestors.insert(info);
+        }
+        let mut pending_err = None;
+        let entries = dir_fd.read_dir().unwrap_or_else(|err| {
+            pending_err = Some((path_buf.len(), err));
+            Vec::new()
+        });
+        Self {
+            stack: vec![DirFrame {
+                dir_fd: Some(dir_fd),
+                path_len: path_buf.len(),
+                dir_info,
+                entries: entries.into_iter(),
+            }],
+            path_buf,
+            ancestors,
+            aborted: false,
+            pending_err,
+        }
+    }
+
+    /// Push a newly opened directory frame while keeping physical directory fds bounded to `OPEN_DIR_FDS`.
+    /// Returns `false` if `dir_fd` is already an active ancestor (cycle).
+    pub fn push_dir(&mut self, dir_fd: DirFd) -> bool {
+        let dir_info = dir_fd.metadata().ok().map(|m| m.file_info());
+        if dir_info.is_some_and(|info| !self.ancestors.insert(info)) {
+            return false;
+        }
+        let entries = dir_fd.read_dir().unwrap_or_else(|err| {
+            self.pending_err = Some((self.path_buf.len(), err));
+            Vec::new()
+        });
+        if let Some(closable) = self.stack.len().checked_sub(OPEN_DIR_FDS)
+            && let Some(parent_info) = self.stack[closable].dir_info
+            && self.stack[closable + 1].dir_fd.as_ref().is_some_and(|fd| {
+                fd.metadata_at(OsStr::new(".."), SymlinkBehavior::NoFollow)
+                    .is_ok_and(|m| m.file_info() == parent_info)
+            })
+        {
+            self.stack[closable].dir_fd = None;
+        }
+        self.stack.push(DirFrame {
+            dir_fd: Some(dir_fd),
+            path_len: self.path_buf.len(),
+            dir_info,
+            entries: entries.into_iter(),
+        });
+        true
+    }
+
+    /// Return the next traversal event (`Entry`, post-order `Leave`, or `Error`).
+    pub fn next_step(&mut self) -> Option<WalkStep<'_>> {
+        if let Some((len, err)) = self.pending_err.take() {
+            return Some(WalkStep::Error(path_of(&self.path_buf[..len]), err));
+        }
+
+        if self.stack.len() > 1
+            && self
+                .stack
+                .last()
+                .is_some_and(|top| self.aborted || top.entries.as_slice().is_empty())
+        {
+            let popped = self.stack.pop()?;
+            if let Some(info) = popped.dir_info {
+                self.ancestors.remove(&info);
+            }
+            self.path_buf.truncate(popped.path_len);
+            let leave_depth = self.stack.len();
+            let parent = self.stack.last_mut()?;
+            if !self.aborted
+                && parent.dir_fd.is_none()
+                && let (Some(child_fd), Some(info)) = (popped.dir_fd, parent.dir_info)
+            {
+                match child_fd.reopen_parent(info) {
+                    Ok(fd) => parent.dir_fd = Some(fd),
+                    Err(err) => {
+                        self.pending_err = Some((parent.path_len, err));
+                        self.aborted = true;
+                    }
+                }
+            }
+            return Some(WalkStep::Leave(path_of(&self.path_buf), leave_depth));
+        }
+
+        if self.aborted {
+            return None;
+        }
+        let depth = self.stack.len();
+        let top = self.stack.last_mut()?;
+        let entry_name = top.entries.next()?;
+        self.path_buf.truncate(top.path_len);
+        path_push(&mut self.path_buf, &entry_name);
+        Some(WalkStep::Entry(
+            top.dir_fd.as_ref()?,
+            entry_name,
+            path_of(&self.path_buf),
+            depth,
+        ))
+    }
+
+    /// Stop reading the current directory and backtrack on the next iteration.
+    pub fn leave_dir(&mut self) {
+        if let Some(top) = self.stack.last_mut() {
+            top.entries = Vec::new().into_iter();
+        }
+    }
+}
+
 impl DirFd {
     /// Open a directory and return a file descriptor
     ///
@@ -303,6 +460,16 @@ impl DirFd {
             }
         })?;
         Ok(Self { fd })
+    }
+
+    /// Reopen the parent of `self` through `".."`, checking it matches `id`.
+    pub fn reopen_parent(&self, id: FileInfo) -> io::Result<Self> {
+        let parent_fd = self.open_subdir(OsStr::new(".."), SymlinkBehavior::NoFollow)?;
+        if parent_fd.metadata()?.file_info() == id {
+            Ok(parent_fd)
+        } else {
+            Err(io::Error::from(io::ErrorKind::NotFound))
+        }
     }
 
     /// Open a subdirectory relative to this directory
@@ -1844,5 +2011,100 @@ mod tests {
         // With follow_symlinks=false, should fail
         let result_nofollow = DirFd::open(&link, SymlinkBehavior::NoFollow);
         assert!(result_nofollow.is_err());
+    }
+
+    #[test]
+    fn test_reopen_parent_identity_check() {
+        let temp_dir = TempDir::new().unwrap();
+        let child = temp_dir.path().join("child");
+        fs::create_dir(&child).unwrap();
+
+        let parent_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::NoFollow).unwrap();
+        let child_fd = DirFd::open(&child, SymlinkBehavior::NoFollow).unwrap();
+        let parent_id = parent_fd.metadata().unwrap().file_info();
+        assert!(child_fd.reopen_parent(parent_id).is_ok());
+
+        let wrong_id = child_fd.metadata().unwrap().file_info();
+        match child_fd.reopen_parent(wrong_id) {
+            Err(err) => assert_eq!(err.kind(), io::ErrorKind::NotFound),
+            Ok(_) => panic!("expected NotFound on mismatched parent identity"),
+        }
+    }
+
+    #[test]
+    fn test_dir_walker_aborts_when_ancestor_moved() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path().join("chain");
+        fs::create_dir(&root).unwrap();
+        let mut chain = root.clone();
+        for i in 0..=OPEN_DIR_FDS + 2 {
+            chain.push(format!("d{i}"));
+            fs::create_dir(&chain).unwrap();
+        }
+        let root_fd = DirFd::open(&root, SymlinkBehavior::NoFollow).unwrap();
+        let mut walker = DirWalker::new(root_fd, &root);
+        let (mut renamed, mut errs, mut entries_after_err) = (false, 0usize, 0usize);
+        while let Some(step) = walker.next_step() {
+            match step {
+                WalkStep::Entry(fd, name, _, depth) => {
+                    if errs > 0 {
+                        entries_after_err += 1;
+                    }
+                    if depth == OPEN_DIR_FDS + 2 && !renamed {
+                        fs::rename(root.join("d0/d1"), temp_dir.path().join("moved")).unwrap();
+                        renamed = true;
+                    }
+                    if let Ok(sub) = fd.open_subdir(&name, SymlinkBehavior::NoFollow) {
+                        walker.push_dir(sub);
+                    }
+                }
+                WalkStep::Error(..) => errs += 1,
+                WalkStep::Leave(..) => {}
+            }
+        }
+        assert!(renamed);
+        assert_eq!(errs, 1);
+        assert_eq!(entries_after_err, 0);
+    }
+
+    #[test]
+    fn test_dir_walker_leave_dir() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir(temp_dir.path().join("sub")).unwrap();
+        fs::write(temp_dir.path().join("sub/s1"), b"x").unwrap();
+        fs::write(temp_dir.path().join("sub/s2"), b"x").unwrap();
+        fs::write(temp_dir.path().join("sibling"), b"x").unwrap();
+
+        let fd = DirFd::open(temp_dir.path(), SymlinkBehavior::NoFollow).unwrap();
+        let mut walker = DirWalker::new(fd, temp_dir.path());
+        let mut visited = Vec::new();
+        while let Some(step) = walker.next_step() {
+            if let WalkStep::Entry(top_fd, name, _, _) = step {
+                visited.push(name.clone());
+                if name == "sub" {
+                    if let Ok(sub_fd) = top_fd.open_subdir(&name, SymlinkBehavior::NoFollow) {
+                        walker.push_dir(sub_fd);
+                    }
+                } else if name == "s1" || name == "s2" {
+                    walker.leave_dir();
+                }
+            }
+        }
+        assert!(visited.contains(&OsString::from("sibling")));
+        assert_eq!(
+            visited.iter().filter(|n| *n == "s1" || *n == "s2").count(),
+            1
+        );
+
+        let root_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::NoFollow).unwrap();
+        let mut root_walker = DirWalker::new(root_fd, temp_dir.path());
+        let mut root_seen = 0;
+        while let Some(step) = root_walker.next_step() {
+            if matches!(step, WalkStep::Entry(..)) {
+                root_seen += 1;
+                root_walker.leave_dir();
+            }
+        }
+        assert_eq!(root_seen, 1);
     }
 }

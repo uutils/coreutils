@@ -2530,3 +2530,16 @@ fn test_recursive_dereference_changes_link_targets() {
         .no_output();
     assert_eq!(at.metadata("target").permissions().mode() & 0o777, 0o640);
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_deep_directory_traversal_no_stack_overflow() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let (leaf, sibling) = uutests::util::prepare_deep_traversal(&at.subdir, &mut ucmd);
+    ucmd.args(&["-R", "-L", "750", "d", "top"]).succeeds();
+    assert_eq!(metadata(leaf).unwrap().permissions().mode() & 0o777, 0o750);
+    assert_eq!(
+        metadata(sibling).unwrap().permissions().mode() & 0o777,
+        0o750
+    );
+}

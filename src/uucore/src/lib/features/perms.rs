@@ -16,20 +16,17 @@ use clap::{Arg, ArgMatches, Command};
 
 use options::traverse;
 #[cfg(target_os = "linux")]
-use std::collections::HashSet;
-#[cfg(target_os = "linux")]
 use std::ffi::OsStr;
 use std::ffi::OsString;
 
 #[cfg(not(target_os = "linux"))]
 use walkdir::WalkDir;
 
-#[cfg(target_os = "linux")]
-use crate::features::fs::FileInformation;
 use crate::features::fs::{metadata_is_root_dir, path_is_root_dir};
 #[cfg(target_os = "linux")]
 use crate::features::safe_traversal::{
-    DirFd, FileInfo, Metadata as TraversalMetadata, PinnedFile, SymlinkBehavior,
+    DirFd, DirWalker, FileInfo, Metadata as TraversalMetadata, PinnedFile, SymlinkBehavior,
+    WalkStep,
 };
 
 use std::fs::Metadata;
@@ -520,84 +517,63 @@ impl ChownExecutor {
             dir_fd
         };
 
-        let mut ancestors = HashSet::new();
         let mut ret = 0;
-        self.safe_traverse_dir(&dir_fd, root, &mut ret, &mut ancestors);
+        self.safe_traverse_dir(dir_fd, root, &mut ret);
         ret
     }
 
     #[cfg(target_os = "linux")]
-    fn safe_traverse_dir(
-        &self,
-        dir_fd: &DirFd,
-        dir_path: &Path,
-        ret: &mut i32,
-        ancestors: &mut HashSet<FileInformation>,
-    ) {
-        // Cycle detection: identify this directory by (dev, ino) via the already-open
-        // fd. Using the fd is TOCTOU-safe (no path re-resolution through symlinks) and
-        // avoids a redundant path walk. If it's already on the current path, it's a cycle.
-        let dir_info = FileInformation::from_file(dir_fd).ok();
-        if dir_info
-            .as_ref()
-            .is_some_and(|info| !ancestors.insert(info.clone()))
-        {
-            return; // cycle detected, stop silently
-        }
-
-        // Read directory entries
-        let entries = match dir_fd.read_dir() {
-            Ok(entries) => entries,
-            Err(e) => {
-                *ret = 1;
-                if self.verbosity.level != VerbosityLevel::Silent {
-                    show_error!(
-                        "cannot read directory {}: {}",
-                        dir_path.quote(),
-                        strip_errno(&e)
-                    );
-                }
-                return;
+    fn safe_traverse_dir(&self, dir_fd: DirFd, dir_path: &Path, ret: &mut i32) {
+        let follow = self.traverse_symlinks == TraverseSymlinks::All;
+        let report_access = |ret: &mut i32, path: &Path, e: std::io::Error| {
+            *ret = 1;
+            if self.verbosity.level != VerbosityLevel::Silent {
+                show_error!(
+                    "{}",
+                    translate!("perms-cannot-access", "file" => path.quote(), "error" => strip_errno(&e))
+                );
             }
         };
 
-        for entry_name in entries {
-            let entry_path = dir_path.join(&entry_name);
+        let mut walker = DirWalker::new(dir_fd, dir_path);
 
-            // Get metadata for the entry
-            let follow = self.traverse_symlinks == TraverseSymlinks::All;
-
-            let meta = match dir_fd.metadata_at(&entry_name, follow.into()) {
-                Ok(m) => m,
-                Err(e) => {
+        while let Some(step) = walker.next_step() {
+            let (top_fd, entry_name, entry_path) = match step {
+                WalkStep::Entry(fd, name, path, _) => (fd, name, path),
+                WalkStep::Leave(..) => continue,
+                WalkStep::Error(path, e) => {
                     *ret = 1;
                     if self.verbosity.level != VerbosityLevel::Silent {
                         show_error!(
-                            "{}",
-                            translate!("perms-cannot-access", "file" => entry_path.quote(), "error" => strip_errno(&e))
+                            "cannot read directory {}: {}",
+                            path.quote(),
+                            strip_errno(&e)
                         );
                     }
                     continue;
                 }
             };
+            let meta = match top_fd.metadata_at(&entry_name, follow.into()) {
+                Ok(m) => m,
+                Err(e) => {
+                    report_access(ret, entry_path, e);
+                    continue;
+                }
+            };
 
-            if self.preserve_root
-                && is_root(&entry_path, self.traverse_symlinks == TraverseSymlinks::All)
-            {
+            if self.preserve_root && is_root(entry_path, follow) {
                 *ret = 1;
-                return;
+                walker.leave_dir();
+                continue;
             }
 
-            // Check if we should chown this entry
             if self.matched(meta.uid(), meta.gid()) {
-                let follow_symlinks =
-                    self.dereference || self.traverse_symlinks == TraverseSymlinks::All;
-
-                let changed = self.chown_entry(dir_fd, &entry_name, &meta, follow_symlinks);
+                let follow_symlinks = self.dereference || follow;
+                let changed = self.chown_entry(top_fd, &entry_name, &meta, follow_symlinks);
                 if let Ok(false) = changed {
                     // Replaced: as with GNU, fail with no error, only -v's line.
                     *ret = 1;
-                    self.report_failed_change(&entry_path, &meta);
+                    self.report_failed_change(entry_path, &meta);
                 } else if let Err(e) = changed {
                     *ret = 1;
                     if self.verbosity.level != VerbosityLevel::Silent {
@@ -613,13 +589,12 @@ impl ChownExecutor {
                         );
                         show_error!("{msg}");
                     }
-                    self.report_failed_change(&entry_path, &meta);
+                    self.report_failed_change(entry_path, &meta);
                 } else {
-                    // Report the successful ownership change using the shared helper
-                    self.report_ownership_change_success(&entry_path, meta.uid(), meta.gid());
+                    self.report_ownership_change_success(entry_path, meta.uid(), meta.gid());
                 }
             } else if self.print_verbose_ownership_retained_as(
-                &entry_path,
+                entry_path,
                 meta.uid(),
                 self.dest_gid.map(|_| meta.gid()),
             ) != 0
@@ -627,33 +602,15 @@ impl ChownExecutor {
                 *ret = 1;
             }
 
-            // Recurse into subdirectories. Open with the same symlink behavior
-            // used for the stat above: with NoFollow (the default, `-P`/`-H`) an
-            // attacker that swaps the just-stat'd directory for a symlink between
-            // the stat and this open cannot redirect the descent off-tree
-            // (O_NOFOLLOW makes openat fail). Only follow when `-L` was requested.
-            if meta.is_dir() && (follow || !meta.file_type().is_symlink()) {
-                match dir_fd.open_subdir(&entry_name, follow.into()) {
+            if meta.is_dir() {
+                // Use NoFollow when not `-L` so a dir swapped for a symlink after stat fails openat.
+                match top_fd.open_subdir(&entry_name, follow.into()) {
                     Ok(subdir_fd) => {
-                        self.safe_traverse_dir(&subdir_fd, &entry_path, ret, ancestors);
+                        walker.push_dir(subdir_fd);
                     }
-                    Err(e) => {
-                        *ret = 1;
-                        if self.verbosity.level != VerbosityLevel::Silent {
-                            show_error!(
-                                "{}",
-                                translate!("perms-cannot-access", "file" => entry_path.quote(), "error" => strip_errno(&e))
-                            );
-                        }
-                    }
+                    Err(e) => report_access(ret, entry_path, e),
                 }
             }
-        }
-
-        // Backtrack so sibling subtrees that legitimately reach the same directory
-        // (e.g. two symlinks to one dir) are not mistaken for cycles.
-        if let Some(info) = dir_info {
-            ancestors.remove(&info);
         }
     }
 
