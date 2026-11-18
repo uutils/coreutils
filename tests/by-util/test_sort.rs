@@ -2406,6 +2406,26 @@ fn test_merge_output_is_hard_link_to_multiple_inputs(#[case] args: &[&str]) {
 }
 
 #[test]
+fn test_merge_output_is_stdin() {
+    // `sort -m -o ledger - updates < ledger`: standard input is the output
+    // file, so it must be read before the output truncates it.
+    let mut ledger = String::new();
+    for i in 1..=10_000 {
+        writeln!(ledger, "{i:05}").unwrap();
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("ledger", &ledger);
+    at.write("updates", "10001\n");
+
+    ucmd.args(&["-m", "-o", "ledger", "-", "updates"])
+        .set_stdin(std::fs::File::open(at.plus("ledger")).unwrap())
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("ledger"), ledger + "10001\n");
+}
+
+#[test]
 fn test_output_file_is_truncated() {
     // The output file is opened without O_TRUNC (so it can also be an input),
     // then truncated before writing: no leftover bytes may survive the sort.
