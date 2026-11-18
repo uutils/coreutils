@@ -5969,6 +5969,18 @@ fn test_invalid_overridden_count_is_rejected() {
             &["-n", "1,2", "-c2"][..],
             "tail: invalid number of lines: '1,2'\n",
         ),
+        (
+            &["--byte=1,2", "-n1"][..],
+            "tail: invalid number of bytes: '1,2'\n",
+        ),
+        (
+            &["--line", "1,2", "-c1"][..],
+            "tail: invalid number of lines: '1,2'\n",
+        ),
+        (
+            &["-n1,2", "-c2"][..],
+            "tail: invalid number of lines: '1,2'\n",
+        ),
     ] {
         new_ucmd!().args(args).fails_with_code(1).stderr_is(message);
     }
