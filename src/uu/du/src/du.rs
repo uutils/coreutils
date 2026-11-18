@@ -562,9 +562,7 @@ fn safe_du(
 
         // Check excludes
         for pattern in &options.excludes {
-            if pattern.matches(&this_stat.path.to_string_lossy())
-                || pattern.matches(&entry_name.to_string_lossy())
-            {
+            if is_excluded(pattern, &this_stat.path) {
                 if options.verbose {
                     println!(
                         "{}",
@@ -722,12 +720,7 @@ fn du_regular(
 
                             // We have an exclude list
                             for pattern in &options.excludes {
-                                // Look at all patterns with both short and long paths
-                                // if we have 'du foo' but search to exclude 'foo/bar'
-                                // we need the full path
-                                if pattern.matches(&this_stat.path.to_string_lossy())
-                                    || pattern.matches(&entry.file_name().into_string().unwrap())
-                                {
+                                if is_excluded(pattern, &this_stat.path) {
                                     // if the directory is ignored, leave early
                                     if options.verbose {
                                         println!(
@@ -847,6 +840,17 @@ fn file_as_vec(filename: impl AsRef<Path>) -> UResult<Vec<String>> {
     let buf = BufReader::new(file);
     let lines = buf.lines().collect::<Result<Vec<String>, _>>()?;
     Ok(lines)
+}
+
+/// Whether `pattern` matches `path` or a trailing part of it that starts
+/// after a separator, so `target/debug` excludes `./target/debug` and
+/// `x/target/debug` but `get/debug` does not.
+fn is_excluded(pattern: &Pattern, path: &Path) -> bool {
+    let path = path.to_string_lossy();
+    pattern.matches(&path)
+        || path
+            .char_indices()
+            .any(|(i, c)| std::path::is_separator(c) && pattern.matches(&path[i + 1..]))
 }
 
 /// Given the `--exclude-from` and/or `--exclude` arguments, returns the globset lists
@@ -1253,7 +1257,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if !&traversal_options.excludes.is_empty() {
             let path_string = path.to_string_lossy();
             for pattern in &traversal_options.excludes {
-                if pattern.matches(&path_string) {
+                if is_excluded(pattern, &path) {
                     // if the directory is ignored, leave early
                     if traversal_options.verbose {
                         println!(
