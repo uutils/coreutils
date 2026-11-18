@@ -1811,3 +1811,22 @@ fn test_strings_with_type_option_is_error() {
             .stderr_contains("no type may be specified when dumping strings");
     }
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "an offset overflow must be diagnosed"]
+fn test_skip_near_max_offset_reports_overflow() {
+    let skip = (i64::MAX - 3).to_string();
+    new_ucmd!()
+        .args(&["-A", "d", "-t", "u2", "-j", &skip, "/dev/zero"])
+        .timeout(std::time::Duration::from_secs(5))
+        .fails_with_code(1)
+        .stdout_is(format!("{}{}\n", i64::MAX - 3, "     0".repeat(8)))
+        .stderr_is("od: offset overflow\n");
+    new_ucmd!()
+        .args(&["-A", "d", "-S", "4", "-j", &skip, "/dev/zero"])
+        .timeout(std::time::Duration::from_secs(5))
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("od: offset overflow\n");
+}

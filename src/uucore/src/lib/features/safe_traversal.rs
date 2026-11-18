@@ -809,12 +809,7 @@ pub fn proc_fd_path(fd: BorrowedFd<'_>) -> PathBuf {
     PathBuf::from(format!("/proc/self/fd/{}", fd.as_raw_fd()))
 }
 
-/// File information for tracking inodes
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct FileInfo {
-    pub dev: u64,
-    pub ino: u64,
-}
+pub use crate::features::fs::FileInfo;
 
 impl FileInfo {
     pub fn from_stat(stat: &FileStat) -> Self {
@@ -824,21 +819,6 @@ impl FileInfo {
             dev: stat.st_dev as u64,
             ino: stat.st_ino as u64,
         }
-    }
-
-    /// Create [`FileInfo`] from device and inode numbers
-    pub fn new(dev: u64, ino: u64) -> Self {
-        Self { dev, ino }
-    }
-
-    /// Get the device number
-    pub fn device(&self) -> u64 {
-        self.dev
-    }
-
-    /// Get the inode number
-    pub fn inode(&self) -> u64 {
-        self.ino
     }
 }
 

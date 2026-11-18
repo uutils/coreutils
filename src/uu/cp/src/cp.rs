@@ -1570,7 +1570,7 @@ fn construct_dest_path(
     if options.no_target_dir && target.is_dir() {
         return Err(
             translate!("cp-error-cannot-overwrite-directory-with-non-directory",
-                              "dir" => target.quote())
+                              "dir" => target.quote(), "source" => source_path.quote())
             .into(),
         );
     }
@@ -2107,39 +2107,22 @@ fn symlink_file(
     dest: &Path,
     symlinked_files: &mut HashSet<FileInformation>,
 ) -> CopyResult<()> {
-    #[cfg(not(any(windows, target_os = "wasi")))]
-    {
-        std::os::unix::fs::symlink(source, dest).map_err(|e| {
-            CpError::IoErrContext(
-                e,
-                translate!("cp-error-cannot-create-symlink",
-                           "dest" => get_filename(dest).unwrap_or("?").quote(),
-                           "source" => get_filename(source).unwrap_or("?").quote()),
-            )
-        })?;
-    }
-    #[cfg(windows)]
-    {
-        std::os::windows::fs::symlink_file(source, dest).map_err(|e| {
-            CpError::IoErrContext(
-                e,
-                translate!("cp-error-cannot-create-symlink",
-                           "dest" => get_filename(dest).unwrap_or("?").quote(),
-                           "source" => get_filename(source).unwrap_or("?").quote()),
-            )
-        })?;
-    }
+    #[cfg(unix)]
+    let res = std::os::unix::fs::symlink(source, dest);
     #[cfg(target_os = "wasi")]
-    {
-        platform::create_symlink(source, dest).map_err(|e| {
-            CpError::IoErrContext(
-                e,
-                translate!("cp-error-cannot-create-symlink",
+    // <https://doc.rust-lang.org/std/os/wasi/fs/fn.symlink_path.html> is nightly API
+    let res = rustix::fs::symlink(source, dest).map_err(io::Error::from);
+    #[cfg(windows)]
+    let res = std::os::windows::fs::symlink_file(source, dest);
+
+    res.map_err(|e| {
+        CpError::IoErrContext(
+            e,
+            translate!("cp-error-cannot-create-symlink",
                            "dest" => get_filename(dest).unwrap_or("?").quote(),
                            "source" => get_filename(source).unwrap_or("?").quote()),
-            )
-        })?;
-    }
+        )
+    })?;
     if let Ok(file_info) = FileInformation::from_path(dest, false) {
         symlinked_files.insert(file_info);
     }

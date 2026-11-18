@@ -239,15 +239,13 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::env;
     use uucore::locale;
 
     #[test]
     fn test_parse_spec() {
-        unsafe {
-            env::set_var("LANG", "C");
-        }
-        let _ = locale::setup_localization("chown");
+        temp_env::with_var("LANG", Some("C"), || {
+            let _ = locale::setup_localization("chown");
+        });
         assert!(matches!(parse_spec(":", ':'), Ok((None, None))));
         assert!(matches!(parse_spec(".", ':'), Ok((None, None))));
         assert!(matches!(parse_spec(".", '.'), Ok((None, None))));

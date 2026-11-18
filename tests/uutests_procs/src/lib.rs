@@ -43,6 +43,9 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
         "DirectoryModesUmaskNotFaithful" => {
             "WASI: directory modes/umask are not faithfully reproduced"
         }
+        "DirectorySizeFromMetadata" => {
+            "WASI: the guest is not Unix, so a directory's size comes from its metadata rather than from a seek to its end"
+        }
         "DotDotCanonicalizationDiffers" => {
             "WASI sandbox: relative '..' path canonicalization differs, causing a false self-copy detection"
         }
@@ -113,9 +116,6 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
         "StdoutDashUnsupported" => "WASI: touch - (stdout) is unsupported",
         "SymlinkHardlinkCaps" => {
             "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
-        }
-        "SymlinkLoopNoEloop" => {
-            "WASI: symlink loop traversal does not surface ELOOP ('Too many levels of symbolic links')"
         }
         "TailFollowDisabled" => "WASI: tail follow mode disabled",
         "UnsupportedStdApi" => {

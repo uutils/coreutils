@@ -222,7 +222,7 @@ fn char_constant_warning_preserves_prior_failure() {
         .args(&["%d\n", "bad", "'ab"])
         .fails_with_code(1)
         .stdout_is("0\n97\n")
-        .stderr_is("printf: 'bad': expected a numeric value\nprintf: warning: b: character(s) following character constant have been ignored\n");
+        .stderr_is("printf: 'bad': expected a numeric value\nprintf: warning: 'b': character(s) following character constant have been ignored\n");
 
     new_ucmd!()
         .args(&["%d\n", "bad", "'ab"])
@@ -509,7 +509,15 @@ fn partial_char() {
         .succeeds()
         .stdout_is("97")
         .stderr_is(
-            "printf: warning: bc: character(s) following character constant have been ignored\n",
+            "printf: warning: 'bc': character(s) following character constant have been ignored\n",
+        );
+
+    new_ucmd!()
+        .args(&["%d", "'Z\tW"])
+        .succeeds()
+        .stdout_is("90")
+        .stderr_is(
+            "printf: warning: '\\tW': character(s) following character constant have been ignored\n",
         );
 }
 
@@ -531,7 +539,7 @@ fn partial_char_posixly_correct() {
     // Without POSIXLY_CORRECT the warning is still emitted.
     for (arg, rest) in [("'AB", "B"), ("'ABC", "BC"), ("\"AB", "B"), ("'-1", "1")] {
         new_ucmd!().args(&["%d", arg]).succeeds().stderr_is(format!(
-            "printf: warning: {rest}: character(s) following character constant have been ignored\n"
+            "printf: warning: '{rest}': character(s) following character constant have been ignored\n"
         ));
     }
 }
@@ -909,13 +917,22 @@ fn mb_input() {
     }
 
     let cases = vec![
-        ("%04x\n", "\"á=", "00e1\n", "="),
-        ("%04x\n", "'á-", "00e1\n", "-"),
-        ("%04x\n", "'á=-==", "00e1\n", "=-=="),
-        ("%04x\n", "'á'", "00e1\n", "'"),
-        ("%04x\n", "'\u{e1}++", "00e1\n", "++"),
-        ("%04x\n", "''á'", "0027\n", "á'"),
-        ("%i\n", "\"á=", "225\n", "="),
+        ("%04x\n", "\"á=", "00e1\n", "'='"),
+        ("%04x\n", "'á-", "00e1\n", "'-'"),
+        ("%04x\n", "'á=-==", "00e1\n", "'=-=='"),
+        ("%04x\n", "'á'", "00e1\n", "\"'\""),
+        ("%04x\n", "'\u{e1}++", "00e1\n", "'++'"),
+        (
+            "%04x\n",
+            "''á'",
+            "0027\n",
+            if cfg!(windows) {
+                "\"\\303\\241'\""
+            } else {
+                "'\\303\\241'\\'"
+            },
+        ),
+        ("%i\n", "\"á=", "225\n", "'='"),
     ];
     for (format, arg, stdout, stderr) in cases {
         new_ucmd!()
@@ -956,10 +973,10 @@ fn mb_invalid_unicode() {
     }
 
     let cases = vec![
-        (b"\"\xe1=".as_slice(), "="),
-        (b"'\xe1-".as_slice(), "-"),
-        (b"'\xe1=-==".as_slice(), "=-=="),
-        (b"'\xe1'".as_slice(), "'"),
+        (b"\"\xe1=".as_slice(), "'='"),
+        (b"'\xe1-".as_slice(), "'-'"),
+        (b"'\xe1=-==".as_slice(), "'=-=='"),
+        (b"'\xe1'".as_slice(), "\"'\""),
         // unclear if original or replacement character is better in stderr
         //(b"''\xe1'".as_slice(), "'�'"),
     ];
@@ -1373,6 +1390,25 @@ fn help_and_version_past_the_format_are_arguments() {
         .stdout_only("--help");
 }
 
+#[rstest]
+#[case::version_then_operand(&["--version", "x"], "--version", "x")]
+#[case::help_then_operand(&["--help", "x"], "--help", "x")]
+#[case::help_then_double_dash(&["--help", "--"], "--help", "--")]
+#[case::version_then_help(&["--version", "--help"], "--version", "--help")]
+fn help_and_version_with_more_arguments_are_the_format(
+    #[case] args: &[&str],
+    #[case] stdout: &str,
+    #[case] excess: &str,
+) {
+    new_ucmd!()
+        .args(args)
+        .succeeds()
+        .stdout_is(stdout)
+        .stderr_is(format!(
+            "printf: warning: ignoring excess arguments, starting with '{excess}'\n"
+        ));
+}
+
 #[test]
 fn test_precision_above_formatter_limit() {
     // A precision larger than u16::MAX must still be honoured in full.
@@ -1414,4 +1450,20 @@ fn test_zero_precision_above_formatter_limit() {
         .args(&["%#.70000g", "0"])
         .succeeds()
         .stdout_only(format!("0.{}", &zeros[1..]));
+}
+
+#[test]
+#[ignore = "the ignored characters must be quoted in the warning"]
+fn test_ignored_chars_warning_is_quoted() {
+    let warning = "character(s) following character constant have been ignored";
+    new_ucmd!()
+        .args(&["%x\n", "'ABC"])
+        .succeeds()
+        .stdout_is("41\n")
+        .stderr_is(format!("printf: warning: 'BC': {warning}\n"));
+    new_ucmd!()
+        .args(&["%d\n", "'Z\tW"])
+        .succeeds()
+        .stdout_is("90\n")
+        .stderr_is(format!("printf: warning: '\\tW': {warning}\n"));
 }
