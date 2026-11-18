@@ -39,13 +39,33 @@ impl WatcherRx {
     }
 
     /// Wrapper for `notify::Watcher::watch` to also add the parent directory of `path` if necessary.
-    fn watch_with_parent(&mut self, path: &Path) -> UResult<()> {
+    fn watch_with_parent(&mut self, path: &Path, use_polling: bool) -> UResult<()> {
+        #[cfg(not(target_os = "linux"))]
+        let _ = use_polling;
+        #[cfg(target_os = "linux")]
+        if path
+            .metadata()
+            .is_ok_and(|metadata| metadata.file_type().is_char_device())
+        {
+            self.watch(path, RecursiveMode::NonRecursive)?;
+            // Native events catch replacement of the device's name. PollWatcher
+            // already checks that path; watching its parent would also hash siblings.
+            if !use_polling && let Some(parent) = path.parent() {
+                match self.watcher.watch(parent, RecursiveMode::NonRecursive) {
+                    Ok(()) => (),
+                    // Reading a device only needs search permission on its parent.
+                    Err(notify::Error {
+                        kind: notify::ErrorKind::Io(err),
+                        ..
+                    }) if err.kind() == std::io::ErrorKind::PermissionDenied => (),
+                    Err(err) => return Err(USimpleError::new(1, err.to_string())),
+                }
+            }
+            return Ok(());
+        }
         let mut path = path.to_owned();
         #[cfg(target_os = "linux")]
-        if path.metadata().is_ok_and(|metadata| {
-            let kind = metadata.file_type();
-            kind.is_file() || kind.is_char_device()
-        }) {
+        if path.is_file() {
             // The directory watch reports a write to a symlink's target under
             // the target's name, not the link's, so also watch the link: it is
             // another inode than the directory and nothing is reported twice.
@@ -285,7 +305,7 @@ impl Observer {
 
                         if path.is_tailable() {
                             // Add existing regular files to `Watcher` (InotifyWatcher).
-                            watcher_rx.watch_with_parent(&path)?;
+                            watcher_rx.watch_with_parent(&path, self.use_polling)?;
                         } else if let Some(active_parent) = path.parent().filter(|p| p.is_dir()) {
                             // If `path` is not a tailable file, add its parent to `Watcher`.
                             watcher_rx.watch(active_parent, RecursiveMode::NonRecursive)?;
@@ -520,7 +540,7 @@ impl Observer {
 
                     // Unwatch old path and watch new path
                     let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
-                    self.watcher_rx.as_mut().unwrap().watch_with_parent(new_path)?;
+                    self.watcher_rx.as_mut().unwrap().watch_with_parent(new_path, self.use_polling)?;
                 }
             _ => {}
         }
@@ -582,7 +602,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                             .watcher_rx
                             .as_mut()
                             .unwrap()
-                            .watch_with_parent(new_path)?;
+                            .watch_with_parent(new_path, observer.use_polling)?;
                     }
                 }
             }

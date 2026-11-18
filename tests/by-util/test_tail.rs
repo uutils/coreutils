@@ -5737,16 +5737,97 @@ fn test_follow_character_device_keeps_file_notifications(#[case] follow: &str) {
 }
 
 #[uutests::wasi_ignore(TailFollowDisabled)]
+#[rstest]
+#[case("-f")]
+#[case("-F")]
+#[cfg(target_os = "linux")]
+fn test_follow_character_device_unreadable_parent(
+    #[case] follow: &str,
+    #[values(false, true)] use_polling: bool,
+) {
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (path, mut controller, _replica) = uutests::util::pty_path();
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkdir("dir");
+    ts.fixtures.symlink_file(&path, "dir/input");
+    ts.fixtures.set_mode("dir", 0o111);
+    let mut command = ts.ucmd();
+    command.args(&["-n0", "-s.1", follow, "dir/input"]);
+    if use_polling {
+        command.arg("--use-polling");
+    }
+    let mut child = command.run_no_wait();
+    controller.write_all(b"\x04").unwrap();
+    controller.write_all(b"device\x04").unwrap();
+    for _ in 0..500 {
+        if child.stdout_all() == "device" {
+            break;
+        }
+        child.delay(10);
+    }
+    // Restore permissions before asserting so the fixture can be removed on failure.
+    ts.fixtures.set_mode("dir", 0o700);
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_is("device")
+        .no_stderr();
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
 #[test]
 #[cfg(target_os = "linux")]
-fn test_follow_character_device_replaced_by_file() {
+fn test_follow_character_device_polling_does_not_read_siblings() {
+    use rustix::fs::inotify::{self, CreateFlags, WatchFlags};
+
     let (path, mut controller, _replica) = uutests::util::pty_path();
     let ts = TestScenario::new(util_name!());
     ts.fixtures.symlink_file(&path, "input");
+    ts.fixtures.write("unrelated", "leave this file alone\n");
+    let events = inotify::init(CreateFlags::NONBLOCK | CreateFlags::CLOEXEC).unwrap();
+    inotify::add_watch(&events, ts.fixtures.plus("unrelated"), WatchFlags::ACCESS).unwrap();
+
     let mut child = ts
         .ucmd()
-        .args(&["-n0", "-s.1", "-F", "input"])
+        .args(&["-n0", "-s.1", "-F", "--use-polling", "input"])
         .run_no_wait();
+    controller.write_all(b"\x04").unwrap();
+    controller.write_all(b"device\x04").unwrap();
+    for _ in 0..500 {
+        if child.stdout_all() == "device" {
+            break;
+        }
+        child.delay(10);
+    }
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_is("device")
+        .no_stderr();
+    assert_eq!(
+        rustix::io::read(&events, &mut [0_u8; 512]),
+        Err(rustix::io::Errno::WOULDBLOCK),
+        "polling a device must not read unrelated files in its directory"
+    );
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[rstest]
+#[cfg(target_os = "linux")]
+fn test_follow_character_device_replaced_by_file(#[values(false, true)] use_polling: bool) {
+    let (path, mut controller, _replica) = uutests::util::pty_path();
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.symlink_file(&path, "input");
+    let mut command = ts.ucmd();
+    command.args(&["-n0", "-s.1", "-F", "input"]);
+    if use_polling {
+        command.arg("--use-polling");
+    }
+    let mut child = command.run_no_wait();
     controller.write_all(b"\x04").unwrap();
     controller.write_all(b"device\x04").unwrap();
     for _ in 0..500 {
@@ -5765,11 +5846,18 @@ fn test_follow_character_device_replaced_by_file() {
         }
         child.delay(10);
     }
+    ts.fixtures.append("input", "more\n");
+    for _ in 0..500 {
+        if child.stdout_all().contains("more\n") {
+            break;
+        }
+        child.delay(10);
+    }
     child
         .kill()
         .make_assertion()
         .with_all_output()
-        .stdout_is("deviceregular\n")
+        .stdout_is("deviceregular\nmore\n")
         .stderr_contains("'input' has been replaced;  following new file");
 }
 
