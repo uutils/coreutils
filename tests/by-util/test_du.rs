@@ -2819,6 +2819,39 @@ fn test_du_negative_max_depth_is_rejected() {
 }
 
 #[test]
+fn test_du_summarize_with_max_depth() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("deep");
+    at.mkdir("deep/deeper");
+
+    // A depth of 0 is what -s means anyway: GNU only warns.
+    for args in [&["-s", "--max-depth=0"][..], &["-d", "0", "-s"][..]] {
+        ts.ucmd()
+            .args(args)
+            .arg("deep")
+            .succeeds()
+            .stdout_contains("deep")
+            .stdout_does_not_contain("deeper")
+            .stderr_is("du: warning: summarizing is the same as using --max-depth=0\n");
+    }
+
+    // Any other depth conflicts with -s.
+    ts.ucmd()
+        .args(&["-s", "--max-depth=1", "deep"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("du: summarizing conflicts with --max-depth=");
+
+    // An invalid depth is reported as such, -s or not.
+    ts.ucmd()
+        .args(&["-s", "--max-depth=abc", "deep"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("du: invalid maximum depth 'abc'");
+}
+
+#[test]
 fn test_du_repeated_v() {
     new_ucmd!().args(&["-s", "-v", "-v"]).succeeds();
 }
