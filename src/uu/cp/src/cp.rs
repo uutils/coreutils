@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDO) copydir fiemap linkgs lstat nlink nlinks pathbuf reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
 // spell-checker:ignore RDONLY futimens utimensat unioned
 
+use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
@@ -1918,7 +1919,7 @@ pub(crate) fn copy_attributes(
     // does not give the copying user elevated privileges via the copy.
     // Matches GNU cp. See issue #9750.
     #[cfg(unix)]
-    let ownership_preserved = std::cell::Cell::new(true);
+    let ownership_preserved = Cell::new(true);
 
     // Ownership must be changed first to avoid interfering with mode change.
     #[cfg(unix)]
@@ -2150,6 +2151,31 @@ fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyRe
     Ok(())
 }
 
+/// Restore a created backup over `dest` on a best-effort basis.
+///
+/// This restores the original destination's timestamps for non-symlink destinations,
+/// clears a read-only attribute on Windows, then renames the backup over `dest`.
+/// All operations ignore errors; the caller reports the original copy failure.
+/// Whether to call this is decided separately by the caller.
+fn restore_backup(dest: &Path, backup_path: &Path, metadata: Option<&Metadata>) {
+    if let Some(metadata) = metadata
+        && !metadata.file_type().is_symlink()
+        && let (Ok(atime), Ok(mtime)) = (metadata.accessed(), metadata.modified())
+    {
+        let _ = filetime::set_file_times(backup_path, FileTime::from(atime), FileTime::from(mtime));
+    }
+    #[cfg(windows)]
+    if let Ok(metadata) = fs::symlink_metadata(dest) {
+        let mut permissions = metadata.permissions();
+        if permissions.readonly() {
+            #[allow(clippy::permissions_set_readonly_false)]
+            permissions.set_readonly(false);
+            let _ = fs::set_permissions(dest, permissions);
+        }
+    }
+    let _ = fs::rename(backup_path, dest);
+}
+
 /// Decide whether `source` and `dest` are the same directory entry, as opposed
 /// to merely being two different hard links to the same inode.
 fn paths_are_same_entry(source: &Path, dest: &Path) -> bool {
@@ -2250,7 +2276,8 @@ fn handle_existing_dest(
     options: &Options,
     source_in_command_line: bool,
     copied_files: &HashMap<FileInformation, PathBuf>,
-) -> CopyResult<()> {
+    destination_changed: &Cell<bool>,
+) -> CopyResult<Option<PathBuf>> {
     // Disallow copying a file to itself, unless `--force` and
     // `--backup` are both specified.
     if is_forbidden_to_copy_to_same_file(source, dest, options, source_in_command_line) {
@@ -2273,13 +2300,16 @@ fn handle_existing_dest(
 
     let mut is_dest_removed = false;
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
-    if let Some(backup_path) = backup_path {
+    if let Some(backup_path) = &backup_path {
         if backup_would_destroy_source(source, dest, &options.backup_suffix, options.backup, true) {
             return Err(translate!("cp-error-backing-up-destroy-source", "dest" => dest.quote(), "source" => source.quote())
             .into());
         }
         is_dest_removed = dest.is_symlink();
-        backup_dest(dest, &backup_path, is_dest_removed)?;
+        backup_dest(dest, backup_path, is_dest_removed)?;
+        if is_dest_removed {
+            destination_changed.set(true);
+        }
     }
     if !is_dest_removed {
         delete_dest_if_needed_and_allowed(
@@ -2288,10 +2318,11 @@ fn handle_existing_dest(
             options,
             source_in_command_line,
             copied_files,
+            destination_changed,
         )?;
     }
 
-    Ok(())
+    Ok(backup_path)
 }
 
 /// Checks if:
@@ -2305,6 +2336,7 @@ fn delete_dest_if_needed_and_allowed(
     options: &Options,
     source_in_command_line: bool,
     copied_files: &HashMap<FileInformation, PathBuf>,
+    destination_changed: &Cell<bool>,
 ) -> CopyResult<()> {
     let delete_dest = match options.overwrite {
         OverwriteMode::Clobber(cl) | OverwriteMode::Interactive(cl) => {
@@ -2347,13 +2379,13 @@ fn delete_dest_if_needed_and_allowed(
     };
 
     if delete_dest {
-        delete_path(dest, options)
+        delete_path(dest, options, destination_changed)
     } else {
         Ok(())
     }
 }
 
-fn delete_path(path: &Path, options: &Options) -> CopyResult<()> {
+fn delete_path(path: &Path, options: &Options, destination_changed: &Cell<bool>) -> CopyResult<()> {
     // Windows requires clearing readonly attribute before deletion when using --force
     #[cfg(windows)]
     if options.force()
@@ -2366,6 +2398,7 @@ fn delete_path(path: &Path, options: &Options) -> CopyResult<()> {
 
     match fs::remove_file(path) {
         Ok(()) => {
+            destination_changed.set(true);
             if options.verbose {
                 println!(
                     "{}",
@@ -2559,6 +2592,7 @@ fn handle_copy_mode(
     symlinked_files: &mut HashSet<FileInformation>,
     source_in_command_line: bool,
     created_parent_dirs: &mut HashSet<PathBuf>,
+    destination_changed: &Cell<bool>,
 ) -> CopyResult<PerformedAction> {
     match options.copy_mode {
         CopyMode::Link => {
@@ -2568,7 +2602,7 @@ fn handle_copy_mode(
                     backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
                 if let Some(backup_path) = backup_path {
                     backup_dest(dest, &backup_path, dest.is_symlink())?;
-                    fs::remove_file(dest)?;
+                    fs::remove_file(dest).inspect(|_| destination_changed.set(true))?;
                 }
                 force = options.overwrite == OverwriteMode::Clobber(ClobberMode::Force);
             }
@@ -2601,12 +2635,14 @@ fn handle_copy_mode(
                 symlinked_files,
                 source_in_command_line,
                 created_parent_dirs,
+                destination_changed,
             )?;
         }
         CopyMode::SymLink => {
             // Atomic replace, for the same reason as CopyMode::Link above.
             if dest.exists() && options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
                 replace_link(source, dest, true)?;
+                destination_changed.set(true);
                 symlinked_files.insert(FileInformation::from_path(dest, false)?);
             } else {
                 symlink_file(source, dest, symlinked_files)?;
@@ -2625,6 +2661,7 @@ fn handle_copy_mode(
                             symlinked_files,
                             source_in_command_line,
                             created_parent_dirs,
+                            destination_changed,
                         )?;
                     }
                     UpdateMode::None => {
@@ -2659,6 +2696,7 @@ fn handle_copy_mode(
                             symlinked_files,
                             source_in_command_line,
                             created_parent_dirs,
+                            destination_changed,
                         )?;
                     }
                 }
@@ -2672,6 +2710,7 @@ fn handle_copy_mode(
                     symlinked_files,
                     source_in_command_line,
                     created_parent_dirs,
+                    destination_changed,
                 )?;
             }
         }
@@ -2684,16 +2723,27 @@ fn handle_copy_mode(
             {
                 let ft = source_metadata.file_type();
                 if ft.is_fifo() {
-                    return copy_fifo(dest, options.overwrite, options.debug)
+                    return copy_fifo(dest, options.overwrite, options.debug, destination_changed)
                         .map(|()| PerformedAction::Copied);
                 }
                 if ft.is_socket() {
-                    return copy_socket(dest, options.overwrite, options.debug)
-                        .map(|()| PerformedAction::Copied);
+                    return copy_socket(
+                        dest,
+                        options.overwrite,
+                        options.debug,
+                        destination_changed,
+                    )
+                    .map(|()| PerformedAction::Copied);
                 }
                 if ft.is_char_device() || ft.is_block_device() {
-                    return copy_node(dest, source_metadata, options.overwrite, options.debug)
-                        .map(|()| PerformedAction::Copied);
+                    return copy_node(
+                        dest,
+                        source_metadata,
+                        options.overwrite,
+                        options.debug,
+                        destination_changed,
+                    )
+                    .map(|()| PerformedAction::Copied);
                 }
             }
             OpenOptions::new()
@@ -2782,6 +2832,7 @@ fn copy_file(
     // Must run before anything below can remove or back up `dest`.
     verify_relative_symlink_in_cwd(source, dest, options)?;
 
+    let destination_changed = &Cell::new(false);
     let source_is_symlink = source.is_symlink();
     let initial_dest_metadata = dest.symlink_metadata().ok();
     let dest_is_symlink = initial_dest_metadata
@@ -2826,7 +2877,7 @@ fn copy_file(
             )
             && options.backup == BackupMode::None
         {
-            fs::remove_file(dest)?;
+            fs::remove_file(dest).inspect(|_| destination_changed.set(true))?;
         }
     }
 
@@ -2839,9 +2890,10 @@ fn copy_file(
         )
         && !paths_are_same_entry(source, dest)
     {
-        fs::remove_file(dest)?;
+        fs::remove_file(dest).inspect(|_| destination_changed.set(true))?;
     }
 
+    let mut created_backup = None;
     if initial_dest_metadata.is_some()
         && (!options.attributes_only
             || matches!(
@@ -2867,7 +2919,14 @@ fn copy_file(
                 }
             }
         }
-        handle_existing_dest(source, dest, options, source_in_command_line, copied_files)?;
+        created_backup = handle_existing_dest(
+            source,
+            dest,
+            options,
+            source_in_command_line,
+            copied_files,
+            destination_changed,
+        )?;
         if are_hardlinks_to_same_file(source, dest) {
             if options.copy_mode == CopyMode::Copy {
                 return Ok(());
@@ -2905,6 +2964,14 @@ fn copy_file(
         return Err(translate!("cp-error-cannot-change-attribute", "dest" => dest.quote()).into());
     }
 
+    let restore_created_backup = || {
+        if let Some(backup_path) = &created_backup
+            && destination_changed.get()
+        {
+            restore_backup(dest, backup_path, initial_dest_metadata.as_ref());
+        }
+    };
+
     // When using --link mode, hard link structure is automatically preserved
     // because we link to source files (which share inodes).
     if options.preserve_hard_links() && options.copy_mode != CopyMode::Link {
@@ -2918,9 +2985,10 @@ fn copy_file(
                         e,
                         translate!("cp-error-cannot-stat-context", "source" => source.quote()),
                     )
-                })?,
+                })
+                .inspect_err(|_| restore_created_backup())?,
         ) {
-            fs::hard_link(new_source, dest)?;
+            fs::hard_link(new_source, dest).inspect_err(|_| restore_created_backup())?;
 
             if options.verbose {
                 print_verbose_output(options.parents, progress_bar, source, dest)?;
@@ -2940,12 +3008,14 @@ fn copy_file(
         } else {
             fs::symlink_metadata(source)
         };
-        result.map_err(|err| {
-            CpError::IoErrContext(
-                err,
-                translate!("cp-error-cannot-stat-context", "source" => source.quote()),
-            )
-        })?
+        result
+            .inspect_err(|_| restore_created_backup())
+            .map_err(|err| {
+                CpError::IoErrContext(
+                    err,
+                    translate!("cp-error-cannot-stat-context", "source" => source.quote()),
+                )
+            })?
     };
 
     let dest_metadata = dest.symlink_metadata().ok();
@@ -2969,7 +3039,13 @@ fn copy_file(
         symlinked_files,
         source_in_command_line,
         created_parent_dirs,
-    )?;
+        destination_changed,
+    )
+    .inspect_err(|err| {
+        if !matches!(err, CpError::Skipped(_)) {
+            restore_created_backup();
+        }
+    })?;
 
     if options.verbose && performed_action != PerformedAction::Skipped {
         print_verbose_output(options.parents, progress_bar, source, dest)?;
@@ -3141,6 +3217,7 @@ fn copy_helper(
     symlinked_files: &mut HashSet<FileInformation>,
     #[cfg_attr(not(unix), allow(unused_variables))] source_in_command_line: bool,
     created_parent_dirs: &mut HashSet<PathBuf>,
+    destination_changed: &Cell<bool>,
 ) -> CopyResult<()> {
     if options.parents {
         let parent = dest.parent().unwrap_or(dest);
@@ -3157,18 +3234,24 @@ fn copy_helper(
     if options.recursive && !options.copy_contents {
         let ft = source_metadata.file_type();
         if ft.is_socket() {
-            return copy_socket(dest, options.overwrite, options.debug);
+            return copy_socket(dest, options.overwrite, options.debug, destination_changed);
         }
         if ft.is_fifo() {
-            return copy_fifo(dest, options.overwrite, options.debug);
+            return copy_fifo(dest, options.overwrite, options.debug, destination_changed);
         }
         if ft.is_char_device() || ft.is_block_device() {
-            return copy_node(dest, source_metadata, options.overwrite, options.debug);
+            return copy_node(
+                dest,
+                source_metadata,
+                options.overwrite,
+                options.debug,
+                destination_changed,
+            );
         }
     }
 
     if source_metadata.is_symlink() {
-        copy_link(source, dest, symlinked_files, options)?;
+        copy_link(source, dest, symlinked_files, options, destination_changed)?;
     } else {
         // Use O_NOFOLLOW on the source open iff cp is in no-dereference mode.
         // In that case source_metadata was obtained via lstat, so a path swap
@@ -3188,6 +3271,7 @@ fn copy_helper(
             is_stream(source_metadata),
             #[cfg(unix)]
             nofollow,
+            destination_changed,
         )?;
 
         if !options.attributes_only && options.debug {
@@ -3202,10 +3286,15 @@ fn copy_helper(
 // "Copies" a FIFO by creating a new one. This workaround is because Rust's
 // built-in fs::copy does not handle FIFOs (see rust-lang/rust/issues/79390).
 #[cfg(unix)]
-fn copy_fifo(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult<()> {
+fn copy_fifo(
+    dest: &Path,
+    overwrite: OverwriteMode,
+    debug: bool,
+    destination_changed: &Cell<bool>,
+) -> CopyResult<()> {
     if dest.exists() {
         overwrite.verify(dest, debug)?;
-        fs::remove_file(dest)?;
+        fs::remove_file(dest).inspect(|_| destination_changed.set(true))?;
     }
     // rustix::fs::mkfifoat is linux only
     nix::unistd::mkfifo(dest, Mode::from_bits_truncate(0o666))
@@ -3213,10 +3302,15 @@ fn copy_fifo(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult<(
 }
 
 #[cfg(unix)]
-fn copy_socket(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult<()> {
+fn copy_socket(
+    dest: &Path,
+    overwrite: OverwriteMode,
+    debug: bool,
+    destination_changed: &Cell<bool>,
+) -> CopyResult<()> {
     if dest.exists() {
         overwrite.verify(dest, debug)?;
-        fs::remove_file(dest)?;
+        fs::remove_file(dest).inspect(|_| destination_changed.set(true))?;
     }
 
     UnixListener::bind(dest)?;
@@ -3229,10 +3323,11 @@ fn copy_node(
     source_metadata: &Metadata,
     overwrite: OverwriteMode,
     debug: bool,
+    destination_changed: &Cell<bool>,
 ) -> CopyResult<()> {
     if dest.exists() {
         overwrite.verify(dest, debug)?;
-        fs::remove_file(dest)?;
+        fs::remove_file(dest).inspect(|_| destination_changed.set(true))?;
     }
     let sflag = if source_metadata.file_type().is_char_device() {
         SFlag::S_IFCHR
@@ -3249,13 +3344,14 @@ fn copy_link(
     dest: &Path,
     symlinked_files: &mut HashSet<FileInformation>,
     options: &Options,
+    destination_changed: &Cell<bool>,
 ) -> CopyResult<()> {
     // Here, we will copy the symlink itself (actually, just recreate it)
     let link = fs::read_link(source)?;
     // we always need to remove the file to be able to create a symlink,
     // even if it is writeable.
     if dest.is_symlink() || dest.is_file() {
-        delete_path(dest, options)?;
+        delete_path(dest, options, destination_changed)?;
     }
     symlink_file(&link, dest, symlinked_files)?;
     copy_attributes(
@@ -3264,7 +3360,8 @@ fn copy_link(
         &options.attributes,
         false,
         options.set_selinux_context,
-    )
+    )?;
+    Ok(())
 }
 
 /// Generate an error message if `target` is not the correct `target_type`

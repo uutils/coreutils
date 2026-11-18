@@ -6,6 +6,7 @@
 // spell-checker:ignore reflink fiemap lseek nofollow
 
 use rustix::fs::{SeekFrom, ioctl_ficlone, seek};
+use std::cell::Cell;
 use std::fs::File;
 use std::io::{self, Read};
 use std::os::unix::fs::FileExt;
@@ -26,13 +27,15 @@ use crate::{
 
 // Create the destination. It is followed when it is a pre-existing symlink,
 // matching GNU cp -d/-P which only forbid dereferencing on the source side.
-fn create_dest(dest: &Path) -> CopyResult<File> {
-    create_dest_restrictive(dest, false).map_err(|e| {
-        CpError::IoErrContext(
-            e,
-            translate!("cp-error-cannot-create-regular-file", "path" => dest.quote()),
-        )
-    })
+fn create_dest(dest: &Path, destination_changed: &Cell<bool>) -> CopyResult<File> {
+    create_dest_restrictive(dest, false)
+        .inspect(|_| destination_changed.set(true))
+        .map_err(|e| {
+            CpError::IoErrContext(
+                e,
+                translate!("cp-error-cannot-create-regular-file", "path" => dest.quote()),
+            )
+        })
 }
 
 /// The fallback behavior for [`clone`] on failed system call.
@@ -76,11 +79,12 @@ fn clone(
     dest: &Path,
     fallback: CloneFallback,
     context: &str,
+    destination_changed: &Cell<bool>,
 ) -> CopyResult<()> {
     // Only needed to decide whether a failed --reflink=always clone should
     // clean up the dest, so skip the lstat for the other fallbacks.
     let dest_existed = matches!(fallback, CloneFallback::Error) && dest.symlink_metadata().is_ok();
-    let mut dst_file = create_dest(dest)?;
+    let mut dst_file = create_dest(dest, destination_changed)?;
     if let Err(err) = ioctl_ficlone(&dst_file, &*src_file) {
         // Reuse the already-open descriptors: the dest was just created with
         // a restrictive mode that the umask may have stripped of write bits,
@@ -232,7 +236,13 @@ fn check_dest_is_fifo(dest: &Path) -> bool {
 }
 
 /// Copy the contents of a stream from `source` to `dest`.
-fn copy_stream<P>(source: P, dest: P, nofollow: bool, context: &str) -> CopyResult<()>
+fn copy_stream<P>(
+    source: P,
+    dest: P,
+    nofollow: bool,
+    context: &str,
+    destination_changed: &Cell<bool>,
+) -> CopyResult<()>
 where
     P: AsRef<Path>,
 {
@@ -260,12 +270,14 @@ where
     // the dest does not momentarily sit with broader perms. The `0o622 &
     // !umask` form previously used here could still allow group/other write
     // under a permissive umask. See #10011.
-    let mut dst_file = create_dest_restrictive(&dest, false).map_err(|e| {
-        CpError::IoErrContext(
-            e,
-            translate!("cp-error-cannot-create-regular-file", "path" => dest.as_ref().quote()),
-        )
-    })?;
+    let mut dst_file = create_dest_restrictive(&dest, false)
+        .inspect(|_| destination_changed.set(true))
+        .map_err(|e| {
+            CpError::IoErrContext(
+                e,
+                translate!("cp-error-cannot-create-regular-file", "path" => dest.as_ref().quote()),
+            )
+        })?;
 
     let ctx_err = |e: io::Error| CpError::IoErrContext(e, context.to_owned());
 
@@ -289,6 +301,7 @@ where
 /// path separately, costing three opens per copy and letting the strategy be
 /// decided from one file while the bytes came from whatever the path named
 /// later (#13185).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn copy_on_write(
     source: &Path,
     dest: &Path,
@@ -297,6 +310,7 @@ pub(crate) fn copy_on_write(
     context: &str,
     source_is_stream: bool,
     nofollow: bool,
+    destination_changed: &Cell<bool>,
 ) -> CopyResult<CopyDebug> {
     let mut copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unknown,
@@ -310,7 +324,7 @@ pub(crate) fn copy_on_write(
             copy_debug.reflink = OffloadReflinkDebug::No;
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_stream(source, dest, nofollow, context)
+                copy_stream(source, dest, nofollow, context, destination_changed)
             } else {
                 let mut src_file = open_source(source, nofollow)
                     .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
@@ -321,7 +335,7 @@ pub(crate) fn copy_on_write(
                     copy_method = method;
                 }
 
-                let mut dst_file = create_dest(dest)?;
+                let mut dst_file = create_dest(dest, destination_changed)?;
                 match copy_method {
                     CopyMethod::FSCopy => buf_copy::copy_fast(&mut src_file, &mut dst_file)
                         .map_err(|e| CpError::IoErrContext(e, context.to_owned())),
@@ -334,7 +348,7 @@ pub(crate) fn copy_on_write(
 
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_stream(source, dest, nofollow, context)
+                copy_stream(source, dest, nofollow, context, destination_changed)
             } else {
                 let mut src_file = open_source(source, nofollow)
                     .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
@@ -342,7 +356,7 @@ pub(crate) fn copy_on_write(
                 if let Ok(debug) = result {
                     copy_debug = debug;
                 }
-                let mut dst_file = create_dest(dest)?;
+                let mut dst_file = create_dest(dest, destination_changed)?;
                 buf_copy::copy_fast(&mut src_file, &mut dst_file)
                     .map_err(|e| CpError::IoErrContext(e, context.to_owned()))
             }
@@ -352,7 +366,7 @@ pub(crate) fn copy_on_write(
 
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_stream(source, dest, nofollow, context)
+                copy_stream(source, dest, nofollow, context, destination_changed)
             } else {
                 let mut src_file = open_source(source, nofollow)
                     .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
@@ -363,7 +377,7 @@ pub(crate) fn copy_on_write(
                     copy_method = method;
                 }
 
-                let mut dst_file = create_dest(dest)?;
+                let mut dst_file = create_dest(dest, destination_changed)?;
                 match copy_method {
                     CopyMethod::SparseCopyWithoutHole => {
                         sparse_copy_without_hole_fd(&src_file, &dst_file, context)
@@ -378,7 +392,7 @@ pub(crate) fn copy_on_write(
             // SparseMode::Always
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_stream(source, dest, nofollow, context)
+                copy_stream(source, dest, nofollow, context, destination_changed)
             } else {
                 let mut src_file = open_source(source, nofollow)
                     .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
@@ -390,10 +404,20 @@ pub(crate) fn copy_on_write(
                 }
 
                 match copy_method {
-                    CopyMethod::FSCopy => {
-                        clone(&mut src_file, dest, CloneFallback::FSCopy, context)
-                    }
-                    _ => clone(&mut src_file, dest, CloneFallback::SparseCopy, context),
+                    CopyMethod::FSCopy => clone(
+                        &mut src_file,
+                        dest,
+                        CloneFallback::FSCopy,
+                        context,
+                        destination_changed,
+                    ),
+                    _ => clone(
+                        &mut src_file,
+                        dest,
+                        CloneFallback::SparseCopy,
+                        context,
+                        destination_changed,
+                    ),
                 }
             }
         }
@@ -402,7 +426,7 @@ pub(crate) fn copy_on_write(
             copy_debug.reflink = OffloadReflinkDebug::No;
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_stream(source, dest, nofollow, context)
+                copy_stream(source, dest, nofollow, context, destination_changed)
             } else {
                 let mut src_file = open_source(source, nofollow)
                     .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
@@ -411,13 +435,19 @@ pub(crate) fn copy_on_write(
                     copy_debug = debug;
                 }
 
-                clone(&mut src_file, dest, CloneFallback::FSCopy, context)
+                clone(
+                    &mut src_file,
+                    dest,
+                    CloneFallback::FSCopy,
+                    context,
+                    destination_changed,
+                )
             }
         }
         (ReflinkMode::Auto, SparseMode::Auto) => {
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Unsupported;
-                copy_stream(source, dest, nofollow, context)
+                copy_stream(source, dest, nofollow, context, destination_changed)
             } else {
                 let mut src_file = open_source(source, nofollow)
                     .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
@@ -434,8 +464,15 @@ pub(crate) fn copy_on_write(
                         dest,
                         CloneFallback::SparseCopyWithoutHole,
                         context,
+                        destination_changed,
                     ),
-                    _ => clone(&mut src_file, dest, CloneFallback::FSCopy, context),
+                    _ => clone(
+                        &mut src_file,
+                        dest,
+                        CloneFallback::FSCopy,
+                        context,
+                        destination_changed,
+                    ),
                 }
             }
         }
@@ -446,7 +483,13 @@ pub(crate) fn copy_on_write(
 
             let mut src_file = open_source(source, nofollow)
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-            clone(&mut src_file, dest, CloneFallback::Error, context)
+            clone(
+                &mut src_file,
+                dest,
+                CloneFallback::Error,
+                context,
+                destination_changed,
+            )
         }
         (ReflinkMode::Always, _) => {
             return Err(translate!("cp-error-reflink-always-sparse-auto").into());

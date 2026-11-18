@@ -5,6 +5,7 @@
 
 // spell-checker:ignore reflink
 
+use std::cell::Cell;
 use std::path::Path;
 
 use uucore::buf_copy;
@@ -18,6 +19,7 @@ use crate::{
 };
 
 /// Copies `source` to `dest` for systems without copy-on-write
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn copy_on_write(
     source: &Path,
     dest: &Path,
@@ -26,6 +28,7 @@ pub(crate) fn copy_on_write(
     context: &str,
     source_is_stream: bool,
     nofollow: bool,
+    destination_changed: &Cell<bool>,
 ) -> CopyResult<CopyDebug> {
     if reflink_mode != ReflinkMode::Never {
         return Err(translate!("cp-error-reflink-not-supported")
@@ -46,12 +49,14 @@ pub(crate) fn copy_on_write(
     if source_is_stream {
         let mut src_file = open_source(source, nofollow)
             .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-        let mut dst_file = create_dest_restrictive(dest, false).map_err(|e| {
-            CpError::IoErrContext(
-                e,
-                translate!("cp-error-cannot-create-regular-file", "path" => dest.quote()),
-            )
-        })?;
+        let mut dst_file = create_dest_restrictive(dest, false)
+            .inspect(|_| destination_changed.set(true))
+            .map_err(|e| {
+                CpError::IoErrContext(
+                    e,
+                    translate!("cp-error-cannot-create-regular-file", "path" => dest.quote()),
+                )
+            })?;
 
         let dest_is_stream = is_stream(&dst_file.metadata()?);
         if !dest_is_stream {
@@ -72,12 +77,14 @@ pub(crate) fn copy_on_write(
     // dest is followed, matching GNU cp.
     let mut src_file =
         open_source(source, nofollow).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-    let mut dst_file = create_dest_restrictive(dest, false).map_err(|e| {
-        CpError::IoErrContext(
-            e,
-            translate!("cp-error-cannot-create-regular-file", "path" => dest.quote()),
-        )
-    })?;
+    let mut dst_file = create_dest_restrictive(dest, false)
+        .inspect(|_| destination_changed.set(true))
+        .map_err(|e| {
+            CpError::IoErrContext(
+                e,
+                translate!("cp-error-cannot-create-regular-file", "path" => dest.quote()),
+            )
+        })?;
     std::io::copy(&mut src_file, &mut dst_file)
         .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 

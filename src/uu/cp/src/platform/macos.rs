@@ -5,6 +5,7 @@
 
 // spell-checker:ignore reflink
 
+use std::cell::Cell;
 use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
 use std::os::unix::ffi::OsStrExt;
@@ -24,6 +25,7 @@ use crate::{
 };
 
 /// Copies `source` to `dest` using copy-on-write if possible.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn copy_on_write(
     source: &Path,
     dest: &Path,
@@ -32,6 +34,7 @@ pub(crate) fn copy_on_write(
     context: &str,
     source_is_stream: bool,
     nofollow: bool,
+    destination_changed: &Cell<bool>,
 ) -> CopyResult<CopyDebug> {
     if sparse_mode != SparseMode::Auto {
         return Err(translate!("cp-error-sparse-not-supported").into());
@@ -92,11 +95,17 @@ pub(crate) fn copy_on_write(
                     // TODO: rewrite this to better match linux behavior
                     // linux first opens the source file and destination file then uses the file
                     // descriptors to do the clone.
-                    let _ = fs::remove_file(dest);
+                    if fs::remove_file(dest).is_ok() {
+                        destination_changed.set(true);
+                    }
                     error = pfn(src.as_ptr(), dst.as_ptr(), 0);
                 }
             }
         }
+    }
+
+    if attempt_clone && error == 0 {
+        destination_changed.set(true);
     }
 
     if !attempt_clone || error != 0 {
@@ -133,6 +142,7 @@ pub(crate) fn copy_on_write(
                 dst_file
                     .set_len(0)
                     .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+                destination_changed.set(true);
             }
 
             buf_copy::copy_fast(&mut src_file, &mut dst_file)
@@ -141,12 +151,14 @@ pub(crate) fn copy_on_write(
         } else {
             let mut src_file = open_source(source, nofollow)
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-            let mut dst_file = create_dest_restrictive(dest, false).map_err(|e| {
-                CpError::IoErrContext(
-                    e,
-                    translate!("cp-error-cannot-create-regular-file", "path" => dest.quote()),
-                )
-            })?;
+            let mut dst_file = create_dest_restrictive(dest, false)
+                .inspect(|_| destination_changed.set(true))
+                .map_err(|e| {
+                    CpError::IoErrContext(
+                        e,
+                        translate!("cp-error-cannot-create-regular-file", "path" => dest.quote()),
+                    )
+                })?;
             std::io::copy(&mut src_file, &mut dst_file)
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
         }
