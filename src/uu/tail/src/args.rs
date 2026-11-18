@@ -117,7 +117,13 @@ impl FilterMode {
             });
         }
 
-        Ok(mode.unwrap_or_else(|| if zero_term { Self::default_zero() } else { Self::default() }))
+        Ok(mode.unwrap_or_else(|| {
+            if zero_term {
+                Self::default_zero()
+            } else {
+                Self::default()
+            }
+        }))
     }
 
     fn default_zero() -> Self {
