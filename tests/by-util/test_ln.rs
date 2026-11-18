@@ -1578,15 +1578,21 @@ fn test_hard_link_source_permission_denied() {
 
 #[test]
 fn test_logical_dangling_source_backup_keeps_files() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
     at.write("dest", "CURRENT\n");
     at.write("dest~", "PREVIOUS\n");
     at.symlink_file("missing", "src");
 
-    ucmd.args(&["-L", "--backup=simple", "--suffix=~", "src", "dest"])
-        .fails()
-        .stderr_contains("failed to access 'src'");
+    for backup in ["--backup=simple", "--backup=numbered"] {
+        scene
+            .ucmd()
+            .args(&["-L", backup, "--suffix=~", "src", "dest"])
+            .fails_with_code(1)
+            .stderr_is("ln: failed to access 'src': No such file or directory\n");
 
-    assert_eq!(at.read("dest"), "CURRENT\n");
-    assert_eq!(at.read("dest~"), "PREVIOUS\n");
+        assert_eq!(at.read("dest"), "CURRENT\n");
+        assert_eq!(at.read("dest~"), "PREVIOUS\n");
+        assert!(!at.file_exists("dest.~1~"));
+    }
 }
