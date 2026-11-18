@@ -23,7 +23,7 @@ use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use custom_str_cmp::custom_str_cmp;
+use custom_str_cmp::{custom_str_cmp, custom_str_key};
 use ext_sort::ext_sort;
 use foldhash::fast::FoldHasher;
 use foldhash::{HashMap, SharedSeed};
@@ -2886,19 +2886,29 @@ fn compare_by<'a>(
 
         let cmp: Ordering = match settings.mode {
             SortMode::Random => {
-                // check if the two strings are equal
-                if custom_str_cmp(
-                    a_str,
-                    b_str,
+                let (ignore_non_printing, dictionary_order, ignore_case) = (
                     settings.ignore_non_printing,
                     settings.dictionary_order,
                     settings.ignore_case,
+                );
+                let salt = &global_settings.salt.unwrap();
+                if custom_str_cmp(
+                    a_str,
+                    b_str,
+                    ignore_non_printing,
+                    dictionary_order,
+                    ignore_case,
                 ) == Ordering::Equal
                 {
                     Ordering::Equal
+                } else if ignore_non_printing || dictionary_order || ignore_case {
+                    // Hash the bytes custom_str_cmp compares, so that keys it
+                    // treats as equal also hash equal and stay adjacent.
+                    let hash =
+                        |s| key_hash(s, salt, ignore_non_printing, dictionary_order, ignore_case);
+                    hash(a_str).cmp(&hash(b_str))
                 } else {
-                    // Only if they are not equal compare by the hash
-                    random_shuffle(a_str, b_str, &global_settings.salt.unwrap())
+                    random_shuffle(a_str, b_str, salt)
                 }
             }
             SortMode::Numeric => {
@@ -3169,6 +3179,48 @@ fn get_hash<T: Hash>(t: &T) -> u64 {
     let mut s = FoldHasher::with_seed(0, SharedSeed::global_fixed());
     t.hash(&mut s);
     s.finish()
+}
+
+/// Hash the bytes of `s` that [`custom_str_cmp`] compares, without allocating.
+fn key_hash(
+    s: &[u8],
+    salt: &[u8],
+    ignore_non_printing: bool,
+    ignore_non_dictionary: bool,
+    ignore_case: bool,
+) -> u64 {
+    let mut h = FoldHasher::with_seed(0, SharedSeed::global_fixed());
+    // Feed the hasher in chunks, a byte at a time is slow.
+    let mut buf = [0; 64];
+    // `write` does not mix in the length, so `a` and `aa` could collide.
+    let total = if ignore_non_printing || ignore_non_dictionary {
+        let mut total = 0;
+        let mut len = 0;
+        for c in custom_str_key(s, ignore_non_printing, ignore_non_dictionary, ignore_case) {
+            buf[len] = c;
+            len += 1;
+            if len == buf.len() {
+                h.write(&buf);
+                total += len;
+                len = 0;
+            }
+        }
+        h.write(&buf[..len]);
+        total + len
+    } else {
+        for chunk in s.chunks(buf.len()) {
+            let chunk_buf = &mut buf[..chunk.len()];
+            chunk_buf.copy_from_slice(chunk);
+            if ignore_case {
+                chunk_buf.make_ascii_uppercase();
+            }
+            h.write(chunk_buf);
+        }
+        s.len()
+    };
+    h.write_usize(total);
+    salt.hash(&mut h);
+    h.finish()
 }
 
 fn random_shuffle(a: &[u8], b: &[u8], salt: &[u8]) -> Ordering {
