@@ -493,6 +493,26 @@ fn test_canonicalize_growing_symlink_loop() {
 }
 
 #[test]
+fn test_readlink_symlink_loop_missing() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.relative_symlink_file("b", "a");
+    at.relative_symlink_file("a", "b");
+
+    let actual = scene.ucmd().args(&["-m", "a"]).succeeds().stdout_move_str();
+    let expect = path_concat!(at.root_dir_resolved(), "a") + "\n";
+    assert_eq!(actual, expect);
+
+    let actual = scene
+        .ucmd()
+        .args(&["-m", "a/x"])
+        .succeeds()
+        .stdout_move_str();
+    let expect = path_concat!(at.root_dir_resolved(), "a", "x") + "\n";
+    assert_eq!(actual, expect);
+}
+
+#[test]
 #[cfg(not(windows))]
 fn test_delimiters() {
     new_ucmd!()
