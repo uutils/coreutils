@@ -485,16 +485,8 @@ impl Observer {
                     let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
                     self.files.remove(event_path);
                 } else if self.use_polling && event.kind == EventKind::Remove(RemoveKind::Any) {
-                    /*
-                    BUG: The watched file was removed. Since we're using Polling, this
-                    could be a rename. We can't tell because `notify::PollWatcher` doesn't
-                    recognize renames properly.
-                    Ideally we want to call seek to offset 0 on the file handle.
-                    But because we only have access to `PathData::reader` as `BufRead`,
-                    we cannot seek to 0 with `BufReader::seek_relative`.
-                    Also because we don't have the new name, we cannot work around this
-                    by simply reopening the file.
-                    */
+                    // PollWatcher may report a rename as a removal without the new
+                    // path, so we cannot reopen the file under its new name.
                 }
             }
             EventKind::Modify(ModifyKind::Name(RenameMode::Both))
