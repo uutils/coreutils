@@ -1,4 +1,4 @@
-﻿// This file is part of the uutils coreutils package.
+// This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
@@ -278,10 +278,11 @@ impl ChownExecutor {
 
     fn format_target_ownership(&self) -> (&'static str, String) {
         // Returns the numeric ID if the spec part starts with '+', otherwise the spec itself.
-        fn resolve_part(spec: &str, id: Option<u32>) -> String {
-            match id {
-                Some(n) if spec.starts_with('+') => n.to_string(),
-                _ => spec.to_string(),
+        fn resolve_part(spec: &str, id: u32) -> String {
+            if spec.starts_with('+') {
+                id.to_string()
+            } else {
+                spec.to_string()
             }
         }
 
@@ -293,22 +294,17 @@ impl ChownExecutor {
             "ownership"
         };
 
-        // Handle both ':' and '.' as user/group separators (e.g. "user:group" or "user.group").
-        let dest = if let Some((u, g)) = self
-            .raw_owner
-            .split_once(':')
-            .or_else(|| self.raw_owner.split_once('.'))
-        {
-            let user = if self.dest_uid.is_some() {
-                resolve_part(u, self.dest_uid)
+        // Split on ':' always; only split on '.' when a group is expected, to avoid
+        // misidentifying dotted user names like "john.doe" as "user.group" specs.
+        let dest = if let Some((u, g)) = self.raw_owner.split_once(':').or_else(|| {
+            if self.dest_gid.is_some() {
+                self.raw_owner.split_once('.')
             } else {
-                String::new()
-            };
-            let group = if self.dest_gid.is_some() {
-                resolve_part(g, self.dest_gid)
-            } else {
-                String::new()
-            };
+                None
+            }
+        }) {
+            let user = self.dest_uid.map(|id| resolve_part(u, id)).unwrap_or_default();
+            let group = self.dest_gid.map(|id| resolve_part(g, id)).unwrap_or_default();
             if user.is_empty() {
                 group
             } else if group.is_empty() {
@@ -316,10 +312,10 @@ impl ChownExecutor {
             } else {
                 format!("{user}:{group}")
             }
-        } else if self.dest_uid.is_some() {
-            resolve_part(&self.raw_owner, self.dest_uid)
-        } else if self.dest_gid.is_some() {
-            resolve_part(&self.raw_owner, self.dest_gid)
+        } else if let Some(id) = self.dest_uid {
+            resolve_part(&self.raw_owner, id)
+        } else if let Some(id) = self.dest_gid {
+            resolve_part(&self.raw_owner, id)
         } else {
             self.raw_owner.clone()
         };
