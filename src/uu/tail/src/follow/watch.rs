@@ -547,18 +547,18 @@ fn report_inaccessible(display_name: &str) {
     );
 }
 
-#[allow(clippy::cognitive_complexity)]
 /// Report the follow implementation in use, for --debug.
 fn print_follow_mode(observer: &Observer, settings: &Settings) {
     // Without a regular file (e.g. only devices or FIFOs) there is nothing to
     // be notified about: following by name polls, by descriptor blocks.
-    // Stdin is classified by what it refers to, the same as `/dev/stdin`.
-    let no_regular_file = settings.inputs.iter().all(|input| {
-        let path = match input.kind() {
-            InputKind::File(path) => path.as_path(),
-            InputKind::Stdin => Path::new(text::DEV_STDIN),
-        };
-        path.metadata().is_ok_and(|md| !md.is_file())
+    // Stdin is classified by what fd 0 refers to.
+    let no_regular_file = settings.inputs.iter().all(|input| match input.kind() {
+        InputKind::File(path) => path.metadata().is_ok_and(|md| !md.is_file()),
+        #[cfg(unix)]
+        InputKind::Stdin => rustix::fs::fstat(std::io::stdin())
+            .is_ok_and(|stat| stat.st_mode & libc::S_IFMT != libc::S_IFREG),
+        #[cfg(not(unix))]
+        InputKind::Stdin => false,
     });
     let mode = if observer.use_polling || (no_regular_file && observer.follow_name()) {
         translate!("tail-debug-using-polling-mode")
@@ -570,6 +570,7 @@ fn print_follow_mode(observer: &Observer, settings: &Settings) {
     show_error!("{mode}");
 }
 
+#[allow(clippy::cognitive_complexity)]
 pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
     if observer.files.no_files_remaining(settings) && !observer.files.only_stdin_remaining() {
         return Err(USimpleError::new(1, translate!("tail-no-files-remaining")));
