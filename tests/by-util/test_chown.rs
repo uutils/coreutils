@@ -1,4 +1,4 @@
-﻿// This file is part of the uutils coreutils package.
+// This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
@@ -1245,6 +1245,10 @@ fn test_chown_verbose_broken_symlink_plus_ids() {
         ),
         (
             format!("+{uid}.+{gid}"),
+            format!("failed to change ownership of 'ghost' to {uid}:{gid}\n"),
+        ),
+        (
+            format!("+{uid}:{gid}"),
             format!("failed to change ownership of 'ghost' to {uid}:{gid}\n"),
         ),
     ] {
