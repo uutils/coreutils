@@ -432,8 +432,8 @@ fn enter_chroot(options: &Options, skip_chdir: bool) -> UResult<()> {
     // chroot the resolved target when there is one; name the caller's spelling
     // in the error either way.
     let target = options.chroot_target.as_deref().unwrap_or(&options.newroot);
-    rustix::process::chroot(target)
-        .map_err(|e| ChrootError::CannotEnter(options.newroot.clone(), e.into()))?;
+    std::os::unix::fs::chroot(target)
+        .map_err(|e| ChrootError::CannotEnter(options.newroot.clone(), e))?;
     if !skip_chdir {
         std::env::set_current_dir("/")?;
     }

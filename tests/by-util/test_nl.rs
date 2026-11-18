@@ -896,15 +896,17 @@ fn test_multi_byte_one_char_section_delimiter() {
     }
 }
 
-#[test]
-fn test_empty_section_delimiter() {
-    for arg in ["-d ''", "--section-delimiter=''"] {
-        new_ucmd!()
-            .arg(arg)
-            .pipe_in("a\n\nb")
-            .succeeds()
-            .stdout_is("     1\ta\n       \n     2\tb\n");
-    }
+#[rstest]
+#[case::short(&["-d", ""], "     1\ta\n\n       b\n\n       c\n")]
+#[case::long(&["--section-delimiter="], "     1\ta\n\n       b\n\n       c\n")]
+#[case::header_numbered(&["-d", "", "-ha"], "     1\ta\n\n     1\tb\n\n     1\tc\n")]
+#[case::no_renumber(&["-d", "", "-ha", "-p"], "     1\ta\n\n     2\tb\n\n     3\tc\n")]
+fn test_empty_section_delimiter(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in("a\n\nb\n\nc\n")
+        .succeeds()
+        .stdout_is(expected);
 }
 
 #[test]
@@ -1142,4 +1144,37 @@ fn test_negative_line_increment_as_a_separate_argument() {
             .succeeds()
             .stdout_is("     1\ta\n     0\tb\n    -1\tc\n");
     }
+}
+
+#[rstest]
+#[case::separator(&["-s", "-z"], "a\n", "     1-za\n")]
+#[case::separator_double_dash(&["-s", "--"], "a\n", "     1--a\n")]
+#[case::long_separator(&["--number-separator", "-x"], "a\n", "     1-xa\n")]
+#[case::footer_delimiter(&["-d", "-z"], "a\n-z\nb\n", "     1\ta\n\n       b\n")]
+#[case::body_delimiter(&["-d", "--"], "a\n----\nb\n", "     1\ta\n\n     1\tb\n")]
+fn test_hyphen_leading_string_value(
+    #[case] args: &[&str],
+    #[case] input: &str,
+    #[case] expected: &str,
+) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[rstest]
+#[case::width(&["-w", "-2"])]
+#[case::join_blank_lines(&["-l", "-1"])]
+#[case::body_numbering(&["-b", "-x"])]
+#[case::header_numbering(&["-h", "-x"])]
+#[case::footer_numbering(&["-f", "-x"])]
+#[case::number_format(&["-n", "-x"])]
+fn test_hyphen_leading_value_is_checked_as_a_value(#[case] args: &[&str]) {
+    new_ucmd!()
+        .args(args)
+        .fails_with_code(1)
+        .stderr_does_not_contain("unexpected argument")
+        .stderr_contains(format!("'{}'", args[1]));
 }

@@ -30,6 +30,6 @@ chmod-help-reference = use RFILE's mode instead of MODE values
 # Verbose messages
 chmod-verbose-neither-changed = neither symbolic link {$file} nor referent has been changed
 chmod-verbose-mode-retained = mode of {$file} retained as {$mode_octal} ({$mode_display})
-chmod-verbose-failed-change = failed to change mode of file {$file} from {$old_mode} ({$old_mode_display}) to {$new_mode} ({$new_mode_display})
+chmod-verbose-failed-change = failed to change mode of {$file} from {$old_mode} ({$old_mode_display}) to {$new_mode} ({$new_mode_display})
 chmod-verbose-mode-changed = mode of {$file} changed from {$old_mode} ({$old_mode_display}) to {$new_mode} ({$new_mode_display})
 chmod-verbose-could-not-be-accessed = {$file} could not be accessed

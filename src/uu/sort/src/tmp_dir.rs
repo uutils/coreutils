@@ -188,18 +188,14 @@ mod imp {
     use rustix::fs::{AtFlags, CWD, Mode, OFlags, openat, unlinkat};
     use std::fs::File;
     use std::io;
-    use std::os::unix::fs::MetadataExt;
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tempfile::{Builder, TempDir};
+    use uucore::fs::FileInfo;
 
-    /// The device and inode of a file.
-    type FileId = (u64, u64);
-
-    fn file_id(file: &File) -> io::Result<FileId> {
-        let metadata = file.metadata()?;
-        Ok((metadata.dev(), metadata.ino()))
+    fn file_id(file: &File) -> io::Result<FileInfo> {
+        Ok(FileInfo::from(&file.metadata()?))
     }
 
     fn open_dir(path: &Path) -> io::Result<File> {
@@ -209,7 +205,7 @@ mod imp {
 
     pub struct SortTmpDir {
         temp_dir: TempDir,
-        id: FileId,
+        id: FileInfo,
         pub created: AtomicUsize,
     }
 
@@ -287,7 +283,7 @@ mod imp {
         dir: Arc<SortTmpDir>,
         path: PathBuf,
         index: usize,
-        id: FileId,
+        id: FileInfo,
     }
 
     impl TmpPath {

@@ -34,7 +34,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{env, fs};
 
-use uucore::time::{FormatSystemTimeFallback, format_system_time, system_time_to_sec};
+use uucore::time::{FormatSystemTimeFallback, format_system_time};
 
 #[derive(Debug, thiserror::Error)]
 enum StatError {
@@ -268,31 +268,17 @@ enum Token {
 }
 
 trait ScanUtil {
-    fn scan_num<F>(&self) -> Option<(F, usize)>
-    where
-        F: std::str::FromStr;
+    fn scan_int(&self) -> Option<(Option<usize>, usize)>;
     fn scan_char(&self, radix: u32) -> Option<(char, usize)>;
 }
 
 impl ScanUtil for str {
-    /// Scans for a number at the beginning of the string
-    /// Returns the parsed number and the character count
-    /// Since we only deal with ASCII characters (+, -, 0-9), character count equals byte count
-    fn scan_num<F>(&self) -> Option<(F, usize)>
-    where
-        F: std::str::FromStr,
-    {
-        let mut chars = self.chars();
-        let count = chars
-            .next()
-            .filter(|&c| c.is_ascii_digit() || c == '-' || c == '+')
-            .map_or(0, |_| 1 + chars.take_while(char::is_ascii_digit).count());
-
-        if count > 0 {
-            F::from_str(&self[..count]).ok().map(|x| (x, count))
-        } else {
-            None
-        }
+    /// Scans the digits at the beginning of the string as a width or precision.
+    /// Returns the value, or `None` when it is above `i32::MAX`, and the digit
+    /// count, which equals the byte count since digits are ASCII.
+    fn scan_int(&self) -> Option<(Option<usize>, usize)> {
+        let count = self.bytes().take_while(u8::is_ascii_digit).count();
+        (count > 0).then(|| (self[..count].parse::<i32>().ok().map(|n| n as usize), count))
     }
 
     fn scan_char(&self, radix: u32) -> Option<(char, usize)> {
@@ -635,12 +621,17 @@ fn format_timestamp(seconds: i64, nanoseconds: u32, precision: Precision) -> Str
 }
 
 fn system_time_to_timestamp(time: SystemTime) -> (i64, u32) {
-    let (mut seconds, mut nanoseconds) = system_time_to_sec(time);
-    if time < UNIX_EPOCH && nanoseconds != 0 {
-        seconds -= 1;
-        nanoseconds = 1_000_000_000 - nanoseconds;
+    match time.duration_since(UNIX_EPOCH) {
+        Ok(d) => (d.as_secs() as i64, d.subsec_nanos()),
+        Err(e) => {
+            let d = e.duration();
+            if d.subsec_nanos() == 0 {
+                (-(d.as_secs() as i64), 0)
+            } else {
+                (-(d.as_secs() as i64) - 1, 1_000_000_000 - d.subsec_nanos())
+            }
+        }
     }
-    (seconds, nanoseconds)
 }
 
 fn format_scaled_decimal(value: i128, precision: usize, negative: bool) -> String {
@@ -717,11 +708,14 @@ fn print_unsigned_oct(
     precision: Precision,
     padding_char: Padding,
 ) {
-    let prefix = if flags.alter { "0" } else { "" };
-    let s = match precision {
-        Precision::NotSpecified | Precision::NoNumber => format!("{prefix}{num:o}"),
-        Precision::Number(p) => format!("{prefix}{num:0>p$o}"),
+    let mut s = match precision {
+        Precision::NotSpecified | Precision::NoNumber => format!("{num:o}"),
+        Precision::Number(p) => format!("{num:0>p$o}"),
     };
+    // `#` makes the number start with a 0, adding one only when needed.
+    if flags.alter && !s.starts_with('0') {
+        s.insert(0, '0');
+    }
     pad_and_print(&s, flags.left, width, padding_char);
 }
 
@@ -779,15 +773,15 @@ impl Stater {
         i: &mut usize,
         bound: usize,
         format_str: &str,
-    ) -> Result<Token, DirectiveError> {
+    ) -> Result<Option<Token>, DirectiveError> {
         let old = *i;
 
         *i += 1;
         if *i >= bound {
-            return Ok(Token::Char('%'));
+            return Ok(Some(Token::Char('%')));
         }
         if chars[*i] == '%' {
-            return Ok(Token::Char('%'));
+            return Ok(Some(Token::Char('%')));
         }
 
         let mut flag = Flags::default();
@@ -807,11 +801,13 @@ impl Stater {
 
         let mut width = 0;
         let mut precision = Precision::NotSpecified;
+        let mut too_large = false;
         let mut j = *i;
 
         let j_byte = char_index_to_byte_index(format_str, j);
-        if let Some((field_width, offset)) = format_str[j_byte..].scan_num::<usize>() {
-            width = field_width;
+        if let Some((field_width, offset)) = format_str[j_byte..].scan_int() {
+            too_large |= field_width.is_none();
+            width = field_width.unwrap_or(0);
             j += offset;
 
             // Reject directives like `%<NUMBER>` by checking if width has been parsed.
@@ -833,11 +829,11 @@ impl Stater {
             check_bound(format_str, bound, old, j)?;
 
             let j_byte = char_index_to_byte_index(format_str, j);
-            match format_str[j_byte..].scan_num::<i32>() {
+            // A sign after '.' is not part of the precision.
+            match format_str[j_byte..].scan_int() {
                 Some((value, offset)) => {
-                    if value >= 0 {
-                        precision = Precision::Number(value as usize);
-                    }
+                    too_large |= value.is_none();
+                    precision = Precision::Number(value.unwrap_or(0));
                     j += offset;
                 }
                 None => precision = Precision::NoNumber,
@@ -848,7 +844,7 @@ impl Stater {
         *i = j;
 
         // Check for multi-character specifiers (e.g., `%Hd`, `%Lr`)
-        if *i + 1 < bound
+        let format = if *i + 1 < bound
             && let Some(&next_char) = chars.get(*i + 1).filter(|c| **c == 'd' || **c == 'r')
             && (chars[*i] == 'H' || chars[*i] == 'L')
         {
@@ -856,32 +852,27 @@ impl Stater {
             flag.major = is_major;
             flag.minor = !is_major; // chars[*i] == 'L'
             *i += 1;
-            return Ok(Token::Directive {
-                flag,
-                width,
-                precision,
-                format: next_char,
-            });
-        }
-
-        // `%Qn` is the quoted file name
-        if *i + 1 < bound && chars[*i] == 'Q' && chars[*i + 1] == 'n' {
+            next_char
+        } else if *i + 1 < bound && chars[*i] == 'Q' && chars[*i + 1] == 'n' {
+            // `%Qn` is the quoted file name
             flag.quote = true;
             *i += 1;
-            return Ok(Token::Directive {
-                flag,
-                width,
-                precision,
-                format: 'n',
-            });
-        }
+            'n'
+        } else {
+            chars[*i]
+        };
 
-        Ok(Token::Directive {
+        // GNU drops a directive whose width or precision is above `INT_MAX`,
+        // but still prints a multibyte conversion as an unknown `?`.
+        if too_large && format.is_ascii() {
+            return Ok(None);
+        }
+        Ok(Some(Token::Directive {
             flag,
             width,
             precision,
-            format: chars[*i],
-        })
+            format,
+        }))
     }
 
     fn handle_escape_sequences(
@@ -964,7 +955,8 @@ impl Stater {
         while i < bound {
             match chars.get(i) {
                 Some('%') => match Self::handle_percent_case(&chars, &mut i, bound, format_str) {
-                    Ok(token) => {
+                    Ok(None) => {}
+                    Ok(Some(token)) => {
                         // A directive takes a single byte as its conversion, so
                         // after a multibyte char (always an unknown directive,
                         // printed as `?`) the rest of its bytes are printed as is.
@@ -1022,7 +1014,7 @@ impl Stater {
         #[expect(clippy::unwrap_used, reason = "set as required by clap")]
         let files: Vec<OsString> = matches
             .get_many::<OsString>(options::FILES)
-            .map(|v| v.map(OsString::from).collect())
+            .map(|v| v.cloned().collect())
             .unwrap();
         let format_str = if matches.contains_id(options::PRINTF) {
             matches
@@ -1590,10 +1582,11 @@ mod tests {
 
     #[test]
     fn test_scanners() {
-        assert_eq!(Some((-5, 2)), "-5zxc".scan_num::<i32>());
-        assert_eq!(Some((51, 2)), "51zxc".scan_num::<u32>());
-        assert_eq!(Some((192, 4)), "+192zxc".scan_num::<i32>());
-        assert_eq!(None, "z192zxc".scan_num::<i32>());
+        assert_eq!(Some((Some(51), 2)), "51zxc".scan_int());
+        assert_eq!(Some((Some(2_147_483_647), 10)), "2147483647zxc".scan_int());
+        assert_eq!(Some((None, 10)), "2147483648zxc".scan_int());
+        assert_eq!(None, "+192zxc".scan_int());
+        assert_eq!(None, "z192zxc".scan_int());
 
         assert_eq!(Some(('a', 3)), "141zxc".scan_char(8));
         assert_eq!(Some(('\n', 2)), "12qzxc".scan_char(8)); // spell-checker:disable-line
@@ -1686,9 +1679,12 @@ mod tests {
                     ..Default::default()
                 },
                 width: 20,
-                precision: Precision::NotSpecified,
-                format: 'w',
+                precision: Precision::NoNumber,
+                format: '-',
             },
+            Token::Char('2'),
+            Token::Char('3'),
+            Token::Char('w'),
             Token::Byte(b'\x12'),
             Token::Byte(b'w'),
             Token::Byte(b'Z'),
