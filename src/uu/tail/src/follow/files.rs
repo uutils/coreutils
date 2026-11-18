@@ -12,7 +12,11 @@ use crate::text;
 use std::collections::HashMap;
 use std::collections::hash_map::Keys;
 use std::fs::{File, Metadata};
-use std::io::{BufRead, BufReader, BufWriter, Write, stdout};
+#[cfg(unix)]
+use std::io::{self, Read};
+use std::io::{BufReader, BufWriter, Write, stdout};
+#[cfg(unix)]
+use std::os::unix::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
 
@@ -114,12 +118,6 @@ impl FileHandling {
 
     /// Reopen the file at the monitored `path`
     pub fn update_reader(&mut self, path: &Path) -> UResult<()> {
-        /*
-        BUG: If it's not necessary to reopen a file, GNU's tail calls seek to offset 0.
-        However, we can't call seek here because `BufRead` does not implement `Seek`.
-        As a workaround, we always reopen the file even though this might not always
-        be necessary.
-        */
         // A FIFO without a writer blocks `open`, and this runs on the thread that
         // serves every followed file. Open FIFOs without waiting for a writer.
         #[cfg(unix)]
@@ -127,7 +125,7 @@ impl FileHandling {
         #[cfg(not(unix))]
         let file = File::open(path)?;
         let data = self.get_mut(path);
-        data.reader.replace(Box::new(BufReader::new(file)));
+        data.reader.replace(BufReader::new(file));
         data.symlink = path.is_symlink();
         Ok(())
     }
@@ -145,6 +143,21 @@ impl FileHandling {
     pub fn tail_file(&mut self, path: &Path, verbose: bool) -> UResult<bool> {
         let mut chunks = BytesChunkBuffer::new(u64::MAX);
         if let Some(reader) = self.get_mut(path).reader.as_mut() {
+            #[cfg(unix)]
+            if reader.get_ref().metadata()?.file_type().is_char_device() {
+                use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
+
+                let flags = fcntl_getfl(reader.get_ref()).map_err(io::Error::from)?;
+                if !flags.contains(OFlags::NONBLOCK) {
+                    fcntl_setfl(reader.get_ref(), flags | OFlags::NONBLOCK)
+                        .map_err(io::Error::from)?;
+                }
+                // A quiet device must not prevent polling other files or --pid.
+                chunks.fill(&mut BufReader::new(AvailableBytes(reader)))?;
+            } else {
+                chunks.fill(reader)?;
+            }
+            #[cfg(not(unix))]
             chunks.fill(reader)?;
         }
         if chunks.has_data() {
@@ -182,7 +195,7 @@ impl FileHandling {
 /// Data structure to keep a handle on the [`BufReader`], [`Metadata`]
 /// and the `display_name` (`header_name`) of files that are being followed.
 pub struct PathData {
-    pub reader: Option<Box<dyn BufRead>>,
+    pub reader: Option<BufReader<File>>,
     pub metadata: Option<Metadata>,
     pub display_name: String,
     /// Whether the path was a symbolic link when it was last opened. Under
@@ -194,7 +207,7 @@ pub struct PathData {
 
 impl PathData {
     pub fn new(
-        reader: Option<Box<dyn BufRead>>,
+        reader: Option<BufReader<File>>,
         metadata: Option<Metadata>,
         display_name: &str,
         symlink: bool,
@@ -214,7 +227,7 @@ impl PathData {
             old_reader
         } else if let Ok(file) = File::open(path) {
             // Open new file tail from start
-            Some(Box::new(BufReader::new(file)) as Box<dyn BufRead>)
+            Some(BufReader::new(file))
         } else {
             // Probably file was renamed/moved or removed again
             None
@@ -226,5 +239,19 @@ impl PathData {
             data.display_name.as_str(),
             path.is_symlink(),
         )
+    }
+}
+
+/// End a polling pass when a nonblocking device has no more bytes available.
+#[cfg(unix)]
+struct AvailableBytes<'a>(&'a mut BufReader<File>);
+
+#[cfg(unix)]
+impl Read for AvailableBytes<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self.0.read(buf) {
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(0),
+            result => result,
+        }
     }
 }

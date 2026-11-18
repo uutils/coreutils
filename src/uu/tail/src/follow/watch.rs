@@ -10,7 +10,10 @@ use crate::follow::files::{FileHandling, PathData};
 use crate::paths::{Input, InputKind, MetadataExtTail, PathExtTail};
 use crate::{platform, text};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
-use std::io::BufRead;
+use std::fs::File;
+use std::io::BufReader;
+#[cfg(unix)]
+use std::os::unix::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, channel};
 use uucore::display::Quotable;
@@ -147,7 +150,7 @@ impl Observer {
         &mut self,
         path: &Path,
         display_name: &str,
-        reader: Option<Box<dyn BufRead>>,
+        reader: Option<BufReader<File>>,
         update_last: bool,
     ) -> UResult<()> {
         if self.follow.is_some() {
@@ -183,6 +186,17 @@ impl Observer {
     pub fn start(&mut self, settings: &Settings) -> UResult<()> {
         if settings.follow.is_none() {
             return Ok(());
+        }
+
+        // Character-device reads are not reported by filesystem notifications.
+        #[cfg(unix)]
+        if settings.inputs.iter().any(|input| {
+            input
+                .resolve()
+                .and_then(|path| path.metadata().ok())
+                .is_some_and(|metadata| metadata.file_type().is_char_device())
+        }) {
+            self.use_polling = true;
         }
 
         let (tx, rx) = channel();
@@ -268,7 +282,7 @@ impl Observer {
                     InputKind::Stdin => (),
                     InputKind::File(path) => {
                         #[cfg(all(unix, not(target_os = "linux")))]
-                        if !path.is_file() {
+                        if !self.use_polling && !path.is_file() {
                             continue;
                         }
                         let mut path = path.clone();

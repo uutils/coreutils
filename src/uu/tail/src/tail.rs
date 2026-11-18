@@ -200,12 +200,7 @@ fn tail_file(
                 }
                 let reader = BufReader::new(file);
                 if input.is_tailable() {
-                    observer.add_path(
-                        path,
-                        input.display_name.as_str(),
-                        Some(Box::new(reader)),
-                        true,
-                    )?;
+                    observer.add_path(path, input.display_name.as_str(), Some(reader), true)?;
                 } else {
                     observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 }

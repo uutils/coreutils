@@ -5648,6 +5648,59 @@ fn test_follow_stdout_pipe_close() {
 }
 
 #[uutests::wasi_ignore(TailFollowDisabled)]
+#[rstest]
+#[case("-f", false)]
+#[case("-F", false)]
+#[case("-f", true)]
+#[case("-F", true)]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_follow_character_device_reads_new_data(
+    #[case] follow: &str,
+    #[case] multiple_inputs: bool,
+) {
+    let (path, mut controller, _replica) = uutests::util::pty_path();
+    let ts = TestScenario::new(util_name!());
+    let mut command = ts.ucmd();
+    command.args(&["-q", "-n0", "-s.1", follow, &path]);
+    if multiple_inputs {
+        ts.fixtures.touch("f");
+        command.arg("f");
+    }
+    let mut child = command.run_no_wait();
+
+    // End the initial read without closing the device, then supply more data.
+    controller.write_all(b"\x04").unwrap();
+    // Deliver a partial line, so the test also checks that output is flushed.
+    controller.write_all(b"new data\x04").unwrap();
+    for _ in 0..500 {
+        if child.stdout_all().contains("new data") {
+            break;
+        }
+        child.delay(10);
+    }
+    if multiple_inputs {
+        // A quiet device must not block output from the other input.
+        ts.fixtures.append("f", "other file\n");
+        for _ in 0..500 {
+            if child.stdout_all().contains("other file\n") {
+                break;
+            }
+            child.delay(10);
+        }
+    }
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_is(if multiple_inputs {
+            "new dataother file\n"
+        } else {
+            "new data"
+        })
+        .no_stderr();
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
 #[test]
 fn test_debug_flag_with_polling() {
     let ts = TestScenario::new(util_name!());
