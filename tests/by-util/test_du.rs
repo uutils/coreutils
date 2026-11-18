@@ -1853,6 +1853,35 @@ fn test_du_exclude_several_components() {
     assert!(!result.stdout_str().contains("a/b"));
 }
 
+// A pattern also matches the trailing components of a path, whatever
+// the operand puts in front of them, but never part of a component.
+#[cfg(not(windows))]
+#[test]
+fn test_du_exclude_trailing_components() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("a/b/c");
+    at.mkdir_all("a/u");
+    at.mkdir_all("xa/b");
+
+    for (operand, excluded, kept) in [
+        (".", "./a/b", "./xa/b"),
+        ("a", "a/b", "a/u"),
+        ("./a", "./a/b", "./a/u"),
+    ] {
+        let result = ts.ucmd().arg("--exclude=a/b").arg(operand).succeeds();
+        let paths: Vec<_> = result
+            .stdout_str()
+            .lines()
+            .filter_map(|l| l.split_once('\t').map(|(_, p)| p))
+            .collect();
+        assert!(!paths.contains(&excluded), "{operand}: {paths:?}");
+        assert!(!paths.contains(&format!("{excluded}/c").as_str()));
+        assert!(paths.contains(&kept), "{operand}: {paths:?}");
+    }
+}
+
 #[test]
 fn test_du_exclude_invalid_syntax() {
     let ts = TestScenario::new(util_name!());
