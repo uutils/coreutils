@@ -5701,6 +5701,79 @@ fn test_follow_character_device_reads_new_data(
 }
 
 #[uutests::wasi_ignore(TailFollowDisabled)]
+#[rstest]
+#[case("-f")]
+#[case("-F")]
+#[cfg(target_os = "linux")]
+fn test_follow_character_device_keeps_file_notifications(#[case] follow: &str) {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.write("f", "ready\n");
+    let mut child = ts
+        .ucmd()
+        .args(&["-q", "-n1", "-s60", follow, "/dev/null", "f"])
+        .run_no_wait();
+    for _ in 0..500 {
+        if child.stdout_all() == "ready\n" {
+            break;
+        }
+        child.delay(10);
+    }
+    assert_eq!(child.stdout_all(), "ready\n");
+
+    // An append should arrive without waiting for the device's polling interval.
+    ts.fixtures.append("f", "new data\n");
+    for _ in 0..500 {
+        if child.stdout_all().contains("new data\n") {
+            break;
+        }
+        child.delay(10);
+    }
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_is("ready\nnew data\n")
+        .no_stderr();
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_follow_character_device_replaced_by_file() {
+    let (path, mut controller, _replica) = uutests::util::pty_path();
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.symlink_file(&path, "input");
+    let mut child = ts
+        .ucmd()
+        .args(&["-n0", "-s.1", "-F", "input"])
+        .run_no_wait();
+    controller.write_all(b"\x04").unwrap();
+    controller.write_all(b"device\x04").unwrap();
+    for _ in 0..500 {
+        if child.stdout_all() == "device" {
+            break;
+        }
+        child.delay(10);
+    }
+    assert_eq!(child.stdout_all(), "device");
+
+    ts.fixtures.write("replacement", "regular\n");
+    ts.fixtures.rename("replacement", "input");
+    for _ in 0..500 {
+        if child.stdout_all().contains("regular\n") {
+            break;
+        }
+        child.delay(10);
+    }
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_is("deviceregular\n")
+        .stderr_contains("'input' has been replaced;  following new file");
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
 #[test]
 fn test_debug_flag_with_polling() {
     let ts = TestScenario::new(util_name!());

@@ -12,10 +12,11 @@ use crate::{platform, text};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::fs::File;
 use std::io::BufReader;
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 use std::os::unix::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, channel};
+use std::time::Instant;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, set_exit_code};
 #[cfg(target_os = "linux")]
@@ -41,7 +42,10 @@ impl WatcherRx {
     fn watch_with_parent(&mut self, path: &Path) -> UResult<()> {
         let mut path = path.to_owned();
         #[cfg(target_os = "linux")]
-        if path.is_file() {
+        if path.metadata().is_ok_and(|metadata| {
+            let kind = metadata.file_type();
+            kind.is_file() || kind.is_char_device()
+        }) {
             // The directory watch reports a write to a symlink's target under
             // the target's name, not the link's, so also watch the link: it is
             // another inode than the directory and nothing is reported twice.
@@ -162,7 +166,7 @@ impl Observer {
             let metadata = path.metadata().ok();
             self.files.insert(
                 &path,
-                PathData::new(reader, metadata, display_name, path.is_symlink()),
+                PathData::new(reader, metadata, display_name, path.is_symlink())?,
                 update_last,
             );
         }
@@ -186,17 +190,6 @@ impl Observer {
     pub fn start(&mut self, settings: &Settings) -> UResult<()> {
         if settings.follow.is_none() {
             return Ok(());
-        }
-
-        // Character-device reads are not reported by filesystem notifications.
-        #[cfg(unix)]
-        if settings.inputs.iter().any(|input| {
-            input
-                .resolve()
-                .and_then(|path| path.metadata().ok())
-                .is_some_and(|metadata| metadata.file_type().is_char_device())
-        }) {
-            self.use_polling = true;
         }
 
         let (tx, rx) = channel();
@@ -282,7 +275,7 @@ impl Observer {
                     InputKind::Stdin => (),
                     InputKind::File(path) => {
                         #[cfg(all(unix, not(target_os = "linux")))]
-                        if !self.use_polling && !path.is_file() {
+                        if !path.is_file() {
                             continue;
                         }
                         let mut path = path.clone();
@@ -526,7 +519,7 @@ impl Observer {
                     let new_path = event.paths.last().unwrap();
                     paths.push(new_path.clone());
 
-                    let new_data = PathData::from_other_with_path(self.files.remove(event_path), new_path);
+                    let new_data = PathData::from_other_with_path(self.files.remove(event_path), new_path)?;
                     self.files.insert(
                         new_path,
                         new_data,
@@ -562,6 +555,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
     let process = platform::ProcessChecker::new(observer.pid);
 
     let mut timeout_counter = 0;
+    let mut last_device_poll = Instant::now();
 
     // main follow loop
     loop {
@@ -604,12 +598,19 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
 
         // With  -f, sleep for approximately N seconds (default 1.0) between iterations;
         // We wake up if Notify sends an Event or if we wait more than `sleep_sec`.
+        let timeout = if observer.files.character_devices().is_empty() {
+            settings.sleep_sec
+        } else {
+            settings
+                .sleep_sec
+                .saturating_sub(last_device_poll.elapsed())
+        };
         let rx_result = observer
             .watcher_rx
             .as_mut()
             .unwrap()
             .receiver
-            .recv_timeout(settings.sleep_sec);
+            .recv_timeout(timeout);
 
         if rx_result.is_ok() {
             timeout_counter = 0;
@@ -708,6 +709,19 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             // This is a workaround because `Notify::PollWatcher`
             // does not recognize the "renaming" of files.
             paths = observer.files.keys().cloned().collect::<Vec<_>>();
+        }
+
+        // Devices don't report new input through filesystem notifications. Poll
+        // them on schedule even when other files keep producing events.
+        if !observer.files.character_devices().is_empty()
+            && last_device_poll.elapsed() >= settings.sleep_sec
+        {
+            for path in observer.files.character_devices() {
+                if !paths.contains(path) {
+                    paths.push(path.clone());
+                }
+            }
+            last_device_poll = Instant::now();
         }
 
         // main print loop

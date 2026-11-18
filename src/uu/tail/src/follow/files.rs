@@ -9,12 +9,12 @@ use crate::args::Settings;
 use crate::chunks::BytesChunkBuffer;
 use crate::paths::{HeaderPrinter, PathExtTail};
 use crate::text;
-use std::collections::HashMap;
 use std::collections::hash_map::Keys;
+use std::collections::{HashMap, HashSet};
 use std::fs::{File, Metadata};
+use std::io::{self, BufReader, BufWriter, Write, stdout};
 #[cfg(unix)]
-use std::io::{self, Read};
-use std::io::{BufReader, BufWriter, Write, stdout};
+use std::io::{BufRead, Read};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
@@ -27,6 +27,7 @@ use uucore::error::UResult;
 /// For existing files, all keys in the [`HashMap`] are absolute Paths.
 pub struct FileHandling {
     map: HashMap<PathBuf, PathData>,
+    character_devices: HashSet<PathBuf>,
     last: Option<PathBuf>,
     header_printer: HeaderPrinter,
 }
@@ -35,6 +36,7 @@ impl FileHandling {
     pub fn from(settings: &Settings) -> Self {
         Self {
             map: HashMap::with_capacity(settings.inputs.len()),
+            character_devices: HashSet::new(),
             last: None,
             header_printer: HeaderPrinter::new(settings.verbose, false),
         }
@@ -46,12 +48,19 @@ impl FileHandling {
         if update_last {
             self.last = Some(k.clone());
         }
+        if v.is_character_device {
+            self.character_devices.insert(k.clone());
+        } else {
+            self.character_devices.remove(&k);
+        }
         let _ = self.map.insert(k, v);
     }
 
     /// Wrapper for [`HashMap::remove`] using [`Path::canonicalize`]
     pub fn remove(&mut self, k: &Path) -> PathData {
-        self.map.remove(&Self::canonicalize_path(k)).unwrap()
+        let k = Self::canonicalize_path(k);
+        self.character_devices.remove(&k);
+        self.map.remove(&k).unwrap()
     }
 
     /// Wrapper for [`HashMap::get`] using [`Path::canonicalize`]
@@ -81,6 +90,10 @@ impl FileHandling {
 
     pub fn keys(&self) -> Keys<'_, PathBuf, PathData> {
         self.map.keys()
+    }
+
+    pub fn character_devices(&self) -> &HashSet<PathBuf> {
+        &self.character_devices
     }
 
     pub fn contains_key(&self, k: &Path) -> bool {
@@ -114,6 +127,9 @@ impl FileHandling {
     /// Set `reader` to None to indicate that `path` is not an existing file anymore.
     pub fn reset_reader(&mut self, path: &Path) {
         self.get_mut(path).reader = None;
+        self.get_mut(path).is_character_device = false;
+        self.character_devices
+            .remove(&Self::canonicalize_path(path));
     }
 
     /// Reopen the file at the monitored `path`
@@ -124,9 +140,17 @@ impl FileHandling {
         let file = crate::open_file(path, true)?;
         #[cfg(not(unix))]
         let file = File::open(path)?;
+        let is_character_device = is_character_device(&file)?;
         let data = self.get_mut(path);
         data.reader.replace(BufReader::new(file));
+        data.is_character_device = is_character_device;
         data.symlink = path.is_symlink();
+        if is_character_device {
+            self.character_devices.insert(Self::canonicalize_path(path));
+        } else {
+            self.character_devices
+                .remove(&Self::canonicalize_path(path));
+        }
         Ok(())
     }
 
@@ -142,18 +166,19 @@ impl FileHandling {
     /// Read new data from `path` and print it to stdout
     pub fn tail_file(&mut self, path: &Path, verbose: bool) -> UResult<bool> {
         let mut chunks = BytesChunkBuffer::new(u64::MAX);
-        if let Some(reader) = self.get_mut(path).reader.as_mut() {
+        let data = self.get_mut(path);
+        if let Some(reader) = data.reader.as_mut() {
             #[cfg(unix)]
-            if reader.get_ref().metadata()?.file_type().is_char_device() {
+            if data.is_character_device {
                 use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
 
                 let flags = fcntl_getfl(reader.get_ref()).map_err(io::Error::from)?;
-                if !flags.contains(OFlags::NONBLOCK) {
-                    fcntl_setfl(reader.get_ref(), flags | OFlags::NONBLOCK)
-                        .map_err(io::Error::from)?;
-                }
+                fcntl_setfl(reader.get_ref(), flags | OFlags::NONBLOCK).map_err(io::Error::from)?;
                 // A quiet device must not prevent polling other files or --pid.
-                chunks.fill(&mut BufReader::new(AvailableBytes(reader)))?;
+                let result = chunks.fill(&mut AvailableBytes(reader));
+                // A duplicated stdin shares these flags with the caller.
+                fcntl_setfl(reader.get_ref(), flags).map_err(io::Error::from)?;
+                result?;
             } else {
                 chunks.fill(reader)?;
             }
@@ -196,6 +221,8 @@ impl FileHandling {
 /// and the `display_name` (`header_name`) of files that are being followed.
 pub struct PathData {
     pub reader: Option<BufReader<File>>,
+    // Describes the open descriptor, which can outlive the file at its path.
+    is_character_device: bool,
     pub metadata: Option<Metadata>,
     pub display_name: String,
     /// Whether the path was a symbolic link when it was last opened. Under
@@ -211,15 +238,21 @@ impl PathData {
         metadata: Option<Metadata>,
         display_name: &str,
         symlink: bool,
-    ) -> Self {
-        Self {
+    ) -> UResult<Self> {
+        let is_character_device = reader
+            .as_ref()
+            .map(|reader| is_character_device(reader.get_ref()))
+            .transpose()?
+            .unwrap_or(false);
+        Ok(Self {
             reader,
+            is_character_device,
             metadata,
             display_name: display_name.to_owned(),
             symlink,
-        }
+        })
     }
-    pub fn from_other_with_path(data: Self, path: &Path) -> Self {
+    pub fn from_other_with_path(data: Self, path: &Path) -> UResult<Self> {
         // Remove old reader
         let old_reader = data.reader;
         let reader = if old_reader.is_some() {
@@ -242,6 +275,19 @@ impl PathData {
     }
 }
 
+/// Check the descriptor rather than a path that may already name another file.
+fn is_character_device(file: &File) -> io::Result<bool> {
+    #[cfg(unix)]
+    {
+        Ok(file.metadata()?.file_type().is_char_device())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = file;
+        Ok(false)
+    }
+}
+
 /// End a polling pass when a nonblocking device has no more bytes available.
 #[cfg(unix)]
 struct AvailableBytes<'a>(&'a mut BufReader<File>);
@@ -253,5 +299,19 @@ impl Read for AvailableBytes<'_> {
             Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(0),
             result => result,
         }
+    }
+}
+
+#[cfg(unix)]
+impl BufRead for AvailableBytes<'_> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        match self.0.fill_buf() {
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(&[]),
+            result => result,
+        }
+    }
+
+    fn consume(&mut self, amount: usize) {
+        self.0.consume(amount);
     }
 }
