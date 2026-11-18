@@ -1002,13 +1002,19 @@ fn build_options(
 
     let across_mode = matches.get_flag(options::ACROSS);
 
-    // -s or -S without a value is an empty string here, and -s then means a tab.
+    // -s or -S without a value is an empty string here. That is a tab for
+    // -s, and for -S a space unless -J joins the columns.
     let given_separator = matches
         .get_one::<String>(options::COLUMN_STRING_SEPARATOR)
         .or_else(|| matches.get_one::<String>(options::COLUMN_CHAR_SEPARATOR));
     let column_separator = match given_separator {
-        Some(x) if !x.is_empty() || matches.contains_id(options::COLUMN_STRING_SEPARATOR) => {
-            x.clone()
+        Some(x) if !x.is_empty() => x.clone(),
+        Some(_) if matches.contains_id(options::COLUMN_STRING_SEPARATOR) => {
+            if matches.get_flag(options::JOIN_LINES) {
+                String::new()
+            } else {
+                " ".to_string()
+            }
         }
         _ => DEFAULT_COLUMN_SEPARATOR.to_string(),
     };
