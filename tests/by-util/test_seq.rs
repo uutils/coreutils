@@ -1352,7 +1352,6 @@ fn test_stalled_value_stops(#[case] args: &[&str], #[case] expected: &str) {
 #[case::comma_operands(&["0,25", "0,25", "1"], "0,25\n0,50\n0,75\n1,00\n")]
 #[case::negative_comma_first(&["-,75", "1"], "-0,75\n0,25\n")]
 #[case::negative_comma_increment(&["2", "-0,5", "1"], "2,0\n1,5\n1,0\n")]
-#[ignore = "operands using the locale's decimal point must be accepted"]
 fn test_locale_decimal_point_operands(#[case] args: &[&str], #[case] expected: &str) {
     let locale = "fr_FR.UTF-8";
     if !uutests::util::is_locale_available(locale) {

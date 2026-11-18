@@ -28,6 +28,7 @@ uucore = { workspace = true, features = [
   "extendedbigdecimal",
   "fast-inc",
   "format",
+  "i18n-decimal",
   "parser",
   "quoting-style",
   "signals",

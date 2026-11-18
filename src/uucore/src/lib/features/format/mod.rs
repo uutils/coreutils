@@ -446,6 +446,32 @@ impl<F: Formatter<T>, T> Format<F, T> {
         w.write_all(&self.suffix)?;
         Ok(())
     }
+
+    /// Like [`Self::fmt`], but writes `decimal_separator` in place of the `.`
+    /// of the formatted number. A `.` in the text around it is kept.
+    pub fn fmt_with_decimal_separator(
+        &self,
+        mut w: impl Write,
+        f: T,
+        decimal_separator: &str,
+    ) -> std::io::Result<()> {
+        if decimal_separator == "." {
+            return self.fmt(w, f);
+        }
+        let mut number = Vec::new();
+        self.formatter.fmt(&mut number, f)?;
+        w.write_all(&self.prefix)?;
+        match number.iter().position(|&b| b == b'.') {
+            Some(i) => {
+                w.write_all(&number[..i])?;
+                w.write_all(decimal_separator.as_bytes())?;
+                w.write_all(&number[i + 1..])?;
+            }
+            None => w.write_all(&number)?,
+        }
+        w.write_all(&self.suffix)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
