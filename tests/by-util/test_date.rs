@@ -3996,7 +3996,8 @@ fn test_date_strftime_e_era_year_is_two_digit_padded() {
         ("-79258089600", "%EY", "\u{0E1E}.\u{0E28}. 01\n"),
         ("-79037164800", "%EY", "\u{0E1E}.\u{0E28}. 08\n"),
         ("-79037164800", "%Ey", "08\n"),
-        // The Thai `d_fmt` template carries the same `%Ey` field.
+        // Thai %x requires the glibc LC_TIME date template.
+        #[cfg(all(target_os = "linux", not(target_env = "musl")))]
         ("-79037164800", "%x", "31/05/08\n"),
         ("-79005628800", "%EY", "\u{0E1E}.\u{0E28}. 09\n"),
         // Three-digit era years keep their own width.
