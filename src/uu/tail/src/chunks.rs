@@ -12,7 +12,7 @@
 
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::{BufRead, Read, Seek, SeekFrom, Write};
+use std::io::{BufRead, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::error::UResult;
 
 /// When reading files in reverse in `bounded_tail`, this is the size of each
@@ -207,17 +207,31 @@ impl BytesChunk {
     }
 
     /// Fills `self.buffer` with maximal [`BUFFER_SIZE`] number of bytes, draining the reader by
-    /// that number of bytes. If EOF is reached (so 0 bytes are read), it returns
-    /// [`UResult<None>`]; otherwise, it returns [`UResult<Some(bytes)>`], where bytes is the
-    /// number of bytes read from the source.
+    /// that number of bytes. If EOF is reached (so 0 bytes are read), or a non-blocking
+    /// descriptor has no data yet (`WouldBlock`), it returns [`UResult<None>`]; otherwise,
+    /// it returns [`UResult<Some(bytes)>`], where bytes is the number of bytes read from
+    /// the source.
     pub fn fill(&mut self, filehandle: &mut impl BufRead) -> UResult<Option<usize>> {
-        let num_bytes = filehandle.read(&mut self.buffer)?;
-        self.bytes = num_bytes;
-        if num_bytes == 0 {
-            return Ok(None);
+        loop {
+            match filehandle.read(&mut self.buffer) {
+                Ok(0) => {
+                    self.bytes = 0;
+                    return Ok(None);
+                }
+                Ok(num_bytes) => {
+                    self.bytes = num_bytes;
+                    return Ok(Some(self.bytes));
+                }
+                Err(e) if e.kind() == ErrorKind::Interrupted => {}
+                Err(e) if e.kind() == ErrorKind::WouldBlock => {
+                    // A followed FIFO whose writer is connected but silent must
+                    // not stall the thread that serves every followed file.
+                    self.bytes = 0;
+                    return Ok(None);
+                }
+                Err(e) => return Err(e.into()),
+            }
         }
-
-        Ok(Some(self.bytes))
     }
 }
 
