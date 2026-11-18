@@ -46,9 +46,10 @@ enum WidthMode {
 ///
 /// `Punctuation` consults four tiers of break points in priority order:
 /// sentence-ending punctuation (`. ! ? :`), clause punctuation (`, ;`),
-/// whitespace, then any non-alphanumeric byte. All sets are ASCII; non-ASCII
-/// scalars fall into the non-alphanumeric tier when they aren't letters or
-/// digits.
+/// whitespace, then any other non-alphanumeric character. Byte-level paths
+/// (`-b`, invalid UTF-8) only consider ASCII bytes, so a break never lands
+/// inside a multibyte sequence; valid UTF-8 also breaks after non-ASCII
+/// punctuation such as `—`.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum BreakMode {
     Hard,
@@ -162,8 +163,6 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            // No short flag reserved: GNU may add short options later and `-p`
-            // could clash with one of them.
             Arg::new(options::PUNCTUATION)
                 .long(options::PUNCTUATION)
                 .help(translate!("fold-punctuation-help"))
@@ -325,7 +324,9 @@ fn find_punctuation_break(chunk: &[u8]) -> Option<usize> {
             b',' | b';' if clause.is_none() => clause = Some(i + 1),
             CR => {}
             b if b.is_ascii_whitespace() && space.is_none() => space = Some(i + 1),
-            b if !b.is_ascii_alphanumeric() && non_alnum.is_none() => non_alnum = Some(i + 1),
+            b if b.is_ascii() && !b.is_ascii_alphanumeric() && non_alnum.is_none() => {
+                non_alnum = Some(i + 1);
+            }
             _ => {}
         }
     }
@@ -472,7 +473,7 @@ fn track_punctuation<W: Write>(ctx: &mut FoldContext<'_, W>, byte: u8, pos: usiz
         b',' | b';' => *ctx.last_clause_end = Some(pos),
         CR => {}
         b if b.is_ascii_whitespace() => *ctx.last_space = Some(pos),
-        b if !b.is_ascii_alphanumeric() => *ctx.last_non_alnum = Some(pos),
+        b if b.is_ascii() && !b.is_ascii_alphanumeric() => *ctx.last_non_alnum = Some(pos),
         _ => {}
     }
 }
@@ -614,7 +615,7 @@ fn process_ascii_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UR
                 let pos = ctx.output.len() - 1;
                 if ctx.break_mode.is_hard() {
                     *ctx.last_space = None;
-                } else if b.is_ascii_whitespace() && b != CR {
+                } else if b.is_ascii_whitespace() {
                     *ctx.last_space = Some(pos);
                 }
 
@@ -671,10 +672,7 @@ fn push_ascii_segment<W: Write>(segment: &[u8], ctx: &mut FoldContext<'_, W>) ->
                 }
             }
             BreakMode::Spaces => {
-                if let Some(pos) = remaining[..take]
-                    .iter()
-                    .rposition(|b| b.is_ascii_whitespace() && *b != CR)
-                {
+                if let Some(pos) = remaining[..take].iter().rposition(u8::is_ascii_whitespace) {
                     *ctx.last_space = Some(base_len + pos);
                 }
             }

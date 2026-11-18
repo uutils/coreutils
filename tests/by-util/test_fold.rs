@@ -1130,3 +1130,21 @@ fn test_punctuation_non_ascii_break_in_utf8_text() {
         .succeeds()
         .stdout_is("caf\u{e9}\u{2026}\nna\u{ef}ve \nwords");
 }
+
+#[test]
+fn test_punctuation_bytewise_ignores_non_ascii_bytes() {
+    // With -b only ASCII bytes are break points. "ab\u{e9}cdef" has none, so
+    // --punctuation must cut exactly where plain -b does, instead of picking a
+    // byte of the 2-byte \u{e9} as a break point.
+    let input = "ab\u{e9}cdef";
+    let plain = new_ucmd!()
+        .args(&["-b", "-w", "3"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_move_bytes();
+    new_ucmd!()
+        .args(&["-b", "--punctuation", "-w", "3"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(plain);
+}
