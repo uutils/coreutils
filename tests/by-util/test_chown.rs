@@ -1226,3 +1226,80 @@ fn test_chown_verbose_broken_symlink_plus_ids() {
             .stderr_contains("chown: cannot dereference 'ghost': ");
     }
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_deep_directory_traversal_no_stack_overflow() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let (leaf, sibling) = uutests::util::prepare_deep_traversal(&at.subdir, &mut ucmd);
+    let rel = |p: &std::path::Path| {
+        p.strip_prefix(&at.subdir)
+            .unwrap()
+            .to_string_lossy()
+            .into_owned()
+    };
+    let uid = rustix::process::geteuid().as_raw();
+    ucmd.args(&["-R", "-L", "-v", &uid.to_string(), "d", "top"])
+        .succeeds()
+        .no_stderr()
+        .stdout_contains(rel(&leaf))
+        .stdout_contains(rel(&sibling))
+        .stdout_contains("top/link/s/s");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_chown_preserve_root_symlink_fails() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.mkdir("dir/sub");
+    at.symlink_dir("/", "dir/sub/rootlink");
+    at.mkdir("dir/sibling");
+    at.touch("dir/sibling/f");
+    at.mkdir("other");
+    at.touch("other/f");
+    let uid = rustix::process::geteuid().as_raw();
+    ucmd.args(&[
+        "-R",
+        "-L",
+        "-v",
+        "--preserve-root",
+        &uid.to_string(),
+        "dir",
+        "other",
+    ])
+    .fails_with_code(1)
+    .stdout_contains("dir/sibling/f")
+    .stdout_contains("other/f");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_chown_deep_unsearchable_dir_continues_siblings() {
+    let uid = rustix::process::geteuid();
+    if uid.is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    let mut cur = at.subdir.join("a");
+    for i in 0..20 {
+        cur.push(format!("d{i}"));
+        std::fs::create_dir(&cur).unwrap();
+    }
+    let bad = cur.join("bad");
+    std::fs::create_dir(&bad).unwrap();
+    std::fs::File::create(bad.join("inner")).unwrap();
+    at.touch("a/s0");
+    at.touch("a/s1");
+    at.set_mode(bad.to_str().unwrap(), 0o644);
+    let res = ucmd
+        .args(&["-R", "-v", &uid.as_raw().to_string(), "a"])
+        .run();
+    at.set_mode(bad.to_str().unwrap(), 0o755);
+    res.code_is(1)
+        .stderr_contains("bad/inner")
+        .stdout_contains("a/s0")
+        .stdout_contains("a/s1");
+    assert!(!res.stderr_str().contains("d19':"));
+}
