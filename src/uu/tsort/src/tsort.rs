@@ -118,6 +118,7 @@ pub fn uu_app() -> Command {
             Arg::new("warn")
                 .short('w')
                 .action(ArgAction::SetTrue)
+                .overrides_with("warn")
                 .hide(true),
         )
         .arg(

@@ -20,6 +20,9 @@ clap = { workspace = true }
 fluent = { workspace = true }
 uucore = { workspace = true, features = ["entries", "fs", "perms"] }
 
+[dev-dependencies]
+temp-env = { workspace = true }
+
 [lints]
 workspace = true
 

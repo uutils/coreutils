@@ -15,6 +15,7 @@ use std::path::Path;
 
 use uucore::buf_copy;
 use uucore::display::Quotable;
+use uucore::fs::FileInfo;
 use uucore::safe_copy::{create_dest_restrictive, open_source};
 use uucore::translate;
 
@@ -112,7 +113,7 @@ fn path_still_refers_to(path: &Path, file: &File) -> bool {
     let (Ok(current), Ok(opened)) = (path.symlink_metadata(), file.metadata()) else {
         return false;
     };
-    current.dev() == opened.dev() && current.ino() == opened.ino()
+    FileInfo::from(&current) == FileInfo::from(&opened)
 }
 
 /// Checks whether a file contains any non null bytes i.e. any byte != 0x0

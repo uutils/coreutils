@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use std::env;
-use std::io::{IsTerminal, Write};
+use std::io::Write;
 
 use clap::{Arg, ArgAction, Command};
 
@@ -13,7 +13,7 @@ use uucore::error::UResult;
 use uucore::i18n::get_ctype_encoding;
 use uucore::line_ending::LineEnding;
 use uucore::quoting_style::{
-    QuotingStyle, escape_name, parser as qs_parser, quoting_style_from_env,
+    QuotingStyle, escape_name, parser as qs_parser, quoting_style_or_tty_env,
 };
 use uucore::{format_usage, translate};
 
@@ -29,15 +29,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let maybe_quoting_style = matches
-        .get_one::<String>(qs_parser::QUOTING_STYLE)
-        .and_then(QuotingStyle::parse)
-        .or_else(|| {
-            std::io::stdout()
-                .is_terminal() // quoting style from env var is only used in TTY
-                .then(quoting_style_from_env)
-                .flatten()
-        });
+    let maybe_quoting_style = quoting_style_or_tty_env(
+        matches
+            .get_one::<String>(qs_parser::QUOTING_STYLE)
+            .and_then(QuotingStyle::parse),
+    );
 
     let separator = LineEnding::from_zero_flag(matches.get_flag(OPT_NULL));
 

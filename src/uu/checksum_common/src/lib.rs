@@ -10,6 +10,7 @@ use std::ffi::OsString;
 use std::io::{self, IsTerminal};
 
 use clap::builder::ValueParser;
+use clap::parser::ValueSource;
 use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint};
 
 use uucore::checksum::compute::{
@@ -215,12 +216,14 @@ pub fn checksum_main(
 
     let quoting_style = (io::stdout().is_terminal() && line_ending != LineEnding::Nul)
         .then(|| quoting_style_from_env().unwrap_or(QuotingStyle::SHELL_ESCAPE));
+    let has_file_operands = matches.value_source(options::FILE) == Some(ValueSource::CommandLine);
 
     let opts = ChecksumComputeOptions {
         algo_kind: algo,
         output_format,
         line_ending,
         quoting_style,
+        has_file_operands,
     };
 
     perform_checksum_computation(io::stdout(), opts, files)?;

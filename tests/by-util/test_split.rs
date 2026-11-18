@@ -355,6 +355,22 @@ fn test_filter_with_env_var_set() {
 }
 
 #[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[rstest]
+#[case::lines(&["-l1"], "executing with FILE=xaa\nexecuting with FILE=xab\n")]
+#[case::bytes(&["-b2"], "executing with FILE=xaa\nexecuting with FILE=xab\n")]
+#[case::line_bytes(&["-C2"], "executing with FILE=xaa\nexecuting with FILE=xab\n")]
+#[case::quoted_prefix(&["-l1", "-", "x y"], "executing with FILE='x yaa'\nexecuting with FILE='x yab'\n")]
+#[cfg(unix)]
+fn test_filter_verbose(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .args(&["--verbose", "--filter=cat > /dev/null"])
+        .args(args)
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 #[cfg(unix)]
 fn test_filter_command_fails() {
@@ -2583,16 +2599,22 @@ fn test_number_with_plus_prefix(
 }
 
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
-#[ignore = "a --filter that exits early must not abort the other -n chunks"]
 fn test_number_filter_exiting_early_keeps_other_chunks() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut data = vec![b'k'; 200_000];
     data.extend(vec![b'm'; 200_000]);
     data.extend(vec![b'n'; 200_000]);
     at.write_bytes("three", &data);
-    ucmd.args(&["-n", "3", "--filter=head -c1 > $FILE", "three"])
-        .succeeds()
-        .no_output();
+    // `head -c` is not POSIX and OpenBSD's head lacks it; dd also stops after one byte.
+    ucmd.args(&[
+        "-n",
+        "3",
+        "--filter=dd bs=1 count=1 2>/dev/null > $FILE",
+        "three",
+    ])
+    .succeeds()
+    .no_output();
     assert_eq!(at.read("xaa") + &at.read("xab") + &at.read("xac"), "kmn");
 }
