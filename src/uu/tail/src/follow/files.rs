@@ -142,15 +142,15 @@ impl FileHandling {
         #[cfg(not(unix))]
         let file = File::open(path)?;
         let is_character_device = is_character_device(&file)?;
-        let data = self.get_mut(path);
+        let key = Self::canonicalize_path(path);
+        let data = self.map.get_mut(&key).unwrap();
         data.reader.replace(BufReader::new(file));
         data.is_character_device = is_character_device;
         data.symlink = path.is_symlink();
         if is_character_device {
-            self.character_devices.insert(Self::canonicalize_path(path));
+            self.character_devices.insert(key);
         } else {
-            self.character_devices
-                .remove(&Self::canonicalize_path(path));
+            self.character_devices.remove(&key);
         }
         Ok(())
     }
