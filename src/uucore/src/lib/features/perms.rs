@@ -286,13 +286,12 @@ impl ChownExecutor {
             }
         }
 
-        let action = if self.verbosity.groups_only
-            || (self.dest_uid.is_none() && self.dest_gid.is_some())
-        {
-            "group"
-        } else {
-            "ownership"
-        };
+        let action =
+            if self.verbosity.groups_only || (self.dest_uid.is_none() && self.dest_gid.is_some()) {
+                "group"
+            } else {
+                "ownership"
+            };
 
         // Split on ':' always; only split on '.' when a group is expected, to avoid
         // misidentifying dotted user names like "john.doe" as "user.group" specs.
