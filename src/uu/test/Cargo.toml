@@ -21,11 +21,9 @@ fluent = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["fs", "i18n-collator", "wide"] }
 
-[target.'cfg(not(any(windows, target_os = "wasi")))'.dependencies]
-rustix = { workspace = true, features = ["fs", "process"] }
-
 [target.'cfg(not(windows))'.dependencies]
 libc = { workspace = true }
+rustix = { workspace = true, features = ["fs", "process"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [

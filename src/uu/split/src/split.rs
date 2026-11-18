@@ -591,7 +591,7 @@ impl<'a> ByteChunkWriter<'a> {
             USimpleError::new(1, translate!("split-error-output-file-suffixes-exhausted"))
         })?;
         if settings.verbose {
-            print_creating_file(&filename)?;
+            print_verbose_chunk(settings, &filename)?;
         }
         let inner = settings.instantiate_current_writer(&filename, true)?;
         Ok(ByteChunkWriter {
@@ -670,7 +670,7 @@ impl ByteChunkWriter<'_> {
                         io::Error::other(translate!("split-error-output-file-suffixes-exhausted"))
                     })?;
                     if self.settings.verbose {
-                        print_creating_file(&filename)?;
+                        print_verbose_chunk(self.settings, &filename)?;
                     }
                     self.inner = self.settings.instantiate_current_writer(&filename, true)?;
                     self.current_filename = filename;
@@ -762,7 +762,7 @@ impl<'a> LineChunkWriter<'a> {
             io::Error::other(translate!("split-error-output-file-suffixes-exhausted"))
         })?;
         if settings.verbose {
-            print_creating_file(&filename)?;
+            print_verbose_chunk(settings, &filename)?;
         }
         settings.instantiate_current_writer(&filename, true)
     }
@@ -1081,7 +1081,7 @@ fn n_chunks_by_byte(
             } else {
                 let idx = (i - 1) as usize;
                 let writer = out_files.get_writer(idx, settings)?;
-                writer.write_all(&buf)?;
+                custom_write_all(&buf, writer, settings)?;
             }
         } else {
             break;
@@ -1380,7 +1380,7 @@ fn line_bytes(
             USimpleError::new(1, translate!("split-error-output-file-suffixes-exhausted"))
         })?;
         if settings.verbose {
-            print_creating_file(&name)?;
+            print_verbose_chunk(settings, &name)?;
         }
         Ok(settings.instantiate_current_writer(&name, true)?)
     };
@@ -1511,10 +1511,11 @@ fn split(settings: &Settings) -> UResult<()> {
     }
 }
 
-fn print_creating_file(name: &OsString) -> io::Result<()> {
-    writeln!(
-        io::stdout(),
-        "{}",
+fn print_verbose_chunk(settings: &Settings, name: &OsString) -> io::Result<()> {
+    let message = if settings.filter.is_some() {
+        translate!("split-executing-with-file", "file" => name.maybe_quote())
+    } else {
         translate!("split-creating-file", "file" => name.quote())
-    )
+    };
+    writeln!(io::stdout(), "{message}")
 }

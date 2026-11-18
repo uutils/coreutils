@@ -55,7 +55,8 @@ fn test_openssl_link() {
     let dynamic = String::from_utf8_lossy(&out.stdout).contains("crypto"); // covering MSYS/MinGW too
     assert_eq!(
         std::env::var("OPENSSL_NO_VENDOR") == Ok("1".to_string()),
-        dynamic
+        dynamic,
+        "unexpected linkage of static/dynamic OpenSSL. Set OPENSSL_STATIC=0 too!"
     );
 }
 
@@ -87,6 +88,19 @@ fn test_stdin() {
         .pipe_in_fixture("lorem_ipsum.txt")
         .succeeds()
         .stdout_is_fixture("crc_stdin.expected");
+}
+
+#[rstest]
+#[case::crc("crc", "4294967295 0 -\n")]
+#[case::bsd("bsd", "00000     0 -\n")]
+#[case::sysv("sysv", "0 0 -\n")]
+fn test_explicit_dash_prints_filename(#[case] algo: &str, #[case] expected: &str) {
+    new_ucmd!()
+        .args(&["--algorithm", algo, "-"])
+        .pipe_in(b"")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(expected);
 }
 
 #[test]
