@@ -194,7 +194,7 @@ fn parse_command_line(config: Command, args: impl uucore::Args) -> UResult<Optio
     let mut args = matches
         .get_many::<OsString>("ARG")
         .unwrap_or_default()
-        .map(OsString::from);
+        .cloned();
 
     if compute_transition_context
         || matches.contains_id(options::USER)

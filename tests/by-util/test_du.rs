@@ -773,6 +773,24 @@ fn test_du_dereference_args() {
     result.stdout_contains("0\tsublink\n");
 }
 
+#[cfg(not(windows))]
+#[test]
+fn test_du_symlink_dir_operand_trailing_slash() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir");
+    at.write("dir/file", "content");
+    at.symlink_dir("dir", "link");
+
+    // The trailing slash resolves the symlink even without -D, as in GNU du.
+    ts.ucmd()
+        .arg("-a")
+        .arg("link/")
+        .succeeds()
+        .stdout_contains("link/file\n");
+}
+
 #[cfg(target_vendor = "apple")]
 fn du_dereference(s: &str) {
     assert_eq!(s, "4\tsubdir/links/deeper_dir\n16\tsubdir/links\n");

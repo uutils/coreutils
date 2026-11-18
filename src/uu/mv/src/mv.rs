@@ -207,9 +207,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let backup_suffix = backup_control::determine_backup_suffix(&matches);
 
-    let target_dir = matches
-        .get_one::<OsString>(OPT_TARGET_DIRECTORY)
-        .map(OsString::from);
+    let target_dir = matches.get_one::<OsString>(OPT_TARGET_DIRECTORY).cloned();
 
     if let Some(ref maybe_dir) = target_dir
         && !Path::new(&maybe_dir).is_dir()

@@ -23,6 +23,21 @@ use std::os::windows::io::{AsHandle, OwnedHandle};
 use std::path::Path;
 use std::process::Stdio;
 
+/// Label error by read or write
+#[derive(Debug)]
+pub enum ReadWriteError {
+    Read(io::Error),
+    Write(io::Error),
+}
+
+impl From<ReadWriteError> for io::Error {
+    fn from(error: ReadWriteError) -> Self {
+        match error {
+            ReadWriteError::Read(e) | ReadWriteError::Write(e) => e,
+        }
+    }
+}
+
 #[cfg(windows)]
 type NativeType = OwnedHandle;
 #[cfg(not(windows))]

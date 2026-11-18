@@ -14,9 +14,7 @@ use crate::{show_error, translate};
 
 use clap::{Arg, ArgMatches, Command};
 
-use libc::{gid_t, uid_t};
 use options::traverse;
-use rustix::fs::{Gid, Uid};
 #[cfg(target_os = "linux")]
 use std::collections::HashSet;
 use std::ffi::OsString;
@@ -30,20 +28,14 @@ use crate::features::fs::{metadata_is_root_dir, path_is_root_dir};
 #[cfg(target_os = "linux")]
 use crate::features::safe_traversal::{DirFd, FileInfo, SymlinkBehavior};
 
-#[cfg(target_os = "redox")]
-use std::ffi::CString;
 use std::fs::Metadata;
-use std::io::{Error as IOError, Result as IOResult};
 use std::os::unix::fs::MetadataExt;
-
-#[cfg(target_os = "redox")]
-use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
 #[derive(Debug, thiserror::Error)]
 enum PermsError {
     #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
-    Write(IOError),
+    Write(std::io::Error),
 }
 
 /// The various level of verbosity
@@ -70,46 +62,6 @@ impl Default for Verbosity {
     }
 }
 
-fn rustix_ownership(uid: uid_t, gid: gid_t) -> (Option<Uid>, Option<Gid>) {
-    // rustix rejects -1 as a Uid/Gid; None requests an unchanged ID.
-    let owner = (uid != uid_t::MAX).then(|| Uid::from_raw(uid));
-    let group = (gid != gid_t::MAX).then(|| Gid::from_raw(gid));
-    (owner, group)
-}
-
-/// Change ownership relative to the current directory, preserving the symlink policy.
-#[cfg(not(target_os = "redox"))]
-fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IOResult<()> {
-    use rustix::fs::{AtFlags, CWD, chownat};
-    let flags = if follow {
-        AtFlags::empty()
-    } else {
-        AtFlags::SYMLINK_NOFOLLOW
-    };
-    let (owner, group) = rustix_ownership(uid, gid);
-    chownat(CWD, path.as_ref(), owner, group, flags).map_err(Into::into)
-}
-
-/// Redox does not provide `rustix::fs::chownat`.
-// TODO: Remove this fallback when a rustix release includes Redox chownat:
-// https://github.com/bytecodealliance/rustix/pull/1638
-#[cfg(target_os = "redox")]
-fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IOResult<()> {
-    let path = path.as_ref();
-    if follow {
-        let (owner, group) = rustix_ownership(uid, gid);
-        return rustix::fs::chown(path, owner, group).map_err(Into::into);
-    }
-    let s = CString::new(path.as_os_str().as_bytes())?;
-    // SAFETY: s is NUL-terminated and lives through the call.
-    let ret = unsafe { libc::lchown(s.as_ptr(), uid, gid) };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(IOError::last_os_error())
-    }
-}
-
 /// Perform the change of owner on a path
 /// with the various options
 /// and error messages management
@@ -126,7 +78,12 @@ pub fn wrap_chown<P: AsRef<Path>>(
     let path = path.as_ref();
     let mut out: String = String::new();
 
-    if let Err(e) = chown(path, dest_uid, dest_gid, follow) {
+    let res = if follow {
+        std::os::unix::fs::chown(path, Some(dest_uid), Some(dest_gid))
+    } else {
+        std::os::unix::fs::lchown(path, Some(dest_uid), Some(dest_gid))
+    };
+    if let Err(e) = res {
         match verbosity.level {
             VerbosityLevel::Silent => (),
             level => {
@@ -289,7 +246,7 @@ fn report_root(path: &Path) {
 /// A pathname can be re-pointed between the stat and the open, so comparing
 /// (device, inode) is what detects the swap. The descriptor cannot be re-pointed after.
 #[cfg(target_os = "linux")]
-fn fd_is(dir_fd: &DirFd, meta: &Metadata) -> IOResult<bool> {
+fn fd_is(dir_fd: &DirFd, meta: &Metadata) -> std::io::Result<bool> {
     let opened = FileInfo::from_stat(&dir_fd.fstat()?);
     Ok(opened == FileInfo::new(meta.dev(), meta.ino()))
 }
@@ -801,7 +758,7 @@ impl ChownExecutor {
     }
 
     #[inline]
-    fn matched(&self, uid: uid_t, gid: gid_t) -> bool {
+    fn matched(&self, uid: u32, gid: u32) -> bool {
         match self.filter {
             IfFrom::All => true,
             IfFrom::User(u) => u == uid,

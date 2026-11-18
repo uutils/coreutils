@@ -408,8 +408,9 @@ impl Parser {
                 // Output-only flags
                 "append" => o.append = true,
                 "seek_bytes" => o.seek_bytes = true,
-                // GNU silently ignores iflags given as oflag.
-                "fullblock" | "count_bytes" | "skip_bytes" => {}
+                // GNU silently ignores these iflags given as oflag, but not
+                // fullblock.
+                "count_bytes" | "skip_bytes" => {}
                 _ => return Err(ParseError::OutputFlagNoMatch(f.to_string())),
             }
         }

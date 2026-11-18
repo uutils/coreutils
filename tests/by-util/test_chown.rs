@@ -1071,6 +1071,7 @@ fn test_chown_no_dereference_symlink_to_dir() {
 }
 
 #[test]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_chown_symlink_cycles() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1196,5 +1197,32 @@ fn test_repeated_flags_are_accepted() {
             .arg(geteuid().to_string())
             .arg("dir")
             .succeeds();
+    }
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "chown -v must print +ID specs as plain IDs"]
+fn test_chown_verbose_broken_symlink_plus_ids() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.symlink_file("absent", "ghost");
+    let uid = rustix::process::geteuid().as_raw();
+    let gid = rustix::process::getegid().as_raw();
+    for (spec, expected) in [
+        (
+            format!("+{uid}"),
+            format!("failed to change ownership of 'ghost' to {uid}\n"),
+        ),
+        (
+            format!(":+{gid}"),
+            format!("failed to change group of 'ghost' to {gid}\n"),
+        ),
+    ] {
+        scene
+            .ucmd()
+            .args(&["-v", &spec, "ghost"])
+            .fails_with_code(1)
+            .stdout_is(expected)
+            .stderr_contains("chown: cannot dereference 'ghost': ");
     }
 }

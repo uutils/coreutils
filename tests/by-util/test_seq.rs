@@ -1320,3 +1320,34 @@ fn test_repeated_option_last_one_wins() {
         .succeeds()
         .stdout_only("1:2:3\n");
 }
+
+#[rstest]
+#[case::pos_inf_down_to_pos_inf(&["inf", "-1", "inf"], "inf\n")]
+#[case::neg_inf_up_to_neg_inf(&["--", "-inf", "3", "-inf"], "-inf\n")]
+#[case::inf_plus_neg_inf_is_nan(&["inf", "-inf", "0"], "inf\n")]
+#[ignore = "seq must stop once the value no longer changes"]
+fn test_stalled_value_stops(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .args(args)
+        .timeout(std::time::Duration::from_secs(5))
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[cfg(unix)]
+#[rstest]
+#[case::comma_operands(&["0,25", "0,25", "1"], "0,25\n0,50\n0,75\n1,00\n")]
+#[case::negative_comma_first(&["-,75", "1"], "-0,75\n0,25\n")]
+#[case::negative_comma_increment(&["2", "-0,5", "1"], "2,0\n1,5\n1,0\n")]
+#[ignore = "operands using the locale's decimal point must be accepted"]
+fn test_locale_decimal_point_operands(#[case] args: &[&str], #[case] expected: &str) {
+    let locale = "fr_FR.UTF-8";
+    if !uutests::util::is_locale_available(locale) {
+        return;
+    }
+    new_ucmd!()
+        .args(args)
+        .env("LC_ALL", locale)
+        .succeeds()
+        .stdout_only(expected);
+}
