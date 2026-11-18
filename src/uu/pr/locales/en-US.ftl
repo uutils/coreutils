@@ -85,6 +85,7 @@ pr-help-join-lines =
   merge full lines, turns off -W line truncation, no column
                   alignment, --sep-string[=STRING] sets separators
 pr-help-expand-tabs = expand input CHARs (TABs) to tab WIDTH (8)
+pr-help-output-tabs = replace spaces with CHARs (TABs) to tab WIDTH (8)
 pr-help-help = Print help information
 
 # Page header text
@@ -116,4 +117,5 @@ pr-error-value-out-of-range = {$message}: {$value}: Numerical result out of rang
 pr-error-starting-page-exceeds-page-count = starting page number {$start} exceeds page count {$count}
 pr-error-integer-overflow = integer overflow
 pr-error-invalid-expand-tab-argument ='-e' extra characters or invalid number in the argument: {$arg}
+pr-error-invalid-output-tab-argument ='-i' extra characters or invalid number in the argument: {$arg}
 pr-error-invalid-number-argument ='-n' extra characters or invalid number in the argument: {$arg}

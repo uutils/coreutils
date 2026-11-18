@@ -735,7 +735,7 @@ fn test_merge_with_column_separator() {
         .ucmd()
         .args(&["-m", "-t", "-w", "10", "one", "two"])
         .succeeds()
-        .stdout_is("firs\tx\n2   \ty\n");
+        .stdout_is("firs x\n2    y\n");
 }
 
 #[test]
@@ -981,12 +981,8 @@ fn test_columns() {
     let whitespace = " ".repeat(50);
     let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
     let header = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
-    // TODO Our output still does not match the behavior of GNU
-    // pr. The correct output should be:
-    //
-    //     "a\t\t\t\t    b\n";
-    //
-    let data = "a                                  \tb\n";
+    // Like GNU pr, the space between the columns is filled with tabs.
+    let data = "a\t\t\t\t    b\n";
     let blank_lines_60 = "\n".repeat(60);
     let pattern = format!("{header}{data}{blank_lines_60}");
     let regex = Regex::new(&pattern).unwrap();
@@ -1010,7 +1006,7 @@ fn test_columns_partly_filled_page() {
         .args(&["-t", "-2", "-w", "20"])
         .pipe_in("a\nb\nc\n")
         .succeeds()
-        .stdout_is("a        \tc\nb\n");
+        .stdout_is("a\t  c\nb\n");
 }
 
 #[test]
@@ -1022,7 +1018,7 @@ fn test_columns_partly_filled_page_across() {
         .args(&["-t", "-a", "-2", "-w", "20"])
         .pipe_in("a\nb\nc\n")
         .succeeds()
-        .stdout_is("a        \tb\nc\n");
+        .stdout_is("a\t  b\nc\n");
 }
 
 #[test]
@@ -1041,7 +1037,7 @@ fn test_columns_fewer_lines_than_columns() {
         .args(&["-t", "-3", "-w", "20"])
         .pipe_in("a\nb\n")
         .succeeds()
-        .stdout_is("a     \tb\n");
+        .stdout_is("a      b\n");
 }
 
 #[test]
@@ -1065,8 +1061,8 @@ fn test_columns_last_page() {
     // Command line: `seq 9 | pr -2 -l 12 -w 20 -D DATE`.
     let header = "\n\nDATE          Page ";
     let expected = format!(
-        "{header}1\n\n\n1        \t3\n2        \t4\n{blank}\
-         {header}2\n\n\n5        \t7\n6        \t8\n{blank}\
+        "{header}1\n\n\n1\t  3\n2\t  4\n{blank}\
+         {header}2\n\n\n5\t  7\n6\t  8\n{blank}\
          {header}3\n\n\n9\n\n\n\n\n\n\n",
         blank = "\n".repeat(5),
     );
@@ -1087,14 +1083,10 @@ fn test_merge() {
     let whitespace = " ".repeat(50);
     let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
     let header = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
-    // TODO Our output still does not match the behavior of GNU
-    // pr. The correct output should be:
-    //
-    //     "a\t\t\t\t    b\n";
-    //
-    // and the blank lines should actually be empty lines.
-    let data = "a                                  \tb\n";
-    let blank_lines_55 = "                                   \t\n".repeat(55);
+    // Like GNU pr, the space between the columns is filled with tabs.
+    // TODO The rest of the page should be filled with empty lines.
+    let data = "a\t\t\t\t    b\n";
+    let blank_lines_55 = "\t\t\t\t    \n".repeat(55);
     let footer = "\n".repeat(5);
     let pattern = format!("{header}{data}{blank_lines_55}{footer}");
     let regex = Regex::new(&pattern).unwrap();
@@ -1117,13 +1109,13 @@ fn test_merge_one_long_one_short() {
     let whitespace = " ".repeat(50);
     let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
     let header = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
-    let data = "a                                  \tb\n";
+    let data = "a\t\t\t\t    b\n";
     let footer = "\n".repeat(5);
     let page1 = format!("{header}{data}{footer}");
 
     // Page 2 should have just the second line of `f`.
     let header = format!("\n\n{datetime_pattern}{whitespace}Page 2\n\n\n");
-    let data = "a                                  \t\n";
+    let data = "a\t\t\t\t    \n";
     let page2 = format!("{header}{data}{footer}");
 
     let pattern = format!("{page1}{page2}");
@@ -1503,7 +1495,7 @@ fn test_merge_non_utf8_input_filename() {
         .arg(name)
         .arg("right")
         .succeeds()
-        .stdout_only(format!("{:<35}\t{}\n", "left", "right"));
+        .stdout_only("left\t\t\t\t    right\n");
 }
 
 #[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
@@ -1710,4 +1702,151 @@ fn test_page_width_narrower_than_leading_tab() {
         .pipe_in("\tone\n\ttwo\n")
         .succeeds()
         .stdout_only("    1\t\n    2\t\n");
+}
+
+#[test]
+fn test_columns_are_padded_with_tabs() {
+    // Like GNU pr, the space between columns is made of tabs, followed by the
+    // spaces that are left. See issue #16510.
+    //
+    // Command line: `printf 'a\nb\nc\nd\ne\nf\n' | pr -2 -t`.
+    new_ucmd!()
+        .args(&["-2", "-t"])
+        .pipe_in("a\nb\nc\nd\ne\nf\n")
+        .succeeds()
+        .stdout_only("a\t\t\t\t    d\nb\t\t\t\t    e\nc\t\t\t\t    f\n");
+
+    // The columns start at 0, 18, 36 and 54, as with spaces only.
+    new_ucmd!()
+        .args(&["-t", "-4"])
+        .pipe_in("a\nbbbbbbbbbbb\nccc\nd\n")
+        .succeeds()
+        .stdout_only("a\t\t  bbbbbbbbbbb\t    ccc\t\t      d\n");
+}
+
+#[test]
+fn test_columns_expand_tabs_from_column_start() {
+    // The TAB in the second column reaches column 36 + 8.
+    new_ucmd!()
+        .args(&["-t", "-2"])
+        .pipe_in("a\n\tb\n")
+        .succeeds()
+        .stdout_only("a\t\t\t\t    \t    b\n");
+}
+
+#[test]
+fn test_columns_with_line_numbers() {
+    // The line number and the TAB after it take 8 of the 14 columns, which
+    // leaves 6 for the text.
+    new_ucmd!()
+        .args(&["-t", "-2", "-n", "-w", "30"])
+        .pipe_in("abcdefghijklmnopq\nx\n")
+        .succeeds()
+        .stdout_only("    1\tabcdef \t   2   x\n");
+}
+
+#[test]
+fn test_columns_with_char_separator_are_not_padded() {
+    // Like GNU pr, -s without -w joins the columns without padding them.
+    new_ucmd!()
+        .args(&["-t", "-2", "-s"])
+        .pipe_in("a\tb\nc\n")
+        .succeeds()
+        .stdout_only("a\tb\tc\n");
+    new_ucmd!()
+        .args(&["-t", "-2", "-s,"])
+        .pipe_in("a\tb\nc\n")
+        .succeeds()
+        .stdout_only("a\tb,c\n");
+}
+
+#[test]
+fn test_output_tabs() {
+    // A single space stays a space, and spaces at the end of a line are
+    // dropped.
+    for args in [&["-t", "-i"][..], &["-t", "--output-tabs"], &["-ti"]] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("ab      cd\nb   \nabcdefg h\n")
+            .succeeds()
+            .stdout_only("ab\tcd\nb\nabcdefg h\n");
+    }
+    new_ucmd!()
+        .args(&["-t", "-i.4"])
+        .pipe_in("ab      cd\n")
+        .succeeds()
+        .stdout_only("ab..cd\n");
+    new_ucmd!()
+        .args(&["-t", "-2", "-i."])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_only("a....    b\n");
+    // Tabs expanded by -e are written as tabs again by -i.
+    new_ucmd!()
+        .args(&["-t", "-i", "-e"])
+        .pipe_in("a\tb      c\n")
+        .succeeds()
+        .stdout_only("a\tb      c\n");
+}
+
+#[test]
+fn test_invalid_output_tab_arguments() {
+    for (arg, field) in [("-i0", "0"), ("-iab", "b"), ("-i.0", "0")] {
+        new_ucmd!()
+            .args(&["-t", arg])
+            .pipe_in("a\n")
+            .ignore_stdin_write_error()
+            .fails_with_code(1)
+            .stderr_contains(format!(
+                "pr: '-i' extra characters or invalid number in the argument: '{field}'\nTry 'pr --help' for more information."
+            ));
+    }
+}
+
+#[test]
+fn test_columns_leading_tab_with_line_numbers() {
+    // Like GNU pr, a TAB that starts the line is expanded as if the line
+    // number were not there.
+    new_ucmd!()
+        .args(&["-t", "-2", "-n:3", "-e3"])
+        .pipe_in("\tb\nx\n")
+        .succeeds()
+        .stdout_only("  1:   b\t\t\t      2:x\n");
+    new_ucmd!()
+        .args(&["-t", "-2", "-n:3"])
+        .pipe_in("\tb\nx\n")
+        .succeeds()
+        .stdout_only("  1:\t    b\t\t\t      2:x\n");
+}
+
+#[test]
+fn test_join_lines_column_position() {
+    // Without padding, GNU pr counts a line number as if a TAB followed it.
+    new_ucmd!()
+        .args(&["-t", "-2", "-n:3", "-J"])
+        .pipe_in("djhefi   hibdefab\ncgedcg\n")
+        .succeeds()
+        .stdout_only("  1:djhefi   hibdefab\t  2:cgedcg\n");
+    // Printing across, it counts each TAB of the text as 8 columns.
+    new_ucmd!()
+        .args(&["-t", "-2", "-J", "-a"])
+        .pipe_in("\txyy\txx\ny y   x\n")
+        .succeeds()
+        .stdout_only("\txyy\txx\ty y   x\n");
+}
+
+#[test]
+fn test_join_lines_blank_line_with_line_number() {
+    // A line number before an empty line is not counted as if a TAB
+    // followed it, and a line of spaces only is printed as an empty one.
+    new_ucmd!()
+        .args(&["-t", "-4", "-w", "26", "-n:3", "-J"])
+        .pipe_in("\niahajff\ndcighcaeadafjd fbgfg\nbc e\n agfj \nd\n")
+        .succeeds()
+        .stdout_only("  1:\t  3:dcighcaeadafjd fbgfg\t  5: agfj \t  6:d\n  2:iahajff\t  4:bc e\n");
+    new_ucmd!()
+        .args(&["-t", "-4", "-w", "20", "-s:", "-n:3", "-e"])
+        .pipe_in(" \n\n")
+        .succeeds()
+        .stdout_only("  1::  2:\n");
 }

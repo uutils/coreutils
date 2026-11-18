@@ -84,6 +84,7 @@ pr-help-join-lines =
   fusionner les lignes complètes, désactive la troncature de ligne -W, aucun
                   alignement de colonne, --sep-string[=CHAÎNE] définit les séparateurs
 pr-help-expand-tabs = convertir les CHARs d'entrée (TABs) en largeur de tabulation WIDTH (8)
+pr-help-output-tabs = remplacer les espaces par des CHARs (TABs) jusqu'à la largeur de tabulation WIDTH (8)
 pr-help-help = Afficher les informations d'aide
 
 # Texte d'en-tête de page
@@ -115,4 +116,5 @@ pr-error-value-out-of-range = {$message} : {$value} : Résultat numérique hors 
 pr-error-starting-page-exceeds-page-count = le numéro de page de début {$start} dépasse le nombre de pages {$count}
 pr-error-integer-overflow = dépassement de capacité d'entier
 pr-error-invalid-expand-tab-argument = Caractères supplémentaires ou nombre invalide dans l'argument de '-e': {$arg}
+pr-error-invalid-output-tab-argument = Caractères supplémentaires ou nombre invalide dans l'argument de '-i': {$arg}
 pr-error-invalid-number-argument = Caractères supplémentaires ou nombre invalide dans l'argument de '-n': {$arg}
