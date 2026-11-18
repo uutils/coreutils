@@ -122,6 +122,30 @@ fn test_parenthesis() {
         .args(&["1", "(", ")"])
         .fails_with_code(2)
         .stderr_only("expr: syntax error: unexpected argument '('\n");
+
+    // Issue #16653: ')' where a value is expected is a syntax error
+    new_ucmd!()
+        .args(&[")"])
+        .fails_with_code(2)
+        .stderr_only("expr: syntax error: unexpected argument ')'\n");
+
+    new_ucmd!()
+        .args(&["length", ")"])
+        .fails_with_code(2)
+        .stderr_only("expr: syntax error: unexpected argument ')'\n");
+
+    new_ucmd!()
+        .args(&[")", "=", "a"])
+        .fails_with_code(2)
+        .stderr_only("expr: syntax error: unexpected argument ')'\n");
+
+    new_ucmd!()
+        .args(&["(", ")"])
+        .fails_with_code(2)
+        .stderr_only("expr: syntax error: unexpected argument ')'\n");
+
+    // Quoting with + allows ')' as a literal operand
+    new_ucmd!().args(&["+", ")"]).succeeds().stdout_only(")\n");
 }
 
 #[test]

@@ -1027,6 +1027,10 @@ impl<'a, S: AsRef<MaybeNonUtf8Str>> Parser<'a, S> {
                         stack.push(ParseFrame::CloseParen);
                         ParseState::Expression { min_prec: 0 }
                     }
+                    b")" => {
+                        self.index -= 1;
+                        return Err(ExprError::UnexpectedArgument(")".into()));
+                    }
                     s => ParseState::Value(AstNode::new(AstNodeInner::Leaf {
                         value: s.into(),
                         position: self.index - 1,
