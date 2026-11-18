@@ -965,6 +965,14 @@ fn process_checksum_file(
 
     let reader = BufReader::new(file);
 
+    let filename_display = || {
+        if input_is_stdin {
+            "standard input".maybe_quote()
+        } else {
+            filename_input.maybe_quote()
+        }
+    };
+
     // cached_line_format is used to ensure that several non algo-based checksum line
     // will use the same parser.
     let mut cached_line_format = None;
@@ -1014,7 +1022,7 @@ fn process_checksum_file(
                         stderr(),
                         "{}: {}",
                         util_name(),
-                        translate_text!("checksum-error-algo-bad-format", "file" => filename_input.maybe_quote(), "line" => i + 1, "algo" => algo)
+                        translate_text!("checksum-error-algo-bad-format", "file" => filename_display(), "line" => i + 1, "algo" => algo)
                     );
                 }
             }
@@ -1023,14 +1031,6 @@ fn process_checksum_file(
             _ => (),
         }
     }
-
-    let filename_display = || {
-        if input_is_stdin {
-            "standard input".maybe_quote()
-        } else {
-            filename_input.maybe_quote()
-        }
-    };
 
     // not a single line correctly formatted found
     // return an error

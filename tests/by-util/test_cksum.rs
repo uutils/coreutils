@@ -818,6 +818,21 @@ fn test_check_tagged_legacy_algo_keeps_warning_algo() {
         );
 }
 
+#[test]
+fn test_check_warn_names_stdin() {
+    // A warning about a line of a list read from stdin names it
+    // 'standard input', as the other messages for a stdin list do.
+    new_ucmd!()
+        .args(&["-a", "md5", "--warn", "--check"])
+        .pipe_in("x\n")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is(
+            "cksum: 'standard input': 1: improperly formatted MD5 checksum line\n\
+             cksum: 'standard input': no properly formatted checksum lines found\n",
+        );
+}
+
 #[rstest]
 #[case::md5("md5", "d41d8cd98f00b204e9800998ecf8427e")]
 #[case::sha1("sha1", "da39a3ee5e6b4b0d3255bfef95601890afd80709")]
