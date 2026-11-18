@@ -546,3 +546,26 @@ fn test_multibyte_char_split_across_reads() {
         .succeeds()
         .stdout_only("\u{e9}       z\n");
 }
+
+#[test]
+fn test_zero_increment_after_a_tab_list() {
+    // As in GNU, `+0` and `/0` after a tab list set no tab size: the list is
+    // used as given, unless a later number supplies the size.
+    for (list, expected) in [
+        ("4,+0", "a   b   c   d   e\n"),
+        ("4,/0", "a   b   c   d   e\n"),
+        ("2,6,+0", "a b   c d e\n"),
+        ("2,6,/0", "a b   c d e\n"),
+        ("4,+0,8", "a   b       c       d       e\n"),
+        ("4,+0,+2", "a   b c d e\n"),
+        ("4,/0,10", "a   b     c         d         e\n"),
+        // A trailing `+` without a number sets no tab size either.
+        ("2,6,+", "a b   c d e\n"),
+    ] {
+        new_ucmd!()
+            .args(&["-t", list])
+            .pipe_in("a\tb\tc\td\te\n")
+            .succeeds()
+            .stdout_only(expected);
+    }
+}

@@ -1469,6 +1469,7 @@ fn test_non_utf8_input_filename() {
     ucmd.arg("-t")
         .arg(name)
         .pipe_in("from stdin\n")
+        .ignore_stdin_write_error()
         .succeeds()
         .stdout_only("from file\n");
 }
@@ -1483,6 +1484,7 @@ fn test_missing_non_utf8_input_does_not_read_stdin() {
         .arg("-t")
         .arg(OsStr::from_bytes(b"missing-\xff"))
         .pipe_in("from stdin\n")
+        .ignore_stdin_write_error()
         .fails_with_code(1)
         .no_stdout()
         .stderr_contains("missing-")
@@ -1767,4 +1769,15 @@ fn test_columns_cut_tab_that_does_not_fit() {
         .pipe_in("\tb\nc\n\td\n\te\n")
         .succeeds()
         .stdout_only("     :\nc    :\n");
+}
+
+#[test]
+fn test_double_space_last_line_without_newline() {
+    for (input, expected) in [("a", "a\n"), ("a\nb", "a\n\nb\n"), ("a\nb\n", "a\n\nb\n\n")] {
+        new_ucmd!()
+            .args(&["-t", "-d"])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(expected);
+    }
 }
