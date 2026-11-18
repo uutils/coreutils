@@ -121,41 +121,31 @@ fn failed(
     }
 }
 
-fn validate_count_options(raw_args: &[OsString], diag_args: Option<&[OsString]>) -> UResult<()> {
-    for argument in count_option_arguments(raw_args) {
-        if let Err(error) = parse::parse_num(&argument.value) {
-            let (short, long, key) = match argument.option {
-                CountOption::Bytes => ('c', "bytes", "head-error-invalid-bytes"),
-                CountOption::Lines => ('n', "lines", "head-error-invalid-lines"),
-            };
-            let size_error = failed(&argument.value, short, long, key)(error);
-            return Err(size_error.into_error(diag_args));
-        }
-    }
-    Ok(())
-}
-
 impl Mode {
     fn from(matches: &ArgMatches) -> Result<Self, SizeError> {
-        if let Some(v) = matches.get_one::<String>(options::BYTES) {
-            let (n, all_but_last) =
-                parse::parse_num(v).map_err(failed(v, 'c', "bytes", "head-error-invalid-bytes"))?;
-            if all_but_last {
-                Ok(Self::AllButLastBytes(n))
-            } else {
-                Ok(Self::FirstBytes(n))
-            }
-        } else if let Some(v) = matches.get_one::<String>(options::LINES) {
-            let (n, all_but_last) =
-                parse::parse_num(v).map_err(failed(v, 'n', "lines", "head-error-invalid-lines"))?;
-            if all_but_last {
-                Ok(Self::AllButLastLines(n))
-            } else {
-                Ok(Self::FirstLines(n))
-            }
-        } else {
-            Ok(Self::default())
+        let mut mode = None;
+
+        for argument in count_option_arguments(matches, options::BYTES, options::LINES) {
+            let option = argument.option;
+            let value = argument.value;
+            let (n, all_but_last) = parse::parse_num(&value).map_err(|error| match option {
+                CountOption::Bytes => {
+                    failed(&value, 'c', "bytes", "head-error-invalid-bytes")(error)
+                }
+                CountOption::Lines => {
+                    failed(&value, 'n', "lines", "head-error-invalid-lines")(error)
+                }
+            })?;
+
+            mode = Some(match (option, all_but_last) {
+                (CountOption::Bytes, true) => Self::AllButLastBytes(n),
+                (CountOption::Bytes, false) => Self::FirstBytes(n),
+                (CountOption::Lines, true) => Self::AllButLastLines(n),
+                (CountOption::Lines, false) => Self::FirstLines(n),
+            });
         }
+
+        Ok(mode.unwrap_or_default())
     }
 }
 
@@ -599,7 +589,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let raw_args: Vec<_> = args.collect();
     // Capture before obsolete options such as `-5` are rewritten to `-n 5`.
     let diag_args = uucore::diagnostics::capture(&raw_args);
-    validate_count_options(&raw_args, diag_args.as_deref())?;
     let args: Vec<_> = arg_iterate(raw_args.into_iter())?.collect();
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let options =
