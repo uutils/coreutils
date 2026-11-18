@@ -869,16 +869,20 @@ fn test_page_header_width() {
 
 #[test]
 fn test_separator_options_default_values() {
-    // -s and -S without arguments should use default values (TAB and space)
+    // -s without a value separates with a TAB
     // TODO: verify output matches GNU pr behavior
     new_ucmd!()
         .args(&["-t", "-2", "-s"])
         .pipe_in("a\nb\n")
         .succeeds();
-    new_ucmd!()
-        .args(&["-t", "-2", "-S"])
-        .pipe_in("a\nb\n")
-        .succeeds();
+    // -S without a value separates like a space, unless -J joins the columns
+    for option in ["-S", "--sep-string=", "-S "] {
+        new_ucmd!()
+            .args(&["-t", "-2", option])
+            .pipe_in("a\nb\n")
+            .succeeds()
+            .stdout_only(format!("a{}b\n", " ".repeat(35)));
+    }
 }
 
 #[test]
