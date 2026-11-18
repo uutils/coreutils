@@ -3077,6 +3077,7 @@ fn get_leading_gen(inp: &[u8], decimal_pt: u8) -> Range<usize> {
 #[derive(Clone, PartialEq, PartialOrd, Debug)]
 pub enum GeneralBigDecimalParseResult {
     Invalid,
+    MinusNan,
     Nan,
     MinusInfinity,
     Number(BigDecimal),
@@ -3116,7 +3117,8 @@ fn general_bd_parse(a: &[u8], decimal_pt: u8) -> GeneralBigDecimalParseResult {
         ExtendedBigDecimal::MinusInfinity => GeneralBigDecimalParseResult::MinusInfinity,
         // Minus zero and zero are equal
         ExtendedBigDecimal::MinusZero => GeneralBigDecimalParseResult::Number(0.into()),
-        ExtendedBigDecimal::Nan | ExtendedBigDecimal::MinusNan => GeneralBigDecimalParseResult::Nan,
+        ExtendedBigDecimal::MinusNan => GeneralBigDecimalParseResult::MinusNan,
+        ExtendedBigDecimal::Nan => GeneralBigDecimalParseResult::Nan,
     }
 }
 

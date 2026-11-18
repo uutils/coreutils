@@ -3043,9 +3043,9 @@ fn test_g_signed_inf_and_nan() {
         .stdout_is("-inf\n1\n2\n+INFx\n+inf\n");
     new_ucmd!()
         .arg("-g")
-        .pipe_in("+nan\n1\n-nan\nx\n-inf\n")
+        .pipe_in("+nan\n1\nnan\n-nan\nx\n-inf\n")
         .succeeds()
-        .stdout_is("x\n+nan\n-nan\n-inf\n1\n");
+        .stdout_is("x\n-nan\n+nan\nnan\n-inf\n1\n");
 }
 
 #[test]
