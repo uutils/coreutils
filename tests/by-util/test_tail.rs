@@ -5679,6 +5679,10 @@ fn test_follow_character_device_reads_new_data(
         child.delay(10);
     }
     if multiple_inputs {
+        assert!(
+            child.stdout_all().contains("new data"),
+            "device input was not read"
+        );
         // A quiet device must not block output from the other input.
         ts.fixtures.append("f", "other file\n");
         for _ in 0..500 {
@@ -5698,6 +5702,78 @@ fn test_follow_character_device_reads_new_data(
             "new data"
         })
         .no_stderr();
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_follow_character_device_continuous_input() {
+    use std::io::Read;
+    use std::os::fd::OwnedFd;
+    use std::os::unix::net::UnixStream;
+    use std::time::{Duration, Instant};
+
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.symlink_file("/dev/null", "input");
+    ts.fixtures.write("other", "ready\n");
+    let mut process = ts.cmd("sleep").arg("60").run_no_wait();
+    let (mut output, writer) = UnixStream::pair().unwrap();
+    output
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let mut child = ts
+        .ucmd()
+        .args(&["-q", "-n1", "-s60", "-F", "input", "other"])
+        .arg(format!("--pid={}", process.id()))
+        // Keep a regression from exhausting memory before the read times out.
+        .limit(rlimit::Resource::AS, 200 * 1024 * 1024, 200 * 1024 * 1024)
+        .limit(rlimit::Resource::CORE, 0, 0)
+        .set_stdout(OwnedFd::from(writer))
+        .run_no_wait();
+    let mut ready = [0; 6];
+    output.read_exact(&mut ready).unwrap();
+    assert_eq!(&ready, b"ready\n");
+
+    ts.fixtures.symlink_file("/dev/zero", "replacement");
+    ts.fixtures.rename("replacement", "input");
+    // Read several batches without waiting for the 60-second polling interval.
+    let mut zeros = vec![1; 256 * 1024];
+    output.read_exact(&mut zeros).unwrap();
+    assert!(zeros.iter().all(|byte| *byte == 0));
+
+    ts.fixtures.append("other", "other file\n");
+    let mut marker = Vec::new();
+    let mut buffer = [0; 8192];
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while marker.len() < b"other file\n".len() && Instant::now() < deadline {
+        let count = output.read(&mut buffer).unwrap();
+        if count == 0 {
+            break;
+        }
+        marker.extend(buffer[..count].iter().copied().filter(|byte| *byte != 0));
+    }
+    assert_eq!(marker, b"other file\n", "the other input stalled");
+
+    process.kill();
+    // Drain stdout so output backpressure cannot prevent the next PID check.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        if output.read(&mut buffer).unwrap() == 0 {
+            break;
+        }
+    }
+    while child.is_alive() && Instant::now() < deadline {
+        child.delay(10);
+    }
+    assert!(
+        child.is_not_alive(),
+        "continuous device input blocked --pid"
+    );
+    child
+        .wait()
+        .unwrap()
+        .success()
+        .stderr_contains("'input' has been replaced");
 }
 
 #[uutests::wasi_ignore(TailFollowDisabled)]
@@ -5846,6 +5922,10 @@ fn test_follow_character_device_replaced_by_file(#[values(false, true)] use_poll
         }
         child.delay(10);
     }
+    assert!(
+        child.stdout_all().contains("regular\n"),
+        "replacement was not read"
+    );
     ts.fixtures.append("input", "more\n");
     for _ in 0..500 {
         if child.stdout_all().contains("more\n") {

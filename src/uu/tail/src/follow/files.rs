@@ -126,10 +126,11 @@ impl FileHandling {
 
     /// Set `reader` to None to indicate that `path` is not an existing file anymore.
     pub fn reset_reader(&mut self, path: &Path) {
-        self.get_mut(path).reader = None;
-        self.get_mut(path).is_character_device = false;
-        self.character_devices
-            .remove(&Self::canonicalize_path(path));
+        let key = Self::canonicalize_path(path);
+        let data = self.map.get_mut(&key).unwrap();
+        data.reader = None;
+        data.is_character_device = false;
+        self.character_devices.remove(&key);
     }
 
     /// Reopen the file at the monitored `path`
@@ -163,9 +164,14 @@ impl FileHandling {
         };
     }
 
-    /// Read new data from `path` and print it to stdout
+    /// Read new data from `path` and print it to stdout.
+    /// Return true when a device filled its batch and should be read again without waiting.
     pub fn tail_file(&mut self, path: &Path, verbose: bool) -> UResult<bool> {
         let mut chunks = BytesChunkBuffer::new(u64::MAX);
+        #[cfg(unix)]
+        let mut read_again = false;
+        #[cfg(not(unix))]
+        let read_again = false;
         let data = self.get_mut(path);
         if let Some(reader) = data.reader.as_mut() {
             #[cfg(unix)]
@@ -174,8 +180,10 @@ impl FileHandling {
 
                 let flags = fcntl_getfl(reader.get_ref()).map_err(io::Error::from)?;
                 fcntl_setfl(reader.get_ref(), flags | OFlags::NONBLOCK).map_err(io::Error::from)?;
-                // A quiet device must not prevent polling other files or --pid.
-                let result = chunks.fill(&mut AvailableBytes(reader));
+                // Even an always-ready device must yield to other files and --pid.
+                let mut available = AvailableBytes(reader).take(64 * 1024);
+                let result = chunks.fill(&mut available);
+                read_again = available.limit() == 0;
                 // A duplicated stdin shares these flags with the caller.
                 fcntl_setfl(reader.get_ref(), flags).map_err(io::Error::from)?;
                 result?;
@@ -197,10 +205,8 @@ impl FileHandling {
 
             self.last.replace(path.to_owned());
             self.update_metadata(path, None);
-            Ok(true)
-        } else {
-            Ok(false)
         }
+        Ok(read_again)
     }
 
     /// Decide if printing `path` needs a header based on when it was last printed

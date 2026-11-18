@@ -10,13 +10,14 @@ use crate::follow::files::{FileHandling, PathData};
 use crate::paths::{Input, InputKind, MetadataExtTail, PathExtTail};
 use crate::{platform, text};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::BufReader;
 #[cfg(target_os = "linux")]
 use std::os::unix::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, channel};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, set_exit_code};
 #[cfg(target_os = "linux")]
@@ -568,11 +569,10 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
 
     let mut timeout_counter = 0;
     let mut last_device_poll = Instant::now();
+    let mut read_devices_again = false;
 
     // main follow loop
     loop {
-        let mut _read_some = false;
-
         // If `--pid=p`, tail checks whether process p
         // is alive at least every `--sleep-interval=N` seconds
         if settings.follow.is_some() && observer.pid != 0 && process.is_dead() {
@@ -597,7 +597,8 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                         );
                         observer.files.update_metadata(new_path, Some(md));
                         observer.files.update_reader(new_path)?;
-                        _read_some = observer.files.tail_file(new_path, settings.verbose)?;
+                        read_devices_again |=
+                            observer.files.tail_file(new_path, settings.verbose)?;
                         observer
                             .watcher_rx
                             .as_mut()
@@ -610,7 +611,9 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
 
         // With  -f, sleep for approximately N seconds (default 1.0) between iterations;
         // We wake up if Notify sends an Event or if we wait more than `sleep_sec`.
-        let timeout = if observer.files.character_devices().is_empty() {
+        let timeout = if read_devices_again {
+            Duration::ZERO
+        } else if observer.files.character_devices().is_empty() {
             settings.sleep_sec
         } else {
             settings
@@ -726,19 +729,27 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
         // Devices don't report new input through filesystem notifications. Poll
         // them on schedule even when other files keep producing events.
         if !observer.files.character_devices().is_empty()
-            && last_device_poll.elapsed() >= settings.sleep_sec
+            && (read_devices_again || last_device_poll.elapsed() >= settings.sleep_sec)
         {
-            for path in observer.files.character_devices() {
-                if !paths.contains(path) {
-                    paths.push(path.clone());
-                }
+            // The polling backend already includes every input above.
+            if !observer.use_polling {
+                let scheduled: HashSet<_> = paths.iter().collect();
+                let devices: Vec<_> = observer
+                    .files
+                    .character_devices()
+                    .iter()
+                    .filter(|path| !scheduled.contains(path))
+                    .cloned()
+                    .collect();
+                paths.extend(devices);
             }
             last_device_poll = Instant::now();
         }
 
         // main print loop
+        read_devices_again = false;
         for path in &paths {
-            _read_some = observer.files.tail_file(path, settings.verbose)?;
+            read_devices_again |= observer.files.tail_file(path, settings.verbose)?;
         }
 
         if timeout_counter == settings.max_unchanged_stats {
