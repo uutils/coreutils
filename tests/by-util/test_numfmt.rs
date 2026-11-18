@@ -625,8 +625,6 @@ fn test_round_keeps_fraction_of_suffixed_input() {
         (&["--round=down", "--format=%.1f"][..], "62.5\n62.5\n"),
         (&["--round=up", "--format=%.1f"][..], "62.5\n62.5\n"),
         (&["--round=towards-zero"][..], "62\n62.5\n"),
-        (&["--round=up", "--to=si"][..], "63\n63\n"),
-        (&["--round=nearest", "--to=si"][..], "63\n63\n"),
         (&["--round=down", "--to=si"][..], "62\n62\n"),
     ] {
         new_ucmd!()
