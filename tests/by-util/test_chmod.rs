@@ -2537,19 +2537,18 @@ fn test_recursive_dereference_changes_link_targets() {
 #[cfg(target_os = "linux")]
 #[test]
 fn test_recursive_skips_entry_removed_during_traversal() {
-    use uutests::util::run_ucmd_with_strace_inject;
+    use uutests::util::run_ucmd_with_strace;
 
     let ts = TestScenario::new(util_name!());
     ts.fixtures.mkdir("tree");
     ts.fixtures.touch("tree/gone");
     let arg = String::from("0750");
     let run = |error: &str, args: &[&str]| {
-        let inject = format!("?chmod,fchmodat,?fchmodat2:error={error}");
-        run_ucmd_with_strace_inject(
+        let inject = format!("inject=?chmod,fchmodat,?fchmodat2:error={error}");
+        run_ucmd_with_strace(
             &ts,
             "tree",
-            "gone",
-            &inject,
+            &["-qq", "-o", "/dev/null", "-P", "gone", "-e", &inject],
             &[&[arg.as_str()], args].concat(),
         )
     };

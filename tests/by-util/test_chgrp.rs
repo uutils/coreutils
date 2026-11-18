@@ -756,19 +756,18 @@ fn test_chgrp_cannot_access_vs_cannot_dereference() {
 #[cfg(target_os = "linux")]
 #[test]
 fn test_recursive_skips_entry_removed_during_traversal() {
-    use uutests::util::run_ucmd_with_strace_inject;
+    use uutests::util::run_ucmd_with_strace;
 
     let ts = TestScenario::new(util_name!());
     ts.fixtures.mkdir("tree");
     ts.fixtures.touch("tree/gone");
     let arg = rustix::process::getgid().as_raw().to_string();
     let run = |error: &str, args: &[&str]| {
-        let inject = format!("?chown,?lchown,fchownat:error={error}");
-        run_ucmd_with_strace_inject(
+        let inject = format!("inject=?chown,?lchown,fchownat:error={error}");
+        run_ucmd_with_strace(
             &ts,
             "tree",
-            "gone",
-            &inject,
+            &["-qq", "-o", "/dev/null", "-P", "gone", "-e", &inject],
             &[&[arg.as_str()], args].concat(),
         )
     };
