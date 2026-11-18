@@ -1912,12 +1912,9 @@ pub(crate) fn copy_attributes(
     };
 
     // A plain copy keeps none of these: don't stat the source for nothing.
-    #[cfg(unix)]
-    let ownership = attributes.ownership;
-    #[cfg(not(unix))]
-    let ownership = Preserve::No { explicit: false };
     let kept = [
-        ownership,
+        #[cfg(unix)]
+        attributes.ownership,
         mode,
         attributes.timestamps,
         attributes.context,
