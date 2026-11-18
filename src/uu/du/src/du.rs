@@ -562,7 +562,7 @@ fn safe_du(
 
         // Check excludes
         for pattern in &options.excludes {
-            if pattern.matches(&this_stat.path.to_string_lossy())
+            if is_excluded(pattern, &this_stat.path.to_string_lossy())
                 || pattern.matches(&entry_name.to_string_lossy())
             {
                 if options.verbose {
@@ -725,7 +725,7 @@ fn du_regular(
                                 // Look at all patterns with both short and long paths
                                 // if we have 'du foo' but search to exclude 'foo/bar'
                                 // we need the full path
-                                if pattern.matches(&this_stat.path.to_string_lossy())
+                                if is_excluded(pattern, &this_stat.path.to_string_lossy())
                                     || pattern.matches(&entry.file_name().into_string().unwrap())
                                 {
                                     // if the directory is ignored, leave early
@@ -847,6 +847,17 @@ fn file_as_vec(filename: impl AsRef<Path>) -> UResult<Vec<String>> {
     let buf = BufReader::new(file);
     let lines = buf.lines().collect::<Result<Vec<String>, _>>()?;
     Ok(lines)
+}
+
+/// Whether `path` matches an `--exclude` pattern. As in GNU, the pattern is
+/// tried on the whole path and on every part of it that follows a `/`, so
+/// `target/debug` also excludes `./target/debug` and `a/target/debug`.
+fn is_excluded(pattern: &Pattern, path: &str) -> bool {
+    pattern.matches(path)
+        || path
+            .match_indices('/')
+            .map(|(i, _)| &path[i + 1..])
+            .any(|tail| !tail.starts_with('/') && pattern.matches(tail))
 }
 
 /// Given the `--exclude-from` and/or `--exclude` arguments, returns the globset lists
@@ -1253,7 +1264,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if !&traversal_options.excludes.is_empty() {
             let path_string = path.to_string_lossy();
             for pattern in &traversal_options.excludes {
-                if pattern.matches(&path_string) {
+                if is_excluded(pattern, &path_string) {
                     // if the directory is ignored, leave early
                     if traversal_options.verbose {
                         println!(
