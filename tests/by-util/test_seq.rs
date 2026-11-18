@@ -263,6 +263,7 @@ fn test_width_invalid_float() {
         .usage_error("invalid floating point argument: '1e2.3'");
 }
 
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
 #[cfg(unix)]
 fn test_sigpipe_ignored_reports_write_error() {
@@ -327,6 +328,7 @@ fn test_separator_and_terminator() {
         .stdout_is("2\\n3\\n4\\n5\\n6\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
 fn test_separator_non_utf8() {
@@ -350,6 +352,7 @@ fn test_separator_non_utf8() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
 fn test_terminator_non_utf8() {
@@ -727,7 +730,8 @@ fn test_width_floats() {
 }
 
 /// Test infinite sequences - these produce endless output, so we check they start correctly
-/// and terminate with SIGPIPE on Unix (or succeed on non-Unix where pipe behavior differs).
+/// and terminate with SIGPIPE on Unix, a write error on WASI (which reports a closed pipe as a
+/// generic I/O error rather than delivering a signal), or succeed on other non-Unix platforms.
 #[rstest]
 #[case::neg_inf(
     &["--", "-inf", "0"],
@@ -765,10 +769,17 @@ fn test_infinite_sequence(#[case] args: &[&str], #[case] expected_start: &[u8]) 
     let result = new_ucmd!()
         .args(args)
         .run_stdout_starts_with(expected_start);
-    #[cfg(unix)]
-    result.signal_name_is("PIPE");
-    #[cfg(not(unix))]
-    result.success();
+    #[cfg(not(wasi_runner))]
+    {
+        #[cfg(unix)]
+        result.signal_name_is("PIPE");
+        #[cfg(not(unix))]
+        result.success();
+    }
+    #[cfg(wasi_runner)]
+    result
+        .code_is(1)
+        .stderr_contains("seq: write error: I/O error");
 }
 
 #[test]
