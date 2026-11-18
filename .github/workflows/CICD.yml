@@ -369,6 +369,9 @@ jobs:
     timeout-minutes: 90
     env:
       DOCKER_OPTS: '--volume /etc/passwd:/etc/passwd --volume /etc/group:/etc/group'
+      CARGO_PROFILE_RELEASE_STRIP: "true"
+      PROFILE: ${{ github.event_name == 'pull_request' && 'debug' || 'release' }}
+      PROFILE_ARG: ${{ github.event_name == 'pull_request' && '--profile=dev' || '--release' }}
     strategy:
       fail-fast: false
       matrix:
@@ -625,11 +628,11 @@ jobs:
       env:
         RUST_BACKTRACE: "1"
     - name: Install llvm-tools (PGO)
-      if: matrix.job.pgo
+      if: matrix.job.pgo && github.event_name != 'pull_request'
       shell: bash
       run: rustup component add llvm-tools
     - name: Train PGO profiles
-      if: matrix.job.pgo
+      if: matrix.job.pgo && github.event_name != 'pull_request'
       shell: bash
       run: |
         ## The target dir is relative: on Windows `github.workspace` is a
@@ -642,7 +645,7 @@ jobs:
           --train-only
         echo "RUSTFLAGS=${RUSTFLAGS:+${RUSTFLAGS} }-Cprofile-use=$(cat target/coreutils-pgo/profdata-path.txt)" >> "$GITHUB_ENV"
     - name: Verify PGO is applied to the published build
-      if: matrix.job.pgo
+      if: matrix.job.pgo && github.event_name != 'pull_request'
       shell: bash
       run: |
         ## The release artifact must be the PGO build: if RUSTFLAGS did not
@@ -658,7 +661,7 @@ jobs:
       if: matrix.job.skip-publish != true && matrix.job.check-only != true && matrix.job.target != 'x86_64-pc-windows-msvc'
       run: |
         ## Build
-        ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} build --release --config=profile.release.strip=true \
+        ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} build ${PROFILE_ARG} \
         --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }}
     # We don't want to have many duplicated long jobs at here
     # So we build individual binaries (including coreutils) for few platforms until we deduplicate many release build for Linux
@@ -666,7 +669,7 @@ jobs:
       if: matrix.job.skip-tests != true && matrix.job.target == 'x86_64-pc-windows-msvc'
       shell: bash
       run: |
-        ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} build --release --config=profile.release.strip=true \
+        ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} build ${PROFILE_ARG} \
         --target=${{ matrix.job.target }} \
         ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} \
         -p coreutils --features=${{ matrix.job.features }}
@@ -675,7 +678,7 @@ jobs:
       shell: bash
       run: |
         ## Package artifact(s)
-        find target/${{ matrix.job.target }}/release -maxdepth 1 -type f \
+        find target/${{ matrix.job.target }}/${PROFILE} -maxdepth 1 -type f \
           \( -name "*.wasm" -o -name "*.exe" -o -perm -u+x \) \
           -exec ln -v {} "${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/" \;
         # README and LICENSE
@@ -693,8 +696,8 @@ jobs:
       if: matrix.job.target == 'x86_64-unknown-linux-gnu' && matrix.job.features == 'feat_os_unix,uudoc'
       run: |
         mkdir -p share/{man/man1,bash-completion/completions,fish/vendor_completions.d,zsh/site-functions,elvish/lib}
-        _uudoc=target/${{ matrix.job.target }}/release/uudoc
-        for bin in $('target/${{ matrix.job.target }}/release/coreutils' --list) coreutils;do
+        _uudoc=target/${{ matrix.job.target }}/${PROFILE}/uudoc
+        for bin in $('target/${{ matrix.job.target }}/${PROFILE}/coreutils' --list) coreutils;do
           ${_uudoc} manpage ${bin} > share/man/man1/${bin}.1
           ${_uudoc} completion ${bin} bash > share/bash-completion/completions/${bin}.bash
           ${_uudoc} completion ${bin} fish > share/fish/vendor_completions.d/${bin}.fish
