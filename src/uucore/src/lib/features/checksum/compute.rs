@@ -15,7 +15,7 @@ use crate::checksum::{
 };
 use crate::error::{FromIo, UResult, USimpleError};
 use crate::line_ending::LineEnding;
-use crate::quoting_style::locale_aware_shell_escape;
+use crate::quoting_style::{QuotingStyle, locale_aware_escape_name, locale_aware_shell_escape};
 use crate::sum::DigestOutput;
 use crate::{show, translate_text};
 
@@ -37,6 +37,26 @@ pub struct ChecksumComputeOptions {
 
     /// Whether to finish lines with '\n' or '\0'.
     pub line_ending: LineEnding,
+
+    /// Quoting style for filenames when stdout is a terminal.
+    pub quoting_style: Option<QuotingStyle>,
+}
+
+/// Format a filename and return its output prefix.
+fn format_filename(options: &ChecksumComputeOptions, filename: &OsStr) -> (String, &'static str) {
+    if options.line_ending == LineEnding::Nul {
+        return (filename.to_string_lossy().into_owned(), "");
+    }
+
+    if let Some(style) = options.quoting_style {
+        #[cfg(windows)]
+        let filename = &std::ffi::OsString::from(filename.to_string_lossy().replace('\\', "/"));
+
+        let quoted = locale_aware_escape_name(filename, style);
+        (quoted.to_string_lossy().into_owned(), "")
+    } else {
+        escape_filename(filename)
+    }
 }
 
 /// Whether to write the digest as hexadecimal or encoded in base64.
@@ -137,11 +157,7 @@ fn write_legacy_checksum(
     debug_assert!(options.algo_kind.is_legacy());
     debug_assert!(matches!(sum, DigestOutput::U16(_) | DigestOutput::Crc(_)));
 
-    let (escaped_filename, prefix) = if options.line_ending == LineEnding::Nul {
-        (filename.to_string_lossy().to_string(), "")
-    } else {
-        escape_filename(filename)
-    };
+    let (escaped_filename, prefix) = format_filename(options, filename);
 
     // Print the sum
     match (options.algo_kind, sum) {
@@ -179,11 +195,7 @@ fn write_tagged_checksum(
     filename: &OsStr,
     sum: &String,
 ) -> io::Result<()> {
-    let (escaped_filename, prefix) = if options.line_ending == LineEnding::Nul {
-        (filename.to_string_lossy().to_string(), "")
-    } else {
-        escape_filename(filename)
-    };
+    let (escaped_filename, prefix) = format_filename(options, filename);
 
     // Print algo name and opening parenthesis.
     write!(w, "{prefix}{} (", options.algo_kind.to_tag())?;
@@ -202,11 +214,7 @@ fn write_untagged_checksum(
     sum: &String,
     reading_mode: ReadingMode,
 ) -> io::Result<()> {
-    let (escaped_filename, prefix) = if options.line_ending == LineEnding::Nul {
-        (filename.to_string_lossy().to_string(), "")
-    } else {
-        escape_filename(filename)
-    };
+    let (escaped_filename, prefix) = format_filename(options, filename);
 
     // Print checksum and reading mode flag
     write!(w, "{prefix}{sum} {}", reading_mode.as_char())?;

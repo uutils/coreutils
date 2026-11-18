@@ -7,7 +7,7 @@
 
 use std::borrow::Borrow;
 use std::ffi::OsString;
-use std::io;
+use std::io::{self, IsTerminal};
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint};
@@ -19,6 +19,7 @@ use uucore::checksum::validate::{self, ChecksumValidateOptions, ChecksumVerbose}
 use uucore::checksum::{AlgoKind, ChecksumError, HashLength, SizedAlgoKind};
 use uucore::error::UResult;
 use uucore::line_ending::LineEnding;
+use uucore::quoting_style::{QuotingStyle, quoting_style_from_env};
 use uucore::{crate_version, format_usage, localized_help_template, util_name};
 
 mod cli;
@@ -212,10 +213,14 @@ pub fn checksum_main(
     let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
+    let quoting_style = (io::stdout().is_terminal() && line_ending != LineEnding::Nul)
+        .then(|| quoting_style_from_env().unwrap_or(QuotingStyle::SHELL_ESCAPE));
+
     let opts = ChecksumComputeOptions {
         algo_kind: algo,
         output_format,
         line_ending,
+        quoting_style,
     };
 
     perform_checksum_computation(io::stdout(), opts, files)?;
