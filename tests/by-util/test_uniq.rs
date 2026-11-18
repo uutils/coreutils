@@ -1214,6 +1214,25 @@ fn test_stdin_w1_multibyte() {
         .stdout_is("à\ná\n");
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
+#[test]
+fn test_skip_chars_multibyte() {
+    // Skipping two characters leaves "y" and "xy", which differ.
+    new_ucmd!()
+        .args(&["-s", "2", "-c"])
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in("éxy\nABxy\n")
+        .succeeds()
+        .stdout_is("      1 éxy\n      1 ABxy\n");
+    // In the C locale, two bytes are skipped and both keys are "xy".
+    new_ucmd!()
+        .args(&["-s", "2", "-c"])
+        .env("LC_ALL", "C")
+        .pipe_in("éxy\nABxy\n")
+        .succeeds()
+        .stdout_is("      2 éxy\n");
+}
+
 #[test]
 fn test_c_locale_counts_bytes() {
     let input = "가나다라마\n가나다바사\n";

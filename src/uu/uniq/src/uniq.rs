@@ -178,8 +178,8 @@ impl Uniq {
 
     fn key_bounds(&self, line: &[u8]) -> (usize, usize) {
         let mut start = self.skip_fields_offset(line);
-        if let Some(skip_bytes) = self.slice_start {
-            start = start.saturating_add(skip_bytes).min(line.len());
+        if let Some(skip_chars) = self.slice_start {
+            start = self.char_offset(line, start, skip_chars);
         }
 
         let end = self.key_end_index(line, start);
@@ -240,6 +240,17 @@ impl Uniq {
                 }
             }
         }
+    }
+
+    /// The index `count` characters after `start`: bytes in the C locale or
+    /// for invalid UTF-8, characters otherwise, as for `-w`.
+    fn char_offset(&self, line: &[u8], start: usize, count: usize) -> usize {
+        if !self.is_c_locale
+            && let Ok(valid) = std::str::from_utf8(&line[start..])
+        {
+            return start + Self::char_prefix_len(valid, count);
+        }
+        start.saturating_add(count).min(line.len())
     }
 
     fn char_prefix_len(text: &str, limit: usize) -> usize {
