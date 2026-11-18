@@ -1017,15 +1017,17 @@ fn build_options(
     )
     .unwrap_or(Ok(default_column_width))?;
 
+    let given_page_width = parse_positive_option(
+        matches,
+        options::PAGE_WIDTH,
+        &translate!("pr-error-invalid-page-width"),
+    )
+    .transpose()?;
+    // -J leaves the lines alone, so the page width only sizes the header.
     let page_width = if matches.get_flag(options::JOIN_LINES) {
         None
     } else {
-        parse_positive_option(
-            matches,
-            options::PAGE_WIDTH,
-            &translate!("pr-error-invalid-page-width"),
-        )
-        .transpose()?
+        given_page_width
     };
 
     // --columns has more priority than -column
@@ -1102,12 +1104,6 @@ fn build_options(
         page_width
     };
 
-    // The header is laid out on the page width, which -J leaves alone.
-    let header_width = matches
-        .get_one::<String>(options::PAGE_WIDTH)
-        .and_then(|raw| raw.parse().ok())
-        .unwrap_or(column_width);
-
     Ok(OutputOptions {
         number,
         header,
@@ -1126,7 +1122,7 @@ fn build_options(
         form_feed_used,
         col_sep_for_printing,
         line_width,
-        header_width,
+        header_width: given_page_width.unwrap_or(column_width),
         expand_tabs,
     })
 }
