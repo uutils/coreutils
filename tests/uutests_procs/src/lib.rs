@@ -26,6 +26,9 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
         "AddressSpaceLimitUnsuitable" => {
             "WASI runner target is not suitable for this address-space-limit regression test"
         }
+        "AutomaticBufferSizeDiffers" => {
+            "WASI: sort's automatic buffer-size heuristic (based on queried available memory) behaves differently under wasm32, so disk-spill thresholds don't match the host"
+        }
         "CannotDetectUnsafeOverwrite" => "WASI: cannot detect unsafe overwrite",
         "CannotExecShellFromDeletedCwd" => {
             "WASI: wasmtime cannot exec the binary via a raw shell from a deleted cwd"
@@ -83,9 +86,6 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
         "NoRlimitSetrlimitSupport" => "WASI: rlimit/setrlimit not supported",
         "NoStdoutFileRedirection" => "WASI: no stdout-to-file redirection",
         "NoSubprocessSpawning" => "WASI: no subprocess spawning",
-        "NoThreadSpawning" => {
-            "WASI: sort -m spawns real OS threads for multi-file merge, unsupported under wasmtime's default config"
-        }
         "NoTzdb" => {
             "WASI: no tzdb; TZ env var is not honoured, so timezone-dependent behaviour (DST validation, timestamps) differs from the host"
         }

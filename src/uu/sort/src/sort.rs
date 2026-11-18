@@ -1519,7 +1519,15 @@ pub(crate) fn fd_soft_limit() -> Option<usize> {
     get_rlimit().ok()
 }
 
-#[cfg(not(all(unix, not(target_os = "fuchsia"))))]
+/// WASI has no `getrlimit`; guess a conservative limit instead of `None`, so
+/// `--batch-size`/merge stay bounded on wasmtime's often-smaller fd table.
+#[cfg(target_os = "wasi")]
+#[allow(clippy::unnecessary_wraps)]
+pub(crate) fn fd_soft_limit() -> Option<usize> {
+    Some(256)
+}
+
+#[cfg(not(any(all(unix, not(target_os = "fuchsia")), target_os = "wasi")))]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
     None
 }

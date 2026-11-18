@@ -259,6 +259,33 @@ pub fn read<T: Read>(
     Ok(should_continue)
 }
 
+/// Read a single chunk synchronously, without a background reader thread.
+///
+/// WASI has no threads, so callers that would otherwise hand `recycled_chunk` to a reader
+/// thread call this instead to read the next chunk directly on the current thread. `read`
+/// sends at most one chunk per call, so a throwaway channel is enough to receive it.
+#[cfg(target_os = "wasi")]
+pub fn read_once<T: Read>(
+    recycled_chunk: RecycledChunk,
+    carry_over: &mut Vec<u8>,
+    file: &mut T,
+    separator: u8,
+    settings: &GlobalSettings,
+) -> UResult<(Option<Chunk>, bool)> {
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    let should_continue = read(
+        &sender,
+        recycled_chunk,
+        None,
+        carry_over,
+        file,
+        &mut std::iter::empty(),
+        separator,
+        settings,
+    )?;
+    Ok((receiver.try_recv().ok(), should_continue))
+}
+
 /// Split `read` into `Line`s, and add them to `lines`.
 fn parse_lines<'a>(
     read: &'a [u8],
