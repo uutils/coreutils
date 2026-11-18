@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore getxattr posix_acl_default posix_acl_access ENOTSUP EOPNOTSUPP renamer
+// spell-checker:ignore getxattr posix_acl_default posix_acl_access ENOTSUP EOPNOTSUPP renamer posix1e nfsace
 
 //! Set of functions to manage xattr on files and dirs
 
@@ -116,6 +116,9 @@ pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> XattrCopy
     ))
 }
 
+/// The xattrs Linux stores POSIX ACLs in.
+const POSIX_ACL_XATTRS: [&str; 2] = ["system.posix_acl_access", "system.posix_acl_default"];
+
 /// Copies only the POSIX ACL xattrs (`system.posix_acl_access` and
 /// `system.posix_acl_default`) from `source` to `dest`.
 ///
@@ -130,7 +133,7 @@ pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> XattrCopy
 /// failures here when `mode` is the only thing being preserved.
 #[cfg(unix)]
 pub fn copy_acls<P: AsRef<Path>>(source: P, dest: P) {
-    for name in ["system.posix_acl_access", "system.posix_acl_default"] {
+    for name in POSIX_ACL_XATTRS {
         if let Ok(Some(value)) = xattr::get(&source, name) {
             // Best-effort: silently skip if dest doesn't support ACL xattrs.
             let _ = xattr::set(&dest, name, &value);
@@ -250,8 +253,8 @@ pub fn apply_xattrs_fd_ignore_unsupported(
 ///
 /// # Returns
 ///
-/// `true` if the file has an extended ACL (on macOS) or any extended attributes
-/// (elsewhere), `false` otherwise.
+/// `true` if the file carries a POSIX ACL or a non-trivial `NFSv4` ACL (an
+/// extended ACL on macOS), `false` otherwise.
 pub fn has_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
     // On macOS most files carry some xattr (e.g. com.apple.provenance) and the
     // ACL is not one of them, so ask the ACL API instead.
@@ -261,16 +264,93 @@ pub fn has_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
     #[cfg(not(target_os = "macos"))]
     let attrs = if dereference {
-        xattr::list_deref(file)
+        xattr::list_deref(&file)
     } else {
-        xattr::list(file)
+        xattr::list(&file)
     };
 
     #[cfg(not(target_os = "macos"))]
-    attrs.is_ok_and(|acl| {
-        // if we have extra attributes, we have an acl
-        acl.count() > 0
-    })
+    {
+        let Ok(names) = attrs else { return false };
+        // Only ACL attributes count; other xattrs such as security.selinux don't.
+        let mut has_nfs4_acl = false;
+        for name in names {
+            if is_acl_xattr(&name) {
+                return true;
+            }
+            has_nfs4_acl |= name == NFS4_ACL_XATTR;
+        }
+        if !has_nfs4_acl {
+            return false;
+        }
+        let value = if dereference {
+            xattr::get_deref(&file, NFS4_ACL_XATTR)
+        } else {
+            xattr::get(&file, NFS4_ACL_XATTR)
+        };
+        matches!(value, Ok(Some(acl)) if nfs4_acl_is_nontrivial(&acl))
+    }
+}
+
+/// Whether `name` is an xattr that stores an ACL.
+#[cfg(not(target_os = "macos"))]
+fn is_acl_xattr(name: &OsStr) -> bool {
+    // FreeBSD and NetBSD expose UFS POSIX.1e and NFSv4 ACLs under these names.
+    #[cfg(any(target_os = "freebsd", target_os = "netbsd"))]
+    const NAMES: &[&str] = &[
+        "system.posix1e.acl_access",
+        "system.posix1e.acl_default",
+        "system.nfs4.acl",
+    ];
+    #[cfg(not(any(target_os = "freebsd", target_os = "netbsd")))]
+    const NAMES: &[&str] = &POSIX_ACL_XATTRS;
+    NAMES.iter().any(|acl| name == *acl)
+}
+
+/// The xattr the Linux `NFSv4` client exposes a file's ACL through.
+#[cfg(not(target_os = "macos"))]
+const NFS4_ACL_XATTR: &str = "system.nfs4_acl";
+
+/// Whether an XDR-encoded `NFSv4` ACL (RFC 7530 `nfsace4` list) says more than
+/// the mode bits.
+///
+/// The NFS client lists this xattr on every file, so only an ACL with
+/// principals other than `OWNER@`, `GROUP@` and `EVERYONE@`, inheritance, or
+/// audit/alarm entries counts. Unparsable data is treated as an ACL.
+#[cfg(not(target_os = "macos"))]
+fn nfs4_acl_is_nontrivial(mut xdr: &[u8]) -> bool {
+    const ACE4_ACCESS_DENIED_ACE_TYPE: u32 = 1;
+    // FILE_INHERIT, DIRECTORY_INHERIT, NO_PROPAGATE_INHERIT, INHERIT_ONLY;
+    // not INHERITED_ACE (0x80), which says where an entry came from.
+    const ACE4_INHERITANCE_FLAGS: u32 = 0x1 | 0x2 | 0x4 | 0x8;
+
+    fn take<'a>(xdr: &mut &'a [u8], len: usize) -> Option<&'a [u8]> {
+        let (head, tail) = xdr.split_at_checked(len)?;
+        *xdr = tail;
+        Some(head)
+    }
+    fn take_u32(xdr: &mut &[u8]) -> Option<u32> {
+        take(xdr, 4)?.try_into().ok().map(u32::from_be_bytes)
+    }
+    fn nontrivial(xdr: &mut &[u8]) -> Option<bool> {
+        for _ in 0..take_u32(xdr)? {
+            let ace_type = take_u32(xdr)?;
+            let flags = take_u32(xdr)?;
+            let _access_mask = take_u32(xdr)?;
+            let who_len = usize::try_from(take_u32(xdr)?).ok()?;
+            let who = take(xdr, who_len)?;
+            take(xdr, who_len.next_multiple_of(4) - who_len)?;
+            if ace_type > ACE4_ACCESS_DENIED_ACE_TYPE
+                || flags & ACE4_INHERITANCE_FLAGS != 0
+                || !matches!(who, b"OWNER@" | b"GROUP@" | b"EVERYONE@")
+            {
+                return Some(true);
+            }
+        }
+        Some(false)
+    }
+
+    nontrivial(&mut xdr).unwrap_or(true)
 }
 
 #[cfg(target_os = "macos")]
@@ -539,6 +619,62 @@ mod tests {
         assert!(has_acl(&file_path, false));
     }
 
+    /// Encodes `NFSv4` ACEs as XDR: (type, flags, who), access mask 0.
+    #[cfg(not(target_os = "macos"))]
+    fn nfs4_acl(aces: &[(u32, u32, &str)]) -> Vec<u8> {
+        let mut xdr = (aces.len() as u32).to_be_bytes().to_vec();
+        for (ace_type, flags, who) in aces {
+            for word in [*ace_type, *flags, 0, who.len() as u32] {
+                xdr.extend(word.to_be_bytes());
+            }
+            xdr.extend(who.as_bytes());
+            xdr.resize(xdr.len().next_multiple_of(4), 0);
+        }
+        xdr
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn test_nfs4_acl_is_nontrivial() {
+        let mode_only = [(0, 0, "OWNER@"), (1, 0x40, "GROUP@"), (0, 0, "EVERYONE@")];
+        assert!(!nfs4_acl_is_nontrivial(&nfs4_acl(&mode_only)));
+        assert!(nfs4_acl_is_nontrivial(&nfs4_acl(&[(0, 0, "1000@example")])));
+        assert!(nfs4_acl_is_nontrivial(&nfs4_acl(&[(0, 0x1, "OWNER@")])));
+        let inherited = [
+            (0, 0x80, "OWNER@"),
+            (0, 0xc0, "GROUP@"),
+            (0, 0x80, "EVERYONE@"),
+        ];
+        assert!(!nfs4_acl_is_nontrivial(&nfs4_acl(&inherited)));
+        assert!(nfs4_acl_is_nontrivial(&nfs4_acl(&[(
+            0,
+            0x80,
+            "1000@example"
+        )])));
+        assert!(nfs4_acl_is_nontrivial(&nfs4_acl(&[(2, 0, "EVERYONE@")])));
+        let truncated = nfs4_acl(&mode_only);
+        assert!(nfs4_acl_is_nontrivial(&truncated[..truncated.len() - 4]));
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn test_is_acl_xattr() {
+        #[cfg(any(target_os = "freebsd", target_os = "netbsd"))]
+        let acl_names = [
+            "system.posix1e.acl_access",
+            "system.posix1e.acl_default",
+            "system.nfs4.acl",
+        ];
+        #[cfg(not(any(target_os = "freebsd", target_os = "netbsd")))]
+        let acl_names = ["system.posix_acl_access", "system.posix_acl_default"];
+        for name in acl_names {
+            assert!(is_acl_xattr(OsStr::new(name)), "{name}");
+        }
+        for name in ["user.test", "security.selinux", "security.capability"] {
+            assert!(!is_acl_xattr(OsStr::new(name)), "{name}");
+        }
+    }
+
     #[test]
     fn test_file_has_acl() {
         let temp_dir = tempdir().unwrap();
@@ -546,15 +682,14 @@ mod tests {
 
         File::create(&file_path).unwrap();
 
-        // FIXME: this fails on a system that uses SELinux
         assert!(!has_acl(&file_path, true));
 
         let test_attr = "user.test_acl";
         let test_value = b"test value";
         xattr::set(&file_path, test_attr, test_value).unwrap();
 
-        // On macOS an ACL isn't an xattr, so an xattr alone is not an ACL.
-        assert_eq!(has_acl(&file_path, true), cfg!(not(target_os = "macos")));
+        // An unrelated xattr is not an ACL on any platform.
+        assert!(!has_acl(&file_path, true));
         assert!(!has_security_cap_acl(&file_path, true));
 
         // FreeBSD/NetBSD's xattr library does not support the "security" namespace

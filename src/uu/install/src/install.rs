@@ -31,7 +31,7 @@ use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
 use uucore::fs::{are_files_identical, dir_strip_dot_for_creation};
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 #[cfg(not(target_os = "redox"))]
-use uucore::safe_traversal::{DirFd, SymlinkBehavior, create_dir_all_safe};
+use uucore::safe_traversal::{DirFd, FileInfo, SymlinkBehavior, create_dir_all_safe};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::{
     SeLinuxError, contexts_differ, get_selinux_security_context, is_selinux_enabled,
@@ -56,6 +56,7 @@ pub struct Behavior {
     compare: bool,
     strip: bool,
     strip_program: String,
+    caller_umask: u32,
     create_leading: bool,
     target_dir: Option<OsString>,
     no_target_dir: bool,
@@ -210,8 +211,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let behavior = behavior(&matches, diag_args.as_deref())?;
 
-    // Like GNU, work with the umask cleared: new ancestor directories get
-    // exactly DEFAULT_MODE and the strip program sees a umask of 0.
+    // Like GNU, work with the umask cleared for new ancestor directories and
+    // file creation. The strip program keeps the caller's umask.
     uucore::mode::with_umask(0, || match behavior.main_function {
         MainFunction::Directory => directory(&paths, &behavior),
         MainFunction::Standard => standard(paths, &behavior),
@@ -482,6 +483,7 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
         compare,
         strip,
         strip_program,
+        caller_umask: uucore::mode::get_umask(),
         create_leading: matches.get_flag(OPT_CREATE_LEADING),
         target_dir,
         no_target_dir,
@@ -816,14 +818,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                 let source_meta = metadata(source)?;
                 if let Ok(to_stat) =
                     parent_fd.stat_at(filename.as_os_str(), SymlinkBehavior::Follow)
+                    && FileInfo::from(&source_meta) == FileInfo::from_stat(&to_stat)
                 {
-                    // st_dev and st_ino types vary by platform (i32/u32 on macOS, u64 on Linux)
-                    #[allow(clippy::unnecessary_cast)]
-                    if source_meta.dev() == to_stat.st_dev as u64
-                        && source_meta.ino() == to_stat.st_ino as u64
-                    {
-                        return Err(InstallError::SameFile(source.clone(), target.clone()).into());
-                    }
+                    return Err(InstallError::SameFile(source.clone(), target.clone()).into());
                 }
 
                 let backup_path = perform_backup(source, &target, b)?;
@@ -1121,7 +1118,11 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
     } else {
         to.to_path_buf()
     };
-    match process::Command::new(&b.strip_program).arg(&to).status() {
+    // GNU runs the strip program with the caller's umask rather than the
+    // zeroed umask used for the installed file.
+    match uucore::mode::with_umask(b.caller_umask, || {
+        process::Command::new(&b.strip_program).arg(&to).status()
+    }) {
         Ok(status) => {
             if !status.success() {
                 // Follow GNU's behavior: if strip fails, removes the target
@@ -1402,11 +1403,7 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     }
 
     // Check if the contents of the source and destination files differ.
-    if !are_files_identical(from, to).unwrap_or(false) {
-        return true;
-    }
-
-    false
+    !are_files_identical(from, to).unwrap_or(false)
 }
 
 /// Sets the `SELinux` security context for install's -Z flag behavior.

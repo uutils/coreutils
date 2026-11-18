@@ -207,9 +207,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let backup_suffix = backup_control::determine_backup_suffix(&matches);
 
-    let target_dir = matches
-        .get_one::<OsString>(OPT_TARGET_DIRECTORY)
-        .map(OsString::from);
+    let target_dir = matches.get_one::<OsString>(OPT_TARGET_DIRECTORY).cloned();
 
     if let Some(ref maybe_dir) = target_dir
         && !Path::new(&maybe_dir).is_dir()
@@ -1207,8 +1205,16 @@ fn rename_dir_fallback(
 ///
 /// `create_dir_all` would accept a symlink planted at `path` after the caller
 /// removed the destination, redirecting the move out of the destination tree.
+///
+/// The directory starts private (0700): its real mode is applied only after its
+/// contents are copied, and until then, or for good if the copy fails, the
+/// umask-based 0755 would expose entries that a 0700 source kept hidden.
 fn create_dir_fail_closed(path: &Path) -> io::Result<()> {
-    fs::create_dir(path).map_err(|e| {
+    #[cfg(unix)]
+    let created = unix::fs::DirBuilderExt::mode(&mut fs::DirBuilder::new(), 0o700).create(path);
+    #[cfg(not(unix))]
+    let created = fs::create_dir(path);
+    created.map_err(|e| {
         if e.kind() == io::ErrorKind::AlreadyExists {
             io::Error::new(
                 io::ErrorKind::AlreadyExists,

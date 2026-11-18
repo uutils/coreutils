@@ -298,6 +298,10 @@ gitignore: add temporary files
   - Feel free to ask for help with merge conflicts.
 - You do not need to ping maintainers to request a review immediately after submission. If you do not get a response to your patch within a few days, it is fine to request a review.
   - If after a week your patch has still not been reviewed, we recommend that you ping the maintainers on our Discord channel in `#coreutils-chat`.
+- If a CI job fails and you believe it is a flaky or intermittent failure, you
+  can comment `/rerun` on the PR to re-run the failed jobs of every failed
+  workflow, or `/rerun <workflow name>` (e.g. `/rerun GnuTests`) to re-run only
+  one of them. This works even without write access to the repository.
 
 ## Platforms
 

@@ -7,6 +7,7 @@
 
 use std::ffi::{OsStr, OsString};
 use std::fmt;
+use std::io::IsTerminal;
 
 use os_display::Quotable;
 
@@ -217,6 +218,17 @@ pub fn quoting_style_from_env() -> Option<QuotingStyle> {
     };
 
     Some(qs)
+}
+
+/// Return `cli_style` (from `--quoting-style`) if given, otherwise the style
+/// from `QUOTING_STYLE`, which is only honored when stdout is a terminal.
+pub fn quoting_style_or_tty_env(cli_style: Option<QuotingStyle>) -> Option<QuotingStyle> {
+    cli_style.or_else(|| {
+        std::io::stdout()
+            .is_terminal()
+            .then(quoting_style_from_env)
+            .flatten()
+    })
 }
 
 /// Common interface of quoting mechanisms.
@@ -885,6 +897,31 @@ mod tests {
                 ("'????????????????????????????????'", "shell-always"),
             ],
         );
+    }
+
+    #[test]
+    fn test_line_and_paragraph_separators() {
+        // U+2028 and U+2029 are not controls but split lines, so they are
+        // escaped or hidden like controls, as GNU does.
+        for (name, octal) in [
+            ("x\u{2028}..", "\\342\\200\\250"),
+            ("x\u{2029}..", "\\342\\200\\251"),
+        ] {
+            let escape = format!("x{octal}..");
+            let c = format!("\"x{octal}..\"");
+            let shell_escape = format!("'x'$'{octal}''..'");
+            check_names_encoding(
+                UEncoding::Utf8,
+                name,
+                &[
+                    ("x?..", "literal"),
+                    (name, "literal-show"),
+                    (&escape, "escape"),
+                    (&c, "c"),
+                    (&shell_escape, "shell-escape"),
+                ],
+            );
+        }
     }
 
     #[test]

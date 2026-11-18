@@ -478,7 +478,7 @@ mod tests {
 
     #[test]
     fn test_thread_ids() {
-        let main_tid = unsafe { libc::gettid() };
+        let main_tid = rustix::thread::gettid().as_raw_pid();
         std::thread::spawn(move || {
             let mut pid_entry = ProcessInformation::try_new(
                 PathBuf::from_str(&format!("/proc/{}", current_pid())).unwrap(),
@@ -488,7 +488,7 @@ mod tests {
 
             assert!(thread_ids.contains(&(main_tid as usize)));
 
-            let new_thread_tid = unsafe { libc::gettid() };
+            let new_thread_tid = rustix::thread::gettid().as_raw_pid();
             assert!(thread_ids.contains(&(new_thread_tid as usize)));
         })
         .join()

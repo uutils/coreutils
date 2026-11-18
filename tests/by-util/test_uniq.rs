@@ -5,6 +5,7 @@
 
 // spell-checker:ignore nabcd badoption schar nosuchfile
 
+use rstest::rstest;
 use uucore::posix::OBSOLETE;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -178,6 +179,18 @@ fn test_repeated_all_repeated_uses_final_delimiter() {
         .pipe_in(DUPLICATE_RUNS)
         .succeeds()
         .stdout_is("copper\ncopper\n\ngold\ngold\n");
+}
+
+#[rstest]
+#[case::abbreviated("-D=n")]
+#[case::full("-D=prepend")]
+#[case::clustered("-uD=separate")]
+fn test_short_all_repeated_takes_no_method(#[case] arg: &str) {
+    new_ucmd!()
+        .arg(arg)
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("unexpected argument '-=' found");
 }
 
 #[test]
@@ -1120,7 +1133,7 @@ fn uniq_basic_dedup_cases() {
             input: "",
             stdout: Some(""),
             stderr: Some(concat!(
-                "error: the argument '--group[=<group-method>]' cannot be used with '--all-repeated[=<delimit-method>]'\n",
+                "error: the argument '--group[=<group-method>]' cannot be used with '-D'\n",
                 "\n",
                 "For more information, try '--help'.\n"
             )),

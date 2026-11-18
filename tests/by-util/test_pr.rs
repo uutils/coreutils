@@ -3,13 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) Sdivide ading tfre
+// spell-checker:ignore (ToDO) Sdivide ading tfre xfeab xffe
 
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
 use std::fs::metadata;
-use uutests::util::UCommand;
-use uutests::{at_and_ucmd, new_ucmd};
+use uutests::util::{TestScenario, UCommand};
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 const DATE_TIME_FORMAT_DEFAULT: &str = "%Y-%m-%d %H:%M";
 
@@ -708,6 +708,54 @@ fn test_join_lines_keeps_column_separator() {
 }
 
 #[test]
+fn test_merge_with_column_separator() {
+    // like GNU pr, -s joins the merged lines with the separator, unpadded
+    // unless -w is given
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("one", "first line\n2\n");
+    scene.fixtures.write("two", "x\ny\n");
+    scene
+        .ucmd()
+        .args(&["-m", "-t", "-s,", "one", "two", "one"])
+        .succeeds()
+        .stdout_is("first line,x,first line\n2,y,2\n");
+    scene
+        .ucmd()
+        .args(&["-m", "-t", "-s,", "-w", "10", "one", "two"])
+        .succeeds()
+        .stdout_is("firs,x\n2   ,y\n");
+    // -S sets the separator but keeps the padding
+    scene
+        .ucmd()
+        .args(&["-m", "-t", "-S,", "-w", "10", "one", "two"])
+        .succeeds()
+        .stdout_is("firs,x\n2   ,y\n");
+    // without -s, -w still sets the merged line width
+    scene
+        .ucmd()
+        .args(&["-m", "-t", "-w", "10", "one", "two"])
+        .succeeds()
+        .stdout_is("firs\tx\n2   \ty\n");
+}
+
+#[test]
+fn test_merge_with_column_separator_and_page_width() {
+    // -W truncates and pads merged lines like -w, and wins over -w
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("one", "first line\n2\n");
+    scene.fixtures.write("two", "x\ny\n");
+    for widths in [&["-W", "10"][..], &["-W", "10", "-w", "20"]] {
+        scene
+            .ucmd()
+            .args(&["-m", "-t", "-s,"])
+            .args(widths)
+            .args(&["one", "two"])
+            .succeeds()
+            .stdout_is("firs,x\n2   ,y\n");
+    }
+}
+
+#[test]
 fn test_merge_stops_after_last_line_without_header() {
     // without a page trailer there is nothing to pad to: like GNU pr, stop
     // after the last merged line (-F still prints the 5 header lines and a form feed)
@@ -1227,7 +1275,7 @@ fn test_invalid_expand_tab_arguments() {
         new_ucmd!()
             .args(&[arg, test_file_path])
             .fails()
-            .stderr_contains(format!("pr: '-e' extra characters or invalid number in the argument: ‘{error_msg_field}’\nTry 'pr --help' for more information."));
+            .stderr_contains(format!("pr: '-e' extra characters or invalid number in the argument: '{error_msg_field}'\nTry 'pr --help' for more information."));
     }
 }
 // spell-checker:enable
@@ -1310,7 +1358,7 @@ fn test_double_dash_shields_filename_ending_with_dash_zero() {
 
 #[test]
 fn test_zero_expand_tab_width() {
-    let expected = "pr: '-e' extra characters or invalid number in the argument: ‘0’\nTry 'pr --help' for more information.\n";
+    let expected = "pr: '-e' extra characters or invalid number in the argument: '0'\nTry 'pr --help' for more information.\n";
     new_ucmd!()
         .arg("-e0")
         .fails_with_code(1)
@@ -1421,6 +1469,7 @@ fn test_non_utf8_input_filename() {
     ucmd.arg("-t")
         .arg(name)
         .pipe_in("from stdin\n")
+        .ignore_stdin_write_error()
         .succeeds()
         .stdout_only("from file\n");
 }
@@ -1435,6 +1484,7 @@ fn test_missing_non_utf8_input_does_not_read_stdin() {
         .arg("-t")
         .arg(OsStr::from_bytes(b"missing-\xff"))
         .pipe_in("from stdin\n")
+        .ignore_stdin_write_error()
         .fails_with_code(1)
         .no_stdout()
         .stderr_contains("missing-")
@@ -1613,5 +1663,64 @@ fn test_plus_operand_that_is_not_a_page_range_names_a_file() {
             .args(&[operand, "test_one_page.log"])
             .fails()
             .stderr_contains(format!("pr: {operand}: "));
+    }
+}
+
+#[test]
+fn test_expand_tabs_equals_is_the_char() {
+    new_ucmd!()
+        .args(&["-t", "-e=4"])
+        .pipe_in("x=y\tz\n")
+        .succeeds()
+        .stdout_is("x   y   z\n");
+
+    // Same when -e is grouped with other flags.
+    new_ucmd!()
+        .arg("-te=4")
+        .pipe_in("x=y\tz\n")
+        .succeeds()
+        .stdout_is("x   y   z\n");
+
+    new_ucmd!()
+        .args(&["-t", "-e=-7"])
+        .fails_with_code(1)
+        .stderr_is(
+            "pr: '-e' extra characters or invalid number in the argument: '-7'\n\
+             Try 'pr --help' for more information.\n",
+        );
+}
+
+#[test]
+fn test_expand_tabs_line_too_long() {
+    new_ucmd!()
+        .args(&["-t", "-e4000"])
+        .pipe_in(vec![b'\t'; 600_000])
+        .fails_with_code(1)
+        .stderr_only("pr: integer overflow\n");
+}
+
+#[test]
+#[ignore = "a character wider than the page width must be dropped"]
+fn test_page_width_narrower_than_leading_tab() {
+    new_ucmd!()
+        .args(&["-t", "-W", "5"])
+        .pipe_in("\tone\n\ttwo\n\tthree\n")
+        .succeeds()
+        .stdout_only("\n\n\n");
+    new_ucmd!()
+        .args(&["-t", "-n", "-W", "5"])
+        .pipe_in("\tone\n\ttwo\n")
+        .succeeds()
+        .stdout_only("    1\t\n    2\t\n");
+}
+
+#[test]
+fn test_double_space_last_line_without_newline() {
+    for (input, expected) in [("a", "a\n"), ("a\nb", "a\n\nb\n"), ("a\nb\n", "a\n\nb\n\n")] {
+        new_ucmd!()
+            .args(&["-t", "-d"])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(expected);
     }
 }

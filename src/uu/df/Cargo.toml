@@ -23,6 +23,7 @@ unicode-width = { workspace = true }
 uucore = { workspace = true, features = ["libc", "fsext", "parser-size", "fs"] }
 
 [dev-dependencies]
+temp-env = { workspace = true }
 divan = { workspace = true }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }

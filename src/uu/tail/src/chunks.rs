@@ -46,13 +46,14 @@ pub struct ReverseChunks<'a> {
 }
 
 impl<'a> ReverseChunks<'a> {
-    pub fn new(file: &'a mut File) -> Self {
+    /// Iterates backwards from `end`, the position seen as the end of the file.
+    pub fn new(file: &'a mut File, end: SeekFrom) -> Self {
         let current = if cfg!(unix) {
             file.stream_position().unwrap()
         } else {
             0
         };
-        let size = file.seek(SeekFrom::End(0)).unwrap() - current;
+        let size = file.seek(end).unwrap() - current;
         let max_blocks_to_read = (size as f64 / BLOCK_SIZE as f64).ceil() as usize;
         let block_idx = 0;
         ReverseChunks {

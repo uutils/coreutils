@@ -61,8 +61,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let spaces = matches.get_flag(options::SPACES);
     let poss_width = matches.get_one::<String>(options::WIDTH).cloned();
 
+    // leading blanks are skipped, trailing ones are not.
     let width = match poss_width {
-        Some(inp_width) => match inp_width.parse::<usize>() {
+        Some(inp_width) => match inp_width
+            .trim_start_matches([' ', '\t', '\n', '\r', '\x0B', '\x0C'])
+            .parse::<usize>()
+        {
             Ok(0) => {
                 return Err(USimpleError::new(
                     1,
@@ -692,38 +696,39 @@ fn process_non_utf8_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) ->
 /// Process buffered bytes, emitting output for valid UTF-8 prefixes and
 /// deferring incomplete sequences until more input arrives.
 ///
-/// If the buffer contains invalid UTF-8, it is handled in non-UTF-8 mode and
-/// the buffer is fully consumed.
+/// Invalid bytes are handled in non-UTF-8 mode one sequence at a time, so the
+/// valid UTF-8 around them is still folded by character.
 fn process_pending_chunk<W: Write>(
     pending: &mut Vec<u8>,
     ctx: &mut FoldContext<'_, W>,
 ) -> UResult<()> {
-    while !pending.is_empty() {
-        match std::str::from_utf8(pending) {
+    let mut start = 0;
+    while start < pending.len() {
+        match std::str::from_utf8(&pending[start..]) {
             Ok(valid) => {
                 process_utf8_line(valid, ctx)?;
-                pending.clear();
-                break;
+                start = pending.len();
             }
             Err(err) => {
-                if err.error_len().is_some() {
-                    let res = process_non_utf8_line(pending, ctx);
-                    pending.clear();
-                    res?;
-                    break;
+                let valid_up_to = start + err.valid_up_to();
+                if valid_up_to > start {
+                    let valid =
+                        std::str::from_utf8(&pending[start..valid_up_to]).expect("valid prefix");
+                    process_utf8_line(valid, ctx)?;
+                    start = valid_up_to;
                 }
 
-                let valid_up_to = err.valid_up_to();
-                if valid_up_to == 0 {
+                // An incomplete sequence at the end waits for more input.
+                let Some(error_len) = err.error_len() else {
                     break;
-                }
+                };
 
-                let valid = std::str::from_utf8(&pending[..valid_up_to]).expect("valid prefix");
-                process_utf8_line(valid, ctx)?;
-                pending.drain(..valid_up_to);
+                process_non_utf8_line(&pending[start..start + error_len], ctx)?;
+                start += error_len;
             }
         }
     }
+    pending.drain(..start);
 
     Ok(())
 }

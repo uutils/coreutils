@@ -580,10 +580,9 @@ mod tests {
     use crate::{BlockSize, Options};
 
     fn init() {
-        unsafe {
-            std::env::set_var("LANG", "C");
-        }
-        let _ = setup_localization("df");
+        temp_env::with_var("LANG", Some("C"), || {
+            let _ = setup_localization("df");
+        });
     }
 
     const COLUMNS_WITH_FS_TYPE: [Column; 7] = [

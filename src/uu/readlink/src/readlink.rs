@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
-use uucore::libc::EINVAL;
+use uucore::libc::{EINVAL, ENOENT};
 use uucore::line_ending::LineEnding;
 use uucore::translate;
 use uucore::{format_usage, show_error};
@@ -82,6 +82,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     for p in &files {
         let path_result = if res_mode == ResolveMode::None {
             fs::read_link(p)
+        } else if p.as_os_str().is_empty() {
+            // An empty name never refers to a file, so there is nothing to
+            // canonicalize; resolving it would yield the current directory.
+            Err(std::io::Error::from_raw_os_error(ENOENT))
         } else {
             canonicalize(p, can_mode, res_mode)
         };

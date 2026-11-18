@@ -2026,6 +2026,59 @@ mod inter_partition_copying {
         }
     }
 
+    // The source mode is applied to a copied directory only after its contents,
+    // so when the copy fails the directories created so far must not be left
+    // with the umask-based mode, which would open a 0700 source to everyone.
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
+    #[test]
+    pub(crate) fn test_mv_inter_partition_failed_copy_keeps_dirs_private() {
+        use std::path::Path;
+
+        if rustix::process::geteuid().is_root() {
+            println!("test skipped: root can read the unreadable file");
+            return;
+        }
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.mkdir_all("private/sub");
+        at.write("private/notes.txt", "secret");
+        at.write("private/sub/unreadable", "x");
+        set_permissions(
+            at.plus("private/sub/unreadable"),
+            PermissionsExt::from_mode(0o000),
+        )
+        .expect("Unable to make private/sub/unreadable unreadable");
+        set_permissions(at.plus("private/sub"), PermissionsExt::from_mode(0o700))
+            .expect("Unable to set the mode of private/sub");
+        set_permissions(at.plus("private"), PermissionsExt::from_mode(0o700))
+            .expect("Unable to set the mode of private");
+
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        let dest = other_fs_tempdir.path().join("private");
+
+        scene
+            .ucmd()
+            .umask(0o022)
+            .arg("private")
+            .arg(dest.to_str().unwrap())
+            .fails();
+
+        let mode_of = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o7777;
+        for dir in [dest.clone(), dest.join("sub")] {
+            let mode = mode_of(&dir);
+            assert_eq!(
+                mode,
+                0o700,
+                "{} should be 0700, got {mode:o}",
+                dir.display()
+            );
+        }
+        assert!(at.dir_exists("private/sub"), "the source must be kept");
+    }
+
     // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
     #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]

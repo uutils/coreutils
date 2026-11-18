@@ -72,6 +72,64 @@ fn test_fs_format() {
     ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
 }
 
+// Like GNU, a file size is unsigned, so `+` and ` ` add no sign to it.
+#[rstest]
+#[case::plus("%+s", "12")]
+#[case::space("% s", "12")]
+#[case::plus_with_precision("%+.3s", "012")]
+fn test_printf_size_takes_no_sign(#[case] format: &str, #[case] expected: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello world\n");
+    ucmd.args(&["--printf", format, "f"])
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[rstest]
+#[case::plus("%.+5s", "?5s")]
+#[case::minus("%.-2s", "?2s")]
+#[case::with_width("%5.+3s|", "?3s|")]
+#[case::leading_zero("%.05s", "00012")]
+fn test_printf_precision_takes_no_sign(#[case] format: &str, #[case] expected: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello world\n");
+    ucmd.args(&["--printf", format, "f"])
+        .succeeds()
+        .stdout_only(expected);
+}
+
+// Like GNU, a width or precision above `INT_MAX` drops the whole directive.
+#[rstest]
+#[case::width("A%99999999999999999999sB")]
+#[case::precision("A%.99999999999999999999dB")]
+#[case::both("A%99999999999999999999.99999999999999999999sB")]
+#[case::width_above_int_max("A%2147483648sB")]
+#[case::precision_above_int_max("A%.2147483648sB")]
+#[case::unknown_conversion("A%99999999999999999999zB")]
+#[case::quoted_name("A%99999999999999999999QnB")]
+#[case::major_device("A%99999999999999999999HdB")]
+fn test_printf_width_above_int_max_drops_directive(#[case] format: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello world\n");
+    ucmd.args(&["--printf", format, "f"])
+        .succeeds()
+        .stdout_only("AB");
+}
+
+// GNU prints the free and total block and free node counts of `-f` as signed
+// numbers and the fundamental block size as an unsigned one.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_fs_printf_sign() {
+    let ts = TestScenario::new(util_name!());
+    for format in ["%+a", "%+b", "%+d", "%+f"] {
+        let result = ts.ucmd().args(&["-f", "--printf", format, "."]).succeeds();
+        assert!(result.stdout_str().starts_with('+'), "{format}");
+    }
+    let result = ts.ucmd().args(&["-f", "--printf", "%+S", "."]).succeeds();
+    assert!(!result.stdout_str().starts_with('+'));
+}
+
 #[test]
 // `stat -f` is only implemented for these targets; elsewhere `fs_type` is
 // still `unimplemented!()`.
@@ -330,6 +388,7 @@ fn test_timestamp_format_preserves_nanoseconds() {
 }
 
 #[test]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_timestamp_format_before_epoch() {
     let ts = TestScenario::new(util_name!());
     let path = ts.fixtures.plus("timestamp");
@@ -773,6 +832,11 @@ fn test_printf_invalid_directive() {
         .args(&["--printf=%9%", "."])
         .fails_with_code(1)
         .stderr_contains("'%9%': invalid directive");
+
+    ts.ucmd()
+        .args(&["--printf=%99999999999999999999%", "."])
+        .fails_with_code(1)
+        .stderr_contains("'%99999999999999999999%': invalid directive");
 }
 
 #[test]
@@ -858,6 +922,8 @@ fn test_unknown_multibyte_directive_keeps_trailing_bytes() {
         ("a%\u{e9}b", &b"a?\xa9b"[..]),
         ("%\u{20ac}%n", &b"?\x82\xac."[..]),
         ("%5\u{20ac}", &b"?\x82\xac"[..]),
+        // GNU keeps it even when the width would drop the directive.
+        ("%99999999999999999999\u{e9}", &b"?\xa9"[..]),
     ] {
         ts.ucmd()
             .arg(format!("--printf={fmt}"))
@@ -965,6 +1031,7 @@ fn test_percent_escaping() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_correct_metadata() {
     use uucore::fs::{major, minor};
 
@@ -1109,6 +1176,25 @@ fn test_last_of_format_printf_wins(#[case] args: &[&str], #[case] expected: &str
         .ucmd()
         .args(args)
         .arg("a.txt")
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[cfg(unix)]
+#[uutests::wasi_ignore(NoPermissionBits)]
+#[rstest]
+#[case::alternate("%#a", "0644\n0\n")]
+#[case::precision_with_zero("%#.4a", "0644\n0000\n")]
+#[case::precision_above("%#.5a", "00644\n00000\n")]
+#[case::precision_below("%#.2a", "0644\n00\n")]
+#[case::width("%#8.4a", "    0644\n    0000\n")]
+fn test_alternate_octal_adds_a_single_zero(#[case] format: &str, #[case] expected: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    at.set_mode("f", 0o644);
+    at.touch("z");
+    at.set_mode("z", 0o000);
+    ucmd.args(&["-c", format, "f", "z"])
         .succeeds()
         .stdout_is(expected);
 }
