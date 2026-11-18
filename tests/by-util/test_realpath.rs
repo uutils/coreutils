@@ -213,6 +213,25 @@ fn test_realpath_loop() {
 }
 
 #[test]
+fn test_realpath_symlink_loop_missing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("b", "a");
+    at.symlink_file("a", "b");
+
+    let actual = ucmd.args(&["-m", "a"]).succeeds().stdout_move_str();
+    let expect = path_concat!(at.root_dir_resolved(), "a") + "\n";
+    assert_eq!(actual, expect);
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("b", "a");
+    at.symlink_file("a", "b");
+
+    let actual = ucmd.args(&["-m", "a/x"]).succeeds().stdout_move_str();
+    let expect = path_concat!(at.root_dir_resolved(), "a", "x") + "\n";
+    assert_eq!(actual, expect);
+}
+
+#[test]
 fn test_realpath_growing_loop() {
     // `foo -> foo/bar` never repeats the same remaining path, so it must be
     // stopped by the limit on followed symlinks rather than loop forever.
