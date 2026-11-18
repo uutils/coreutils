@@ -433,25 +433,20 @@ fn test_chroot_userspec_unknown_uid() {
 
 #[test]
 fn test_chroot_userspec_group_replaces_passwd_group() {
-    use uucore::entries::{usr2gid, usr2uid};
+    use uucore::entries::{Locate, Passwd};
 
     let ts = TestScenario::new(util_name!());
-    let (Ok(_), Ok(passwd_gid)) = (usr2uid("daemon"), usr2gid("daemon")) else {
+    let Ok(passwd) = Passwd::locate("daemon") else {
         println!("Test skipped; requires 'daemon' user");
         return;
     };
+    let passwd_gid = passwd.gid;
     let group = if passwd_gid == 65534 { 65533 } else { 65534 };
-    // The passwd group may still be a supplementary group if /etc/group
-    // lists the user in it.
-    let listed_in_passwd_group = std::fs::read_to_string("/etc/group")
-        .unwrap_or_default()
-        .lines()
-        .map(|line| line.split(':').collect::<Vec<_>>())
-        .any(|fields| {
-            fields.len() == 4
-                && fields[2] == passwd_gid.to_string()
-                && fields[3].split(',').any(|member| member == "daemon")
-        });
+    // NSS may retain the passwd group as a supplementary group even when
+    // another primary group is requested.
+    let gids = passwd.belongs_to_with_gid(group);
+    assert!(gids.contains(&group));
+    let listed_in_passwd_group = gids.contains(&passwd_gid);
     if listed_in_passwd_group {
         println!("Test skipped; requires 'daemon' not to be listed in its own group");
         return;

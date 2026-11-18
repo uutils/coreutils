@@ -364,17 +364,13 @@ enum Strategy {
 fn handle_missing_groups(strategy: Strategy) -> Result<(), ChrootError> {
     match strategy {
         Strategy::Nothing => Ok(()),
-        Strategy::FromUID(uid, None) => {
-            let gids = supplemental_gids(uid, None);
-            if gids.is_empty() {
+        Strategy::FromUID(uid, gid) => {
+            let gids = supplemental_gids(uid, gid);
+            if gids.is_empty() && gid.is_none() {
                 Err(ChrootError::NoGroupSpecified(uid))
             } else {
                 set_supplemental_gids(&gids).map_err(ChrootError::SetGroupsFailed)
             }
-        }
-        Strategy::FromUID(uid, Some(gid)) => {
-            let gids = supplemental_gids(uid, Some(gid));
-            set_supplemental_gids(&gids).map_err(ChrootError::SetGroupsFailed)
         }
     }
 }
