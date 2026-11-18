@@ -72,7 +72,7 @@ pub enum LnError {
     #[error("{}", translate_text!("ln-failed-to-create-hard-link-dir", "source" => _0.to_string_lossy()))]
     FailedToCreateHardLinkDir(PathBuf),
 
-    #[error("{}", translate!("ln-error-cannot-overwrite-directory", "dest" => _0.maybe_quote()))]
+    #[error("{}", translate_text!("ln-error-cannot-overwrite-directory", "dest" => _0.maybe_quote()))]
     CannotOverwriteDirectory(PathBuf),
 }
 
