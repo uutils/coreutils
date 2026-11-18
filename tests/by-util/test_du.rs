@@ -1882,6 +1882,31 @@ fn test_du_exclude_trailing_components() {
     }
 }
 
+// Trailing slashes on an operand collapse to one, so entries are `a/x`
+// and not `a//x`, and excludes see the same paths.
+#[cfg(not(windows))]
+#[test]
+fn test_du_operand_trailing_slashes() {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkdir_all("a/target");
+
+    for (args, expected) in [
+        (&["a/"][..], &["a/target", "a/"][..]),
+        (&["a//"], &["a/target", "a/"]),
+        (&["a///"], &["a/target", "a/"]),
+        (&["--exclude=/target", "a//"], &["a/target", "a/"]),
+        (&["--exclude=*/a/target", "./a//"], &["./a/"]),
+    ] {
+        let result = ts.ucmd().args(args).succeeds();
+        let paths: Vec<_> = result
+            .stdout_str()
+            .lines()
+            .filter_map(|l| l.split_once('\t').map(|(_, p)| p))
+            .collect();
+        assert_eq!(paths, expected, "{args:?}");
+    }
+}
+
 #[test]
 fn test_du_exclude_invalid_syntax() {
     let ts = TestScenario::new(util_name!());
