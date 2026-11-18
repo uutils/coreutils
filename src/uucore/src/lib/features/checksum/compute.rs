@@ -40,7 +40,7 @@ pub struct ChecksumComputeOptions {
 
     /// Quoting style for filenames when stdout is a terminal.
     pub quoting_style: Option<QuotingStyle>,
-  
+
     /// Whether any file operand was given on the command line. GNU prints the
     /// file name for an explicit "-" in legacy output, but not for the implicit
     /// stdin used when no operand is provided.
