@@ -853,6 +853,26 @@ fn is_excluded(pattern: &Pattern, path: &Path) -> bool {
             .any(|(i, c)| std::path::is_separator(c) && pattern.matches(&path[i + 1..]))
 }
 
+/// Collapse trailing separators to one like GNU du, so the operand `a//`
+/// is shown as `a/` and its entries as `a/b`. `//` is kept as GNU does.
+fn collapse_trailing_separators(path: PathBuf) -> PathBuf {
+    let Ok(bytes) = uucore::os_str_as_bytes(path.as_os_str()) else {
+        return path;
+    };
+    let is_sep = |i: usize| std::path::is_separator(bytes[i] as char);
+    if bytes.len() == 2 && is_sep(0) && is_sep(1) {
+        return path;
+    }
+    let mut end = bytes.len();
+    while end > 1 && is_sep(end - 1) && is_sep(end - 2) {
+        end -= 1;
+    }
+    if end == bytes.len() {
+        return path;
+    }
+    uucore::os_str_from_bytes(&bytes[..end]).map_or_else(|_| path.clone(), PathBuf::from)
+}
+
 /// Given the `--exclude-from` and/or `--exclude` arguments, returns the globset lists
 /// to ignore the files
 fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
@@ -1175,6 +1195,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         vec![PathBuf::from(".")]
     };
+    let files: Vec<PathBuf> = files
+        .into_iter()
+        .map(collapse_trailing_separators)
+        .collect();
 
     let time = matches.contains_id(options::TIME).then(|| {
         matches
