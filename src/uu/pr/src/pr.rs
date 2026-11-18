@@ -24,6 +24,8 @@ use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
 use uucore::{show_error, translate};
 
 const TAB: char = '\t';
+/// Distance between the tab stops that tabs in the input are aligned to.
+const TAB_WIDTH: usize = 8;
 const LINES_PER_PAGE: usize = 66;
 const LINES_PER_PAGE_FOR_FORM_FEED: usize = 63;
 const HEADER_LINES_PER_PAGE: usize = 5;
@@ -1657,30 +1659,29 @@ fn get_line_for_printing(
     let mut complete_line = formatted_line_number.into_bytes();
     complete_line.extend_from_slice(&file_line.line_content);
 
-    let tab_count = memchr::memchr_iter(TAB as u8, &complete_line).count();
-    // Like GNU pr, a byte that is not part of a valid UTF-8 sequence is not
-    // printable and takes no width.
-    let invalid_count: usize = complete_line
-        .utf8_chunks()
-        .map(|chunk| chunk.invalid().len())
-        .sum();
-
-    let display_length = complete_line.len() - invalid_count + (tab_count * 7);
-
     let is_last_cell = (index + 1) == indexes;
     if let Some(i) = line_width {
         let min_width = i.saturating_sub(columns - 1) / columns;
-        // A leading tab that is wider than the page width cannot be printed.
-        // GNU pr drops the content but keeps any line-number prefix.
-        if file_line.line_content.first() == Some(&(TAB as u8)) && 8 > min_width {
-            complete_line.truncate(prefix_len);
-        } else {
-            // Like GNU pr, the last cell of a row is not padded, so the line has
-            // no trailing spaces.
-            if display_length < min_width && !is_last_cell {
-                complete_line.resize(complete_line.len() + (min_width - display_length), b' ');
-            }
-            complete_line.truncate(char_prefix_len(&complete_line, min_width));
+        // The line number prefix is always kept. Any character of the content
+        // (a tab included) that would end past the cell width is dropped.
+        let (_, prefix_columns) = fit_to_columns(&complete_line[..prefix_len], 0, usize::MAX);
+        let (kept, _) = fit_to_columns(&complete_line[prefix_len..], prefix_columns, min_width);
+        complete_line.truncate(prefix_len + kept);
+
+        let tab_count = memchr::memchr_iter(TAB as u8, &complete_line).count();
+        // Like GNU pr, a byte that is not part of a valid UTF-8 sequence is not
+        // printable and takes no width.
+        let invalid_count: usize = complete_line
+            .utf8_chunks()
+            .map(|chunk| chunk.invalid().len())
+            .sum();
+
+        let display_length = complete_line.len() - invalid_count + (tab_count * (TAB_WIDTH - 1));
+
+        // Like GNU pr, the last cell of a row is not padded, so the line has
+        // no trailing spaces.
+        if display_length < min_width && !is_last_cell {
+            complete_line.resize(complete_line.len() + (min_width - display_length), b' ');
         }
     }
 
@@ -1690,23 +1691,35 @@ fn get_line_for_printing(
     complete_line
 }
 
-/// Returns the length in bytes of the first `n` characters of `bytes`. A byte
-/// that is not part of a valid UTF-8 sequence takes no width, so it is kept
-/// unless a character before it is already cut off.
-fn char_prefix_len(bytes: &[u8], n: usize) -> usize {
+/// Returns how many bytes of `bytes` fit within `width` display columns, and
+/// the column reached, when the line number prefix takes `prefix` columns. A
+/// tab advances to the next tab stop, and a character that would end past
+/// `width` is dropped together with everything after it. A byte that is not
+/// part of a valid UTF-8 sequence takes no width, so it is kept unless a
+/// character before it is already cut off.
+///
+/// Like GNU pr, the first character is measured before the prefix is
+/// counted, so it is only dropped if it does not fit in `width` on its own.
+fn fit_to_columns(bytes: &[u8], prefix: usize, width: usize) -> (usize, usize) {
     let mut len = 0;
-    let mut count = 0;
+    let mut column = 0;
+    let mut prefix = Some(prefix);
     for chunk in bytes.utf8_chunks() {
         for c in chunk.valid().chars() {
-            if count == n {
-                return len;
+            let next = if c == TAB {
+                (column / TAB_WIDTH + 1) * TAB_WIDTH
+            } else {
+                column + 1
+            };
+            if next > width {
+                return (len, column + prefix.unwrap_or(0));
             }
+            column = next + prefix.take().unwrap_or(0);
             len += c.len_utf8();
-            count += 1;
         }
         len += chunk.invalid().len();
     }
-    len
+    (len, column + prefix.unwrap_or(0))
 }
 
 fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: usize) -> String {

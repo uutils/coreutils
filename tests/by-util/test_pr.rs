@@ -1710,3 +1710,61 @@ fn test_page_width_narrower_than_leading_tab() {
         .succeeds()
         .stdout_only("    1\t\n    2\t\n");
 }
+
+#[test]
+fn test_page_width_cuts_tab_that_does_not_fit() {
+    for (width, expected) in [("5", "a\n"), ("8", "a\t\n"), ("9", "a\tb\n")] {
+        new_ucmd!()
+            .args(&["-t", "-W", width])
+            .pipe_in("a\tb\n")
+            .succeeds()
+            .stdout_only(expected);
+    }
+    new_ucmd!()
+        .args(&["-t", "-W", "16"])
+        .pipe_in("ab\tc\td\n")
+        .succeeds()
+        .stdout_only("ab\tc\t\n");
+}
+
+#[test]
+fn test_page_width_counts_tab_after_line_number() {
+    // The content starts at column 8, after the number and its tab.
+    new_ucmd!()
+        .args(&["-t", "-n", "-W", "12"])
+        .pipe_in("a\tbcd\nabcd\tb\n")
+        .succeeds()
+        .stdout_only("    1\ta\n    2\tabcd\n");
+    new_ucmd!()
+        .args(&["-t", "-n", "-W", "16"])
+        .pipe_in("abcdefg\tb\n")
+        .succeeds()
+        .stdout_only("    1\tabcdefg\t\n");
+    // Like GNU pr, the first character is measured without the number, so
+    // a leading tab is kept as long as it fits in the page width on its own.
+    new_ucmd!()
+        .args(&["-t", "-n", "-W", "12"])
+        .pipe_in("\tone\n")
+        .succeeds()
+        .stdout_only("    1\t\t\n");
+}
+
+#[test]
+fn test_columns_cut_tab_that_does_not_fit() {
+    // Each column is (11 - 1) / 2 = 5 wide.
+    new_ucmd!()
+        .args(&["-t", "-2", "-s:", "-w", "11"])
+        .pipe_in("a\tb\nc\td\ne\tf\n")
+        .succeeds()
+        .stdout_only("a    :e\nc\n");
+    new_ucmd!()
+        .args(&["-t", "-2", "-s:", "-w", "11"])
+        .pipe_in("abcdefg\tb\nc\td\n")
+        .succeeds()
+        .stdout_only("abcde:c\n");
+    new_ucmd!()
+        .args(&["-t", "-2", "-s:", "-w", "11"])
+        .pipe_in("\tb\nc\n\td\n\te\n")
+        .succeeds()
+        .stdout_only("     :\nc    :\n");
+}
