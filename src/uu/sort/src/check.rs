@@ -163,22 +163,23 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
 
     let mut file = open(path)?;
     let mut carry_over = vec![];
-    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
     let mut prev_chunk: Option<Chunk> = None;
     let mut line_idx = 0;
+    // Reuse the previous chunk's buffer for the next read instead of allocating a
+    // fresh one each time, once it is no longer needed for the disorder comparison.
+    let mut recycled_chunk = None;
     loop {
-        let recycled = RecycledChunk::new(buffer_size(settings));
-        let should_continue = chunks::read(
-            &sender,
-            recycled,
-            None,
+        let chunk_buffer = recycled_chunk
+            .take()
+            .unwrap_or_else(|| RecycledChunk::new(buffer_size(settings)));
+        let (chunk, should_continue) = chunks::read_once(
+            chunk_buffer,
             &mut carry_over,
             &mut file,
-            &mut std::iter::empty(),
             settings.line_ending.into(),
             settings,
         )?;
-        while let Ok(chunk) = receiver.try_recv() {
+        if let Some(chunk) = chunk {
             check_chunk(
                 path,
                 settings,
@@ -187,7 +188,7 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
                 &chunk,
                 &mut line_idx,
             )?;
-            prev_chunk = Some(chunk);
+            recycled_chunk = prev_chunk.replace(chunk).map(Chunk::recycle);
         }
         if !should_continue {
             break;
