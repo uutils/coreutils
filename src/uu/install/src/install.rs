@@ -1596,6 +1596,9 @@ fn create_dir_with<G>(
 #[cfg(test)]
 mod tests {
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    use super::derive_context_from_parent;
+
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     #[test]
     fn test_derive_context_from_parent() {
         // Test cases: (input_context, file_type, expected_output, description)
