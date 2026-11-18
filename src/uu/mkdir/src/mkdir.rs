@@ -104,11 +104,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Extract the SELinux related flags and options
     let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
     let has_context = matches.contains_id(options::CONTEXT);
-    // A bare `--context` means "use the default context", so an empty value is
-    // treated as no explicit context string.
-    let context = matches
-        .get_one::<String>(options::CONTEXT)
-        .filter(|value| !value.is_empty());
+    // A bare `--context` means "use the default context", so clap reports it
+    // as no value; an explicit `--context=` stays an empty context string.
+    let context = matches.get_one::<String>(options::CONTEXT);
 
     let config = Config {
         recursive,
@@ -166,7 +164,6 @@ pub fn uu_app() -> Command {
                 .value_name("CTX")
                 .num_args(0..=1)
                 .require_equals(true)
-                .default_missing_value("")
                 .help(translate!("mkdir-help-context")),
         )
         .arg(

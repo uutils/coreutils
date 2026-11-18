@@ -193,36 +193,6 @@ static OPT_UNPRIVILEGED: &str = "unprivileged";
 
 static ARG_FILES: &str = "files";
 
-/// Whether the command line asks for the default context with a bare `--context`.
-///
-/// An empty value passed as `--context=` still has to be reported, but clap
-/// hands both spellings to us the same way, so the arguments are inspected.
-/// Long-option inference also lets an unambiguous prefix such as `--con` or
-/// `--cont` mean `--context`, so prefixes are resolved against the command's
-/// declared long options.
-fn has_bare_context(args: &[OsString], app: &Command) -> bool {
-    for arg in args {
-        let text = arg.to_string_lossy();
-        if text == "--" {
-            break;
-        }
-        let Some(flag) = text.strip_prefix("--") else {
-            continue;
-        };
-        if flag.is_empty() || flag.contains('=') {
-            continue;
-        }
-        let mut matching = app
-            .get_arguments()
-            .filter_map(|arg| arg.get_long())
-            .filter(|long| long.starts_with(flag));
-        if matching.next() == Some(OPT_CONTEXT) && matching.next().is_none() {
-            return true;
-        }
-    }
-    false
-}
-
 /// Main install utility function, called from main.rs.
 ///
 /// Returns a program return code.
@@ -233,7 +203,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Kept for the caret in mode diagnostics, which needs the mode as typed.
     let diag_args = uucore::diagnostics::operands(&args);
     let app = uu_app();
-    let bare_context = has_bare_context(&args, &app);
     let matches = uucore::clap_localization::handle_clap_result(app, args)?;
 
     let paths: Vec<OsString> = matches
@@ -241,7 +210,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.cloned().collect())
         .unwrap_or_default();
 
-    let behavior = behavior(&matches, diag_args.as_deref(), bare_context)?;
+    let behavior = behavior(&matches, diag_args.as_deref())?;
 
     // Like GNU, work with the umask cleared for new ancestor directories and
     // file creation. The strip program keeps the caller's umask.
@@ -374,8 +343,7 @@ pub fn uu_app() -> Command {
                 .value_name("CONTEXT")
                 .value_parser(clap::value_parser!(String))
                 .num_args(0..=1)
-                .require_equals(true)
-                .default_missing_value(""),
+                .require_equals(true),
         )
         .arg(
             Arg::new(ARG_FILES)
@@ -411,11 +379,7 @@ fn resolve_id(value: &str, lookup: impl Fn(&str) -> std::io::Result<u32>) -> Opt
 ///
 /// In event of failure, returns an integer intended as a program return code.
 ///
-fn behavior(
-    matches: &ArgMatches,
-    diag_args: Option<&[OsString]>,
-    bare_context: bool,
-) -> UResult<Behavior> {
+fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Behavior> {
     let main_function = if matches.get_flag(OPT_DIRECTORY) {
         MainFunction::Directory
     } else {
@@ -502,12 +466,12 @@ fn behavior(
     let selinux_enabled = false;
 
     // A bare `--context` means "use the default context", while an explicit
-    // `--context=` is an empty context that still has to be reported.
-    let mut context = if bare_context {
-        None
-    } else {
-        matches.get_one::<String>(OPT_CONTEXT).cloned()
-    };
+    // `--context=` is an empty context that still has to be reported. Without
+    // a default missing value, clap reports the former as `get_one() == None`
+    // with `contains_id() == true`, and the latter as `Some("")`.
+    let context_value = matches.get_one::<String>(OPT_CONTEXT);
+    let bare_context = matches.contains_id(OPT_CONTEXT) && context_value.is_none();
+    let mut context = context_value.cloned();
     if context.is_some() && !selinux_enabled {
         show_warning!("{}", translate!("install-warning-context-ignored"));
         context = None;
@@ -1631,37 +1595,6 @@ fn create_dir_with<G>(
 
 #[cfg(test)]
 mod tests {
-    use super::{has_bare_context, uu_app};
-    use std::ffi::OsString;
-
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-    use super::derive_context_from_parent;
-
-    fn os_args(values: &[&str]) -> Vec<OsString> {
-        values.iter().map(|value| OsString::from(*value)).collect()
-    }
-
-    #[test]
-    fn test_has_bare_context_with_long_option_prefixes() {
-        let app = uu_app();
-        for arg in ["--con", "--cont", "--context"] {
-            assert!(
-                has_bare_context(&os_args(&["install", arg]), &app),
-                "{arg} should be a bare context"
-            );
-        }
-        for arg in ["--context=", "--context=foo", "--con=foo", "--cont=foo"] {
-            assert!(
-                !has_bare_context(&os_args(&["install", arg]), &app),
-                "{arg} has an explicit value"
-            );
-        }
-        assert!(
-            !has_bare_context(&os_args(&["install", "--", "--context"]), &app),
-            "arguments after -- are operands"
-        );
-    }
-
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     #[test]
     fn test_derive_context_from_parent() {
