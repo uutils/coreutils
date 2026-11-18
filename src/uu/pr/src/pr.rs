@@ -348,7 +348,7 @@ pub fn uu_app() -> Command {
                 .help(translate!("pr-help-column-char-separator"))
                 .value_name("char")
                 .num_args(0..=1)
-                .default_missing_value("\t"),
+                .default_missing_value(""),
         )
         .arg(
             Arg::new(options::COLUMN_STRING_SEPARATOR)
@@ -357,7 +357,7 @@ pub fn uu_app() -> Command {
                 .help(translate!("pr-help-column-string-separator"))
                 .value_name("string")
                 .num_args(0..=1)
-                .default_missing_value(" "),
+                .default_missing_value(""),
         )
         .arg(
             Arg::new(options::MERGE)
@@ -1002,11 +1002,16 @@ fn build_options(
 
     let across_mode = matches.get_flag(options::ACROSS);
 
-    let column_separator = match matches.get_one::<String>(options::COLUMN_STRING_SEPARATOR) {
-        Some(x) => Some(x),
-        None => matches.get_one::<String>(options::COLUMN_CHAR_SEPARATOR),
-    }
-    .map_or_else(|| DEFAULT_COLUMN_SEPARATOR.to_string(), ToString::to_string);
+    // -s or -S without a value is an empty string here, and -s then means a tab.
+    let given_separator = matches
+        .get_one::<String>(options::COLUMN_STRING_SEPARATOR)
+        .or_else(|| matches.get_one::<String>(options::COLUMN_CHAR_SEPARATOR));
+    let column_separator = match given_separator {
+        Some(x) if !x.is_empty() || matches.contains_id(options::COLUMN_STRING_SEPARATOR) => {
+            x.clone()
+        }
+        _ => DEFAULT_COLUMN_SEPARATOR.to_string(),
+    };
 
     let default_column_width = if matches.contains_id(options::COLUMN_WIDTH)
         && matches.contains_id(options::COLUMN_CHAR_SEPARATOR)
@@ -1023,15 +1028,17 @@ fn build_options(
     )
     .unwrap_or(Ok(default_column_width))?;
 
+    let given_page_width = parse_positive_option(
+        matches,
+        options::PAGE_WIDTH,
+        &translate!("pr-error-invalid-page-width"),
+    )
+    .transpose()?;
+    // -J leaves the lines alone, so the page width only sizes the header.
     let page_width = if matches.get_flag(options::JOIN_LINES) {
         None
     } else {
-        parse_positive_option(
-            matches,
-            options::PAGE_WIDTH,
-            &translate!("pr-error-invalid-page-width"),
-        )
-        .transpose()?
+        given_page_width
     };
 
     // --columns has more priority than -column
@@ -1050,20 +1057,9 @@ fn build_options(
     // Every column needs at least one character next to the separators.
     if let Some(columns) = column_option_value {
         // -W counts here even with -J
-        let width = matches
-            .get_one::<String>(options::PAGE_WIDTH)
-            .and_then(|raw| raw.parse().ok())
-            .unwrap_or(column_width);
-        // A bare -s or -S takes no room. Clap reports it as its default
-        // value, so an explicit tab or space is counted the same way.
-        let separator_width = match (
-            matches.get_one::<String>(options::COLUMN_STRING_SEPARATOR),
-            matches.get_one::<String>(options::COLUMN_CHAR_SEPARATOR),
-        ) {
-            (Some(string), _) if string == " " => 0,
-            (None, Some(char)) if char == "\t" => 0,
-            _ => column_separator.chars().count(),
-        };
+        let width = given_page_width.unwrap_or(column_width);
+        // -s or -S without a value takes no room.
+        let separator_width = given_separator.unwrap_or(&column_separator).chars().count();
         let separators = (columns - 1).saturating_mul(separator_width);
         if width.saturating_sub(separators) < columns {
             return Err(PrError::EncounteredErrors {
