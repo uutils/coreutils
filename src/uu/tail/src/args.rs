@@ -90,34 +90,34 @@ impl FilterMode {
         };
 
         let zero_term = matches.get_flag(options::ZERO_TERM);
-        let mode = if let Some(arg) = matches.get_one::<String>(options::BYTES) {
-            match parse_num(arg) {
-                Ok(signum) => Self::Bytes(signum),
-                Err(e) => {
+        let mut mode = None;
+
+        for argument in count_option_arguments(matches, options::BYTES, options::LINES) {
+            let option = argument.option;
+            let arg = argument.value;
+            let signum = parse_num(&arg).map_err(|e| match option {
+                CountOption::Bytes => {
                     let message =
                         translate!("tail-error-invalid-number-of-bytes", "arg" => e.to_string());
-                    return Err(raise(message, arg, 'c', "bytes", &e));
+                    raise(message, &arg, 'c', "bytes", &e)
                 }
-            }
-        } else if let Some(arg) = matches.get_one::<String>(options::LINES) {
-            match parse_num(arg) {
-                Ok(signum) => {
+                CountOption::Lines => {
+                    let message =
+                        translate!("tail-error-invalid-number-of-lines", "arg" => arg.quote());
+                    raise(message, &arg, 'n', "lines", &e)
+                }
+            })?;
+
+            mode = Some(match option {
+                CountOption::Bytes => Self::Bytes(signum),
+                CountOption::Lines => {
                     let delimiter = if zero_term { 0 } else { b'\n' };
                     Self::Lines(signum, delimiter)
                 }
-                Err(e) => {
-                    let message =
-                        translate!("tail-error-invalid-number-of-lines", "arg" => arg.quote());
-                    return Err(raise(message, arg, 'n', "lines", &e));
-                }
-            }
-        } else if zero_term {
-            Self::default_zero()
-        } else {
-            Self::default()
-        };
+            });
+        }
 
-        Ok(mode)
+        Ok(mode.unwrap_or_else(|| if zero_term { Self::default_zero() } else { Self::default() }))
     }
 
     fn default_zero() -> Self {
@@ -442,54 +442,8 @@ fn parse_num(src: &str) -> Result<Signum, ParseSizeError> {
     }
 }
 
-fn validate_count_options(args: &[OsString]) -> UResult<()> {
-    let diag = uucore::diagnostics::capture(args);
-    for argument in count_option_arguments(args) {
-        if let Err(error) = parse_num(&argument.value) {
-            let (short, long, message) = match argument.option {
-                CountOption::Bytes => (
-                    'c',
-                    "bytes",
-                    translate!(
-                        "tail-error-invalid-number-of-bytes",
-                        "arg" => error.to_string()
-                    ),
-                ),
-                CountOption::Lines => (
-                    'n',
-                    "lines",
-                    translate!(
-                        "tail-error-invalid-number-of-lines",
-                        "arg" => error.to_string()
-                    ),
-                ),
-            };
-            let option = OptionValue::new(&argument.value, short, long);
-            return Err(error.size_value_error(
-                diag.as_deref(),
-                &option,
-                number_offset(&argument.value),
-                &message,
-                USimpleError::new(1, message.clone()),
-            ));
-        }
-    }
-    Ok(())
-}
-
 pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     let args_vec: Vec<OsString> = args.collect();
-    // Validate every count value up front, including ones clap would override.
-    // Skip that when the arguments are actually obsolete syntax (e.g. `tail -cf`),
-    // which has its own parser below.
-    let obsolete_preview = if args_vec.len() == 2 || args_vec.len() == 3 {
-        parse_obsolete(&args_vec[1], args_vec.get(2))?
-    } else {
-        None
-    };
-    if obsolete_preview.is_none() {
-        validate_count_options(&args_vec)?;
-    }
     let clap_args = uu_app().try_get_matches_from(args_vec.clone());
     let mut settings_failed = false;
     let clap_result = match clap_args {
@@ -566,7 +520,7 @@ pub fn uu_app() -> Command {
                 .long(options::BYTES)
                 .value_name("[+]NUM")
                 .allow_hyphen_values(true)
-                .overrides_with_all([options::BYTES, options::LINES])
+                .action(ArgAction::Append)
                 .help(translate!("tail-help-bytes")),
         )
         .arg(
@@ -586,7 +540,7 @@ pub fn uu_app() -> Command {
                 .long(options::LINES)
                 .value_name("[+]NUM")
                 .allow_hyphen_values(true)
-                .overrides_with_all([options::BYTES, options::LINES])
+                .action(ArgAction::Append)
                 .help(translate!("tail-help-lines")),
         )
         .arg(

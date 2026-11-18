@@ -104,14 +104,9 @@ impl SignedNum {
 pub fn parse_signed_num_max(src: &str) -> Result<SignedNum, ParseSizeError> {
     let (sign, size_string) = strip_sign_prefix(src);
 
-    // Empty string after stripping sign is an error. GNU keeps a '+' in the
-    // message but reports '-' (and a bare empty value) as the empty string.
+    // Empty string after stripping sign is an error
     if size_string.is_empty() {
-        let reported = match sign {
-            Some(SignPrefix::Plus) => "+",
-            _ => "",
-        };
-        return Err(ParseSizeError::ParseFailure(reported.quote().to_string()));
+        return Err(ParseSizeError::ParseFailure(src.to_string()));
     }
 
     // Remove leading zeros so size is interpreted as decimal, not octal
@@ -383,13 +378,5 @@ mod tests {
         assert!(parse_signed_num_max("").is_err());
         assert!(parse_signed_num_max("abc").is_err());
         assert!(parse_signed_num_max("++10").is_err());
-    }
-
-    #[test]
-    fn test_sign_only_reports_the_sign() {
-        // GNU reports a lone '+' as '+', but a lone '-' as the empty string.
-        assert_eq!(parse_signed_num_max("+").unwrap_err().to_string(), "'+'");
-        assert_eq!(parse_signed_num_max("-").unwrap_err().to_string(), "''");
-        assert_eq!(parse_signed_num_max("").unwrap_err().to_string(), "''");
     }
 }

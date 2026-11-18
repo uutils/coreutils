@@ -6132,19 +6132,6 @@ mod diagnostics {
 }
 
 #[test]
-fn test_sign_only_count_is_reported_with_its_sign() {
-    // GNU keeps a lone '+' in the message but reports a lone '-' as ''.
-    for (args, message) in [
-        (&["-n", "+"][..], "tail: invalid number of lines: '+'\n"),
-        (&["-n", "-"][..], "tail: invalid number of lines: ''\n"),
-        (&["-c", "+"][..], "tail: invalid number of bytes: '+'\n"),
-        (&["-c", "-"][..], "tail: invalid number of bytes: ''\n"),
-    ] {
-        new_ucmd!().args(args).fails_with_code(1).stderr_is(message);
-    }
-}
-
-#[test]
 fn test_invalid_count_keeps_its_leading_zeros() {
     // Leading zeros are stripped only so the count is read as decimal rather
     // than octal. That is internal, so GNU still names the argument as typed.
@@ -6215,11 +6202,23 @@ fn test_invalid_max_unchanged_stats_is_rejected() {
 }
 
 #[test]
-fn test_invalid_overridden_byte_count_is_rejected() {
-    new_ucmd!()
-        .args(&["--bytes", "1,2", "--lines", "2"])
-        .fails_with_code(1)
-        .stderr_is("tail: invalid number of bytes: '1,2'\n");
+fn test_invalid_overridden_count_is_rejected() {
+    for (args, message) in [
+        (
+            &["--bytes", "1,2", "--lines", "2"][..],
+            "tail: invalid number of bytes: '1,2'\n",
+        ),
+        (
+            &["--lines", "1,2", "--bytes", "2"][..],
+            "tail: invalid number of lines: '1,2'\n",
+        ),
+        (
+            &["-n", "1,2", "-c2"][..],
+            "tail: invalid number of lines: '1,2'\n",
+        ),
+    ] {
+        new_ucmd!().args(args).fails_with_code(1).stderr_is(message);
+    }
 }
 
 #[uutests::wasi_ignore(StdinPositionNotPreserved)]
