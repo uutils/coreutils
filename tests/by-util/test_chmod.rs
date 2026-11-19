@@ -2530,3 +2530,55 @@ fn test_recursive_dereference_changes_link_targets() {
         .no_output();
     assert_eq!(at.metadata("target").permissions().mode() & 0o777, 0o640);
 }
+
+#[cfg(target_os = "linux")]
+#[rstest::rstest]
+#[case::verbose(&["-v"], &["first", "dir/second"])]
+#[case::changes(&["-c"], &["first", "dir/second"])]
+#[case::recursive_verbose(&["-R", "-v"], &["first", "dir"])]
+#[case::recursive_changes(&["-R", "-c"], &["first", "dir"])]
+fn test_chmod_reports_stdout_write_error_once(#[case] flags: &[&str], #[case] operands: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("first");
+    at.touch("dir/second");
+    for path in ["first", "dir/second"] {
+        set_permissions(at.plus(path), Permissions::from_mode(0o600)).unwrap();
+    }
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    ucmd.args(flags)
+        .arg("755")
+        .args(operands)
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_is("chmod: write error: No space left on device\n");
+
+    // Modes are still changed after the first failed write.
+    assert_eq!(at.metadata("first").permissions().mode() & 0o777, 0o755);
+    assert_eq!(
+        at.metadata("dir/second").permissions().mode() & 0o777,
+        0o755
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_chmod_reports_stdout_write_error_after_other_errors() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    set_permissions(at.plus("a"), Permissions::from_mode(0o600)).unwrap();
+    set_permissions(at.plus("b"), Permissions::from_mode(0o600)).unwrap();
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    ucmd.args(&["-v", "755", "a", "missing", "b"])
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_is(
+            "chmod: cannot access 'missing': No such file or directory\n\
+             chmod: write error: No space left on device\n",
+        );
+
+    assert_eq!(at.metadata("b").permissions().mode() & 0o777, 0o755);
+}

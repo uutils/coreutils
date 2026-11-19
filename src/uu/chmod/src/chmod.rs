@@ -8,14 +8,16 @@
 #![cfg(unix)]
 
 use clap::{Arg, ArgAction, Command};
+use std::cell::OnceCell;
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs;
+use std::io::Write;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{
-    ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code, strip_errno,
+    ExitCode, FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code, strip_errno,
 };
 use uucore::fs::{FileInformation, display_permissions_unix, path_is_root_dir};
 use uucore::mode;
@@ -212,9 +214,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         dereference,
         args: mode_args,
         mode_indices,
+        write_error: OnceCell::new(),
     };
 
-    chmoder.chmod(&files)
+    let result = chmoder.chmod(&files);
+    if let Some(err) = chmoder.write_error.into_inner() {
+        show!(err.map_err_context(|| translate!("common-write-error")));
+    }
+    result
 }
 
 pub fn uu_app() -> Command {
@@ -319,6 +326,8 @@ struct Chmoder {
     /// Where each extracted negative mode sat in `args`, in the order they
     /// were joined into `cmode`. Empty unless `option_like_mode` is set.
     mode_indices: Vec<usize>,
+    /// The first failure to write `-v`/`-c` output, reported once at the end.
+    write_error: OnceCell<std::io::Error>,
 }
 
 impl Chmoder {
@@ -413,15 +422,15 @@ impl Chmoder {
             let new_permissions = display_permissions_unix(new_mode, false);
 
             if new_mode != old_mode {
-                println!(
+                self.print(format_args!(
                     "mode of {} changed from {old_mode:04o} ({current_permissions}) to {new_mode:04o} ({new_permissions})",
                     file_path.quote(),
-                );
+                ));
             } else if self.verbose {
-                println!(
+                self.print(format_args!(
                     "mode of {} retained as {old_mode:04o} ({current_permissions})",
                     file_path.quote(),
-                );
+                ));
             }
         }
     }
@@ -472,20 +481,27 @@ impl Chmoder {
     /// "'FILE' could not be accessed" on stdout, even with --quiet.
     fn report_not_accessed(&self, path: &Path) {
         if self.verbose {
-            println!(
-                "{}",
-                translate!("chmod-verbose-could-not-be-accessed", "file" => path.quote())
-            );
+            self.print(translate!("chmod-verbose-could-not-be-accessed", "file" => path.quote()));
         }
     }
 
-    fn print_neither_changed(file: OsString) -> std::io::Result<()> {
-        use std::io::{Write as _, stdout};
-        writeln!(
-            stdout(),
-            "{}",
-            translate!("chmod-verbose-neither-changed", "file" => file.quote())
-        )
+    fn print_neither_changed(&self, file: &Path) {
+        self.print(translate!("chmod-verbose-neither-changed", "file" => file.quote()));
+    }
+
+    /// Print one line of `-v`/`-c` output.
+    ///
+    /// A failed write does not stop the run: the modes are still changed, as
+    /// in GNU. The first error is kept and reported once at the end, and
+    /// nothing more is printed after it.
+    fn print(&self, message: impl std::fmt::Display) {
+        if self.write_error.get().is_none() {
+            // One write per line, so a failure leaves nothing buffered for
+            // the flush at exit to fail on again.
+            if let Err(err) = std::io::stdout().write_all(format!("{message}\n").as_bytes()) {
+                let _ = self.write_error.set(err);
+            }
+        }
     }
 
     fn chmod(&self, files: &[OsString]) -> UResult<()> {
@@ -933,7 +949,7 @@ impl Chmoder {
                 // Handle dangling symlinks or other errors
                 return if file.is_symlink() && !dereference {
                     if self.verbose {
-                        Self::print_neither_changed(file.into())?;
+                        self.print_neither_changed(file);
                     }
                     Ok(()) // Skip dangling symlinks
                 } else {
@@ -958,7 +974,7 @@ impl Chmoder {
         // ignored by the kernel anyway, so changing them has no effect.
         if file.is_symlink() && !dereference {
             if self.verbose {
-                Self::print_neither_changed(file.into())?;
+                self.print_neither_changed(file);
             }
             return Ok(());
         }
@@ -1005,15 +1021,12 @@ impl Chmoder {
     fn report_failed_change(&self, file: &Path, err: std::io::Error, old_mode: u32, new_mode: u32) {
         self.report_failure(ChmodError::ChangingPermissions(file.into(), err).into());
         if self.verbose {
-            println!(
-                "{}",
-                translate_text!("chmod-verbose-failed-change",
-                    "file" => file.quote(),
-                    "old_mode" => format!("{old_mode:04o}"),
-                    "old_mode_display" => display_permissions_unix(old_mode, false),
-                    "new_mode" => format!("{new_mode:04o}"),
-                    "new_mode_display" => display_permissions_unix(new_mode, false))
-            );
+            self.print(translate_text!("chmod-verbose-failed-change",
+                "file" => file.quote(),
+                "old_mode" => format!("{old_mode:04o}"),
+                "old_mode_display" => display_permissions_unix(old_mode, false),
+                "new_mode" => format!("{new_mode:04o}"),
+                "new_mode_display" => display_permissions_unix(new_mode, false)));
         }
     }
 }
