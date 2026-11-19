@@ -1233,6 +1233,43 @@ fn test_skip_chars_multibyte() {
         .stdout_is("      2 éxy\n");
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
+#[test]
+fn test_skip_chars_with_check_chars_multibyte() {
+    // Skip one character, then compare one: é, é and è.
+    new_ucmd!()
+        .args(&["-s", "1", "-w", "1", "-c"])
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in("xé1\nyé2\nzè3\n")
+        .succeeds()
+        .stdout_is("      2 xé1\n      1 zè3\n");
+    // In the C locale both count bytes: the first byte of é and è is the same.
+    new_ucmd!()
+        .args(&["-s", "1", "-w", "1", "-c"])
+        .env("LC_ALL", "C")
+        .pipe_in("xé1\nyé2\nzè3\n")
+        .succeeds()
+        .stdout_is("      3 xé1\n");
+}
+
+#[uutests::wasi_ignore(NoLocaleData)]
+#[test]
+fn test_skip_chars_invalid_utf8_counts_bytes() {
+    // Invalid UTF-8 falls back to bytes, as for -w.
+    new_ucmd!()
+        .args(&["-s", "3", "-c"])
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(&b"a\xff\xfeX\nb\xff\xfeY\n"[..])
+        .succeeds()
+        .stdout_is_bytes(&b"      1 a\xff\xfeX\n      1 b\xff\xfeY\n"[..]);
+    new_ucmd!()
+        .args(&["-s", "1", "-w", "2", "-c"])
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(&b"a\xff\xfeX\nb\xff\xfeY\n"[..])
+        .succeeds()
+        .stdout_is_bytes(&b"      2 a\xff\xfeX\n"[..]);
+}
+
 #[test]
 fn test_c_locale_counts_bytes() {
     let input = "가나다라마\n가나다바사\n";

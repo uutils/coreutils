@@ -220,25 +220,9 @@ impl Uniq {
     }
 
     fn key_end_index(&self, line: &[u8], key_start: usize) -> usize {
-        let remainder = &line[key_start..];
         match self.slice_stop {
             None => line.len(),
-            Some(limit) => {
-                if remainder.is_empty() {
-                    return key_start;
-                }
-                if self.is_c_locale {
-                    // for C or POSIX we count bytes
-                    key_start + remainder.len().min(limit)
-                } else if let Ok(valid) = std::str::from_utf8(remainder) {
-                    // for UTF-8 we count characters
-                    let prefix_len = Self::char_prefix_len(valid, limit);
-                    key_start + prefix_len
-                } else {
-                    // for invalid UTF-8 we count bytes
-                    key_start + remainder.len().min(limit)
-                }
-            }
+            Some(limit) => self.char_offset(line, key_start, limit),
         }
     }
 
