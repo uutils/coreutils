@@ -13,7 +13,7 @@ use uutests::util_name;
 /*
  * As vdir use the same functions than ls, we don't have to retest them here.
  * We just test the default and the column output
-*/
+ */
 
 #[test]
 fn test_vdir() {
