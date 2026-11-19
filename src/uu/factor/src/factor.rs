@@ -142,7 +142,7 @@ impl Display for NumError<'_> {
 
 /// Writing out the prime factors for integers
 fn write_result(
-    w: &mut impl Write,
+    w: &mut Vec<u8>,
     x: &impl Display,
     factorization: BTreeMap<impl Display, usize>,
     print_exponents: bool,
@@ -156,8 +156,13 @@ fn write_result(
                 write!(w, " {factor}")?;
             }
         } else {
-            for _ in 0..n {
-                write!(w, " {factor}")?;
+            // Format a repeated factor once and copy its text: formatting a big
+            // factor costs far more than copying it.
+            let start = w.len();
+            write!(w, " {factor}")?;
+            let end = w.len();
+            for _ in 1..n {
+                w.extend_from_within(start..end);
             }
         }
     }
