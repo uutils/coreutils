@@ -90,7 +90,8 @@ struct OutputOptions {
 struct FileLine {
     file_id: usize,
     page_number: usize,
-    line_number: usize,
+    /// `None` for the blank filler cells of merged output.
+    line_number: Option<usize>,
     line_content: Vec<u8>,
     /// The last line of the input, which has no newline.
     unterminated: bool,
@@ -130,7 +131,7 @@ impl FileLine {
         Ok(Self {
             file_id,
             page_number,
-            line_number,
+            line_number: Some(line_number),
             line_content,
             unterminated: false,
         })
@@ -148,7 +149,7 @@ struct ColumnModeOptions {
 struct NumberingMode {
     width: usize,
     separator: String,
-    first_number: usize,
+    first_number: Option<usize>,
 }
 
 impl Default for NumberingMode {
@@ -156,7 +157,7 @@ impl Default for NumberingMode {
         Self {
             width: 5,
             separator: TAB.to_string(),
-            first_number: 1,
+            first_number: None,
         }
     }
 }
@@ -796,13 +797,12 @@ fn build_options(
         OsString::from,
     );
 
-    let default_first_number = NumberingMode::default().first_number;
     let first_number = parse_usize(
         matches,
         options::FIRST_LINE_NUMBER,
         &translate!("pr-error-invalid-first-line-number"),
     )
-    .unwrap_or(Ok(default_first_number))?;
+    .transpose()?;
 
     let number = matches
         .get_one::<String>(options::NUMBER_LINES)
@@ -868,11 +868,12 @@ fn build_options(
         })
         .transpose()?
         .or_else(|| {
-            if matches.contains_id(options::NUMBER_LINES) {
-                Some(NumberingMode::default())
-            } else {
-                None
-            }
+            matches
+                .contains_id(options::NUMBER_LINES)
+                .then(|| NumberingMode {
+                    first_number,
+                    ..NumberingMode::default()
+                })
         });
 
     let expand_tabs = matches
@@ -1215,6 +1216,9 @@ fn get_pages(
     // Keep a running total of the number of lines read, starting with
     // 0 or another specified number.
     let mut line_num = get_start_line_number(options);
+    // An explicit `-N` numbers from the first printed page, so lines on
+    // skipped pages must not count towards it.
+    let explicit_first_number = options.number.as_ref().and_then(|n| n.first_number);
 
     // We will collect each page into a list of pages, along with
     // its page number.
@@ -1229,6 +1233,19 @@ fn get_pages(
     // Remember the index of the end of the last line to use as the
     // beginning of the next line.
     let mut prev = 0;
+
+    // Keep a finished page if it is printed and start the next one. With an
+    // explicit `-N`, a skipped page restarts the line numbering (pages past
+    // `end_page` are never printed, so resetting there is harmless).
+    let mut finish_page = |page_num: &mut usize, page: &mut Vec<FileLine>, line_num: &mut usize| {
+        if start_page <= *page_num + 1 && end_page.is_none_or(|e| *page_num < e) {
+            pages.push((*page_num, std::mem::take(page)));
+        } else if let Some(n) = explicit_first_number {
+            *line_num = n;
+        }
+        *page_num += 1;
+        page.clear();
+    };
 
     // Search for either the form feed character `\f` or the newline
     // character `\n`. The newline character marks the end of a line,
@@ -1257,11 +1274,7 @@ fn get_pages(
             //
             // TODO Optimization opportunity: don't bother pushing
             // lines and pages if we aren't going to display it.
-            if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-                pages.push((page_num, std::mem::take(&mut page)));
-            }
-            page_num += 1;
-            page.clear();
+            finish_page(&mut page_num, &mut page, &mut line_num);
         } else {
             // Add everything up to (but not including) the newline
             // character as one line of the page.
@@ -1281,11 +1294,7 @@ fn get_pages(
             // If the page is finished, add it to the list of pages
             // and clear the `page` buffer for the next iteration.
             if page.len() >= lines_needed_per_page {
-                if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-                    pages.push((page_num, std::mem::take(&mut page)));
-                }
-                page_num += 1;
-                page.clear();
+                finish_page(&mut page_num, &mut page, &mut line_num);
             }
         }
     }
@@ -1717,10 +1726,14 @@ fn char_prefix_len(bytes: &[u8], n: usize) -> usize {
     len
 }
 
-fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: usize) -> String {
+fn get_formatted_line_number(
+    opts: &OutputOptions,
+    line_number: Option<usize>,
+    index: usize,
+) -> String {
     let should_show_line_number =
         opts.number.is_some() && (opts.merge_files_print.is_none() || index == 0);
-    if should_show_line_number && line_number != 0 {
+    if let Some(line_number) = line_number.filter(|_| should_show_line_number) {
         let line_str = line_number.to_string();
         let num_opt = opts.number.as_ref().unwrap();
         let width = num_opt.width;
@@ -1805,7 +1818,10 @@ fn trailer_content(options: &OutputOptions) -> Vec<String> {
 /// If -N is specified the first line number changes otherwise
 /// default is 1.
 fn get_start_line_number(opts: &OutputOptions) -> usize {
-    opts.number.as_ref().map_or(1, |i| i.first_number)
+    opts.number
+        .as_ref()
+        .and_then(|i| i.first_number)
+        .unwrap_or(1)
 }
 
 /// Returns number of lines to read from input for constructing one page of pr output.
