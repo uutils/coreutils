@@ -49,40 +49,45 @@ fn replace_output_file_in_input_files(
     if let Some(output_path) = output.map(Path::new)
         && let Ok(output_info) = FileInformation::from_path(output_path, true)
     {
+        // `-` is read from the descriptor, which may be the output file under
+        // any name, so compare what it is open on.
+        let stdin_is_output = FileInformation::from_file(&io::stdin())
+            .is_ok_and(|stdin_info| stdin_info == output_info);
+        // One copy of the output file for its path operands, and one of
+        // standard input, taken from where it stands.
         let mut path_copy: Option<OsString> = None;
         let mut stdin_copy: Option<OsString> = None;
         for file in files {
-            if file == "-" {
-                // `-` is read from the descriptor, which may be the output file
-                // under any name, so compare what it is open on.
-                if stdin_copy.is_none()
-                    && FileInformation::from_file(&io::stdin())
-                        .is_ok_and(|stdin_info| stdin_info == output_info)
-                {
-                    let copy = copy_to_tmp_file(&mut io::stdin().lock(), tmp_dir)?;
-                    stdin_copy = Some(copy.path().into());
-                    copies.push(copy);
-                }
-                if let Some(copy) = &stdin_copy {
-                    file.clone_from(copy);
-                }
-                continue;
-            }
+            let is_stdin = file == "-";
             // Different hard links have different canonical paths but still
             // share the file that will be truncated when output begins.
-            if FileInformation::from_path(Path::new(file), true)
-                .is_ok_and(|input_info| input_info == output_info)
-            {
-                if path_copy.is_none() {
+            let reads_output = if is_stdin {
+                stdin_is_output
+            } else {
+                FileInformation::from_path(Path::new(file), true)
+                    .is_ok_and(|input_info| input_info == output_info)
+            };
+            if !reads_output {
+                continue;
+            }
+            let slot = if is_stdin {
+                &mut stdin_copy
+            } else {
+                &mut path_copy
+            };
+            if slot.is_none() {
+                let copy = if is_stdin {
+                    copy_to_tmp_file(&mut io::stdin().lock(), tmp_dir)?
+                } else {
                     let mut source = File::open(output_path)
                         .map_err(|error| SortError::OpenTmpFileFailed { error })?;
-                    let copy = copy_to_tmp_file(&mut source, tmp_dir)?;
-                    path_copy = Some(copy.path().into());
-                    copies.push(copy);
-                }
-                if let Some(copy) = &path_copy {
-                    file.clone_from(copy);
-                }
+                    copy_to_tmp_file(&mut source, tmp_dir)?
+                };
+                *slot = Some(copy.path().into());
+                copies.push(copy);
+            }
+            if let Some(copy) = slot {
+                file.clone_from(copy);
             }
         }
     }

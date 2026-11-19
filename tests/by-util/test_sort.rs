@@ -2405,24 +2405,33 @@ fn test_merge_output_is_hard_link_to_multiple_inputs(#[case] args: &[&str]) {
     assert_eq!(at.read("other"), other);
 }
 
-#[test]
-fn test_merge_output_is_stdin() {
+#[rstest]
+#[case::stdin_only(&["-", "updates"], 1)]
+#[case::stdin_and_path(&["-", "ledger", "updates"], 2)]
+fn test_merge_output_is_stdin(#[case] inputs: &[&str], #[case] copies: usize) {
     // `sort -m -o ledger - updates < ledger`: standard input is the output
-    // file, so it must be read before the output truncates it.
+    // file, so it must be read before the output truncates it. With
+    // `- ledger`, both the stdin copy and the path copy are merged.
     let mut ledger = String::new();
+    let mut expected = String::new();
     for i in 1..=10_000 {
         writeln!(ledger, "{i:05}").unwrap();
+        for _ in 0..copies {
+            writeln!(expected, "{i:05}").unwrap();
+        }
     }
+    expected.push_str("10001\n");
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("ledger", &ledger);
     at.write("updates", "10001\n");
 
-    ucmd.args(&["-m", "-o", "ledger", "-", "updates"])
+    ucmd.args(&["-m", "-o", "ledger"])
+        .args(inputs)
         .set_stdin(std::fs::File::open(at.plus("ledger")).unwrap())
         .succeeds()
         .no_output();
 
-    assert_eq!(at.read("ledger"), ledger + "10001\n");
+    assert_eq!(at.read("ledger"), expected);
 }
 
 #[test]
