@@ -1422,13 +1422,8 @@ fn write_page(
     let header = header_content(options, page);
     let trailer_content = trailer_content(options);
 
-    for (index, x) in header.iter().enumerate() {
-        // The left margin goes on the first blank line and on the
-        // header text line, but not on the other blank header lines.
-        if index == 0 || index == 2 {
-            write_offset_spaces(writer, options.offset_spaces)?;
-        }
-        writer.write_all(x)?;
+    for x in header {
+        writer.write_all(&x)?;
         writer.write_all(line_separator)?;
     }
 
@@ -1803,7 +1798,12 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<Vec<u8>> {
         .concat()
     };
 
-    vec![Vec::new(), Vec::new(), header_line, Vec::new(), Vec::new()]
+    // The left margin goes on the first blank line and on the header text
+    // line, but not on the other blank header lines.
+    let margin = vec![b' '; options.offset_spaces];
+    let header_line = [margin.as_slice(), header_line.as_slice()].concat();
+
+    vec![margin, Vec::new(), header_line, Vec::new(), Vec::new()]
 }
 
 /// Returns five empty lines as trailer content if displaying trailer
