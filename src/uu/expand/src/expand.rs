@@ -91,6 +91,16 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
                     // Parse a number from the byte sequence.
                     let s = from_utf8(&bytes[i..]).unwrap();
                     match s.parse::<usize>() {
+                        // After a tab list, `+0` or `/0` sets no tab size yet,
+                        // as in GNU: a later number still gives one, and if
+                        // none does the list is used as if it were not there.
+                        Ok(0)
+                            if remaining_mode != RemainingMode::None
+                                && !nums.is_empty()
+                                && !is_specifier_already_used =>
+                        {
+                            break;
+                        }
                         // Tab size must be positive.
                         Ok(0) => return Err(ParseError::TabSizeCannotBeZero),
                         // Tab stops must be ascending. A number after `/` or `+` is a
@@ -138,6 +148,11 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
                 }
             }
         }
+    }
+
+    // A `+0` or `/0` that no later number replaced leaves the list as given.
+    if !is_specifier_already_used {
+        remaining_mode = RemainingMode::None;
     }
     // If no numbers could be parsed (for example, if `s` were "+,+,+"),
     // then just use the default tabstops.

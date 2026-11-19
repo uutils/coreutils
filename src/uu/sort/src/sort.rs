@@ -352,7 +352,7 @@ impl GlobalSettings {
             ])
             .with_default_unit("K")
             .with_b_byte_count(true)
-            .parse(input.trim())?;
+            .parse(input.trim_start())?;
 
         usize::try_from(size).map_err(|_| {
             ParseSizeError::SizeTooBig(translate!("sort-error-buffer-size-too-big", "size" => size))
@@ -2278,9 +2278,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         PathBuf::from,
     ));
 
-    settings.compress_prog = matches
-        .get_one::<String>(options::COMPRESS_PROG)
-        .map(String::from);
+    settings.compress_prog = matches.get_one::<String>(options::COMPRESS_PROG).cloned();
 
     if let Some(n_merge) = matches.get_one::<String>(options::BATCH_SIZE) {
         // `None` means the value does not even fit in a `usize`, which is always too large.

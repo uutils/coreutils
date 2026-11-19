@@ -92,6 +92,8 @@ struct FileLine {
     page_number: usize,
     line_number: usize,
     line_content: Vec<u8>,
+    /// The last line of the input, which has no newline.
+    unterminated: bool,
 }
 
 impl FileLine {
@@ -130,6 +132,7 @@ impl FileLine {
             page_number,
             line_number,
             line_content,
+            unterminated: false,
         })
     }
 }
@@ -1289,7 +1292,8 @@ fn get_pages(
 
     // Consider all trailing bytes as the last line.
     if prev < buf.len() {
-        let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..], options)?;
+        let mut file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..], options)?;
+        file_line.unterminated = true;
         page.push(file_line);
     }
 
@@ -1635,7 +1639,18 @@ fn write_columns(
         if cells_written == 0 && not_found_break && no_trailer {
             break;
         }
-        writer.write_all(line_separator)?;
+        // Like GNU pr, -d adds its blank line only after a line that ended
+        // with a newline, so an input whose last line lacks one ends there.
+        // With a header and trailer the page is padded to its length anyway.
+        let single_unterminated = !options.display_header_and_trailer
+            && !merge
+            && columns == 1
+            && matches!(row.first(), Some(Some(line)) if line.unterminated);
+        if single_unterminated {
+            writer.write_all(b"\n")?;
+        } else {
+            writer.write_all(line_separator)?;
+        }
     }
 
     Ok(())

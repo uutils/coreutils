@@ -7,7 +7,9 @@
 
 use crate::args::Settings;
 use crate::chunks::BytesChunkBuffer;
+use crate::open_file;
 use crate::paths::{HeaderPrinter, PathExtTail};
+use crate::read::ReadAvailable;
 use crate::text;
 use std::collections::hash_map::Keys;
 use std::collections::{HashMap, HashSet};
@@ -30,6 +32,7 @@ pub struct FileHandling {
     character_devices: HashSet<PathBuf>,
     last: Option<PathBuf>,
     header_printer: HeaderPrinter,
+    pub(super) nonblocking: bool,
 }
 
 impl FileHandling {
@@ -39,6 +42,7 @@ impl FileHandling {
             character_devices: HashSet::new(),
             last: None,
             header_printer: HeaderPrinter::new(settings.verbose, false),
+            nonblocking: settings.use_nonblocking(),
         }
     }
 
@@ -135,12 +139,16 @@ impl FileHandling {
 
     /// Reopen the file at the monitored `path`
     pub fn update_reader(&mut self, path: &Path) -> UResult<()> {
-        // A FIFO without a writer blocks `open`, and this runs on the thread that
-        // serves every followed file. Open FIFOs without waiting for a writer.
+        // A FIFO without a writer must not block the thread serving all files.
+        let file = open_file(path, true)?;
         #[cfg(unix)]
-        let file = crate::open_file(path, true)?;
-        #[cfg(not(unix))]
-        let file = File::open(path)?;
+        if !self.nonblocking {
+            use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
+
+            // Without --pid, preserve blocking reads after the nonblocking open.
+            let flags = fcntl_getfl(&file).map_err(io::Error::from)?;
+            fcntl_setfl(&file, flags & !OFlags::NONBLOCK).map_err(io::Error::from)?;
+        }
         let is_character_device = is_character_device(&file)?;
         let key = Self::canonicalize_path(path);
         let data = self.map.get_mut(&key).unwrap();
@@ -224,7 +232,7 @@ impl PathData {
         if self.is_character_device {
             return read_device(reader, chunks);
         }
-        chunks.fill(reader)?;
+        chunks.fill(&mut ReadAvailable::new(reader))?;
         Ok(false)
     }
 
@@ -247,13 +255,13 @@ impl PathData {
             symlink,
         })
     }
-    pub fn from_other_with_path(data: Self, path: &Path) -> UResult<Self> {
+    pub fn from_other_with_path(data: Self, path: &Path, nonblocking: bool) -> UResult<Self> {
         // Remove old reader
         let old_reader = data.reader;
         let reader = if old_reader.is_some() {
             // Use old reader with the same file descriptor if there is one
             old_reader
-        } else if let Ok(file) = File::open(path) {
+        } else if let Ok(file) = open_file(path, nonblocking) {
             // Open new file tail from start
             Some(BufReader::new(file))
         } else {
