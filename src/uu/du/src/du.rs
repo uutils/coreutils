@@ -561,8 +561,9 @@ fn safe_du(
         };
 
         // Check excludes
+        let path_string = this_stat.path.to_string_lossy();
         for pattern in &options.excludes {
-            if is_excluded(pattern, &this_stat.path) {
+            if is_excluded(pattern, &path_string) {
                 if options.verbose {
                     println!(
                         "{}",
@@ -719,8 +720,9 @@ fn du_regular(
                             }
 
                             // We have an exclude list
+                            let path_string = this_stat.path.to_string_lossy();
                             for pattern in &options.excludes {
-                                if is_excluded(pattern, &this_stat.path) {
+                                if is_excluded(pattern, &path_string) {
                                     // if the directory is ignored, leave early
                                     if options.verbose {
                                         println!(
@@ -845,12 +847,26 @@ fn file_as_vec(filename: impl AsRef<Path>) -> UResult<Vec<String>> {
 /// Whether `pattern` matches `path` or a trailing part of it that starts
 /// after a separator, so `target/debug` excludes `./target/debug` and
 /// `x/target/debug` but `get/debug` does not.
-fn is_excluded(pattern: &Pattern, path: &Path) -> bool {
-    let path = path.to_string_lossy();
-    pattern.matches(&path)
-        || path
-            .char_indices()
-            .any(|(i, c)| std::path::is_separator(c) && pattern.matches(&path[i + 1..]))
+fn is_excluded(pattern: &Pattern, path: &str) -> bool {
+    if pattern.matches(path) {
+        return true;
+    }
+    let glob = pattern.as_str();
+    // `*` also matches separators, so a leading `*` that matches a trailing
+    // part matches the whole path too, which was checked above.
+    if glob.starts_with('*') {
+        return false;
+    }
+    let mut starts = path
+        .match_indices(std::path::is_separator)
+        .map(|(i, sep)| i + sep.len());
+    // Without wildcards or separators only the last component can match.
+    if !glob.contains(|c| std::path::is_separator(c) || matches!(c, '*' | '?' | '[')) {
+        return starts
+            .next_back()
+            .is_some_and(|i| pattern.matches(&path[i..]));
+    }
+    starts.any(|i| pattern.matches(&path[i..]))
 }
 
 /// Collapse trailing separators to one like GNU du, so the operand `a//`
@@ -870,7 +886,8 @@ fn collapse_trailing_separators(path: PathBuf) -> PathBuf {
     if end == bytes.len() {
         return path;
     }
-    uucore::os_str_from_bytes(&bytes[..end]).map_or_else(|_| path.clone(), PathBuf::from)
+    // A prefix of bytes that converted fine above cannot fail to convert back.
+    PathBuf::from(uucore::os_str_from_bytes(&bytes[..end]).unwrap())
 }
 
 /// Given the `--exclude-from` and/or `--exclude` arguments, returns the globset lists
@@ -1281,7 +1298,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if !&traversal_options.excludes.is_empty() {
             let path_string = path.to_string_lossy();
             for pattern in &traversal_options.excludes {
-                if is_excluded(pattern, &path) {
+                if is_excluded(pattern, &path_string) {
                     // if the directory is ignored, leave early
                     if traversal_options.verbose {
                         println!(

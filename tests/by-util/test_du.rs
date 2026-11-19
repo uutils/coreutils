@@ -1882,6 +1882,23 @@ fn test_du_exclude_trailing_components() {
     }
 }
 
+// Like GNU, `?` and `*` match a separator, so a pattern without `/` can
+// still match several trailing components.
+#[cfg(not(windows))]
+#[test]
+fn test_du_exclude_wildcard_spans_components() {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkdir_all("x/a/b");
+    ts.fixtures.mkdir_all("x/c");
+
+    ts.ucmd()
+        .args(&["--exclude=a?b", "x"])
+        .succeeds()
+        .stdout_does_not_contain("x/a/b")
+        .stdout_contains("x/a\n")
+        .stdout_contains("x/c");
+}
+
 // Trailing slashes on an operand collapse to one, so entries are `a/x`
 // and not `a//x`, and excludes see the same paths.
 #[cfg(not(windows))]
