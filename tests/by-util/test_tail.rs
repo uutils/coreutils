@@ -5809,9 +5809,8 @@ fn test_follow_character_device_continuous_input() {
         .set_read_timeout(Some(Duration::from_secs(5)))
         .unwrap();
     let mut command = ts.ucmd();
-    // Apple platforms reject address-space limits. Elsewhere, keep a regression
-    // from exhausting memory before the read times out.
-    #[cfg(not(target_vendor = "apple"))]
+    // Bound memory use if a regression buffers continuous input indefinitely.
+    #[cfg(target_os = "linux")]
     command.limit(rlimit::Resource::AS, 200 * 1024 * 1024, 200 * 1024 * 1024);
     let mut child = command
         .args(&["-q", "-n1", "-s60", "-F", "input", "other"])
