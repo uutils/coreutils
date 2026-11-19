@@ -1422,8 +1422,13 @@ fn write_page(
     let header = header_content(options, page);
     let trailer_content = trailer_content(options);
 
-    for x in header {
-        writer.write_all(&x)?;
+    for (index, x) in header.iter().enumerate() {
+        // Like GNU, the left margin goes on the first blank line and on the
+        // header text line, but not on the other blank header lines.
+        if index == 0 || index == 2 {
+            write_offset_spaces(writer, options.offset_spaces)?;
+        }
+        writer.write_all(x)?;
         writer.write_all(line_separator)?;
     }
 
