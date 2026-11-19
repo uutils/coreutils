@@ -634,6 +634,21 @@ fn test_round_keeps_fraction_of_suffixed_input() {
             .succeeds()
             .stdout_only(exp);
     }
+    // Negative values used to be rounded away from zero whatever the method.
+    for (args, exp) in [
+        (&["--round=up"][..], "-62\n-62.5\n"),
+        (&["--round=down"][..], "-63\n-62.5\n"),
+        (&["--round=towards-zero"][..], "-62\n-62.5\n"),
+        (&["--round=from-zero"][..], "-63\n-62.5\n"),
+        (&["--round=up", "--format=%.1f"][..], "-62.5\n-62.5\n"),
+    ] {
+        new_ucmd!()
+            .args(&["--from=si"])
+            .args(args)
+            .args(&["--", "-0.0625K", "-62.5"])
+            .succeeds()
+            .stdout_only(exp);
+    }
 }
 
 #[test]
