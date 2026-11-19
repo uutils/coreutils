@@ -820,13 +820,13 @@ pub fn uu_app() -> Command {
 /// GNU `date` rounds `%s` toward negative infinity for negative fractional
 /// timestamps, whereas jiff's `%s` truncates toward zero. `%%` escapes are
 /// preserved and every other specifier is left untouched for jiff to render.
-fn substitute_epoch_seconds(fmt: &str, date: &Zoned) -> String {
+fn substitute_epoch_seconds<'a>(fmt: &'a str, date: &Zoned) -> Cow<'a, str> {
     if !fmt.contains('%') || !fmt.contains('s') {
-        return fmt.to_string();
+        return Cow::Borrowed(fmt);
     }
 
     let seconds = timestamp_seconds_floor(date.timestamp());
-    substitute_epoch_seconds_value(fmt, seconds)
+    Cow::Owned(substitute_epoch_seconds_value(fmt, seconds))
 }
 
 fn timestamp_seconds_floor(timestamp: Timestamp) -> i64 {
@@ -958,9 +958,9 @@ fn format_epoch_seconds(seconds: i64, flags: &str, width: Option<usize>) -> Stri
 /// when a specifier letter follows it. A dangling `%O` (at the end of the
 /// string, or followed by a non-letter) stays literal, as does any `O`
 /// that merely follows the `%%` escape.
-fn strip_o_modifier(fmt: &str) -> String {
+fn strip_o_modifier(fmt: &str) -> Cow<'_, str> {
     if !fmt.contains("%O") {
-        return fmt.to_string();
+        return Cow::Borrowed(fmt);
     }
 
     let mut out = String::with_capacity(fmt.len());
@@ -987,7 +987,7 @@ fn strip_o_modifier(fmt: &str) -> String {
             _ => out.push('%'),
         }
     }
-    out
+    Cow::Owned(out)
 }
 
 /// A piece of a format string.
@@ -1048,6 +1048,9 @@ fn format_chunks(
     chunks: &[FormatChunk],
     mut format_chunk: impl FnMut(&str) -> Result<String, String>,
 ) -> Result<Vec<u8>, String> {
+    if let [FormatChunk::Specifiers(fmt)] = chunks {
+        return format_chunk(fmt).map(String::into_bytes);
+    }
     let mut output = Vec::new();
     for chunk in chunks {
         match chunk {
@@ -1447,8 +1450,8 @@ fn format_date_with_locale_aware_months(
     // negative infinity (e.g. `@-1.5` → `-2`, not `-1`). Every other field jiff
     // produces already agrees with GNU, so only `%s` needs correcting; rewrite it
     // to the floored epoch second before jiff sees the format string.
-    let fmt_owned = strip_o_modifier(&substitute_epoch_seconds(fmt, date));
-    let fmt = fmt_owned.as_str();
+    let fmt = &*substitute_epoch_seconds(fmt, date);
+    let fmt = &*strip_o_modifier(fmt);
 
     // Check if format string has GNU modifiers (width/flags) and format if present
     if let Some(result) = format_modifiers::format_with_modifiers_if_present(date, fmt, config) {
@@ -1641,25 +1644,30 @@ fn parse_dates_from_reader<R: Read + 'static>(
 ) -> Box<
     dyn Iterator<Item = Result<ParsedDateTime, (String, parse_datetime::ParseDateTimeError)>> + '_,
 > {
-    let lines = BufReader::new(reader).split(b'\n');
-    Box::new(lines.map_while(Result::ok).map(move |mut bytes| {
-        // GNU handles each line as a C string, so a NUL byte ends it
-        if let Some(nul) = bytes.iter().position(|&b| b == 0) {
-            bytes.truncate(nul);
+    let mut reader = BufReader::new(reader);
+    let mut bytes = Vec::new();
+    Box::new(std::iter::from_fn(move || {
+        bytes.clear();
+        if reader.read_until(b'\n', &mut bytes).ok()? == 0 {
+            return None;
+        }
+        // GNU handles each line as a C string, so a NUL byte (or trailing LF) ends it
+        if let Some(end) = bytes.iter().position(|&b| b == 0 || b == b'\n') {
+            bytes.truncate(end);
         }
         // Strip a trailing '\r' (CRLF input; GNU's lexer ignores it too)
         if bytes.last() == Some(&b'\r') {
             bytes.pop();
         }
-        match String::from_utf8(bytes) {
+        Some(match std::str::from_utf8(&bytes) {
             Ok(s) => parse_date(s, now, dbg_opts),
             // Report lines with invalid UTF-8 (with non-printable bytes
             // octal-escaped like GNU) instead of silently stopping the input
-            Err(e) => Err((
-                escape_for_error(e.as_bytes()),
+            Err(_) => Err((
+                escape_for_error(&bytes),
                 parse_datetime::ParseDateTimeError::InvalidInput,
             )),
-        }
+        })
     }))
 }
 
@@ -1669,8 +1677,7 @@ fn rewrite_whitespace_tokens(
     input: &str,
     mut rewrite: impl FnMut(&str) -> Option<String>,
 ) -> Option<String> {
-    let mut output = String::with_capacity(input.len());
-    let mut changed = false;
+    let mut output: Option<String> = None;
     let bytes = input.as_bytes();
     let mut start = 0;
 
@@ -1682,23 +1689,25 @@ fn rewrite_whitespace_tokens(
         }
 
         let part = &input[start..end];
-        if whitespace {
-            output.push_str(part);
-        } else if let Some(replacement) = rewrite(part) {
-            output.push_str(&replacement);
-            changed = true;
-        } else {
-            output.push_str(part);
+        if !whitespace && let Some(replacement) = rewrite(part) {
+            output
+                .get_or_insert_with(|| input[..start].to_owned())
+                .push_str(&replacement);
+        } else if let Some(out) = &mut output {
+            out.push_str(part);
         }
         start = end;
     }
 
-    changed.then_some(output)
+    output
 }
 
 /// Convert the European `DD.MM[.][YYYY]` spelling to the slash-separated form
 /// understood by the underlying parser, preserving a missing year.
 fn rewrite_european_date_token(token: &str) -> Option<String> {
+    if !token.contains('.') {
+        return None;
+    }
     let trailing_dot = token.ends_with('.');
     let core = token.strip_suffix('.').unwrap_or(token);
     let parts: Vec<&str> = core.split('.').collect();
@@ -1836,6 +1845,9 @@ fn named_date_end(tokens: &[&str], date_index: usize) -> Option<usize> {
 /// Drop weekday items when an explicit calendar date is present.
 /// Relative-only inputs must remain untouched because the weekday can matter.
 fn strip_weekday_for_explicit_date(input: &str) -> Option<String> {
+    if !input.contains(|c: char| c.is_ascii_alphabetic() || !c.is_ascii()) {
+        return None;
+    }
     let mut spans = Vec::new();
     let mut token_start = None;
     for (index, character) in input.char_indices() {
@@ -1953,6 +1965,9 @@ fn is_clock_with_seconds(token: &str) -> bool {
 /// parser for its timezone offset and relative item, rather than rewriting the
 /// input into unrelated syntax.
 fn parse_relative_plus(input: &str, now: &Zoned) -> Option<ParsedDateTime> {
+    if !input.contains('+') {
+        return None;
+    }
     let words: Vec<&str> = input.split_whitespace().collect();
     if !words.iter().any(|word| is_clock_with_seconds(word))
         || words.iter().any(|word| {
@@ -2030,18 +2045,13 @@ fn normalize_parse_input(input: &str) -> Cow<'_, str> {
 /// Extract a local wall-clock value for the DST-gap check and its diagnostics.
 /// This is intentionally narrower than the full date parser.
 fn parse_local_datetime(input: &str) -> Option<jiff::civil::DateTime> {
-    let normalized = input.replace(['T', 't'], " ");
-    let (year, month, day) = normalized.split_whitespace().find_map(|token| {
-        let parts: Vec<&str> = if token.contains('-') {
-            token.split('-').collect()
-        } else if token.contains('/') {
-            token.split('/').collect()
-        } else {
-            return None;
-        };
-        let (year, month, day) = match parts.as_slice() {
-            [year, month, day] if token.contains('-') => (*year, *month, *day),
-            [month, day, year] if token.contains('/') => (*year, *month, *day),
+    let tokens = || input.split(|c: char| c.is_whitespace() || matches!(c, 'T' | 't'));
+    let (year, month, day) = tokens().find_map(|token| {
+        let sep = if token.contains('-') { '-' } else { '/' };
+        let mut parts = token.split(sep);
+        let (year, month, day) = match (parts.next(), parts.next(), parts.next(), parts.next()) {
+            (Some(y), Some(m), Some(d), None) if sep == '-' => (y, m, d),
+            (Some(m), Some(d), Some(y), None) if sep == '/' => (y, m, d),
             _ => return None,
         };
         if !year.chars().all(|c| c.is_ascii_digit())
@@ -2056,7 +2066,7 @@ fn parse_local_datetime(input: &str) -> Option<jiff::civil::DateTime> {
             day.parse::<i8>().ok()?,
         ))
     })?;
-    let (hour, minute, second, nanosecond) = normalized.split_whitespace().find_map(|token| {
+    let (hour, minute, second, nanosecond) = tokens().find_map(|token| {
         let token = token
             .char_indices()
             .skip(1)
@@ -2132,12 +2142,11 @@ fn is_numeric_timezone(offset: &str) -> bool {
 
 /// Detect a local wall-clock time that falls inside a timezone transition gap.
 /// Explicit numeric offsets are absolute instants and therefore cannot be gaps.
-fn is_nonexistent_local_time(input: &str, now: &Zoned) -> bool {
+fn is_nonexistent_local_time(input: &str, normalized: &str, now: &Zoned) -> bool {
     if has_explicit_numeric_timezone(input) {
         return false;
     }
-    let normalized = normalize_parse_input(input);
-    let Some(local) = parse_local_datetime(normalized.as_ref()) else {
+    let Some(local) = parse_local_datetime(normalized) else {
         return false;
     };
     matches!(
@@ -2194,7 +2203,7 @@ fn parse_date<S: AsRef<str>>(
         Ok(ParsedDateTime::InRange(date)) => {
             // parse_datetime may normalize a nonexistent wall-clock time;
             // reject that result so DST gaps are not silently accepted.
-            if is_nonexistent_local_time(input_str, now) {
+            if is_nonexistent_local_time(input_str, parse_input, now) {
                 return Err((
                     escape_for_error(input_str.as_bytes()),
                     parse_datetime::ParseDateTimeError::InvalidInput,
@@ -2489,6 +2498,19 @@ mod tests {
                 Some("17 August 2026")
             );
         }
+        assert_eq!(strip_weekday_for_explicit_date("2026-08-17"), None);
+    }
+
+    #[test]
+    fn test_rewrite_whitespace_tokens() {
+        assert_eq!(
+            rewrite_whitespace_tokens("a  10.03.2024\tb", rewrite_european_date_token).as_deref(),
+            Some("a  03/10/2024\tb")
+        );
+        assert_eq!(
+            rewrite_whitespace_tokens("a b", rewrite_european_date_token),
+            None
+        );
     }
 
     /// Run one date through the shared writer used by the display loop and
