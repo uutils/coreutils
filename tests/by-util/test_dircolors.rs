@@ -313,7 +313,6 @@ fn test_print_database_ignores_term() {
 }
 
 #[test]
-#[ignore = "--csh must escape '!' to prevent history substitution"]
 fn test_csh_output_escapes_bang() {
     let scene = uutests::util::TestScenario::new(uutests::util_name!());
     scene.fixtures.write("db", "*.hey! 01;33\n");
@@ -327,4 +326,58 @@ fn test_csh_output_escapes_bang() {
         .args(&["-b", "db"])
         .succeeds()
         .stdout_only("LS_COLORS='*.hey!=01;33:';\nexport LS_COLORS\n");
+}
+
+#[test]
+fn test_escape_equals_in_item() {
+    // GNU escapes '=' in items/args so that ls' LS_COLORS parser does not
+    // treat it as the item/value separator.
+    let scene = uutests::util::TestScenario::new(uutests::util_name!());
+    scene.fixtures.write("db", "exec x=y 01;33\n");
+    scene
+        .ucmd()
+        .env("TERM", "xterm")
+        .args(&["-b", "db"])
+        .succeeds()
+        .stdout_only("LS_COLORS='ex=x\\=y 01;33:';\nexport LS_COLORS\n");
+}
+
+#[test]
+fn test_escape_caret_toggles_backslash_state() {
+    // GNU: '^' toggles the need_backslash state, so the ':' after '^' is raw.
+    let scene = uutests::util::TestScenario::new(uutests::util_name!());
+    scene.fixtures.write("db", "exec ^:x 01;33\n");
+    scene
+        .ucmd()
+        .env("TERM", "xterm")
+        .args(&["-b", "db"])
+        .succeeds()
+        .stdout_only("LS_COLORS='ex=^:x 01;33:';\nexport LS_COLORS\n");
+}
+
+#[test]
+fn test_escape_backslashes_toggle_backslash_state() {
+    // GNU: each '\' toggles the state, so '\\' before ':' still escapes ':'.
+    let scene = uutests::util::TestScenario::new(uutests::util_name!());
+    scene.fixtures.write("db", "exec x\\\\:y 01;33\n");
+    scene
+        .ucmd()
+        .env("TERM", "xterm")
+        .args(&["-b", "db"])
+        .succeeds()
+        .stdout_only("LS_COLORS='ex=x\\\\\\:y 01;33:';\nexport LS_COLORS\n");
+}
+
+#[test]
+fn test_print_ls_colors_does_not_escape() {
+    // --print-ls-colors output is for display: GNU does not escape anything.
+    let scene = uutests::util::TestScenario::new(uutests::util_name!());
+    scene.fixtures.write("db", "exec x=y 01;33\n");
+    scene
+        .ucmd()
+        .env("TERM", "xterm")
+        .arg("--print-ls-colors")
+        .arg("db")
+        .succeeds()
+        .stdout_only("\x1B[x=y 01;33mex\tx=y 01;33\x1B[0m\n");
 }

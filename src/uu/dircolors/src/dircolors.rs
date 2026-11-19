@@ -358,7 +358,7 @@ where
             continue;
         }
 
-        let line = escape(line);
+        let line = escape(line, fmt);
 
         let (key, val) = line.split_two();
         if val.is_empty() {
@@ -452,22 +452,52 @@ fn append_entry(
     }
 }
 
-/// Escape single quotes because they are not allowed between single quotes in shell code, and code
-/// enclosed by single quotes is what is returned by `parse()`.
+/// Escape a parsed line the way GNU `dircolors.c` `append_quoted()` does, so
+/// that the produced `LS_COLORS` string is byte-compatible with GNU's.
+///
+/// A `need_backslash` flag starts as `true` and is *toggled* by `\` and `^`
+/// (they are already escape markers themselves); every other character sets it
+/// back to `true`. When `:` or `=` is seen while the flag is up, a backslash is
+/// emitted before it. Single quotes are converted to the `'\'`-chunk trick,
+/// and `!` is escaped under csh to prevent history substitution.
 ///
 /// We also escape ":" to make the "quote" test pass in the GNU test suite:
 /// <https://github.com/coreutils/coreutils/blob/master/tests/misc/dircolors.pl>
-fn escape(s: &str) -> String {
+fn escape(s: &str, fmt: &OutputFmt) -> String {
+    // `--print-ls-colors` output is for display only: GNU does not escape
+    // anything in that mode (`if (! print_ls_colors)` guard in append_quoted).
+    if *fmt == OutputFmt::Display {
+        return s.to_string();
+    }
     let mut result = String::new();
-    let mut previous = ' ';
+    let mut need_backslash = true;
 
     for c in s.chars() {
         match c {
-            '\'' => result.push_str("'\\''"),
-            ':' if previous != '\\' => result.push_str("\\:"),
-            _ => result.push(c),
+            '\'' => {
+                result.push_str("'\\''");
+                need_backslash = true;
+            }
+            '!' if *fmt == OutputFmt::CShell => {
+                result.push_str("\\!");
+                need_backslash = true;
+            }
+            '\\' | '^' => {
+                result.push(c);
+                need_backslash = !need_backslash;
+            }
+            ':' | '=' => {
+                if need_backslash {
+                    result.push('\\');
+                }
+                result.push(c);
+                need_backslash = true;
+            }
+            _ => {
+                result.push(c);
+                need_backslash = true;
+            }
         }
-        previous = c;
     }
 
     result
@@ -534,10 +564,24 @@ mod tests {
 
     #[test]
     fn test_escape() {
-        assert_eq!("", escape(""));
-        assert_eq!("'\\''", escape("'"));
-        assert_eq!("\\:", escape(":"));
-        assert_eq!("\\:", escape("\\:"));
+        let sh = OutputFmt::Shell;
+        let csh = OutputFmt::CShell;
+        let disp = OutputFmt::Display;
+        assert_eq!("", escape("", &sh));
+        assert_eq!("'\\''", escape("'", &sh));
+        assert_eq!("\\:", escape(":", &sh));
+        assert_eq!("\\:", escape("\\:", &sh));
+        // GNU: '=' is escaped just like ':'.
+        assert_eq!("x\\=y", escape("x=y", &sh));
+        // GNU: '^' toggles the need_backslash state, so ':' after '^' is raw.
+        assert_eq!("^:x", escape("^:x", &sh));
+        // GNU: backslashes toggle, so the state flips twice and ':' is escaped.
+        assert_eq!("x\\\\\\:y", escape("x\\\\:y", &sh));
+        // csh escapes '!' (history substitution), sh does not.
+        assert_eq!("a\\!b", escape("a!b", &csh));
+        assert_eq!("a!b", escape("a!b", &sh));
+        // Display output is never escaped.
+        assert_eq!("x=y:z", escape("x=y:z", &disp));
     }
 
     #[test]
