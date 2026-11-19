@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont checkfile unopenable
+// spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont checkfile unopenable ZEZTN
 
 use rstest::rstest;
 use rstest_reuse::{apply, template};
@@ -3927,6 +3927,98 @@ fn test_check_blake3_untagged(
         .pipe_in(untagged)
         .succeeds()
         .stdout_only("FILE: OK\n");
+}
+
+#[template]
+#[rstest]
+// Empty input values are the reference vectors published with xxHash.
+#[case(b"", "2d06800538d394c2", None)]
+#[case(b"", "2d06800538d394c2", Some(64))]
+#[case(b"", "99aa06d3014798d86001c324468d497f", Some(128))]
+#[case(b"uutils", "d74cd76b0cd5897d", Some(0))]
+#[case(b"uutils", "fec64465337c13d347ff579db36c6c4f", Some(128))]
+fn test_xxh3(#[case] input: &[u8], #[case] expected: &str, #[case] length: Option<usize>) {}
+
+fn xxh3_tag(length: Option<usize>) -> &'static str {
+    match length {
+        Some(128) => "XXH3-128",
+        _ => "XXH3-64",
+    }
+}
+
+#[apply(test_xxh3)]
+fn test_compute_xxh3(#[case] input: &[u8], #[case] expected: &str, #[case] length: Option<usize>) {
+    let length_args: Vec<String> = length.map_or(vec![], |len| vec!["-l".into(), len.to_string()]);
+
+    new_ucmd!()
+        .args(&["-a", "xxh3"])
+        .args(&length_args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(format!("{} (-) = {expected}\n", xxh3_tag(length)));
+
+    new_ucmd!()
+        .args(&["-a", "xxh3", "--untagged"])
+        .args(&length_args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(format!("{expected}  -\n"));
+}
+
+#[apply(test_xxh3)]
+fn test_check_xxh3(#[case] input: &[u8], #[case] digest: &str, #[case] length: Option<usize>) {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write_bytes("in.bin", input);
+
+    // The tagged line carries the algorithm, so no -a is needed.
+    scene
+        .ucmd()
+        .arg("--check")
+        .pipe_in(format!("{} (in.bin) = {digest}\n", xxh3_tag(length)))
+        .succeeds()
+        .stdout_only("in.bin: OK\n");
+
+    // An untagged line gets its length from the digest size.
+    scene
+        .ucmd()
+        .args(&["--check", "-a", "xxh3"])
+        .pipe_in(format!("{digest}  in.bin\n"))
+        .succeeds()
+        .stdout_only("in.bin: OK\n");
+}
+
+#[test]
+fn test_xxh3_base64_roundtrip() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("data", "uutils");
+    at.write("sums", "XXH3-128 (data) = /sZEZTN8E9NH/1eds2xsTw==\n");
+    ucmd.args(&["--check", "sums"])
+        .succeeds()
+        .stdout_only("data: OK\n");
+}
+
+#[rstest]
+#[case("32")]
+#[case("256")]
+fn test_xxh3_invalid_length(#[case] length: &str) {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["-a", "xxh3", "-l", length])
+        .pipe_in("x")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("cksum: digest length for 'XXH3' must be 64 or 128\n");
+}
+
+#[test]
+fn test_check_xxh3_unsupported_length_is_improperly_formatted() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("data", "uutils");
+    ucmd.arg("--check")
+        .pipe_in("XXH3-96 (data) = 000000000000000000000000\n")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("no properly formatted checksum lines found");
 }
 
 #[test]
