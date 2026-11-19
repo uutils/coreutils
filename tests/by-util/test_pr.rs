@@ -7,6 +7,7 @@
 
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
+use rstest::rstest;
 use std::fs::metadata;
 use uutests::util::{TestScenario, UCommand};
 use uutests::{at_and_ucmd, new_ucmd, util_name};
@@ -1712,6 +1713,37 @@ fn test_page_width_narrower_than_leading_tab() {
         .pipe_in("\tone\n\ttwo\n")
         .succeeds()
         .stdout_only("    1\t\n    2\t\n");
+}
+
+#[rstest]
+#[case::default_counts_skipped_lines(&["-l1", "+2", "-n:1"], "a\nb\n", "2:b\n")]
+#[case::explicit_one(&["-l1", "+2", "-n:1", "-N1"], "a\nb\n", "1:b\n")]
+#[case::explicit_eight(&["-l1", "+2", "-n:1", "-N8"], "a\nb\n", "8:b\n")]
+#[case::first_number_zero(&["-l2", "+2", "-n:1", "-N0"], "a\nb\nc\nd\ne\nf\ng\n", "0:c\n1:d\n2:e\n3:f\n4:g\n")]
+#[case::two_pages_skipped(&["-l2", "+3", "-n:1", "-N5"], "a\nb\nc\nd\ne\nf\ng\n", "5:e\n6:f\n7:g\n")]
+#[case::form_feed_pages(&["+3", "-n:1", "-N5"], "a\x0cb\nc\x0cd\n", "5:d\n")]
+#[case::with_end_page(&["-l1", "+2:3", "-n:1", "-N8"], "a\nb\nc\nd\n", "8:b\n9:c\n")]
+fn test_first_line_number_with_skipped_pages(
+    #[case] args: &[&str],
+    #[case] input: &str,
+    #[case] expected: &str,
+) {
+    new_ucmd!()
+        .arg("-t")
+        .args(args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
+fn test_bare_number_lines_after_first_line_number() {
+    // A trailing bare `-n` must keep the `-N` value given before it.
+    new_ucmd!()
+        .args(&["-t", "-l1", "+2", "-N8", "-n"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_only("    8\tb\n");
 }
 
 #[test]
