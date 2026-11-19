@@ -448,18 +448,20 @@ impl<F: Formatter<T>, T> Format<F, T> {
     }
 
     /// Like [`Self::fmt`], but writes `decimal_separator` in place of the `.`
-    /// of the formatted number. A `.` in the text around it is kept.
+    /// of the formatted number. A `.` in the text around it is kept. `number`
+    /// is scratch space, so a caller formatting many values can reuse it.
     pub fn fmt_with_decimal_separator(
         &self,
         mut w: impl Write,
         f: T,
         decimal_separator: &str,
+        number: &mut Vec<u8>,
     ) -> std::io::Result<()> {
         if decimal_separator == "." {
             return self.fmt(w, f);
         }
-        let mut number = Vec::new();
-        self.formatter.fmt(&mut number, f)?;
+        number.clear();
+        self.formatter.fmt(&mut *number, f)?;
         w.write_all(&self.prefix)?;
         match number.iter().position(|&b| b == b'.') {
             Some(i) => {
@@ -467,7 +469,7 @@ impl<F: Formatter<T>, T> Format<F, T> {
                 w.write_all(decimal_separator.as_bytes())?;
                 w.write_all(&number[i + 1..])?;
             }
-            None => w.write_all(&number)?,
+            None => w.write_all(number)?,
         }
         w.write_all(&self.suffix)?;
         Ok(())
@@ -476,7 +478,39 @@ impl<F: Formatter<T>, T> Format<F, T> {
 
 #[cfg(test)]
 mod tests {
-    use super::{FormatError, check_precision};
+    use super::{Format, FormatError, check_precision, num_format};
+    use crate::extendedbigdecimal::ExtendedBigDecimal;
+
+    #[test]
+    fn fmt_with_decimal_separator_replaces_only_the_number_point() {
+        let format = Format::<num_format::Float, &ExtendedBigDecimal>::parse("v%.2f.").unwrap();
+        let value = ExtendedBigDecimal::BigDecimal("1.5".parse().unwrap());
+        let mut scratch = Vec::new();
+        let mut out = Vec::new();
+        format
+            .fmt_with_decimal_separator(&mut out, &value, ",", &mut scratch)
+            .unwrap();
+        assert_eq!(out, b"v1,50.");
+        // A `.` separator is the plain `fmt`, and the scratch space is reused.
+        out.clear();
+        format
+            .fmt_with_decimal_separator(&mut out, &value, ".", &mut scratch)
+            .unwrap();
+        assert_eq!(out, b"v1.50.");
+        // A multi-byte separator, and a number without a point.
+        let format = Format::<num_format::Float, &ExtendedBigDecimal>::parse("%g").unwrap();
+        out.clear();
+        format
+            .fmt_with_decimal_separator(&mut out, &value, "\u{66b}", &mut scratch)
+            .unwrap();
+        assert_eq!(out, "1\u{66b}5".as_bytes());
+        out.clear();
+        let two = ExtendedBigDecimal::BigDecimal("2".parse().unwrap());
+        format
+            .fmt_with_decimal_separator(&mut out, &two, ",", &mut scratch)
+            .unwrap();
+        assert_eq!(out, b"2");
+    }
 
     #[test]
     fn check_precision_caps_at_i32_max() {

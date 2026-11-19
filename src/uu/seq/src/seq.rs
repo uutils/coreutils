@@ -469,11 +469,12 @@ fn print_seq(
     let mut value = first;
 
     let mut is_first_iteration = true;
+    let mut number = Vec::new();
     while !done_printing(&value, &increment, &last) {
         if !is_first_iteration {
             stdout.write_all(separator.as_encoded_bytes())?;
         }
-        format.fmt_with_decimal_separator(&mut stdout, &value, decimal_separator)?;
+        format.fmt_with_decimal_separator(&mut stdout, &value, decimal_separator, &mut number)?;
         // TODO Implement augmenting addition.
         value = value + increment.clone();
         is_first_iteration = false;
