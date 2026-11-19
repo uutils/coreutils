@@ -3181,7 +3181,7 @@ fn get_hash<T: Hash>(t: &T) -> u64 {
     s.finish()
 }
 
-/// Hash the bytes of `s` that [`custom_str_cmp`] compares, without allocating.
+/// Hash the bytes of `s` that [`custom_str_cmp()`] compares, without allocating.
 fn key_hash(
     s: &[u8],
     salt: &[u8],
