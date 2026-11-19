@@ -70,7 +70,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         }
     };
-    #[cfg(not(target_os = "openbsd"))]
+    #[cfg(target_env = "musl")]
+    {
+        let filename = maybe_file.unwrap_or(Path::new(utmpx::DEFAULT_FILE));
+        users = utmpx::linux_utmp_users(filename);
+    };
+    #[cfg(not(any(target_os = "openbsd", target_env = "musl")))]
     {
         let filename = maybe_file.unwrap_or(utmpx::DEFAULT_FILE.as_ref());
 
@@ -89,15 +94,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    #[cfg(not(target_env = "musl"))]
-    let about = translate!("users-about");
-    #[cfg(target_env = "musl")]
-    let about = translate!("users-about") + &translate!("users-about-musl-warning");
-
     Command::new("users")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template("users"))
-        .about(about)
+        .about(translate!("users-about"))
         .override_usage(format_usage(&translate!("users-usage")))
         .infer_long_args(true)
         .after_help(get_long_usage())
