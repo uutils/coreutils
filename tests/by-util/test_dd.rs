@@ -2912,7 +2912,28 @@ fn test_truncate_without_seek_does_not_need_ftruncate() {
     assert_eq!(at.read("t.bin"), "");
 }
 
-// If the output cannot be checked before truncating it, fail without writing.
+// `oflag=append` without a seek also truncates when opening.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
+fn test_truncate_with_append_does_not_need_ftruncate() {
+    let (at, _ucmd) = at_and_ucmd!();
+    at.write("t.bin", "hello\n");
+
+    let Some(out) = run_dd_with_strace(
+        &at,
+        "t.bin",
+        &["inject=ftruncate:error=EIO"],
+        &["if=/dev/null", "of=t.bin", "oflag=append", "status=none"],
+    ) else {
+        return;
+    };
+    assert_eq!(out.status.code(), Some(0));
+    assert_eq!(String::from_utf8_lossy(&out.stderr), "");
+    assert_eq!(at.read("t.bin"), "");
+}
+
+// If the output cannot be truncated or checked, fail without writing.
 #[test]
 #[cfg(target_os = "linux")]
 #[cfg(not(wasi_runner))]

@@ -859,21 +859,30 @@ impl<'a> Output<'a> {
             opts.write(true)
                 .create(!cflags.nocreat)
                 .create_new(cflags.excl)
-                .append(oflags.append)
-                .truncate(truncate);
+                .append(oflags.append);
 
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            if let Some(libc_flags) = make_linux_oflags(oflags) {
+            // `OpenOptions` refuses `truncate` together with `append`, so pass
+            // `O_TRUNC` directly on Unix.
+            #[cfg(unix)]
+            {
+                #[allow(unused_mut)]
+                let mut libc_flags = if truncate { libc::O_TRUNC } else { 0 };
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                if let Some(flags) = make_linux_oflags(oflags) {
+                    libc_flags |= flags;
+                }
                 opts.custom_flags(libc_flags);
             }
+            #[cfg(not(unix))]
+            opts.truncate(truncate);
 
             opts.open(path)
         }
 
-        // Without a seek, truncate when opening so that no `set_len()` is needed.
-        // `OpenOptions` does not allow truncating together with appending.
-        let truncate_on_open =
-            !settings.oconv.notrunc && settings.seek == 0 && !settings.oflags.append;
+        // Without a seek, truncate when opening so that no `ftruncate` is needed.
+        let truncate_on_open = !settings.oconv.notrunc
+            && settings.seek == 0
+            && (cfg!(unix) || !settings.oflags.append);
         let dst = open_dst(
             filename,
             &settings.oconv,
@@ -882,18 +891,18 @@ impl<'a> Output<'a> {
         )
         .map_err_context(|| translate!("dd-error-failed-to-open", "path" => filename.quote()))?;
 
-        // Check the file type before truncating, and fail before writing
-        // anything if that is not possible.
-        // Failures on special outputs such as `/dev/null` are ignored, as GNU does.
+        // A failing `ftruncate` is only reported for regular files (not e.g.
+        // for `/dev/null`). As GNU does, check the file type only after the
+        // failure, and stop before writing if that check fails too.
         if !settings.oconv.notrunc
             && !truncate_on_open
+            && let Err(e) = dst.set_len(settings.seek)
             && dst
                 .metadata()
                 .map_err_context(
                     || translate!("dd-error-cannot-fstat", "file" => filename.quote()),
                 )?
                 .is_file()
-            && let Err(e) = dst.set_len(settings.seek)
         {
             show_error!(
                 "{}",
