@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (words) dirfd subdirs openat FDCWD rwxr Nofile
 
+use rstest::rstest;
 use std::fs::{OpenOptions, Permissions, metadata, set_permissions};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use uutests::at_and_ucmd;
@@ -2515,18 +2516,91 @@ fn test_chmod_changes_does_not_report_inaccessible_operand() {
 
 #[cfg(unix)]
 #[test]
-#[ignore = "chmod -R --dereference must change the target of symlinks found while recursing"]
 fn test_recursive_dereference_changes_link_targets() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.mkdir("tree");
     at.touch("target");
     set_permissions(at.plus("target"), Permissions::from_mode(0o600)).unwrap();
-    at.symlink_file("../target", "tree/link");
+    // Relative, as `ln -s ../target tree/link` makes it: `symlink_file` would
+    // prefix the fixture path and leave the link dangling.
+    at.relative_symlink_file("../target", "tree/link");
     scene
         .ucmd()
         .args(&["-R", "--dereference", "g+r", "tree"])
         .succeeds()
         .no_output();
     assert_eq!(at.metadata("target").permissions().mode() & 0o777, 0o640);
+}
+
+/// A directory reached through a symlink in the tree gets its mode changed
+/// with --dereference, but only -L descends into it. Without --dereference
+/// the link is left alone.
+#[rstest]
+#[case::default(&["-R"], 0o700)]
+#[case::traverse_operands(&["-R", "-H"], 0o700)]
+#[case::dereference(&["-R", "--dereference"], 0o740)]
+#[case::dereference_traverse_operands(&["-R", "-H", "--dereference"], 0o740)]
+fn test_recursive_dereference_directory_link_in_tree(
+    #[case] flags: &[&str],
+    #[case] dir_mode: u32,
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("tree");
+    at.mkdir("dir");
+    at.touch("dir/f");
+    at.set_mode("dir", 0o700);
+    at.set_mode("dir/f", 0o600);
+    at.relative_symlink_dir("../dir", "tree/link");
+
+    ucmd.args(flags)
+        .args(&["g+r", "tree"])
+        .succeeds()
+        .no_output();
+
+    let mode = |file| at.metadata(file).permissions().mode() & 0o7777;
+    assert_eq!(mode("dir"), dir_mode);
+    assert_eq!(mode("dir/f"), 0o600);
+}
+
+#[test]
+fn test_recursive_dereference_dangling_link_in_tree() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("tree");
+    at.relative_symlink_file("missing", "tree/link");
+
+    scene
+        .ucmd()
+        .args(&["-v", "-R", "--dereference", "u+r", "tree"])
+        .fails_with_code(1)
+        .stdout_contains("'tree/link' could not be accessed\n")
+        .stderr_is("chmod: cannot dereference 'tree/link': No such file or directory\n");
+    // -f hides the message, not the failure.
+    scene
+        .ucmd()
+        .args(&["-f", "-R", "--dereference", "u+r", "tree"])
+        .fails_with_code(1)
+        .no_output();
+}
+
+#[test]
+fn test_recursive_dereference_preserve_root_link_in_tree() {
+    // With --dereference, a symlink to '/' met in the tree would change '/'
+    // itself, so --preserve-root refuses it and the walk goes on. `u+u`
+    // changes nothing, should the check ever let it by.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("tree");
+    at.touch("tree/f");
+    at.symlink_dir("/", "tree/link");
+
+    ucmd.args(&["-v", "-R", "--dereference", "--preserve-root"])
+        .args(&["u+u", "tree"])
+        .fails_with_code(1)
+        .stdout_contains("mode of 'tree/f' retained as")
+        .stdout_does_not_contain("'tree/link'")
+        .stderr_is(
+            "chmod: it is dangerous to operate recursively on 'tree/link' (same as '/')\n\
+             chmod: use --no-preserve-root to override this failsafe\n",
+        );
 }

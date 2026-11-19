@@ -5,6 +5,7 @@ chmod-usage = chmod [OPTION]... MODE[,MODE]... FILE...
   chmod [OPTION]... --reference=RFILE FILE...
 chmod-after-help = Each MODE is of the form [ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+.
 chmod-error-dangling-symlink = cannot operate on dangling symlink {$file}
+chmod-error-cannot-dereference = cannot dereference {$file}: {$error}
 chmod-error-no-such-file = cannot access {$file}: No such file or directory
 chmod-error-preserve-root = it is dangerous to operate recursively on {$file}
   chmod: use --no-preserve-root to override this failsafe
