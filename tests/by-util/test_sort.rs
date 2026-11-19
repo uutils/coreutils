@@ -3056,6 +3056,20 @@ fn test_g_misc() {
 }
 
 #[test]
+fn test_g_signed_inf_and_nan() {
+    new_ucmd!()
+        .arg("-g")
+        .pipe_in("+inf\n1\n-inf\n+INFx\n2\n")
+        .succeeds()
+        .stdout_is("-inf\n1\n2\n+INFx\n+inf\n");
+    new_ucmd!()
+        .arg("-g")
+        .pipe_in("+nan\n1\nnan\n-nan\nx\n-inf\n")
+        .succeeds()
+        .stdout_is("x\n-nan\n+nan\nnan\n-inf\n1\n");
+}
+
+#[test]
 // Test numbers with a large number of digits, where only the last digit is different.
 // We use scientific notation to make sure string sorting does not correctly order them.
 fn test_g_arbitrary() {
