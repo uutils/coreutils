@@ -434,8 +434,11 @@ impl Observer {
                                     translate!("tail-status-has-appeared-following-new-file", "file" => display_name.quote())
                                 );
                                 self.reopen(event_path)?;
-                            } else if event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To))
+                            } else if (event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To))
+                                && !pd.reader.as_ref().unwrap().get_ref().metadata()?.file_id_eq(&new_md))
                             || (self.use_polling && !old_md.file_id_eq(&new_md)) {
+                                // Compare with the open reader: a device-name check may
+                                // have handled the replacement before its native event.
                                 show_error!(
                                     "{}",
                                     translate!("tail-status-has-been-replaced-following-new-file", "file" => display_name.quote())
@@ -830,4 +833,32 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
     }
 
     Ok(())
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use notify::event::{ModifyKind, RenameMode};
+    use std::io::{Seek, SeekFrom};
+
+    #[test]
+    fn duplicate_rename_event_preserves_reader_position() {
+        let path = std::env::current_exe().unwrap();
+        let mut reader = BufReader::new(File::open(&path).unwrap());
+        reader.seek(SeekFrom::Start(1)).unwrap();
+        let settings = Settings {
+            follow: Some(FollowMode::Name),
+            ..Settings::default()
+        };
+        let mut observer = Observer::from(&settings);
+        observer
+            .add_path(&path, "input", Some(reader), false)
+            .unwrap();
+        let event = notify::Event::new(notify::EventKind::Modify(ModifyKind::Name(RenameMode::To)))
+            .add_path(path.clone());
+
+        observer.handle_event(&event, &settings).unwrap();
+        let reader = observer.files.get_mut(&path).reader.as_mut().unwrap();
+        assert_eq!(reader.stream_position().unwrap(), 1);
+    }
 }

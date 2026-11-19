@@ -5789,6 +5789,50 @@ fn test_follow_character_device_continuous_input() {
 
 #[uutests::wasi_ignore(TailFollowDisabled)]
 #[rstest]
+#[cfg(target_os = "linux")]
+fn test_follow_character_device_stdin_keeps_inherited_access(
+    #[values(false, true)] use_polling: bool,
+) {
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::PermissionsExt;
+
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (path, mut controller, replica) = uutests::util::pty_path();
+    let permissions = replica.metadata().unwrap().permissions();
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.touch("other");
+    // Linux resolves redirected stdin through /proc/self/fd/0. It must keep
+    // using that descriptor when the resolved device can no longer be opened.
+    set_permissions(&path, Permissions::from_mode(0)).unwrap();
+    let mut command = ts.ucmd();
+    command
+        .args(&["-q", "-n0", "-s.01", "-f", "-", "other"])
+        .set_stdin(replica);
+    if use_polling {
+        command.arg("--use-polling");
+    }
+    let mut child = command.run_no_wait();
+    write_pty_after_eof(&mut controller, b"device");
+    let ready = wait_until(&mut child, |child| child.stdout_all() == "device");
+    if ready {
+        // A quiet stdin must also leave the other input free to make progress.
+        ts.fixtures.append("other", "other file\n");
+        wait_until(&mut child, |child| {
+            child.stdout_all() == "deviceother file\n"
+        });
+    }
+    set_permissions(&path, permissions).unwrap();
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_is("deviceother file\n");
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[rstest]
 #[case("-f")]
 #[case("-F")]
 #[cfg(unix)]

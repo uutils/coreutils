@@ -283,37 +283,66 @@ fn is_character_device(_file: &File) -> io::Result<bool> {
 
 #[cfg(unix)]
 fn read_device(reader: &mut BufReader<File>, chunks: &mut BytesChunkBuffer) -> UResult<bool> {
-    use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
-
-    let flags = fcntl_getfl(reader.get_ref()).map_err(io::Error::from)?;
-    fcntl_setfl(reader.get_ref(), flags | OFlags::NONBLOCK).map_err(io::Error::from)?;
     // Even an always-ready device must yield to other files and --pid.
     let mut available = AvailableBytes(reader).take(64 * 1024);
-    let result = chunks.fill(&mut available);
-    let read_again = available.limit() == 0;
-    // A duplicated stdin shares these flags with the caller, including on read errors.
-    fcntl_setfl(reader.get_ref(), flags).map_err(io::Error::from)?;
-    result?;
-    Ok(read_again)
+    chunks.fill(&mut available)?;
+    Ok(available.limit() == 0)
 }
 
-/// End a polling pass when a nonblocking device has no more bytes available.
+#[cfg(all(unix, not(target_vendor = "apple")))]
+fn device_is_readable(file: &File) -> io::Result<bool> {
+    use rustix::event::{PollFd, PollFlags, Timespec, poll};
+
+    let mut fds = [PollFd::new(file, PollFlags::IN)];
+    rustix::io::retry_on_intr(|| poll(&mut fds, Some(&Timespec::default())))
+        .map(|ready| ready != 0)
+        .map_err(io::Error::from)
+}
+
+#[cfg(target_vendor = "apple")]
+fn device_is_readable(file: &File) -> io::Result<bool> {
+    use rustix::event::{FdSetElement, Timespec, fd_set_insert, fd_set_num_elements, select};
+    use std::os::fd::AsRawFd;
+
+    // Apple's poll reports POLLNVAL for devices such as /dev/null and /dev/zero.
+    let fd = file.as_raw_fd();
+    let mut read_fds = vec![FdSetElement::default(); fd_set_num_elements(1, fd + 1)];
+    rustix::io::retry_on_intr(|| {
+        fd_set_insert(&mut read_fds, fd);
+        // SAFETY: file keeps the sole descriptor in the correctly sized set open.
+        unsafe {
+            select(
+                fd + 1,
+                Some(&mut read_fds),
+                None,
+                None,
+                Some(&Timespec::default()),
+            )
+        }
+    })
+    .map(|ready| ready != 0)
+    .map_err(io::Error::from)
+}
+
+/// Check readiness before each refill without changing flags shared with stdin's owner.
 #[cfg(unix)]
 struct AvailableBytes<'a>(&'a mut BufReader<File>);
 
 #[cfg(unix)]
 impl Read for AvailableBytes<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self.0.read(buf) {
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(0),
-            result => result,
-        }
+        let count = self.fill_buf()?.read(buf)?;
+        self.consume(count);
+        Ok(count)
     }
 }
 
 #[cfg(unix)]
 impl BufRead for AvailableBytes<'_> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        if self.0.buffer().is_empty() && !device_is_readable(self.0.get_ref())? {
+            return Ok(&[]);
+        }
         match self.0.fill_buf() {
             Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(&[]),
             result => result,
@@ -322,5 +351,64 @@ impl BufRead for AvailableBytes<'_> {
 
     fn consume(&mut self, amount: usize) {
         self.0.consume(amount);
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use rustix::fs::{OFlags, fcntl_getfl};
+    use std::os::fd::OwnedFd;
+    use std::os::unix::net::UnixStream;
+    use std::sync::Barrier;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[test]
+    fn device_reads_preserve_shared_flags() {
+        let file = File::open("/dev/zero").unwrap();
+        let shared = file.try_clone().unwrap();
+        let flags = fcntl_getfl(&shared).unwrap();
+        assert!(!flags.contains(OFlags::NONBLOCK));
+        let mut reader = BufReader::new(file);
+        let done = AtomicBool::new(false);
+        let started = Barrier::new(2);
+
+        std::thread::scope(|scope| {
+            let monitor = scope.spawn(|| {
+                started.wait();
+                while !done.load(Ordering::Relaxed) {
+                    if fcntl_getfl(&shared).unwrap() != flags {
+                        return false;
+                    }
+                }
+                true
+            });
+            started.wait();
+            // Observe the shared description during reads, not just after flags
+            // could have been restored. Each batch remains bounded at 64 KiB.
+            let result: UResult<()> = (0..128).try_for_each(|_| {
+                read_device(&mut reader, &mut BytesChunkBuffer::new(u64::MAX))?;
+                Ok(())
+            });
+            done.store(true, Ordering::Relaxed);
+            let unchanged = monitor.join().unwrap();
+            result.unwrap();
+            assert!(unchanged, "device reads changed shared file status flags");
+        });
+    }
+
+    #[test]
+    fn available_bytes_preserve_buffered_data() {
+        let (input, mut output) = UnixStream::pair().unwrap();
+        let mut reader = BufReader::new(File::from(OwnedFd::from(input)));
+        output.write_all(b"data").unwrap();
+        assert_eq!(reader.fill_buf().unwrap(), b"data");
+        reader.consume(1);
+
+        // The descriptor is now quiet, but three bytes remain in the buffer.
+        let mut bytes = Vec::new();
+        AvailableBytes(&mut reader).read_to_end(&mut bytes).unwrap();
+        assert_eq!(bytes, b"ata");
+        assert!(reader.buffer().is_empty());
     }
 }
