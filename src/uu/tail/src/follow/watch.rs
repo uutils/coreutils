@@ -13,7 +13,7 @@ use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::BufReader;
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, channel};
@@ -41,27 +41,7 @@ impl WatcherRx {
 
     /// Wrapper for `notify::Watcher::watch` to also add the parent directory of `path` if necessary.
     fn watch_with_parent(&mut self, path: &Path, use_polling: bool) -> UResult<()> {
-        #[cfg(not(target_os = "linux"))]
-        let _ = use_polling;
-        #[cfg(target_os = "linux")]
-        if path
-            .metadata()
-            .is_ok_and(|metadata| metadata.file_type().is_char_device())
-        {
-            self.watch(path, RecursiveMode::NonRecursive)?;
-            // Native events catch replacement of the device's name. PollWatcher
-            // already checks that path; watching its parent would also hash siblings.
-            if !use_polling && let Some(parent) = path.parent() {
-                match self.watcher.watch(parent, RecursiveMode::NonRecursive) {
-                    Ok(()) => (),
-                    // Reading a device only needs search permission on its parent.
-                    Err(notify::Error {
-                        kind: notify::ErrorKind::Io(err),
-                        ..
-                    }) if err.kind() == std::io::ErrorKind::PermissionDenied => (),
-                    Err(err) => return Err(USimpleError::new(1, err.to_string())),
-                }
-            }
+        if self.watch_character_device(path, use_polling)? {
             return Ok(());
         }
         let mut path = path.to_owned();
@@ -102,6 +82,29 @@ impl WatcherRx {
         // for syscalls: 2x "inotify_add_watch" ("filename" and ".") and 1x "inotify_rm_watch"
         self.watch(&path, RecursiveMode::NonRecursive)?;
         Ok(())
+    }
+
+    #[cfg(unix)]
+    fn watch_character_device(&mut self, path: &Path, use_polling: bool) -> UResult<bool> {
+        if !path
+            .metadata()
+            .is_ok_and(|metadata| metadata.file_type().is_char_device())
+        {
+            return Ok(false);
+        }
+        self.watch(path, RecursiveMode::NonRecursive)?;
+        // Native events let us notice name replacements promptly. The polling
+        // pass also checks device names, so an unreadable parent is harmless.
+        // PollWatcher must not watch the parent: it would also hash siblings.
+        if !use_polling && let Some(parent) = path.parent() {
+            let _ = self.watcher.watch(parent, RecursiveMode::NonRecursive);
+        }
+        Ok(true)
+    }
+
+    #[cfg(not(unix))]
+    fn watch_character_device(&mut self, _path: &Path, _use_polling: bool) -> UResult<bool> {
+        Ok(false)
     }
 
     fn watch(&mut self, path: &Path, mode: RecursiveMode) -> UResult<()> {
@@ -296,7 +299,9 @@ impl Observer {
                     InputKind::Stdin => (),
                     InputKind::File(path) => {
                         #[cfg(all(unix, not(target_os = "linux")))]
-                        if !path.is_file() {
+                        if !path.metadata().is_ok_and(|metadata| {
+                            metadata.is_file() || metadata.file_type().is_char_device()
+                        }) {
                             continue;
                         }
                         let mut path = path.clone();
@@ -325,17 +330,53 @@ impl Observer {
         Ok(())
     }
 
-    /// Open `path` again and, on Linux, watch the file it names now: a
-    /// watch on a symlink follows the link when it is added, so one added
-    /// before the link was changed still reports the old target.
+    /// Open `path` again and refresh device watches and Linux symlink watches.
+    /// These watches can still refer to the old target after a name replacement.
     fn reopen(&mut self, path: &Path) -> UResult<()> {
+        let was_device = self.files.character_devices().contains(path);
         self.files.update_reader(path)?;
+        if was_device && let Some(watcher_rx) = &mut self.watcher_rx {
+            let _ = watcher_rx.unwatch(path);
+            watcher_rx.watch_with_parent(path, self.use_polling)?;
+        }
         #[cfg(target_os = "linux")]
-        if path.is_symlink()
+        if !was_device
+            && path.is_symlink()
             && let Some(watcher_rx) = &mut self.watcher_rx
         {
             let _ = watcher_rx.unwatch(path);
             watcher_rx.watch(path, RecursiveMode::NonRecursive)?;
+        }
+        Ok(())
+    }
+
+    fn check_device_name(&mut self, path: &Path, settings: &Settings) -> UResult<()> {
+        use notify::event::{EventKind, ModifyKind, RemoveKind, RenameMode};
+
+        if !self.follow_name() || !self.files.character_devices().contains(path) {
+            return Ok(());
+        }
+        let kind = match path.metadata() {
+            Ok(metadata) => {
+                // Compare with the open device: cached path metadata may already
+                // describe a replacement that arrived during the previous read.
+                let reader = self.files.get(path).reader.as_ref().unwrap();
+                if reader.get_ref().metadata()?.file_id_eq(&metadata) {
+                    return Ok(());
+                }
+                EventKind::Modify(ModifyKind::Name(RenameMode::To))
+            }
+            Err(_) => EventKind::Remove(RemoveKind::Any),
+        };
+        self.handle_event(
+            &notify::Event::new(kind).add_path(path.to_owned()),
+            settings,
+        )?;
+        if self.retry
+            && self.files.get(path).reader.is_none()
+            && !self.orphans.iter().any(|orphan| orphan == path)
+        {
+            self.orphans.push(path.to_owned());
         }
         Ok(())
     }
@@ -639,11 +680,34 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                              settings: &Settings,
                              paths: &mut Vec<PathBuf>|
          -> UResult<()> {
+            // kqueue can report a directory change without the replaced child's
+            // name. Recheck devices in that directory before reading their FDs.
+            if observer.follow_name() {
+                for device in observer.files.character_devices() {
+                    if event.paths.iter().any(|path| {
+                        device
+                            .parent()
+                            .is_some_and(|parent| path == parent || path.parent() == Some(parent))
+                    }) && !paths.contains(device)
+                    {
+                        paths.push(device.clone());
+                    }
+                }
+            }
             if event
                 .paths
                 .first()
                 .is_some_and(|path| observer.files.contains_key(path))
             {
+                let path = &event.paths[0];
+                if observer.files.character_devices().contains(path) {
+                    // Device events can describe the old target after a rename.
+                    // Check the current name in the print loop; -f keeps its FD.
+                    if !paths.contains(path) {
+                        paths.push(path.clone());
+                    }
+                    return Ok(());
+                }
                 // Handle Event if it is about a path that we are monitoring
                 let new_paths = observer.handle_event(&event, settings)?;
                 for p in new_paths {
@@ -749,6 +813,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
         // main print loop
         read_devices_again = false;
         for path in &paths {
+            observer.check_device_name(path, settings)?;
             read_devices_again |= observer.files.tail_file(path, settings.verbose)?;
         }
 

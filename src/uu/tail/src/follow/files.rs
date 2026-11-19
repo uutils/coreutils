@@ -168,31 +168,7 @@ impl FileHandling {
     /// Return true when a device filled its batch and should be read again without waiting.
     pub fn tail_file(&mut self, path: &Path, verbose: bool) -> UResult<bool> {
         let mut chunks = BytesChunkBuffer::new(u64::MAX);
-        #[cfg(unix)]
-        let mut read_again = false;
-        #[cfg(not(unix))]
-        let read_again = false;
-        let data = self.get_mut(path);
-        if let Some(reader) = data.reader.as_mut() {
-            #[cfg(unix)]
-            if data.is_character_device {
-                use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
-
-                let flags = fcntl_getfl(reader.get_ref()).map_err(io::Error::from)?;
-                fcntl_setfl(reader.get_ref(), flags | OFlags::NONBLOCK).map_err(io::Error::from)?;
-                // Even an always-ready device must yield to other files and --pid.
-                let mut available = AvailableBytes(reader).take(64 * 1024);
-                let result = chunks.fill(&mut available);
-                read_again = available.limit() == 0;
-                // A duplicated stdin shares these flags with the caller.
-                fcntl_setfl(reader.get_ref(), flags).map_err(io::Error::from)?;
-                result?;
-            } else {
-                chunks.fill(reader)?;
-            }
-            #[cfg(not(unix))]
-            chunks.fill(reader)?;
-        }
+        let read_again = self.get_mut(path).read_available(&mut chunks)?;
         if chunks.has_data() {
             if self.needs_header(path, verbose) {
                 let display_name = self.get(path).display_name.clone();
@@ -239,6 +215,19 @@ pub struct PathData {
 }
 
 impl PathData {
+    /// Fill one batch, returning whether a device may have more data ready.
+    fn read_available(&mut self, chunks: &mut BytesChunkBuffer) -> UResult<bool> {
+        let Some(reader) = self.reader.as_mut() else {
+            return Ok(false);
+        };
+        #[cfg(unix)]
+        if self.is_character_device {
+            return read_device(reader, chunks);
+        }
+        chunks.fill(reader)?;
+        Ok(false)
+    }
+
     pub fn new(
         reader: Option<BufReader<File>>,
         metadata: Option<Metadata>,
@@ -282,16 +271,30 @@ impl PathData {
 }
 
 /// Check the descriptor rather than a path that may already name another file.
+#[cfg(unix)]
 fn is_character_device(file: &File) -> io::Result<bool> {
-    #[cfg(unix)]
-    {
-        Ok(file.metadata()?.file_type().is_char_device())
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = file;
-        Ok(false)
-    }
+    Ok(file.metadata()?.file_type().is_char_device())
+}
+
+#[cfg(not(unix))]
+fn is_character_device(_file: &File) -> io::Result<bool> {
+    Ok(false)
+}
+
+#[cfg(unix)]
+fn read_device(reader: &mut BufReader<File>, chunks: &mut BytesChunkBuffer) -> UResult<bool> {
+    use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
+
+    let flags = fcntl_getfl(reader.get_ref()).map_err(io::Error::from)?;
+    fcntl_setfl(reader.get_ref(), flags | OFlags::NONBLOCK).map_err(io::Error::from)?;
+    // Even an always-ready device must yield to other files and --pid.
+    let mut available = AvailableBytes(reader).take(64 * 1024);
+    let result = chunks.fill(&mut available);
+    let read_again = available.limit() == 0;
+    // A duplicated stdin shares these flags with the caller, including on read errors.
+    fcntl_setfl(reader.get_ref(), flags).map_err(io::Error::from)?;
+    result?;
+    Ok(read_again)
 }
 
 /// End a polling pass when a nonblocking device has no more bytes available.
