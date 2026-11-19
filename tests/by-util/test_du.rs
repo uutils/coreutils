@@ -2820,6 +2820,7 @@ fn test_du_negative_max_depth_is_rejected() {
 
 #[test]
 fn test_du_summarize_with_max_depth() {
+    use uucore::display::Quotable;
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkdir("deep");
@@ -2841,7 +2842,10 @@ fn test_du_summarize_with_max_depth() {
         .args(&["-s", "--max-depth=1", "deep"])
         .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("du: summarizing conflicts with --max-depth=");
+        .stderr_contains(format!(
+            "du: summarizing conflicts with --max-depth={}\n",
+            "1".maybe_quote()
+        ));
 
     // An invalid depth is reported as such, -s or not.
     ts.ucmd()
