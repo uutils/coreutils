@@ -5760,6 +5760,17 @@ fn test_debug_mode_printed_after_initial_output() {
     );
 }
 
+/// Wait up to 5 seconds for the stderr of `child` to satisfy `done`.
+#[cfg(target_os = "linux")]
+fn wait_for_stderr(child: &mut uutests::util::UChild, done: impl Fn(&str) -> bool) {
+    for _ in 0..100 {
+        if done(&child.stderr_all()) {
+            break;
+        }
+        child.delay(50);
+    }
+}
+
 #[uutests::wasi_ignore(TailFollowDisabled)]
 #[test]
 #[cfg(target_os = "linux")]
@@ -5781,20 +5792,10 @@ fn test_debug_reports_switch_to_polling() {
     // already gone whenever tail handles the removal.
     at.rename("dir", "dir.gone");
     at.remove("dir.gone/f");
-    for _ in 0..100 {
-        if child.stderr_all().contains("using polling mode") {
-            break;
-        }
-        child.delay(50);
-    }
+    wait_for_stderr(&mut child, |e| e.contains("using polling mode"));
     at.mkdir("dir");
     at.touch("dir/f");
-    for _ in 0..100 {
-        if child.stderr_all().contains("has appeared") {
-            break;
-        }
-        child.delay(50);
-    }
+    wait_for_stderr(&mut child, |e| e.contains("has appeared"));
 
     child.make_assertion().is_alive();
     child
@@ -5832,12 +5833,9 @@ fn test_debug_reports_switch_to_polling_once() {
     at.rename("dir", "dir.gone");
     at.remove("dir.gone/a");
     at.remove("dir.gone/b");
-    for _ in 0..100 {
-        if child.stderr_all().matches("reverting to polling").count() == 2 {
-            break;
-        }
-        child.delay(50);
-    }
+    wait_for_stderr(&mut child, |e| {
+        e.matches("reverting to polling").count() == 2
+    });
 
     let stderr = child.kill().stderr_all();
     assert_eq!(stderr.matches("using polling mode").count(), 1, "{stderr}");

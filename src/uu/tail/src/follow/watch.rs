@@ -7,7 +7,7 @@
 
 use crate::args::{FollowMode, Settings};
 use crate::follow::files::{FileHandling, PathData};
-use crate::paths::{Input, InputKind, MetadataExtTail, PathExtTail};
+use crate::paths::{Input, InputKind, MetadataExtTail, PathExtTail, stdin_is_regular};
 use crate::{platform, text};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::io::BufRead;
@@ -554,11 +554,7 @@ fn print_follow_mode(observer: &Observer, settings: &Settings) {
     // Stdin is classified by what fd 0 refers to.
     let no_regular_file = settings.inputs.iter().all(|input| match input.kind() {
         InputKind::File(path) => path.metadata().is_ok_and(|md| !md.is_file()),
-        #[cfg(unix)]
-        InputKind::Stdin => rustix::fs::fstat(std::io::stdin())
-            .is_ok_and(|stat| stat.st_mode & libc::S_IFMT != libc::S_IFREG),
-        #[cfg(not(unix))]
-        InputKind::Stdin => false,
+        InputKind::Stdin => !stdin_is_regular(),
     });
     let mode = if observer.use_polling || (no_regular_file && observer.follow_name()) {
         translate!("tail-debug-using-polling-mode")
