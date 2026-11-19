@@ -18,10 +18,13 @@ use std::{
     ffi::{OsStr, OsString},
     fs::File,
     io::{self, BufWriter, Read, Write},
-    iter,
     path::Path,
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     rc::Rc,
+};
+#[cfg(not(target_os = "wasi"))]
+use std::{
+    iter,
     sync::mpsc::{Receiver, Sender, SyncSender, TryRecvError, channel, sync_channel},
     thread::{self, JoinHandle},
 };
@@ -179,6 +182,7 @@ pub fn merge_with_file_limit<
 ///
 /// It is the responsibility of the caller to ensure that `files` yields only
 /// as many files as we are allowed to open concurrently.
+#[cfg(not(target_os = "wasi"))]
 fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
     files: F,
     settings: &GlobalSettings,
@@ -247,6 +251,7 @@ fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
     })
 }
 /// The struct on the reader thread representing an input file
+#[cfg(not(target_os = "wasi"))]
 struct ReaderFile<M: MergeInput> {
     file: M,
     sender: SyncSender<Chunk>,
@@ -254,6 +259,7 @@ struct ReaderFile<M: MergeInput> {
 }
 
 /// The function running on the reader thread.
+#[cfg(not(target_os = "wasi"))]
 fn reader(
     recycled_receiver: &Receiver<(usize, RecycledChunk)>,
     files: &mut [Option<ReaderFile<impl MergeInput>>],
@@ -287,10 +293,15 @@ fn reader(
     }
     Ok(())
 }
-/// The struct on the main thread representing an input file
+/// The struct representing an input file.
+///
+/// WASI has no threads, so chunks are read synchronously, right when needed,
+/// instead of by a background reader thread; there is no `receiver` to read
+/// the next chunk from.
 pub struct MergeableFile<'a> {
     current_chunk: Rc<Chunk>,
     line_idx: usize,
+    #[cfg(not(target_os = "wasi"))]
     receiver: Receiver<Chunk>,
     file_number: usize,
     settings: &'a GlobalSettings,
@@ -337,10 +348,99 @@ impl Ord for MergeableFile<'_> {
 struct PreviousLine {
     chunk: Rc<Chunk>,
     line_idx: usize,
+    // Used to recycle the chunk back to the right file once nothing references it
+    // anymore: to the reader thread's channel on non-WASI, directly onto the file's
+    // `ReaderFile` on WASI (there is no reader thread to send it to).
     file_number: usize,
 }
 
+/// What went wrong writing the next line in [`write_next_line`].
+enum WriteNextError {
+    /// Writing the line to the output failed.
+    Write(io::Error),
+    /// Reading the next chunk for a file whose current one ran out failed.
+    Chunk(Box<dyn uucore::error::UError>),
+}
+
+/// How a [`FileMerger`] gets a file's next chunk once its current one runs out, and recycles
+/// a chunk once nothing references it anymore.
+///
+/// The threaded merger fetches chunks from its reader thread and recycles them back to it
+/// over a channel; WASI, which has no threads, reads the next chunk directly and recycles
+/// onto the file itself. [`write_next_line`] is the rest of merging, shared between them.
+trait ChunkSource {
+    fn advance(&mut self, file: &mut MergeableFile<'_>) -> UResult<Option<Chunk>>;
+    fn recycle(&mut self, file_number: usize, chunk: Chunk);
+}
+
+/// Write one line from the file at the front of `heap` to `writer`, and advance that file,
+/// using `source` to fetch its next chunk once the current one runs out.
+fn write_next_line(
+    heap: &mut BinaryHeap<MergeableFile<'_>>,
+    prev: &mut Option<PreviousLine>,
+    writer: &mut impl Write,
+    settings: &GlobalSettings,
+    source: &mut impl ChunkSource,
+) -> Result<bool, WriteNextError> {
+    let Some(mut file) = heap.peek_mut() else {
+        return Ok(false);
+    };
+
+    let old_prev = prev.replace(PreviousLine {
+        chunk: file.current_chunk.clone(),
+        line_idx: file.line_idx,
+        file_number: file.file_number,
+    });
+
+    file.current_chunk
+        .with_dependent(|_, contents| {
+            let current_line = &contents.lines[file.line_idx];
+            if settings.unique
+                && let Some(prev) = &old_prev
+            {
+                let cmp = merge_compare(
+                    &prev.chunk.lines()[prev.line_idx],
+                    current_line,
+                    settings,
+                    prev.chunk.line_data(),
+                    file.current_chunk.line_data(),
+                );
+                if cmp == Ordering::Equal {
+                    return Ok(());
+                }
+            }
+            current_line.write(writer, settings)
+        })
+        .map_err(WriteNextError::Write)?;
+
+    let was_last_line_for_file = file.current_chunk.lines().len() == file.line_idx + 1;
+
+    if was_last_line_for_file {
+        let next_chunk = source.advance(&mut file).map_err(WriteNextError::Chunk)?;
+        if let Some(next_chunk) = next_chunk {
+            file.current_chunk = Rc::new(next_chunk);
+            file.line_idx = 0;
+        } else {
+            std::collections::binary_heap::PeekMut::pop(file);
+        }
+    } else {
+        // This will cause the comparison to use a different line and the heap to readjust.
+        file.line_idx += 1;
+    }
+
+    if let Some(prev) = old_prev
+        && let Ok(prev_chunk) = Rc::try_unwrap(prev.chunk)
+    {
+        // If nothing is referencing the previous chunk anymore, this means that the previous
+        // line was the last line of the chunk. We can recycle the chunk.
+        source.recycle(prev.file_number, prev_chunk);
+    }
+
+    Ok(true)
+}
+
 /// Merges files together. This is **not** an iterator because of lifetime problems.
+#[cfg(not(target_os = "wasi"))]
 struct FileMerger<'a> {
     heap: BinaryHeap<MergeableFile<'a>>,
     request_sender: Sender<(usize, RecycledChunk)>,
@@ -348,6 +448,7 @@ struct FileMerger<'a> {
     reader_join_handle: JoinHandle<UResult<()>>,
 }
 
+#[cfg(not(target_os = "wasi"))]
 impl FileMerger<'_> {
     /// Write the merged contents to the output file.
     fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
@@ -364,16 +465,17 @@ impl FileMerger<'_> {
         out: &mut impl Write,
         ctx: impl FnOnce() -> String,
     ) -> UResult<()> {
-        let write_result = loop {
+        let write_result: UResult<()> = loop {
             match self.write_next(out, settings) {
                 Ok(true) => (),
                 Ok(false) => break Ok(()),
-                Err(error) => {
-                    // Don't return yet: we still have to shut the reader thread down in an
-                    // orderly fashion below. Returning here would drop our receivers while
-                    // the reader is still sending, and `chunks::read` unwraps that send.
-                    break Err(error);
-                }
+                // Don't return yet: we still have to shut the reader thread down in an
+                // orderly fashion below. Returning here would drop our receivers while
+                // the reader is still sending, and `chunks::read` unwraps that send.
+                Err(WriteNextError::Write(error)) => break Err(error).map_err_context(ctx),
+                // `advance` never errors on this platform: chunks are always read on the
+                // reader thread, whose errors are reported separately via `reader_result`.
+                Err(WriteNextError::Chunk(error)) => break Err(error),
             }
         };
 
@@ -400,66 +502,225 @@ impl FileMerger<'_> {
         let reader_result = reader_join_handle.join().unwrap();
         // A write failure is what the user needs to hear about; the reader hitting an error
         // on the way down is secondary.
-        write_result.map_err_context(ctx).and(reader_result)
+        write_result.and(reader_result)
     }
 
     fn write_next(
         &mut self,
         writer: &mut impl Write,
         settings: &GlobalSettings,
-    ) -> io::Result<bool> {
-        if let Some(file) = self.heap.peek() {
-            let prev = self.prev.replace(PreviousLine {
-                chunk: file.current_chunk.clone(),
-                line_idx: file.line_idx,
-                file_number: file.file_number,
+    ) -> Result<bool, WriteNextError> {
+        let Self {
+            heap,
+            request_sender,
+            prev,
+            ..
+        } = self;
+        let mut source = ThreadedChunkSource { request_sender };
+        write_next_line(heap, prev, writer, settings, &mut source)
+    }
+}
+
+/// Fetches chunks from the reader thread and recycles them back to it over a channel.
+#[cfg(not(target_os = "wasi"))]
+struct ThreadedChunkSource<'a> {
+    request_sender: &'a Sender<(usize, RecycledChunk)>,
+}
+
+#[cfg(not(target_os = "wasi"))]
+impl ChunkSource for ThreadedChunkSource<'_> {
+    fn advance(&mut self, file: &mut MergeableFile<'_>) -> UResult<Option<Chunk>> {
+        Ok(file.receiver.recv().ok())
+    }
+
+    fn recycle(&mut self, file_number: usize, chunk: Chunk) {
+        self.request_sender
+            .send((file_number, chunk.recycle()))
+            .ok();
+    }
+}
+
+/// Merge files without limiting how many files are concurrently open.
+///
+/// WASI has no threads, so chunks are read synchronously, right when the
+/// merger needs them, instead of by a background reader thread.
+///
+/// It is the responsibility of the caller to ensure that `files` yields only
+/// as many files as we are allowed to open concurrently.
+#[cfg(target_os = "wasi")]
+fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
+    files: F,
+    settings: &GlobalSettings,
+) -> UResult<FileMerger<'_, M>> {
+    let separator = settings.line_ending.into();
+    let mut reader_files = Vec::with_capacity(files.size_hint().0);
+    for file in files {
+        reader_files.push(Some(ReaderFile {
+            file: file?,
+            carry_over: vec![],
+            finished: false,
+            recycled: None,
+        }));
+    }
+
+    let mut mergeable_files = vec![];
+    for (file_number, reader_file) in reader_files.iter_mut().enumerate() {
+        let chunk = read_next_chunk(reader_file.as_mut().unwrap(), settings, separator)?;
+        if let Some(chunk) = chunk {
+            mergeable_files.push(MergeableFile {
+                current_chunk: Rc::new(chunk),
+                file_number,
+                line_idx: 0,
+                settings,
             });
+        } else {
+            let ReaderFile { file, .. } = reader_file.take().unwrap();
+            file.finished_reading()?;
+        }
+    }
 
-            file.current_chunk.with_dependent(|_, contents| {
-                let current_line = &contents.lines[file.line_idx];
-                if settings.unique
-                    && let Some(prev) = &prev
-                {
-                    let cmp = merge_compare(
-                        &prev.chunk.lines()[prev.line_idx],
-                        current_line,
-                        settings,
-                        prev.chunk.line_data(),
-                        file.current_chunk.line_data(),
-                    );
-                    if cmp == Ordering::Equal {
-                        return Ok(());
-                    }
-                }
-                current_line.write(writer, settings)
-            })?;
+    Ok(FileMerger {
+        heap: BinaryHeap::from(mergeable_files),
+        reader_files,
+        prev: None,
+        separator,
+    })
+}
 
-            let was_last_line_for_file = file.current_chunk.lines().len() == file.line_idx + 1;
+/// The struct representing an input file, read synchronously on demand.
+#[cfg(target_os = "wasi")]
+struct ReaderFile<M: MergeInput> {
+    file: M,
+    carry_over: Vec<u8>,
+    /// Set once `chunks::read` has reported there is nothing left to read.
+    ///
+    /// `chunks::read` can leave unused, zero-filled buffer space in
+    /// `carry_over` once it has reported `false`; calling it again would
+    /// misparse that padding as a spurious extra chunk, so this must be
+    /// checked instead of only looking at whether a chunk was sent.
+    finished: bool,
+    /// A finished chunk's buffer, handed back by `FileMerger::write_next` once
+    /// nothing references it anymore, to reuse for this file's next read
+    /// instead of allocating a fresh one. There is no reader thread to send it
+    /// to here, so it is kept on the file itself until the next read.
+    recycled: Option<RecycledChunk>,
+}
 
-            if was_last_line_for_file {
-                if let Ok(next_chunk) = file.receiver.recv() {
-                    let mut file = self.heap.peek_mut().unwrap();
-                    file.current_chunk = Rc::new(next_chunk);
-                    file.line_idx = 0;
-                } else {
-                    self.heap.pop();
-                }
-            } else {
-                // This will cause the comparison to use a different line and the heap to readjust.
-                self.heap.peek_mut().unwrap().line_idx += 1;
-            }
+/// Reads the next chunk of `reader_file`, or `None` at end of file.
+#[cfg(target_os = "wasi")]
+fn read_next_chunk<M: MergeInput>(
+    reader_file: &mut ReaderFile<M>,
+    settings: &GlobalSettings,
+    separator: u8,
+) -> UResult<Option<Chunk>> {
+    if reader_file.finished {
+        return Ok(None);
+    }
+    let recycled_chunk = reader_file
+        .recycled
+        .take()
+        .unwrap_or_else(|| RecycledChunk::new(8 * 1024));
+    let (chunk, should_continue) = chunks::read_once(
+        recycled_chunk,
+        &mut reader_file.carry_over,
+        reader_file.file.as_read(),
+        separator,
+        settings,
+    )?;
+    reader_file.finished = !should_continue;
+    Ok(chunk)
+}
 
-            if let Some(prev) = prev
-                && let Ok(prev_chunk) = Rc::try_unwrap(prev.chunk)
-            {
-                // If nothing is referencing the previous chunk anymore, this means that the previous line
-                // was the last line of the chunk. We can recycle the chunk.
-                self.request_sender
-                    .send((prev.file_number, prev_chunk.recycle()))
-                    .ok();
+/// Merges files together. This is **not** an iterator because of lifetime problems.
+///
+/// WASI has no threads, so there is no reader thread to request chunks from;
+/// `reader_files` holds each input directly, read from on demand.
+#[cfg(target_os = "wasi")]
+struct FileMerger<'a, M: MergeInput> {
+    heap: BinaryHeap<MergeableFile<'a>>,
+    reader_files: Vec<Option<ReaderFile<M>>>,
+    prev: Option<PreviousLine>,
+    separator: u8,
+}
+
+#[cfg(target_os = "wasi")]
+impl<M: MergeInput> FileMerger<'_, M> {
+    /// Write the merged contents to the output file.
+    fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
+        let ctx = output.write_failed_context();
+        let mut out = output.into_write()?;
+        self.write_all_to(settings, &mut out, &ctx)?;
+        out.flush().map_err_context(ctx)
+    }
+
+    /// Write the merged contents to `out`, reporting write errors with `ctx`.
+    fn write_all_to(
+        mut self,
+        settings: &GlobalSettings,
+        out: &mut impl Write,
+        ctx: impl FnOnce() -> String,
+    ) -> UResult<()> {
+        loop {
+            match self.write_next(out, settings) {
+                Ok(true) => (),
+                Ok(false) => break Ok(()),
+                // A read failure already has its own context; wrapping it as a write
+                // failure here would be misleading.
+                Err(WriteNextError::Write(error)) => break Err(error).map_err_context(ctx),
+                Err(WriteNextError::Chunk(error)) => break Err(error),
             }
         }
-        Ok(!self.heap.is_empty())
+    }
+
+    fn write_next(
+        &mut self,
+        writer: &mut impl Write,
+        settings: &GlobalSettings,
+    ) -> Result<bool, WriteNextError> {
+        let Self {
+            heap,
+            reader_files,
+            prev,
+            separator,
+        } = self;
+        let mut source = WasiChunkSource {
+            reader_files,
+            settings,
+            separator: *separator,
+        };
+        write_next_line(heap, prev, writer, settings, &mut source)
+    }
+}
+
+/// Reads chunks synchronously, right when needed, and recycles them onto the file itself:
+/// there is no reader thread to fetch from or send a recycled chunk back to.
+#[cfg(target_os = "wasi")]
+struct WasiChunkSource<'a, M: MergeInput> {
+    reader_files: &'a mut Vec<Option<ReaderFile<M>>>,
+    settings: &'a GlobalSettings,
+    separator: u8,
+}
+
+#[cfg(target_os = "wasi")]
+impl<M: MergeInput> ChunkSource for WasiChunkSource<'_, M> {
+    fn advance(&mut self, file: &mut MergeableFile<'_>) -> UResult<Option<Chunk>> {
+        let file_number = file.file_number;
+        let reader_file = self.reader_files[file_number].as_mut().unwrap();
+        let next_chunk = read_next_chunk(reader_file, self.settings, self.separator)?;
+        if next_chunk.is_none() {
+            let ReaderFile { file, .. } = self.reader_files[file_number].take().unwrap();
+            file.finished_reading()?;
+        }
+        Ok(next_chunk)
+    }
+
+    fn recycle(&mut self, file_number: usize, chunk: Chunk) {
+        if let Some(reader_file) = self.reader_files[file_number].as_mut() {
+            // If nothing is referencing the previous chunk anymore, this means that the
+            // previous line was the last line of the chunk. We can recycle the chunk for
+            // this file's next read.
+            reader_file.recycled = Some(chunk.recycle());
+        }
     }
 }
 
