@@ -65,25 +65,39 @@ impl ChildExt for Child {
         result.map_err(|e| io::Error::from_raw_os_error(e as i32))
     }
 
-    fn wait_or_timeout(&mut self, timeout: Duration, ignore_term: bool) -> io::Result<TimeoutRet> {
+    fn wait_or_timeout(
+        &mut self,
+        timeout: Duration,
+        ignore_signal: Option<usize>,
+    ) -> io::Result<TimeoutRet> {
         // .try_wait() doesn't drop stdin, so we do it manually
         drop(self.stdin.take());
 
+        // Fast path: if the child already terminated, return its exit status immediately.
+        if let Some(status) = self.try_wait()? {
+            return Ok(TimeoutRet::Exited(status));
+        }
+
         // Waits continuously whenever we receive an external SIGCHLD or
-        // we SIGTERM when we are ignoring them.
+        // the signal we are ignoring (e.g. the one we resent to the process group).
         let start = Instant::now();
         // Zero disables the timer, but signals must still be handled.
         let mut remaining = (!timeout.is_zero()).then_some(timeout);
         let mut timer = Timer::new()?;
         loop {
             match timer.timed_sigwait(remaining) {
-                Ok(None) => break Ok(TimeoutRet::TimedOut),
+                Ok(None) => {
+                    if let Some(status) = self.try_wait()? {
+                        break Ok(TimeoutRet::Exited(status));
+                    }
+                    break Ok(TimeoutRet::TimedOut);
+                }
                 Ok(Some(Signal::SIGCHLD)) => {
                     if let Some(status) = self.try_wait()? {
                         break Ok(TimeoutRet::Exited(status));
                     } // otherwise waits again
                 }
-                Ok(Some(Signal::SIGTERM)) if ignore_term => {} // waits again
+                Ok(Some(signal)) if ignore_signal == Some(signal as usize) => {} // waits again
                 Ok(Some(signal)) => break Ok(TimeoutRet::Interrupted(signal as usize)),
                 Err(e) => break Err(e),
             }
