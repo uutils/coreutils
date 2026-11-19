@@ -1519,17 +1519,13 @@ pub(crate) fn fd_soft_limit() -> Option<usize> {
     get_rlimit().ok()
 }
 
-/// WASI has no `getrlimit`; guess a conservative limit instead of `None`, so
-/// `--batch-size`/merge stay bounded on wasmtime's often-smaller fd table.
-#[cfg(target_os = "wasi")]
-#[allow(clippy::unnecessary_wraps)]
+#[cfg(not(all(unix, not(target_os = "fuchsia"))))]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
-    Some(256)
-}
-
-#[cfg(not(any(all(unix, not(target_os = "fuchsia")), target_os = "wasi")))]
-pub(crate) fn fd_soft_limit() -> Option<usize> {
-    None
+    // WASI has no `getrlimit`. 256 is the traditional POSIX soft `RLIMIT_NOFILE`
+    // default most systems used before raising it; assume it instead of treating
+    // `--batch-size`/merge as unbounded, since wasmtime's fd table tends to be small.
+    const WASI_FD_LIMIT_GUESS: usize = 256;
+    cfg!(target_os = "wasi").then_some(WASI_FD_LIMIT_GUESS)
 }
 
 /// The largest `--batch-size` argument that can be honoured with the current file
