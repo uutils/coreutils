@@ -883,6 +883,7 @@ fn process_checksum_line(
     cli_algo_name: Option<AlgoKind>,
     cli_algo_length: Option<HashLength>,
     opts: ChecksumValidateOptions,
+    input_is_stdin: bool,
     cached_line_format: &mut Option<LineFormat>,
     last_algo: &mut Option<String>,
 ) -> Result<(), LineCheckError> {
@@ -895,8 +896,8 @@ fn process_checksum_line(
 
     // Use `LineInfo` to extract the data of a line.
     // Then, depending on its format, apply a different pre-treatment.
-    // The detected format is kept only if the line turns out to be properly
-    // formatted: an improper line must not decide how the next ones are read.
+    // The detected format is kept once the digest and the algorithm are valid.
+    // A line rejected before that must not decide how the next ones are read.
     let mut line_format = *cached_line_format;
     let line_info = LineInfo::parse(line, &mut line_format, opts.allow_empty_filename)
         .ok_or(LineCheckError::ImproperlyFormatted)?;
@@ -912,6 +913,12 @@ fn process_checksum_line(
         return Err(LineCheckError::ImproperlyFormatted);
     };
     *cached_line_format = line_format;
+
+    // When the list comes from stdin, a line naming '-' cannot be checked:
+    // count it as improperly formatted, but keep its format.
+    if input_is_stdin && line_info.filename == b"-" {
+        return Err(LineCheckError::ImproperlyFormatted);
+    }
 
     compute_and_check_digest_from_file(
         &line_info.filename,
@@ -979,6 +986,7 @@ fn process_checksum_file(
             cli_algo_kind,
             cli_algo_length,
             opts,
+            input_is_stdin,
             &mut cached_line_format,
             &mut last_algo,
         );
@@ -1393,6 +1401,7 @@ mod tests {
             Some(AlgoKind::Md5),
             None,
             opts,
+            false,
             cached_line_format,
             &mut None,
         )

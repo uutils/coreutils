@@ -1474,6 +1474,46 @@ fn test_check_pipe() {
         .stderr_contains("cksum: 'standard input': no properly formatted checksum lines found");
 }
 
+// When the checksum list is read from stdin, a line naming '-' is improperly
+// formatted, yet it still sets the line format. From a file, '-' reads stdin.
+#[rstest]
+// The algorithm in the warning comes from the line.
+#[case::tagged(
+    &["--warn", "--check", "-"],
+    "MD5 (-) = {d}\nMD5 (a) = {d}\n",
+    "a: OK\n",
+    "cksum: 'standard input': 1: improperly formatted MD5 checksum line\n\
+    cksum: WARNING: 1 line is improperly formatted\n",
+    0
+)]
+// The first line sets the two-space format, so the single-space line is improper.
+#[case::keeps_line_format(
+    &["-a", "md5", "--check"],
+    "{d}  -\n{d} a\n",
+    "",
+    "cksum: 'standard input': no properly formatted checksum lines found\n",
+    1
+)]
+#[case::list_from_file(&["-a", "md5", "--check", "list"], "a\n", "-: OK\n", "", 0)]
+fn test_check_line_naming_stdin(
+    #[case] args: &[&str],
+    #[case] stdin: &str,
+    #[case] stdout: &str,
+    #[case] stderr: &str,
+    #[case] code: i32,
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let digest = "60b725f10c9c85c70d97880dfe8191b3";
+    at.write("a", "a\n");
+    at.write("list", &format!("{digest}  -\n"));
+    ucmd.args(args)
+        .pipe_in(stdin.replace("{d}", digest))
+        .run()
+        .code_is(code)
+        .stdout_is(stdout)
+        .stderr_is(stderr);
+}
+
 #[test]
 fn test_cksum_check_empty_line() {
     let scene = TestScenario::new(util_name!());
