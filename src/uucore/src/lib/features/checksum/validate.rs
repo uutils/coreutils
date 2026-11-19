@@ -72,6 +72,9 @@ pub struct ChecksumValidateOptions {
     /// An untagged line with no file name after the separator is a check of the file '' for
     /// cksum and b2sum, and is improperly formatted for md5sum and sha*sum.
     pub allow_empty_filename: bool,
+    /// cksum reads a digest in hexadecimal or in base64. md5sum, sha*sum and b2sum read
+    /// hexadecimal only.
+    pub allow_base64_digest: bool,
     pub ignore_missing: bool,
     pub strict: bool,
     pub verbose: ChecksumVerbose,
@@ -551,7 +554,11 @@ impl LineInfo {
 }
 
 /// Extract the expected digest from the checksum string and decode it
-fn get_raw_expected_digest(checksum: &str, len_hint: Option<HashLength>) -> Option<Vec<u8>> {
+fn get_raw_expected_digest(
+    checksum: &str,
+    len_hint: Option<HashLength>,
+    allow_base64: bool,
+) -> Option<Vec<u8>> {
     // If the length of the digest is not a multiple of 2, then it must be
     // improperly formatted (1 byte is 2 hex digits, and base64 strings should
     // always be a multiple of 4).
@@ -567,6 +574,10 @@ fn get_raw_expected_digest(checksum: &str, len_hint: Option<HashLength>) -> Opti
         && let Ok(raw_ck) = hex::decode(checksum)
     {
         return Some(raw_ck);
+    }
+
+    if !allow_base64 {
+        return None;
     }
 
     // If the checksum cannot be decoded as hexadecimal, interpret it as Base64
@@ -811,6 +822,7 @@ fn process_algo_based_line(
     line_info: &LineInfo,
     cli_algo_kind: Option<AlgoKind>,
     last_algo: &mut Option<String>,
+    allow_base64_digest: bool,
 ) -> Result<(Vec<u8>, SizedAlgoKind), LineCheckError> {
     let (algo_kind, algo_len) = identify_algo_name_and_length(line_info, cli_algo_kind, last_algo)?;
 
@@ -825,8 +837,9 @@ fn process_algo_based_line(
     }
     .map(HashLength::from_bits);
 
-    let expected_checksum = get_raw_expected_digest(&line_info.checksum, len_hint)
-        .ok_or(LineCheckError::ImproperlyFormatted)?;
+    let expected_checksum =
+        get_raw_expected_digest(&line_info.checksum, len_hint, allow_base64_digest)
+            .ok_or(LineCheckError::ImproperlyFormatted)?;
 
     let algo = SizedAlgoKind::from_unsized(algo_kind, algo_len)
         .map_err(|_| LineCheckError::ImproperlyFormatted)?;
@@ -839,12 +852,17 @@ fn process_non_algo_based_line(
     line_info: &LineInfo,
     cli_algo_kind: AlgoKind,
     cli_algo_length: Option<HashLength>,
+    allow_base64_digest: bool,
 ) -> Result<(Vec<u8>, SizedAlgoKind), LineCheckError> {
     use AlgoKind as ak;
 
     let expected_digest_sum = cli_algo_kind.expected_digest_bit_len();
-    let expected_checksum = get_raw_expected_digest(&line_info.checksum, expected_digest_sum)
-        .ok_or(LineCheckError::ImproperlyFormatted)?;
+    let expected_checksum = get_raw_expected_digest(
+        &line_info.checksum,
+        expected_digest_sum,
+        allow_base64_digest,
+    )
+    .ok_or(LineCheckError::ImproperlyFormatted)?;
 
     // When a specific algorithm name is input, use it and use the provided
     // bits except when dealing with blake2b, sha2 and sha3, where we will
@@ -903,11 +921,21 @@ fn process_checksum_line(
         .ok_or(LineCheckError::ImproperlyFormatted)?;
 
     let (expected_checksum, algo) = if line_info.format == LineFormat::AlgoBased {
-        process_algo_based_line(&line_info, cli_algo_name, last_algo)?
+        process_algo_based_line(
+            &line_info,
+            cli_algo_name,
+            last_algo,
+            opts.allow_base64_digest,
+        )?
     } else if let Some(cli_algo) = cli_algo_name {
         // If we match a non-algo based parser, we expect a cli argument
         // to give us the algorithm to use
-        process_non_algo_based_line(&line_info, cli_algo, cli_algo_length)?
+        process_non_algo_based_line(
+            &line_info,
+            cli_algo,
+            cli_algo_length,
+            opts.allow_base64_digest,
+        )?
     } else {
         // We have no clue of what algorithm to use
         return Err(LineCheckError::ImproperlyFormatted);
@@ -1469,7 +1497,7 @@ mod tests {
     fn test_get_expected_digest() {
         let ck = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=".to_owned();
 
-        let result = get_raw_expected_digest(&ck, None);
+        let result = get_raw_expected_digest(&ck, None, true);
 
         assert_eq!(
             result.unwrap(),
@@ -1483,7 +1511,7 @@ mod tests {
         // The line misses a '=' at the end to be valid base64
         let ck = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU".to_owned();
 
-        let result = get_raw_expected_digest(&ck, None);
+        let result = get_raw_expected_digest(&ck, None, true);
 
         assert!(result.is_none());
     }

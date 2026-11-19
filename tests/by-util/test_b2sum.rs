@@ -78,6 +78,20 @@ fn test_check_status_reports_unusable_checksum_input() {
 }
 
 #[test]
+fn test_check_tagged_base64_digest_is_improperly_formatted() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("a", "a\n");
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .pipe_in("BLAKE2b (a) = vt+7kNhYwtZ7fuj3Ujvj07VABO+eTwLyrXmh0Fv9/km4HjyS6/mbUEECtr8AP6NCWH9bMSTCBfVSBOjEtM59fA==\n")
+        .fails()
+        .no_stdout()
+        .stderr_is("b2sum: 'standard input': no properly formatted checksum lines found\n");
+}
+
+#[test]
 fn test_invalid_b2sum_length_option_not_multiple_of_8() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
