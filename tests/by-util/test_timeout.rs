@@ -145,6 +145,29 @@ fn test_kill_after_preserves_timeout_exit_without_preserve_status() {
         .no_output();
 }
 
+/// When `-k` is set and the first signal ends the child, timeout must not
+/// immediately escalate to KILL; it should exit with 124 without sending KILL.
+#[test]
+fn test_kill_after_with_non_term_signal_does_not_escalate_when_child_exits() {
+    let (ts, bin) = scenario_with_bin();
+    for sig in ["INT", "HUP", "QUIT"] {
+        ts.ucmd()
+            .args(&[
+                "--verbose",
+                "-k",
+                "2",
+                "-s",
+                sig,
+                "0.05",
+                &bin,
+                "sleep",
+                "10",
+            ])
+            .fails_with_code(124)
+            .stderr_does_not_contain("KILL");
+    }
+}
+
 /// A timeout signal of KILL reports 128 + 9 rather than 124, with or
 /// without `--kill-after`; other signals keep reporting 124.
 #[test]

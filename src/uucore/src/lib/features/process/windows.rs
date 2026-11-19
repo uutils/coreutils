@@ -790,7 +790,11 @@ impl ChildExt for Child {
         send_signal_to_console_group(pid, signal)
     }
 
-    fn wait_or_timeout(&mut self, timeout: Duration, _ignore_term: bool) -> io::Result<TimeoutRet> {
+    fn wait_or_timeout(
+        &mut self,
+        timeout: Duration,
+        _ignore_signal: Option<usize>,
+    ) -> io::Result<TimeoutRet> {
         // The unix implementation drops stdin so the child sees EOF; match it.
         drop(self.stdin.take());
 
@@ -908,7 +912,7 @@ mod tests {
         assert_eq!(unsafe { console_ctrl_handler(CTRL_C_EVENT) }, 1);
         let started = Instant::now();
         let result = child
-            .wait_or_timeout(Duration::from_secs(60), false)
+            .wait_or_timeout(Duration::from_secs(60), None)
             .unwrap();
         assert!(matches!(result, TimeoutRet::Interrupted(sig) if sig == SIGNAL_INT as usize));
         assert!(started.elapsed() < Duration::from_secs(30));

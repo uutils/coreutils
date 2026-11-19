@@ -27,9 +27,13 @@ pub trait ChildExt {
     /// Wait for a process to finish or return after the specified duration.
     /// A `timeout` of zero disables the timeout.
     ///
-    /// `ignore_term` keeps waiting through an external request to deliver
-    /// the termination signal (used for the kill-after grace period).
-    fn wait_or_timeout(&mut self, timeout: Duration, ignore_term: bool) -> io::Result<TimeoutRet>;
+    /// `ignore_signal` keeps waiting through an external request to deliver
+    /// the specified signal (used for the kill-after grace period).
+    fn wait_or_timeout(
+        &mut self,
+        timeout: Duration,
+        ignore_signal: Option<usize>,
+    ) -> io::Result<TimeoutRet>;
 }
 
 /// The outcome of [`ChildExt::wait_or_timeout`].
