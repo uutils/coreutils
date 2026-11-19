@@ -48,7 +48,6 @@ pub use self::ut::*;
 
 // See the FAQ at https://wiki.musl-libc.org/faq#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?
 // Musl implements only stubs for the utmp functions, and the libc crate issues a deprecation warning about this.
-// However, calling these stubs is the correct approach to maintain consistent behavior with GNU coreutils.
 #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
 pub use libc::endutxent;
 #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
@@ -68,6 +67,46 @@ use libc::utmpx;
 pub use libc::utmpxname;
 
 use crate::libc; // import macros from `../../macros.rs`
+
+// extract users without musl's stub
+#[cfg(target_env = "musl")]
+pub fn linux_utmp_users(path: &Path) -> Vec<String> {
+    use std::io::Read as _;
+    // size_of::<utmpx>() does not work
+    #[cfg(not(target_arch = "aarch64"))]
+    const UTMP_SIZE: usize = 384;
+    #[cfg(target_arch = "aarch64")]
+    const UTMP_SIZE: usize = 400;
+    const UT_USER_OFFSET: usize = std::mem::offset_of!(utmpx, ut_user);
+    const UT_USER_END: usize = UT_USER_OFFSET + UT_NAMESIZE;
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return Vec::new();
+    };
+    let mut buf = Vec::new();
+    if file.read_to_end(&mut buf).is_err() {
+        return Vec::new();
+    }
+
+    let mut users = Vec::new();
+    for chunk in buf
+        .as_chunks::<UTMP_SIZE>()
+        .0
+        .iter()
+        .filter(|c| i16::from_ne_bytes([c[0], c[1]]) == USER_PROCESS)
+    {
+        let raw_user = &chunk[UT_USER_OFFSET..UT_USER_END];
+        if let end @ 1.. = raw_user
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(raw_user.len())
+            && let Ok(user) = std::str::from_utf8(&raw_user[..end])
+        {
+            users.push(user.to_string());
+        }
+    }
+
+    users
+}
 
 // In case the c_char array doesn't end with NULL
 macro_rules! chars2string {

@@ -51,6 +51,15 @@ fn test_users_check_name() {
 }
 
 #[test]
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))] // utmp_linux.bin was dumped on x86_64
+fn test_users_check_name_avoid_musl_stub() {
+    new_ucmd!()
+        .args(&["utmp_linux.bin"])
+        .succeeds()
+        .stdout_is("runner\n");
+}
+
+#[test]
 #[cfg(target_os = "openbsd")]
 fn test_users_check_name_openbsd() {
     new_ucmd!()
