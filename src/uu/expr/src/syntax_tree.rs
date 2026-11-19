@@ -1027,6 +1027,8 @@ impl<'a, S: AsRef<MaybeNonUtf8Str>> Parser<'a, S> {
                         stack.push(ParseFrame::CloseParen);
                         ParseState::Expression { min_prec: 0 }
                     }
+                    // Only `+ )` makes a value out of it.
+                    b")" => return Err(ExprError::UnexpectedClosingParenthesis),
                     s => ParseState::Value(AstNode::new(AstNodeInner::Leaf {
                         value: s.into(),
                         position: self.index - 1,
