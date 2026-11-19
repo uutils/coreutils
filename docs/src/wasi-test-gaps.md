@@ -8,10 +8,6 @@ Limitations that affect only `wasm32-wasip2` use `#[uutests::wasip2_ignore(Reaso
 
 To find all annotated tests: `grep -rnE 'wasi_ignore|wasip2_ignore' tests/`. For the full, authoritative list of reason keys and their text, see `tests/uutests_procs/src/lib.rs`.
 
-## Tools not yet covered by integration tests
-
-arch, b2sum, cat, cp, csplit, date, dir, dircolors, fmt, join, ls, md5sum, mkdir, mv, nproc, pathchk, pr, printenv, ptx, pwd, readlink, realpath, rm, rmdir, seq, sha1sum, sha224sum, sha256sum, sha384sum, sha512sum, shred, sleep, sort, split, tail, touch, tsort, uname, uniq, vdir, yes
-
 ## WASI sandbox: host paths not visible
 
 The WASI guest only sees directories explicitly mapped with `--dir`. Host paths like `/proc`, `/sys`, and `/dev` are not accessible. Affected tests include those that read `/proc/version`, `/proc/modules`, `/proc/cpuinfo`, `/proc/self/mem`, `/sys/kernel/profiling`, `/dev/null`, `/dev/zero`, `/dev/full`, and tests that rely on anonymous pipes or Linux-specific I/O error paths.

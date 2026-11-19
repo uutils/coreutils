@@ -15,23 +15,23 @@ use syn::Item;
 fn wasi_reason(key: &str) -> Option<&'static str> {
     Some(match key {
         "AbsoluteHostTmpdirOutsideGuestRoot" => {
-            "WASI sandbox: absolute host tmpdir path is outside the mapped guest root, so cp cannot stat it"
+            "WASI sandbox: absolute host tmpdir path (e.g. /tmp) is outside the mapped guest root, so it cannot be statted or written to"
         }
         "AbsoluteSymlinkTargetsUnfollowable" => {
             "WASI sandbox: absolute symlink targets cannot be followed"
         }
         "AclXattrPreservationFails" => {
-            "WASI: ACL/xattr syscalls are not implemented, so attribute preservation (--archive, -p) always fails"
+            "WASI: ACL/xattr syscalls are not implemented, so attribute preservation (--archive, -p) and ACL display always report no ACLs"
         }
         "AddressSpaceLimitUnsuitable" => {
             "WASI runner target is not suitable for this address-space-limit regression test"
         }
+        "AutomaticBufferSizeDiffers" => {
+            "WASI: sort's automatic buffer-size heuristic (based on queried available memory) behaves differently under wasm32, so disk-spill thresholds don't match the host"
+        }
         "CannotDetectUnsafeOverwrite" => "WASI: cannot detect unsafe overwrite",
         "CannotExecShellFromDeletedCwd" => {
             "WASI: wasmtime cannot exec the binary via a raw shell from a deleted cwd"
-        }
-        "ClosedStdoutGenericIoError" => {
-            "WASI: closed stdout reports a generic I/O error rather than BrokenPipe"
         }
         "CompressProgramBypassed" => {
             "WASI: ext_sort bypasses --compress-program entirely (single-threaded in-memory path)"
@@ -40,19 +40,12 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
             "WASI: --debug reports 'unsupported' instead of 'unknown' for this platform"
         }
         "DevNullNotSeekable" => "WASI sandbox: /dev/null is not a seekable device",
-        "DirectoryModesUmaskNotFaithful" => {
-            "WASI: directory modes/umask are not faithfully reproduced"
-        }
         "DirectorySizeFromMetadata" => {
             "WASI: the guest is not Unix, so a directory's size comes from its metadata rather than from a seek to its end"
         }
         "DotDotCanonicalizationDiffers" => {
             "WASI sandbox: relative '..' path canonicalization differs, causing a false self-copy detection"
         }
-        "EmptyPathResolvesToDirectory" => {
-            "WASI: an empty path argument resolves to a directory instead of ENOENT"
-        }
-        "ErrnoMessageMismatch" => "WASI: errno/error-message mismatches",
         "GuestRootPathResolution" => {
             "WASI sandbox: paths resolve against the guest's preopened root, so '..', UNC-style, canonicalized, symlinked-cwd and host absolute paths differ from the host"
         }
@@ -77,14 +70,17 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
             "WASI: no locale data; every locale (even one requested via LC_ALL or other locale env vars) behaves as C"
         }
         "NoPermissionBits" => {
-            "WASI: no permission bits/chmod syscall, so file mode cannot be restricted or observed, and explicit mode/ownership preservation always fails"
+            "WASI: no permission bits/chmod syscall and no mkdir mode parameter, so file and directory modes cannot be restricted, observed, or faithfully reproduced via umask"
         }
         "NoPipeSignalSupport" => "WASI: no pipe/signal support",
+        "NoProcessPrioritySupport" => {
+            "WASI: no process priority support (getpriority/setpriority), so nice always reports/applies a fixed niceness"
+        }
         "NoRlimitSetrlimitSupport" => "WASI: rlimit/setrlimit not supported",
         "NoStdoutFileRedirection" => "WASI: no stdout-to-file redirection",
         "NoSubprocessSpawning" => "WASI: no subprocess spawning",
         "NoThreadSpawning" => {
-            "WASI: sort -m spawns real OS threads for multi-file merge, unsupported under wasmtime's default config"
+            "WASI: this code path spawns a real OS thread, unsupported under wasmtime's default config"
         }
         "NoTzdb" => {
             "WASI: no tzdb; TZ env var is not honoured, so timezone-dependent behaviour (DST validation, timestamps) differs from the host"
@@ -93,9 +89,6 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
         "NoUnixDomainSockets" => "WASI: no Unix domain socket support",
         "NonUtf8ArgsUnsupported" => {
             "WASI: argv, env values, and paths must be valid UTF-8; wasmtime cannot pass non-UTF-8 data through the sandboxed binary or the spawned test harness"
-        }
-        "PathCreateDirectoryNoModeParam" => {
-            "WASI: path_create_directory has no mode parameter and chmod returns ENOSYS, so directories can't be created with restricted permissions"
         }
         "PermissionErrorsSurfaceAsEnoent" => {
             "WASI: filesystem permission errors surface as ENOENT rather than EACCES"
@@ -109,6 +102,9 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
         "RenameNotAtomicReplace" => {
             "WASI: path rename is not guaranteed to be an atomic replace, so a concurrent creator can win the race during a forced relink"
         }
+        "SandboxRootAliasesGuestCwd" => {
+            "WASI sandbox: the guest's preopened root is remapped to \"/\", so a path that resolves to the mapped root is indistinguishable from the real filesystem root"
+        }
         "StdinPositionNotPreserved" => "WASI: stdin file position not preserved through wasmtime",
         "StdioHandlesOpaque" => {
             "WASI sandbox: inherited stdin and stdout cannot be inspected, do not share a file offset and are not reachable through /dev/fd"
@@ -118,6 +114,9 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
             "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
         }
         "TailFollowDisabled" => "WASI: tail follow mode disabled",
+        "TrailingSlashOnRemoveRejected" => {
+            "WASI: path removal syscalls reject a trailing slash on the target, unlike POSIX unlink/rmdir"
+        }
         "UnsupportedStdApi" => {
             "WASI: the std or libc API is unsupported (File::try_clone, setlocale LC_* constants)"
         }
@@ -132,9 +131,6 @@ fn wasip2_reason(key: &str) -> Option<&'static str> {
         // FIXME: wasi-sdk-35 fixes this (wasi-libc #887); remove the ignore once Rust bundles it.
         "StreamWriteGenericIoError" => {
             "WASI P2: stream write errors report a generic I/O error instead of their errno, for example ENOSPC on a full device"
-        }
-        "OsErrorMessageDiffers" => {
-            "WASI P2: the error message text for this OS error differs from native Unix"
         }
         "OsStringRequiresUtf8" => "WASI P2: OsString requires valid UTF-8, unlike unix and WASI P1",
         _ => return None,

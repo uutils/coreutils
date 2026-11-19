@@ -1090,6 +1090,7 @@ creating file 'xaf'
         );
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_number_n() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1106,6 +1107,7 @@ fn test_number_n() {
         .stdout_only("");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_number_kth_of_n() {
     new_ucmd!()
@@ -1151,6 +1153,7 @@ fn test_number_kth_of_n() {
         .stderr_contains("split: invalid number of chunks: '18446744073709551616'");
 }
 
+#[uutests::wasi_ignore(Usize32BitOverflow)]
 #[test]
 fn test_number_kth_of_n_round_robin() {
     new_ucmd!()

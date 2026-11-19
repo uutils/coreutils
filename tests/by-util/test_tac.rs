@@ -274,8 +274,9 @@ fn test_null_separator() {
         .stdout_is("b\0a\0");
 }
 
-#[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
+#[test]
 fn test_non_utf8_separator() {
     use std::os::unix::ffi::OsStringExt;
     new_ucmd!()
@@ -287,8 +288,9 @@ fn test_non_utf8_separator() {
         .stdout_is_bytes(b"21\xe9");
 }
 
-#[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
+#[test]
 fn test_non_utf8_regex_separator() {
     use std::os::unix::ffi::OsStringExt;
 

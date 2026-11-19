@@ -393,7 +393,14 @@ fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -
         #[cfg(unix)]
         InputType::Socket => Err(CatError::NoSuchDeviceOrAddress),
         _ => {
-            let file = File::open(path)?;
+            let file = File::open(path).map_err(|e| match e.kind() {
+                ErrorKind::IsADirectory => CatError::IsDirectory,
+                #[cfg(target_os = "wasi")]
+                _ if e.raw_os_error() == Some(rustix::io::Errno::LOOP.raw_os_error()) => {
+                    CatError::TooManySymlinks
+                }
+                _ => CatError::from(e),
+            })?;
             if !is_safe_overwrite(&file, &io::stdout()) {
                 return Err(CatError::OutputIsInput);
             }
@@ -456,6 +463,9 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
     let ft = match metadata(path) {
         Ok(md) => md.file_type(),
         Err(e) => {
+            if e.kind() == ErrorKind::IsADirectory {
+                return Err(CatError::IsDirectory);
+            }
             if let Some(raw_error) = e.raw_os_error() {
                 #[cfg(any(unix, target_os = "wasi"))]
                 let too_many_symlink_code = rustix::io::Errno::LOOP.raw_os_error();

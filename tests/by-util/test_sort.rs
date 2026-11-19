@@ -73,8 +73,8 @@ fn test_buffer_sizes() {
     }
 }
 
+#[uutests::wasi_ignore(AutomaticBufferSizeDiffers)]
 #[test]
-#[cfg(not(target_os = "wasi"))]
 fn test_buffer_size_limits_both_chunks() {
     let line = format!("{}\n", "b".repeat(1022));
     let input = line.repeat(1200);
@@ -591,9 +591,9 @@ fn test_random_source_reads_only_the_salt_length() {
     assert_eq!(from_16, from_longer);
 }
 
-#[test]
-#[uutests::wasi_ignore(NoFifo)]
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoFifo)]
+#[test]
 fn test_random_source_pipe_only_needs_16_bytes() {
     use std::io::Write;
     use uutests::util_name;
@@ -862,9 +862,9 @@ fn month_sort_input_expected(months: &[String]) -> (String, String) {
     (input, expected)
 }
 
-#[test]
 #[cfg(unix)]
 #[uutests::wasi_ignore(NoLocaleData)]
+#[test]
 fn test_month_sort_french_locale() {
     let locale = "fr_FR.UTF-8";
     if !is_locale_available(locale) {
@@ -906,9 +906,9 @@ fn test_month_sort_french_locale() {
         .stdout_is(expected);
 }
 
-#[test]
 #[cfg(unix)]
 #[uutests::wasi_ignore(NoLocaleData)]
+#[test]
 fn test_month_sort_hungarian_locale() {
     let locale = "hu_HU.UTF-8";
     if !is_locale_available(locale) {
@@ -950,9 +950,9 @@ fn test_month_sort_hungarian_locale() {
 
 /// Test that embedded blanks in month names cause a non-match (GNU compat).
 /// E.g. "av   ril" should NOT match "avril" — GNU treats it as unknown.
-#[test]
 #[cfg(unix)]
 #[uutests::wasi_ignore(NoLocaleData)]
+#[test]
 fn test_month_sort_french_embedded_blanks() {
     let locale = "fr_FR.UTF-8";
     if !is_locale_available(locale) {
@@ -1015,9 +1015,9 @@ fn test_month_sort_french_embedded_blanks() {
         .stdout_is(expected);
 }
 
-#[test]
 #[cfg(unix)]
 #[uutests::wasi_ignore(NoLocaleData)]
+#[test]
 fn test_month_sort_japanese_locale() {
     let locale = "ja_JP.UTF-8";
     if !is_locale_available(locale) {
@@ -1402,8 +1402,8 @@ fn test_unterminated_file_not_fused_across_chunk_boundary() {
     }
 }
 
-#[test]
 #[uutests::wasi_ignore(NoThreadSpawning)]
+#[test]
 fn test_merge_interleaved() {
     new_ucmd!()
         .arg("-m")
@@ -1414,8 +1414,8 @@ fn test_merge_interleaved() {
         .stdout_only_fixture("merge_ints_interleaved.expected");
 }
 
-#[test]
 #[uutests::wasi_ignore(NoThreadSpawning)]
+#[test]
 fn test_merge_preserves_long_lines() {
     use std::fmt::Write;
 
@@ -1473,9 +1473,9 @@ fn test_ext_sort_preserves_long_lines() {
 // Regression test: a failing write must not take the merge reader thread down with it.
 // The write error used to propagate straight out of `write_all_to`, dropping the chunk
 // receivers while the reader was still sending, and `chunks::read` unwraps that send.
-#[test]
 #[cfg(target_os = "linux")]
 #[uutests::wasi_ignore(NoThreadSpawning)]
+#[test]
 fn test_merge_write_error_does_not_panic() {
     use std::fs::File;
 
@@ -1542,9 +1542,9 @@ fn test_spill_write_error_does_not_panic() {
 
 // A read error must be reported with context and without the raw io::Error suffix.
 // It used to print `sort: Input/output error (os error 5)`.
+#[cfg(target_os = "linux")]
 #[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg(target_os = "linux")]
 fn test_read_error_message() {
     // Reading /proc/self/mem from offset 0 fails with EIO.
     let result = new_ucmd!().arg("/proc/self/mem").fails_with_code(2);
@@ -1575,8 +1575,8 @@ fn test_merge_flush_error_is_reported() {
         .stderr_is("sort: write failed: 'standard output': No space left on device\n");
 }
 
-#[test]
 #[uutests::wasi_ignore(NoThreadSpawning)]
+#[test]
 fn test_merge_unique() {
     new_ucmd!()
         .arg("-m")
@@ -1591,8 +1591,8 @@ fn test_merge_unique() {
         .stdout_only_fixture("merge_ints_interleaved.expected");
 }
 
-#[test]
 #[uutests::wasi_ignore(NoThreadSpawning)]
+#[test]
 fn test_merge_stable() {
     new_ucmd!()
         .arg("-m")
@@ -1604,8 +1604,8 @@ fn test_merge_stable() {
         .stdout_only_fixture("merge_stable.expected");
 }
 
-#[test]
 #[uutests::wasi_ignore(NoThreadSpawning)]
+#[test]
 fn test_merge_reversed() {
     new_ucmd!()
         .arg("-m")
@@ -1885,9 +1885,9 @@ fn test_compress() {
         .stdout_only_fixture("ext_sort.expected");
 }
 
-#[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[uutests::wasi_ignore(NoThreadSpawning)]
+#[test]
 fn test_compress_merge() {
     new_ucmd!()
         .args(&[
@@ -1909,9 +1909,9 @@ fn test_compress_merge() {
         .stdout_only_fixture("merge_ints_interleaved.expected");
 }
 
-#[test]
 #[cfg(not(target_os = "android"))]
 #[uutests::wasi_ignore(CompressProgramBypassed)]
+#[test]
 fn test_compress_fail() {
     let result = new_ucmd!()
         .args(&[
@@ -1981,8 +1981,8 @@ fn test_batch_size_too_large() {
         .stderr_contains("maximum --batch-size argument with current rlimit is");
 }
 
-#[test]
 #[uutests::wasi_ignore(NoThreadSpawning)]
+#[test]
 fn test_merge_batch_size() {
     new_ucmd!()
         .arg("--batch-size=2")
@@ -1998,11 +1998,11 @@ fn test_merge_batch_size() {
         .stdout_only_fixture("merge_ints_interleaved.expected");
 }
 
-#[test]
 // TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
 // #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(target_os = "linux")]
 #[uutests::wasi_ignore(NoThreadSpawning)]
+#[test]
 fn test_merge_batch_size_with_limit() {
     // Currently need...
     // 3 descriptors for stdin, stdout, stderr
@@ -2155,8 +2155,9 @@ fn test_sigpipe_panic() {
     child.wait().unwrap().no_stderr();
 }
 
-#[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoFifo)]
+#[test]
 fn test_fifo_without_trailing_newline() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("FIFO");
@@ -2240,9 +2241,9 @@ fn test_verifies_files_after_keys() {
         .stderr_contains("invalid field specification '0'");
 }
 
-#[test]
 #[cfg(unix)]
 #[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
 fn test_verifies_input_files() {
     new_ucmd!()
         .args(&["/dev/random", "nonexistent_file"])
@@ -2250,8 +2251,9 @@ fn test_verifies_input_files() {
         .stderr_is("sort: cannot read: nonexistent_file: No such file or directory\n");
 }
 
-#[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoFifo)]
+#[test]
 fn test_verifies_input_files_without_opening_them() {
     // Opening a FIFO blocks until a writer shows up, so if the input check opened
     // the inputs, the missing second file would never be reported.
@@ -2331,6 +2333,7 @@ fn test_same_separator_twice_ok(#[case] args: &[&str]) {
         .stdout_only("b:1\na:2\n");
 }
 
+#[uutests::wasi_ignore(AbsoluteHostTmpdirOutsideGuestRoot)]
 #[test]
 fn test_output_is_input() {
     let input = "a\nb\nc\n";
@@ -2344,6 +2347,7 @@ fn test_output_is_input() {
     assert_eq!(at.read("file"), input);
 }
 
+#[uutests::wasi_ignore(AbsoluteHostTmpdirOutsideGuestRoot)]
 #[rstest]
 #[case::newline('\n', &[])]
 #[case::newline_unique('\n', &["-u"])]
@@ -2371,6 +2375,7 @@ fn test_merge_output_is_hard_link_to_input(#[case] separator: char, #[case] args
     assert_eq!(at.read("output"), input);
 }
 
+#[uutests::wasi_ignore(AbsoluteHostTmpdirOutsideGuestRoot)]
 #[rstest]
 #[case::single_batch(&[])]
 #[case::multiple_batches(&["--batch-size=2"])]
@@ -2423,6 +2428,7 @@ fn test_output_file_is_truncated() {
     assert_eq!(at.read("shrinking"), "apple\nkiwi\n");
 }
 
+#[uutests::wasi_ignore(NoThreadSpawning)]
 #[test]
 fn test_merge_output_file_is_truncated() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2439,9 +2445,9 @@ fn test_merge_output_file_is_truncated() {
     assert_eq!(at.read("merged"), "damson\nquince\n");
 }
 
-#[test]
 #[cfg(unix)]
 #[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
 fn test_output_device() {
     new_ucmd!()
         .args(&["-o", "/dev/null"])
@@ -2449,8 +2455,8 @@ fn test_output_device() {
         .succeeds();
 }
 
-#[test]
 #[uutests::wasi_ignore(NoThreadSpawning)]
+#[test]
 fn test_merge_empty_input() {
     new_ucmd!()
         .args(&["-m", "empty.txt"])
@@ -2474,9 +2480,9 @@ fn test_wrong_args_exit_code() {
         .stderr_contains("--misspelled");
 }
 
-#[test]
 #[cfg(unix)]
 #[uutests::wasi_ignore(NoPipeSignalSupport)]
+#[test]
 fn test_tmp_files_deleted_on_sigint() {
     use rand::{RngExt as _, SeedableRng, rngs::SmallRng};
     use rustix::process::{Pid, Signal, kill_process};
@@ -2523,8 +2529,9 @@ fn test_tmp_files_deleted_on_sigint() {
     assert!(read_dir(at.plus("tmp_dir")).unwrap().next().is_none());
 }
 
-#[test]
 #[cfg(unix)]
+#[uutests::wasi_ignore(AutomaticBufferSizeDiffers)]
+#[test]
 fn test_tmp_files_are_private() {
     use rustix::process::{Pid, Signal, kill_process};
     use std::os::unix::fs::PermissionsExt as _;
@@ -2568,8 +2575,9 @@ fn test_tmp_files_are_private() {
     child.wait().unwrap().code_is(2);
 }
 
-#[test]
 #[cfg(all(unix, not(target_os = "redox")))]
+#[uutests::wasi_ignore(NoFifo)]
+#[test]
 fn test_tmp_dir_replaced_by_a_symlink() {
     use rustix::process::{Pid, Signal, kill_process};
     use std::{
@@ -2670,8 +2678,8 @@ fn test_args_check_conflict() {
 }
 
 #[cfg(target_os = "linux")]
-#[test]
 #[uutests::wasip2_ignore(StreamWriteGenericIoError)]
+#[test]
 fn test_failed_write_is_reported() {
     new_ucmd!()
         .pipe_in("hello")
@@ -2790,9 +2798,9 @@ fn test_files0_from_empty_input_file() {
         .stderr_only("sort: no input from 'file'\n");
 }
 
-#[test]
 #[cfg(unix)]
 #[uutests::wasip2_ignore(OsStringRequiresUtf8)]
+#[test]
 fn test_files0_from_non_utf8_filename() {
     new_ucmd!()
         .args(&["--files0-from", "-"])
@@ -2819,7 +2827,6 @@ fn test_read_error_on_reader_thread(#[case] args: &[&str]) {
 
 #[test]
 #[cfg(unix)]
-#[uutests::wasip2_ignore(OsErrorMessageDiffers)]
 fn test_files0_from_unreadable_source() {
     new_ucmd!()
         .args(&["--files0-from", "."])
@@ -2828,9 +2835,9 @@ fn test_files0_from_unreadable_source() {
 }
 
 #[cfg(unix)]
-#[test]
 // Test files0-from with non-regular empty file
 #[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
 fn test_files0_from_dev_null_is_empty() {
     new_ucmd!()
         .args(&["--files0-from", "/dev/null"])
@@ -2914,10 +2921,10 @@ fn test_files0_from_two_entries_trailing_nul() {
         .stdout_only("kiwi\nkiwi\nmango\nmango\n");
 }
 
-#[test]
 // Test files0-from with non-UTF-8 filenames
 #[cfg(all(unix, not(target_vendor = "apple")))]
 #[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
+#[test]
 fn test_files0_from_non_utf8_content() {
     use std::os::unix::ffi::OsStringExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3917,8 +3924,8 @@ fn test_locale_collation_utf8() {
     }
 }
 
-#[test]
 #[uutests::wasi_ignore(NoLocaleData)]
+#[test]
 fn test_locale_interleaved_en_us_utf8() {
     // Test case for issue: locale-based collation support
     // In en_US.UTF-8, lowercase and uppercase letters should interleave
@@ -3990,8 +3997,8 @@ fn test_locale_with_ignore_case_flag() {
     );
 }
 
-#[test]
 #[uutests::wasi_ignore(NoLocaleData)]
+#[test]
 fn test_locale_complex_utf8_sorting() {
     // More complex test with mixed case and special characters
     // In en_US.UTF-8, should respect locale collation rules
@@ -4015,8 +4022,8 @@ fn test_locale_posix_sort_debug_message() {
         .stderr_contains("text ordering performed using simple byte comparison");
 }
 
-#[test]
 #[uutests::wasi_ignore(NoLocaleData)]
+#[test]
 fn test_locale_utf8_sort_debug_message() {
     new_ucmd!()
         .env("LC_ALL", "en_US.UTF-8")
@@ -4070,8 +4077,8 @@ fn test_empty_input_empty_output() {
     assert_eq!(at.read("file"), "");
 }
 
-#[test]
 #[uutests::wasi_ignore(NoLocaleData)]
+#[test]
 fn test_consistent_sorting_with_i18n_collate() {
     // Regression test for issue #11980
     // Lexicographic fallback sorting for equal sorting keys for 01 and 0_1
@@ -4092,6 +4099,7 @@ fn test_consistent_sorting_with_i18n_collate() {
         .stdout_is(expected_output);
 }
 
+#[uutests::wasi_ignore(NoThreadSpawning)]
 #[test]
 fn test_merge_locale_collation() {
     // `sort -m` compares lines lazily with the collator instead of precomputed

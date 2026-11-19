@@ -522,6 +522,7 @@ fn test_force_then_interactive_no_operand() {
     }
 }
 
+#[uutests::wasi_ignore(TrailingSlashOnRemoveRejected)]
 #[test]
 fn test_verbose_slash() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -946,8 +947,9 @@ fn test_remove_inaccessible_dir() {
     assert!(!at.dir_exists(dir_1));
 }
 
-#[test]
 #[cfg(not(windows))]
+#[uutests::wasi_ignore(SandboxRootAliasesGuestCwd)]
+#[test]
 fn test_current_or_parent_dir_rm4() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1179,6 +1181,7 @@ fn test_only_first_error_recursive() {
 }
 
 #[cfg(not(windows))]
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 fn test_unreadable_and_nonempty_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1193,6 +1196,7 @@ fn test_unreadable_and_nonempty_dir() {
 }
 
 #[cfg(not(windows))]
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 fn test_recursive_remove_unreadable_subdir() {
     // Regression test for https://github.com/uutils/coreutils/issues/10966
@@ -1233,6 +1237,7 @@ fn test_inaccessible_dir_nonempty() {
 }
 
 #[cfg(not(windows))]
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 fn test_inaccessible_dir_interactive() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1565,6 +1570,7 @@ fn test_symlink_to_readonly_no_prompt() {
 
 /// Test that --preserve-root properly detects symlinks pointing to root.
 #[cfg(unix)]
+#[uutests::wasi_ignore(AbsoluteSymlinkTargetsUnfollowable)]
 #[test]
 fn test_preserve_root_symlink_to_root() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1587,6 +1593,7 @@ fn test_preserve_root_symlink_to_root() {
 
 /// Test that the "same as '/'" error escapes control characters in the name.
 #[cfg(unix)]
+#[uutests::wasi_ignore(AbsoluteSymlinkTargetsUnfollowable)]
 #[test]
 fn test_preserve_root_symlink_to_root_escapes_name() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1603,6 +1610,7 @@ fn test_preserve_root_symlink_to_root_escapes_name() {
 
 /// Test that --preserve-root properly detects nested symlinks pointing to root.
 #[cfg(unix)]
+#[uutests::wasi_ignore(AbsoluteSymlinkTargetsUnfollowable)]
 #[test]
 fn test_preserve_root_nested_symlink_to_root() {
     let (at, mut ucmd) = at_and_ucmd!();
