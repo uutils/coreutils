@@ -4471,3 +4471,21 @@ fn test_debug_incompatible_with_output() {
         .stderr_only("sort: options '-o --debug' are incompatible\n");
     assert!(!at.file_exists("out"));
 }
+
+#[test]
+fn test_debug_incompatible_with_check() {
+    for (args, opt) in [
+        (&["-c", "--debug"][..], "c"),
+        (&["--debug", "--check=diagnose-first"], "c"),
+        (&["-C", "--debug"], "C"),
+        (&["--check=quiet", "--debug"], "C"),
+        // reported before the other problems with -c
+        (&["-c", "--debug", "-o", "out"], "c"),
+        (&["-c", "--debug", "a", "b"], "c"),
+    ] {
+        new_ucmd!()
+            .args(args)
+            .fails_with_code(2)
+            .stderr_only(format!("sort: options '-{opt} --debug' are incompatible\n"));
+    }
+}
