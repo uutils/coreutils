@@ -781,6 +781,13 @@ fn scan_option(
     Ok(())
 }
 
+/// Returns true if `arg` contains a space, which suggests that a whole shebang
+/// line such as `cat -n` was passed as a single argument. Only then is the
+/// hint to use `-S` worth printing.
+fn looks_like_shebang_line(arg: &[u8]) -> bool {
+    arg.contains(&b' ')
+}
+
 #[derive(Default)]
 struct EnvAppData {
     do_debug_printing: bool,
@@ -803,7 +810,7 @@ impl EnvAppData {
             "{}",
             translate!("env-error-no-such-file", "program" => prog.quote())
         );
-        if !self.had_string_argument {
+        if !self.had_string_argument && looks_like_shebang_line(prog.as_encoded_bytes()) {
             uucore::show_error!("{}", translate!("env-error-use-s-shebang"));
         }
         ExitCode::new(127)
@@ -990,14 +997,23 @@ impl EnvAppData {
                     clap::error::ErrorKind::DisplayHelp
                     | clap::error::ErrorKind::DisplayVersion => return Err(e.into()),
                     _ => {
+                        // Only suggest -S when the rejected option contains a space,
+                        // as when a whole shebang line arrives as one argument.
+                        let show_shebang_hint = matches!(
+                            e.get(clap::error::ContextKind::InvalidArg),
+                            Some(clap::error::ContextValue::String(arg))
+                                if looks_like_shebang_line(arg.as_bytes())
+                        );
                         // Use ErrorFormatter directly to handle error with shebang message callback
                         let formatter = uucore::clap_localization::ErrorFormatter::new("env");
                         formatter.print_error_and_exit_with_callback(&e, 125, || {
-                            let _ = writeln!(
-                                stderr(),
-                                "env: {}",
-                                translate!("env-error-use-s-shebang")
-                            );
+                            if show_shebang_hint {
+                                let _ = writeln!(
+                                    stderr(),
+                                    "env: {}",
+                                    translate!("env-error-use-s-shebang")
+                                );
+                            }
                         });
                     }
                 }
