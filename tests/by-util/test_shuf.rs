@@ -17,7 +17,7 @@ fn test_invalid_arg() {
 
 #[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_getrandom_fail() {
     // getrandom is missing from legacy kernel
     use std::process::Command;

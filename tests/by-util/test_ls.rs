@@ -8440,7 +8440,7 @@ fn test_long_options_detached() {
 // Without -R a directory can never be revisited, so ls should not spend a stat
 // recording it for the loop detection that only recursion consults.
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(not(wasi_runner))]
 fn test_no_extra_stat_without_recursion() {
     use std::process::Command;
@@ -8699,7 +8699,7 @@ fn test_ls_dereference_sibling_alias_not_already_listed() {
 #[case(&["-lLZ", "."], "./entry")]
 #[case(&["-lLd", "entry"], "entry")]
 #[case(&["--dereference-command-line-symlink-to-dir", "-d", "--color=always", "entry"], "entry")]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(not(wasi_runner))]
 fn test_dereferenced_metadata_is_cached(#[case] args: &[&str], #[case] path: &str) {
     use std::process::Command;
