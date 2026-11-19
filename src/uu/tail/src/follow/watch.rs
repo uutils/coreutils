@@ -803,15 +803,11 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
         {
             // The polling backend already includes every input above.
             if !observer.use_polling {
-                let scheduled: HashSet<_> = paths.iter().collect();
-                let devices: Vec<_> = observer
-                    .files
-                    .character_devices()
-                    .iter()
-                    .filter(|path| !scheduled.contains(path))
-                    .cloned()
-                    .collect();
-                paths.extend(devices);
+                let mut devices: HashSet<_> = observer.files.character_devices().iter().collect();
+                for path in &paths {
+                    devices.remove(path);
+                }
+                paths.extend(devices.into_iter().cloned());
             }
             last_device_poll = Instant::now();
         }

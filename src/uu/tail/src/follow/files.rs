@@ -292,7 +292,7 @@ fn is_character_device(_file: &File) -> io::Result<bool> {
 #[cfg(unix)]
 fn read_device(reader: &mut BufReader<File>, chunks: &mut BytesChunkBuffer) -> UResult<bool> {
     // Even an always-ready device must yield to other files and --pid.
-    let mut available = AvailableBytes(reader).take(64 * 1024);
+    let mut available = ReadAvailable::new(AvailableBytes(reader)).take(64 * 1024);
     chunks.fill(&mut available)?;
     Ok(available.limit() == 0)
 }
@@ -351,10 +351,7 @@ impl BufRead for AvailableBytes<'_> {
         if self.0.buffer().is_empty() && !device_is_readable(self.0.get_ref())? {
             return Ok(&[]);
         }
-        match self.0.fill_buf() {
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(&[]),
-            result => result,
-        }
+        self.0.fill_buf()
     }
 
     fn consume(&mut self, amount: usize) {

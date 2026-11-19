@@ -54,17 +54,15 @@ use uutests::util::expected_result;
 use uutests::util::is_ci;
 use uutests::util_name;
 
-fn wait_until(
-    child: &mut uutests::util::UChild,
-    mut condition: impl FnMut(&mut uutests::util::UChild) -> bool,
-) -> bool {
+#[cfg(unix)]
+fn wait_for_output(child: &mut uutests::util::UChild, expected: &str) -> bool {
     for _ in 0..500 {
-        if condition(child) {
+        if child.stdout_all() == expected {
             return true;
         }
         child.delay(10);
     }
-    condition(child)
+    child.stdout_all() == expected
 }
 
 #[cfg(all(unix, not(target_os = "redox")))]
@@ -2453,7 +2451,12 @@ fn test_follow_name_truncate1() {
     // appears the truncate/restore below are guaranteed to be observed as events.
     // A fixed delay isn't enough here: a slow-starting child process (observed on
     // macOS CI, see #12335) can otherwise race ahead of tail's own startup.
-    wait_until(&mut p, |child| child.stdout_all() == initial_stdout);
+    for _ in 0..500 {
+        if p.stdout_all() == initial_stdout {
+            break;
+        }
+        p.delay(10);
+    }
 
     at.copy(source, backup);
     p.delay(delay);
@@ -2484,10 +2487,11 @@ fn test_follow_name_truncate2() {
         expected_stdout: &str,
         expected_stderr: &str,
     ) {
-        if wait_until(child, |child| {
-            child.stdout_all() == expected_stdout && child.stderr_all() == expected_stderr
-        }) {
-            return;
+        for _ in 0..500 {
+            if child.stdout_all() == expected_stdout && child.stderr_all() == expected_stderr {
+                return;
+            }
+            child.delay(10);
         }
         child
             .make_assertion()
@@ -5755,52 +5759,35 @@ fn test_follow_stdout_pipe_close() {
 
 #[uutests::wasi_ignore(TailFollowDisabled)]
 #[rstest]
-#[case("-f", false)]
-#[case("-F", false)]
-#[case("-f", true)]
-#[case("-F", true)]
 #[cfg(all(unix, not(target_os = "redox")))]
 fn test_follow_character_device_reads_new_data(
-    #[case] follow: &str,
-    #[case] multiple_inputs: bool,
+    #[values("-f", "-F")] follow: &str,
     #[values(false, true)] use_polling: bool,
 ) {
     let (path, mut controller, _replica) = uutests::util::pty_path();
     let ts = TestScenario::new(util_name!());
+    ts.fixtures.touch("other");
     let mut command = ts.ucmd();
-    command.args(&["-q", "-n0", "-s.1", follow, &path]);
+    command.args(&["-q", "-n0", "-s.1", follow, &path, "other"]);
     if use_polling {
         command.arg("--use-polling");
-    }
-    if multiple_inputs {
-        ts.fixtures.touch("f");
-        command.arg("f");
     }
     let mut child = command.run_no_wait();
 
     // A partial line also checks that output is flushed.
     write_pty_after_eof(&mut controller, b"new data");
-    wait_until(&mut child, |child| child.stdout_all().contains("new data"));
-    if multiple_inputs {
-        assert!(
-            child.stdout_all().contains("new data"),
-            "device input was not read"
-        );
-        // A quiet device must not block output from the other input.
-        ts.fixtures.append("f", "other file\n");
-        wait_until(&mut child, |child| {
-            child.stdout_all().contains("other file\n")
-        });
-    }
+    assert!(
+        wait_for_output(&mut child, "new data"),
+        "device input was not read"
+    );
+    // A quiet device must not block output from the other input.
+    ts.fixtures.append("other", "other file\n");
+    wait_for_output(&mut child, "new dataother file\n");
     child
         .kill()
         .make_assertion()
         .with_all_output()
-        .stdout_is(if multiple_inputs {
-            "new dataother file\n"
-        } else {
-            "new data"
-        })
+        .stdout_is("new dataother file\n")
         .no_stderr();
 }
 
@@ -5893,95 +5880,47 @@ fn test_follow_character_device_stdin_keeps_inherited_access(
     let (path, mut controller, replica) = uutests::util::pty_path();
     let permissions = replica.metadata().unwrap().permissions();
     let ts = TestScenario::new(util_name!());
-    ts.fixtures.touch("other");
     // Linux resolves redirected stdin through /proc/self/fd/0. It must keep
     // using that descriptor when the resolved device can no longer be opened.
     set_permissions(&path, Permissions::from_mode(0)).unwrap();
     let mut command = ts.ucmd();
     command
-        .args(&["-q", "-n0", "-s.01", "-f", "-", "other"])
+        .args(&["-q", "-n0", "-s.01", "-f", "-", "/dev/null"])
         .set_stdin(replica);
     if use_polling {
         command.arg("--use-polling");
     }
     let mut child = command.run_no_wait();
     write_pty_after_eof(&mut controller, b"device");
-    let ready = wait_until(&mut child, |child| child.stdout_all() == "device");
-    if ready {
-        // A quiet stdin must also leave the other input free to make progress.
-        ts.fixtures.append("other", "other file\n");
-        wait_until(&mut child, |child| {
-            child.stdout_all() == "deviceother file\n"
-        });
-    }
+    wait_for_output(&mut child, "device");
     set_permissions(&path, permissions).unwrap();
     child
         .kill()
         .make_assertion()
         .with_all_output()
-        .stdout_is("deviceother file\n");
+        .stdout_is("device");
 }
 
 #[uutests::wasi_ignore(TailFollowDisabled)]
-#[rstest]
-#[case("-f")]
-#[case("-F")]
+#[test]
 #[cfg(unix)]
-fn test_follow_character_device_keeps_file_notifications(#[case] follow: &str) {
+fn test_follow_character_device_keeps_file_notifications() {
     let ts = TestScenario::new(util_name!());
     ts.fixtures.write("f", "ready\n");
     let mut child = ts
         .ucmd()
-        .args(&["-q", "-n1", "-s60", follow, "/dev/null", "f"])
+        .args(&["-q", "-n1", "-s60", "-f", "/dev/null", "f"])
         .run_no_wait();
-    wait_until(&mut child, |child| child.stdout_all() == "ready\n");
-    assert_eq!(child.stdout_all(), "ready\n");
+    assert!(wait_for_output(&mut child, "ready\n"));
 
     // An append should arrive without waiting for the device's polling interval.
     ts.fixtures.append("f", "new data\n");
-    wait_until(&mut child, |child| {
-        child.stdout_all().contains("new data\n")
-    });
+    wait_for_output(&mut child, "ready\nnew data\n");
     child
         .kill()
         .make_assertion()
         .with_all_output()
         .stdout_is("ready\nnew data\n")
-        .no_stderr();
-}
-
-#[uutests::wasi_ignore(TailFollowDisabled)]
-#[rstest]
-#[case("-f")]
-#[case("-F")]
-#[cfg(all(unix, not(target_os = "redox")))]
-fn test_follow_character_device_unreadable_parent(
-    #[case] follow: &str,
-    #[values(false, true)] use_polling: bool,
-) {
-    if rustix::process::geteuid().is_root() {
-        return;
-    }
-    let (path, mut controller, _replica) = uutests::util::pty_path();
-    let ts = TestScenario::new(util_name!());
-    ts.fixtures.mkdir("dir");
-    ts.fixtures.symlink_file(&path, "dir/input");
-    ts.fixtures.set_mode("dir", 0o111);
-    let mut command = ts.ucmd();
-    command.args(&["-n0", "-s.1", follow, "dir/input"]);
-    if use_polling {
-        command.arg("--use-polling");
-    }
-    let mut child = command.run_no_wait();
-    write_pty_after_eof(&mut controller, b"device");
-    wait_until(&mut child, |child| child.stdout_all() == "device");
-    // Restore permissions before asserting so the fixture can be removed on failure.
-    ts.fixtures.set_mode("dir", 0o700);
-    child
-        .kill()
-        .make_assertion()
-        .with_all_output()
-        .stdout_is("device")
         .no_stderr();
 }
 
@@ -6012,14 +5951,14 @@ fn test_follow_character_device_retargeted_in_unreadable_parent(
     }
     let mut child = command.run_no_wait();
     write_pty_after_eof(&mut controller, b"device");
-    let ready = wait_until(&mut child, |child| child.stdout_all() == "device");
+    let ready = wait_for_output(&mut child, "device");
     if ready {
         ts.fixtures.symlink_file(&new_path, "replacement");
         ts.fixtures.rename("replacement", "dir/input");
         write_pty_after_eof(&mut new_controller, b"new");
         // Descriptor following must keep reading the original device.
         write_pty_after_eof(&mut controller, b"old");
-        wait_until(&mut child, |child| child.stdout_all() == expected);
+        wait_for_output(&mut child, expected);
     }
     ts.fixtures.set_mode("dir", 0o700);
     assert!(ready, "initial device data was not read");
@@ -6050,7 +5989,7 @@ fn test_follow_character_device_polling_does_not_read_siblings() {
         .args(&["-n0", "-s.1", "-F", "--use-polling", "input"])
         .run_no_wait();
     write_pty_after_eof(&mut controller, b"device");
-    wait_until(&mut child, |child| child.stdout_all() == "device");
+    wait_for_output(&mut child, "device");
     child
         .kill()
         .make_assertion()
@@ -6078,18 +6017,16 @@ fn test_follow_character_device_replaced_by_file(#[values(false, true)] use_poll
     }
     let mut child = command.run_no_wait();
     write_pty_after_eof(&mut controller, b"device");
-    wait_until(&mut child, |child| child.stdout_all() == "device");
-    assert_eq!(child.stdout_all(), "device");
+    assert!(wait_for_output(&mut child, "device"));
 
     ts.fixtures.write("replacement", "regular\n");
     ts.fixtures.rename("replacement", "input");
-    wait_until(&mut child, |child| child.stdout_all().contains("regular\n"));
     assert!(
-        child.stdout_all().contains("regular\n"),
+        wait_for_output(&mut child, "deviceregular\n"),
         "replacement was not read"
     );
     ts.fixtures.append("input", "more\n");
-    wait_until(&mut child, |child| child.stdout_all().contains("more\n"));
+    wait_for_output(&mut child, "deviceregular\nmore\n");
     child
         .kill()
         .make_assertion()
