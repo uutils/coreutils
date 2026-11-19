@@ -12,7 +12,7 @@ use std::io::{BufRead, BufReader, BufWriter, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
-use uucore::char_width::char_width_at;
+use uucore::char_width::{char_width_at, incomplete_utf8_suffix};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
 use uucore::io::InputReader;
@@ -506,17 +506,40 @@ fn expand_file(
 ) -> UResult<()> {
     let mut input = open(file)?;
     let ts = options.tabstops.as_ref();
+    // The start of a multi-byte character that the previous read cut short.
+    // It is joined to the next read, so the character counts as one column.
+    let mut carry: Vec<u8> = Vec::new();
     loop {
         match input.fill_buf() {
             Ok([]) => break,
             Ok(buf) => {
-                expand_buf(buf, output, ts, options, line)
-                    .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
                 let len = buf.len();
+                let joined;
+                let data: &[u8] = if carry.is_empty() {
+                    buf
+                } else {
+                    carry.extend_from_slice(buf);
+                    joined = std::mem::take(&mut carry);
+                    &joined
+                };
+                let keep = if options.utf8 {
+                    incomplete_utf8_suffix(data)
+                } else {
+                    0
+                };
+                let (complete, rest) = data.split_at(data.len() - keep);
+                expand_buf(complete, output, ts, options, line)
+                    .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+                carry = rest.to_vec();
                 input.consume(len);
             }
             Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
         }
+    }
+    // The file ended inside a character: write the bytes as they are.
+    if !carry.is_empty() {
+        expand_buf(&carry, output, ts, options, line)
+            .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
     }
     Ok(())
 }

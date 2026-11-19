@@ -10,7 +10,7 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Stdin, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
-use uucore::char_width::char_info_at;
+use uucore::char_width::{char_info_at, incomplete_utf8_suffix};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
 use uucore::io::InputReader;
@@ -710,6 +710,24 @@ fn unexpand_file(
     result
 }
 
+/// Unexpands the lines of one chunk of input, carrying the line state in `print_state`.
+fn unexpand_lines(
+    buf: &[u8],
+    output: &mut BufWriter<Stdout>,
+    options: &Options,
+    lastcol: usize,
+    tab_config: &TabConfig,
+    print_state: &mut PrintState,
+) -> UResult<()> {
+    for line in buf.split_inclusive(|b| *b == b'\n') {
+        unexpand_buf(line, output, options, lastcol, tab_config, print_state)?;
+        if let Some(b'\n') = line.last() {
+            print_state.new_line();
+        }
+    }
+    Ok(())
+}
+
 /// Unexpands everything `input` yields, carrying the line state in `print_state`.
 fn unexpand_input(
     input: &mut impl BufRead,
@@ -720,20 +738,34 @@ fn unexpand_input(
     tab_config: &TabConfig,
     print_state: &mut PrintState,
 ) -> UResult<()> {
+    // The start of a multi-byte character that the previous read cut short.
+    // It is joined to the next read, so the character counts as one column.
+    let mut carry: Vec<u8> = Vec::new();
     while let buf @ [_, ..] = input
         .fill_buf()
         .map_err(|e| e.map_err_context(|| file.maybe_quote().to_string()) as Box<dyn UError>)?
     {
-        for line in buf.split_inclusive(|b| *b == b'\n') {
-            unexpand_buf(line, output, options, lastcol, tab_config, print_state)?;
-            if let Some(b'\n') = line.last() {
-                print_state.new_line();
-            }
-        }
         let len = buf.len();
+        let joined;
+        let data: &[u8] = if carry.is_empty() {
+            buf
+        } else {
+            carry.extend_from_slice(buf);
+            joined = std::mem::take(&mut carry);
+            &joined
+        };
+        let keep = if options.utf8 {
+            incomplete_utf8_suffix(data)
+        } else {
+            0
+        };
+        let (complete, rest) = data.split_at(data.len() - keep);
+        unexpand_lines(complete, output, options, lastcol, tab_config, print_state)?;
+        carry = rest.to_vec();
         input.consume(len);
     }
-    Ok(())
+    // The input ended inside a character: write the bytes as they are.
+    unexpand_lines(&carry, output, options, lastcol, tab_config, print_state)
 }
 
 fn unexpand(options: &Options) -> UResult<()> {
