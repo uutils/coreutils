@@ -36,10 +36,10 @@ fn test_install_basic_try_reflink() {
     at.touch(file1);
     at.touch(file2);
     at.mkdir(dir);
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     ucmd.arg(file1).arg(file2).arg(dir).succeeds().no_stderr();
     // mkfs.btrfs needs root. use strace instead.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     if std::process::Command::new("strace")
         .args(["-qqq", "-o", "strace.out", "-e", "trace=ioctl"])
         .arg(uutests::util::get_tests_binary())
@@ -3379,7 +3379,7 @@ fn test_install_d_parallel_mkdir_race() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_install_target_without_splice_support() {
     // Does eCryptfs not support splice on some kernel?
     use std::process::Command;

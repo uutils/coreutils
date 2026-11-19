@@ -2338,7 +2338,7 @@ fn test_nocache_eof() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(not(wasi_runner))]
 fn test_nocache_eof_fadvise_zero_length() {
     use std::process::Command;
