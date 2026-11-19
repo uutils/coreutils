@@ -806,15 +806,12 @@ fn compute_and_check_digest_from_file(
     }
 }
 
-/// Check a digest checksum with non-algo based pre-treatment.
+/// Get the expected digest and the algorithm of an algo-based line.
 fn process_algo_based_line(
     line_info: &LineInfo,
     cli_algo_kind: Option<AlgoKind>,
-    opts: ChecksumValidateOptions,
     last_algo: &mut Option<String>,
-) -> Result<(), LineCheckError> {
-    let filename_to_check = line_info.filename.as_slice();
-
+) -> Result<(Vec<u8>, SizedAlgoKind), LineCheckError> {
     let (algo_kind, algo_len) = identify_algo_name_and_length(line_info, cli_algo_kind, last_algo)?;
 
     // If the digest bitlen is known, we can check the format of the expected
@@ -834,22 +831,15 @@ fn process_algo_based_line(
     let algo = SizedAlgoKind::from_unsized(algo_kind, algo_len)
         .map_err(|_| LineCheckError::ImproperlyFormatted)?;
 
-    compute_and_check_digest_from_file(
-        filename_to_check,
-        line_info.escaped,
-        &expected_checksum,
-        algo,
-        opts,
-    )
+    Ok((expected_checksum, algo))
 }
 
-/// Check a digest checksum with non-algo based pre-treatment.
+/// Get the expected digest and the algorithm of a line without an algorithm name.
 fn process_non_algo_based_line(
     line_info: &LineInfo,
     cli_algo_kind: AlgoKind,
     cli_algo_length: Option<HashLength>,
-    opts: ChecksumValidateOptions,
-) -> Result<(), LineCheckError> {
+) -> Result<(Vec<u8>, SizedAlgoKind), LineCheckError> {
     use AlgoKind as ak;
 
     let expected_digest_sum = cli_algo_kind.expected_digest_bit_len();
@@ -879,13 +869,7 @@ fn process_non_algo_based_line(
 
     let algo = SizedAlgoKind::from_unsized(cli_algo_kind, algo_len)?;
 
-    compute_and_check_digest_from_file(
-        &line_info.filename,
-        line_info.escaped,
-        &expected_checksum,
-        algo,
-        opts,
-    )
+    Ok((expected_checksum, algo))
 }
 
 /// Parses a checksum line, detect the algorithm to use, read the file and produce
@@ -917,21 +901,25 @@ fn process_checksum_line(
     let line_info = LineInfo::parse(line, &mut line_format, opts.allow_empty_filename)
         .ok_or(LineCheckError::ImproperlyFormatted)?;
 
-    let result = if line_info.format == LineFormat::AlgoBased {
-        process_algo_based_line(&line_info, cli_algo_name, opts, last_algo)
+    let (expected_checksum, algo) = if line_info.format == LineFormat::AlgoBased {
+        process_algo_based_line(&line_info, cli_algo_name, last_algo)?
     } else if let Some(cli_algo) = cli_algo_name {
         // If we match a non-algo based parser, we expect a cli argument
         // to give us the algorithm to use
-        process_non_algo_based_line(&line_info, cli_algo, cli_algo_length, opts)
+        process_non_algo_based_line(&line_info, cli_algo, cli_algo_length)?
     } else {
         // We have no clue of what algorithm to use
-        Err(LineCheckError::ImproperlyFormatted)
+        return Err(LineCheckError::ImproperlyFormatted);
     };
+    *cached_line_format = line_format;
 
-    if !matches!(result, Err(LineCheckError::ImproperlyFormatted)) {
-        *cached_line_format = line_format;
-    }
-    result
+    compute_and_check_digest_from_file(
+        &line_info.filename,
+        line_info.escaped,
+        &expected_checksum,
+        algo,
+        opts,
+    )
 }
 
 fn process_checksum_file(
