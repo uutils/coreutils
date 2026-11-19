@@ -270,15 +270,52 @@ impl ChownExecutor {
         Ok(())
     }
 
+    fn target_spec(&self) -> (&'static str, String) {
+        if self.verbosity.groups_only {
+            let group = self.raw_owner.strip_prefix('+').unwrap_or(&self.raw_owner);
+            return ("group", group.to_string());
+        }
+
+        let (user_part, group_part) = if let Some((u, g)) = self.raw_owner.split_once(':') {
+            (Some(u), Some(g))
+        } else if let Some((u, g)) = self.raw_owner.split_once('.') {
+            (Some(u), Some(g))
+        } else {
+            (Some(self.raw_owner.as_str()), None)
+        };
+
+        let user = user_part
+            .filter(|u| !u.is_empty())
+            .map(|u| u.strip_prefix('+').unwrap_or(u).to_string());
+
+        let group = if let Some(g) = group_part {
+            if g.is_empty() {
+                self.dest_gid
+                    .map(|gid| entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()))
+            } else {
+                Some(g.strip_prefix('+').unwrap_or(g).to_string())
+            }
+        } else {
+            None
+        };
+
+        match (user, group) {
+            (Some(u), Some(g)) => ("ownership", format!("{u}:{g}")),
+            (Some(u), None) => ("ownership", u),
+            (None, Some(g)) => ("group", g),
+            (None, None) => ("ownership", self.raw_owner.clone()),
+        }
+    }
+
     #[allow(clippy::cognitive_complexity)]
     fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
         let path = root.as_ref();
         let Some(meta) = self.obtain_meta(path, self.dereference) else {
             if self.verbosity.level == VerbosityLevel::Verbose {
+                let (kind, target) = self.target_spec();
                 self.write_verbose_line(&format!(
-                    "failed to change ownership of {} to {}",
-                    path.quote(),
-                    self.raw_owner
+                    "failed to change {kind} of {} to {target}",
+                    path.quote()
                 ));
             }
             return 1;
