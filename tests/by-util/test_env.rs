@@ -2275,6 +2275,35 @@ fn test_shebang_error() {
 }
 
 #[test]
+fn test_shebang_hint_only_when_argument_has_space() {
+    let hint = "use -[v]S to pass options in shebang lines";
+
+    // A whole shebang line passed as the program name or as an option.
+    new_ucmd!()
+        .arg("cat -n")
+        .fails_with_code(127)
+        .stderr_contains(hint);
+    new_ucmd!()
+        .arg("-v -S cat -n")
+        .fails_with_code(125)
+        .stderr_contains(hint);
+
+    // Plain missing programs and bad options don't get the hint.
+    new_ucmd!()
+        .arg("nosuchcmd")
+        .fails_with_code(127)
+        .stderr_is("env: 'nosuchcmd': No such file or directory\n");
+    new_ucmd!()
+        .arg("--bogus")
+        .fails_with_code(125)
+        .stderr_does_not_contain(hint);
+    new_ucmd!()
+        .args(&["-v", "-x y"])
+        .fails_with_code(125)
+        .stderr_does_not_contain(hint);
+}
+
+#[test]
 #[cfg(not(windows))]
 fn test_reject_shell_style_variable_expansions() {
     for split in [
