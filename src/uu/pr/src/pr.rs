@@ -1692,7 +1692,9 @@ fn get_line_for_printing(
 
     let is_last_cell = (index + 1) == indexes;
     if let Some(i) = line_width {
-        let min_width = i.saturating_sub(columns - 1) / columns;
+        // Like GNU pr, each byte of the separator takes one column.
+        let separators = (columns - 1) * options.col_sep_for_printing.len();
+        let min_width = i.saturating_sub(separators) / columns;
         // Like GNU pr, the last cell of a row is not padded, so the line has
         // no trailing spaces.
         if display_length < min_width && !is_last_cell {
