@@ -595,6 +595,14 @@ fn test_offset_large_value_does_not_abort_under_memory_limit() {
         .args(&["-t", "-o", "999999999"])
         .pipe_in("hi\n")
         .succeeds();
+
+    // With the page header, which is also indented
+    new_ucmd!()
+        .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
+        .set_stdout(Stdio::null())
+        .args(&["-o", "999999999"])
+        .pipe_in("hi\n")
+        .succeeds();
 }
 
 #[test]
