@@ -9867,7 +9867,8 @@ fn test_cp_early_stat_failure_keeps_untouched_destination_inode() {
 
 #[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
-#[cfg(unix)]
+// Android SELinux denies hard links in the test directory (PermissionDenied).
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_cp_unreadable_source_keeps_destination_inode_and_hard_links() {
     if rustix::process::geteuid().is_root() {
         return;
