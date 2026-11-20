@@ -6044,3 +6044,35 @@ fn test_invalid_max_unchanged_stats_is_rejected() {
             .stderr_contains(value);
     }
 }
+
+#[test]
+fn test_invalid_overridden_count_is_rejected() {
+    for (args, message) in [
+        (
+            &["--bytes", "1,2", "--lines", "2"][..],
+            "tail: invalid number of bytes: '1,2'\n",
+        ),
+        (
+            &["--lines", "1,2", "--bytes", "2"][..],
+            "tail: invalid number of lines: '1,2'\n",
+        ),
+        (
+            &["-n", "1,2", "-c2"][..],
+            "tail: invalid number of lines: '1,2'\n",
+        ),
+        (
+            &["--byte=1,2", "-n1"][..],
+            "tail: invalid number of bytes: '1,2'\n",
+        ),
+        (
+            &["--line", "1,2", "-c1"][..],
+            "tail: invalid number of lines: '1,2'\n",
+        ),
+        (
+            &["-n1,2", "-c2"][..],
+            "tail: invalid number of lines: '1,2'\n",
+        ),
+    ] {
+        new_ucmd!().args(args).fails_with_code(1).stderr_is(message);
+    }
+}

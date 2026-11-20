@@ -20,6 +20,7 @@ use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use uucore::line_ending::LineEnding;
+use uucore::parser::count_option::{CountOption, count_option_arguments};
 use uucore::parser::parse_signed_num::number_offset;
 use uucore::parser::parse_size::ParseSizeError;
 use uucore::quoting_style::locale_aware_shell_escape;
@@ -106,41 +107,45 @@ impl SizeError {
     }
 }
 
+fn failed(
+    value: &str,
+    short: char,
+    long: &'static str,
+    key: &'static str,
+) -> impl FnOnce(ParseSizeError) -> SizeError {
+    let option = OptionValue::new(value, short, long);
+    move |error| SizeError {
+        message: translate!(key, "err" => &error),
+        option,
+        error,
+    }
+}
+
 impl Mode {
     fn from(matches: &ArgMatches) -> Result<Self, SizeError> {
-        fn failed(
-            value: &str,
-            short: char,
-            long: &'static str,
-            key: &'static str,
-        ) -> impl FnOnce(ParseSizeError) -> SizeError {
-            let option = OptionValue::new(value, short, long);
-            move |error| SizeError {
-                message: translate!(key, "err" => &error),
-                option,
-                error,
-            }
+        let mut mode = None;
+
+        for argument in count_option_arguments(matches, options::BYTES, options::LINES) {
+            let option = argument.option;
+            let value = argument.value;
+            let (n, all_but_last) = parse::parse_num(&value).map_err(|error| match option {
+                CountOption::Bytes => {
+                    failed(&value, 'c', "bytes", "head-error-invalid-bytes")(error)
+                }
+                CountOption::Lines => {
+                    failed(&value, 'n', "lines", "head-error-invalid-lines")(error)
+                }
+            })?;
+
+            mode = Some(match (option, all_but_last) {
+                (CountOption::Bytes, true) => Self::AllButLastBytes(n),
+                (CountOption::Bytes, false) => Self::FirstBytes(n),
+                (CountOption::Lines, true) => Self::AllButLastLines(n),
+                (CountOption::Lines, false) => Self::FirstLines(n),
+            });
         }
 
-        if let Some(v) = matches.get_one::<String>(options::BYTES) {
-            let (n, all_but_last) =
-                parse::parse_num(v).map_err(failed(v, 'c', "bytes", "head-error-invalid-bytes"))?;
-            if all_but_last {
-                Ok(Self::AllButLastBytes(n))
-            } else {
-                Ok(Self::FirstBytes(n))
-            }
-        } else if let Some(v) = matches.get_one::<String>(options::LINES) {
-            let (n, all_but_last) =
-                parse::parse_num(v).map_err(failed(v, 'n', "lines", "head-error-invalid-lines"))?;
-            if all_but_last {
-                Ok(Self::AllButLastLines(n))
-            } else {
-                Ok(Self::FirstLines(n))
-            }
-        } else {
-            Ok(Self::default())
-        }
+        Ok(mode.unwrap_or_default())
     }
 }
 
