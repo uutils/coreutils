@@ -550,10 +550,7 @@ impl ChownExecutor {
                 // Only a followed stat can also fail on a dangling symlink.
                 Err(e)
                     if e.kind() == std::io::ErrorKind::NotFound
-                        && !(follow
-                            && dir_fd
-                                .metadata_at(&entry_name, SymlinkBehavior::NoFollow)
-                                .is_ok_and(|m| m.file_type().is_symlink())) =>
+                        && !(follow && dir_fd.is_symlink_at(&entry_name)) =>
                 {
                     continue;
                 }

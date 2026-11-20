@@ -782,24 +782,21 @@ impl Chmoder {
         for entry_name in entries {
             let entry_path = dir_path.join(&entry_name);
 
-            // Checked through the fd, as the path may exceed PATH_MAX.
-            let is_symlink = || {
-                dir_fd
-                    .metadata_at(&entry_name, SymlinkBehavior::NoFollow)
-                    .is_ok_and(|m| m.file_type().is_symlink())
-            };
             let meta = match dir_fd.metadata_at(&entry_name, should_follow_symlink.into()) {
                 Ok(meta) => meta,
                 // Removed since the directory was listed: skip it, like GNU.
-                // Only a followed stat can also fail on a dangling symlink.
+                // Only a followed stat can also fail on a dangling symlink,
+                // checked through the fd as the path may exceed PATH_MAX.
                 Err(err)
                     if err.kind() == std::io::ErrorKind::NotFound
-                        && !(should_follow_symlink && is_symlink()) =>
+                        && !(should_follow_symlink && dir_fd.is_symlink_at(&entry_name)) =>
                 {
                     continue;
                 }
                 Err(err) => {
-                    let error = if err.kind() == std::io::ErrorKind::NotFound && is_symlink() {
+                    let error = if err.kind() == std::io::ErrorKind::NotFound
+                        && dir_fd.is_symlink_at(&entry_name)
+                    {
                         ChmodError::DanglingSymlink(entry_path.clone())
                     } else if err.kind() == std::io::ErrorKind::PermissionDenied {
                         ChmodError::PermissionDenied(entry_path.clone())
