@@ -4124,6 +4124,7 @@ dependencies = [
  "notify",
  "rstest",
  "rustix",
+ "tempfile",
  "uucore",
  "windows-sys",
 ]
