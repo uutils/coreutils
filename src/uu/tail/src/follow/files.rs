@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore tailable stdlib (stdlib)
+// spell-checker:ignore nonblocking POLLNVAL
 
 use crate::args::Settings;
 use crate::chunks::BytesChunkBuffer;
@@ -139,17 +140,7 @@ impl FileHandling {
 
     /// Reopen the file at the monitored `path`
     pub fn update_reader(&mut self, path: &Path) -> UResult<()> {
-        // A FIFO without a writer must not block the thread serving all files.
-        let file = open_file(path, true)?;
-        #[cfg(unix)]
-        if !self.nonblocking {
-            use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
-
-            // Without --pid, preserve blocking reads after the nonblocking open.
-            let flags = fcntl_getfl(&file).map_err(io::Error::from)?;
-            fcntl_setfl(&file, flags & !OFlags::NONBLOCK).map_err(io::Error::from)?;
-        }
-        let is_character_device = is_character_device(&file)?;
+        let (file, is_character_device) = open_follow_file(path, self.nonblocking)?;
         let key = Self::canonicalize_path(path);
         let data = self.map.get_mut(&key).unwrap();
         data.reader.replace(BufReader::new(file));
@@ -261,7 +252,7 @@ impl PathData {
         let reader = if old_reader.is_some() {
             // Use old reader with the same file descriptor if there is one
             old_reader
-        } else if let Ok(file) = open_file(path, nonblocking) {
+        } else if let Ok((file, _)) = open_follow_file(path, nonblocking) {
             // Open new file tail from start
             Some(BufReader::new(file))
         } else {
@@ -278,6 +269,27 @@ impl PathData {
     }
 }
 
+fn open_follow_file(
+    path: &Path,
+    #[cfg(unix)] nonblocking: bool,
+    #[cfg(not(unix))] _: bool,
+) -> io::Result<(File, bool)> {
+    // A FIFO without a writer must not block the thread serving all files.
+    let file = open_file(path, true)?;
+    let is_character_device = is_character_device(&file)?;
+    #[cfg(unix)]
+    if !nonblocking && !is_character_device {
+        use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
+
+        // Devices must stay nonblocking even if another reader consumes their
+        // input between the readiness check and the read. Preserve the existing
+        // blocking behavior for other files when --pid is absent.
+        let flags = fcntl_getfl(&file).map_err(io::Error::from)?;
+        fcntl_setfl(&file, flags & !OFlags::NONBLOCK).map_err(io::Error::from)?;
+    }
+    Ok((file, is_character_device))
+}
+
 /// Check the descriptor rather than a path that may already name another file.
 #[cfg(unix)]
 fn is_character_device(file: &File) -> io::Result<bool> {
@@ -285,6 +297,7 @@ fn is_character_device(file: &File) -> io::Result<bool> {
 }
 
 #[cfg(not(unix))]
+#[allow(clippy::unnecessary_wraps)] // Match the fallible Unix implementation.
 fn is_character_device(_file: &File) -> io::Result<bool> {
     Ok(false)
 }
@@ -333,6 +346,7 @@ fn device_is_readable(file: &File) -> io::Result<bool> {
 }
 
 /// Check readiness before each refill without changing flags shared with stdin's owner.
+/// Owned devices are nonblocking; inherited stdin can still race with another reader.
 #[cfg(unix)]
 struct AvailableBytes<'a>(&'a mut BufReader<File>);
 
@@ -367,6 +381,27 @@ mod tests {
     use std::os::unix::net::UnixStream;
     use std::sync::Barrier;
     use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[test]
+    fn reopened_device_stays_nonblocking() {
+        let settings = Settings::default();
+        let path = Path::new("/dev/null");
+        let mut files = FileHandling::from(&settings);
+        files.insert(
+            path,
+            PathData::new(None, None, "device", false).unwrap(),
+            false,
+        );
+
+        files.update_reader(path).unwrap();
+
+        let reader = files.get(path).reader.as_ref().unwrap();
+        assert!(
+            fcntl_getfl(reader.get_ref())
+                .unwrap()
+                .contains(OFlags::NONBLOCK)
+        );
+    }
 
     #[test]
     fn device_reads_preserve_shared_flags() {
@@ -415,5 +450,23 @@ mod tests {
         AvailableBytes(&mut reader).read_to_end(&mut bytes).unwrap();
         assert_eq!(bytes, b"ata");
         assert!(reader.buffer().is_empty());
+    }
+
+    #[test]
+    fn device_hangup_drains_data_without_busy_looping() {
+        let (input, mut output) = UnixStream::pair().unwrap();
+        let mut reader = BufReader::new(File::from(OwnedFd::from(input)));
+        output.write_all(b"data").unwrap();
+        drop(output);
+
+        let mut chunks = BytesChunkBuffer::new(u64::MAX);
+        assert!(!read_device(&mut reader, &mut chunks).unwrap());
+        let mut bytes = Vec::new();
+        chunks.write(&mut bytes).unwrap();
+        assert_eq!(bytes, b"data");
+
+        let mut chunks = BytesChunkBuffer::new(u64::MAX);
+        assert!(!read_device(&mut reader, &mut chunks).unwrap());
+        assert!(!chunks.has_data());
     }
 }

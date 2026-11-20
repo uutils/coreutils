@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) tailable untailable stdlib kqueue Uncategorized unwatch
+// spell-checker:ignore nonblocking
 
 use crate::args::{FollowMode, Settings};
 use crate::follow::files::{FileHandling, PathData};
@@ -92,17 +93,21 @@ impl WatcherRx {
         {
             return Ok(false);
         }
-        self.watch(path, RecursiveMode::NonRecursive)?;
-        // Native events let us notice name replacements promptly. The polling
-        // pass also checks device names, so an unreadable parent is harmless.
-        // PollWatcher must not watch the parent: it would also hash siblings.
-        if !use_polling && let Some(parent) = path.parent() {
+        // kqueue opens watched paths in blocking mode, which can wait for a
+        // carrier on serial devices. Native watchers only need the parent to
+        // report name replacements; device input is polled separately.
+        if use_polling {
+            // Watching the parent would also hash unrelated siblings.
+            self.watch(path, RecursiveMode::NonRecursive)?;
+        } else if let Some(parent) = path.parent() {
+            // The polling pass checks names even if the parent is unreadable.
             let _ = self.watcher.watch(parent, RecursiveMode::NonRecursive);
         }
         Ok(true)
     }
 
     #[cfg(not(unix))]
+    #[allow(clippy::unnecessary_wraps)] // Match the fallible Unix implementation.
     fn watch_character_device(&mut self, _path: &Path, _use_polling: bool) -> UResult<bool> {
         Ok(false)
     }
@@ -679,22 +684,34 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
         }
 
         let mut paths = vec![]; // Paths worth checking for new content to print
+        let mut scheduled = HashSet::new();
 
         // Helper closure to process a single event
-        let process_event = |observer: &mut Observer,
-                             event: notify::Event,
-                             settings: &Settings,
-                             paths: &mut Vec<PathBuf>|
+        let mut process_event = |observer: &mut Observer,
+                                 event: notify::Event,
+                                 settings: &Settings,
+                                 paths: &mut Vec<PathBuf>|
          -> UResult<()> {
+            // A content or metadata update to a tracked input cannot replace a
+            // sibling device's name. Avoid scanning all devices for such events.
+            let input_update = matches!(
+                event.kind,
+                notify::EventKind::Access(_)
+                    | notify::EventKind::Modify(
+                        notify::event::ModifyKind::Data(_) | notify::event::ModifyKind::Metadata(_)
+                    )
+            ) && event.paths.iter().all(|path| {
+                observer.files.contains_key(path) && observer.files.get(path).reader.is_some()
+            });
             // kqueue can report a directory change without the replaced child's
             // name. Recheck devices in that directory before reading their FDs.
-            if observer.follow_name() {
+            if observer.follow_name() && !input_update {
                 for device in observer.files.character_devices() {
                     if event.paths.iter().any(|path| {
                         device
                             .parent()
                             .is_some_and(|parent| path == parent || path.parent() == Some(parent))
-                    }) && !paths.contains(device)
+                    }) && scheduled.insert(device.clone())
                     {
                         paths.push(device.clone());
                     }
@@ -709,7 +726,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                 if observer.files.character_devices().contains(path) {
                     // Device events can describe the old target after a rename.
                     // Check the current name in the print loop; -f keeps its FD.
-                    if !paths.contains(path) {
+                    if scheduled.insert(path.clone()) {
                         paths.push(path.clone());
                     }
                     return Ok(());
@@ -717,7 +734,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                 // Handle Event if it is about a path that we are monitoring
                 let new_paths = observer.handle_event(&event, settings)?;
                 for p in new_paths {
-                    if !paths.contains(&p) {
+                    if scheduled.insert(p.clone()) {
                         paths.push(p);
                     }
                 }
@@ -803,11 +820,14 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
         {
             // The polling backend already includes every input above.
             if !observer.use_polling {
-                let mut devices: HashSet<_> = observer.files.character_devices().iter().collect();
-                for path in &paths {
-                    devices.remove(path);
-                }
-                paths.extend(devices.into_iter().cloned());
+                paths.extend(
+                    observer
+                        .files
+                        .character_devices()
+                        .iter()
+                        .filter(|path| scheduled.insert((*path).clone()))
+                        .cloned(),
+                );
             }
             last_device_poll = Instant::now();
         }
@@ -838,7 +858,52 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
 mod tests {
     use super::*;
     use notify::event::{ModifyKind, RenameMode};
+    use rstest::rstest;
     use std::io::{Seek, SeekFrom};
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Default)]
+    struct RecordingWatcher(Arc<Mutex<Vec<PathBuf>>>);
+
+    impl Watcher for RecordingWatcher {
+        fn new<F: notify::EventHandler>(_: F, _: notify::Config) -> notify::Result<Self> {
+            Ok(Self::default())
+        }
+
+        fn watch(&mut self, path: &Path, _: RecursiveMode) -> notify::Result<()> {
+            self.0.lock().unwrap().push(path.to_owned());
+            Ok(())
+        }
+
+        fn unwatch(&mut self, _: &Path) -> notify::Result<()> {
+            Ok(())
+        }
+
+        fn kind() -> WatcherKind {
+            WatcherKind::NullWatcher
+        }
+    }
+
+    #[rstest]
+    #[case(false, "/dev")]
+    #[case(true, "/dev/null")]
+    fn device_watch_does_not_open_device_or_poll_siblings(
+        #[case] use_polling: bool,
+        #[case] expected: &str,
+    ) {
+        let watcher = RecordingWatcher::default();
+        let watched = Arc::clone(&watcher.0);
+        let (_, receiver) = channel();
+        let mut watcher_rx = WatcherRx::new(Box::new(watcher), receiver);
+
+        watcher_rx
+            .watch_with_parent(Path::new("/dev/null"), use_polling)
+            .unwrap();
+
+        // A native backend may open every registered path in blocking mode.
+        // PollWatcher must not read siblings by registering the directory.
+        assert_eq!(*watched.lock().unwrap(), [PathBuf::from(expected)]);
+    }
 
     #[test]
     fn duplicate_rename_event_preserves_reader_position() {
