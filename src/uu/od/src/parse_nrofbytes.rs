@@ -64,8 +64,17 @@ pub fn parse_number_of_bytes(s: &str) -> Result<u64, ParseSizeError> {
         _ => {}
     }
 
-    let factor = u64::from_str_radix(&s[start..len], radix)
-        .map_err(|e| ParseSizeError::ParseFailure(e.to_string()))?;
+    let digits = &s[start..len];
+    // A number made of valid digits that does not fit u64 is too large,
+    // not invalid: GNU accepts it as a number and reports the overflow.
+    let all_digits = !digits.is_empty() && digits.chars().all(|c| c.is_digit(radix));
+    let factor = u64::from_str_radix(digits, radix).map_err(|e| {
+        if all_digits {
+            ParseSizeError::SizeTooBig(s.to_string())
+        } else {
+            ParseSizeError::ParseFailure(e.to_string())
+        }
+    })?;
     factor
         .checked_mul(multiply)
         .ok_or_else(|| ParseSizeError::SizeTooBig(s.to_string()))
