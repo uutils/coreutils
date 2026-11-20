@@ -870,6 +870,10 @@ trait ManageOutFiles {
     /// instead of created anew if we need to keep writing into them later,
     /// i.e. in case of round robin distribution as in [`n_chunks_by_line_round_robin`]
     fn get_writer(&mut self, idx: usize, settings: &Settings) -> UResult<&mut Writer>;
+    /// Create (or truncate) every output file that was never opened, e.g. because
+    /// [`Self::init`] deferred it due to the open files limit and it received no data.
+    /// Files are opened and closed one at a time to stay within that limit.
+    fn create_unopened(&mut self, settings: &Settings) -> UResult<()>;
 }
 
 impl ManageOutFiles for OutFiles {
@@ -965,6 +969,17 @@ impl ManageOutFiles for OutFiles {
             // Instantiate it and record for future use.
             self.instantiate_writer(idx, settings)
         }
+    }
+
+    fn create_unopened(&mut self, settings: &Settings) -> UResult<()> {
+        for idx in 0..self.len() {
+            if self[idx].is_new && self[idx].maybe_writer.is_none() {
+                self.instantiate_writer(idx, settings)?.flush()?;
+                self[idx].maybe_writer = None;
+                self[idx].is_new = false;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -1096,6 +1111,7 @@ fn n_chunks_by_byte(
             break;
         }
     }
+    out_files.create_unopened(settings)?;
     Ok(())
 }
 
@@ -1246,6 +1262,9 @@ fn n_chunks_by_line(
             break;
         }
     }
+    if !settings.elide_empty_files {
+        out_files.create_unopened(settings)?;
+    }
     Ok(())
 }
 
@@ -1341,6 +1360,9 @@ fn n_chunks_by_line_round_robin(
         if record_complete {
             i += 1;
         }
+    }
+    if !settings.elide_empty_files {
+        out_files.create_unopened(settings)?;
     }
     Ok(())
 }
