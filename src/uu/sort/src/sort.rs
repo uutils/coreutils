@@ -411,12 +411,17 @@ impl GlobalSettings {
     /// character onwards, and `-n -t. -k2` on its second field, neither of
     /// which the line as a whole stands for. A key whose `r` differs from the
     /// global one also has to go the long way, since the shortcut only knows
-    /// the global one.
+    /// the global one. The shortcut parses with `.` as the decimal point, so a
+    /// locale with another one goes the long way too: in `de_DE`, `1.000` is a
+    /// thousand, not one.
     fn can_use_whole_line_numeric(&self) -> bool {
         let [selector] = &self.selectors[..] else {
             return false;
         };
-        self.mode == SortMode::Numeric
+        self.numeric_locale
+            .decimal_pt
+            .is_none_or(|decimal_pt| decimal_pt == b'.')
+            && self.mode == SortMode::Numeric
             && selector.settings.mode == SortMode::Numeric
             && selector.settings.reverse == self.reverse
             && selector.from.field == 1
