@@ -351,6 +351,14 @@ impl DirFd {
             .map(Metadata::from_stat)
     }
 
+    /// Whether `name`, relative to this directory, is a symlink. An entry that
+    /// cannot be stat-ed is not one, so after a following stat failed with
+    /// ENOENT this tells a dangling symlink from an entry that is gone.
+    pub fn is_symlink_at(&self, name: &OsStr) -> bool {
+        self.metadata_at(name, SymlinkBehavior::NoFollow)
+            .is_ok_and(|m| m.file_type().is_symlink())
+    }
+
     /// Get metadata for this directory
     pub fn metadata(&self) -> io::Result<Metadata> {
         self.fstat().map(Metadata::from_stat)
@@ -1116,6 +1124,20 @@ mod tests {
 
         let result = DirFd::open(&file_path, SymlinkBehavior::Follow);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_dirfd_is_symlink_at() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("file"), "").unwrap();
+        symlink("file", temp_dir.path().join("link")).unwrap();
+        symlink("missing", temp_dir.path().join("dangling")).unwrap();
+
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        assert!(!dir_fd.is_symlink_at(OsStr::new("file")));
+        assert!(dir_fd.is_symlink_at(OsStr::new("link")));
+        assert!(dir_fd.is_symlink_at(OsStr::new("dangling")));
+        assert!(!dir_fd.is_symlink_at(OsStr::new("missing")));
     }
 
     #[test]

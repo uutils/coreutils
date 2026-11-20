@@ -3348,6 +3348,31 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
     gnu_cmd_result(ts, args, &[])
 }
 
+/// Run `util_name args` under `strace strace_args` in the fixture
+/// subdirectory `dir`. Returns the exit status and stderr, minus `strace`'s
+/// own `strace: ` lines, or `None` if `strace` could not be started.
+#[cfg(target_os = "linux")]
+pub fn run_ucmd_with_strace(
+    ts: &TestScenario,
+    dir: &str,
+    strace_args: &[&str],
+    args: &[&str],
+) -> Option<(ExitStatus, String)> {
+    Command::new("strace")
+        .args(strace_args)
+        .arg(&ts.bin_path)
+        .arg(&ts.util_name)
+        .args(args)
+        .current_dir(ts.fixtures.plus(dir))
+        .output()
+        .ok()
+        .map(|o| {
+            let stderr = String::from_utf8_lossy(&o.stderr);
+            let stderr = stderr.lines().filter(|l| !l.starts_with("strace: "));
+            (o.status, stderr.collect::<Vec<_>>().join("\n"))
+        })
+}
+
 /// This is a convenience wrapper to run a ucmd with root permissions.
 /// It can be used to test programs when being root is needed
 /// This runs `sudo -E --non-interactive target/debug/coreutils util_name args`
