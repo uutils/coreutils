@@ -85,6 +85,7 @@ jiff = "0.2.18"
 jiff-icu = "0.2.2"
 jiff-tzdb = "0.1"
 libc = "0.2.191"
+libloading = "0.8.9"
 lscolors = { version = "0.21.0", default-features = false, features = [
   "gnu_legacy",
 ] }

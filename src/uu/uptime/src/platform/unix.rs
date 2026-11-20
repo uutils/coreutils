@@ -17,7 +17,7 @@ use uucore::error::UResult;
 use uucore::translate;
 use uucore::uptime::get_uptime;
 #[cfg(not(any(target_os = "openbsd", target_os = "android")))]
-use uucore::utmpx::{BOOT_TIME, USER_PROCESS, Utmpx};
+use uucore::utmpx::{BOOT_TIME, USER_PROCESS, Utmpx, time::OffsetDateTime};
 
 use crate::{UptimeError, options, print_loadavg, print_nusers, print_time, print_uptime};
 
@@ -161,9 +161,12 @@ fn process_utmpx(file: Option<&OsString>) -> (Option<i64>, usize) {
         match line.record_type() {
             x if x == USER_PROCESS => nusers += 1,
             x if x == BOOT_TIME => {
-                let dt = line.login_time();
-                if dt.unix_timestamp() > 0 {
-                    boot_time = Some(dt.unix_timestamp());
+                if let Some(timestamp) = line
+                    .login_time()
+                    .map(OffsetDateTime::unix_timestamp)
+                    .filter(|&timestamp| timestamp > 0)
+                {
+                    boot_time = Some(timestamp);
                 }
             }
             _ => (),

@@ -22,6 +22,9 @@ clap = { workspace = true }
 fluent = { workspace = true }
 uucore = { workspace = true, features = ["utmpx", "entries"] }
 
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+uucore = { workspace = true, features = ["systemd_logind_test"] }
+
 [features]
 systemd_logind = ["uucore/systemd_logind"]
 

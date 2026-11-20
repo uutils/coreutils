@@ -217,7 +217,25 @@ fn format_timestamp(ut: &UtmpxRecord) -> String {
         )
         .unwrap()
     };
-    ut.login_time().format(&pattern).unwrap()
+    ut.login_time()
+        .map_or_else(|| "?".into(), |time| time.format(&pattern).unwrap())
+}
+
+fn format_pid(ut: &UtmpxRecord) -> String {
+    ut.pid().map_or_else(|| "?".into(), |pid| pid.to_string())
+}
+
+#[cfg(all(test, target_os = "linux", feature = "systemd_logind"))]
+mod logind_tests {
+    use super::*;
+    use uucore::systemd_logind::{SystemdUtmpxCompat, test_session_record};
+
+    #[test]
+    fn unavailable_time_and_pid_are_question_marks() {
+        let record = UtmpxRecord::Systemd(SystemdUtmpxCompat::new(test_session_record()));
+        assert_eq!(format_timestamp(&record), "?");
+        assert_eq!(format_pid(&record), "?");
+    }
 }
 
 fn current_tty() -> String {
@@ -301,7 +319,7 @@ impl Who {
 
     fn emit_event(&self, ut: &UtmpxRecord, event: Event) -> UResult<()> {
         let time = format_timestamp(ut);
-        let pid = format!("{}", ut.pid());
+        let pid = format_pid(ut);
         let note = translate!("who-login-id", "id" => ut.terminal_suffix());
 
         // Held outside the match so the borrows below outlive it.
@@ -324,8 +342,9 @@ impl Who {
             },
             #[cfg(target_os = "linux")]
             Event::Runlevel => {
-                let last = (ut.pid() / 256) as u8 as char;
-                let level = (ut.pid() % 256) as u8 as char;
+                let pid = ut.pid().unwrap_or_default();
+                let last = (pid / 256) as u8 as char;
+                let level = (pid % 256) as u8 as char;
                 runlevel_line = translate!("who-runlevel", "level" => level);
                 // Like GNU, a previous level of 'N' is reported as 'S'; any
                 // other previous level is reported as-is.
@@ -420,7 +439,7 @@ impl Who {
             line: &ut.tty_device(),
             time: &format_timestamp(ut),
             idle: &idle,
-            pid: &format!("{}", ut.pid()),
+            pid: &format_pid(ut),
             note: &note,
             exit: "",
         })?;
