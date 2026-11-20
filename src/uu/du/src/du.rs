@@ -561,7 +561,7 @@ fn safe_du(
         };
 
         // Check excludes
-        if is_excluded(&options.excludes, &this_stat.path.to_string_lossy()) {
+        if is_excluded(&options.excludes, &this_stat.path) {
             if options.verbose {
                 println!(
                     "{}",
@@ -716,7 +716,7 @@ fn du_regular(
                                 continue 'file_loop;
                             }
 
-                            if is_excluded(&options.excludes, &this_stat.path.to_string_lossy()) {
+                            if is_excluded(&options.excludes, &this_stat.path) {
                                 if options.verbose {
                                     println!(
                                         "{}",
@@ -839,12 +839,16 @@ fn file_as_vec(filename: impl AsRef<Path>) -> UResult<Vec<String>> {
 /// pattern is tried on the whole path and on every part of it that follows a
 /// separator, so `target/debug` also excludes `./target/debug` and
 /// `a/target/debug`. The last part is the file name.
-fn is_excluded(patterns: &[Pattern], path: &str) -> bool {
+fn is_excluded(patterns: &[Pattern], path: &Path) -> bool {
+    if patterns.is_empty() {
+        return false;
+    }
+    let path = path.to_string_lossy();
     let tails = path
         .match_indices(std::path::is_separator)
         .map(|(i, sep)| &path[i + sep.len()..])
         .filter(|tail| !tail.starts_with(std::path::is_separator));
-    std::iter::once(path)
+    std::iter::once(&*path)
         .chain(tails)
         .any(|p| patterns.iter().any(|pattern| pattern.matches(p)))
 }
@@ -1249,12 +1253,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut seen_inodes: FxHashSet<FileInfo> = FxHashSet::default();
 
     'loop_file: for path in files {
-        let path_string = path.to_string_lossy();
-        if is_excluded(&traversal_options.excludes, &path_string) {
+        if is_excluded(&traversal_options.excludes, &path) {
             if traversal_options.verbose {
                 println!(
                     "{}",
-                    translate!("du-verbose-ignored", "path" => path_string.quote())
+                    translate!("du-verbose-ignored", "path" => path.to_string_lossy().quote())
                 );
             }
             continue 'loop_file;
