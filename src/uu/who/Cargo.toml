@@ -15,7 +15,6 @@ readme.workspace = true
 
 [lib]
 path = "src/who.rs"
-test = false
 doctest = false
 
 [dependencies]
@@ -23,6 +22,9 @@ clap = { workspace = true }
 fluent = { workspace = true }
 rustix = { workspace = true, features = ["fs", "termios"] }
 uucore = { workspace = true, features = ["utmpx"] }
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+uucore = { workspace = true, features = ["systemd_logind_test"] }
 
 [features]
 systemd_logind = ["uucore/systemd_logind"]

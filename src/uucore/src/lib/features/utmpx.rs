@@ -440,11 +440,15 @@ impl UtmpxRecord {
         }
     }
 
-    /// A.K.A. `ut.ut_pid`
-    pub fn pid(&self) -> i32 {
+    /// The `ut_pid` field, or the session leader PID if available from logind.
+    #[cfg_attr(
+        not(all(target_os = "linux", feature = "systemd_logind")),
+        expect(clippy::unnecessary_wraps, reason = "Logind can omit this metadata")
+    )]
+    pub fn pid(&self) -> Option<i32> {
         match self {
-            Self::Traditional(utmpx) => utmpx.pid(),
-            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
+            Self::Traditional(utmpx) => Some(utmpx.pid()),
+            #[cfg(all(target_os = "linux", feature = "systemd_logind"))]
             Self::Systemd(systemd) => systemd.pid(),
         }
     }
@@ -485,11 +489,15 @@ impl UtmpxRecord {
         }
     }
 
-    /// A.K.A. `ut.ut_tv`
-    pub fn login_time(&self) -> time::OffsetDateTime {
+    /// The `ut_tv` field, or the login time if available from logind.
+    #[cfg_attr(
+        not(all(target_os = "linux", feature = "systemd_logind")),
+        expect(clippy::unnecessary_wraps, reason = "Logind can omit this metadata")
+    )]
+    pub fn login_time(&self) -> Option<time::OffsetDateTime> {
         match self {
-            Self::Traditional(utmpx) => utmpx.login_time(),
-            #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
+            Self::Traditional(utmpx) => Some(utmpx.login_time()),
+            #[cfg(all(target_os = "linux", feature = "systemd_logind"))]
             Self::Systemd(systemd) => systemd.login_time(),
         }
     }

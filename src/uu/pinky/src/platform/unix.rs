@@ -192,7 +192,10 @@ fn format_timestamp(ut: &UtmpxRecord) -> String {
         };
     }
 
-    TIME_FORMAT.with(|description| ut.login_time().format(description).unwrap())
+    ut.login_time().map_or_else(
+        || "?".into(),
+        |time| TIME_FORMAT.with(|description| time.format(description).unwrap()),
+    )
 }
 
 /// Pull the real name out of a password entry's comment field: it is the part
@@ -367,6 +370,37 @@ impl Pinky {
 #[cfg(test)]
 mod tests {
     use super::{format_quiet_time, real_name};
+
+    #[test]
+    #[cfg(all(target_os = "linux", feature = "systemd_logind"))]
+    fn missing_session_time_is_displayed_as_unknown() {
+        use super::*;
+        use uucore::systemd_logind::{SystemdUtmpxCompat, test_session_record};
+
+        let record = UtmpxRecord::Systemd(SystemdUtmpxCompat::new(test_session_record()));
+        let pinky = Pinky {
+            resolve_hosts: false,
+            layout: Layout {
+                header: false,
+                real_name: false,
+                idle: true,
+                origin: true,
+            },
+            details: Details {
+                home_and_shell: false,
+                project: false,
+                plan: false,
+            },
+            names: Vec::new(),
+        };
+        assert_eq!(
+            pinky
+                .session_row(&record)
+                .split_whitespace()
+                .collect::<Vec<_>>(),
+            ["user", "?pts/test", "?????", "?", "alias.test"]
+        );
+    }
 
     #[test]
     fn idle_under_a_minute_is_blank() {
