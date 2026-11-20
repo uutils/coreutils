@@ -837,6 +837,22 @@ struct Output<'a> {
     settings: &'a Settings,
 }
 
+/// Whether a failed `ftruncate` means the output cannot be truncated at
+/// all, rather than a real failure: on Unix, `ftruncate` fails with
+/// `EINVAL` for outputs such as `/dev/null` or a pipe.
+#[cfg(unix)]
+fn truncate_not_supported(e: &io::Error) -> bool {
+    e.raw_os_error() == Some(libc::EINVAL)
+}
+
+/// Whether a failed `ftruncate` means the output cannot be truncated at
+/// all, rather than a real failure: without Unix errnos, go by the
+/// error kind instead.
+#[cfg(not(unix))]
+fn truncate_not_supported(e: &io::Error) -> bool {
+    e.kind() == io::ErrorKind::InvalidInput
+}
+
 impl<'a> Output<'a> {
     /// Instantiate this struct with stdout as a destination.
     fn new_stdout(settings: &'a Settings) -> UResult<Self> {
@@ -891,19 +907,21 @@ impl<'a> Output<'a> {
         )
         .map_err_context(|| translate!("dd-error-failed-to-open", "path" => filename.quote()))?;
 
-        // A failing `ftruncate` is only reported for regular files (not e.g.
-        // for `/dev/null`). As GNU does, check the file type only after the
-        // failure, and stop before writing if that check fails too.
+        // If truncating to the seek offset fails, the error itself says
+        // whether the output can be truncated at all: `EINVAL` means it
+        // cannot (e.g. `/dev/null`, a pipe), so ignore that as GNU does.
+        // For any other error, stat the output as GNU does: if even
+        // that fails, report it and stop before writing anything;
+        // otherwise report the truncate failure, keep copying, and
+        // exit 1 in the end.
         if !settings.oconv.notrunc
             && !truncate_on_open
             && let Err(e) = dst.set_len(settings.seek)
-            && dst
-                .metadata()
-                .map_err_context(
-                    || translate!("dd-error-cannot-fstat", "file" => filename.quote()),
-                )?
-                .is_file()
+            && !truncate_not_supported(&e)
         {
+            dst.metadata().map_err_context(
+                || translate!("dd-error-cannot-fstat", "file" => filename.quote()),
+            )?;
             show_error!(
                 "{}",
                 e.map_err_context(|| translate!(
