@@ -11,7 +11,7 @@ use uucore::display::Quotable;
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
 use uutests::util::TestScenario;
-use uutests::{at_and_ucmd, new_ucmd, path, util_name};
+use uutests::{at_and_ts, at_and_ucmd, new_ucmd, path, util_name};
 
 use std::fs::set_permissions;
 
@@ -1673,6 +1673,94 @@ fn test_cp_numbered_if_existing_backup(#[case] backup_arg: &str) {
     assert!(at.file_exists(existing_backup));
     assert_eq!(
         at.read(format!("{TEST_HOW_ARE_YOU_SOURCE}.~2~")),
+        "How are you?\n"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_backup_moves_destination_aside() {
+    use std::os::unix::fs::MetadataExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dest_inode = at.metadata(TEST_HOW_ARE_YOU_SOURCE).ino();
+
+    ucmd.arg("--backup=simple")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(
+        at.metadata(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")).ino(),
+        dest_inode
+    );
+    assert_ne!(at.metadata(TEST_HOW_ARE_YOU_SOURCE).ino(), dest_inode);
+}
+
+#[test]
+fn test_cp_backup_case_variant_of_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // On a case-insensitive filesystem the variant names the source file, on a
+    // case-sensitive one it is a separate file and there is nothing to test.
+    let variant = TEST_HOW_ARE_YOU_SOURCE.to_uppercase();
+    if !at.file_exists(&variant) {
+        return;
+    }
+
+    ucmd.arg("--backup=simple")
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg(&variant)
+        .succeeds()
+        .no_stderr();
+
+    // The source is not moved away and keeps its content.
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
+    // The backup holds the content of the source.
+    assert_eq!(at.read(&format!("{variant}~")), "How are you?\n");
+}
+
+#[test]
+#[cfg(windows)]
+fn test_cp_backup_replaces_destination_held_open_for_delete() {
+    use std::fs::OpenOptions;
+    use std::os::windows::fs::OpenOptionsExt;
+    use uucore::windows_sys::Win32::Storage::FileSystem::{FILE_SHARE_DELETE, FILE_SHARE_READ};
+
+    let (at, ts) = at_and_ts!();
+    // The sharing a running image is held with on Windows. #3034
+    let share_mode = FILE_SHARE_READ | FILE_SHARE_DELETE;
+
+    // Without a backup the destination cannot be overwritten in place.
+    let held = OpenOptions::new()
+        .read(true)
+        .share_mode(share_mode)
+        .open(at.subdir.join(TEST_HOW_ARE_YOU_SOURCE))
+        .expect("hold the destination open the way a running image is held");
+    ts.ucmd()
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .fails()
+        .no_stdout();
+    drop(held);
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
+
+    // Backing the destination up by moving it aside replaces it.
+    let held = OpenOptions::new()
+        .read(true)
+        .share_mode(share_mode)
+        .open(at.subdir.join(TEST_HOW_ARE_YOU_SOURCE))
+        .expect("hold the destination open the way a running image is held");
+    ts.ucmd()
+        .arg("--backup=simple")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+    drop(held);
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
         "How are you?\n"
     );
 }
