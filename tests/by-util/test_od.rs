@@ -1713,6 +1713,7 @@ fn test_octal_alias() {
     for arg in ["-o", "-B"] {
         scene
             .ucmd()
+            .arg("--endian=little")
             .arg(arg)
             .arg("test")
             .succeeds()
@@ -1790,6 +1791,7 @@ fn test_od_zero_byte_type_size() {
             .no_stdout();
     }
     new_ucmd!()
+        .arg("--endian=little")
         .arg("-tx4")
         .pipe_in("abcd")
         .succeeds()
