@@ -2542,7 +2542,7 @@ fn test_recursive_dereference_changes_link_targets() {
 #[cfg(target_os = "linux")]
 #[rstest]
 #[case::stat(
-    "?newfstatat,?statx,?fstatat",
+    "?newfstatat,?statx,?fstatat64",
     false,
     "EPERM",
     "Operation not permitted"

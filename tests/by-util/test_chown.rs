@@ -1235,7 +1235,7 @@ fn test_chown_verbose_broken_symlink_plus_ids() {
 /// other error (EIO) on the same call is still reported.
 #[cfg(target_os = "linux")]
 #[rstest]
-#[case::stat("?newfstatat,?statx,?fstatat", false)]
+#[case::stat("?newfstatat,?statx,?fstatat64", false)]
 #[case::change("?chown,?lchown,fchownat", false)]
 #[case::open_subdir("openat", true)]
 fn test_recursive_skips_entry_removed_during_traversal(
