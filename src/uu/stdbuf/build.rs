@@ -11,8 +11,12 @@ use std::path::Path;
 use std::process::Command;
 
 fn main() {
-    // do not compile libstdbuf for windows target. The windows stdbuf.exe loads libstdbuf.dll compiled for the cygwin target.
-    if env::var("CARGO_CFG_UNIX").is_err() {
+    // do not compile libstdbuf for some targets.
+    // The windows stdbuf.exe loads libstdbuf.dll compiled for the cygwin target.
+    // musl stdbuf loads system libstdbuf.so
+    if env::var("CARGO_CFG_UNIX").is_err()
+        || env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("musl")
+    {
         println!("cargo:rustc-cfg=feature=\"feat_external_libstdbuf\"");
         return;
     }
