@@ -54,6 +54,20 @@ enum ChmodError {
     Replaced(PathBuf),
 }
 
+impl ChmodError {
+    /// The error for a stat of `file` failing with `err`. EACCES keeps the
+    /// translated "Permission denied"; anything else is reported as the OS
+    /// describes it, like GNU, since the `PermissionDenied` kind also covers
+    /// EPERM ("Operation not permitted").
+    fn cannot_access(file: PathBuf, err: std::io::Error) -> Self {
+        if err.raw_os_error() == Some(uucore::libc::EACCES) {
+            Self::PermissionDenied(file)
+        } else {
+            Self::CannotStat(file, err)
+        }
+    }
+}
+
 impl UError for ChmodError {}
 
 mod options {
@@ -529,7 +543,7 @@ impl Chmoder {
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
                     if !self.quiet {
-                        show!(ChmodError::PermissionDenied(filename.into()));
+                        show!(ChmodError::cannot_access(filename.into(), err));
                     }
                     self.report_not_accessed(file);
                     set_exit_code(1);
@@ -950,11 +964,7 @@ impl Chmoder {
                     Ok(()) // Skip dangling symlinks
                 } else {
                     self.report_not_accessed(file);
-                    if err.kind() == std::io::ErrorKind::PermissionDenied {
-                        Err(ChmodError::PermissionDenied(file.into()).into())
-                    } else {
-                        Err(ChmodError::CannotStat(file.into(), err).into())
-                    }
+                    Err(ChmodError::cannot_access(file.into(), err).into())
                 };
             }
         };

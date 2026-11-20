@@ -2595,3 +2595,42 @@ fn test_recursive_skips_entry_removed_during_traversal(
         "{stderr}"
     );
 }
+
+/// A stat of an operand failing with EPERM is reported as "Operation not
+/// permitted", like GNU, not "Permission denied", which stays for EACCES.
+/// `strace` fakes the failure on the stat of `f`.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_operand_stat_error_reported_as_the_os_describes_it() {
+    use uutests::util::run_ucmd_with_strace;
+
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkdir("dir");
+    ts.fixtures.touch("dir/f");
+    let run = |error: &str| {
+        let inject = format!("inject=?newfstatat,?statx,?fstatat64:error={error}");
+        run_ucmd_with_strace(
+            &ts,
+            "dir",
+            &["-qq", "-o", "/dev/null", "-P", "f", "-e", &inject],
+            &["0750", "f"],
+        )
+    };
+
+    // Probe: the injection must make chmod fail on `f`, else skip. A strace
+    // that cannot trace (blocked ptrace) also fails, so check the error.
+    if run("EIO")
+        .is_none_or(|(status, err)| status.success() || !err.contains("Input/output error"))
+    {
+        eprintln!("TEST SKIPPED: strace syscall injection is not available");
+        return;
+    }
+
+    let (status, stderr) = run("EPERM").unwrap();
+    assert_eq!(status.code(), Some(1), "{stderr}");
+    assert_eq!(stderr, "chmod: cannot access 'f': Operation not permitted");
+
+    let (status, stderr) = run("EACCES").unwrap();
+    assert_eq!(status.code(), Some(1), "{stderr}");
+    assert_eq!(stderr, "chmod: cannot access 'f': Permission denied");
+}
