@@ -655,6 +655,30 @@ fn test_invalid_syntax() {
 }
 
 #[test]
+fn test_closing_parenthesis_is_not_a_value() {
+    for args in [
+        &[")"][..],
+        &["length", ")"],
+        &["(", ")"],
+        &["1", "+", ")"],
+        &[")", "=", "a"],
+        &["a", "|", ")"],
+    ] {
+        new_ucmd!()
+            .args(args)
+            .fails_with_code(2)
+            .stderr_only("expr: syntax error: unexpected ')'\n");
+    }
+
+    // `+` still quotes it.
+    new_ucmd!().args(&["+", ")"]).succeeds().stdout_only(")\n");
+    new_ucmd!()
+        .args(&["(", "+", ")", ")"])
+        .succeeds()
+        .stdout_only(")\n");
+}
+
+#[test]
 fn test_num_str_comparison() {
     new_ucmd!()
         .args(&["1a", "<", "1", "+", "1"])
@@ -2190,6 +2214,26 @@ expr: syntax error: expecting ')' after '7'
    │
  1 │ ( 6 + 7
    │       ─
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unexpected_closing_parenthesis() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["6", "+", ")"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+expr: syntax error: unexpected ')'
+   ╭─[ expr:1:5 ]
+   │
+ 1 │ 6 + )
+   │     ─
 ───╯"
         );
     }

@@ -30,3 +30,4 @@ fmt-error-invalid-width-malformed = invalid width: {$width}
 fmt-error-cannot-open-for-reading = cannot open {$file} for reading
 fmt-error-cannot-get-metadata = cannot get metadata for {$file}
 fmt-error-failed-to-write-output = failed to write output
+fmt-error-read = error reading {$file}

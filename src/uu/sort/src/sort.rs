@@ -2346,6 +2346,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.check = check_silent || check_diagnose;
     settings.check_silent = check_silent;
 
+    if settings.check && settings.debug {
+        let opts = if settings.check_silent {
+            "C --debug"
+        } else {
+            "c --debug"
+        };
+        return Err(incompatible_options_error(opts));
+    }
+
     if matches.contains_id(options::OUTPUT) && settings.check {
         let opts = if settings.check_silent { "Co" } else { "co" };
         return Err(incompatible_options_error(opts));
@@ -3003,17 +3012,17 @@ fn ascii_case_insensitive_cmp(a: &[u8], b: &[u8]) -> Ordering {
 // For example, 5e10KFD would be 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
 #[allow(clippy::cognitive_complexity)]
 fn get_leading_gen(inp: &[u8], decimal_pt: u8) -> Range<usize> {
-    // check for inf, -inf and nan
-    const ALLOWED_PREFIXES: &[&[u8]] = &[b"inf", b"-inf", b"nan"];
+    // check for inf and nan, with an optional sign
+    const ALLOWED_PREFIXES: &[&[u8]] = &[b"inf", b"nan"];
 
     let trimmed = inp.trim_ascii_start();
     let leading_whitespace_len = inp.len() - trimmed.len();
+    let sign_len = usize::from(matches!(trimmed.first(), Some(NEGATIVE | POSITIVE)));
 
     for &allowed_prefix in ALLOWED_PREFIXES {
-        if trimmed.len() >= allowed_prefix.len()
-            && trimmed[..allowed_prefix.len()].eq_ignore_ascii_case(allowed_prefix)
-        {
-            return leading_whitespace_len..(leading_whitespace_len + allowed_prefix.len());
+        let end = sign_len + allowed_prefix.len();
+        if trimmed.len() >= end && trimmed[sign_len..end].eq_ignore_ascii_case(allowed_prefix) {
+            return leading_whitespace_len..(leading_whitespace_len + end);
         }
     }
     // Make this iter peekable to see if next char is numeric
@@ -3075,6 +3084,7 @@ fn get_leading_gen(inp: &[u8], decimal_pt: u8) -> Range<usize> {
 #[derive(Clone, PartialEq, PartialOrd, Debug)]
 pub enum GeneralBigDecimalParseResult {
     Invalid,
+    MinusNan,
     Nan,
     MinusInfinity,
     Number(BigDecimal),
@@ -3114,7 +3124,8 @@ fn general_bd_parse(a: &[u8], decimal_pt: u8) -> GeneralBigDecimalParseResult {
         ExtendedBigDecimal::MinusInfinity => GeneralBigDecimalParseResult::MinusInfinity,
         // Minus zero and zero are equal
         ExtendedBigDecimal::MinusZero => GeneralBigDecimalParseResult::Number(0.into()),
-        ExtendedBigDecimal::Nan | ExtendedBigDecimal::MinusNan => GeneralBigDecimalParseResult::Nan,
+        ExtendedBigDecimal::MinusNan => GeneralBigDecimalParseResult::MinusNan,
+        ExtendedBigDecimal::Nan => GeneralBigDecimalParseResult::Nan,
     }
 }
 

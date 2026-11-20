@@ -7,6 +7,7 @@
 
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
+use rstest::rstest;
 use std::fs::metadata;
 use uutests::util::{TestScenario, UCommand};
 use uutests::{at_and_ucmd, new_ucmd, util_name};
@@ -242,7 +243,14 @@ fn test_with_page_range() {
     let test_file_path = "test.log";
     let expected_test_file_path = "test_page_range_1.log.expected";
     let expected_test_file_path1 = "test_page_range_2.log.expected";
-    for arg in ["--pages=15", "+15"] {
+    for arg in [
+        "--pages=15",
+        "+15",
+        "--pages=+15",
+        "--pages= 15",
+        "--pages=\x0B15",
+        "++15",
+    ] {
         let mut scenario = new_ucmd!();
         let value = file_last_modified_time(&scenario, test_file_path);
         scenario
@@ -253,7 +261,7 @@ fn test_with_page_range() {
                 &[("{last_modified_time}", &value)],
             );
     }
-    for arg in ["--pages=15:17", "+15:17"] {
+    for arg in ["--pages=15:17", "+15:17", "--pages=+15:+17", "+15: 17"] {
         let mut scenario = new_ucmd!();
         let value = file_last_modified_time(&scenario, test_file_path);
         scenario
@@ -1591,6 +1599,9 @@ fn test_numeric_option_diagnostics() {
         (&["--pages=1:x"], "pr: invalid --pages argument '1:x'\n"),
         (&["--pages=1:0"], "pr: invalid page range '1:0'\n"),
         (&["--pages=1x"], "pr: invalid page range '1x'\n"),
+        (&["--pages=+0"], "pr: invalid page range '+0'\n"),
+        (&["--pages=++1"], "pr: invalid --pages argument '++1'\n"),
+        (&["--pages=+ 1"], "pr: invalid --pages argument '+ 1'\n"),
         (
             &["--pages=99999999999999999999"],
             "pr: --pages argument '99999999999999999999' too large\n",
@@ -1712,6 +1723,37 @@ fn test_page_width_narrower_than_leading_tab() {
         .pipe_in("\tone\n\ttwo\n")
         .succeeds()
         .stdout_only("    1\t\n    2\t\n");
+}
+
+#[rstest]
+#[case::default_counts_skipped_lines(&["-l1", "+2", "-n:1"], "a\nb\n", "2:b\n")]
+#[case::explicit_one(&["-l1", "+2", "-n:1", "-N1"], "a\nb\n", "1:b\n")]
+#[case::explicit_eight(&["-l1", "+2", "-n:1", "-N8"], "a\nb\n", "8:b\n")]
+#[case::first_number_zero(&["-l2", "+2", "-n:1", "-N0"], "a\nb\nc\nd\ne\nf\ng\n", "0:c\n1:d\n2:e\n3:f\n4:g\n")]
+#[case::two_pages_skipped(&["-l2", "+3", "-n:1", "-N5"], "a\nb\nc\nd\ne\nf\ng\n", "5:e\n6:f\n7:g\n")]
+#[case::form_feed_pages(&["+3", "-n:1", "-N5"], "a\x0cb\nc\x0cd\n", "5:d\n")]
+#[case::with_end_page(&["-l1", "+2:3", "-n:1", "-N8"], "a\nb\nc\nd\n", "8:b\n9:c\n")]
+fn test_first_line_number_with_skipped_pages(
+    #[case] args: &[&str],
+    #[case] input: &str,
+    #[case] expected: &str,
+) {
+    new_ucmd!()
+        .arg("-t")
+        .args(args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
+fn test_bare_number_lines_after_first_line_number() {
+    // A trailing bare `-n` must keep the `-N` value given before it.
+    new_ucmd!()
+        .args(&["-t", "-l1", "+2", "-N8", "-n"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_only("    8\tb\n");
 }
 
 #[test]

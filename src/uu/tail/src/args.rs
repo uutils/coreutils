@@ -178,6 +178,11 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// Named inputs must not block the follow loop's process-exit checks.
+    pub fn use_nonblocking(&self) -> bool {
+        self.follow.is_some() && self.pid.is_some()
+    }
+
     pub fn from_obsolete_args(args: &parse::ObsoleteArgs, name: Option<&OsString>) -> Self {
         let mut settings = Self::default();
         if args.follow {
