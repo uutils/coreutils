@@ -1484,15 +1484,6 @@ fn test_du_total_time_column() {
         .args(&["-m", "-t", "202403011800"])
         .arg(at.plus("d/sub/new.txt"))
         .succeeds();
-    // Touching the nested file bumps directory mtimes; put those back so -S
-    // reports the directory's own time, not "now".
-    for path in ["d", "d/sub"] {
-        ts.ccmd("touch")
-            .env("TZ", "UTC")
-            .args(&["-m", "-t", "202001010000"])
-            .arg(at.plus(path))
-            .succeeds();
-    }
 
     #[cfg(not(windows))]
     let sub = "d/sub";
