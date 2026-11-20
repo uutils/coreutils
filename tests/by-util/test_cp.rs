@@ -9714,9 +9714,9 @@ fn test_cp_source_in_unsearchable_dir() {
     assert!(!at.file_exists("dest"));
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: no chmod syscall")]
 fn test_cp_backup_restored_when_copy_fails() {
     if rustix::process::geteuid().is_root() {
         return;
@@ -9757,9 +9757,9 @@ fn test_cp_backup_restored_when_copy_fails() {
     }
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: no chmod syscall")]
 fn test_cp_failed_copy_does_not_restore_stale_backup() {
     if rustix::process::geteuid().is_root() {
         return;
@@ -9799,9 +9799,9 @@ fn test_cp_backup_restored_when_source_cannot_be_statted() {
     assert!(!at.file_exists("dest.~1~"));
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: no chmod syscall")]
 fn test_cp_backup_restore_preserves_metadata() {
     use std::os::unix::fs::PermissionsExt;
 
@@ -9834,9 +9834,9 @@ fn test_cp_backup_restore_preserves_metadata() {
 fn test_cp_backup_restore_preserves_destination_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("target", "old target");
-    at.symlink_file("target", "dest");
+    at.relative_symlink_file("target", "dest");
     let link_target = std::fs::read_link(at.plus("dest")).unwrap();
-    at.symlink_file("nonexistent-target", "src");
+    at.relative_symlink_file("nonexistent-target", "src");
     ucmd.args(&["--backup=simple", "--dereference", "src", "dest"])
         .fails_with_code(1)
         .stderr_contains("cannot stat");
@@ -9865,9 +9865,9 @@ fn test_cp_early_stat_failure_keeps_untouched_destination_inode() {
     assert_eq!(at.read("dest~"), "old");
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(unix)]
-#[uutests::wasi_ignore(NoPermissionBits)]
 fn test_cp_unreadable_source_keeps_destination_inode_and_hard_links() {
     if rustix::process::geteuid().is_root() {
         return;
