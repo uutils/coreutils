@@ -3,8 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist groupname notexisting passgrp
+// spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist groupname notexisting passgrp fchownat fstatat newfstatat
 
+#[cfg(target_os = "linux")]
+use rstest::rstest;
 #[cfg(all(unix, not(target_os = "openbsd")))]
 use std::os::unix::fs::MetadataExt;
 use uutests::util::{CmdResult, TestScenario, is_ci, run_ucmd_as_root};
@@ -1228,19 +1230,30 @@ fn test_chown_verbose_broken_symlink_plus_ids() {
 }
 
 /// `chown -R` skips an entry removed after its directory was listed, like GNU.
-/// `strace` fakes the removal by failing the change of `gone` with ENOENT;
-/// any other error (EIO) is still reported.
+/// `strace` fakes the removal by failing one of the calls made for `gone` with
+/// ENOENT: the stat or change of a file, or the open of a subdirectory. Any
+/// other error (EIO) on the same call is still reported.
 #[cfg(target_os = "linux")]
-#[test]
-fn test_recursive_skips_entry_removed_during_traversal() {
+#[rstest]
+#[case::stat("?newfstatat,?statx,?fstatat", false)]
+#[case::change("?chown,?lchown,fchownat", false)]
+#[case::open_subdir("openat", true)]
+fn test_recursive_skips_entry_removed_during_traversal(
+    #[case] syscalls: &str,
+    #[case] is_dir: bool,
+) {
     use uutests::util::run_ucmd_with_strace;
 
     let ts = TestScenario::new(util_name!());
     ts.fixtures.mkdir("tree");
-    ts.fixtures.touch("tree/gone");
+    if is_dir {
+        ts.fixtures.mkdir("tree/gone");
+    } else {
+        ts.fixtures.touch("tree/gone");
+    }
     let arg = rustix::process::getuid().as_raw().to_string();
     let run = |error: &str, args: &[&str]| {
-        let inject = format!("inject=?chown,?lchown,fchownat:error={error}");
+        let inject = format!("inject={syscalls}:error={error}");
         run_ucmd_with_strace(
             &ts,
             "tree",
@@ -1249,9 +1262,11 @@ fn test_recursive_skips_entry_removed_during_traversal() {
         )
     };
 
-    // Probe: the injection must make a plain `chown gone` fail, else skip.
-    // A strace that cannot trace (blocked ptrace) also fails, so check the error.
-    if run("EIO", &["gone"])
+    // Probe: the injection must make chown fail on the operand `gone` itself,
+    // else skip; the directory is opened with `-R`. A strace that cannot
+    // trace (blocked ptrace) also fails, so check the error.
+    let probe: &[&str] = if is_dir { &["-R", "gone"] } else { &["gone"] };
+    if run("EIO", probe)
         .is_none_or(|(status, err)| status.success() || !err.contains("Input/output error"))
     {
         eprintln!("TEST SKIPPED: strace syscall injection is not available");
@@ -1264,7 +1279,7 @@ fn test_recursive_skips_entry_removed_during_traversal() {
     let (status, stderr) = run("EIO", &["-R", "."]).unwrap();
     assert!(!status.success(), "{stderr}");
     assert!(
-        stderr.contains("gone") && stderr.contains("Input/output error"),
+        stderr.contains("'./gone'") && stderr.contains("Input/output error"),
         "{stderr}"
     );
 }
