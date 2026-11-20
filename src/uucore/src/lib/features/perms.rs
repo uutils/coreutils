@@ -302,8 +302,14 @@ impl ChownExecutor {
                 None
             }
         }) {
-            let user = self.dest_uid.map(|id| resolve_part(u, id)).unwrap_or_default();
-            let group = self.dest_gid.map(|id| resolve_part(g, id)).unwrap_or_default();
+            let user = self
+                .dest_uid
+                .map(|id| resolve_part(u, id))
+                .unwrap_or_default();
+            let group = self
+                .dest_gid
+                .map(|id| resolve_part(g, id))
+                .unwrap_or_default();
             if user.is_empty() {
                 group
             } else if group.is_empty() {
