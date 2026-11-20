@@ -414,11 +414,7 @@ impl ChownExecutor {
 
     #[cfg(target_os = "linux")]
     fn safe_chown_dir(&self, dir_fd: &DirFd, path: &Path, meta: &Metadata) -> Result<(), String> {
-        let dest_uid = self.dest_uid.unwrap_or_else(|| meta.uid());
-        let dest_gid = self.dest_gid.unwrap_or_else(|| meta.gid());
-
-        // Use fchown (safe) to change the directory's ownership
-        if let Err(e) = dir_fd.fchown(self.dest_uid, self.dest_gid) {
+        if let Err(e) = std::os::unix::fs::fchown(dir_fd, self.dest_uid, self.dest_gid) {
             let mut error_msg = format!(
                 "changing {} of {}: {}",
                 if self.verbosity.groups_only {
@@ -431,6 +427,8 @@ impl ChownExecutor {
             );
 
             if self.verbosity.level == VerbosityLevel::Verbose {
+                let dest_uid = self.dest_uid.unwrap_or_else(|| meta.uid());
+                let dest_gid = self.dest_gid.unwrap_or_else(|| meta.gid());
                 error_msg = if self.verbosity.groups_only {
                     let gid = meta.gid();
                     format!(
