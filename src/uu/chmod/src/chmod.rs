@@ -794,12 +794,10 @@ impl Chmoder {
                     continue;
                 }
                 Err(err) => {
-                    let error = if err.kind() == std::io::ErrorKind::NotFound
-                        && dir_fd.is_symlink_at(&entry_name)
-                    {
+                    // Not found here can only be the dangling symlink above;
+                    // any other error is reported as the OS describes it.
+                    let error = if err.kind() == std::io::ErrorKind::NotFound {
                         ChmodError::DanglingSymlink(entry_path.clone())
-                    } else if err.kind() == std::io::ErrorKind::PermissionDenied {
-                        ChmodError::PermissionDenied(entry_path.clone())
                     } else {
                         ChmodError::CannotStat(entry_path.clone(), err)
                     };
