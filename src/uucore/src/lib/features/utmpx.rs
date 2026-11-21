@@ -231,11 +231,7 @@ impl Utmpx {
         let ts_nanos: i128 = (1_000_000_000_i64 * self.inner.ut_tv.tv_sec as i64
             + 1_000_i64 * self.inner.ut_tv.tv_usec as i64)
             .into();
-        let local_offset = time::OffsetDateTime::now_local()
-            .map_or_else(|_| time::UtcOffset::UTC, time::OffsetDateTime::offset);
-        time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos)
-            .unwrap()
-            .to_offset(local_offset)
+        local_login_time(time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos).unwrap())
     }
     /// A.K.A. `ut.ut_exit`
     ///
@@ -346,7 +342,13 @@ impl Utmpx {
     }
 }
 
-// Serialize access to libc's utmp state and the selected path. UtmpxIter must
+/// Apply the local UTC offset at the record's timestamp, including historical DST.
+pub(crate) fn local_login_time(datetime: time::OffsetDateTime) -> time::OffsetDateTime {
+    let offset = time::UtcOffset::local_offset_at(datetime).unwrap_or(time::UtcOffset::UTC);
+    datetime.to_offset(offset)
+}
+
+'s utmp state and the selected path. UtmpxIter must
 // stay on its creating thread because libc's utmp state may be thread-local.
 static LOCK: Mutex<Option<PathBuf>> = Mutex::new(None);
 
