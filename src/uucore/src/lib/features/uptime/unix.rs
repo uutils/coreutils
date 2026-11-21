@@ -96,7 +96,7 @@ pub fn get_uptime(_boot_time: Option<i64>) -> UResult<Duration> {
     target_os = "openbsd",
 )))]
 pub fn get_uptime(boot_time: Option<i64>) -> UResult<Duration> {
-    use crate::utmpx::{BOOT_TIME, Utmpx};
+    use crate::utmpx::{BOOT_TIME, Utmpx, time::OffsetDateTime};
     use jiff::Timestamp;
     use std::fs::File;
     use std::io::Read;
@@ -118,7 +118,7 @@ pub fn get_uptime(boot_time: Option<i64>) -> UResult<Duration> {
     let derived_boot_time = boot_time.or_else(|| {
         Utmpx::iter_all_records()
             .filter(|r| r.record_type() == BOOT_TIME)
-            .map(|r| r.login_time().unix_timestamp())
+            .filter_map(|r| r.login_time().map(OffsetDateTime::unix_timestamp))
             .find(|&ts| ts > 0)
     });
 
