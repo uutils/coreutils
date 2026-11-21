@@ -192,7 +192,10 @@ fn format_timestamp(ut: &UtmpxRecord) -> String {
         };
     }
 
-    TIME_FORMAT.with(|description| ut.login_time().format(description).unwrap())
+    ut.try_login_time().map_or_else(
+        || "?".into(),
+        |time| TIME_FORMAT.with(|description| time.format(description).unwrap()),
+    )
 }
 
 /// Pull the real name out of a password entry's comment field: it is the part
@@ -299,7 +302,10 @@ impl Pinky {
         if self.layout.header {
             writeln!(writer, "{}", self.header_row())?;
         }
-        for ut in Utmpx::iter_all_records() {
+        for ut in Utmpx::iter_all_records_with_options(utmpx::ReadOptions {
+            session_time: true,
+            session_pid: false,
+        }) {
             if ut.is_user_process()
                 && (self.names.is_empty() || self.names.iter().any(|n| n.as_str() == ut.user()))
             {
@@ -367,6 +373,47 @@ impl Pinky {
 #[cfg(test)]
 mod tests {
     use super::{format_quiet_time, real_name};
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn missing_session_time_is_displayed_as_unknown() {
+        use super::*;
+        use uucore::systemd_logind::{SystemdLoginRecord, SystemdRecordType, SystemdUtmpxCompat};
+
+        let record = UtmpxRecord::Systemd(SystemdUtmpxCompat::new(SystemdLoginRecord {
+            user: "user".into(),
+            session_id: "legacy".into(),
+            seat_or_tty: "pts/test".into(),
+            raw_device: "pts/test".into(),
+            host: "alias.test".into(),
+            login_time: std::time::UNIX_EPOCH,
+            pid: 0,
+            session_leader_pid: 0,
+            record_type: SystemdRecordType::UserProcess,
+        }));
+        let pinky = Pinky {
+            resolve_hosts: false,
+            layout: Layout {
+                header: false,
+                real_name: false,
+                idle: true,
+                origin: true,
+            },
+            details: Details {
+                home_and_shell: false,
+                project: false,
+                plan: false,
+            },
+            names: Vec::new(),
+        };
+        assert_eq!(
+            pinky
+                .session_row(&record)
+                .split_whitespace()
+                .collect::<Vec<_>>(),
+            ["user", "?pts/test", "?????", "?", "alias.test"]
+        );
+    }
 
     #[test]
     fn idle_under_a_minute_is_blank() {
