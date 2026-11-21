@@ -71,6 +71,20 @@ fn test_posix_mode() {
         .fails()
         .no_stdout();
 
+    // _POSIX_PATH_MAX (256) includes the terminating null byte, so 255 bytes
+    // is the longest portable file name
+    new_ucmd!()
+        .args(&["-p", &format!("{}a", "a/".repeat(127))])
+        .succeeds()
+        .no_output();
+    let path = format!("{}ab", "a/".repeat(127));
+    new_ucmd!()
+        .args(&["-p", &path])
+        .fails_with_code(1)
+        .stderr_only(format!(
+            "pathchk: limit 255 exceeded by length 256 of file name '{path}'\n"
+        ));
+
     // fail on long filename
     new_ucmd!()
         .args(&[
