@@ -16,7 +16,7 @@ use os_display::Quotable;
 
 use crate::checksum::{
     AlgoKind, BlakeLength, ChecksumError, HashLength, ReadingMode, ShaLength, SizedAlgoKind,
-    digest_reader, parse_blake_length, unescape_filename,
+    Xxh3Length, digest_reader, parse_blake_length, unescape_filename,
 };
 use crate::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use crate::quoting_style::locale_aware_shell_escape;
@@ -717,10 +717,15 @@ fn identify_algo_name_and_length(
                 Some(HashLength::from_bits(bitlen))
             }
             ak::Shake128 | ak::Shake256 => Some(HashLength::from_bits(bitlen)),
+            ak::Xxh3 => Some(
+                Xxh3Length::try_from(bitlen)
+                    .map_err(|_| LineCheckError::ImproperlyFormatted)?
+                    .into(),
+            ),
             // Either
             //  the algo based line is provided with a bit length with an
             //  algorithm that does not support it (only Blake2b, Blake3, sha2,
-            //  and sha3 do).
+            //  sha3, shake and xxh3 do).
             //
             //  eg: MD5-128 (foo.txt) = fffffffff
             //          ^ This is illegal
@@ -818,9 +823,12 @@ fn process_algo_based_line(
     // checksum with it.
     let len_hint = match (algo_kind, algo_len) {
         (AlgoKind::Blake2b | AlgoKind::Blake3, Some(byte_len)) => Some(byte_len.as_bits()),
-        (AlgoKind::Shake128 | AlgoKind::Shake256, Some(bit_len)) => Some(bit_len.as_bits()),
+        (AlgoKind::Shake128 | AlgoKind::Shake256 | AlgoKind::Xxh3, Some(bit_len)) => {
+            Some(bit_len.as_bits())
+        }
         (AlgoKind::Shake128, None) => Some(sum::Shake128::DEFAULT_BIT_SIZE),
         (AlgoKind::Shake256, None) => Some(sum::Shake256::DEFAULT_BIT_SIZE),
+        (AlgoKind::Xxh3, None) => Some(sum::Xxh3::BIT_SIZE_64),
         _ => None,
     }
     .map(HashLength::from_bits);
@@ -864,6 +872,11 @@ fn process_non_algo_based_line(
                     .into(),
             )
         }
+        ak::Xxh3 => Some(
+            Xxh3Length::try_from(expected_checksum.len() * 8)
+                .map_err(|_| LineCheckError::ImproperlyFormatted)?
+                .into(),
+        ),
         _ => cli_algo_length,
     };
 

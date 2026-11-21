@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore memmem algo PCLMULQDQ refin xorout Hdlc libcrypto SSSE FIPS
+// spell-checker:ignore memmem algo PCLMULQDQ refin xorout Hdlc libcrypto SSSE FIPS twox xxhsum
 
 //! Implementations of digest functions, like md5 and sha1.
 //!
@@ -13,6 +13,7 @@
 //! implements the [`Write`] trait, for use in situations where calling
 //! [`write`] would be useful.
 
+use std::hash::Hasher;
 use std::io::{self, Write};
 
 use data_encoding::BASE64;
@@ -207,6 +208,57 @@ impl Digest for Sm3 {
 
     fn output_bits(&self) -> usize {
         Self::BIT_SIZE
+    }
+}
+
+/// XXH3, in its 64 or 128-bit variant. Not a cryptographic hash: it is meant
+/// to detect accidental corruption quickly.
+pub enum Xxh3 {
+    Bits64(twox_hash::XxHash3_64),
+    Bits128(twox_hash::XxHash3_128),
+}
+
+impl Xxh3 {
+    pub const BIT_SIZE_64: usize = 64;
+    pub const BIT_SIZE_128: usize = 128;
+
+    pub fn new_64() -> Self {
+        Self::Bits64(twox_hash::XxHash3_64::default())
+    }
+
+    pub fn new_128() -> Self {
+        Self::Bits128(twox_hash::XxHash3_128::default())
+    }
+}
+
+impl Digest for Xxh3 {
+    fn hash_update(&mut self, input: &[u8]) {
+        match self {
+            Self::Bits64(hasher) => hasher.write(input),
+            Self::Bits128(hasher) => hasher.write(input),
+        }
+    }
+
+    fn hash_finalize(&mut self, out: &mut [u8]) {
+        // Big endian, the canonical byte order used by xxhsum.
+        match self {
+            Self::Bits64(hasher) => out.copy_from_slice(&hasher.finish().to_be_bytes()),
+            Self::Bits128(hasher) => out.copy_from_slice(&hasher.finish_128().to_be_bytes()),
+        }
+    }
+
+    fn reset(&mut self) {
+        *self = match self {
+            Self::Bits64(_) => Self::new_64(),
+            Self::Bits128(_) => Self::new_128(),
+        };
+    }
+
+    fn output_bits(&self) -> usize {
+        match self {
+            Self::Bits64(_) => Self::BIT_SIZE_64,
+            Self::Bits128(_) => Self::BIT_SIZE_128,
+        }
     }
 }
 

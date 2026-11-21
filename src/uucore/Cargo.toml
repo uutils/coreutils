@@ -1,4 +1,4 @@
-# spell-checker:ignore (features) extendedbigdecimal tzdb zoneinfo logind libcrypto
+# spell-checker:ignore (features) extendedbigdecimal tzdb zoneinfo logind libcrypto twox
 
 [package]
 name = "uucore"
@@ -57,6 +57,7 @@ shake = { workspace = true, optional = true }
 blake2b_simd = { workspace = true, optional = true }
 blake3 = { workspace = true, optional = true }
 sm3 = { workspace = true, optional = true }
+twox-hash = { workspace = true, optional = true }
 crc-fast = { workspace = true, optional = true, features = ["std"] }
 bigdecimal = { workspace = true, optional = true }
 num-bigint = { workspace = true, optional = true }
@@ -225,6 +226,7 @@ sum = [
   "blake2b_simd",
   "blake3",
   "sm3",
+  "twox-hash",
   "crc-fast",
   "data-encoding",
 ]
