@@ -96,7 +96,7 @@ pub fn get_uptime(_boot_time: Option<i64>) -> UResult<Duration> {
     target_os = "openbsd",
 )))]
 pub fn get_uptime(boot_time: Option<i64>) -> UResult<Duration> {
-    use crate::utmpx::{BOOT_TIME, Utmpx};
+    use crate::utmpx::{BOOT_TIME, ReadOptions, Utmpx, time};
     use jiff::Timestamp;
     use std::fs::File;
     use std::io::Read;
@@ -116,9 +116,10 @@ pub fn get_uptime(boot_time: Option<i64>) -> UResult<Duration> {
 
     // Try provided boot_time or derive from utmpx
     let derived_boot_time = boot_time.or_else(|| {
-        Utmpx::iter_all_records()
+        Utmpx::iter_all_records_with_options(ReadOptions::BASIC)
             .filter(|r| r.record_type() == BOOT_TIME)
-            .map(|r| r.login_time().unix_timestamp())
+            .filter_map(|record| record.try_login_time())
+            .map(time::OffsetDateTime::unix_timestamp)
             .find(|&ts| ts > 0)
     });
 
@@ -164,10 +165,10 @@ pub fn get_uptime(boot_time: Option<i64>) -> UResult<Duration> {
 #[cfg(not(any(target_os = "openbsd", target_os = "android")))]
 // see: https://gitlab.com/procps-ng/procps/-/blob/4740a0efa79cade867cfc7b32955fe0f75bf5173/library/uptime.c#L63-L115
 pub fn get_nusers() -> usize {
-    use crate::utmpx::{USER_PROCESS, Utmpx};
+    use crate::utmpx::{ReadOptions, USER_PROCESS, Utmpx};
 
     let mut num_user = 0;
-    Utmpx::iter_all_records().for_each(|ut| {
+    Utmpx::iter_all_records_with_options(ReadOptions::BASIC).for_each(|ut| {
         if ut.record_type() == USER_PROCESS {
             num_user += 1;
         }
