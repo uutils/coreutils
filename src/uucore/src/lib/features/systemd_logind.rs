@@ -448,11 +448,9 @@ impl SystemdUtmpxCompat {
         self.record.is_user_process()
     }
 
-    /// Canonical host name
-    pub fn canon_host(&self) -> String {
-        // Simple implementation - just return the host as-is
-        // Could be enhanced with DNS lookup like the original
-        self.record.host.clone()
+    /// Canonicalize host name using DNS
+    pub fn canon_host(&self) -> std::io::Result<String> {
+        crate::utmpx::canonicalize_host(self.record.host.clone())
     }
 }
 
@@ -528,6 +526,30 @@ impl Iterator for SystemdUtmpxIter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn canonical_host_preserves_local_display() {
+        // A local display has no hostname to resolve.
+        let host = ":0";
+        let record = SystemdUtmpxCompat::new(SystemdLoginRecord {
+            user: "user".into(),
+            session_id: "session".into(),
+            seat_or_tty: "pts/0".into(),
+            raw_device: "pts/0".into(),
+            host: host.into(),
+            login_time: UNIX_EPOCH,
+            pid: 0,
+            session_leader_pid: 0,
+            record_type: SystemdRecordType::UserProcess,
+        });
+        assert_eq!(record.canon_host().unwrap(), host);
+        assert_eq!(
+            crate::utmpx::UtmpxRecord::Systemd(record)
+                .canon_host()
+                .unwrap(),
+            host
+        );
+    }
 
     #[test]
     fn test_empty_iterator() {
