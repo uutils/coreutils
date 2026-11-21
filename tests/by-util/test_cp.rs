@@ -9274,6 +9274,10 @@ fn test_cp_preserve_xattr_failure_keeps_the_rest() {
 #[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(
+    target_os = "android",
+    ignore = "different result between adb and termux"
+)]
 fn test_cp_preserve_directory_permissions_by_default() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

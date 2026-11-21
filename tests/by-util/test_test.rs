@@ -1034,6 +1034,10 @@ fn test_nonexistent_file_not_owned_by_egid() {
 #[uutests::wasi_ignore(NoUidGid)]
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(
+    target_os = "android",
+    ignore = "lacking system binary needed for this test"
+)]
 fn test_file_not_owned_by_egid() {
     let target_file = if cfg!(target_os = "freebsd") {
         // The coreutils test runner user has a primary group id of "wheel",

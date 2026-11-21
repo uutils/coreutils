@@ -402,20 +402,6 @@ fn embed_locale_file(
     Ok(())
 }
 
-/// Higher-level helper to embed locale files for a component with a path pattern.
-///
-/// This eliminates the repetitive `for_each_locale` + `embed_locale_file` pattern.
-///
-/// # Errors
-///
-/// Returns an error if `for_each_locale` fails, which typically happens if
-/// reading a locale file or writing to the `embedded_file` fails.
-/// Check if we are cross-compiling for WASI (build.rs runs on the host,
-/// so `#[cfg(target_os = "wasi")]` does not work here).
-fn is_wasi_target() -> bool {
-    env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os == "wasi")
-}
-
 /// For WASI/WASM builds, embed ALL available .ftl files in a locale
 /// directory so the playground can switch languages at runtime.
 fn embed_all_locales_for_component<F>(
@@ -456,7 +442,9 @@ fn embed_component_locales<F>(
 where
     F: Fn(&str) -> PathBuf,
 {
-    if is_wasi_target() {
+    // we want to embedded locales on some targets to make publishing easier.
+    // cfg does not work for cross-building.
+    if env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os == "wasi" || os == "android") {
         return embed_all_locales_for_component(embedded_file, component_name, &path_builder);
     }
 
