@@ -1475,7 +1475,6 @@ fn test_zero_precision_above_formatter_limit() {
 }
 
 #[test]
-#[ignore = "the ignored characters must be quoted in the warning"]
 fn test_ignored_chars_warning_is_quoted() {
     let warning = "character(s) following character constant have been ignored";
     new_ucmd!()
