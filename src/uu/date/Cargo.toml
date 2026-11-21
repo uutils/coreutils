@@ -28,6 +28,7 @@ jiff = { workspace = true, features = [
   "tzdb-concatenated",
 ] }
 jiff-icu = { workspace = true, optional = true }
+memchr = { workspace = true }
 parse_datetime = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
