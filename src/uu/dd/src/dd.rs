@@ -163,11 +163,11 @@ impl Num {
 ///
 /// `O_DIRECT` fails reads with `EINVAL` when the user buffer does not meet
 /// the device's DMA alignment (typically 512 bytes; 4 KiB covers every
-/// mainline Linux block driver). Over-allocates [`alloc_copy_buffer`]
-/// storage by one alignment unit and slices at the first aligned byte,
-/// keeping the pages zeroed and not faulted in.
+/// mainline Linux block driver). Over-allocates the backing storage by one
+/// alignment unit and slices at the first aligned byte, keeping the pages
+/// zeroed and not faulted in.
 struct AlignedBuf {
-    storage: Vec<u8>,
+    storage: Box<[u8]>,
     /// Distance from the start of `storage` to the first aligned byte;
     /// `offset + len <= storage.len()` since `storage` is over-allocated
     /// by `ALIGNMENT`.
@@ -183,7 +183,7 @@ impl AlignedBuf {
         let total = size
             .checked_add(Self::ALIGNMENT)
             .ok_or_else(|| io::Error::from(io::ErrorKind::OutOfMemory))?;
-        let storage = alloc_copy_buffer(total)?;
+        let storage = uucore::zeroed_alloc::try_new_boxed_slice::<u8>(total)?;
         let misalignment = storage.as_ptr().addr() % Self::ALIGNMENT;
         let offset = if misalignment == 0 {
             0
@@ -1458,26 +1458,6 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<core::ffi::c_int> {
     }
 
     if flag == 0 { None } else { Some(flag) }
-}
-
-/// The copy buffer, `bsize` bytes long and ready to be read into.
-///
-/// `Read::read` fills an initialized slice, and zeroed pages are the only
-/// initialization that costs nothing: `vec![0; n]` allocates through
-/// `alloc_zeroed`, so the pages arrive from the kernel already zero and stay
-/// untouched until something is read into them. Writing a fill byte over
-/// reserved capacity instead faults in the whole of `bs=` before the first
-/// read, which is what made a large `bs=` cost its full size in time and in
-/// resident memory even with nothing to copy.
-///
-/// The reservation still happens first, because `vec![0; n]` aborts when the
-/// allocation fails and `dd` reports that as an error instead.
-fn alloc_copy_buffer(bsize: usize) -> io::Result<Vec<u8>> {
-    let mut probe: Vec<u8> = Vec::new();
-    // try_with_capacity is unstable https://github.com/rust-lang/rust/issues/91913
-    probe.try_reserve(bsize)?;
-    drop(probe);
-    Ok(vec![0u8; bsize])
 }
 
 /// Read one block worth of data, applying `conv=sync` and `conv=swab`.
