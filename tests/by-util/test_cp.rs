@@ -1103,6 +1103,18 @@ fn test_cp_update_older_missing_source() {
 }
 
 #[test]
+fn test_cp_missing_source_fails_before_touching_destination() {
+    for option in ["--update=none", "--remove-destination"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("destination", "kept");
+        ucmd.args(&[option, "missing", "destination"])
+            .fails()
+            .stderr_contains("cannot stat 'missing'");
+        assert_eq!(at.read("destination"), "kept");
+    }
+}
+
+#[test]
 fn test_cp_update_older_skipped_destination_is_not_just_created() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a");

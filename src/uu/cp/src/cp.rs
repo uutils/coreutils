@@ -2249,10 +2249,10 @@ fn verify_relative_symlink_in_cwd(source: &Path, dest: &Path, options: &Options)
 fn update_keeps_dest(
     source: &Path,
     dest: &Path,
+    source_metadata: &Metadata,
     dest_metadata: Option<&Metadata>,
     writes_through_dangling_symlink: bool,
     options: &Options,
-    source_in_command_line: bool,
 ) -> CopyResult<bool> {
     if options.update != UpdateMode::IfOlder {
         return Ok(false);
@@ -2266,17 +2266,6 @@ fn update_keeps_dest(
     {
         return Ok(false);
     }
-    let source_metadata = if options.dereference(source_in_command_line) {
-        fs::metadata(source)
-    } else {
-        fs::symlink_metadata(source)
-    }
-    .map_err(|e| {
-        CpError::IoErrContext(
-            e,
-            translate!("cp-error-cannot-stat-context", "source" => source.quote()),
-        )
-    })?;
     Ok(source_metadata.modified()? <= dest_metadata.modified()?)
 }
 
@@ -2798,13 +2787,24 @@ fn copy_file(
     source_in_command_line: bool,
 ) -> CopyResult<()> {
     let source_is_symlink = source.is_symlink();
+    let source_metadata = if options.dereference(source_in_command_line) {
+        fs::metadata(source)
+    } else {
+        fs::symlink_metadata(source)
+    }
+    .map_err(|e| {
+        CpError::IoErrContext(
+            e,
+            translate!("cp-error-cannot-stat-context", "source" => source.quote()),
+        )
+    })?;
     let initial_dest_metadata = dest.symlink_metadata().ok();
+    let remove_destination = matches!(
+        options.overwrite,
+        OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+    );
     // `--attributes-only` changes an existing `dest` in place.
-    let attributes_only_in_place = options.attributes_only
-        && !matches!(
-            options.overwrite,
-            OverwriteMode::Clobber(ClobberMode::RemoveDestination)
-        );
+    let attributes_only_in_place = options.attributes_only && !remove_destination;
 
     // Identifies `source` in `copied_files`, which is read only to preserve hard
     // links. `--link` preserves them anyway, since every name links to its source.
@@ -2837,20 +2837,17 @@ fn copy_file(
     let writes_through_dangling_symlink = dest_is_symlink
         && !dest.try_exists().unwrap_or(false)
         && (options.dereference(source_in_command_line) || !source_is_symlink)
-        && !matches!(
-            options.overwrite,
-            OverwriteMode::Clobber(ClobberMode::RemoveDestination)
-        );
+        && !remove_destination;
 
     // Must run before anything below can remove, back up or prompt for `dest`.
     if !links_to_copy
         && update_keeps_dest(
             source,
             dest,
+            &source_metadata,
             initial_dest_metadata.as_ref(),
             writes_through_dangling_symlink,
             options,
-            source_in_command_line,
         )?
     {
         // Later hard links to `source` are linked to the kept `dest`.
@@ -2887,10 +2884,7 @@ fn copy_file(
             ));
         }
         if paths_refer_to_same_file(source, dest, true)
-            && matches!(
-                options.overwrite,
-                OverwriteMode::Clobber(ClobberMode::RemoveDestination)
-            )
+            && remove_destination
             && options.backup == BackupMode::None
         {
             fs::remove_file(dest)?;
@@ -2900,10 +2894,7 @@ fn copy_file(
     // Path resolution is the last condition checked, only reached in the rare
     // hardlink `--remove-destination` case rather than on every file `cp` touches.
     if are_hardlinks_to_same_file(source, dest)
-        && matches!(
-            options.overwrite,
-            OverwriteMode::Clobber(ClobberMode::RemoveDestination)
-        )
+        && remove_destination
         && !paths_are_same_entry(source, dest)
     {
         fs::remove_file(dest)?;
@@ -2987,20 +2978,6 @@ fn copy_file(
     // Calculate the context upfront before canonicalizing the path
     let context = context_for(source, dest);
     let context = context.as_str();
-
-    let source_metadata = {
-        let result = if options.dereference(source_in_command_line) {
-            fs::metadata(source)
-        } else {
-            fs::symlink_metadata(source)
-        };
-        result.map_err(|err| {
-            CpError::IoErrContext(
-                err,
-                translate!("cp-error-cannot-stat-context", "source" => source.quote()),
-            )
-        })?
-    };
 
     let dest_metadata = dest.symlink_metadata().ok();
 
