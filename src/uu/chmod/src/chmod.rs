@@ -677,22 +677,14 @@ impl Chmoder {
         }
 
         // Change the mode through a descriptor checked not to be "/". Under -h with -H/-L,
-        // or if it does not open yet, go by path as GNU does; the descent checks for "/".
+        // or if permissions keep it from opening, go by path; the descent checks for "/".
+        // Any other failure means the name no longer leads to a directory: leave it alone.
         let pinned = if should_follow_symlink == self.dereference {
             match DirFd::open(file_path, should_follow_symlink.into())
                 .and_then(|dir_fd| Ok((dir_fd.metadata()?, dir_fd)))
             {
                 Ok(pinned) => Some(pinned),
-                Err(e)
-                    if matches!(
-                        e.raw_os_error(),
-                        Some(uucore::libc::EACCES | uucore::libc::EPERM | uucore::libc::EMFILE)
-                    ) =>
-                {
-                    None
-                }
-                // Other errors, such as the name now leading to a file or a symlink,
-                // leave it alone rather than change whatever is there by path.
+                Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => None,
                 Err(e) => {
                     self.report_failure(ChmodError::CannotStat(file_path.into(), e).into());
                     self.report_not_accessed(file_path);
@@ -702,40 +694,36 @@ impl Chmoder {
         } else {
             None
         };
-        // The descriptor is closed once the mode is changed, keeping only the
-        // directory's identity, so the walk holds no more descriptors than without it.
-        let (changed, result) = match pinned {
-            Some((meta, dir_fd)) => {
-                if self.preserve_root && uucore::fs::metadata_is_root_dir(&meta) {
-                    show!(ChmodError::PreserveRootSameAs(file_path.into()));
-                    return;
-                }
-                let result = self.chmod_dir_fd(&dir_fd, meta.mode() & 0o7777, file_path);
-                (Some(meta.file_info()), result)
+        let changed = if let Some((meta, dir_fd)) = pinned {
+            if self.preserve_root && uucore::fs::metadata_is_root_dir(&meta) {
+                show!(ChmodError::PreserveRootSameAs(file_path.into()));
+                return;
             }
-            None => (None, self.chmod_file(file_path)),
+            if let Err(err) = self.chmod_dir_fd(&dir_fd, meta.mode() & 0o7777, file_path) {
+                self.report_failure(err);
+            }
+            Some(meta.file_info())
+        } else {
+            if let Err(err) = self.chmod_file(file_path) {
+                self.report_failure(err);
+            }
+            None
         };
-        if let Err(err) = result {
-            self.report_failure(err);
-        }
 
-        // Open again to descend, as GNU does, so the mode just set decides whether
-        // the directory can be read.
+        // Open again to descend, so the mode just set decides whether the directory
+        // can be read, and descend only into the directory changed above.
         match DirFd::open(file_path, should_follow_symlink.into()) {
             Ok(dir_fd) => {
-                if let Some(changed) = changed {
-                    // Descend only into the directory changed above, known not to be "/".
-                    if !dir_fd
-                        .metadata()
-                        .is_ok_and(|meta| meta.file_info() == changed)
-                    {
-                        self.report_failure(ChmodError::Replaced(file_path.into()).into());
-                        return;
-                    }
-                } else if self.preserve_root
-                    && dir_fd
-                        .metadata()
-                        .is_ok_and(|meta| uucore::fs::metadata_is_root_dir(&meta))
+                let meta = dir_fd.metadata().ok();
+                if changed.is_some_and(|info| {
+                    meta.as_ref()
+                        .map(uucore::safe_traversal::Metadata::file_info)
+                        != Some(info)
+                }) {
+                    self.report_failure(ChmodError::Replaced(file_path.into()).into());
+                    return;
+                }
+                if self.preserve_root && meta.is_some_and(|m| uucore::fs::metadata_is_root_dir(&m))
                 {
                     show!(ChmodError::PreserveRootSameAs(file_path.into()));
                     return;
