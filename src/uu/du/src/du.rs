@@ -561,17 +561,18 @@ fn safe_du(
         };
 
         // Check excludes
-        for pattern in &options.excludes {
-            if pattern.matches(&this_stat.path.to_string_lossy())
-                || pattern.matches(&entry_name.to_string_lossy())
-            {
-                if options.verbose {
-                    println!(
-                        "{}",
-                        translate!("du-verbose-ignored", "path" => this_stat.path.quote())
-                    );
+        if !options.excludes.is_empty() {
+            let path_string = this_stat.path.to_string_lossy();
+            for pattern in &options.excludes {
+                if is_excluded(pattern, &path_string) {
+                    if options.verbose {
+                        println!(
+                            "{}",
+                            translate!("du-verbose-ignored", "path" => this_stat.path.quote())
+                        );
+                    }
+                    continue 'file_loop;
                 }
-                continue 'file_loop;
             }
         }
 
@@ -721,22 +722,20 @@ fn du_regular(
                             }
 
                             // We have an exclude list
-                            for pattern in &options.excludes {
-                                // Look at all patterns with both short and long paths
-                                // if we have 'du foo' but search to exclude 'foo/bar'
-                                // we need the full path
-                                if pattern.matches(&this_stat.path.to_string_lossy())
-                                    || pattern.matches(&entry.file_name().into_string().unwrap())
-                                {
-                                    // if the directory is ignored, leave early
-                                    if options.verbose {
-                                        println!(
-                                            "{}",
-                                            translate!("du-verbose-ignored", "path" => this_stat.path.quote())
-                                        );
+                            if !options.excludes.is_empty() {
+                                let path_string = this_stat.path.to_string_lossy();
+                                for pattern in &options.excludes {
+                                    if is_excluded(pattern, &path_string) {
+                                        // if the directory is ignored, leave early
+                                        if options.verbose {
+                                            println!(
+                                                "{}",
+                                                translate!("du-verbose-ignored", "path" => this_stat.path.quote())
+                                            );
+                                        }
+                                        // Go to the next file
+                                        continue 'file_loop;
                                     }
-                                    // Go to the next file
-                                    continue 'file_loop;
                                 }
                             }
 
@@ -847,6 +846,52 @@ fn file_as_vec(filename: impl AsRef<Path>) -> UResult<Vec<String>> {
     let buf = BufReader::new(file);
     let lines = buf.lines().collect::<Result<Vec<String>, _>>()?;
     Ok(lines)
+}
+
+/// Whether `pattern` matches `path` or a trailing part of it that starts
+/// after a separator, so `target/debug` excludes `./target/debug` and
+/// `x/target/debug` but `get/debug` does not.
+fn is_excluded(pattern: &Pattern, path: &str) -> bool {
+    if pattern.matches(path) {
+        return true;
+    }
+    let glob = pattern.as_str();
+    // `*` also matches separators, so a leading `*` that matches a trailing
+    // part matches the whole path too, which was checked above.
+    if glob.starts_with('*') {
+        return false;
+    }
+    let mut starts = path
+        .match_indices(std::path::is_separator)
+        .map(|(i, sep)| i + sep.len());
+    // Without wildcards or separators only the last component can match.
+    if !glob.contains(|c| std::path::is_separator(c) || matches!(c, '*' | '?' | '[')) {
+        return starts
+            .next_back()
+            .is_some_and(|i| pattern.matches(&path[i..]));
+    }
+    starts.any(|i| pattern.matches(&path[i..]))
+}
+
+/// Collapse trailing separators to one like GNU du, so the operand `a//`
+/// is shown as `a/` and its entries as `a/b`. `//` is kept as GNU does.
+fn collapse_trailing_separators(path: PathBuf) -> PathBuf {
+    let Ok(bytes) = uucore::os_str_as_bytes(path.as_os_str()) else {
+        return path;
+    };
+    let is_sep = |i: usize| std::path::is_separator(bytes[i] as char);
+    if bytes.len() == 2 && is_sep(0) && is_sep(1) {
+        return path;
+    }
+    let mut end = bytes.len();
+    while end > 1 && is_sep(end - 1) && is_sep(end - 2) {
+        end -= 1;
+    }
+    if end == bytes.len() {
+        return path;
+    }
+    // A prefix of bytes that converted fine above cannot fail to convert back.
+    PathBuf::from(uucore::os_str_from_bytes(&bytes[..end]).unwrap())
 }
 
 /// Given the `--exclude-from` and/or `--exclude` arguments, returns the globset lists
@@ -1171,6 +1216,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         vec![PathBuf::from(".")]
     };
+    let files: Vec<PathBuf> = files
+        .into_iter()
+        .map(collapse_trailing_separators)
+        .collect();
 
     let time = matches.contains_id(options::TIME).then(|| {
         matches
@@ -1253,7 +1302,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if !&traversal_options.excludes.is_empty() {
             let path_string = path.to_string_lossy();
             for pattern in &traversal_options.excludes {
-                if pattern.matches(&path_string) {
+                if is_excluded(pattern, &path_string) {
                     // if the directory is ignored, leave early
                     if traversal_options.verbose {
                         println!(
