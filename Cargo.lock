@@ -512,6 +512,7 @@ dependencies = [
  "clap_complete",
  "clap_mangen",
  "ctor",
+ "dunce",
  "filetime",
  "fluent-syntax",
  "glob",
@@ -3852,6 +3853,7 @@ name = "uu_pwd"
 version = "0.13.0"
 dependencies = [
  "clap",
+ "dunce",
  "fluent",
  "uucore",
 ]
@@ -3861,6 +3863,7 @@ name = "uu_readlink"
 version = "0.13.0"
 dependencies = [
  "clap",
+ "dunce",
  "fluent",
  "uucore",
 ]

@@ -138,16 +138,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         _ => Err(error).map_err_context(|| translate!("pwd-error-failed-to-get-current-directory")),
     })?;
 
-    // \\?\ is a prefix Windows gives to paths under certain circumstances,
-    // including when canonicalizing them.
-    // With the right extension trait we can remove it non-lossily, but
-    // we print it lossily anyway, so no reason to bother.
+    // Canonicalizing a path on Windows can give it a \\?\ prefix; dunce
+    // strips it (including the \\?\UNC\ form) whenever that can be done
+    // without changing what the path refers to.
     #[cfg(windows)]
-    let cwd = cwd
-        .to_string_lossy()
-        .strip_prefix(r"\\?\")
-        .map(Into::into)
-        .unwrap_or(cwd);
+    let cwd = dunce::simplified(&cwd);
 
     println_verbatim(cwd)
         .map_err_context(|| translate!("pwd-error-failed-to-print-current-directory"))?;
