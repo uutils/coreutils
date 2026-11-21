@@ -9,9 +9,9 @@
 //!
 //! See the [`copy_directory`] function for more information.
 
+use hashbrown::{HashMap, HashSet};
 #[cfg(windows)]
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
 use std::convert::identity;
 use std::env;
 use std::fs::{self, exists};
