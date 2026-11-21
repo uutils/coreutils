@@ -439,6 +439,8 @@ openssl = [
 ]
 # "test_risky_names" == enable tests that create problematic file names (would make a network share inaccessible to Windows, breaks SVN on Mac OS, etc.)
 test_risky_names = []
+# Linux logind integration tests.
+test_logind = ["who", "pinky", "users", "uptime"]
 # * only build `uudoc` when `--feature uudoc` is activated
 uudoc = [
   "dep:clap_complete",
