@@ -304,7 +304,18 @@ impl Source {
                     }
                 }
             }
-            Self::File(f) => f.seek(SeekFrom::Current(n.try_into().unwrap())),
+            Self::File(f) => {
+                if let Ok(offset) = n.try_into() {
+                    match f.seek(SeekFrom::Current(offset)) {
+                        // Special files such as EFI variables can be readable without
+                        // supporting seeks. Propagate any other seek error.
+                        Err(e) if e.raw_os_error() == Some(libc::ESPIPE) => {}
+                        result => return result,
+                    }
+                }
+                // Also read and discard when n exceeds the signed seek offset range.
+                uucore::io::read_and_discard(f, n, ibs)
+            }
             #[cfg(unix)]
             Self::Fifo(f) => uucore::io::read_and_discard(f, n, ibs),
         }
@@ -1673,11 +1684,31 @@ pub fn uu_app() -> Command {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(not(target_os = "wasi"))]
+    use crate::Source;
     #[cfg(unix)]
-    use crate::{Dest, Input, Source, dd_copy};
+    use crate::{Dest, Input, dd_copy};
     use crate::{Output, Parser, calc_bsize};
 
     use std::path::Path;
+
+    #[test]
+    // The WASI unit-test runner does not grant access to temporary files.
+    #[cfg(not(target_os = "wasi"))]
+    fn skip_file_beyond_seek_range() {
+        use std::io::{Read, Seek, Write};
+
+        for n in [1_u64 << 63, u64::MAX] {
+            let mut file = tempfile::tempfile().unwrap();
+            file.write_all(b"payload").unwrap();
+            file.rewind().unwrap();
+            let mut src = Source::File(file.try_clone().unwrap());
+            assert_eq!(src.skip(n, 2).unwrap(), 7);
+            let mut rest = Vec::new();
+            file.read_to_end(&mut rest).unwrap();
+            assert!(rest.is_empty());
+        }
+    }
 
     #[test]
     #[cfg(unix)]
