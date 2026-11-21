@@ -272,6 +272,19 @@ impl Cell {
             width: UnicodeWidthStr::width(os.to_string_lossy().as_ref()),
         }
     }
+
+    /// Create a cell from a mount point, replacing ASCII control characters
+    /// with `?` like GNU df, so that a newline in the name can't split the row.
+    fn from_mount_point(os: &OsString) -> Self {
+        let bytes: Vec<u8> = uucore::os_str_as_bytes_lossy(os)
+            .iter()
+            .map(|&b| if b.is_ascii_control() { b'?' } else { b })
+            .collect();
+        Self {
+            width: UnicodeWidthStr::width(String::from_utf8_lossy(&bytes).as_ref()),
+            bytes,
+        }
+    }
 }
 
 /// A formatter for [`Row`].
@@ -368,7 +381,7 @@ impl<'a> RowFormatter<'a> {
                     if self.is_total_row && !self.options.columns.contains(&Column::Source) {
                         Cell::from_string(translate!("df-total"))
                     } else {
-                        Cell::from_os_string(&self.row.fs_mount)
+                        Cell::from_mount_point(&self.row.fs_mount)
                     }
                 }
                 Column::Itotal => self.scaled_inodes(self.row.inodes),
@@ -583,6 +596,24 @@ mod tests {
         temp_env::with_var("LANG", Some("C"), || {
             let _ = setup_localization("df");
         });
+    }
+
+    #[test]
+    fn test_mount_point_control_chars_are_replaced() {
+        let cell = Cell::from_mount_point(&"/mnt/usb\nstick\tx".into());
+        assert_eq!(cell.bytes, b"/mnt/usb?stick?x");
+        assert_eq!(cell.width, 16);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_mount_point_preserves_non_utf8_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let mount_point = std::ffi::OsString::from_vec(b"/mnt/\xff\nx".to_vec());
+        let cell = Cell::from_mount_point(&mount_point);
+        assert_eq!(cell.bytes, b"/mnt/\xff?x");
+        assert_eq!(cell.width, 8);
     }
 
     const COLUMNS_WITH_FS_TYPE: [Column; 7] = [
