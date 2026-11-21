@@ -157,6 +157,29 @@ fn test_with_double_space_option() {
 }
 
 #[test]
+fn test_double_space_keeps_one_line_on_a_short_page() {
+    // A page with room for a single line still prints it, followed by the
+    // blank line of -d.
+    for length in ["1", "3"] {
+        new_ucmd!()
+            .args(&["-d", "-l", length])
+            .pipe_in("a\nb\n")
+            .succeeds()
+            .stdout_only("a\n\nb\n\n");
+    }
+    // Header and trailer leave one line with -l 11 and three with -l 13;
+    // either way each page takes one input line.
+    for length in ["11", "13"] {
+        new_ucmd!()
+            .args(&["-d", "-l", length])
+            .pipe_in("a\nb\n")
+            .succeeds()
+            .stdout_contains("Page 1\n\n\na\n")
+            .stdout_contains("Page 2\n\n\nb\n");
+    }
+}
+
+#[test]
 fn test_with_first_line_number_option() {
     let test_file_path = "test_one_page.log";
     let expected_test_file_path = "test_one_page_first_line.log.expected";
