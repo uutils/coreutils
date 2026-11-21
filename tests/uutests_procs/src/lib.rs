@@ -77,7 +77,7 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
             "WASI: no locale data; every locale (even one requested via LC_ALL or other locale env vars) behaves as C"
         }
         "NoPermissionBits" => {
-            "WASI: no permission bits/chmod syscall, so file mode cannot be restricted or observed, and explicit mode/ownership preservation always fails"
+            "WASI: no permission bits/chmod syscall and no mkdir mode parameter, so file and directory modes cannot be restricted or observed, and explicit mode/ownership preservation always fails"
         }
         "NoPipeSignalSupport" => "WASI: no pipe/signal support",
         "NoRlimitSetrlimitSupport" => "WASI: rlimit/setrlimit not supported",
@@ -93,9 +93,6 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
         "NoUnixDomainSockets" => "WASI: no Unix domain socket support",
         "NonUtf8ArgsUnsupported" => {
             "WASI: argv, env values, and paths must be valid UTF-8; wasmtime cannot pass non-UTF-8 data through the sandboxed binary or the spawned test harness"
-        }
-        "PathCreateDirectoryNoModeParam" => {
-            "WASI: path_create_directory has no mode parameter and chmod returns ENOSYS, so directories can't be created with restricted permissions"
         }
         "PermissionErrorsSurfaceAsEnoent" => {
             "WASI: filesystem permission errors surface as ENOENT rather than EACCES"
