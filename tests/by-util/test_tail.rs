@@ -7,6 +7,7 @@
 // spell-checker:ignore (libs) kqueue ELOOP EISDIR FSIZE setrlimit SIGXFSZ
 // spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
 // spell-checker:ignore (cmd) taskkill
+// spell-checker:ignore nonblocking fdinfo dataother backpressure deviceold devicenew CLOEXEC WOULDBLOCK deviceregular
 
 #![allow(
     clippy::unicode_not_nfc,
@@ -53,6 +54,25 @@ use uutests::util::expected_result;
 #[cfg(not(windows))]
 use uutests::util::is_ci;
 use uutests::util_name;
+
+#[cfg(unix)]
+fn wait_for_output(child: &mut uutests::util::UChild, expected: &str) -> bool {
+    for _ in 0..500 {
+        if child.stdout_all() == expected {
+            return true;
+        }
+        child.delay(10);
+    }
+    child.stdout_all() == expected
+}
+
+#[cfg(all(unix, not(target_os = "redox")))]
+fn write_pty_after_eof(controller: &mut File, data: &[u8]) {
+    // End the initial read while keeping the device open, then deliver a partial line.
+    controller.write_all(b"\x04").unwrap();
+    controller.write_all(data).unwrap();
+    controller.write_all(b"\x04").unwrap();
+}
 
 const FOOBAR_TXT: &str = "foobar.txt";
 const FOOBAR_2_TXT: &str = "foobar2.txt";
@@ -5736,6 +5756,346 @@ fn test_follow_stdout_pipe_close() {
     child.stdout_exact_bytes(6); // read "line1\n"
     child.close_stdout();
     child.delay(2000).make_assertion().is_not_alive();
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[rstest]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_follow_character_device_reads_new_data(
+    #[values("-f", "-F")] follow: &str,
+    #[values(false, true)] use_polling: bool,
+) {
+    let (path, mut controller, _replica) = uutests::util::pty_path();
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.touch("other");
+    let mut command = ts.ucmd();
+    command.args(&["-q", "-n0", "-s.1", follow, &path, "other"]);
+    if use_polling {
+        command.arg("--use-polling");
+    }
+    let mut child = command.run_no_wait();
+
+    // A partial line also checks that output is flushed.
+    write_pty_after_eof(&mut controller, b"new data");
+    assert!(
+        wait_for_output(&mut child, "new data"),
+        "device input was not read"
+    );
+    // A quiet device must not block output from the other input.
+    ts.fixtures.append("other", "other file\n");
+    let received = wait_for_output(&mut child, "new dataother file\n");
+    let result = child.kill().make_assertion().with_all_output();
+    assert!(received, "the other input stalled");
+    result.stdout_is("new dataother file\n").no_stderr();
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(unix)]
+fn test_follow_character_device_continuous_input() {
+    use std::io::Read;
+    use std::os::fd::OwnedFd;
+    use std::os::unix::net::UnixStream;
+    use std::time::{Duration, Instant};
+
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.symlink_file("/dev/null", "input");
+    ts.fixtures.write("other", "ready\n");
+    let mut process = ts.cmd("sleep").arg("60").run_no_wait();
+    let (mut output, writer) = UnixStream::pair().unwrap();
+    output
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let mut command = ts.ucmd();
+    // Bound memory use if a regression buffers continuous input indefinitely.
+    #[cfg(target_os = "linux")]
+    command.limit(rlimit::Resource::AS, 200 * 1024 * 1024, 200 * 1024 * 1024);
+    let mut child = command
+        .args(&["-q", "-n1", "-s60", "-F", "input", "other"])
+        .arg(format!("--pid={}", process.id()))
+        .limit(rlimit::Resource::CORE, 0, 0)
+        .set_stdout(OwnedFd::from(writer))
+        .run_no_wait();
+    let mut ready = [0; 6];
+    output.read_exact(&mut ready).unwrap();
+    assert_eq!(&ready, b"ready\n");
+
+    ts.fixtures.symlink_file("/dev/zero", "replacement");
+    ts.fixtures.rename("replacement", "input");
+    // Read several batches without waiting for the 60-second polling interval.
+    let mut zeros = vec![1; 256 * 1024];
+    output.read_exact(&mut zeros).unwrap();
+    assert!(zeros.iter().all(|byte| *byte == 0));
+
+    ts.fixtures.append("other", "other file\n");
+    let mut marker = Vec::new();
+    let mut buffer = [0; 8192];
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while marker.len() < b"other file\n".len() && Instant::now() < deadline {
+        let count = output.read(&mut buffer).unwrap();
+        if count == 0 {
+            break;
+        }
+        marker.extend(buffer[..count].iter().copied().filter(|byte| *byte != 0));
+    }
+    assert_eq!(marker, b"other file\n", "the other input stalled");
+
+    process.kill();
+    // Drain stdout so output backpressure cannot prevent the next PID check.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        if output.read(&mut buffer).unwrap() == 0 {
+            break;
+        }
+    }
+    while child.is_alive() && Instant::now() < deadline {
+        child.delay(10);
+    }
+    assert!(
+        child.is_not_alive(),
+        "continuous device input blocked --pid"
+    );
+    child
+        .wait()
+        .unwrap()
+        .success()
+        .stderr_contains("'input' has been replaced");
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[rstest]
+#[cfg(target_os = "linux")]
+fn test_follow_character_device_stdin_keeps_inherited_access(
+    #[values(false, true)] use_polling: bool,
+) {
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::PermissionsExt;
+
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (path, mut controller, replica) = uutests::util::pty_path();
+    let permissions = replica.metadata().unwrap().permissions();
+    let ts = TestScenario::new(util_name!());
+    // Linux resolves redirected stdin through /proc/self/fd/0. It must keep
+    // using that descriptor when the resolved device can no longer be opened.
+    set_permissions(&path, Permissions::from_mode(0o0)).unwrap();
+    let mut command = ts.ucmd();
+    command
+        .args(&["-q", "-n0", "-s.01", "-f", "-", "/dev/null"])
+        .set_stdin(replica);
+    if use_polling {
+        command.arg("--use-polling");
+    }
+    let mut child = command.run_no_wait();
+    write_pty_after_eof(&mut controller, b"device");
+    let received = wait_for_output(&mut child, "device");
+    set_permissions(&path, permissions).unwrap();
+    let result = child.kill().make_assertion().with_all_output();
+    assert!(received, "inherited device input was not read");
+    result.stdout_is("device");
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(unix)]
+fn test_follow_character_device_keeps_file_notifications() {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.write("f", "ready\n");
+    let mut child = ts
+        .ucmd()
+        .args(&["-q", "-n1", "-s60", "-f", "/dev/null", "f"])
+        .run_no_wait();
+    assert!(wait_for_output(&mut child, "ready\n"));
+
+    // An append should arrive without waiting for the device's polling interval.
+    ts.fixtures.append("f", "new data\n");
+    let received = wait_for_output(&mut child, "ready\nnew data\n");
+    let result = child.kill().make_assertion().with_all_output();
+    assert!(received, "file notification was not handled promptly");
+    result.stdout_is("ready\nnew data\n").no_stderr();
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[rstest]
+#[cfg(target_os = "linux")]
+fn test_follow_character_device_read_flags(
+    #[values(false, true)] inherited: bool,
+    #[values(false, true)] use_polling: bool,
+) {
+    use rustix::fs::{OFlags, fcntl_getfl};
+
+    let (path, mut controller, replica) = uutests::util::pty_path();
+    let flags = fcntl_getfl(&replica).unwrap();
+    assert!(!flags.contains(OFlags::NONBLOCK));
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.touch("other");
+    let mut command = ts.ucmd();
+    command.args(&["-q", "-n0", "-s.01", "-f"]);
+    if inherited {
+        command.arg("-").set_stdin(replica.try_clone().unwrap());
+    } else {
+        command.arg(&path);
+    }
+    command.arg("other");
+    if use_polling {
+        command.arg("--use-polling");
+    }
+    let mut child = command.run_no_wait();
+    write_pty_after_eof(&mut controller, b"device");
+    let received = wait_for_output(&mut child, "device");
+    let device_flags = tail_input_flags(child.id(), Path::new(&path));
+    let result = child.kill().make_assertion().with_all_output();
+
+    assert!(received, "device input was not read");
+    let device_flags = device_flags
+        .unwrap()
+        .expect("tail did not keep the device open");
+    assert_eq!(device_flags & OFlags::NONBLOCK.bits() != 0, !inherited);
+    assert_eq!(fcntl_getfl(&replica).unwrap(), flags);
+    result.stdout_is("device");
+    if inherited {
+        result.stderr_is("tail: warning: following standard input indefinitely is ineffective\n");
+    } else {
+        result.no_stderr();
+    }
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[rstest]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_follow_character_device_stdin_alias_keeps_flags(#[values(false, true)] use_polling: bool) {
+    use rustix::fs::{OFlags, fcntl_getfl};
+
+    let (_path, mut controller, replica) = uutests::util::pty_path();
+    let flags = fcntl_getfl(&replica).unwrap();
+    assert!(!flags.contains(OFlags::NONBLOCK));
+    let ts = TestScenario::new(util_name!());
+    let mut command = ts.ucmd();
+    command
+        .args(&["-n0", "-s.01", "-f", "/dev/fd/0"])
+        .set_stdin(replica.try_clone().unwrap());
+    if use_polling {
+        command.arg("--use-polling");
+    }
+    let mut child = command.run_no_wait();
+    write_pty_after_eof(&mut controller, b"device");
+    let received = wait_for_output(&mut child, "device");
+    let result = child.kill().make_assertion().with_all_output();
+
+    assert!(received, "device input through stdin's alias was not read");
+    assert_eq!(fcntl_getfl(&replica).unwrap(), flags);
+    result.stdout_is("device").no_stderr();
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[rstest]
+#[case("-f", "deviceold")]
+#[case("-F", "devicenew")]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_follow_character_device_retargeted_in_unreadable_parent(
+    #[case] follow: &str,
+    #[case] expected: &str,
+    #[values(false, true)] use_polling: bool,
+) {
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (path, mut controller, _replica) = uutests::util::pty_path();
+    let (new_path, mut new_controller, _new_replica) = uutests::util::pty_path();
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkdir("dir");
+    ts.fixtures.symlink_file(&path, "dir/input");
+    // Allow replacing the name while preventing a native parent-directory watch.
+    ts.fixtures.set_mode("dir", 0o333);
+    let mut command = ts.ucmd();
+    command.args(&["-n0", "-s.1", follow, "dir/input"]);
+    if use_polling {
+        command.arg("--use-polling");
+    }
+    let mut child = command.run_no_wait();
+    write_pty_after_eof(&mut controller, b"device");
+    let ready = wait_for_output(&mut child, "device");
+    let received = if ready {
+        ts.fixtures.symlink_file(&new_path, "replacement");
+        ts.fixtures.rename("replacement", "dir/input");
+        write_pty_after_eof(&mut new_controller, b"new");
+        // Descriptor following must keep reading the original device.
+        write_pty_after_eof(&mut controller, b"old");
+        wait_for_output(&mut child, expected)
+    } else {
+        false
+    };
+    ts.fixtures.set_mode("dir", 0o700);
+    let result = child.kill().make_assertion().with_all_output();
+    assert!(ready, "initial device data was not read");
+    assert!(received, "retargeted device input was not read");
+    result.stdout_is(expected);
+    if follow == "-F" {
+        result.stderr_contains("'dir/input' has been replaced;  following new file");
+    } else {
+        result.no_stderr();
+    }
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_follow_character_device_polling_does_not_read_siblings() {
+    use rustix::fs::inotify::{self, CreateFlags, WatchFlags};
+
+    let (path, mut controller, _replica) = uutests::util::pty_path();
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.symlink_file(&path, "input");
+    ts.fixtures.write("unrelated", "leave this file alone\n");
+    let events = inotify::init(CreateFlags::NONBLOCK | CreateFlags::CLOEXEC).unwrap();
+    inotify::add_watch(&events, ts.fixtures.plus("unrelated"), WatchFlags::ACCESS).unwrap();
+
+    let mut child = ts
+        .ucmd()
+        .args(&["-n0", "-s.1", "-F", "--use-polling", "input"])
+        .run_no_wait();
+    write_pty_after_eof(&mut controller, b"device");
+    let received = wait_for_output(&mut child, "device");
+    let result = child.kill().make_assertion().with_all_output();
+    assert!(received, "device input was not read");
+    result.stdout_is("device").no_stderr();
+    assert_eq!(
+        rustix::io::read(&events, &mut [0_u8; 512]),
+        Err(rustix::io::Errno::WOULDBLOCK),
+        "polling a device must not read unrelated files in its directory"
+    );
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[rstest]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_follow_character_device_replaced_by_file(#[values(false, true)] use_polling: bool) {
+    let (path, mut controller, _replica) = uutests::util::pty_path();
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.symlink_file(&path, "input");
+    let mut command = ts.ucmd();
+    command.args(&["-n0", "-s.1", "-F", "input"]);
+    if use_polling {
+        command.arg("--use-polling");
+    }
+    let mut child = command.run_no_wait();
+    write_pty_after_eof(&mut controller, b"device");
+    assert!(wait_for_output(&mut child, "device"));
+
+    ts.fixtures.write("replacement", "regular\n");
+    ts.fixtures.rename("replacement", "input");
+    assert!(
+        wait_for_output(&mut child, "deviceregular\n"),
+        "replacement was not read"
+    );
+    ts.fixtures.append("input", "more\n");
+    let received = wait_for_output(&mut child, "deviceregular\nmore\n");
+    let result = child.kill().make_assertion().with_all_output();
+    assert!(received, "replacement file notification was not handled");
+    result
+        .stdout_is("deviceregular\nmore\n")
+        .stderr_contains("'input' has been replaced;  following new file");
 }
 
 #[uutests::wasi_ignore(TailFollowDisabled)]
