@@ -69,7 +69,7 @@ pub(crate) fn filesystem_from_mount(
     Ok(Filesystem {
         file,
         mount_info: mount.clone(),
-        usage: FsUsage::new(usage),
+        usage: Some(FsUsage::new(usage)),
     })
 }
 
@@ -170,7 +170,7 @@ where
     Ok(Filesystem {
         file: Some(file),
         mount_info,
-        usage,
+        usage: Some(usage),
     })
 }
 
