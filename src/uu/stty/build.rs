@@ -3,16 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use cfg_aliases::cfg_aliases;
+#[path = "../../../cfg_aliases.rs"]
+mod cfg_aliases;
 
 fn main() {
-    cfg_aliases! {
-        bsd: { any(
-            target_vendor = "apple",
-            target_os = "freebsd",
-            target_os = "dragonfly",
-            target_os = "netbsd",
-            target_os = "openbsd"
-        ) },
-    };
+    cfg_aliases::register();
 }
