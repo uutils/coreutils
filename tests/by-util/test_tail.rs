@@ -3268,7 +3268,7 @@ fn test_pid_without_follow_waits_for_fifo_eof() {
     let mut child = command
         .arg("--pid=0")
         .args(&["-n1", "fifo"])
-        .timeout(std::time::Duration::from_secs(5))
+        .timeout(Duration::from_secs(5))
         .run_no_wait();
     child
         .make_assertion_with_delay(500)
@@ -3306,7 +3306,7 @@ fn test_fifo_with_pid_reads_while_writer_stays_open() {
     let mut child = ucmd
         .args(&["-f", "-s.05", "-n1", "fifo"])
         .arg(format!("--pid={}", monitored.id()))
-        .timeout(std::time::Duration::from_secs(5))
+        .timeout(Duration::from_secs(5))
         .run_no_wait();
     child
         .make_assertion_with_delay(500)
