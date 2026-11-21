@@ -3717,9 +3717,9 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
+ "fancy-regex",
  "fluent",
  "itoa",
- "regex",
  "tempfile",
  "uucore",
 ]

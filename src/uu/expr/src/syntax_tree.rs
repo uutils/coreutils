@@ -155,78 +155,6 @@ impl StringOp {
     }
 }
 
-/// Check if regex pattern character iterator is at the end of a regex expression or subexpression
-fn is_end_of_expression<I>(pattern_chars: &I) -> bool
-where
-    I: Iterator<Item = char> + Clone,
-{
-    let mut pattern_chars_clone = pattern_chars.clone();
-    match pattern_chars_clone.next() {
-        Some('\\') => matches!(pattern_chars_clone.next(), Some(')' | '|')),
-        None => true, // No characters left
-        _ => false,
-    }
-}
-
-/// Check if regex pattern character iterator is at the start of a valid range quantifier.
-/// The iterator's start position is expected to be after the opening brace.
-/// Range quantifier ends to closing brace.
-///
-/// # Examples of valid range quantifiers
-///
-/// - `r"\{3\}"`
-/// - `r"\{3,\}"`
-/// - `r"\{,6\}"`
-/// - `r"\{3,6\}"`
-/// - `r"\{,\}"`
-fn verify_range_quantifier<I>(pattern_chars: &I) -> Result<(), ExprError>
-where
-    I: Iterator<Item = char> + Clone,
-{
-    let mut pattern_chars_clone = pattern_chars.clone().peekable();
-    if pattern_chars_clone.peek().is_none() {
-        return Err(ExprError::UnmatchedOpeningBrace);
-    }
-
-    // Parse the string between braces
-    let mut quantifier = String::new();
-    let mut prev = '\0';
-    let mut curr_is_escaped = false;
-    while let Some(curr) = pattern_chars_clone.next() {
-        curr_is_escaped = prev == '\\' && !curr_is_escaped;
-        if curr_is_escaped && curr == '}' {
-            break;
-        }
-        if pattern_chars_clone.peek().is_none() {
-            return Err(ExprError::UnmatchedOpeningBrace);
-        }
-        if prev != '\0' {
-            quantifier.push(prev);
-        }
-        prev = curr;
-    }
-
-    // Check if parsed quantifier is valid
-    let re = Regex::new(r"^([0-9]*,[0-9]*|[0-9]+)$").expect("valid regular expression");
-    if let Ok(Some(captures)) = re.captures(&quantifier) {
-        let matched = captures.get(0).map_or("", |m| m.as_str());
-        match matched.split_once(',') {
-            Some(("", "")) => Ok(()),
-            Some((x, "") | ("", x)) if x.parse::<i16>().is_ok() => Ok(()),
-            Some((_, "") | ("", _)) => Err(ExprError::TooBigRangeQuantifierIndex),
-            Some((f, l)) => match (f.parse::<i16>(), l.parse::<i16>()) {
-                (Ok(f), Ok(l)) if f > l => Err(ExprError::InvalidBracketContent),
-                (Ok(_), Ok(_)) => Ok(()),
-                _ => Err(ExprError::TooBigRangeQuantifierIndex),
-            },
-            None if matched.parse::<i16>().is_ok() => Ok(()),
-            None => Err(ExprError::TooBigRangeQuantifierIndex),
-        }
-    } else {
-        Err(ExprError::InvalidBracketContent)
-    }
-}
-
 /// Check for errors in a supplied regular expression
 ///
 /// GNU coreutils shows messages for invalid regular expressions
@@ -264,144 +192,19 @@ fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
     }
 }
 
-/// Transpile the input pattern from BRE syntax to ERE for fancy-regex
 fn transpile_bre_to_ere(pattern_str: &str) -> ExprResult<String> {
-    let mut re_string = String::with_capacity(pattern_str.len() + 8);
-    let mut pattern_chars = pattern_str.chars().peekable();
-    let mut prev = '\0';
-    let mut prev_is_escaped = false;
-    let mut in_bracket = false;
-    let mut bracket_start_idx = 0;
-    let mut is_start_of_expression = true;
-    let mut after_anchor_caret = false;
-
-    while let Some(curr) = pattern_chars.next() {
-        let curr_is_escaped = prev == '\\' && !prev_is_escaped;
-        let mut next_is_start = false;
-        let mut next_after_anchor = false;
-
-        if in_bracket {
-            let is_first = re_string.len() == bracket_start_idx + 1
-                || (re_string.ends_with("[^") && re_string.len() == bracket_start_idx + 2);
-            if curr == ']' && !curr_is_escaped && !is_first {
-                in_bracket = false;
-            }
-            re_string.push(curr);
-        } else {
-            match curr {
-                '[' if !curr_is_escaped => {
-                    in_bracket = true;
-                    bracket_start_idx = re_string.len();
-                    re_string.push('[');
-                }
-                // In BRE, '(', ')', '|', '+', '?', '{', '}' are literal by default,
-                // and become operators only when escaped. ERE has the exact opposite convention.
-                '(' | ')' | '|' | '+' | '?' | '{' | '}' => {
-                    if curr_is_escaped {
-                        if re_string.ends_with('\\') {
-                            re_string.pop();
-                        }
-                        match curr {
-                            '(' | '|' => {
-                                re_string.push(curr);
-                                next_is_start = true;
-                            }
-                            '+' | '?' => {
-                                if is_start_of_expression || after_anchor_caret {
-                                    re_string.push('\\');
-                                }
-                                re_string.push(curr);
-                            }
-                            '{' => {
-                                // Handle '{' literally at the start of an expression
-                                if is_start_of_expression || after_anchor_caret {
-                                    re_string.push_str(r"\{");
-                                } else {
-                                    // Check if the following section is a valid range quantifier
-                                    verify_range_quantifier(&pattern_chars)?;
-                                    re_string.push('{');
-                                    // Set the lower bound of range quantifier to 0 if it is missing
-                                    if pattern_chars.peek() == Some(&',') {
-                                        re_string.push('0');
-                                    }
-                                }
-                            }
-                            _ => re_string.push(curr), // ')' and '}'
-                        }
-                    } else {
-                        // Unescaped metacharacter in BRE -> literal in ERE
-                        re_string.push('\\');
-                        re_string.push(curr);
-                    }
-                }
-                '*' => {
-                    if curr_is_escaped {
-                        re_string.push('*');
-                    } else if is_start_of_expression || after_anchor_caret {
-                        re_string.push_str(r"\*");
-                    } else {
-                        re_string.push('*');
-                    }
-                }
-                // Character class negation "[^a]"
-                // Explicitly escaped caret "\^"
-                '^' => {
-                    if curr_is_escaped {
-                        re_string.push('^');
-                    } else if is_start_of_expression {
-                        re_string.push('^');
-                        next_after_anchor = true;
-                    } else if prev == '[' && !prev_is_escaped {
-                        re_string.push('^');
-                    } else {
-                        re_string.push_str(r"\^");
-                    }
-                }
-                '$' if !curr_is_escaped && !is_end_of_expression(&pattern_chars) => {
-                    re_string.push_str(r"\$");
-                }
-                '<' if curr_is_escaped => {
-                    if re_string.ends_with('\\') {
-                        re_string.pop();
-                    }
-                    re_string.push_str(r"\b(?=\w)");
-                }
-                '>' if curr_is_escaped => {
-                    if re_string.ends_with('\\') {
-                        re_string.pop();
-                    }
-                    re_string.push_str(r"\b(?<=\w)");
-                }
-                '\\' if !curr_is_escaped => {
-                    if pattern_chars.peek().is_none() {
-                        return Err(ExprError::TrailingBackslash);
-                    }
-                    // Carry the expression-start / after-anchor state over the
-                    // backslash so the escaped character is still treated as the
-                    // first token of a (sub)expression.
-                    next_is_start = is_start_of_expression;
-                    next_after_anchor = after_anchor_caret;
-                    re_string.push('\\');
-                }
-                _ => {
-                    if curr_is_escaped
-                        && !"123456789.*^$[]\\wWsSbB".contains(curr)
-                        && re_string.ends_with('\\')
-                    {
-                        re_string.pop();
-                    }
-                    re_string.push(curr);
-                }
-            }
+    uucore::bre_regex::transpile(pattern_str).map_err(|error| match error {
+        uucore::bre_regex::TranspileError::UnmatchedOpeningBrace => {
+            ExprError::UnmatchedOpeningBrace
         }
-
-        is_start_of_expression = next_is_start;
-        after_anchor_caret = next_after_anchor;
-        prev_is_escaped = curr_is_escaped;
-        prev = curr;
-    }
-
-    Ok(re_string)
+        uucore::bre_regex::TranspileError::InvalidBracketContent => {
+            ExprError::InvalidBracketContent
+        }
+        uucore::bre_regex::TranspileError::TrailingBackslash => ExprError::TrailingBackslash,
+        uucore::bre_regex::TranspileError::TooBigRangeQuantifierIndex => {
+            ExprError::TooBigRangeQuantifierIndex
+        }
+    })
 }
 
 /// Build a regex from a pattern string with locale-aware encoding
@@ -1114,8 +917,9 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::syntax_tree::verify_range_quantifier;
     use crate::{ExprError, ExprResult};
+
+    use uucore::bre_regex::{TranspileError, transpile};
 
     use super::{
         AstNode, AstNodeInner, BinOp, MaybeNonUtf8Str, NumericOp, RelationOp, StringOp,
@@ -1364,47 +1168,19 @@ mod test {
 
     #[test]
     fn test_is_valid_range_quantifier() {
-        assert!(verify_range_quantifier(&"3\\}".chars()).is_ok());
-        assert!(verify_range_quantifier(&"3,\\}".chars()).is_ok());
-        assert!(verify_range_quantifier(&",6\\}".chars()).is_ok());
-        assert!(verify_range_quantifier(&"3,6\\}".chars()).is_ok());
-        assert!(verify_range_quantifier(&",\\}".chars()).is_ok());
-        assert!(verify_range_quantifier(&"32767\\}anything".chars()).is_ok());
+        assert_eq!(transpile(r"a\{3\}"), Ok(String::from("a{3}")));
+        assert_eq!(transpile(r"a\{3,\}"), Ok(String::from("a{3,}")));
+        assert_eq!(transpile(r"a\{,6\}"), Ok(String::from("a{0,6}")));
+        assert_eq!(transpile(r"a\{3,6\}"), Ok(String::from("a{3,6}")));
+        assert_eq!(transpile(r"a\{,\}"), Ok(String::from("a{0,}")));
+        assert_eq!(transpile(r"a\{32767\}"), Ok(String::from("a{32767}")));
         assert_eq!(
-            verify_range_quantifier(&"\\{3,6\\}".chars()),
-            Err(ExprError::InvalidBracketContent)
+            transpile(r"a\{3,2\}"),
+            Err(TranspileError::InvalidBracketContent)
         );
         assert_eq!(
-            verify_range_quantifier(&"\\}".chars()),
-            Err(ExprError::InvalidBracketContent)
-        );
-        assert_eq!(
-            verify_range_quantifier(&"".chars()),
-            Err(ExprError::UnmatchedOpeningBrace)
-        );
-        assert_eq!(
-            verify_range_quantifier(&"3".chars()),
-            Err(ExprError::UnmatchedOpeningBrace)
-        );
-        assert_eq!(
-            verify_range_quantifier(&"3,".chars()),
-            Err(ExprError::UnmatchedOpeningBrace)
-        );
-        assert_eq!(
-            verify_range_quantifier(&",6".chars()),
-            Err(ExprError::UnmatchedOpeningBrace)
-        );
-        assert_eq!(
-            verify_range_quantifier(&"3,6".chars()),
-            Err(ExprError::UnmatchedOpeningBrace)
-        );
-        assert_eq!(
-            verify_range_quantifier(&",".chars()),
-            Err(ExprError::UnmatchedOpeningBrace)
-        );
-        assert_eq!(
-            verify_range_quantifier(&"32768\\}".chars()),
-            Err(ExprError::TooBigRangeQuantifierIndex)
+            transpile(r"a\{32768\}"),
+            Err(TranspileError::TooBigRangeQuantifierIndex)
         );
     }
 
