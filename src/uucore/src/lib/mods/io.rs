@@ -15,7 +15,7 @@
 //! Access to this common functionality is provided in `OwnedFileDescriptorOrHandle`.
 
 use std::fs::{File, OpenOptions};
-use std::io;
+use std::io::{self, IsTerminal};
 #[cfg(not(windows))]
 use std::os::fd::{AsFd, OwnedFd};
 #[cfg(windows)]
@@ -74,6 +74,71 @@ impl<F: io::BufRead, S: io::BufRead> io::BufRead for InputReader<F, S> {
         match self {
             Self::Stdin(input) => input.consume(amount),
             Self::File(input) => input.consume(amount),
+        }
+    }
+}
+
+/// Represents standard output, written directly to a terminal and buffered
+/// otherwise.
+///
+/// Every stable `Write` method is forwarded, not only the required ones:
+/// `BufWriter::write_all` copies into the buffer in one step, where the
+/// trait's default `write_all` would loop over `write`.
+pub enum OutputWriter {
+    Terminal(io::Stdout),
+    Buffered(io::BufWriter<io::Stdout>),
+}
+
+impl OutputWriter {
+    /// Returns standard output, buffered unless it is a terminal.
+    pub fn stdout() -> Self {
+        let stdout = io::stdout();
+        if stdout.is_terminal() {
+            Self::Terminal(stdout)
+        } else {
+            Self::Buffered(io::BufWriter::new(stdout))
+        }
+    }
+}
+
+impl io::Write for OutputWriter {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            Self::Terminal(output) => output.write(buf),
+            Self::Buffered(output) => output.write(buf),
+        }
+    }
+
+    #[inline]
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        match self {
+            Self::Terminal(output) => output.write_vectored(bufs),
+            Self::Buffered(output) => output.write_vectored(bufs),
+        }
+    }
+
+    #[inline]
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Self::Terminal(output) => output.flush(),
+            Self::Buffered(output) => output.flush(),
+        }
+    }
+
+    #[inline]
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        match self {
+            Self::Terminal(output) => output.write_all(buf),
+            Self::Buffered(output) => output.write_all(buf),
+        }
+    }
+
+    #[inline]
+    fn write_fmt(&mut self, args: std::fmt::Arguments<'_>) -> io::Result<()> {
+        match self {
+            Self::Terminal(output) => output.write_fmt(args),
+            Self::Buffered(output) => output.write_fmt(args),
         }
     }
 }
