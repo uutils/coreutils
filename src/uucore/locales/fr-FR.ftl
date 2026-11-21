@@ -45,6 +45,9 @@ action-creating = création
 action-reading = lecture
 action-writing = écriture
 
+# Messages d'erreur systemd-logind
+systemd-logind-error-load-library = Échec du chargement de libsystemd : { $error }
+
 # Messages d'erreur SELinux
 selinux-error-not-enabled = SELinux n'est pas activé sur ce système
 selinux-error-file-open-failure = échec de l'ouverture du fichier : { $error }

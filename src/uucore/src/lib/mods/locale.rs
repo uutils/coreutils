@@ -1213,6 +1213,34 @@ invalid-syntax = This is { $missing
     }
 
     #[test]
+    fn test_systemd_library_load_error_is_localized() {
+        std::thread::spawn(|| {
+            let locales_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("locales");
+            let error = "libsystemd.so.0: undefined symbol: sd_get_sessions";
+
+            for (locale, expected) in [
+                (
+                    "en-US",
+                    "Failed to load libsystemd: libsystemd.so.0: undefined symbol: sd_get_sessions",
+                ),
+                (
+                    "fr-FR",
+                    "Échec du chargement de libsystemd : libsystemd.so.0: undefined symbol: sd_get_sessions",
+                ),
+            ] {
+                let locale = LanguageIdentifier::from_str(locale).unwrap();
+                init_localization(&locale, &locales_dir, "uucore").unwrap();
+                assert_eq!(
+                    translate!("systemd-logind-error-load-library", "error" => error),
+                    expected,
+                );
+            }
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
     fn test_localizer_format_message_not_found() {
         let temp_dir = create_test_locales_dir();
         let en_bundle = create_test_bundle(
