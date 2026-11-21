@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST MESZ KST uueuu ueuu vasárnap június január distros Wednes Ihours uppercases xffx
+// spell-checker:ignore AEDT AEST EEST CET EET NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST MESZ KST uueuu ueuu vasárnap június január distros Wednes Ihours uppercases xffx
 
 use std::cmp::Ordering;
 
@@ -174,6 +174,14 @@ fn test_date_accepts_gnu_timezone_abbreviations() {
         ("2024-01-15 12:00 KST", "03:00\n"),
         ("2024-01-15 12:00 EST", "17:00\n"),
         ("2024-01-15 12:00 IST", "06:30\n"),
+        // A standard-time abbreviation keeps its offset in summer too.
+        ("2020-06-01 12:00 WET", "12:00\n"),
+        ("2020-06-01 12:00 WEST", "11:00\n"),
+        ("2020-01-01 12:00 WEST", "11:00\n"),
+        ("2020-06-01 12:00 CET", "11:00\n"),
+        ("2020-06-01 12:00 MET", "11:00\n"),
+        ("2020-06-01 12:00 EET", "10:00\n"),
+        ("2020-01-01 12:00 CET", "11:00\n"),
     ] {
         new_ucmd!()
             .env("LC_ALL", "C")
