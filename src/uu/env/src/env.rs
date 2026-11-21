@@ -781,6 +781,31 @@ fn scan_option(
     Ok(())
 }
 
+/// Whitespace as in C's `isspace` in the C locale: space, `\t`, `\n`,
+/// `\v`, `\f` and `\r`.
+fn is_c_space(b: u8) -> bool {
+    matches!(b, b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r')
+}
+
+/// Returns true if `arg` contains whitespace, which suggests that a whole
+/// shebang line such as `cat -n` was passed as a single argument. Only then is
+/// the hint to use `-S` worth printing.
+fn looks_like_shebang_line(arg: &[u8]) -> bool {
+    arg.iter().copied().any(is_c_space)
+}
+
+/// Returns true if the short option that was rejected is a whitespace
+/// character, as for `env -v -S cat -n` where the whole shebang line arrives
+/// as one argument and parsing stops at the space after `-v`. An unknown
+/// option that merely contains whitespace (`-x y`, `--foo bar`) does not get
+/// the hint.
+fn rejected_option_is_whitespace(invalid_arg: &str) -> bool {
+    match invalid_arg.as_bytes() {
+        [b'-', c] => is_c_space(*c),
+        _ => false,
+    }
+}
+
 #[derive(Default)]
 struct EnvAppData {
     do_debug_printing: bool,
@@ -803,7 +828,7 @@ impl EnvAppData {
             "{}",
             translate!("env-error-no-such-file", "program" => prog.quote())
         );
-        if !self.had_string_argument {
+        if !self.had_string_argument && looks_like_shebang_line(prog.as_encoded_bytes()) {
             uucore::show_error!("{}", translate!("env-error-use-s-shebang"));
         }
         ExitCode::new(127)
@@ -990,14 +1015,23 @@ impl EnvAppData {
                     clap::error::ErrorKind::DisplayHelp
                     | clap::error::ErrorKind::DisplayVersion => return Err(e.into()),
                     _ => {
+                        // Only suggest -S when the rejected short option is whitespace,
+                        // as when a whole shebang line arrives as one argument.
+                        let show_shebang_hint = matches!(
+                            e.get(clap::error::ContextKind::InvalidArg),
+                            Some(clap::error::ContextValue::String(arg))
+                                if rejected_option_is_whitespace(arg)
+                        );
                         // Use ErrorFormatter directly to handle error with shebang message callback
                         let formatter = uucore::clap_localization::ErrorFormatter::new("env");
                         formatter.print_error_and_exit_with_callback(&e, 125, || {
-                            let _ = writeln!(
-                                stderr(),
-                                "env: {}",
-                                translate!("env-error-use-s-shebang")
-                            );
+                            if show_shebang_hint {
+                                let _ = writeln!(
+                                    stderr(),
+                                    "env: {}",
+                                    translate!("env-error-use-s-shebang")
+                                );
+                            }
                         });
                     }
                 }
