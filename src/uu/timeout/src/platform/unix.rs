@@ -29,7 +29,7 @@ fn signal_from_raw(sig: i32) -> Option<Signal> {
         return Some(s);
     }
     // Slow path: realtime signals (SIGRTMIN..=SIGRTMAX).
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let rtmin = libc::SIGRTMIN();
         let rtmax = libc::SIGRTMAX();
