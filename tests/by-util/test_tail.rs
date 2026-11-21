@@ -189,7 +189,7 @@ fn run_appending_to_input(at: &uutests::util::AtPath, ucmd: &mut uutests::util::
             child.kill();
             break;
         }
-        std::thread::sleep(std::time::Duration::from_millis(1));
+        std::thread::sleep(Duration::from_millis(1));
     }
     assert!(
         at.metadata("f").len() <= CAP,
