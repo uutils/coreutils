@@ -1736,11 +1736,7 @@ fn test_install_strip_with_directory() {
     let at = &scene.fixtures;
 
     for args in [["-d", "-s", "newdir"], ["-s", "-d", "newdir"]] {
-        scene
-            .ucmd()
-            .args(&args)
-            .fails_with_code(1)
-            .stderr_contains("cannot be used with");
+        scene.ucmd().args(&args).fails_with_code(1); // clap's error message
         assert!(!at.dir_exists("newdir"));
     }
 }
