@@ -8,6 +8,8 @@
 use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::io::{self, Error, ErrorKind, Write};
+#[cfg(any(unix, target_os = "wasi"))]
+use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
@@ -79,7 +81,7 @@ fn tee(options: &Options) -> Result<(), ()> {
         NamedWriter {
             name: translate!("tee-standard-output").into(),
             #[cfg(any(unix, target_os = "wasi"))]
-            inner: Writer::Stdout(uucore::io::RawWriter(rustix::stdio::stdout())),
+            inner: Writer::Stdout(rustix::stdio::stdout()),
             #[cfg(not(any(unix, target_os = "wasi")))]
             inner: Writer::Stdout(io::stdout()),
         },
@@ -300,7 +302,7 @@ enum Writer {
     File(std::fs::File),
     // remove buffering for posix requirement and improve throughput
     #[cfg(any(unix, target_os = "wasi"))]
-    Stdout(uucore::io::RawWriter<rustix::fd::BorrowedFd<'static>>),
+    Stdout(BorrowedFd<'static>),
     #[cfg(not(any(unix, target_os = "wasi")))]
     Stdout(io::Stdout),
 }
@@ -311,7 +313,7 @@ impl Writer {
             // File does not have line buffering
             Self::File(f) => f.write_all(buf),
             #[cfg(any(unix, target_os = "wasi"))]
-            Self::Stdout(s) => s.write_all(buf),
+            Self::Stdout(fd) => uucore::io::RawWriter::from_borrowed_fd(*fd).write_all(buf),
             #[cfg(not(any(unix, target_os = "wasi")))]
             Self::Stdout(s) => {
                 s.write_all(buf)?;
@@ -328,11 +330,11 @@ struct NamedWriter {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-impl rustix::fd::AsFd for NamedWriter {
-    fn as_fd(&self) -> rustix::fd::BorrowedFd<'_> {
+impl std::os::fd::AsFd for NamedWriter {
+    fn as_fd(&self) -> BorrowedFd<'_> {
         match &self.inner {
             Writer::File(f) => f.as_fd(),
-            Writer::Stdout(s) => s.0,
+            Writer::Stdout(fd) => *fd,
         }
     }
 }
