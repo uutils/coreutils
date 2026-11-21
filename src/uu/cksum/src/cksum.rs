@@ -9,6 +9,7 @@ use clap::Command;
 use uu_checksum_common::{ChecksumCommand, checksum_main, default_checksum_app, options};
 
 use uucore::checksum::compute::{DigestFormat, OutputFormat};
+use uucore::checksum::validate::ChecksumTool;
 use uucore::checksum::{
     AlgoKind, BlakeLength, ChecksumError, HashLength, ReadingMode, Xxh3Length, parse_blake_length,
     sanitize_sha2_sha3_length_str,
@@ -134,7 +135,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         print_cpu_debug_info();
     }
 
-    checksum_main(algo_cli, length, matches, output_format, true)
+    checksum_main(
+        algo_cli,
+        length,
+        matches,
+        output_format,
+        ChecksumTool::Cksum,
+    )
 }
 
 pub fn uu_app() -> Command {

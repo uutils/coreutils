@@ -9,6 +9,7 @@ use clap::Command;
 
 use uu_checksum_common::{standalone_checksum_app_with_length, standalone_with_length_main};
 
+use uucore::checksum::validate::ChecksumTool;
 use uucore::checksum::{AlgoKind, BlakeLength, parse_blake_length};
 use uucore::error::UResult;
 use uucore::translate;
@@ -22,7 +23,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         uu_app(),
         args,
         calculate_blake2b_length,
-        true,
+        ChecksumTool::B2sum,
     )
 }
 

@@ -66,12 +66,29 @@ impl ChecksumVerbose {
     }
 }
 
+/// The utility that reads the checksum list. Some rules for a line depend on it.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum ChecksumTool {
+    Cksum,
+    B2sum,
+    /// md5sum and sha*sum
+    #[default]
+    Other,
+}
+
+impl ChecksumTool {
+    /// An untagged line with no file name after the separator is a check of the file '' for
+    /// cksum and b2sum, and is improperly formatted for md5sum and sha*sum.
+    #[inline]
+    fn allows_empty_filename(self) -> bool {
+        matches!(self, Self::Cksum | Self::B2sum)
+    }
+}
+
 /// This struct regroups CLI flags.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ChecksumValidateOptions {
-    /// An untagged line with no file name after the separator is a check of the file '' for
-    /// cksum and b2sum, and is improperly formatted for md5sum and sha*sum.
-    pub allow_empty_filename: bool,
+    pub tool: ChecksumTool,
     pub ignore_missing: bool,
     pub strict: bool,
     pub verbose: ChecksumVerbose,
@@ -912,7 +929,7 @@ fn process_checksum_line(
     // The detected format is kept once the digest and the algorithm are valid.
     // A line rejected before that must not decide how the next ones are read.
     let mut line_format = *cached_line_format;
-    let line_info = LineInfo::parse(line, &mut line_format, opts.allow_empty_filename)
+    let line_info = LineInfo::parse(line, &mut line_format, opts.tool.allows_empty_filename())
         .ok_or(LineCheckError::ImproperlyFormatted)?;
 
     let (expected_checksum, algo) = if line_info.format == LineFormat::AlgoBased {
