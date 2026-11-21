@@ -83,6 +83,42 @@ fn test_touch_no_create_file_exists() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
+fn test_touch_open_no_race_condition() {
+    let (at, mut _ucmd) = at_and_ucmd!();
+    if std::process::Command::new("strace")
+        .args([
+            "-f",
+            "-e",
+            "trace=open,openat",
+            "-P",
+            "touched",
+            "-o",
+            "strace.out",
+            uutests::util::get_tests_binary(),
+            "touch",
+            "touched",
+        ])
+        .current_dir(at.as_string())
+        .output()
+        .is_err()
+    {
+        return; // strace did not work
+    }
+    for line in at.read("strace.out").lines() {
+        let trimmed = line.trim();
+        if trimmed.contains("touched")
+            && (trimmed.starts_with("open(") || trimmed.starts_with("openat("))
+        {
+            assert!(line.contains("O_CREAT"));
+            // symlink planted in the metadata-check/open race window should not be truncated.
+            assert!(!line.contains("O_TRUNC"));
+        }
+    }
+}
+
+#[test]
 fn test_touch_set_mdhm_time() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_mdhm_time";
