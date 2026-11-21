@@ -1099,10 +1099,9 @@ fn test_merge() {
     // pr. The correct output should be:
     //
     //     "a\t\t\t\t    b\n";
-    //
-    // and the blank lines should actually be empty lines.
     let data = "a                                  \tb\n";
-    let blank_lines_55 = "                                   \t\n".repeat(55);
+    // Like GNU pr, the rest of the page is filled with empty lines.
+    let blank_lines_55 = "\n".repeat(55);
     let footer = "\n".repeat(5);
     let pattern = format!("{header}{data}{blank_lines_55}{footer}");
     let regex = Regex::new(&pattern).unwrap();
