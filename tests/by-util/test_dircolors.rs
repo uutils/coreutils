@@ -216,14 +216,26 @@ fn test_helper(file_name: &str, term: &str) {
         .stdout_is_fixture(format!("{file_name}.sh.expected"));
 }
 
+#[uutests::wasi_ignore(ErrnoMessageMismatch)]
 #[test]
 fn test_dircolors_for_dir_as_file() {
-    let result = new_ucmd!().args(&["-c", "/"]).fails();
-    result.no_stdout();
-    assert_eq!(
-        result.stderr_str().trim(),
-        "dircolors: expected file, got directory '/'",
-    );
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    ucmd.args(&["-c", "dir"])
+        .fails_with_code(1)
+        .stderr_only("dircolors: dir: read error: Is a directory\n");
+}
+
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_dircolors_read_error() {
+    // The errno text comes from the libc (musl says "I/O error").
+    new_ucmd!()
+        .args(&["-b", "/proc/self/mem"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("dircolors: /proc/self/mem: read error: ");
 }
 
 #[test]

@@ -18,6 +18,7 @@ dircolors-error-extra-operand-print-database = extra operand { $operand }
   file operands cannot be combined with --print-database (-p)
 dircolors-error-no-shell-environment = no SHELL environment variable, and no shell type option given
 dircolors-error-extra-operand = extra operand { $operand }
-dircolors-error-expected-file-got-directory = expected file, got directory { $path }
+dircolors-error-read = { $path }: read error: { $error }
+dircolors-error-read-directory = { $path }: read error: Is a directory
 dircolors-error-invalid-line-missing-token = { $file }:{ $line }: invalid line;  missing second token
 dircolors-error-unrecognized-keyword = unrecognized keyword { $keyword }
