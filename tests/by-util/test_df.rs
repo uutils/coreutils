@@ -14,7 +14,7 @@
 
 use std::collections::HashSet;
 
-#[cfg(not(any(target_os = "freebsd", windows)))]
+#[cfg(not(target_os = "freebsd"))]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 #[cfg(target_os = "linux")]
@@ -1232,4 +1232,31 @@ df: invalid suffix in --block-size argument '1fb'
             .fails_with_code(1)
             .stderr_is("df: invalid suffix in --block-size argument '1fb'\n");
     }
+}
+
+/// Windows only: `df` must report the space available to the caller.
+/// Regression test for #7461, where `bavail` was hardcoded to 0 on Windows.
+#[test]
+#[cfg(windows)]
+fn test_windows_avail_is_reported() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let stdout = ucmd
+        .args(&["--output=avail"])
+        .arg(&at.subdir)
+        .succeeds()
+        .stdout_move_str();
+
+    let avail: u64 = stdout
+        .lines()
+        .nth(1)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+
+    assert!(
+        avail > 0,
+        "df must report non-zero available space:\n{stdout}"
+    );
 }
