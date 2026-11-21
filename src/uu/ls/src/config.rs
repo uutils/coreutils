@@ -20,11 +20,14 @@ use term_grid::SPACES_IN_TAB;
 use uucore::{
     diagnostics::OptionValue,
     display::Quotable,
-    error::UResult,
+    error::{UError, UResult},
     format::human::SizeFormat,
     fsext::MetadataTimeField,
     line_ending::LineEnding,
-    parser::{parse_block_size, parse_glob, parse_size::parse_size_non_zero_u64},
+    parser::{
+        parse_block_size, parse_glob,
+        parse_size::{ParseSizeError, parse_size_non_zero_u64},
+    },
     quoting_style::{QuotingStyle, quoting_style_from_env},
     show_error, show_warning,
     time::format,
@@ -624,6 +627,33 @@ fn parse_width(width_match: Option<&String>) -> Result<u16, LsError> {
     Ok(ret)
 }
 
+/// The report for an invalid `--block-size` value, with the caret under the value.
+fn block_size_error(
+    value: &str,
+    parse_error: ParseSizeError,
+    diag_args: Option<&[OsString]>,
+) -> Box<dyn UError> {
+    let ls_error = LsError::BlockSizeParseError(value.to_string());
+    let message = ls_error.to_string();
+    parse_error.size_value_error(
+        diag_args,
+        &OptionValue::with_names(value, None, Some(options::size::BLOCK_SIZE)),
+        0,
+        &message,
+        ls_error,
+    )
+}
+
+/// The size mode that wins on the command line.
+///
+/// A `--block-size` value is parsed once, when it is validated, and the result
+/// is kept in `Block` so it never has to be parsed (or unwrapped) again.
+enum SizeMode {
+    Si,
+    HumanReadable,
+    Block(u64),
+}
+
 /// Parses the tab size value from the command line
 fn parse_tab_size(size_str: &str) -> Result<usize, LsError> {
     size_str
@@ -722,53 +752,56 @@ impl Config {
         let mut needs_color = extract_color(options);
         let hyperlink = extract_hyperlink(options);
 
-        let opt_block_size = options.get_one::<String>(options::size::BLOCK_SIZE);
-        let opt_si = opt_block_size.is_some_and(|x| x == options::size::SI)
-            || options.get_flag(options::size::SI);
-        let opt_hr = opt_block_size.is_some_and(|x| x == options::size::HUMAN_READABLE)
-            || options.get_flag(options::size::HUMAN_READABLE);
-        let opt_kb = options.get_flag(options::size::KIBIBYTES);
+        // Every --block-size value must be valid, even when a later -h/--si
+        // overrides it; the last size mode option on the command line wins.
+        let mut candidates: Vec<(usize, SizeMode)> = Vec::new();
+        if let (Some(values), Some(indices)) = (
+            options.get_many::<String>(options::size::BLOCK_SIZE),
+            options.indices_of(options::size::BLOCK_SIZE),
+        ) {
+            for (value, index) in values.zip(indices) {
+                let text = value.as_str();
+                let mode = if text == options::size::SI {
+                    SizeMode::Si
+                } else if text == options::size::HUMAN_READABLE {
+                    SizeMode::HumanReadable
+                } else {
+                    match parse_size_non_zero_u64(value) {
+                        Ok(size) => SizeMode::Block(size),
+                        Err(err) => return Err(block_size_error(value, err, diag_args)),
+                    }
+                };
+                candidates.push((index, mode));
+            }
+        }
+        for (arg, mode) in [
+            (options::size::SI, SizeMode::Si),
+            (options::size::HUMAN_READABLE, SizeMode::HumanReadable),
+        ] {
+            if options.get_flag(arg)
+                && let Some(index) = options.indices_of(arg).and_then(Iterator::max)
+            {
+                candidates.push((index, mode));
+            }
+        }
+        // The size mode option that appears last on the command line wins.
+        let size_mode = candidates
+            .into_iter()
+            .max_by_key(|(index, _)| *index)
+            .map(|(_, mode)| mode);
 
-        let size_format = if opt_si {
-            SizeFormat::Decimal
-        } else if opt_hr {
-            SizeFormat::Binary
-        } else {
-            SizeFormat::Bytes
+        let size_format = match size_mode {
+            Some(SizeMode::Si) => SizeFormat::Decimal,
+            Some(SizeMode::HumanReadable) => SizeFormat::Binary,
+            _ => SizeFormat::Bytes,
         };
 
-        let (file_size_block_size, block_size) = if let Some(opt_block_size) = opt_block_size {
-            // --block-size command-line argument: parse it, error on invalid
-            // If --block-size=si or --block-size=human-readable, skip numeric parsing
-            if opt_si {
-                (DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
-            } else if opt_hr {
-                (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
-            } else {
-                let size = parse_size_non_zero_u64(opt_block_size).map_err(|error| {
-                    let ls_error = LsError::BlockSizeParseError(opt_block_size.clone());
-                    let message = ls_error.to_string();
-                    error.size_value_error(
-                        diag_args,
-                        &OptionValue::with_names(
-                            opt_block_size,
-                            None,
-                            Some(options::size::BLOCK_SIZE),
-                        ),
-                        0,
-                        &message,
-                        ls_error,
-                    )
-                })?;
-                // --block-size overrides -k
-                (size, size)
-            }
-        } else if !opt_si && !opt_hr {
-            resolve_block_sizes_from_env(opt_kb)
-        } else if opt_si {
-            (DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
-        } else {
-            (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+        let (file_size_block_size, block_size) = match size_mode {
+            Some(SizeMode::Si) => (DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000),
+            Some(SizeMode::HumanReadable) => (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE),
+            // --block-size also overrides -k.
+            Some(SizeMode::Block(size)) => (size, size),
+            None => resolve_block_sizes_from_env(options.get_flag(options::size::KIBIBYTES)),
         };
 
         let long = {

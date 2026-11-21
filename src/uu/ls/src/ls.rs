@@ -593,7 +593,6 @@ pub fn uu_app() -> Command {
             .short('h')
             .long(options::size::HUMAN_READABLE)
             .help(translate!("ls-help-human-readable"))
-            .overrides_with_all([options::size::BLOCK_SIZE, options::size::SI])
             .action(ArgAction::SetTrue),
     )
     .arg(
@@ -607,7 +606,6 @@ pub fn uu_app() -> Command {
         Arg::new(options::size::SI)
             .long(options::size::SI)
             .help(translate!("ls-help-si"))
-            .overrides_with_all([options::size::BLOCK_SIZE, options::size::HUMAN_READABLE])
             .action(ArgAction::SetTrue),
     )
     .arg(
@@ -615,7 +613,7 @@ pub fn uu_app() -> Command {
             .long(options::size::BLOCK_SIZE)
             .value_name("BLOCK_SIZE")
             .help(translate!("ls-help-block-size"))
-            .overrides_with_all([options::size::SI, options::size::HUMAN_READABLE]),
+            .action(ArgAction::Append),
     )
     .arg(
         Arg::new(options::INODE)
