@@ -1736,6 +1736,61 @@ fn zero_precision_format() {
 }
 
 #[test]
+fn suffix_format_huge_width_reports_memory_exhausted() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--suffix-format", "%9999999999999999999d", "-", "1"])
+        .pipe_in("a\nb\nc\n")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_only("csplit: memory exhausted\n");
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("counting splits")
+        .count();
+    assert_eq!(count, 0);
+}
+
+#[test]
+fn suffix_format_huge_precision_reports_memory_exhausted() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "--suffix-format",
+        "%9999999999999999999.9999999999999999999d",
+        "-",
+        "1",
+    ])
+    .pipe_in("a\nb\nc\n")
+    .fails_with_code(1)
+    .no_stdout()
+    .stderr_only("csplit: memory exhausted\n");
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("counting splits")
+        .count();
+    assert_eq!(count, 0);
+}
+
+#[test]
+fn suffix_format_huge_precision_skip_only_succeeds() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "--suffix-format",
+        "%9999999999999999999.9999999999999999999d",
+        "-",
+        "%a%1",
+        "{*}",
+    ])
+    .pipe_in("a\n")
+    .succeeds()
+    .no_output();
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("counting splits")
+        .count();
+    assert_eq!(count, 0);
+}
+
+#[test]
 fn zero_error() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("in");
