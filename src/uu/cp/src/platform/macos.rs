@@ -13,6 +13,7 @@ use std::path::Path;
 
 use uucore::buf_copy;
 use uucore::display::Quotable;
+use uucore::fs::{AccessMode, effective_access};
 use uucore::safe_copy::{create_dest_restrictive, open_source};
 use uucore::translate;
 
@@ -85,9 +86,7 @@ pub(crate) fn copy_on_write(
                 // fs::copy below, which follows the symlink via O_TRUNC.
                 let dest_is_symlink =
                     fs::symlink_metadata(dest).is_ok_and(|md| md.file_type().is_symlink());
-                if !dest_is_symlink
-                    && fs::metadata(dest).is_ok_and(|md| !md.permissions().readonly())
-                {
+                if !dest_is_symlink && effective_access(dest, AccessMode::Write) {
                     // remove and copy again
                     // TODO: rewrite this to better match linux behavior
                     // linux first opens the source file and destination file then uses the file
