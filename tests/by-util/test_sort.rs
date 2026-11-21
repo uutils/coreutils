@@ -638,12 +638,56 @@ fn test_random_source_is_not_read_without_random_sort() {
 
 #[test]
 fn test_random_ignore_case() {
+    use uutests::util_name;
+
     let input = "ABC\nABc\nAbC\nAbc\naBC\naBc\nabC\nabc\n";
     new_ucmd!()
         .args(&["-fR"])
         .pipe_in(input)
         .succeeds()
         .stdout_is(input);
+
+    // Keys equal under -f must also hash equal, or a second key can split
+    // them and -u keeps both.
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.write_bytes("source", &[0; 16]);
+    ts.ucmd()
+        .args(&["-Rfu", "-k1,1", "--random-source=source"])
+        .pipe_in("Alice ticket-1\nalice ticket-2\nXena ticket-3\n")
+        .succeeds()
+        .stdout_str_check(|out| out.lines().count() == 2);
+}
+
+#[test]
+fn test_random_dictionary_order_unique() {
+    use uutests::util_name;
+
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.write_bytes("source", &[0; 16]);
+    ts.ucmd()
+        .args(&["-Rdu", "--random-source=source"])
+        .pipe_in("Alice\nalice\nXena\n a\na\nb.\nb\n")
+        .succeeds()
+        .stdout_str_check(|out| out.lines().count() == 6);
+}
+
+#[test]
+fn test_random_unique_keys_of_different_lengths() {
+    use uutests::util_name;
+
+    // Keys that only differ in length must not hash equal, or -u drops one.
+    // The noise byte is one each option ignores.
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.write_bytes("source", &[0; 16]);
+    let keys = ["a", "aa", "aaa", "aaaa", "ab", "abb", "XZ", "XZZ"];
+    for (option, noise) in [("-Rfu", ""), ("-Rdu", "."), ("-Riu", "\x01")] {
+        let input = keys.join(&format!("{noise}\n")) + noise + "\n";
+        ts.ucmd()
+            .args(&[option, "--random-source=source"])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_str_check(|out| out.lines().count() == keys.len());
+    }
 }
 
 #[test]
