@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED FSIZE SIGXFSZ rusage maxrss cdefg ncdefg cdefh
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED FSIZE SIGXFSZ rusage maxrss cdefg ncdefg cdefh newfstatat
 
 use rstest::rstest;
 use uutests::at_and_ucmd;
@@ -2855,4 +2855,115 @@ fn test_ascii_ebcdic_without_cbs_still_convert() {
             .succeeds()
             .stdout_only_bytes(expected);
     }
+}
+
+/// Run `dd` under `strace`, injecting faults into the system calls on `file`.
+/// Returns `None` if `strace` is missing or tracing is not permitted.
+#[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
+fn run_dd_with_strace(
+    at: &uutests::util::AtPath,
+    file: &str,
+    inject: &[&str],
+    args: &[&str],
+) -> Option<std::process::Output> {
+    use std::process::Command;
+
+    let mut cmd = Command::new("strace");
+    cmd.current_dir(at.as_string())
+        .args(["-qq", "-o", "/dev/null", "-P"])
+        .arg(at.plus(file));
+    for spec in inject {
+        cmd.args(["-e", spec]);
+    }
+    let out = cmd
+        .arg(get_tests_binary())
+        .arg("dd")
+        .args(args)
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .output()
+        .ok()?;
+    if String::from_utf8_lossy(&out.stderr).contains("ptrace") {
+        return None;
+    }
+    Some(out)
+}
+
+// Without a seek the output is truncated when it is opened, so a failing
+// `ftruncate` does not matter.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
+fn test_truncate_without_seek_does_not_need_ftruncate() {
+    let (at, _ucmd) = at_and_ucmd!();
+    at.write("t.bin", "hello\n");
+
+    let Some(out) = run_dd_with_strace(
+        &at,
+        "t.bin",
+        &["inject=ftruncate:error=EIO"],
+        &["if=/dev/null", "of=t.bin", "status=none"],
+    ) else {
+        return;
+    };
+    assert_eq!(out.status.code(), Some(0));
+    assert_eq!(String::from_utf8_lossy(&out.stderr), "");
+    assert_eq!(at.read("t.bin"), "");
+}
+
+// `oflag=append` without a seek also truncates when opening.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
+fn test_truncate_with_append_does_not_need_ftruncate() {
+    let (at, _ucmd) = at_and_ucmd!();
+    at.write("t.bin", "hello\n");
+
+    let Some(out) = run_dd_with_strace(
+        &at,
+        "t.bin",
+        &["inject=ftruncate:error=EIO"],
+        &["if=/dev/null", "of=t.bin", "oflag=append", "status=none"],
+    ) else {
+        return;
+    };
+    assert_eq!(out.status.code(), Some(0));
+    assert_eq!(String::from_utf8_lossy(&out.stderr), "");
+    assert_eq!(at.read("t.bin"), "");
+}
+
+// If the output cannot be truncated or checked, fail without writing.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
+fn test_seek_fails_before_writing_when_fstat_fails() {
+    let (at, _ucmd) = at_and_ucmd!();
+    let data: Vec<u8> = (0..2048).map(|i| (i % 251) as u8).collect();
+    at.write_bytes("big.bin", &data);
+
+    let Some(out) = run_dd_with_strace(
+        &at,
+        "big.bin",
+        &[
+            "inject=ftruncate:error=EPERM",
+            "inject=fstat,newfstatat,statx:error=EPERM",
+        ],
+        &[
+            "if=/dev/zero",
+            "of=big.bin",
+            "bs=256",
+            "seek=3",
+            "count=2",
+            "status=none",
+        ],
+    ) else {
+        return;
+    };
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stderr),
+        "dd: cannot fstat 'big.bin': Operation not permitted\n"
+    );
+    assert_eq!(at.read_bytes("big.bin"), data);
 }
