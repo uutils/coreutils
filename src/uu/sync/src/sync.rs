@@ -41,11 +41,22 @@ mod platform {
     /// Returns the opened file or an error if opening fails.
     /// Logs a warning if fcntl fails but doesn't abort the operation.
     fn open_and_reset_nonblock(path: &str) -> UResult<File> {
-        let f = OpenOptions::new()
+        // Fall back to opening for write when read fails, e.g. write-only
+        // files (mode 0200, test_sync_no_permission_file); if both fail,
+        // report the original read error.
+        let f = match OpenOptions::new()
             .read(true)
             .custom_flags(rustix::fs::OFlags::NONBLOCK.bits() as i32)
             .open(path)
-            .map_err_context(|| path.to_string())?;
+        {
+            Ok(f) => f,
+            Err(read_err) => OpenOptions::new()
+                .write(true)
+                .custom_flags(rustix::fs::OFlags::NONBLOCK.bits() as i32)
+                .open(path)
+                .map_err(|_| read_err)
+                .map_err_context(|| path.to_string())?,
+        };
         // Reset O_NONBLOCK flag if it was set (matches GNU behavior)
         // This is non-critical, so we log errors but don't fail
         if let Err(e) = rustix::fs::fcntl_setfl(&f, rustix::fs::OFlags::empty()) {
@@ -80,12 +91,18 @@ mod platform {
     pub fn do_fdatasync(files: &[String]) -> UResult<()> {
         do_sync_with(files, |f| f.sync_data())
     }
+
+    pub fn do_fsync(files: &[String]) -> UResult<()> {
+        do_sync_with(files, |f| f.sync_all())
+    }
 }
 
 #[cfg(windows)]
 mod platform {
     use std::fs::OpenOptions;
     use std::path::Path;
+    use uucore::display::Quotable;
+    use uucore::error::FromIo;
     use uucore::error::{UResult, USimpleError};
     use uucore::translate;
     use uucore::wide::{FromWide, ToWide};
@@ -188,6 +205,21 @@ mod platform {
         }
         Ok(())
     }
+
+    pub fn do_fsync(files: &[String]) -> UResult<()> {
+        // Flush just each file (FlushFileBuffers via sync_all), matching GNU.
+        // It needs a write handle, so open each file for write.
+        for path in files {
+            let file = OpenOptions::new()
+                .write(true)
+                .open(path)
+                .map_err_context(|| path.clone())?;
+            file.sync_all().map_err_context(
+                || translate!("sync-error-syncing-file", "file" => path.quote()),
+            )?;
+        }
+        Ok(())
+    }
 }
 
 #[uucore::main]
@@ -250,6 +282,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if matches.get_flag(options::DATA) {
         #[cfg(unix)]
         fdatasync(&files)?;
+    } else if !files.is_empty() {
+        fsync(&files)?;
     } else {
         sync()?;
     }
@@ -298,4 +332,8 @@ fn syncfs(files: &[String]) -> UResult<()> {
 #[cfg(unix)]
 fn fdatasync(files: &[String]) -> UResult<()> {
     platform::do_fdatasync(files)
+}
+
+fn fsync(files: &[String]) -> UResult<()> {
+    platform::do_fsync(files)
 }
