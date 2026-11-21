@@ -12,11 +12,17 @@ use uutests::new_ucmd;
 #[cfg(unix)]
 #[cfg(not(target_os = "android"))]
 fn test_get_current_niceness() {
-    // Test that the nice command with no arguments returns the default nice value
+    // Test that the nice command with no arguments returns the default nice value.
+    // WASI has no getpriority syscall, so nice always reports a fixed niceness of 0
+    // there, regardless of the host's actual value.
+    #[cfg(wasi_runner)]
+    let nice = 0;
+    #[cfg(not(wasi_runner))]
     let nice = rustix::process::getpriority_process(None).unwrap();
     new_ucmd!().succeeds().stdout_is(format!("{nice}\n"));
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 #[cfg(unix)]
 #[cfg(not(target_os = "android"))]
@@ -41,12 +47,14 @@ fn test_adjustment_with_no_command_should_error() {
         .usage_error("A command must be given with an adjustment.");
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 #[cfg(unix)]
 fn test_command_with_no_adjustment() {
     new_ucmd!().args(&["echo", "a"]).succeeds().stdout_is("a\n");
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 #[cfg(unix)]
 fn test_command_with_no_args() {
@@ -56,6 +64,7 @@ fn test_command_with_no_args() {
         .stdout_is("\n");
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 #[cfg(unix)]
 fn test_command_with_args() {
@@ -65,6 +74,7 @@ fn test_command_with_args() {
         .stdout_is("a b c\n");
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 #[cfg(unix)]
 fn test_command_where_command_takes_n_flag() {
@@ -74,6 +84,7 @@ fn test_command_where_command_takes_n_flag() {
         .stdout_is("a");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
 fn test_command_with_non_utf8_args() {
@@ -87,6 +98,7 @@ fn test_command_with_non_utf8_args() {
         .stdout_only_bytes(b"a\xffb\n");
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 #[cfg(unix)]
 fn test_non_utf8_command_not_found() {
@@ -127,6 +139,7 @@ fn test_invalid_argument() {
     new_ucmd!().arg("--invalid").fails_with_code(125);
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 #[cfg(unix)]
 fn test_bare_adjustment() {
@@ -148,6 +161,7 @@ fn test_trailing_empty_adjustment() {
     );
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 #[cfg(unix)]
 fn test_nice_huge() {
@@ -161,6 +175,7 @@ fn test_nice_huge() {
         .no_stdout();
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 #[cfg(unix)]
 fn test_nice_huge_negative() {
@@ -168,6 +183,15 @@ fn test_nice_huge_negative() {
     //.stderr_contains("Permission denied"); Depending on platform?
 }
 
+// Because WASI lacks subprocess support, `nice` fails with exit code 126.
+// This tests that Wasmtime exits cleanly via `proc_exit` rather than trapping.
+#[test]
+#[cfg(all(unix, wasi_runner))]
+fn test_exec_failure_remaps_exit_code_under_wasi() {
+    new_ucmd!().arg("true").fails_with_code(125);
+}
+
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 #[cfg(unix)]
 fn test_sign_middle() {

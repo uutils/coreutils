@@ -134,7 +134,13 @@ fn main() -> ExitCode {
             // #[cfg(not(feature = "only_english"))]
             validation::setup_localization_or_exit(util);
             let code = uumain(vec![util_os].into_iter().chain(args));
+            // `exit` remaps the code for WASI's `proc_exit`; preview 2 also maps
+            // every nonzero `ExitCode` returned from main to 1, so WASI always
+            // has to go through `exit` rather than return.
+            #[cfg(target_os = "wasi")]
+            exit(code);
             // ExitCode only holds a u8; larger codes (Windows) go through exit.
+            #[cfg(not(target_os = "wasi"))]
             return u8::try_from(code).map_or_else(|_| exit(code), ExitCode::from);
         }
         // GNU coreutils --help string shows help for coreutils

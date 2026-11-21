@@ -92,6 +92,14 @@ pub fn set_exit_code(code: i32) {
     EXIT_CODE.store(code, Ordering::SeqCst);
 }
 
+/// Remaps an exit code into the range WASI's `proc_exit` accepts.
+///
+/// `proc_exit` traps the whole module for any status outside `[0, 126)`;
+/// remap the rest to 125 so the exit stays non-zero without crashing it.
+pub fn wasi_safe_exit_code(code: i32) -> i32 {
+    if (0..126).contains(&code) { code } else { 125 }
+}
+
 /// Print `<util>: <prefix><msg>` to stderr, used by [`crate::show!`] and friends.
 ///
 /// stderr is unbuffered, so the line is formatted first and written at once.
@@ -795,7 +803,7 @@ impl Display for ClapErrorWrapper {
 
 #[cfg(test)]
 mod tests {
-    use super::{USimpleError, UUsageError, quiet_if_reported};
+    use super::{USimpleError, UUsageError, quiet_if_reported, wasi_safe_exit_code};
 
     /// A quieted error keeps its code but says nothing: the report already did.
     #[test]
@@ -852,5 +860,16 @@ mod tests {
                 .unwrap_err()
                 .to_string()
         );
+    }
+
+    #[test]
+    fn test_wasi_safe_exit_code() {
+        assert_eq!(wasi_safe_exit_code(0), 0);
+        assert_eq!(wasi_safe_exit_code(1), 1);
+        assert_eq!(wasi_safe_exit_code(125), 125);
+        assert_eq!(wasi_safe_exit_code(126), 125);
+        assert_eq!(wasi_safe_exit_code(127), 125);
+        assert_eq!(wasi_safe_exit_code(128 + 9), 125);
+        assert_eq!(wasi_safe_exit_code(255), 125);
     }
 }
