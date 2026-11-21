@@ -19,7 +19,7 @@ use uucore::show;
 use uucore::translate;
 
 const TAB_WIDTH: usize = 8;
-/// Smallest rejected width: like GNU, leave room for a tab stop past the width.
+/// Smallest rejected width: leaves room for a tab stop past the width.
 const TOO_WIDE: usize = usize::MAX - TAB_WIDTH;
 const NL: u8 = b'\n';
 const CR: u8 = b'\r';
