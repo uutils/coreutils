@@ -142,12 +142,30 @@ fn valid_prefix_len(s: &str, unit: Unit, unit_separator: &str) -> usize {
     }
 }
 
+/// Whether `c` separates fields: the blanks of `iswblank`, plus the newline
+/// that a `-z` record may hold. A carriage return, vertical tab, form feed or
+/// no-break space is not one and stays part of the field.
+#[inline]
+pub fn is_blank(c: char) -> bool {
+    if c.is_ascii() {
+        return matches!(c, ' ' | '\t' | '\n');
+    }
+    matches!(
+        c,
+        '\u{1680}'
+            | '\u{2000}'..='\u{2006}'
+            | '\u{2008}'..='\u{200a}'
+            | '\u{205f}'
+            | '\u{3000}'
+    )
+}
+
 /// Byte range of the part of a refused `input` a caret should point at: what
 /// follows the number that could be read, or the whole of it when there is
 /// none. Surrounding whitespace, reproduced rather than converted, is left out.
 pub fn invalid_span(input: &str, options: &NumfmtOptions) -> std::ops::Range<usize> {
-    let start = input.len() - input.trim_start().len();
-    let mut end = input.trim_end().len();
+    let start = input.len() - input.trim_start_matches(is_blank).len();
+    let mut end = input.trim_end_matches(is_blank).len();
 
     // Whitespace only: there is no number to point past, and the two offsets
     // above have crossed — `start` is the whole length, `end` is zero.
@@ -175,7 +193,7 @@ pub fn invalid_span(input: &str, options: &NumfmtOptions) -> std::ops::Range<usi
 /// about what may follow one is only given where there is one. A lone sign or
 /// decimal separator is the leading part of a number, but not yet a number.
 pub fn holds_number(input: &str) -> bool {
-    find_numeric_beginning(input.trim_start()).is_some_and(|number| {
+    find_numeric_beginning(input.trim_start_matches(is_blank)).is_some_and(|number| {
         number
             .replace(locale_decimal_separator(), ".")
             .parse::<f64>()
@@ -216,7 +234,7 @@ fn detailed_error_message(s: &str, unit: Unit, unit_separator: &str) -> Option<S
     }
 
     if valid_part != s {
-        let trailing = s[valid_part.len()..].trim_start();
+        let trailing = s[valid_part.len()..].trim_start_matches(is_blank);
         return Some(
             translate!("numfmt-error-invalid-specific-suffix", "input" => s.quote(), "suffix" => trailing.quote()),
         );
@@ -264,7 +282,7 @@ fn parse_suffix(
     unit_separator: &str,
     explicit_unit_separator: bool,
 ) -> Result<(ParsedNumber, Option<Suffix>)> {
-    let trimmed = s.trim_end();
+    let trimmed = s.trim_end_matches(is_blank);
     if trimmed.is_empty() {
         return Err(translate!("numfmt-error-invalid-number-empty"));
     }
@@ -301,7 +319,7 @@ fn parse_suffix(
                 return Err(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
             }
         } else {
-            let number_trimmed = number_part.trim_end();
+            let number_trimmed = number_part.trim_end_matches(is_blank);
             let whitespace = number_part.len() - number_trimmed.len();
             if whitespace > 1 {
                 return Err(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
@@ -368,10 +386,13 @@ fn apply_grouping(s: &str) -> String {
 }
 
 fn split_next_field(s: &str) -> (&str, &str, &str) {
-    let prefix_len = s.find(|c: char| !c.is_whitespace()).unwrap_or(s.len());
-    let field_end = s[prefix_len..]
-        .find(char::is_whitespace)
-        .map_or(s.len(), |i| prefix_len + i);
+    let mut chars = s.char_indices();
+    let prefix_len = chars
+        .find(|&(_, c)| !is_blank(c))
+        .map_or(s.len(), |(i, _)| i);
+    let field_end = chars
+        .find(|&(_, c)| is_blank(c))
+        .map_or(s.len(), |(i, _)| i);
     (&s[..prefix_len], &s[prefix_len..field_end], &s[field_end..])
 }
 
@@ -381,7 +402,7 @@ fn split_next_field(s: &str) -> (&str, &str, &str) {
 fn split_mergeable_suffix<'a>(s: &'a str, options: &NumfmtOptions) -> Option<(&'a str, &'a str)> {
     if !options.explicit_unit_separator
         || options.unit_separator.is_empty()
-        || !options.unit_separator.chars().all(char::is_whitespace)
+        || !options.unit_separator.chars().all(is_blank)
     {
         return None;
     }
@@ -1002,7 +1023,7 @@ pub fn write_formatted_with_delimiter<W: std::io::Write + ?Sized>(
             // Field must be valid UTF-8 for numeric conversion
             let formatted = std::str::from_utf8(field)
                 .map_err(|_| translate!("numfmt-error-invalid-number", "input" => escape_line(field).quote()))
-                .and_then(|field_str| format_string(field_str.trim_start(), options, None));
+                .and_then(|field_str| format_string(field_str.trim_start_matches(is_blank), options, None));
             match formatted {
                 Ok(formatted) => writer.write_all(formatted.as_bytes())?,
                 Err(message) => {
