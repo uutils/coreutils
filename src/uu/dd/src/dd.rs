@@ -1099,32 +1099,68 @@ impl BlockWriter<'_> {
     }
 }
 
+/// Name a file in a message as GNU `dd` does: the operand, or the `stdio` message
+/// (`'standard input'`/`'standard output'`). GNU always quotes the operand when
+/// reading or writing fails, but only when needed elsewhere.
+fn file_name(operand: Option<&str>, stdio: &str, always_quote: bool) -> String {
+    match operand {
+        Some(f) if always_quote => f.quote().to_string(),
+        Some(f) => f.maybe_quote().to_string(),
+        None => translate!(stdio),
+    }
+}
+
 /// depending on the command line arguments, this function
 /// informs the OS to flush/discard the caches for input and/or output file.
 fn flush_caches_full_length(i: &Input, o: &Output) {
     // Using len=0 in posix_fadvise means "to end of file"
     if i.settings.iflags.nocache {
-        let file = i
-            .settings
-            .infile
-            .clone()
-            .unwrap_or_else(|| translate!("dd-standard-input"));
+        let file = file_name(i.settings.infile.as_deref(), "dd-standard-input", false);
         show_if_err!(
             i.discard_cache(0, 0)
                 .map_err_context(|| translate!("dd-error-failed-discard-cache", "file" => file))
         );
     }
     if i.settings.oflags.nocache {
-        let file = o
-            .settings
-            .outfile
-            .clone()
-            .unwrap_or_else(|| translate!("dd-standard-output"));
+        let file = file_name(o.settings.outfile.as_deref(), "dd-standard-output", false);
         show_if_err!(
             o.discard_cache(0, 0)
                 .map_err_context(|| translate!("dd-error-failed-discard-cache", "file" => file))
         );
     }
+}
+
+/// A failure of the copy: reading and writing name the file, the rest does not.
+enum CopyError {
+    Read(io::Error),
+    Write(io::Error),
+    Other(io::Error),
+}
+
+impl From<io::Error> for CopyError {
+    fn from(e: io::Error) -> Self {
+        Self::Other(e)
+    }
+}
+
+/// Copy the input to the output, adding the failing operation and file to an error.
+fn dd_copy(i: Input, o: Output) -> UResult<()> {
+    let settings = i.settings;
+    let Err(e) = copy(i, o) else {
+        return Ok(());
+    };
+    let (e, context) = match e {
+        CopyError::Read(e) => {
+            let file = file_name(settings.infile.as_deref(), "dd-standard-input", true);
+            (e, translate!("dd-error-reading", "file" => file))
+        }
+        CopyError::Write(e) => {
+            let file = file_name(settings.outfile.as_deref(), "dd-standard-output", true);
+            (e, translate!("dd-error-writing", "file" => file))
+        }
+        CopyError::Other(e) => (e, translate!("dd-error-io-error")),
+    };
+    Err(e).map_err_context(|| context)
 }
 
 /// Copy the given input data to this output, consuming both.
@@ -1138,7 +1174,7 @@ fn flush_caches_full_length(i: &Input, o: &Output) {
 ///
 /// If there is a problem reading from the input or writing to
 /// this output.
-fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
+fn copy(mut i: Input, o: Output) -> Result<(), CopyError> {
     // The read and write statistics.
     //
     // These objects are counters, initialized to zero. After each
@@ -1192,14 +1228,14 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // need the contents of the input file in a system cache.
         //
         flush_caches_full_length(&i, &o);
-        return finalize(
+        return Ok(finalize(
             BlockWriter::Unbuffered(o),
             rstat,
             wstat,
             start,
             &prog_tx,
             output_thread,
-        );
+        )?);
     }
 
     // Spawn a timer thread to provide a scheduled signal indicating when we
@@ -1264,8 +1300,8 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // best buffer size for reading based on the number of
         // blocks already read and the number of blocks remaining.
         let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, i.settings.ibs, bsize);
-        let Ok((rstat_update, data)) =
-            read_helper(&mut i, &mut buf, loop_bsize).map_err(|e| copy_error = Some(e))
+        let Ok((rstat_update, data)) = read_helper(&mut i, &mut buf, loop_bsize)
+            .map_err(|e| copy_error = Some(CopyError::Read(e)))
         else {
             break;
         };
@@ -1285,7 +1321,10 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             None => o.write_blocks(data),
             Some(c) => write_converted(c, data, &mut conv_rstat, &mut conv_wstat, &mut o),
         };
-        let Ok(wstat_update) = written.map_err(|e| copy_error = Some(e)) else {
+        let Ok(wstat_update) = written.map_err(|e| copy_error = Some(CopyError::Write(e))) else {
+            // The block was read before the write failed, so it still counts as
+            // a record in, as GNU `dd` reports it.
+            rstat += rstat_update;
             break;
         };
 
@@ -1341,7 +1380,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         && let Some(c) = &mut converter
         && let Err(e) = c.finish(&mut write_to(&mut o, &mut wstat))
     {
-        copy_error = Some(e);
+        copy_error = Some(CopyError::Write(e));
     }
 
     rstat.records_truncated = conv_rstat.records_truncated;
@@ -1355,7 +1394,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         return Err(e);
     }
 
-    finalize(o, rstat, wstat, start, &prog_tx, output_thread)
+    Ok(finalize(o, rstat, wstat, start, &prog_tx, output_thread)?)
 }
 
 /// Write `data` through `converter`, which may count truncated records in `rstat`.
@@ -1657,7 +1696,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None if is_stdout_redirected_to_seekable_file() => Output::new_file_from_stdout(&settings)?,
         None => Output::new_stdout(&settings)?,
     };
-    dd_copy(i, o).map_err_context(|| translate!("dd-error-io-error"))
+    dd_copy(i, o)
 }
 
 pub fn uu_app() -> Command {
