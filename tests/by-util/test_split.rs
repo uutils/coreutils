@@ -366,6 +366,87 @@ fn test_filter_command_fails() {
         .fails();
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[rstest]
+#[case::lines("-l1")]
+#[case::bytes("-b2")]
+#[case::line_bytes("-C2")]
+#[cfg(unix)]
+fn test_filter_exit_status_stops_split(#[case] mode: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "a\nb\nc\n");
+    let filter = "cat > /dev/null; echo $FILE >> calls; exit 5";
+    ucmd.args(&[mode, &format!("--filter={filter}"), "in"])
+        .fails_with_code(5)
+        .stderr_only(format!(
+            "split: with FILE=xaa, exit 5 from command: {filter}\n"
+        ));
+    assert_eq!(at.read("calls"), "xaa\n");
+}
+
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[rstest]
+#[case::lines(&["-l1"])]
+#[case::bytes(&["-b100000"])]
+#[case::line_bytes(&["-C100000"])]
+#[case::chunks(&["-n", "2"])]
+#[cfg(unix)]
+fn test_filter_exit_status_without_reading_input(#[case] mode: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // More than a pipe holds, so the write fails once the filter has exited.
+    at.write("in", &"a\n".repeat(150_000));
+    ucmd.args(mode)
+        .args(&["--filter=exit 5", "in"])
+        .fails_with_code(5)
+        .stderr_only("split: with FILE=xaa, exit 5 from command: exit 5\n");
+}
+
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[rstest]
+#[case::all_fail("exit 5", 5, "xaa")]
+#[case::second_fails("[ $FILE = xab ] && exit 6; exit 0", 6, "xab")]
+#[cfg(unix)]
+fn test_filter_exit_status_round_robin(
+    #[case] status: &str,
+    #[case] code: i32,
+    #[case] file: &str,
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "a\nb\nc\n");
+    let filter = format!("cat > /dev/null; echo $FILE >> calls; {status}");
+    ucmd.args(&["-n", "r/2", &format!("--filter={filter}"), "in"])
+        .fails_with_code(code)
+        .stderr_only(format!(
+            "split: with FILE={file}, exit {code} from command: {filter}\n"
+        ));
+    assert_eq!(at.read("calls"), "xaa\nxab\n");
+}
+
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[test]
+#[cfg(unix)]
+fn test_filter_killed_by_signal() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "a\nb\n");
+    let filter = "cat > /dev/null; kill -KILL $$";
+    ucmd.args(&["-l1", &format!("--filter={filter}"), "in"])
+        .fails_with_code(128 + 9)
+        .stderr_only(format!(
+            "split: with FILE=xaa, signal KILL from command: {filter}\n"
+        ));
+}
+
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[test]
+#[cfg(unix)]
+fn test_filter_killed_by_sigpipe_is_ignored() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "a\nb\n");
+    ucmd.args(&["-l1", "--filter=cat > /dev/null; exec kill -PIPE $$", "in"])
+        .succeeds()
+        .no_output();
+}
+
 #[test]
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
