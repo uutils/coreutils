@@ -80,6 +80,7 @@ number of spaces representing a tab when determining the line length.
 ## `id`
 
 `id` has three additional flags:
+
 * `-P` displays the id as a password file entry
 * `-p` makes the output human-readable
 * `-A` displays the process audit user ID
