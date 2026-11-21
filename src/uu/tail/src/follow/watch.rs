@@ -10,7 +10,8 @@ use crate::follow::files::{FileHandling, PathData};
 use crate::paths::{Input, InputKind, MetadataExtTail, PathExtTail};
 use crate::{platform, text};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
-use std::io::BufRead;
+use std::fs::File;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, channel};
 use uucore::display::Quotable;
@@ -102,6 +103,7 @@ pub struct Observer {
     pub use_polling: bool,
 
     pub watcher_rx: Option<WatcherRx>,
+    /// Paths requiring periodic checks after their watch is lost.
     pub orphans: Vec<PathBuf>,
     pub files: FileHandling,
 
@@ -143,20 +145,32 @@ impl Observer {
         )
     }
 
+    /// Watch the same resolved stdin path that is used for the initial read.
+    pub fn watch_stdin_file(&mut self, path: &Path) -> UResult<()> {
+        if let Some(watcher_rx) = &mut self.watcher_rx {
+            watcher_rx.watch_with_parent(path)?;
+        }
+        Ok(())
+    }
+
     pub fn add_path(
         &mut self,
         path: &Path,
         display_name: &str,
-        reader: Option<Box<dyn BufRead>>,
+        reader: Option<BufReader<File>>,
         update_last: bool,
     ) -> UResult<()> {
         if self.follow.is_some() {
-            let path = if path.is_relative() {
+            let path = if path.is_relative() && !path.is_stdin() {
                 std::env::current_dir()?.join(path)
             } else {
                 path.to_owned()
             };
-            let metadata = path.metadata().ok();
+
+            let metadata = reader
+                .as_ref()
+                .and_then(|reader| reader.get_ref().metadata().ok())
+                .or_else(|| path.metadata().ok());
             self.files.insert(
                 &path,
                 PathData::new(reader, metadata, display_name, path.is_symlink()),
@@ -265,7 +279,9 @@ impl Observer {
         if let Some(watcher_rx) = &mut self.watcher_rx {
             for input in inputs {
                 match input.kind() {
+                    // stdin is watched when it is read, using the same resolved path.
                     InputKind::Stdin => (),
+                    InputKind::File(path) if cfg!(unix) && path == Path::new(text::DEV_STDIN) => (),
                     InputKind::File(path) => {
                         #[cfg(all(unix, not(target_os = "linux")))]
                         if !path.is_file() {
@@ -319,12 +335,15 @@ impl Observer {
         settings: &Settings,
     ) -> UResult<Vec<PathBuf>> {
         use notify::event::{
-            CreateKind, DataChange, EventKind, MetadataKind, ModifyKind, RemoveKind, RenameMode,
+            CreateKind, EventKind, MetadataKind, ModifyKind, RemoveKind, RenameMode,
         };
 
         let event_path = event.paths.first().unwrap();
         let mut paths: Vec<PathBuf> = vec![];
         let display_name = self.files.get(event_path).display_name.clone();
+
+        let follows_open_file =
+            self.follow_descriptor() && self.files.get(event_path).reader.is_some();
 
         match event.kind {
             // NOTE: `ModifyKind::Any` is emitted by the Windows `ReadDirectoryChangesW`
@@ -333,9 +352,18 @@ impl Observer {
             // appends are never followed on those platforms (see GH issue #4827).
             // Linux inotify and the polling fallback report the more specific
             // `Modify(Data(..))`/`Modify(Metadata(..))` instead, so this is a no-op there.
-            EventKind::Modify(ModifyKind::Any | ModifyKind::Metadata(MetadataKind::Any | MetadataKind::WriteTime) | ModifyKind::Data(DataChange::Any) | ModifyKind::Name(RenameMode::To)) |
+            EventKind::Modify(ModifyKind::Any | ModifyKind::Metadata(MetadataKind::Any | MetadataKind::WriteTime) | ModifyKind::Data(_) | ModifyKind::Name(RenameMode::To)) |
             EventKind::Create(CreateKind::File | CreateKind::Folder | CreateKind::Any) => {
-                if let Ok(new_md) = event_path.metadata() {
+                if follows_open_file {
+                    // The name may refer to a replacement. Check truncation against
+                    // the open descriptor when reading, without reopening the path.
+                    paths.push(event_path.clone());
+                    if event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To))
+                        && !self.orphans.contains(event_path)
+                    {
+                        self.orphans.push(event_path.clone());
+                    }
+                } else if let Ok(new_md) = event_path.metadata() {
                     let pd = self.files.get(event_path);
                     // `metadata()` follows symlinks, so under --follow=name a
                     // watched file swapped for a symlink would otherwise be
@@ -365,8 +393,9 @@ impl Observer {
                                     translate!("tail-status-has-appeared-following-new-file", "file" => display_name.quote())
                                 );
                                 self.reopen(event_path)?;
-                            } else if event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To))
-                            || (self.use_polling && !old_md.file_id_eq(&new_md)) {
+                            } else if self.follow_name()
+                                && (event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To))
+                                    || (self.use_polling && !old_md.file_id_eq(&new_md))) {
                                 show_error!(
                                     "{}",
                                     translate!("tail-status-has-been-replaced-following-new-file", "file" => display_name.quote())
@@ -425,10 +454,6 @@ impl Observer {
                         }
                     }
                     self.files.update_metadata(event_path, Some(new_md));
-                } else if self.follow_descriptor() && self.files.get(event_path).reader.is_some() {
-                    // The link no longer resolves, but the file it led to is
-                    // still open and is what --follow=descriptor follows.
-                    paths.push(event_path.clone());
                 } else if event_path.is_symlink() && settings.retry {
                     // The link no longer resolves. Say so if it was being
                     // followed, and poll it until it resolves again.
@@ -440,8 +465,15 @@ impl Observer {
                 }
             }
             EventKind::Remove(RemoveKind::File | RemoveKind::Any)
-                | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
-                if self.follow_name() {
+                | EventKind::Modify(ModifyKind::Name(RenameMode::From | RenameMode::Any)) => {
+                if follows_open_file {
+                    // Backends can lose the watch when a file moves. Continue reading
+                    // its descriptor on subsequent events and timeouts.
+                    if !self.orphans.contains(event_path) {
+                        self.orphans.push(event_path.clone());
+                    }
+                    paths.push(event_path.clone());
+                } else if self.follow_name() {
                     if settings.retry {
                         if self.files.get_mut_metadata(event_path).is_some_and(MetadataExtTail::is_tailable)
                             && self.files.get(event_path).reader.is_some() {
@@ -478,36 +510,11 @@ impl Observer {
                     // --retry only effective for the initial open
                     let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
                     self.files.remove(event_path);
-                } else if self.use_polling && event.kind == EventKind::Remove(RemoveKind::Any) {
-                    /*
-                    BUG: The watched file was removed. Since we're using Polling, this
-                    could be a rename. We can't tell because `notify::PollWatcher` doesn't
-                    recognize renames properly.
-                    Ideally we want to call seek to offset 0 on the file handle.
-                    But because we only have access to `PathData::reader` as `BufRead`,
-                    we cannot seek to 0 with `BufReader::seek_relative`.
-                    Also because we don't have the new name, we cannot work around this
-                    by simply reopening the file.
-                    */
                 }
             }
             EventKind::Modify(ModifyKind::Name(RenameMode::Both))
-                /*
-                NOTE: For `tail -f a`, keep tracking additions to b after `mv a b`
-                (gnu/tests/tail-2/descriptor-vs-rename.sh)
-                NOTE: The File/BufReader doesn't need to be updated.
-                However, we need to update our `files.map`.
-                This can only be done for inotify, because this EventKind does not
-                trigger for the PollWatcher.
-                BUG: As a result, there's a bug if polling is used:
-                $ tail -f file_a ---disable-inotify
-                $ mv file_a file_b
-                $ echo A >> file_b
-                $ echo A >> file_a
-                The last append to file_a is printed, however this shouldn't be because
-                after the "mv" tail should only follow "file_b".
-                TODO: [2022-05; jhscheer] add test for this bug
-                */
+                // Inotify can move the watch to the new path while keeping the reader.
+                // Other backends continue reading the descriptor on events or timeouts.
 
                 if self.follow_descriptor() => {
                     let new_path = event.paths.last().unwrap();
@@ -524,7 +531,11 @@ impl Observer {
 
                     // Unwatch old path and watch new path
                     let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
-                    self.watcher_rx.as_mut().unwrap().watch_with_parent(new_path)?;
+                    self.orphans.retain(|path| path != event_path);
+                    if self.watcher_rx.as_mut().unwrap().watch_with_parent(new_path).is_err() {
+                        // Another rename may have already made the new path unavailable.
+                        self.orphans.push(new_path.clone());
+                    }
                 }
             _ => {}
         }
@@ -580,7 +591,9 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                         );
                         observer.files.update_metadata(new_path, Some(md));
                         observer.files.update_reader(new_path)?;
-                        _read_some = observer.files.tail_file(new_path, settings.verbose)?;
+                        _read_some = observer
+                            .files
+                            .tail_file(new_path, settings.verbose, false)?;
                         observer
                             .watcher_rx
                             .as_mut()
@@ -653,6 +666,9 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                 paths,
             })) if e.kind() == std::io::ErrorKind::NotFound => {
                 if let Some(event_path) = paths.first().filter(|p| observer.files.contains_key(p)) {
+                    if observer.follow_descriptor() && !observer.orphans.contains(event_path) {
+                        observer.orphans.push(event_path.clone());
+                    }
                     let _ = observer
                         .watcher_rx
                         .as_mut()
@@ -692,16 +708,30 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             }
         }
 
-        if observer.use_polling && settings.follow.is_some() {
+        if settings.follow.is_some() && observer.use_polling {
             // Consider all files to potentially have new content.
-            // This is a workaround because `Notify::PollWatcher`
-            // does not recognize the "renaming" of files.
+            // PollWatcher cannot recognize renames.
             paths = observer.files.keys().cloned().collect::<Vec<_>>();
+        } else if observer.follow_descriptor() {
+            // Read descriptors that lost their watches on every event or timeout,
+            // so events for other files cannot indefinitely postpone these reads.
+            for path in &observer.orphans {
+                if !paths.contains(path) {
+                    paths.push(path.clone());
+                }
+            }
         }
 
         // main print loop
         for path in &paths {
-            _read_some = observer.files.tail_file(path, settings.verbose)?;
+            // A later rename in the same event batch may have moved this entry.
+            if !observer.files.contains_key(path) {
+                continue;
+            }
+            _read_some =
+                observer
+                    .files
+                    .tail_file(path, settings.verbose, observer.follow_descriptor())?;
         }
 
         if timeout_counter == settings.max_unchanged_stats {
