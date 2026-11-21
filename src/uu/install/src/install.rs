@@ -430,6 +430,11 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
     }
     .to_string();
 
+    if matches.get_flag(OPT_DIRECTORY) && strip {
+        show_error!("{}", translate!("install-error-strip-with-directory"));
+        return Err(1.into());
+    }
+
     if compare && strip {
         show_error!(
             "{}",

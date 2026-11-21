@@ -48,6 +48,7 @@ install-error-extra-operand = opérande supplémentaire { $operand }
 install-error-invalid-mode = Chaîne de mode invalide : { $error }
 install-error-mutually-exclusive-target = Les options --target-directory et --no-target-directory sont mutuellement exclusives
 install-error-mutually-exclusive-compare-strip = Les options --compare et --strip sont mutuellement exclusives
+install-error-strip-with-directory = l'option de suppression des symboles ne peut pas être utilisée lors de l'installation d'un répertoire
 install-error-missing-file-operand = opérande de fichier manquant
 install-error-missing-destination-operand = opérande de fichier de destination manquant après { $path }
 install-error-failed-to-remove = Échec de la suppression du fichier existant { $path }. { $error }

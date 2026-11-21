@@ -1731,6 +1731,26 @@ fn test_install_compare_option() {
 }
 
 #[test]
+fn test_install_strip_with_directory() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene
+        .ucmd()
+        .args(&["-d", "-s", "newdir"])
+        .fails_with_code(1)
+        .stderr_contains("the strip option may not be used when installing a directory");
+    assert!(!at.dir_exists("newdir"));
+
+    // The directory check comes before the compare one.
+    scene
+        .ucmd()
+        .args(&["-d", "-s", "-C", "newdir"])
+        .fails_with_code(1)
+        .stderr_contains("the strip option may not be used when installing a directory");
+}
+
+#[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_install_compare_basic() {
     let scene = TestScenario::new(util_name!());
