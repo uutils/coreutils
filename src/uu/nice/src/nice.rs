@@ -15,8 +15,8 @@ use std::os::windows::process::CommandExt as _;
 use std::process;
 #[cfg(windows)]
 use windows_sys::Win32::System::Threading::{
-    ABOVE_NORMAL_PRIORITY_CLASS, BELOW_NORMAL_PRIORITY_CLASS, HIGH_PRIORITY_CLASS,
-    IDLE_PRIORITY_CLASS, NORMAL_PRIORITY_CLASS, REALTIME_PRIORITY_CLASS,
+    ABOVE_NORMAL_PRIORITY_CLASS, BELOW_NORMAL_PRIORITY_CLASS, GetCurrentProcess, GetPriorityClass,
+    HIGH_PRIORITY_CLASS, IDLE_PRIORITY_CLASS, NORMAL_PRIORITY_CLASS, REALTIME_PRIORITY_CLASS,
 };
 
 use uucore::translate;
@@ -100,6 +100,65 @@ fn standardize_nice_args(mut args: impl uucore::Args) -> impl uucore::Args {
     v.into_iter()
 }
 
+/// Map a Windows priority class to the nice value Cygwin reports for it.
+///
+/// Cygwin documents the mapping between nice values and Windows priority
+/// classes in the "Implementation Notes" chapter of its API documentation:
+/// <https://cygwin.com/cygwin-api/std-notes.html>
+///
+/// That mapping gives every priority class a range of nice values, and the
+/// nice value reported for a class is the middle of that range:
+///
+/// | priority class                | nice values | reported |
+/// |-------------------------------|-------------|----------|
+/// | `REALTIME_PRIORITY_CLASS`     | -20         | -20      |
+/// | `HIGH_PRIORITY_CLASS`         | -19 .. -13  | -16      |
+/// | `ABOVE_NORMAL_PRIORITY_CLASS` | -12 .. -5   | -8       |
+/// | `NORMAL_PRIORITY_CLASS`       | -4 .. 3     | 0        |
+/// | `BELOW_NORMAL_PRIORITY_CLASS` | 4 .. 11     | 8        |
+/// | `IDLE_PRIORITY_CLASS`         | 12 .. 19    | 16       |
+#[cfg(windows)]
+fn niceness_from_priority_class(priority_class: u32) -> i32 {
+    match priority_class {
+        REALTIME_PRIORITY_CLASS => -20,
+        HIGH_PRIORITY_CLASS => -16,
+        ABOVE_NORMAL_PRIORITY_CLASS => -8,
+        BELOW_NORMAL_PRIORITY_CLASS => 8,
+        IDLE_PRIORITY_CLASS => 16,
+        // NORMAL, and the 0 that `GetPriorityClass` returns when it fails.
+        _ => 0,
+    }
+}
+
+/// Map a nice value to a Windows priority class, like Cygwin's `setpriority`.
+///
+/// The ranges of nice values per priority class are the ones Cygwin
+/// documents in the "Implementation Notes" chapter of its API documentation:
+/// <https://cygwin.com/cygwin-api/std-notes.html>
+///
+/// Nice values outside of the documented -20 .. 19 range are clamped to it.
+#[cfg(windows)]
+fn priority_class_from_niceness(niceness: i32) -> u32 {
+    match niceness {
+        ..=-20 => REALTIME_PRIORITY_CLASS,
+        -19..=-13 => HIGH_PRIORITY_CLASS,
+        -12..=-5 => ABOVE_NORMAL_PRIORITY_CLASS,
+        -4..=3 => NORMAL_PRIORITY_CLASS,
+        4..=11 => BELOW_NORMAL_PRIORITY_CLASS,
+        _ => IDLE_PRIORITY_CLASS,
+    }
+}
+
+/// The priority class the current process runs at.
+#[cfg(windows)]
+fn get_current_priority_class() -> u32 {
+    // SAFETY: `GetCurrentProcess` always returns a valid pseudo-handle.
+    let process = unsafe { GetCurrentProcess() };
+
+    // SAFETY: `process` is a valid handle for querying the priority class.
+    unsafe { GetPriorityClass(process) }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = standardize_nice_args(args);
@@ -107,8 +166,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches =
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
-    #[cfg(not(unix))]
-    let current_niceness = 0i32; // todo: what we can do?
+    #[cfg(not(any(unix, windows)))]
+    let current_niceness = 0i32;
+    #[cfg(windows)]
+    let current_niceness = niceness_from_priority_class(get_current_priority_class());
     #[cfg(unix)]
     let current_niceness = rustix::process::getpriority_process(None)
         .map_err(|e| uucore::error::USimpleError::new(125, format!("getpriority: {e}")))?;
@@ -158,14 +219,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     #[cfg(windows)]
-    let priority_class = match new_niceness {
-        ..=-20 => REALTIME_PRIORITY_CLASS,
-        -19 => HIGH_PRIORITY_CLASS,
-        -18..=-1 => ABOVE_NORMAL_PRIORITY_CLASS,
-        0 => NORMAL_PRIORITY_CLASS,
-        1..=18 => BELOW_NORMAL_PRIORITY_CLASS,
-        19.. => IDLE_PRIORITY_CLASS,
-    };
+    let priority_class = priority_class_from_niceness(new_niceness);
 
     let cmd = cmd_iter.next().unwrap();
     let args: Vec<&OsString> = cmd_iter.collect();
@@ -174,8 +228,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     #[cfg(unix)]
     let err = command.exec();
     #[cfg(windows)]
-    let Err(err) = command.creation_flags(priority_class).spawn() else {
-        return Ok(());
+    let err = match command.creation_flags(priority_class).status() {
+        Ok(status) => {
+            // On Unix `nice` replaces itself with the command, so the exit
+            // status of the command becomes the exit status of `nice`. On
+            // Windows the command runs as a child process, so pass its exit
+            // status on.
+            set_exit_code(status.code().unwrap_or(1));
+            return Ok(());
+        }
+        Err(err) => err,
     };
     #[cfg(not(any(unix, windows)))]
     let Err(err) = command.status() else {
