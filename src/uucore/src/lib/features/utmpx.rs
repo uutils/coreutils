@@ -258,36 +258,7 @@ impl Utmpx {
 
     /// Canonicalize host name using DNS
     pub fn canon_host(&self) -> IOResult<String> {
-        let host = self.host();
-
-        let (hostname, display) = host.split_once(':').unwrap_or((&host, ""));
-
-        if !hostname.is_empty() {
-            use dns_lookup::{AddrInfoHints, getaddrinfo};
-
-            const AI_CANONNAME: i32 = 0x2;
-            let hints = AddrInfoHints {
-                flags: AI_CANONNAME,
-                ..AddrInfoHints::default()
-            };
-            if let Ok(sockets) = getaddrinfo(Some(hostname), None, Some(hints)) {
-                let sockets = sockets.collect::<IOResult<Vec<_>>>()?;
-                for socket in sockets {
-                    if let Some(ai_canonname) = socket.canonname {
-                        return Ok(if display.is_empty() {
-                            ai_canonname
-                        } else {
-                            format!("{ai_canonname}:{display}")
-                        });
-                    }
-                }
-            } else {
-                // GNU coreutils has this behavior
-                return Ok(hostname.to_string());
-            }
-        }
-
-        Ok(host)
+        canonicalize_host(self.host())
     }
 
     /// Iterate through all utmp records using the most recently selected path.
@@ -1019,5 +990,55 @@ impl Drop for UtmpxIter {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod host_tests {
+    use super::{canonicalize_host_with, split_host_display};
+
+    #[rstest::rstest]
+    #[case("alias.test", "alias.test", "canonical.test")]
+    #[case("alias.test:0", "alias.test", "canonical.test:0")]
+    #[case("192.0.2.1", "192.0.2.1", "canonical.test")]
+    #[case("dead:beef::1", "dead:beef::1", "canonical.test")]
+    #[case("[dead:beef::1]:0", "[dead:beef::1]:0", "canonical.test")]
+    fn canonical_names_preserve_display_suffixes(
+        #[case] host: &str,
+        #[case] lookup: &str,
+        #[case] expected: &str,
+    ) {
+        let result = canonicalize_host_with(host.into(), |name| {
+            assert_eq!(name, lookup);
+            Ok([Ok(None), Ok(Some("canonical.test".into()))])
+        })
+        .unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn addresses_without_a_canonical_name_are_preserved() {
+        for host in ["192.0.2.1", "dead:beef::1", "[dead:beef::1]:0"] {
+            assert_eq!(
+                canonicalize_host_with(host.into(), |_| Ok([Ok(None)])).unwrap(),
+                host
+            );
+        }
+    }
+
+    #[rstest::rstest]
+    #[case("192.0.2.1", "192.0.2.1", "")]
+    #[case("dead:beef::1", "dead:beef::1", "")]
+    #[case("fe80::1%eth0", "fe80::1%eth0", "")]
+    #[case("[dead:beef::1]:0", "[dead:beef::1]:0", "")]
+    #[case("host.example", "host.example", "")]
+    #[case("host.example:0.1", "host.example", "0.1")]
+    #[case(":0", "", "0")]
+    fn ipv6_colons_are_not_display_separators(
+        #[case] host: &str,
+        #[case] hostname: &str,
+        #[case] display: &str,
+    ) {
+        assert_eq!(split_host_display(host), (hostname, display));
     }
 }
