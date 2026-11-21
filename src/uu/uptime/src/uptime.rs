@@ -62,7 +62,11 @@ pub fn uu_app() -> Command {
     #[cfg(not(target_env = "musl"))]
     let about = translate!("uptime-about");
     #[cfg(target_env = "musl")]
-    let about = translate!("uptime-about") + &translate!("uptime-about-musl-warning");
+    let about = format!(
+        "{}\n\n{}",
+        translate!("uptime-about"),
+        translate!("uptime-about-musl-warning")
+    );
 
     let cmd = Command::new("uptime")
         .version(uucore::crate_version!())
