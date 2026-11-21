@@ -537,3 +537,20 @@ fn test_repeated_flags_are_accepted() {
             "                               hello   world\n"
         ));
 }
+
+#[test]
+fn test_filter_file_missing_includes_path() {
+    // Plain names stay unquoted (same as other ptx I/O errors).
+    new_ucmd!()
+        .args(&["-b", "missing_break_file"])
+        .fails_with_code(1)
+        .stderr_is("ptx: missing_break_file: No such file or directory\n");
+    new_ucmd!()
+        .args(&["-o", "missing_only_file"])
+        .fails_with_code(1)
+        .stderr_is("ptx: missing_only_file: No such file or directory\n");
+    new_ucmd!()
+        .args(&["-i", "missing_ignore_file"])
+        .fails_with_code(1)
+        .stderr_is("ptx: missing_ignore_file: No such file or directory\n");
+}
