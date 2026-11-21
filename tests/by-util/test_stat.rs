@@ -972,6 +972,27 @@ fn test_stat_selinux() {
     assert_eq!(s.len(), 4);
 }
 
+#[test]
+#[cfg(not(feature = "selinux"))]
+fn test_context_without_selinux() {
+    // A context that cannot be read is printed as "?" and reported, and the
+    // rest of the format is still used.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    let result = ucmd
+        .args(&["-c", "%n %3C|%-3C| %s", "f"])
+        .fails_with_code(1);
+    result.stdout_is("f   ?|?  | 0\n");
+    let stderr = result.stderr_str();
+    assert_eq!(stderr.lines().count(), 2, "{stderr}");
+    for line in stderr.lines() {
+        assert!(
+            line.starts_with("stat: failed to get security context of 'f': "),
+            "{line}"
+        );
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn test_mount_point_basic() {
