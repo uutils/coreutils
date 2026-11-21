@@ -197,8 +197,14 @@ fn report_if_verbose(signal: usize, cmd: &OsStr, verbose: bool) {
 
 /// Wait for a child process and send a kill signal if it does not terminate.
 ///
+/// The `--kill-after` grace period, and the signal that started it.
+struct KillAfter {
+    delay: Duration,
+    sent_signal: usize,
+}
+
 /// This function waits for the child `process` for the time period
-/// given by `duration`. If the child process does not terminate
+/// given by `kill_after.delay`. If the child process does not terminate
 /// within that time, we send the `SIGKILL` signal to it. If `verbose`
 /// is `true`, then a message is printed to `stderr` when that
 /// happens.
@@ -218,17 +224,20 @@ fn report_if_verbose(signal: usize, cmd: &OsStr, verbose: bool) {
 fn wait_or_kill_process(
     process: &mut Child,
     cmd: &OsStr,
-    duration: Duration,
+    kill_after: &KillAfter,
     preserve_status: bool,
     foreground: bool,
     verbose: bool,
     spawn_state: &platform::SpawnState,
 ) -> std::io::Result<i32> {
     // A zero kill-after delay disables escalation, even on further signals.
-    let result = if duration.is_zero() {
+    let result = if kill_after.delay.is_zero() {
         process.wait().map(TimeoutRet::Exited)
     } else {
-        process.wait_or_timeout(duration, true)
+        // The signal we sent also reaches us through the process group, and
+        // an external TERM is not a reason to escalate either.
+        let term = signal_by_name_or_value("TERM").unwrap();
+        process.wait_or_timeout(kill_after.delay, &[term, kill_after.sent_signal])
     };
     match result {
         Ok(TimeoutRet::Exited(status)) => {
@@ -303,7 +312,7 @@ fn timeout(
     // TODO The structure of this block is extremely similar to the
     // structure of `wait_or_kill_process()`. They can probably be
     // refactored into some common function.
-    match process.wait_or_timeout(duration, false) {
+    match process.wait_or_timeout(duration, &[]) {
         Ok(TimeoutRet::Exited(status)) => {
             let exit_code = status.code().unwrap_or_else(|| {
                 platform::status_signal(status).map_or_else(
@@ -326,7 +335,10 @@ fn timeout(
                 return match wait_or_kill_process(
                     process,
                     &cmd[0],
-                    kill_after,
+                    &KillAfter {
+                        delay: kill_after,
+                        sent_signal: signal,
+                    },
                     preserve_status,
                     foreground,
                     verbose,
@@ -370,7 +382,10 @@ fn timeout(
                 return match wait_or_kill_process(
                     process,
                     &cmd[0],
-                    kill_after,
+                    &KillAfter {
+                        delay: kill_after,
+                        sent_signal: signal_to_send,
+                    },
                     preserve_status,
                     foreground,
                     verbose,
