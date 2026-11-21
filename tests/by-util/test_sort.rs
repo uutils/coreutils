@@ -461,7 +461,7 @@ fn test_check_zero_terminated_failure() {
         .arg("-c")
         .arg("zero-terminated.txt")
         .fails()
-        .stderr_only("sort: zero-terminated.txt:2: disorder: ../../fixtures/du\n");
+        .stderr_only("sort: zero-terminated.txt:2: disorder: ../../fixtures/du\0");
 }
 
 #[test]

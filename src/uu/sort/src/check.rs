@@ -11,7 +11,11 @@ use crate::{
     compare_by, open,
 };
 use itertools::Itertools;
-use std::{cmp::Ordering, ffi::OsStr};
+use std::{
+    cmp::Ordering,
+    ffi::OsStr,
+    io::{Write, stderr},
+};
 #[cfg(not(target_os = "wasi"))]
 use std::{
     io::Read,
@@ -19,7 +23,8 @@ use std::{
     sync::mpsc::{Receiver, SyncSender, sync_channel},
     thread,
 };
-use uucore::error::UResult;
+use uucore::error::{UError, UResult};
+use uucore::line_ending::LineEnding;
 
 fn buffer_size(settings: &GlobalSettings) -> usize {
     if settings.buffer_size < 100 * 1024 {
@@ -29,6 +34,31 @@ fn buffer_size(settings: &GlobalSettings) -> usize {
     } else {
         100 * 1024
     }
+}
+
+/// Builds the error for the first out-of-order line.
+///
+/// The diagnostic ends with the line terminator in use. The usual error
+/// printing always ends with a newline, so with `-z` the message is written
+/// here and the returned error is silent.
+fn disorder(
+    path: &OsStr,
+    line_number: usize,
+    line: &[u8],
+    settings: &GlobalSettings,
+) -> Box<dyn UError> {
+    let mut silent = settings.check_silent;
+    let error = |silent| SortError::Disorder {
+        file: path.to_owned(),
+        line_number,
+        line: String::from_utf8_lossy(line).into_owned(),
+        silent,
+    };
+    if !silent && settings.line_ending == LineEnding::Nul {
+        let _ = write!(stderr(), "{}: {}\0", uucore::util_name(), error(false));
+        silent = true;
+    }
+    error(silent).into()
 }
 
 /// Checks `chunk` against the end of `prev_chunk` (if any) and within itself.
@@ -58,26 +88,14 @@ fn check_chunk(
             chunk.line_data(),
         ) > max_allowed_cmp
         {
-            return Err(SortError::Disorder {
-                file: path.to_owned(),
-                line_number: *line_idx,
-                line: String::from_utf8_lossy(new_first.line).into_owned(),
-                silent: settings.check_silent,
-            }
-            .into());
+            return Err(disorder(path, *line_idx, new_first.line, settings));
         }
     }
 
     for (a, b) in chunk.lines().iter().tuple_windows() {
         *line_idx += 1;
         if compare_by(a, b, settings, chunk.line_data(), chunk.line_data()) > max_allowed_cmp {
-            return Err(SortError::Disorder {
-                file: path.to_owned(),
-                line_number: *line_idx,
-                line: String::from_utf8_lossy(b.line).into_owned(),
-                silent: settings.check_silent,
-            }
-            .into());
+            return Err(disorder(path, *line_idx, b.line, settings));
         }
     }
 
