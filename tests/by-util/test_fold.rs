@@ -1011,3 +1011,140 @@ fn test_fold_after_long_line_is_flushed(
         .succeeds()
         .stdout_is_bytes(expected);
 }
+
+#[test]
+fn test_punctuation_fold_at_sentence_end() {
+    new_ucmd!()
+        .args(&["--punctuation", "-w", "20"])
+        .pipe_in("Hello world. This is a test.")
+        .succeeds()
+        .stdout_is("Hello world.\n This is a test.");
+}
+
+#[test]
+fn test_punctuation_fold_at_clause() {
+    new_ucmd!()
+        .args(&["--punctuation", "-w", "20"])
+        .pipe_in("one two three four, five six")
+        .succeeds()
+        .stdout_is("one two three four,\n five six");
+}
+
+#[test]
+fn test_punctuation_fold_falls_back_to_space() {
+    new_ucmd!()
+        .args(&["--punctuation", "-w", "10"])
+        .pipe_in("hello world today")
+        .succeeds()
+        .stdout_is("hello \nworld \ntoday");
+}
+
+#[test]
+fn test_punctuation_fold_hard_cut() {
+    new_ucmd!()
+        .args(&["--punctuation", "-w", "5"])
+        .pipe_in("abcdefghij")
+        .succeeds()
+        .stdout_is("abcde\nfghij");
+}
+
+#[test]
+fn test_punctuation_fold_preserves_newlines() {
+    new_ucmd!()
+        .args(&["--punctuation", "-w", "40"])
+        .pipe_in("Short line.\n\nAnother short line.\n")
+        .succeeds()
+        .stdout_is("Short line.\n\nAnother short line.\n");
+}
+
+#[test]
+fn test_punctuation_fold_exclamation_and_question() {
+    new_ucmd!()
+        .args(&["--punctuation", "-w", "15"])
+        .pipe_in("Really? Yes! OK.")
+        .succeeds()
+        .stdout_is("Really? Yes!\n OK.");
+}
+
+#[test]
+fn test_punctuation_fold_with_bytes_mode() {
+    new_ucmd!()
+        .args(&["--punctuation", "-b", "-w", "12"])
+        .pipe_in("Hello world. Bye.")
+        .succeeds()
+        .stdout_is("Hello world.\n Bye.");
+}
+
+#[test]
+fn test_punctuation_fold_non_alnum_fallback() {
+    new_ucmd!()
+        .args(&["--punctuation", "-w", "8"])
+        .pipe_in("foo-bar-baz")
+        .succeeds()
+        .stdout_is("foo-bar-\nbaz");
+}
+
+#[test]
+fn test_punctuation_conflicts_with_spaces() {
+    new_ucmd!()
+        .args(&["--punctuation", "-s"])
+        .pipe_in("test")
+        .fails_with_code(1);
+}
+
+#[test]
+fn test_punctuation_short_line_no_fold() {
+    new_ucmd!()
+        .args(&["--punctuation", "-w", "80"])
+        .pipe_in("Hello, world!")
+        .succeeds()
+        .stdout_is("Hello, world!");
+}
+
+#[test]
+fn test_punctuation_preserves_newline_after_sentence_end() {
+    // Regression: a mid-line sentence-end must not steal the position of the
+    // trailing newline. The whole line fits, so no fold should happen.
+    new_ucmd!()
+        .args(&["--punctuation", "-w", "80"])
+        .pipe_in("foo. bar baz\n")
+        .succeeds()
+        .stdout_is("foo. bar baz\n");
+}
+
+#[test]
+fn test_punctuation_non_ascii_break_keeps_char_whole() {
+    // The em dash is a 3-byte char; the break after it must not split it.
+    new_ucmd!()
+        .args(&["--punctuation", "-w", "6"])
+        .pipe_in("abcd\u{2014}efghij")
+        .succeeds()
+        .stdout_is("abcd\u{2014}\nefghij");
+}
+
+#[test]
+fn test_punctuation_non_ascii_break_in_utf8_text() {
+    new_ucmd!()
+        .args(&["--punctuation", "-w", "8"])
+        .pipe_in("caf\u{e9}\u{2026}na\u{ef}ve words")
+        .succeeds()
+        .stdout_is("caf\u{e9}\u{2026}\nna\u{ef}ve \nwords");
+}
+
+#[test]
+fn test_punctuation_bytewise_ignores_non_ascii_bytes() {
+    // With -b only ASCII bytes are break points. "ab\u{e9}cdef" has none, so
+    // --punctuation must cut exactly where plain -b does, instead of picking a
+    // byte of the 2-byte \u{e9} as a break point.
+    let input = "ab\u{e9}cdef";
+    let plain = new_ucmd!()
+        .args(&["-b", "-w", "3"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_move_bytes();
+    new_ucmd!()
+        .args(&["-b", "--punctuation", "-w", "3"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(plain);
+}
