@@ -418,9 +418,7 @@ impl GlobalSettings {
         let [selector] = &self.selectors[..] else {
             return false;
         };
-        self.numeric_locale
-            .decimal_pt
-            .is_none_or(|decimal_pt| decimal_pt == b'.')
+        self.numeric_locale.decimal_pt == Some(b'.')
             && self.mode == SortMode::Numeric
             && selector.settings.mode == SortMode::Numeric
             && selector.settings.reverse == self.reverse
