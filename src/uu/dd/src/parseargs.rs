@@ -366,11 +366,11 @@ impl Parser {
                 "dsync" => linux_only!(f, i.dsync = true),
                 "sync" => linux_only!(f, i.sync = true),
                 "nocache" => linux_only!(f, i.nocache = true),
-                "nonblock" => linux_only!(f, i.nonblock = true),
+                "nonblock" if cfg!(unix) => i.nonblock = true,
                 "noatime" => linux_only!(f, i.noatime = true),
                 "noctty" => linux_only!(f, i.noctty = true),
                 "nofollow" => linux_only!(f, i.nofollow = true),
-                "cio" | "nolinks" | "binary" | "text" => {
+                "nonblock" | "cio" | "nolinks" | "binary" | "text" => {
                     return Err(ParseError::Unimplemented(f.to_string()));
                 }
 
