@@ -1419,11 +1419,19 @@ fn write_page(
     let line_separator = options.line_separator.as_bytes();
     let page_separator = options.page_separator_char.as_bytes();
 
-    let header = header_content(options, page);
     let trailer_content = trailer_content(options);
 
-    for x in header {
-        writer.write_all(&x)?;
+    if let Some(header_line) = header_content(options, page) {
+        // The header is a blank line, another blank line, the header text and
+        // two more blank lines. The left margin goes on the first blank line
+        // and on the header text line, and is streamed rather than allocated.
+        write_offset_spaces(writer, options.offset_spaces)?;
+        writer.write_all(line_separator)?;
+        writer.write_all(line_separator)?;
+        write_offset_spaces(writer, options.offset_spaces)?;
+        writer.write_all(&header_line)?;
+        writer.write_all(line_separator)?;
+        writer.write_all(line_separator)?;
         writer.write_all(line_separator)?;
     }
 
@@ -1755,11 +1763,11 @@ fn get_formatted_line_number(
     }
 }
 
-/// Returns a five line header content if displaying header is not disabled by
-/// using `NO_HEADER_TRAILER_OPTION` option.
-fn header_content(options: &OutputOptions, page: usize) -> Vec<Vec<u8>> {
+/// Returns the header text line (date, file name and page number) if displaying
+/// the header is not disabled by using `NO_HEADER_TRAILER_OPTION` option.
+fn header_content(options: &OutputOptions, page: usize) -> Option<Vec<u8>> {
     if !options.display_header_and_trailer {
-        return Vec::new();
+        return None;
     }
 
     // The header should be formatted with proper spacing:
@@ -1802,7 +1810,7 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<Vec<u8>> {
         .concat()
     };
 
-    vec![Vec::new(), Vec::new(), header_line, Vec::new(), Vec::new()]
+    Some(header_line)
 }
 
 /// Returns five empty lines as trailer content if displaying trailer
