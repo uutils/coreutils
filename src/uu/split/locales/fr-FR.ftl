@@ -41,8 +41,8 @@ split-error-cannot-read-from-input = { $input } : impossible de lire depuis l'en
 split-error-unable-to-open-file = impossible d'ouvrir { $file } ; abandon
 split-error-unable-to-reopen-file = impossible de rouvrir { $file } ; abandon
 split-error-file-descriptor-limit = limite de descripteurs de fichiers atteinte, mais aucun descripteur de fichier à fermer. { $count } écrivains fermés auparavant.
-split-error-shell-process-returned = Le processus shell a retourné { $code }
-split-error-shell-process-terminated = Le processus shell a été terminé par un signal
+split-error-filter-exit = avec FILE={ $file }, code de sortie { $code } de la commande : { $command }
+split-error-filter-signal = avec FILE={ $file }, signal { $signal } de la commande : { $command }
 
 # Messages d'aide pour les options de ligne de commande
 split-help-bytes = mettre TAILLE octets par fichier de sortie

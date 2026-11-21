@@ -42,8 +42,8 @@ split-error-cannot-read-from-input = { $input }: cannot read from input: { $erro
 split-error-unable-to-open-file = unable to open { $file }; aborting
 split-error-unable-to-reopen-file = unable to re-open { $file }; aborting
 split-error-file-descriptor-limit = at file descriptor limit, but no file descriptor left to close. Closed { $count } writers before.
-split-error-shell-process-returned = Shell process returned { $code }
-split-error-shell-process-terminated = Shell process terminated by signal
+split-error-filter-exit = with FILE={ $file }, exit { $code } from command: { $command }
+split-error-filter-signal = with FILE={ $file }, signal { $signal } from command: { $command }
 
 # Help messages for command-line options
 split-help-bytes = put SIZE bytes per output file
