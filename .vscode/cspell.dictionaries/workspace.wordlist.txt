@@ -1,6 +1,8 @@
 # * cargo
 cdylib
 doctest
+libloading
+nocapture
 
 # * uutils project
 uutils
@@ -11,6 +13,7 @@ ucmd
 uumain
 rlimit
 mkfifo
+logind
 urandom
 uchild
 ello
@@ -203,6 +206,8 @@ inode
 inodes
 isatty
 lchown
+libsystemd
+ohos
 pathlen
 setgid
 setgroups

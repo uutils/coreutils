@@ -20,10 +20,7 @@ doctest = false
 [dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
-uucore = { workspace = true, features = ["utmpx", "entries"] }
-
-[features]
-systemd_logind = ["uucore/systemd_logind"]
+uucore = { workspace = true, features = ["utmpx", "systemd-logind", "entries"] }
 
 [lints]
 workspace = true
