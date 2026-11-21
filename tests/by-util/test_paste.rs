@@ -192,6 +192,48 @@ fn test_combine_pairs_of_lines() {
     }
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_write_error_on_full_device() {
+    // The output is small enough to stay in the buffer until the final flush.
+    for args in [&["-", "-"][..], &["-s", "-d+", "-"], &["-"]] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("kiwi\nmango\nplum")
+            .set_stdout(std::fs::File::create("/dev/full").unwrap())
+            .fails_with_code(1)
+            .stderr_only("paste: write error: No space left on device\n");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn test_terminal_output_is_line_buffered() {
+    // Each line must show up on a terminal while stdin is still open.
+    for args in [&["-d:", "-", "-"][..], &["-"]] {
+        let mut child = new_ucmd!()
+            .args(args)
+            .set_stdin(std::process::Stdio::piped())
+            .terminal_sim_stdio(uutests::util::TerminalSimulation {
+                stdout: true,
+                ..Default::default()
+            })
+            .run_no_wait();
+        child.try_write_in("left\nright\n").unwrap();
+        let expected: &[u8] = if args.len() == 1 {
+            b"left\r\nright\r\n"
+        } else {
+            b"left:right\r\n"
+        };
+        child
+            .make_assertion_with_delay(500)
+            .is_alive()
+            .with_current_output()
+            .stdout_only_bytes(expected);
+        child.kill();
+    }
+}
+
 #[test]
 fn test_multi_stdin() {
     for d in ["-d", "--delimiters"] {
