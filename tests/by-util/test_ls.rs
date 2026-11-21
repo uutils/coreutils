@@ -8541,6 +8541,36 @@ fn test_ls_long_stat_failure_is_reported() {
     std::fs::set_permissions(at.plus("dir"), std::fs::Permissions::from_mode(0o700)).unwrap();
 }
 
+#[cfg(unix)]
+#[test]
+fn test_ls_recursive_reports_unreadable_dir_in_order() {
+    use rustix::process::geteuid;
+    use std::os::unix::fs::PermissionsExt;
+
+    // root can open the directory anyway
+    if geteuid().is_root() {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("d/a/a1");
+    at.mkdir("d/b");
+    at.mkdir_all("d/c/c1");
+    at.set_mode("d/b", 0o000);
+
+    ucmd.args(&["-R", "d"])
+        .stderr_to_stdout()
+        .fails_with_code(1)
+        .stdout_is(
+            "d:\na\nb\nc\n\nd/a:\na1\n\nd/a/a1:\n\
+             ls: cannot open directory 'd/b': Permission denied\n\
+             \nd/c:\nc1\n\nd/c/c1:\n",
+        );
+
+    // restore so that the test directory can be cleaned up
+    std::fs::set_permissions(at.plus("d/b"), std::fs::Permissions::from_mode(0o700)).unwrap();
+}
+
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     use super::*;
