@@ -162,6 +162,24 @@ impl Default for AlignedBuffer {
     }
 }
 
+/// Counts the newlines in `bytes`, with SIMD when `simd_allowed`.
+pub(crate) fn count_lines(bytes: &[u8], simd_allowed: bool) -> usize {
+    if simd_allowed {
+        bytecount::count(bytes, b'\n')
+    } else {
+        bytecount::naive_count(bytes, b'\n')
+    }
+}
+
+/// Counts the UTF-8 characters in `bytes`, with SIMD when `simd_allowed`.
+pub(crate) fn count_chars(bytes: &[u8], simd_allowed: bool) -> usize {
+    if simd_allowed {
+        bytecount::num_chars(bytes)
+    } else {
+        bytecount::naive_num_chars(bytes)
+    }
+}
+
 /// Returns a [`WordCount`] that counts the number of bytes, lines, and/or the number of Unicode characters encoded in UTF-8 read via a Reader.
 ///
 /// This corresponds to the `-c`, `-l` and `-m` command line flags to wc.
@@ -189,18 +207,10 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
                     total.bytes += n;
                 }
                 if COUNT_CHARS {
-                    total.chars += if simd_allowed {
-                        bytecount::num_chars(&buf[..n])
-                    } else {
-                        bytecount::naive_num_chars(&buf[..n])
-                    };
+                    total.chars += count_chars(&buf[..n], simd_allowed);
                 }
                 if COUNT_LINES {
-                    total.lines += if simd_allowed {
-                        bytecount::count(&buf[..n], b'\n')
-                    } else {
-                        bytecount::naive_count(&buf[..n], b'\n')
-                    };
+                    total.lines += count_lines(&buf[..n], simd_allowed);
                 }
             }
             Err(e) if e.kind() == ErrorKind::Interrupted => (),
