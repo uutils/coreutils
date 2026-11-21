@@ -24,14 +24,19 @@ use uucore::show_error;
 pub struct WatcherRx {
     watcher: Box<dyn Watcher>,
     receiver: Receiver<Result<notify::Event, notify::Error>>,
+    /// Whether `watcher` is a `notify::PollWatcher`.
+    #[cfg(target_os = "linux")]
+    polling: bool,
 }
 
 impl WatcherRx {
-    fn new(
-        watcher: Box<dyn Watcher>,
-        receiver: Receiver<Result<notify::Event, notify::Error>>,
-    ) -> Self {
-        Self { watcher, receiver }
+    /// Whether a followed file is watched itself, not only through its directory.
+    /// With inotify every file is watched, as GNU does. With polling only symlinks
+    /// are, since the polling backend reorders events when it watches both a file
+    /// and its directory.
+    #[cfg(target_os = "linux")]
+    fn watches_file(&self, path: &Path) -> bool {
+        path.is_symlink() || !self.polling
     }
 
     /// Wrapper for `notify::Watcher::watch` to also add the parent directory of `path` if necessary.
@@ -39,20 +44,23 @@ impl WatcherRx {
         let mut path = path.to_owned();
         #[cfg(target_os = "linux")]
         if path.is_file() {
-            // The directory watch reports a write to a symlink's target under
-            // the target's name, not the link's, so also watch the link: it is
-            // another inode than the directory and nothing is reported twice.
-            if path.is_symlink() {
-                self.watch(&path, RecursiveMode::NonRecursive)?;
+            // Watch the file itself as well as its directory, as GNU does.
+            // The file watch also reports writes to a symlink's target under
+            // the link's name, which the directory watch does not.
+            if self.watches_file(&path) {
+                // Ignore errors here (e.g. EACCES on an unreadable file): the parent
+                // directory watch below is enough to keep following, and will still
+                // report resource limits such as MaxFilesWatch.
+                let _ = self.watch(&path, RecursiveMode::NonRecursive);
             }
             /*
-            NOTE: Using the parent directory instead of the file is a workaround.
-            This workaround follows the recommendation of the notify crate authors:
+            NOTE: The parent directory is watched as well, following the recommendation of
+            the notify crate authors:
             > On some platforms, if the `path` is renamed or removed while being watched, behavior may
             > be unexpected. See discussions in [#165] and [#166]. If less surprising behavior is wanted
             > one may non-recursively watch the _parent_ directory as well and manage related events.
-            NOTE: Adding both: file and parent results in duplicate/wrong events.
-            Tested for notify::InotifyWatcher and for notify::PollWatcher.
+            NOTE: Both watches report a rename or removal of the file, so such events can
+            arrive twice for the same path.
             */
             if let Some(parent) = path.parent() {
                 if parent.is_dir() {
@@ -71,7 +79,6 @@ impl WatcherRx {
             path = path.canonicalize()?;
         }
 
-        // for syscalls: 2x "inotify_add_watch" ("filename" and ".") and 1x "inotify_rm_watch"
         self.watch(&path, RecursiveMode::NonRecursive)?;
         Ok(())
     }
@@ -239,7 +246,12 @@ impl Observer {
             }
         }
 
-        self.watcher_rx = Some(WatcherRx::new(watcher, rx));
+        self.watcher_rx = Some(WatcherRx {
+            watcher,
+            receiver: rx,
+            #[cfg(target_os = "linux")]
+            polling: self.use_polling,
+        });
         self.init_files(&settings.inputs)?;
 
         Ok(())
@@ -298,15 +310,25 @@ impl Observer {
     }
 
     /// Open `path` again and, on Linux, watch the file it names now: a
-    /// watch on a symlink follows the link when it is added, so one added
-    /// before the link was changed still reports the old target.
+    /// watch is bound to the inode it was added for, so one added before
+    /// the file was replaced (or a symlink changed) still reports the old
+    /// file. The old watch is dropped before the old file is closed:
+    /// closing it may free a replaced inode, and its watch would then report
+    /// the name as deleted.
     fn reopen(&mut self, path: &Path) -> UResult<()> {
+        #[cfg(target_os = "linux")]
+        let watch_file = path.is_file()
+            && self
+                .watcher_rx
+                .as_ref()
+                .is_some_and(|watcher_rx| watcher_rx.watches_file(path));
+        #[cfg(target_os = "linux")]
+        if watch_file && let Some(watcher_rx) = &mut self.watcher_rx {
+            let _ = watcher_rx.unwatch(path);
+        }
         self.files.update_reader(path)?;
         #[cfg(target_os = "linux")]
-        if path.is_symlink()
-            && let Some(watcher_rx) = &mut self.watcher_rx
-        {
-            let _ = watcher_rx.unwatch(path);
+        if watch_file && let Some(watcher_rx) = &mut self.watcher_rx {
             watcher_rx.watch(path, RecursiveMode::NonRecursive)?;
         }
         Ok(())
@@ -461,7 +483,9 @@ impl Observer {
                             // the link until it resolves again.
                             self.orphans.push(event_path.clone());
                         }
-                    } else {
+                    } else if self.files.get(event_path).reader.is_some() {
+                        // Both the directory and the file watch report the name going away; say so
+                        // only once.
                         show_error!(
                             "{}: {}",
                             display_name,
