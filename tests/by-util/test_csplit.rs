@@ -1976,3 +1976,58 @@ fn test_elide_empty_files_keeps_file_it_failed_to_create() {
 
     assert_eq!(at.read("xx00"), "KEEP THIS\n");
 }
+
+#[test]
+fn test_c_locale_matches_bytes() {
+    // In the C locale `é` is two characters, so `^.$` matches only `a`.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.env("LC_ALL", "C")
+        .args(&["-", "/^.$/"])
+        .pipe_in(b"\xc3\xa9\na\n".as_slice())
+        .succeeds()
+        .stdout_only("3\n2\n");
+    assert_eq!(at.read_bytes("xx00"), b"\xc3\xa9\n");
+    assert_eq!(at.read_bytes("xx01"), b"a\n");
+
+    // A byte that is not valid UTF-8 is still a character that `[^a]` matches.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.env("LC_ALL", "C")
+        .args(&["-", "/[^a]/"])
+        .pipe_in(b"\xff\na\n".as_slice())
+        .succeeds()
+        .stdout_only("0\n4\n");
+    assert_eq!(at.read_bytes("xx01"), b"\xff\na\n");
+}
+
+#[test]
+fn test_c_locale_non_ascii_pattern() {
+    // In the C locale `[é]` is a bracket of the two bytes C3 and A9, so it
+    // matches the line holding a lone A9 byte.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.env("LC_ALL", "C")
+        .args(&["-", "/[é]/"])
+        .pipe_in(b"a\n\xa9z\nb\n".as_slice())
+        .succeeds()
+        .stdout_only("2\n5\n");
+    assert_eq!(at.read_bytes("xx01"), b"\xa9z\nb\n");
+
+    // Outside a bracket, `é` is its two bytes in a row.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.env("LC_ALL", "C")
+        .args(&["-", "/é/"])
+        .pipe_in(b"a\n\xa9\n\xc3\xa9\n".as_slice())
+        .succeeds()
+        .stdout_only("4\n3\n");
+    assert_eq!(at.read_bytes("xx01"), b"\xc3\xa9\n");
+}
+
+#[test]
+fn test_utf8_locale_matches_characters() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.env("LC_ALL", "C.UTF-8")
+        .args(&["-", "/^.$/"])
+        .pipe_in(b"\xc3\xa9\na\n".as_slice())
+        .succeeds()
+        .stdout_only("0\n5\n");
+    assert_eq!(at.read_bytes("xx01"), b"\xc3\xa9\na\n");
+}

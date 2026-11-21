@@ -5,10 +5,13 @@
 
 // spell-checker:ignore (regex) SKIPTO UPTO ; (vars) ntimes
 
+use std::borrow::Cow;
+use std::fmt::Write as _;
 use std::ops::Range;
 
 use crate::csplit_error::{CsplitError, PatternProblem};
-use regex::{Regex, bytes::Regex as BytesRegex};
+use regex::{Regex, bytes::Regex as BytesRegex, bytes::RegexBuilder as BytesRegexBuilder};
+use uucore::i18n::{UEncoding, get_ctype_encoding};
 use uucore::show_warning;
 use uucore::translate;
 
@@ -140,11 +143,11 @@ fn extract_patterns(args: &[&str]) -> Result<Vec<Pattern>, CsplitError> {
                 Some(m) => m.as_str().parse().unwrap(),
             };
             if let Some(up_to_match) = captures.name("UPTO") {
-                let pattern = BytesRegex::new(up_to_match.as_str())
+                let pattern = build_regex(up_to_match.as_str())
                     .map_err(|e| invalid_regex(arg, up_to_match.range(), &e))?;
                 patterns.push(Pattern::UpToMatch(pattern, offset, execute_ntimes));
             } else if let Some(skip_to_match) = captures.name("SKIPTO") {
-                let pattern = BytesRegex::new(skip_to_match.as_str())
+                let pattern = build_regex(skip_to_match.as_str())
                     .map_err(|e| invalid_regex(arg, skip_to_match.range(), &e))?;
                 patterns.push(Pattern::SkipToMatch(pattern, offset, execute_ntimes));
             }
@@ -162,6 +165,47 @@ fn extract_patterns(args: &[&str]) -> Result<Vec<Pattern>, CsplitError> {
         }
     }
     Ok(patterns)
+}
+
+/// Compiles a `/REGEXP/` or `%REGEXP%` body. Outside a UTF-8 locale (e.g.
+/// `LC_ALL=C`) a character is one byte, so `.` and `[^a]` match any single
+/// byte, including one half of a UTF-8 sequence or an invalid byte.
+fn build_regex(pattern: &str) -> Result<BytesRegex, regex::Error> {
+    if get_ctype_encoding() == UEncoding::Utf8 {
+        return BytesRegex::new(pattern);
+    }
+    BytesRegexBuilder::new(&non_ascii_as_bytes(pattern))
+        .unicode(false)
+        .build()
+}
+
+/// Spells each non-ASCII character of `pattern` as the `\xHH` escapes of its
+/// UTF-8 bytes. Without Unicode mode the regex engine rejects a non-ASCII
+/// character, while in the C locale it is just those bytes: `é` matches
+/// `C3 A9`, and `[é]` matches either byte.
+fn non_ascii_as_bytes(pattern: &str) -> Cow<'_, str> {
+    if pattern.is_ascii() {
+        return Cow::Borrowed(pattern);
+    }
+    let mut out = String::with_capacity(pattern.len() * 4);
+    let mut escaped = false;
+    for c in pattern.chars() {
+        if c.is_ascii() {
+            out.push(c);
+            escaped = c == '\\' && !escaped;
+            continue;
+        }
+        if escaped {
+            // `\é` is just `é`: drop the backslash before its bytes.
+            out.pop();
+            escaped = false;
+        }
+        let mut buf = [0; 4];
+        for byte in c.encode_utf8(&mut buf).bytes() {
+            let _ = write!(out, "\\x{byte:02X}");
+        }
+    }
+    Cow::Owned(out)
 }
 
 /// The error for a `/REGEXP/` or `%REGEXP%` operand whose regex did not
@@ -244,6 +288,16 @@ fn validate_line_numbers(patterns: &[Pattern]) -> Result<(), CsplitError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn non_ascii_becomes_byte_escapes() {
+        assert_eq!(non_ascii_as_bytes("^a.b$"), "^a.b$");
+        assert_eq!(non_ascii_as_bytes("[é]"), r"[\xC3\xA9]");
+        // an escaped non-ASCII character is the same character
+        assert_eq!(non_ascii_as_bytes(r"\é"), r"\xC3\xA9");
+        // an escaped backslash stays, and the character after it is unescaped
+        assert_eq!(non_ascii_as_bytes(r"\\é"), r"\\\xC3\xA9");
+    }
 
     #[test]
     fn bad_pattern() {
