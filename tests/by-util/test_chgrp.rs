@@ -3,8 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) nosuchgroup groupname
+// spell-checker:ignore (words) nosuchgroup groupname fchownat fstatat newfstatat
 
+#[cfg(target_os = "linux")]
+use rstest::rstest;
 use rustix::process::getegid;
 #[cfg(not(target_vendor = "apple"))]
 use rustix::process::getgroups;
@@ -779,4 +781,59 @@ fn test_chgrp_recursive_verbose_reports_failed_entry() {
             "chgrp: changing group of 'dir': Operation not permitted\n\
              chgrp: changing group of 'dir/file': Operation not permitted\n",
         );
+}
+
+/// `chgrp -R` skips an entry removed after its directory was listed, like GNU.
+/// `strace` fakes the removal by failing one of the calls made for `gone` with
+/// ENOENT: the stat or change of a file, or the open of a subdirectory. Any
+/// other error (EIO) on the same call is still reported.
+#[cfg(target_os = "linux")]
+#[rstest]
+#[case::stat("?newfstatat,?statx,?fstatat64", false)]
+#[case::change("?chown,?lchown,fchownat", false)]
+#[case::open_subdir("openat", true)]
+fn test_recursive_skips_entry_removed_during_traversal(
+    #[case] syscalls: &str,
+    #[case] is_dir: bool,
+) {
+    use uutests::util::run_ucmd_with_strace;
+
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkdir("tree");
+    if is_dir {
+        ts.fixtures.mkdir("tree/gone");
+    } else {
+        ts.fixtures.touch("tree/gone");
+    }
+    let arg = rustix::process::getgid().as_raw().to_string();
+    let run = |error: &str, args: &[&str]| {
+        let inject = format!("inject={syscalls}:error={error}");
+        run_ucmd_with_strace(
+            &ts,
+            "tree",
+            &["-qq", "-o", "/dev/null", "-P", "gone", "-e", &inject],
+            &[&[arg.as_str()], args].concat(),
+        )
+    };
+
+    // Probe: the injection must make chgrp fail on the operand `gone` itself,
+    // else skip; the directory is opened with `-R`. A strace that cannot
+    // trace (blocked ptrace) also fails, so check the error.
+    let probe: &[&str] = if is_dir { &["-R", "gone"] } else { &["gone"] };
+    if run("EIO", probe)
+        .is_none_or(|(status, err)| status.success() || !err.contains("Input/output error"))
+    {
+        eprintln!("TEST SKIPPED: strace syscall injection is not available");
+        return;
+    }
+
+    let (status, stderr) = run("ENOENT", &["-R", "."]).unwrap();
+    assert!(status.success() && stderr.is_empty(), "{stderr}");
+
+    let (status, stderr) = run("EIO", &["-R", "."]).unwrap();
+    assert!(!status.success(), "{stderr}");
+    assert!(
+        stderr.contains("'./gone'") && stderr.contains("Input/output error"),
+        "{stderr}"
+    );
 }

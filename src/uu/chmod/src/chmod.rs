@@ -54,6 +54,20 @@ enum ChmodError {
     Replaced(PathBuf),
 }
 
+impl ChmodError {
+    /// The error for a stat of `file` failing with `err`. EACCES keeps the
+    /// translated "Permission denied"; anything else is reported as the OS
+    /// describes it, like GNU, since the `PermissionDenied` kind also covers
+    /// EPERM ("Operation not permitted").
+    fn cannot_access(file: PathBuf, err: std::io::Error) -> Self {
+        if err.raw_os_error() == Some(uucore::libc::EACCES) {
+            Self::PermissionDenied(file)
+        } else {
+            Self::CannotStat(file, err)
+        }
+    }
+}
+
 impl UError for ChmodError {}
 
 mod options {
@@ -529,7 +543,7 @@ impl Chmoder {
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
                     if !self.quiet {
-                        show!(ChmodError::PermissionDenied(filename.into()));
+                        show!(ChmodError::cannot_access(filename.into(), err));
                     }
                     self.report_not_accessed(file);
                     set_exit_code(1);
@@ -784,15 +798,23 @@ impl Chmoder {
 
             let meta = match dir_fd.metadata_at(&entry_name, should_follow_symlink.into()) {
                 Ok(meta) => meta,
+                // Removed since the directory was listed: skip it, like GNU.
+                // Only a followed stat can also fail on a dangling symlink,
+                // checked through the fd as the path may exceed PATH_MAX.
+                Err(err)
+                    if err.kind() == std::io::ErrorKind::NotFound
+                        && !(should_follow_symlink && dir_fd.is_symlink_at(&entry_name)) =>
+                {
+                    continue;
+                }
                 Err(err) => {
-                    let error =
-                        if err.kind() == std::io::ErrorKind::NotFound && entry_path.is_symlink() {
-                            ChmodError::DanglingSymlink(entry_path.clone())
-                        } else if err.kind() == std::io::ErrorKind::PermissionDenied {
-                            ChmodError::PermissionDenied(entry_path.clone())
-                        } else {
-                            ChmodError::CannotStat(entry_path.clone(), err)
-                        };
+                    // Not found here can only be the dangling symlink above;
+                    // any other error is reported as the OS describes it.
+                    let error = if err.kind() == std::io::ErrorKind::NotFound {
+                        ChmodError::DanglingSymlink(entry_path.clone())
+                    } else {
+                        ChmodError::CannotStat(entry_path.clone(), err)
+                    };
                     self.report_failure(error.into());
                     self.report_not_accessed(&entry_path);
                     continue;
@@ -832,6 +854,7 @@ impl Chmoder {
                         Ok(child_dir_fd) => {
                             self.safe_traverse_dir(&child_dir_fd, &entry_path, ancestors);
                         }
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
                         Err(err) => self.report_unreadable_dir(&entry_path, err),
                     }
                 }
@@ -906,7 +929,10 @@ impl Chmoder {
 
         // Use safe traversal to change the mode
         if let Err(e) = dir_fd.chmod_at(entry_name, new_mode, symlink_behavior) {
-            self.report_failed_change(file_path, e, current_mode, new_mode);
+            // Removed since the directory was listed: skip it, like GNU.
+            if e.kind() != std::io::ErrorKind::NotFound {
+                self.report_failed_change(file_path, e, current_mode, new_mode);
+            }
             return Ok(());
         }
 
@@ -938,11 +964,7 @@ impl Chmoder {
                     Ok(()) // Skip dangling symlinks
                 } else {
                     self.report_not_accessed(file);
-                    if err.kind() == std::io::ErrorKind::PermissionDenied {
-                        Err(ChmodError::PermissionDenied(file.into()).into())
-                    } else {
-                        Err(ChmodError::CannotStat(file.into(), err).into())
-                    }
+                    Err(ChmodError::cannot_access(file.into(), err).into())
                 };
             }
         };
