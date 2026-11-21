@@ -180,3 +180,43 @@ fn test_base32_file_with_trailing_slash() {
         .fails()
         .stderr_only("base32: a/: Not a directory\n");
 }
+
+#[test]
+fn test_decode_rejects_carriage_return() {
+    // A CR is invalid, but input before it is decoded and written first.
+    new_ucmd!()
+        .args(&["-d"])
+        .pipe_in("NBSWY3DP\r") // spell-checker:disable-line
+        .fails()
+        .code_is(1)
+        .stdout_is("hello")
+        .stderr_is("base32: invalid input\n");
+
+    new_ucmd!()
+        .args(&["-d"])
+        .pipe_in("NBSW\rY3DP") // spell-checker:disable-line
+        .fails()
+        .code_is(1)
+        .stdout_is("he")
+        .stderr_is("base32: invalid input\n");
+
+    new_ucmd!()
+        .args(&["-d"])
+        .pipe_in("\rNBSWY3DP") // spell-checker:disable-line
+        .fails()
+        .code_is(1)
+        .no_stdout()
+        .stderr_is("base32: invalid input\n");
+}
+
+#[test]
+fn test_decode_ignore_garbage_allows_carriage_return() {
+    // spell-checker:disable-next-line
+    for input in ["NBSWY3DP\r", "NBSW\rY3DP", "\rNBSWY3DP"] {
+        new_ucmd!()
+            .args(&["-d", "-i"])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only("hello");
+    }
+}
