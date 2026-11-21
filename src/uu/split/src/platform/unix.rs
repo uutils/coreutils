@@ -9,12 +9,13 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io::Result;
 use std::io::Write;
+use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
-use uucore::error::USimpleError;
+use uucore::display::Quotable;
+use uucore::error::{UResult, USimpleError};
 use uucore::fs;
 use uucore::fs::FileInformation;
-use uucore::show;
 use uucore::translate;
 
 /// A writer that writes to a `shell_process`' stdin
@@ -24,6 +25,10 @@ use uucore::translate;
 pub struct FilterWriter {
     /// Running shell process
     shell_process: Child,
+    /// Shell command, for error messages
+    command: String,
+    /// Value of $FILE given to the command, for error messages
+    file: OsString,
 }
 
 impl Write for FilterWriter {
@@ -35,11 +40,11 @@ impl Write for FilterWriter {
             .write(buf)
     }
     fn flush(&mut self) -> Result<()> {
+        // stdin is gone once `finish` has run, and there is nothing to flush.
         self.shell_process
             .stdin
             .as_mut()
-            .expect("failed to get shell stdin")
-            .flush()
+            .map_or(Ok(()), Write::flush)
     }
 }
 
@@ -96,35 +101,68 @@ impl FilterWriter {
                 .stdin(Stdio::piped())
                 .spawn()?;
 
-        Ok(Self { shell_process })
+        Ok(Self {
+            shell_process,
+            command: command.to_owned(),
+            file: filepath.to_owned(),
+        })
     }
 }
 
 impl Drop for FilterWriter {
-    /// flush stdin, close it and wait on `shell_process` before dropping self
     fn drop(&mut self) {
-        {
-            // close stdin by dropping it
-            let _stdin = self.shell_process.stdin.as_mut();
-        }
-        let exit_status = self
-            .shell_process
-            .wait()
-            .expect("Couldn't wait for child process");
-        if let Some(return_code) = exit_status.code() {
-            if return_code != 0 {
-                show!(USimpleError::new(
-                    1,
-                    translate!("split-error-shell-process-returned", "code" => return_code)
-                ));
+        // Errors are reported by `finish`; here we only reap the command.
+        drop(self.shell_process.stdin.take());
+        let _ = self.shell_process.wait();
+    }
+}
+
+impl FilterWriter {
+    /// Close the command's stdin and wait for it. A failing command is an
+    /// error with its exit status; being killed by SIGPIPE is not a failure.
+    pub fn finish(&mut self) -> UResult<()> {
+        drop(self.shell_process.stdin.take());
+        let status = self.shell_process.wait()?;
+        let file = self.file.maybe_quote().to_string();
+        let command = self.command.as_str();
+        if let Some(code) = status.code() {
+            if code == 0 {
+                return Ok(());
             }
-        } else {
-            show!(USimpleError::new(
-                1,
-                translate!("split-error-shell-process-terminated")
-            ));
+            let message = translate!(
+                "split-error-filter-exit",
+                "file" => file,
+                "code" => code,
+                "command" => command
+            );
+            return Err(USimpleError::new(code, message));
+        }
+        match status.signal() {
+            Some(signal) if signal != uucore::libc::SIGPIPE => {
+                let message = translate!(
+                    "split-error-filter-signal",
+                    "file" => file,
+                    "signal" => signal_name(signal),
+                    "command" => command
+                );
+                Err(USimpleError::new(128 + signal, message))
+            }
+            _ => Ok(()),
         }
     }
+}
+
+#[cfg(not(target_os = "fuchsia"))]
+fn signal_name(signal: i32) -> String {
+    usize::try_from(signal)
+        .ok()
+        .and_then(uucore::signals::signal_name_by_value)
+        .unwrap_or_else(|| signal.to_string())
+}
+
+#[cfg(target_os = "fuchsia")]
+fn signal_name(signal: i32) -> String {
+    signal.to_string()
 }
 
 /// Instantiate either a file writer or a "write to shell process's stdin" writer

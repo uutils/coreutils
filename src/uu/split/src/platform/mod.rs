@@ -37,6 +37,21 @@ pub enum Writer {
     Filter(FilterWriter),
 }
 
+impl Writer {
+    /// Wait for a filter command to finish, failing if the command failed.
+    #[cfg_attr(
+        not(unix),
+        expect(clippy::unnecessary_wraps, reason = "only filters can fail")
+    )]
+    pub fn finish(&mut self) -> uucore::error::UResult<()> {
+        match self {
+            Self::File(_) => Ok(()),
+            #[cfg(unix)]
+            Self::Filter(w) => w.finish(),
+        }
+    }
+}
+
 impl std::io::Write for Writer {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         match self {

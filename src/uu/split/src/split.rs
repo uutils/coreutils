@@ -25,7 +25,9 @@ use std::io;
 use std::io::{BufRead, BufReader, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code, strip_errno};
+use uucore::error::{
+    FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code, strip_errno,
+};
 use uucore::parser::parse_size::parse_size_u64;
 use uucore::translate;
 
@@ -615,13 +617,13 @@ impl<'a> ByteChunkWriter<'a> {
     ///
     /// Returns an empty error: the message is already out, so the caller only
     /// has to stop, without printing anything else.
-    fn report_error(&mut self, e: &io::Error) -> io::Error {
+    fn report_error(&mut self, e: &io::Error) -> Box<dyn UError> {
         if !self.error_reported {
             uucore::show_error!("{}: {}", self.current_filename.display(), strip_errno(e));
             set_exit_code(1);
             self.error_reported = true;
         }
-        io::Error::other("")
+        USimpleError::new(1, "")
     }
 
     /// Write to the current chunk, flushing right away.
@@ -629,7 +631,7 @@ impl<'a> ByteChunkWriter<'a> {
     /// Without the flush, a write failure on a full device would only surface
     /// when the buffer happens to be flushed, by which point we have moved on
     /// to another chunk and would blame the wrong file.
-    fn write_chunk(&mut self, bytes: &[u8]) -> io::Result<()> {
+    fn write_chunk(&mut self, bytes: &[u8]) -> UResult<()> {
         let written = custom_write_all(bytes, &mut self.inner, self.settings)
             .and_then(|_| self.inner.flush());
         match written {
@@ -650,7 +652,7 @@ impl Drop for ByteChunkWriter<'_> {
 impl ByteChunkWriter<'_> {
     /// Implements `--bytes=SIZE`. GNU is unbuffered.
     // todo: distinct read error and write error and show
-    fn copy(&mut self, mut reader: impl Read, io_blksize: usize) -> io::Result<()> {
+    fn copy(&mut self, mut reader: impl Read, io_blksize: usize) -> UResult<()> {
         // If the length of `buf` exceeds the number of bytes remaining
         // in the current chunk, we will need to write to multiple
         // different underlying writers. In that case, each iteration of
@@ -665,6 +667,8 @@ impl ByteChunkWriter<'_> {
                     // Flush before switching file, so a delayed write error is
                     // still attributed to the chunk it belongs to.
                     self.inner.flush().map_err(|e| self.report_error(&e))?;
+
+                    self.inner.finish()?;
 
                     // Increment the chunk number, reset the number of bytes remaining, and instantiate the new underlying writer.
                     self.num_chunks_written += 1;
@@ -705,7 +709,7 @@ impl ByteChunkWriter<'_> {
                 buf = &buf[i..];
             }
         }
-        Ok(())
+        self.inner.finish()
     }
 }
 
@@ -772,15 +776,11 @@ impl<'a> LineChunkWriter<'a> {
         settings.instantiate_current_writer(&filename, true)
     }
     /// Writes `buf[start..end]` to the current chunk, then starts a new one.
-    fn flush_and_start_new_chunk(
-        &mut self,
-        buf: &[u8],
-        start: usize,
-        end: usize,
-    ) -> io::Result<()> {
+    fn flush_and_start_new_chunk(&mut self, buf: &[u8], start: usize, end: usize) -> UResult<()> {
         if start < end {
             custom_write_all(&buf[start..end], &mut self.inner, self.settings)?;
         }
+        self.inner.finish()?;
         self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
         self.num_lines_remaining_in_current_chunk = self.chunk_size;
         Ok(())
@@ -790,7 +790,7 @@ impl<'a> LineChunkWriter<'a> {
     ///
     /// Like GNU, all the lines of `buf` that belong to the same chunk are
     /// written with a single call instead of one write per line.
-    fn copy(&mut self, mut reader: impl Read, io_blksize: usize) -> io::Result<()> {
+    fn copy(&mut self, mut reader: impl Read, io_blksize: usize) -> UResult<()> {
         // If the number of lines in `buf` exceeds the number of lines
         // remaining in the current chunk, we will need to write to
         // multiple different underlying writers. In that case, each
@@ -830,7 +830,7 @@ impl<'a> LineChunkWriter<'a> {
                 custom_write_all(&buf[start..], &mut self.inner, self.settings)?;
             }
         }
-        Ok(())
+        self.inner.finish()
     }
 }
 
@@ -866,6 +866,8 @@ trait ManageOutFiles {
     /// instead of created anew if we need to keep writing into them later,
     /// i.e. in case of round robin distribution as in [`n_chunks_by_line_round_robin`]
     fn get_writer(&mut self, idx: usize, settings: &Settings) -> UResult<&mut Writer>;
+    /// Wait for every filter command, then return the first failure.
+    fn finish_all(&mut self) -> UResult<()>;
 }
 
 impl ManageOutFiles for OutFiles {
@@ -961,6 +963,17 @@ impl ManageOutFiles for OutFiles {
             // Instantiate it and record for future use.
             self.instantiate_writer(idx, settings)
         }
+    }
+
+    fn finish_all(&mut self) -> UResult<()> {
+        let mut result = Ok(());
+        for writer in self.iter_mut().filter_map(|f| f.maybe_writer.as_mut()) {
+            let finished = writer.finish();
+            if result.is_ok() {
+                result = finished;
+            }
+        }
+        result
     }
 }
 
@@ -1092,7 +1105,7 @@ fn n_chunks_by_byte(
             break;
         }
     }
-    Ok(())
+    out_files.finish_all()
 }
 
 /// Split a file or STDIN into a specific number of chunks by line.
@@ -1242,7 +1255,7 @@ fn n_chunks_by_line(
             break;
         }
     }
-    Ok(())
+    out_files.finish_all()
 }
 
 /// Split a file or STDIN into a specific number of chunks by line, but
@@ -1328,7 +1341,7 @@ fn n_chunks_by_line_round_robin(
             break;
         }
     }
-    Ok(())
+    out_files.finish_all()
 }
 
 /// Like `io::Lines`, but includes the line ending character.
@@ -1399,6 +1412,7 @@ fn line_bytes(
         let mut line = &line[..];
         loop {
             if remaining == 0 {
+                writer.finish()?;
                 writer = next_writer()?;
                 remaining = chunk_size;
             }
@@ -1437,7 +1451,7 @@ fn line_bytes(
             remaining = 0;
         }
     }
-    Ok(())
+    writer.finish()
 }
 
 fn split(settings: &Settings) -> UResult<()> {
@@ -1495,20 +1509,12 @@ fn split(settings: &Settings) -> UResult<()> {
         }
         Strategy::Lines(chunk_size) => {
             let mut writer = LineChunkWriter::new(chunk_size, settings)?;
-            Ok(writer.copy(&mut reader, io_blksize)?)
+            writer.copy(&mut reader, io_blksize)
         }
         Strategy::Bytes(chunk_size) => {
             let mut writer = ByteChunkWriter::new(chunk_size, settings)?;
             // todo: distinct read error and write error
-            match writer.copy(&mut reader, io_blksize) {
-                Ok(()) => Ok(()),
-                // The writer already reported the write error and set the exit
-                // code, and signals that with an empty error: stay quiet here.
-                Err(e) if e.kind() == ErrorKind::Other && e.to_string().is_empty() => {
-                    Err(USimpleError::new(1, ""))
-                }
-                Err(e) => Err(e.into()),
-            }
+            writer.copy(&mut reader, io_blksize)
         }
         Strategy::LineBytes(chunk_size) => {
             line_bytes(settings, &mut reader, chunk_size as usize, io_blksize)
