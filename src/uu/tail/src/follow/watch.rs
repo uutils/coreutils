@@ -7,7 +7,7 @@
 
 use crate::args::{FollowMode, Settings};
 use crate::follow::files::{FileHandling, PathData};
-use crate::paths::{Input, InputKind, MetadataExtTail, PathExtTail};
+use crate::paths::{Input, InputKind, MetadataExtTail, PathExtTail, stdin_is_regular};
 use crate::{platform, text};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::io::BufRead;
@@ -106,6 +106,9 @@ pub struct Observer {
     pub files: FileHandling,
 
     pub pid: platform::Pid,
+
+    /// Whether --debug already reported the switch to polling mode.
+    reported_polling: bool,
 }
 
 impl Observer {
@@ -130,6 +133,7 @@ impl Observer {
             orphans: Vec::new(),
             files,
             pid,
+            reported_polling: false,
         }
     }
 
@@ -453,6 +457,10 @@ impl Observer {
                                 "{}",
                                 translate!("tail-status-backend-cannot-be-used-reverting-to-polling", "backend" => text::BACKEND)
                             );
+                            if settings.debug && !self.reported_polling {
+                                self.reported_polling = true;
+                                show_error!("{}", translate!("tail-debug-using-polling-mode"));
+                            }
                             self.orphans.push(event_path.clone());
                             let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
                         } else if event_path.is_symlink() && !self.orphans.contains(event_path) {
@@ -542,10 +550,33 @@ fn report_inaccessible(display_name: &str) {
     );
 }
 
+/// Report the follow implementation in use, for --debug.
+fn print_follow_mode(observer: &Observer, settings: &Settings) {
+    // Without a regular file (e.g. only devices or FIFOs) there is nothing to
+    // be notified about: following by name polls, by descriptor blocks.
+    // Stdin is classified by what fd 0 refers to.
+    let no_regular_file = settings.inputs.iter().all(|input| match input.kind() {
+        InputKind::File(path) => path.metadata().is_ok_and(|md| !md.is_file()),
+        InputKind::Stdin => !stdin_is_regular(),
+    });
+    let mode = if observer.use_polling || (no_regular_file && observer.follow_name()) {
+        translate!("tail-debug-using-polling-mode")
+    } else if no_regular_file {
+        translate!("tail-debug-using-blocking-mode")
+    } else {
+        translate!("tail-debug-using-notification-mode")
+    };
+    show_error!("{mode}");
+}
+
 #[allow(clippy::cognitive_complexity)]
 pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
     if observer.files.no_files_remaining(settings) && !observer.files.only_stdin_remaining() {
         return Err(USimpleError::new(1, translate!("tail-no-files-remaining")));
+    }
+
+    if settings.debug {
+        print_follow_mode(&observer, settings);
     }
 
     let process = platform::ProcessChecker::new(observer.pid);
