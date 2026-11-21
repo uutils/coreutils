@@ -51,7 +51,6 @@ install-error-not-permitted = cannot remove { $path }: Operation not permitted
 install-error-invalid-mode = Invalid mode string: { $error }
 install-error-mutually-exclusive-target = Options --target-directory and --no-target-directory are mutually exclusive
 install-error-mutually-exclusive-compare-strip = Options --compare and --strip are mutually exclusive
-install-error-strip-with-directory = the strip option may not be used when installing a directory
 install-error-missing-file-operand = missing file operand
 install-error-missing-destination-operand = missing destination file operand after { $path }
 install-error-failed-to-remove = Failed to remove existing file { $path }. { $error }

@@ -1735,19 +1735,14 @@ fn test_install_strip_with_directory() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    scene
-        .ucmd()
-        .args(&["-d", "-s", "newdir"])
-        .fails_with_code(1)
-        .stderr_contains("the strip option may not be used when installing a directory");
-    assert!(!at.dir_exists("newdir"));
-
-    // The directory check comes before the compare one.
-    scene
-        .ucmd()
-        .args(&["-d", "-s", "-C", "newdir"])
-        .fails_with_code(1)
-        .stderr_contains("the strip option may not be used when installing a directory");
+    for args in [["-d", "-s", "newdir"], ["-s", "-d", "newdir"]] {
+        scene
+            .ucmd()
+            .args(&args)
+            .fails_with_code(1)
+            .stderr_contains("cannot be used with");
+        assert!(!at.dir_exists("newdir"));
+    }
 }
 
 #[test]

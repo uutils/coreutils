@@ -289,6 +289,7 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(OPT_STRIP)
                 .help(translate!("install-help-strip"))
+                .conflicts_with(OPT_DIRECTORY)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -429,11 +430,6 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
         None => DEFAULT_STRIP_PROGRAM,
     }
     .to_string();
-
-    if matches.get_flag(OPT_DIRECTORY) && strip {
-        show_error!("{}", translate!("install-error-strip-with-directory"));
-        return Err(1.into());
-    }
 
     if compare && strip {
         show_error!(
