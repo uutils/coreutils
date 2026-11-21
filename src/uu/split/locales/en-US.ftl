@@ -17,6 +17,7 @@ split-after-help = Output fixed-size pieces of INPUT to PREFIXaa, PREFIXab, ...;
 
 # messages
 split-creating-file = creating file { $file }
+split-executing-with-file = executing with FILE={ $file }
 # Error messages
 split-error-suffix-not-parsable = invalid suffix length: { $value }
 split-error-suffix-contains-separator = invalid suffix { $value }, contains directory separator

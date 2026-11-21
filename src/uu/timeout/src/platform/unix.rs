@@ -56,8 +56,6 @@ pub(crate) fn prepare(
     {
         #[cfg(target_os = "linux")]
         let death_sig = signal_from_raw(signal as i32);
-        #[cfg(not(target_os = "linux"))]
-        let _ = signal;
         let sigpipe_was_ignored = uucore::signals::sigpipe_was_ignored();
         let stdin_was_closed = uucore::signals::stdin_was_closed();
 
@@ -69,6 +67,10 @@ pub(crate) fn prepare(
                 // Preserve SIGPIPE ignore status if parent had it ignored
                 if sigpipe_was_ignored {
                     let _ = libc::signal(Signal::as_raw(Signal::PIPE), libc::SIG_IGN);
+                }
+                // Don't let an inherited SIG_IGN make the child immune to our signal
+                if signal != 0 {
+                    let _ = libc::signal(signal as libc::c_int, libc::SIG_DFL);
                 }
                 // If stdin was closed before Rust reopened it as /dev/null, close it in child
                 if stdin_was_closed {

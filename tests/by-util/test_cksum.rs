@@ -55,7 +55,8 @@ fn test_openssl_link() {
     let dynamic = String::from_utf8_lossy(&out.stdout).contains("crypto"); // covering MSYS/MinGW too
     assert_eq!(
         std::env::var("OPENSSL_NO_VENDOR") == Ok("1".to_string()),
-        dynamic
+        dynamic,
+        "unexpected linkage of static/dynamic OpenSSL. Set OPENSSL_STATIC=0 too!"
     );
 }
 
@@ -87,6 +88,19 @@ fn test_stdin() {
         .pipe_in_fixture("lorem_ipsum.txt")
         .succeeds()
         .stdout_is_fixture("crc_stdin.expected");
+}
+
+#[rstest]
+#[case::crc("crc", "4294967295 0 -\n")]
+#[case::bsd("bsd", "00000     0 -\n")]
+#[case::sysv("sysv", "0 0 -\n")]
+fn test_explicit_dash_prints_filename(#[case] algo: &str, #[case] expected: &str) {
+    new_ucmd!()
+        .args(&["--algorithm", algo, "-"])
+        .pipe_in(b"")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(expected);
 }
 
 #[test]
@@ -804,6 +818,21 @@ fn test_check_tagged_legacy_algo_keeps_warning_algo() {
         );
 }
 
+#[test]
+fn test_check_warn_names_stdin() {
+    // A warning about a line of a list read from stdin names it
+    // 'standard input', as the other messages for a stdin list do.
+    new_ucmd!()
+        .args(&["-a", "md5", "--warn", "--check"])
+        .pipe_in("x\n")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is(
+            "cksum: 'standard input': 1: improperly formatted MD5 checksum line\n\
+             cksum: 'standard input': no properly formatted checksum lines found\n",
+        );
+}
+
 #[rstest]
 #[case::md5("md5", "d41d8cd98f00b204e9800998ecf8427e")]
 #[case::sha1("sha1", "da39a3ee5e6b4b0d3255bfef95601890afd80709")]
@@ -1445,6 +1474,46 @@ fn test_check_pipe() {
         .stderr_contains("cksum: 'standard input': no properly formatted checksum lines found");
 }
 
+// When the checksum list is read from stdin, a line naming '-' is improperly
+// formatted, yet it still sets the line format. From a file, '-' reads stdin.
+#[rstest]
+// The algorithm in the warning comes from the line.
+#[case::tagged(
+    &["--warn", "--check", "-"],
+    "MD5 (-) = {d}\nMD5 (a) = {d}\n",
+    "a: OK\n",
+    "cksum: 'standard input': 1: improperly formatted MD5 checksum line\n\
+    cksum: WARNING: 1 line is improperly formatted\n",
+    0
+)]
+// The first line sets the two-space format, so the single-space line is improper.
+#[case::keeps_line_format(
+    &["-a", "md5", "--check"],
+    "{d}  -\n{d} a\n",
+    "",
+    "cksum: 'standard input': no properly formatted checksum lines found\n",
+    1
+)]
+#[case::list_from_file(&["-a", "md5", "--check", "list"], "a\n", "-: OK\n", "", 0)]
+fn test_check_line_naming_stdin(
+    #[case] args: &[&str],
+    #[case] stdin: &str,
+    #[case] stdout: &str,
+    #[case] stderr: &str,
+    #[case] code: i32,
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let digest = "60b725f10c9c85c70d97880dfe8191b3";
+    at.write("a", "a\n");
+    at.write("list", &format!("{digest}  -\n"));
+    ucmd.args(args)
+        .pipe_in(stdin.replace("{d}", digest))
+        .run()
+        .code_is(code)
+        .stdout_is(stdout)
+        .stderr_is(stderr);
+}
+
 #[test]
 fn test_cksum_check_empty_line() {
     let scene = TestScenario::new(util_name!());
@@ -1760,7 +1829,6 @@ fn test_check_untagged_flag_without_file_name() {
         .stderr_contains("WARNING: 2 lines are improperly formatted");
 }
 
-#[uutests::wasi_ignore(EmptyPathResolvesToDirectory)]
 #[test]
 #[cfg(all(not(windows), feature = "b2sum"))]
 fn test_check_untagged_without_file_name() {
@@ -3993,4 +4061,40 @@ fn test_check_improperly_formatted_line_does_not_select_format() {
         .succeeds()
         .stdout_is("a: OK\n")
         .stderr_contains("1 line is improperly formatted");
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "file names must be quoted when stdout is a terminal"]
+fn test_terminal_output_quotes_names() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("my file.txt");
+    let md5 = "d41d8cd98f00b204e9800998ecf8427e";
+    for (args, style, expected) in [
+        (
+            &["-a", "md5"][..],
+            None,
+            format!("MD5 ('my file.txt') = {md5}\r\n"),
+        ),
+        (
+            &["-a", "md5", "--untagged"][..],
+            None,
+            format!("{md5}  'my file.txt'\r\n"),
+        ),
+        (
+            &["-a", "md5"][..],
+            Some("c"),
+            format!("MD5 (\"my file.txt\") = {md5}\r\n"),
+        ),
+    ] {
+        let mut cmd = scene.ucmd();
+        if let Some(style) = style {
+            cmd.env("QUOTING_STYLE", style);
+        }
+        cmd.args(args)
+            .arg("my file.txt")
+            .terminal_simulation(true)
+            .succeeds()
+            .stdout_only(expected);
+    }
 }

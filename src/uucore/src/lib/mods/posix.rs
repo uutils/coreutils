@@ -46,13 +46,14 @@ mod tests {
     #[test]
     fn test_posix_version() {
         // default
-        assert_eq!(posix_version(), None);
+        temp_env::with_var_unset("_POSIX2_VERSION", || {
+            assert_eq!(posix_version(), None);
+        });
         // set specific version
-        unsafe { env::set_var("_POSIX2_VERSION", OBSOLETE.to_string()) };
-        assert_eq!(posix_version(), Some(OBSOLETE));
-        unsafe { env::set_var("_POSIX2_VERSION", TRADITIONAL.to_string()) };
-        assert_eq!(posix_version(), Some(TRADITIONAL));
-        unsafe { env::set_var("_POSIX2_VERSION", MODERN.to_string()) };
-        assert_eq!(posix_version(), Some(MODERN));
+        for version in [OBSOLETE, TRADITIONAL, MODERN] {
+            temp_env::with_var("_POSIX2_VERSION", Some(version.to_string()), || {
+                assert_eq!(posix_version(), Some(version));
+            });
+        }
     }
 }

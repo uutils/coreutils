@@ -876,8 +876,8 @@ mod tests {
             "locale table uses a raw string; content containing `\"#` becomes code"
         );
     }
+    use std::fs;
     use std::path::PathBuf;
-    use std::{env, fs};
     use tempfile::TempDir;
 
     #[test]
@@ -1693,55 +1693,26 @@ invalid-syntax = This is { $missing
 
     #[test]
     fn test_detect_system_locale_no_lang_env() {
-        // Save current LANG value
-        let original_lang = env::var("LANG").ok();
-
-        // Remove LANG environment variable
-        unsafe {
-            env::remove_var("LANG");
-        }
-
-        let result = detect_system_locale();
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().to_string(), "en-US");
-
-        // Restore original LANG value
-        if let Some(val) = original_lang {
-            unsafe {
-                env::set_var("LANG", val);
-            }
-        } else {
-            {} // Was already unset
-        }
+        temp_env::with_var_unset("LANG", || {
+            let result = detect_system_locale();
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().to_string(), "en-US");
+        });
     }
 
     #[test]
     fn test_setup_localization_success() {
         std::thread::spawn(|| {
-            // Save current LANG value
-            let original_lang = env::var("LANG").ok();
-            unsafe {
-                env::set_var("LANG", "en-US.UTF-8"); // Use English since we have embedded resources for "test"
-            }
-
-            let result = setup_localization("test");
-            assert!(result.is_ok());
+            // Use English since we have embedded resources for "test"
+            temp_env::with_var("LANG", Some("en-US.UTF-8"), || {
+                let result = setup_localization("test");
+                assert!(result.is_ok());
+            });
 
             // Test that we can get messages (should use embedded English for "test" utility)
             let message = get_message("test-about");
             // Since we're using embedded resources, we should get the expected message
             assert!(!message.is_empty());
-
-            // Restore original LANG value
-            if let Some(val) = original_lang {
-                unsafe {
-                    env::set_var("LANG", val);
-                }
-            } else {
-                unsafe {
-                    env::remove_var("LANG");
-                }
-            }
         })
         .join()
         .unwrap();
@@ -1750,29 +1721,15 @@ invalid-syntax = This is { $missing
     #[test]
     fn test_setup_localization_falls_back_to_english() {
         std::thread::spawn(|| {
-            // Save current LANG value
-            let original_lang = env::var("LANG").ok();
-            unsafe {
-                env::set_var("LANG", "de-DE.UTF-8"); // German file doesn't exist, should fallback
-            }
-
-            let result = setup_localization("test");
-            assert!(result.is_ok());
+            // German file doesn't exist, should fallback
+            temp_env::with_var("LANG", Some("de-DE.UTF-8"), || {
+                let result = setup_localization("test");
+                assert!(result.is_ok());
+            });
 
             // Should fall back to English embedded resources
             let message = get_message("test-about");
             assert!(!message.is_empty()); // Should get something, not just the key
-
-            // Restore original LANG value
-            if let Some(val) = original_lang {
-                unsafe {
-                    env::set_var("LANG", val);
-                }
-            } else {
-                unsafe {
-                    env::remove_var("LANG");
-                }
-            }
         })
         .join()
         .unwrap();
@@ -1781,14 +1738,9 @@ invalid-syntax = This is { $missing
     #[test]
     fn test_setup_localization_fallback_to_embedded() {
         std::thread::spawn(|| {
-            // Force English locale for this test
-            unsafe {
-                env::set_var("LANG", "en-US");
-            }
-
             // Test with a utility name that has embedded locales
             // This should fall back to embedded English when filesystem files aren't found
-            let result = setup_localization("test");
+            let result = temp_env::with_var("LANG", Some("en-US"), || setup_localization("test"));
             if let Err(e) = &result {
                 eprintln!("Setup localization failed: {e}");
             }
@@ -1807,18 +1759,16 @@ invalid-syntax = This is { $missing
         // A process hosting several utilities (e.g. nushell) sets them up one
         // after another on the same thread
         std::thread::spawn(|| {
-            unsafe {
-                env::set_var("LANG", "en-US");
-            }
+            temp_env::with_var("LANG", Some("en-US"), || {
+                setup_localization("test").unwrap();
+                assert_eq!(
+                    get_message("test-about"),
+                    "Check file types and compare values."
+                );
 
-            setup_localization("test").unwrap();
-            assert_eq!(
-                get_message("test-about"),
-                "Check file types and compare values."
-            );
-
-            setup_localization("whoami").unwrap();
-            assert_eq!(get_message("whoami-about"), "Print the current username.");
+                setup_localization("whoami").unwrap();
+                assert_eq!(get_message("whoami-about"), "Print the current username.");
+            });
         })
         .join()
         .unwrap();
@@ -1828,12 +1778,10 @@ invalid-syntax = This is { $missing
     fn test_setup_localization_keeps_util_for_name_without_strings() {
         // e.g. `dir` or a prefixed binary name passed by the help template
         std::thread::spawn(|| {
-            unsafe {
-                env::set_var("LANG", "en-US");
-            }
-
-            setup_localization("test").unwrap();
-            setup_localization("no-such-util").unwrap();
+            temp_env::with_var("LANG", Some("en-US"), || {
+                setup_localization("test").unwrap();
+                setup_localization("no-such-util").unwrap();
+            });
             assert_eq!(
                 get_message("test-about"),
                 "Check file types and compare values."

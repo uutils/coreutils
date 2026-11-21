@@ -612,6 +612,7 @@ fn test_numeric_looking_file_name_verbose_remove() {
 #[uutests::wasi_ignore(StdioHandlesOpaque)]
 #[test]
 #[cfg(unix)]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_shred_dash_wipes_stdout_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "secret.txt";
@@ -638,6 +639,7 @@ fn test_shred_dash_wipes_stdout_file() {
 #[uutests::wasi_ignore(StdioHandlesOpaque)]
 #[test]
 #[cfg(unix)]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_shred_dash_remove_truncates_but_does_not_unlink_stdout() {
     for remove_arg in [
         "-u",
@@ -719,7 +721,7 @@ fn test_shred_socket() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(not(wasi_runner))]
 fn test_stat_failure_reports_open_error() {
     // Make stat and open fail with different errors on the same path: the
@@ -762,7 +764,7 @@ fn test_stat_failure_reports_open_error() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(not(wasi_runner))]
 fn test_remove_reports_truncate_failure() {
     // When the data cannot be deallocated, say so and keep the file.

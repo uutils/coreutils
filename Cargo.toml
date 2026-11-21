@@ -62,7 +62,7 @@ ctor = "1.0.0"
 ctrlc = { version = "3.5.2", features = ["termination"] }
 data-encoding = "2.6"
 data-encoding-macro = "0.1.15"
-divan = { package = "codspeed-divan-compat", version = "5.0.0" }
+divan = { package = "codspeed-divan-compat", version = "6.1" }
 dns-lookup = { version = "4.0.0" }
 dunce = "1.0.4"
 filetime = "0.2.29"
@@ -122,9 +122,12 @@ rustix = { version = "1.1.4", default-features = false }
 self_cell = "1.0.4"
 selinux = "0.6"
 syn = { version = "3.0", features = ["full"] }
+temp-env = "0.3.6"
 tempfile = "3.15.0"
 terminal_size = "0.4.0"
-textwrap = { version = "0.16.1", features = ["terminal_size"] }
+textwrap = { version = "0.16.1", default-features = false, features = [
+  "terminal_size",
+] }
 thiserror = "2.0.3"
 time = { version = "0.3.36" }
 quote = "1.0.36"
@@ -506,7 +509,6 @@ feat_common_core = [
   "cksum",
   "b2sum",
   "md5sum",
-  "nice",
   "sha1sum",
   "sha224sum",
   "sha256sum",
@@ -584,6 +586,7 @@ feat_Tier1 = [
   "env",
   "hostname",
   "kill",
+  "nice",
   "nohup",
   "nproc",
   "more",
@@ -645,6 +648,7 @@ feat_os_unix_illumos = [
   "logname",
   "mkfifo",
   "more",
+  "nice",
   "nohup",
   "nproc",
   "stty",
@@ -693,6 +697,7 @@ feat_os_unix_fuchsia = [
   "logname",
   "mkfifo",
   "mknod",
+  "nice",
   "unlink",
 ]
 # "feat_os_unix_redox" == set of utilities which can be built/run on "Redox OS" (refs: <https://www.redox-os.org>; <https://en.wikipedia.org/wiki/Redox_(operating_system)>)

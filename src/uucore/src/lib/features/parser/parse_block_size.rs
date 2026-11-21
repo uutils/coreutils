@@ -76,302 +76,259 @@ pub fn default_block_size() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use std::sync::Mutex;
-
-    // These tests modify shared environment variables (BLOCK_SIZE, BLOCKSIZE,
-    // POSIXLY_CORRECT), so they must run sequentially. The mutex ensures that.
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-
-    // SAFETY: set_var/remove_var are unsafe since Rust 2024 edition because env
-    // vars are process-global. We serialize access via ENV_LOCK above.
-    fn clear_env_vars(vars: &[&str]) {
-        for var in vars {
-            unsafe {
-                std::env::remove_var(var);
-            }
-        }
-    }
-
-    fn set_env_var(key: &str, value: &str) {
-        unsafe {
-            std::env::set_var(key, value);
-        }
-    }
+    use temp_env::{with_var, with_var_unset, with_vars, with_vars_unset};
 
     #[test]
     fn test_block_size_from_env_program_var_priority() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let vars = ["TEST_DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"];
-        clear_env_vars(&vars);
-
-        set_env_var("TEST_DU_BLOCK_SIZE", "2048");
-        set_env_var("BLOCK_SIZE", "4096");
-        set_env_var("BLOCKSIZE", "8192");
-
-        assert_eq!(
-            block_size_from_env(&["TEST_DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"]),
-            BlockSizeEnv::Found(2048),
-            "program-specific var should have highest priority"
+        with_vars(
+            [
+                (vars[0], Some("2048")),
+                (vars[1], Some("4096")),
+                (vars[2], Some("8192")),
+            ],
+            || {
+                assert_eq!(
+                    block_size_from_env(&vars),
+                    BlockSizeEnv::Found(2048),
+                    "program-specific var should have highest priority"
+                );
+            },
         );
-
-        clear_env_vars(&vars);
     }
 
     #[test]
     fn test_block_size_from_env_block_size_fallback() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let vars = ["TEST_PROG_BS", "BLOCK_SIZE", "BLOCKSIZE"];
-        clear_env_vars(&vars);
-
-        set_env_var("BLOCK_SIZE", "4096");
-        set_env_var("BLOCKSIZE", "8192");
-
-        assert_eq!(
-            block_size_from_env(&["TEST_PROG_BS", "BLOCK_SIZE", "BLOCKSIZE"]),
-            BlockSizeEnv::Found(4096),
-            "BLOCK_SIZE should be checked when program var is unset"
+        with_vars(
+            [
+                (vars[0], None),
+                (vars[1], Some("4096")),
+                (vars[2], Some("8192")),
+            ],
+            || {
+                assert_eq!(
+                    block_size_from_env(&vars),
+                    BlockSizeEnv::Found(4096),
+                    "BLOCK_SIZE should be checked when program var is unset"
+                );
+            },
         );
-
-        clear_env_vars(&vars);
     }
 
     #[test]
     fn test_block_size_from_env_blocksize_fallback() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let vars = ["TEST_PROG_BS2", "BLOCK_SIZE", "BLOCKSIZE"];
-        clear_env_vars(&vars);
-
-        set_env_var("BLOCKSIZE", "8192");
-
-        assert_eq!(
-            block_size_from_env(&["TEST_PROG_BS2", "BLOCK_SIZE", "BLOCKSIZE"]),
-            BlockSizeEnv::Found(8192),
-            "BLOCKSIZE should be checked when others are unset"
+        with_vars(
+            [(vars[0], None), (vars[1], None), (vars[2], Some("8192"))],
+            || {
+                assert_eq!(
+                    block_size_from_env(&vars),
+                    BlockSizeEnv::Found(8192),
+                    "BLOCKSIZE should be checked when others are unset"
+                );
+            },
         );
-
-        clear_env_vars(&vars);
     }
 
     #[test]
     fn test_block_size_from_env_none_set() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let vars = ["TEST_PROG_BS3", "BLOCK_SIZE", "BLOCKSIZE"];
-        clear_env_vars(&vars);
-
-        assert_eq!(
-            block_size_from_env(&["TEST_PROG_BS3", "BLOCK_SIZE", "BLOCKSIZE"]),
-            BlockSizeEnv::NotSet,
-            "should return NotSet when no env vars are set"
-        );
+        with_vars_unset(vars, || {
+            assert_eq!(
+                block_size_from_env(&vars),
+                BlockSizeEnv::NotSet,
+                "should return NotSet when no env vars are set"
+            );
+        });
     }
 
     #[test]
     fn test_block_size_from_env_invalid_stops_lookup() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let vars = ["TEST_PROG_BS4", "BLOCK_SIZE", "BLOCKSIZE"];
-        clear_env_vars(&vars);
-
-        set_env_var("TEST_PROG_BS4", "invalid");
-        set_env_var("BLOCK_SIZE", "4096");
-
-        assert_eq!(
-            block_size_from_env(&["TEST_PROG_BS4", "BLOCK_SIZE", "BLOCKSIZE"]),
-            BlockSizeEnv::SetButInvalid,
-            "first set var with invalid value should return SetButInvalid, not fall through"
+        with_vars(
+            [
+                (vars[0], Some("invalid")),
+                (vars[1], Some("4096")),
+                (vars[2], None),
+            ],
+            || {
+                assert_eq!(
+                    block_size_from_env(&vars),
+                    BlockSizeEnv::SetButInvalid,
+                    "first set var with invalid value should return SetButInvalid, not fall through"
+                );
+            },
         );
-
-        clear_env_vars(&vars);
     }
 
     #[test]
     fn test_block_size_from_env_zero_stops_lookup() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let vars = ["TEST_PROG_BS5", "BLOCK_SIZE", "BLOCKSIZE"];
-        clear_env_vars(&vars);
-
-        set_env_var("TEST_PROG_BS5", "0");
-        set_env_var("BLOCK_SIZE", "2048");
-
-        assert_eq!(
-            block_size_from_env(&["TEST_PROG_BS5", "BLOCK_SIZE", "BLOCKSIZE"]),
-            BlockSizeEnv::SetButInvalid,
-            "first set var with zero value should return SetButInvalid, not fall through"
+        with_vars(
+            [
+                (vars[0], Some("0")),
+                (vars[1], Some("2048")),
+                (vars[2], None),
+            ],
+            || {
+                assert_eq!(
+                    block_size_from_env(&vars),
+                    BlockSizeEnv::SetButInvalid,
+                    "first set var with zero value should return SetButInvalid, not fall through"
+                );
+            },
         );
-
-        clear_env_vars(&vars);
     }
 
     #[test]
     fn test_block_size_from_env_all_invalid() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let vars = ["TEST_PROG_BS6", "BLOCK_SIZE", "BLOCKSIZE"];
-        clear_env_vars(&vars);
-
-        set_env_var("TEST_PROG_BS6", "invalid");
-        set_env_var("BLOCK_SIZE", "bad");
-        set_env_var("BLOCKSIZE", "nope");
-
-        assert_eq!(
-            block_size_from_env(&["TEST_PROG_BS6", "BLOCK_SIZE", "BLOCKSIZE"]),
-            BlockSizeEnv::SetButInvalid,
-            "should return SetButInvalid when first set var is invalid"
+        with_vars(
+            [
+                (vars[0], Some("invalid")),
+                (vars[1], Some("bad")),
+                (vars[2], Some("nope")),
+            ],
+            || {
+                assert_eq!(
+                    block_size_from_env(&vars),
+                    BlockSizeEnv::SetButInvalid,
+                    "should return SetButInvalid when first set var is invalid"
+                );
+            },
         );
-
-        clear_env_vars(&vars);
     }
 
     #[test]
     fn test_block_size_from_env_empty_stops_lookup() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let vars = ["TEST_PROG_BS8", "BLOCK_SIZE", "BLOCKSIZE"];
-        clear_env_vars(&vars);
-
         // BLOCK_SIZE is set to empty string — first set var wins, even if invalid
-        set_env_var("BLOCK_SIZE", "");
-        set_env_var("BLOCKSIZE", "512");
-
-        assert_eq!(
-            block_size_from_env(&["TEST_PROG_BS8", "BLOCK_SIZE", "BLOCKSIZE"]),
-            BlockSizeEnv::SetButInvalid,
-            "empty BLOCK_SIZE is set but invalid, should return SetButInvalid (not fall through)"
+        with_vars(
+            [(vars[0], None), (vars[1], Some("")), (vars[2], Some("512"))],
+            || {
+                assert_eq!(
+                    block_size_from_env(&vars),
+                    BlockSizeEnv::SetButInvalid,
+                    "empty BLOCK_SIZE is set but invalid, should return SetButInvalid (not fall through)"
+                );
+            },
         );
-
-        clear_env_vars(&vars);
     }
 
     #[test]
     fn test_block_size_from_env_unset_var_skipped() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let vars = ["TEST_PROG_BS9", "BLOCK_SIZE", "BLOCKSIZE"];
-        clear_env_vars(&vars);
-
         // Program var is not set, BLOCK_SIZE is not set, only BLOCKSIZE is set
-        set_env_var("BLOCKSIZE", "512");
-
-        assert_eq!(
-            block_size_from_env(&["TEST_PROG_BS9", "BLOCK_SIZE", "BLOCKSIZE"]),
-            BlockSizeEnv::Found(512),
-            "unset vars should be skipped, falling through to BLOCKSIZE"
+        with_vars(
+            [(vars[0], None), (vars[1], None), (vars[2], Some("512"))],
+            || {
+                assert_eq!(
+                    block_size_from_env(&vars),
+                    BlockSizeEnv::Found(512),
+                    "unset vars should be skipped, falling through to BLOCKSIZE"
+                );
+            },
         );
-
-        clear_env_vars(&vars);
     }
 
     #[test]
     fn test_block_size_from_env_with_suffix() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let vars = ["TEST_PROG_BS7", "BLOCK_SIZE", "BLOCKSIZE"];
-        clear_env_vars(&vars);
-
-        set_env_var("TEST_PROG_BS7", "1K");
-
-        assert_eq!(
-            block_size_from_env(&["TEST_PROG_BS7", "BLOCK_SIZE", "BLOCKSIZE"]),
-            BlockSizeEnv::Found(1024),
-            "should parse size suffixes like 1K"
+        with_vars(
+            [(vars[0], Some("1K")), (vars[1], None), (vars[2], None)],
+            || {
+                assert_eq!(
+                    block_size_from_env(&vars),
+                    BlockSizeEnv::Found(1024),
+                    "should parse size suffixes like 1K"
+                );
+            },
         );
-
-        clear_env_vars(&vars);
     }
 
     #[test]
     fn test_block_size_from_env_no_blocksize_excludes_blocksize() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let vars = ["TEST_PROG_NB", "BLOCK_SIZE", "BLOCKSIZE"];
-        clear_env_vars(&vars);
-
-        set_env_var("BLOCKSIZE", "8192");
-
-        assert_eq!(
-            block_size_from_env(&["TEST_PROG_NB", "BLOCK_SIZE"]),
-            BlockSizeEnv::NotSet,
-            "should not check BLOCKSIZE"
+        with_vars(
+            [
+                ("TEST_PROG_NB", None),
+                ("BLOCK_SIZE", None),
+                ("BLOCKSIZE", Some("8192")),
+            ],
+            || {
+                assert_eq!(
+                    block_size_from_env(&["TEST_PROG_NB", "BLOCK_SIZE"]),
+                    BlockSizeEnv::NotSet,
+                    "should not check BLOCKSIZE"
+                );
+            },
         );
-
-        clear_env_vars(&vars);
     }
 
     #[test]
     fn test_block_size_from_env_no_blocksize_checks_block_size() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let vars = ["TEST_PROG_NB2", "BLOCK_SIZE", "BLOCKSIZE"];
-        clear_env_vars(&vars);
-
-        set_env_var("BLOCK_SIZE", "4096");
-        set_env_var("BLOCKSIZE", "8192");
-
-        assert_eq!(
-            block_size_from_env(&["TEST_PROG_NB2", "BLOCK_SIZE"]),
-            BlockSizeEnv::Found(4096),
-            "should check BLOCK_SIZE but not BLOCKSIZE"
+        with_vars(
+            [
+                ("TEST_PROG_NB2", None),
+                ("BLOCK_SIZE", Some("4096")),
+                ("BLOCKSIZE", Some("8192")),
+            ],
+            || {
+                assert_eq!(
+                    block_size_from_env(&["TEST_PROG_NB2", "BLOCK_SIZE"]),
+                    BlockSizeEnv::Found(4096),
+                    "should check BLOCK_SIZE but not BLOCKSIZE"
+                );
+            },
         );
-
-        clear_env_vars(&vars);
     }
 
     #[test]
     fn test_blocksize_from_env_set() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        clear_env_vars(&["BLOCKSIZE"]);
-
-        set_env_var("BLOCKSIZE", "2048");
-        assert_eq!(
-            block_size_from_env(&["BLOCKSIZE"]),
-            BlockSizeEnv::Found(2048)
-        );
-
-        clear_env_vars(&["BLOCKSIZE"]);
+        with_var("BLOCKSIZE", Some("2048"), || {
+            assert_eq!(
+                block_size_from_env(&["BLOCKSIZE"]),
+                BlockSizeEnv::Found(2048)
+            );
+        });
     }
 
     #[test]
     fn test_blocksize_from_env_unset() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        clear_env_vars(&["BLOCKSIZE"]);
-        assert_eq!(block_size_from_env(&["BLOCKSIZE"]), BlockSizeEnv::NotSet);
+        with_var_unset("BLOCKSIZE", || {
+            assert_eq!(block_size_from_env(&["BLOCKSIZE"]), BlockSizeEnv::NotSet);
+        });
     }
 
     #[test]
     fn test_blocksize_from_env_invalid() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        clear_env_vars(&["BLOCKSIZE"]);
-
-        set_env_var("BLOCKSIZE", "invalid");
-        assert_eq!(
-            block_size_from_env(&["BLOCKSIZE"]),
-            BlockSizeEnv::SetButInvalid
-        );
-
-        clear_env_vars(&["BLOCKSIZE"]);
+        with_var("BLOCKSIZE", Some("invalid"), || {
+            assert_eq!(
+                block_size_from_env(&["BLOCKSIZE"]),
+                BlockSizeEnv::SetButInvalid
+            );
+        });
     }
 
     #[test]
     fn test_default_block_size_without_posixly_correct() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        clear_env_vars(&["POSIXLY_CORRECT"]);
-        assert_eq!(default_block_size(), 1024);
+        with_var_unset("POSIXLY_CORRECT", || {
+            assert_eq!(default_block_size(), 1024);
+        });
     }
 
     #[test]
     fn test_default_block_size_with_posixly_correct() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        clear_env_vars(&["POSIXLY_CORRECT"]);
-
-        set_env_var("POSIXLY_CORRECT", "1");
-        assert_eq!(default_block_size(), 512);
-
-        clear_env_vars(&["POSIXLY_CORRECT"]);
+        with_var("POSIXLY_CORRECT", Some("1"), || {
+            assert_eq!(default_block_size(), 512);
+        });
     }
 
     #[test]
     fn test_default_block_size_with_posixly_correct_empty() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        clear_env_vars(&["POSIXLY_CORRECT"]);
-
         // Even an empty value means POSIXLY_CORRECT is set
-        set_env_var("POSIXLY_CORRECT", "");
-        assert_eq!(default_block_size(), 512);
-
-        clear_env_vars(&["POSIXLY_CORRECT"]);
+        with_var("POSIXLY_CORRECT", Some(""), || {
+            assert_eq!(default_block_size(), 512);
+        });
     }
 }

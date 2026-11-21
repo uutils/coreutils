@@ -610,7 +610,17 @@ fn get_file_to_check(
         let print_error = |err: io::Error| {
             show!(err.map_err_context(|| { locale_aware_shell_escape(filename) }));
         };
-        match File::open(filename) {
+        // WASI resolves an empty path to the preopened directory instead of
+        // failing with ENOENT.
+        let open_result = if filename.is_empty() {
+            Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                translate!("error-file-not-found"),
+            ))
+        } else {
+            File::open(filename)
+        };
+        match open_result {
             Ok(f) => {
                 if f.metadata()
                     .map_err(|_| LineCheckError::CantOpenFile)?
@@ -796,15 +806,12 @@ fn compute_and_check_digest_from_file(
     }
 }
 
-/// Check a digest checksum with non-algo based pre-treatment.
+/// Get the expected digest and the algorithm of an algo-based line.
 fn process_algo_based_line(
     line_info: &LineInfo,
     cli_algo_kind: Option<AlgoKind>,
-    opts: ChecksumValidateOptions,
     last_algo: &mut Option<String>,
-) -> Result<(), LineCheckError> {
-    let filename_to_check = line_info.filename.as_slice();
-
+) -> Result<(Vec<u8>, SizedAlgoKind), LineCheckError> {
     let (algo_kind, algo_len) = identify_algo_name_and_length(line_info, cli_algo_kind, last_algo)?;
 
     // If the digest bitlen is known, we can check the format of the expected
@@ -824,22 +831,15 @@ fn process_algo_based_line(
     let algo = SizedAlgoKind::from_unsized(algo_kind, algo_len)
         .map_err(|_| LineCheckError::ImproperlyFormatted)?;
 
-    compute_and_check_digest_from_file(
-        filename_to_check,
-        line_info.escaped,
-        &expected_checksum,
-        algo,
-        opts,
-    )
+    Ok((expected_checksum, algo))
 }
 
-/// Check a digest checksum with non-algo based pre-treatment.
+/// Get the expected digest and the algorithm of a line without an algorithm name.
 fn process_non_algo_based_line(
     line_info: &LineInfo,
     cli_algo_kind: AlgoKind,
     cli_algo_length: Option<HashLength>,
-    opts: ChecksumValidateOptions,
-) -> Result<(), LineCheckError> {
+) -> Result<(Vec<u8>, SizedAlgoKind), LineCheckError> {
     use AlgoKind as ak;
 
     let expected_digest_sum = cli_algo_kind.expected_digest_bit_len();
@@ -869,13 +869,7 @@ fn process_non_algo_based_line(
 
     let algo = SizedAlgoKind::from_unsized(cli_algo_kind, algo_len)?;
 
-    compute_and_check_digest_from_file(
-        &line_info.filename,
-        line_info.escaped,
-        &expected_checksum,
-        algo,
-        opts,
-    )
+    Ok((expected_checksum, algo))
 }
 
 /// Parses a checksum line, detect the algorithm to use, read the file and produce
@@ -889,6 +883,7 @@ fn process_checksum_line(
     cli_algo_name: Option<AlgoKind>,
     cli_algo_length: Option<HashLength>,
     opts: ChecksumValidateOptions,
+    input_is_stdin: bool,
     cached_line_format: &mut Option<LineFormat>,
     last_algo: &mut Option<String>,
 ) -> Result<(), LineCheckError> {
@@ -901,27 +896,37 @@ fn process_checksum_line(
 
     // Use `LineInfo` to extract the data of a line.
     // Then, depending on its format, apply a different pre-treatment.
-    // The detected format is kept only if the line turns out to be properly
-    // formatted: an improper line must not decide how the next ones are read.
+    // The detected format is kept once the digest and the algorithm are valid.
+    // A line rejected before that must not decide how the next ones are read.
     let mut line_format = *cached_line_format;
     let line_info = LineInfo::parse(line, &mut line_format, opts.allow_empty_filename)
         .ok_or(LineCheckError::ImproperlyFormatted)?;
 
-    let result = if line_info.format == LineFormat::AlgoBased {
-        process_algo_based_line(&line_info, cli_algo_name, opts, last_algo)
+    let (expected_checksum, algo) = if line_info.format == LineFormat::AlgoBased {
+        process_algo_based_line(&line_info, cli_algo_name, last_algo)?
     } else if let Some(cli_algo) = cli_algo_name {
         // If we match a non-algo based parser, we expect a cli argument
         // to give us the algorithm to use
-        process_non_algo_based_line(&line_info, cli_algo, cli_algo_length, opts)
+        process_non_algo_based_line(&line_info, cli_algo, cli_algo_length)?
     } else {
         // We have no clue of what algorithm to use
-        Err(LineCheckError::ImproperlyFormatted)
+        return Err(LineCheckError::ImproperlyFormatted);
     };
+    *cached_line_format = line_format;
 
-    if !matches!(result, Err(LineCheckError::ImproperlyFormatted)) {
-        *cached_line_format = line_format;
+    // When the list comes from stdin, a line naming '-' cannot be checked:
+    // count it as improperly formatted, but keep its format.
+    if input_is_stdin && line_info.filename == b"-" {
+        return Err(LineCheckError::ImproperlyFormatted);
     }
-    result
+
+    compute_and_check_digest_from_file(
+        &line_info.filename,
+        line_info.escaped,
+        &expected_checksum,
+        algo,
+        opts,
+    )
 }
 
 fn process_checksum_file(
@@ -955,6 +960,14 @@ fn process_checksum_file(
 
     let reader = BufReader::new(file);
 
+    let filename_display = || {
+        if input_is_stdin {
+            "standard input".maybe_quote()
+        } else {
+            filename_input.maybe_quote()
+        }
+    };
+
     // cached_line_format is used to ensure that several non algo-based checksum line
     // will use the same parser.
     let mut cached_line_format = None;
@@ -973,6 +986,7 @@ fn process_checksum_file(
             cli_algo_kind,
             cli_algo_length,
             opts,
+            input_is_stdin,
             &mut cached_line_format,
             &mut last_algo,
         );
@@ -1004,7 +1018,7 @@ fn process_checksum_file(
                         stderr(),
                         "{}: {}",
                         util_name(),
-                        translate_text!("checksum-error-algo-bad-format", "file" => filename_input.maybe_quote(), "line" => i + 1, "algo" => algo)
+                        translate_text!("checksum-error-algo-bad-format", "file" => filename_display(), "line" => i + 1, "algo" => algo)
                     );
                 }
             }
@@ -1013,14 +1027,6 @@ fn process_checksum_file(
             _ => (),
         }
     }
-
-    let filename_display = || {
-        if input_is_stdin {
-            "standard input".maybe_quote()
-        } else {
-            filename_input.maybe_quote()
-        }
-    };
 
     // not a single line correctly formatted found
     // return an error
@@ -1395,6 +1401,7 @@ mod tests {
             Some(AlgoKind::Md5),
             None,
             opts,
+            false,
             cached_line_format,
             &mut None,
         )

@@ -7,7 +7,8 @@
 
 use rstest::rstest;
 use uucore::display::Quotable;
-use uutests::{at_and_ucmd, new_ucmd};
+use uutests::util::TestScenario;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 #[test]
 fn test_invalid_arg() {
@@ -492,4 +493,101 @@ fn test_buffered_reads_new_line_no_tabs_in_first_chunk() {
         .args(&["new_line_in_chunk.txt"])
         .succeeds()
         .stdout_is_fixture("new_line_in_chunk_expected.txt");
+}
+
+#[test]
+fn test_line_continues_into_next_file() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("f1", "a");
+    at.write("f2", "\tb\n");
+    at.write("f3", "\u{e9}");
+    ts.ucmd()
+        .args(&["f1", "f2", "f3", "f2"])
+        .succeeds()
+        .stdout_only("a       b\n\u{e9}       b\n");
+
+    // The tab follows `a`, so it is not an initial one.
+    ts.ucmd()
+        .args(&["-i", "f1", "f2"])
+        .succeeds()
+        .stdout_only("a\tb\n");
+}
+
+#[test]
+fn test_column_kept_across_read_buffers() {
+    // Longer than one read buffer, with no tab before the end of the first one.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let prefix = format!("{}bcd", "a".repeat(8190));
+    at.write("long", &format!("{prefix}\tx\n"));
+    ts.ucmd()
+        .args(&["-t3", "long"])
+        .succeeds()
+        .stdout_only(format!("{prefix}   x\n"));
+
+    let prefix = format!("a{}", " ".repeat(8191));
+    at.write("long_i", &format!("{prefix}\tx\n"));
+    ts.ucmd()
+        .args(&["-i", "long_i"])
+        .succeeds()
+        .stdout_only(format!("{prefix}\tx\n"));
+}
+
+#[rstest]
+#[case::plus_in_first(&["-t", "1,+5", "-t", "2"], "a b    c    d\n")]
+#[case::slash_in_first(&["-t", "1,/5", "-t", "2"], "a b  c    d\n")]
+#[case::plus_alone_first(&["-t", "+5", "-t", "3"], "a  b    c    d\n")]
+#[case::slash_then_larger_stop(&["-t", "2,/4", "-t", "9"], "a b      c  d\n")]
+#[case::slash_before_two_values(&["-t", "/4", "-t", "2", "-t", "7"], "a b    c    d\n")]
+fn test_specifier_in_an_earlier_tabs_value(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in("a\tb\tc\td\n")
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
+fn test_specifier_in_two_tabs_values() {
+    new_ucmd!()
+        .args(&["-t", "/4", "-t", "/5"])
+        .fails_with_code(1)
+        .stderr_is("expand: '/' specifier only allowed with the last value\n");
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "a multi-byte char split across reads must count as one column"]
+fn test_multibyte_char_split_across_reads() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .cmd_shell("(printf '\\303'; sleep 0.3; printf '\\251\\tz\\n') | \"$BIN\" expand")
+        .env("BIN", &scene.bin_path)
+        .env("LC_ALL", "C.UTF-8")
+        .succeeds()
+        .stdout_only("\u{e9}       z\n");
+}
+
+#[test]
+fn test_zero_increment_after_a_tab_list() {
+    // As in GNU, `+0` and `/0` after a tab list set no tab size: the list is
+    // used as given, unless a later number supplies the size.
+    for (list, expected) in [
+        ("4,+0", "a   b   c   d   e\n"),
+        ("4,/0", "a   b   c   d   e\n"),
+        ("2,6,+0", "a b   c d e\n"),
+        ("2,6,/0", "a b   c d e\n"),
+        ("4,+0,8", "a   b       c       d       e\n"),
+        ("4,+0,+2", "a   b c d e\n"),
+        ("4,/0,10", "a   b     c         d         e\n"),
+        // A trailing `+` without a number sets no tab size either.
+        ("2,6,+", "a b   c d e\n"),
+    ] {
+        new_ucmd!()
+            .args(&["-t", list])
+            .pipe_in("a\tb\tc\td\te\n")
+            .succeeds()
+            .stdout_only(expected);
+    }
 }

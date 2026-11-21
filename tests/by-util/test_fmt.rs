@@ -153,6 +153,27 @@ fn test_fmt_positional_width_not_first() {
 }
 
 #[test]
+fn test_fmt_positional_width_zero() {
+    // `-0` is a width like any other `-WIDTH`, not a file name.
+    for width in ["-0", "-00"] {
+        new_ucmd!()
+            .arg(width)
+            .pipe_in("a b c\n")
+            .succeeds()
+            .stdout_only("a\nb\nc\n");
+        new_ucmd!()
+            .args(&[width, "one-word-per-line.txt"])
+            .succeeds()
+            .stdout_only("this\nis\na\nfile\nwith\none\nword\nper\nline\n");
+    }
+
+    new_ucmd!()
+        .args(&["one-word-per-line.txt", "-0"])
+        .fails_with_code(1)
+        .stderr_contains("fmt: invalid option -- 0; -WIDTH is recognized only when it is the first\noption; use -w N instead");
+}
+
+#[test]
 fn test_fmt_negative_number_file_after_double_dash() {
     use uutests::util::TestScenario;
     use uutests::util_name;
@@ -288,6 +309,31 @@ fn test_fmt_continues_after_missing_file() {
         .fails_with_code(1)
         .stdout_is("one two\n")
         .stderr_is("fmt: cannot open 'non-existing' for reading: No such file or directory\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+fn test_fmt_read_error() {
+    // Reading /proc/self/mem from offset 0 fails with EIO.
+    // fmt must propagate the read error instead of treating it as EOF.
+    new_ucmd!()
+        .arg("/proc/self/mem")
+        .fails_with_code(1)
+        .stderr_contains("fmt: error reading '/proc/self/mem'");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+fn test_fmt_continues_after_read_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("valid.txt", "one\ntwo\n");
+
+    ucmd.args(&["/proc/self/mem", "valid.txt"])
+        .fails_with_code(1)
+        .stdout_is("one two\n")
+        .stderr_contains("fmt: error reading '/proc/self/mem'");
 }
 
 #[test]
@@ -718,6 +764,45 @@ fn test_fmt_first_word_ending_a_sentence() {
     ] {
         new_ucmd!()
             .args(args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn test_fmt_tagged_one_line_paragraph_indent() {
+    for (args, input, expected) in [
+        (
+            vec!["-t", "-w10"],
+            "ab cd ef gh ij kl mn\n",
+            "ab cd ef\n   gh ij\n   kl mn\n",
+        ),
+        (
+            vec!["-t", "-w10"],
+            "  ab cd ef gh ij kl mn\n",
+            "  ab cd\nef gh ij\nkl mn\n",
+        ),
+        (
+            vec!["-t", "-w10", "-p", "#"],
+            "#ab cd ef gh ij kl mn\n",
+            "#ab cd\n#ef gh ij\n#kl mn\n",
+        ),
+        // the space ending the prefix is not printed, so it takes no width
+        (
+            vec!["-t", "-w12", "-p", "# "],
+            "# ab cd ef gh ij kl mn\n",
+            "# ab cd ef\n#gh ij kl mn\n",
+        ),
+        // a second line sets the indent
+        (
+            vec!["-t", "-w10"],
+            "ab cd ef gh\n  ij kl mn op qr\n",
+            "ab cd ef\n  gh ij kl\n  mn op qr\n",
+        ),
+    ] {
+        new_ucmd!()
+            .args(&args)
             .pipe_in(input)
             .succeeds()
             .stdout_only(expected);

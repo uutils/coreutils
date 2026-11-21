@@ -5,6 +5,7 @@
 
 // spell-checker:ignore nabcd badoption schar nosuchfile
 
+use rstest::rstest;
 use uucore::posix::OBSOLETE;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -178,6 +179,18 @@ fn test_repeated_all_repeated_uses_final_delimiter() {
         .pipe_in(DUPLICATE_RUNS)
         .succeeds()
         .stdout_is("copper\ncopper\n\ngold\ngold\n");
+}
+
+#[rstest]
+#[case::abbreviated("-D=n")]
+#[case::full("-D=prepend")]
+#[case::clustered("-uD=separate")]
+fn test_short_all_repeated_takes_no_method(#[case] arg: &str) {
+    new_ucmd!()
+        .arg(arg)
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("unexpected argument '-=' found");
 }
 
 #[test]
@@ -1120,7 +1133,7 @@ fn uniq_basic_dedup_cases() {
             input: "",
             stdout: Some(""),
             stderr: Some(concat!(
-                "error: the argument '--group[=<group-method>]' cannot be used with '--all-repeated[=<delimit-method>]'\n",
+                "error: the argument '--group[=<group-method>]' cannot be used with '-D'\n",
                 "\n",
                 "For more information, try '--help'.\n"
             )),
@@ -1199,6 +1212,62 @@ fn test_stdin_w1_multibyte() {
         .pipe_in(input)
         .succeeds()
         .stdout_is("à\ná\n");
+}
+
+#[uutests::wasi_ignore(NoLocaleData)]
+#[test]
+fn test_skip_chars_multibyte() {
+    // Skipping two characters leaves "y" and "xy", which differ.
+    new_ucmd!()
+        .args(&["-s", "2", "-c"])
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in("éxy\nABxy\n")
+        .succeeds()
+        .stdout_is("      1 éxy\n      1 ABxy\n");
+    // In the C locale, two bytes are skipped and both keys are "xy".
+    new_ucmd!()
+        .args(&["-s", "2", "-c"])
+        .env("LC_ALL", "C")
+        .pipe_in("éxy\nABxy\n")
+        .succeeds()
+        .stdout_is("      2 éxy\n");
+}
+
+#[uutests::wasi_ignore(NoLocaleData)]
+#[test]
+fn test_skip_chars_with_check_chars_multibyte() {
+    // Skip one character, then compare one: é, é and è.
+    new_ucmd!()
+        .args(&["-s", "1", "-w", "1", "-c"])
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in("xé1\nyé2\nzè3\n")
+        .succeeds()
+        .stdout_is("      2 xé1\n      1 zè3\n");
+    // In the C locale both count bytes: the first byte of é and è is the same.
+    new_ucmd!()
+        .args(&["-s", "1", "-w", "1", "-c"])
+        .env("LC_ALL", "C")
+        .pipe_in("xé1\nyé2\nzè3\n")
+        .succeeds()
+        .stdout_is("      3 xé1\n");
+}
+
+#[uutests::wasi_ignore(NoLocaleData)]
+#[test]
+fn test_skip_chars_invalid_utf8_counts_bytes() {
+    // Invalid UTF-8 falls back to bytes, as for -w.
+    new_ucmd!()
+        .args(&["-s", "3", "-c"])
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(&b"a\xff\xfeX\nb\xff\xfeY\n"[..])
+        .succeeds()
+        .stdout_is_bytes(&b"      1 a\xff\xfeX\n      1 b\xff\xfeY\n"[..]);
+    new_ucmd!()
+        .args(&["-s", "1", "-w", "2", "-c"])
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(&b"a\xff\xfeX\nb\xff\xfeY\n"[..])
+        .succeeds()
+        .stdout_is_bytes(&b"      2 a\xff\xfeX\n"[..]);
 }
 
 #[test]

@@ -265,9 +265,9 @@ fn parse_number_part(s: &str, input: &str) -> Result<ParsedNumber> {
     }
 
     let normalized = if dec_sep == "." {
-        s.to_string()
+        std::borrow::Cow::Borrowed(s)
     } else {
-        s.replace(dec_sep, ".")
+        std::borrow::Cow::Owned(s.replace(dec_sep, "."))
     };
 
     normalized
@@ -337,52 +337,16 @@ fn parse_suffix(
     Ok((number, suffix))
 }
 
-fn apply_grouping(s: &str) -> String {
-    let grouping_separator = locale_grouping_separator();
-    if grouping_separator.is_empty() {
-        return s.to_string();
+fn apply_grouping_in_place(buf: &mut String, sep: &str, dec_sep: &str) {
+    if sep.is_empty() {
+        return;
     }
-
-    let (sign, rest) = if let Some(rest) = s.strip_prefix('-') {
-        ("-", rest)
-    } else {
-        ("", s)
-    };
-    let dec_sep = locale_decimal_separator();
-    let (integer, fraction) = rest.split_once(dec_sep).map_or((rest, ""), |(i, f)| (i, f));
-    if integer.len() < 4 {
-        return s.to_string();
+    let start = usize::from(buf.starts_with('-'));
+    let mut pos = buf[start..].find(dec_sep).map_or(buf.len(), |i| start + i);
+    while pos >= start + 4 {
+        pos -= 3;
+        buf.insert_str(pos, sep);
     }
-
-    let sep_len = grouping_separator.len();
-    let num_seps = (integer.len() - 1) / 3;
-    let mut grouped = String::with_capacity(
-        sign.len()
-            + integer.len()
-            + num_seps * sep_len
-            + if fraction.is_empty() {
-                0
-            } else {
-                1 + fraction.len()
-            },
-    );
-    grouped.push_str(sign);
-
-    let first_group = integer.len() % 3;
-    let first_group = if first_group == 0 { 3 } else { first_group };
-    grouped.push_str(&integer[..first_group]);
-    for chunk in integer.as_bytes()[first_group..].chunks(3) {
-        grouped.push_str(grouping_separator);
-        // SAFETY: integer is known to be valid UTF-8 ASCII digits
-        grouped.push_str(std::str::from_utf8(chunk).unwrap());
-    }
-
-    if !fraction.is_empty() {
-        grouped.push_str(dec_sep);
-        grouped.push_str(fraction);
-    }
-
-    grouped
 }
 
 fn split_next_field(s: &str) -> (&str, &str, &str) {
@@ -658,11 +622,19 @@ fn is_too_large_to_format(scaled: i128, precision: usize) -> bool {
         .is_none_or(|v| v >= MAX_FORMATTED)
 }
 
+/// Reusable buffers for formatting one field at a time.
+#[derive(Default)]
+pub struct FormatScratch {
+    buf: String,
+    pad_buf: String,
+}
+
 fn try_format_exact_int_without_suffix_scaling(
     value: ParsedNumber,
     opts: &TransformOptions,
     precision: usize,
-) -> Option<Result<String>> {
+    out: &mut String,
+) -> Option<Result<()>> {
     if opts.to != Unit::None {
         return None;
     }
@@ -680,15 +652,12 @@ fn try_format_exact_int_without_suffix_scaling(
         return Some(Err(too_large_to_print(scaled as f64, precision)));
     }
 
-    Some(Ok(if precision == 0 {
-        scaled.to_string()
-    } else {
-        format!(
-            "{scaled}{}{}",
-            locale_decimal_separator(),
-            "0".repeat(precision)
-        )
-    }))
+    let _ = write!(out, "{scaled}");
+    if precision > 0 {
+        out.push_str(locale_decimal_separator());
+        out.extend(std::iter::repeat_n('0', precision));
+    }
+    Some(Ok(()))
 }
 
 /// GNU names the precision only when there is one.
@@ -727,13 +696,14 @@ fn format_gnu_general(v: f64) -> String {
     format!("{mantissa}e{sign}{:02}", exp.abs())
 }
 
-/// Format `value` with `precision` decimals, exactly as `{:.precision$}` would.
+/// Append `value` with `precision` decimals to `out`, as `{:.precision$}` would,
+/// replacing `.` with `dec_sep`.
 ///
 /// Most of what numfmt prints is a whole number — `348M`, `1024` — and the
 /// general float formatter reaches for a big-integer expansion of the value to
 /// get its last digit right. When the value is an integer the answer needs no
 /// expansion, so take the short way and let the rest fall through.
-fn format_float(value: f64, precision: usize) -> String {
+fn write_float_localized(out: &mut String, value: f64, precision: usize, dec_sep: &str) {
     // Past 2^53 an f64 no longer holds every integer, and the two routes would
     // not agree on what to print.
     const EXACT_INTEGERS_UP_TO: f64 = 9_007_199_254_740_992.0;
@@ -743,12 +713,21 @@ fn format_float(value: f64, precision: usize) -> String {
         // negative value that rounds to zero, which `{:.0}` keeps.
         let rounded = value.round_ties_even();
         if rounded == 0.0 && value.is_sign_negative() {
-            return "-0".to_string();
+            out.push_str("-0");
+        } else {
+            let _ = write!(out, "{}", rounded as i64);
         }
-        return (rounded as i64).to_string();
+        return;
     }
 
-    format!("{value:.precision$}")
+    let start = out.len();
+    let _ = write!(out, "{value:.precision$}");
+    if dec_sep != "."
+        && let Some(dot) = out[start..].find('.')
+    {
+        let idx = start + dot;
+        out.replace_range(idx..=idx, dec_sep);
+    }
 }
 
 fn transform_to(
@@ -758,8 +737,10 @@ fn transform_to(
     precision: usize,
     unit_separator: &str,
     is_precision_specified: bool,
-) -> Result<String> {
-    if let Some(result) = try_format_exact_int_without_suffix_scaling(s, opts, precision) {
+    out: &mut String,
+) -> Result<()> {
+    out.clear();
+    if let Some(result) = try_format_exact_int_without_suffix_scaling(s, opts, precision, out) {
         return result;
     }
 
@@ -773,68 +754,54 @@ fn transform_to(
         return Err(too_large_to_print(i2, precision));
     }
     let (i2, s) = consider_suffix(i2, opts.to, round_method, precision, is_precision_specified)?;
-    let dec_sep = locale_decimal_separator();
-    let localize = |s: String| -> String {
-        if dec_sep == "." {
-            s
-        } else {
-            s.replacen('.', dec_sep, 1)
-        }
-    };
-    Ok(match s {
+    let (value, digits) = match s {
         None if opts.to == Unit::None && precision <= u16::MAX.into() => {
             let rounded = round_with_precision(i2, round_method, precision);
             // rounding a small negative number leaves -0.0, which would print as "-0"
-            let rounded = if rounded == 0.0 { 0.0 } else { rounded };
-            localize(format_float(rounded, precision))
+            (if rounded == 0.0 { 0.0 } else { rounded }, precision)
         }
         None if is_precision_specified && precision <= u16::MAX.into() => {
-            let i2 = round_with_precision(i2, round_method, 0);
-            localize(format_float(i2, precision))
+            (round_with_precision(i2, round_method, 0), precision)
         }
-        None => localize(format_float(i2, 0)),
-        Some(s) if precision > 0 && precision <= u16::MAX.into() => localize(format!(
-            "{i2:.precision$}{unit_separator}{}",
-            DisplayableSuffix(s, opts.to),
-        )),
-        Some(s) if is_precision_specified => format!(
-            "{}{unit_separator}{}",
-            format_float(i2, 0),
-            DisplayableSuffix(s, opts.to)
-        ),
-        Some(s) if i2.abs() < 10.0 => {
-            // single digit before the decimal, like 1.5K
-            localize(format!(
-                "{i2:.1}{unit_separator}{}",
-                DisplayableSuffix(s, opts.to)
-            ))
-        }
-        Some(s) => format!(
-            "{}{unit_separator}{}",
-            format_float(i2, 0),
-            DisplayableSuffix(s, opts.to)
-        ),
-    })
+        Some(_) if precision > 0 && precision <= u16::MAX.into() => (i2, precision),
+        // single digit before the decimal, like 1.5K
+        Some(_) if !is_precision_specified && i2.abs() < 10.0 => (i2, 1),
+        _ => (i2, 0),
+    };
+    write_float_localized(out, value, digits, locale_decimal_separator());
+    if let Some(s) = s {
+        out.push_str(unit_separator);
+        let _ = write!(out, "{}", DisplayableSuffix(s, opts.to));
+    }
+    Ok(())
 }
 
 /// Pad `s` to at least `width` characters using `fill`.
 /// Right-aligns when `right_align` is true, left-aligns otherwise.
 /// Unlike `format!("{:>width$}")`, this handles widths larger than 65535.
-fn pad_string(s: &str, width: usize, fill: char, right_align: bool) -> String {
-    let len = s.chars().count();
-    if len >= width {
-        return s.to_string();
-    }
-    let pad = width - len;
-    let mut result = String::with_capacity(width);
-    if right_align {
-        result.extend(std::iter::repeat_n(fill, pad));
-        result.push_str(s);
+fn pad_string(s: &str, width: usize, fill: char, right_align: bool, out: &mut String) {
+    let len = if s.is_ascii() {
+        s.len()
     } else {
-        result.push_str(s);
-        result.extend(std::iter::repeat_n(fill, pad));
+        s.chars().count()
+    };
+    let pad = width.saturating_sub(len);
+    out.reserve(s.len() + pad * fill.len_utf8());
+    if right_align {
+        out.extend(std::iter::repeat_n(fill, pad));
     }
-    result
+    out.push_str(s);
+    if !right_align {
+        out.extend(std::iter::repeat_n(fill, pad));
+    }
+}
+
+fn pad_in_place(buf: &mut String, pad_buf: &mut String, padding: isize) {
+    if padding != 0 {
+        pad_buf.clear();
+        pad_string(buf, padding.unsigned_abs(), ' ', padding > 0, pad_buf);
+        std::mem::swap(buf, pad_buf);
+    }
 }
 
 /// Split a scaled value into its numeric part and the unit suffix that trails
@@ -853,7 +820,9 @@ fn format_string(
     source: &str,
     options: &NumfmtOptions,
     implicit_padding: Option<isize>,
-) -> Result<String> {
+    scratch: &mut FormatScratch,
+) -> Result<()> {
+    let FormatScratch { buf, pad_buf } = scratch;
     // strip the (optional) suffix before applying any transformation
     let source_without_suffix = match &options.suffix {
         Some(suffix) => source.strip_suffix(suffix).unwrap_or(source),
@@ -874,34 +843,31 @@ fn format_string(
         0
     };
 
-    let number = transform_to(
+    transform_to(
         transform_from(source_without_suffix, &options.transform, options)?,
         &options.transform,
         options.round,
         precision,
         &options.unit_separator,
         is_precision_specified,
+        buf,
     )?;
 
     // bring back the suffix before applying padding
-    let grouped_number = if options.grouping {
-        apply_grouping(&number)
-    } else {
-        number
-    };
+    if options.grouping {
+        apply_grouping_in_place(buf, locale_grouping_separator(), locale_decimal_separator());
+    }
 
-    let number_with_suffix = match &options.suffix {
-        Some(suffix) => format!("{grouped_number}{suffix}"),
-        None => grouped_number,
-    };
+    if let Some(suffix) = &options.suffix {
+        buf.push_str(suffix);
+    }
 
     let padding = options
         .format
         .padding
         .unwrap_or_else(|| implicit_padding.unwrap_or(options.padding));
 
-    let padded_number = match padding {
-        0 => number_with_suffix,
+    match padding {
         p if p > 0 && options.format.zero_padding => {
             // GNU zero-pads the number itself: "Optional zero (%010f) width
             // will zero pad the number". A unit suffix from --to and the
@@ -909,40 +875,32 @@ fn format_string(
             // which applies to the whole output.
             // The --suffix text is user-supplied and may itself contain
             // digits, so peel it off before locating the number.
-            let (scaled, user_suffix) = match &options.suffix {
-                Some(suffix) => number_with_suffix
-                    .strip_suffix(suffix.as_str())
-                    .map_or((number_with_suffix.as_str(), ""), |rest| {
-                        (rest, suffix.as_str())
-                    }),
-                None => (number_with_suffix.as_str(), ""),
-            };
-            let (number, unit) = split_number_and_units(scaled);
-            let trailing = format!("{unit}{user_suffix}");
-            let zero_padded = if let Some(unsigned) = number.strip_prefix(['-', '+']) {
-                let sign = &number[..1];
-                format!(
-                    "{sign}{}{trailing}",
-                    pad_string(unsigned, (p as usize).saturating_sub(1), '0', true)
-                )
-            } else {
-                format!("{}{trailing}", pad_string(number, p as usize, '0', true))
-            };
+            let suffix_len = options.suffix.as_deref().unwrap_or("").len();
+            let (number, _) = split_number_and_units(&buf[..buf.len() - suffix_len]);
+            let (sign, digits) = number.split_at(usize::from(number.starts_with(['-', '+'])));
+            pad_buf.clear();
+            pad_buf.push_str(sign);
+            pad_string(
+                digits,
+                (p as usize).saturating_sub(sign.len()),
+                '0',
+                true,
+                pad_buf,
+            );
+            pad_buf.push_str(&buf[number.len()..]);
+            std::mem::swap(buf, pad_buf);
 
-            match implicit_padding.unwrap_or(options.padding) {
-                0 => zero_padded,
-                p if p > 0 => pad_string(&zero_padded, p as usize, ' ', true),
-                p => pad_string(&zero_padded, p.unsigned_abs(), ' ', false),
-            }
+            pad_in_place(buf, pad_buf, implicit_padding.unwrap_or(options.padding));
         }
-        p if p > 0 => pad_string(&number_with_suffix, p as usize, ' ', true),
-        p => pad_string(&number_with_suffix, p.unsigned_abs(), ' ', false),
-    };
+        p => pad_in_place(buf, pad_buf, p),
+    }
 
-    Ok(format!(
-        "{}{padded_number}{}",
-        options.format.prefix, options.format.suffix
-    ))
+    if !options.format.prefix.is_empty() {
+        buf.insert_str(0, &options.format.prefix);
+    }
+    buf.push_str(&options.format.suffix);
+
+    Ok(())
 }
 
 /// Encodes a byte slice as a string, representing non-UTF-8 bytes and non-printable ASCII
@@ -1007,6 +965,7 @@ pub fn write_formatted_with_delimiter<W: std::io::Write + ?Sized>(
     input: &[u8],
     options: &NumfmtOptions,
     eol: Option<u8>,
+    scratch: &mut FormatScratch,
 ) -> std::result::Result<bool, WriteError> {
     let delimiter = options.delimiter.as_deref().unwrap();
     let mut saw_invalid = false;
@@ -1023,9 +982,11 @@ pub fn write_formatted_with_delimiter<W: std::io::Write + ?Sized>(
             // Field must be valid UTF-8 for numeric conversion
             let formatted = std::str::from_utf8(field)
                 .map_err(|_| translate!("numfmt-error-invalid-number", "input" => escape_line(field).quote()))
-                .and_then(|field_str| format_string(field_str.trim_start_matches(is_blank), options, None));
+                .and_then(|field_str| {
+                    format_string(field_str.trim_start_matches(is_blank), options, None, scratch)
+                });
             match formatted {
-                Ok(formatted) => writer.write_all(formatted.as_bytes())?,
+                Ok(()) => writer.write_all(scratch.buf.as_bytes())?,
                 Err(message) => {
                     report_invalid_field(options, message)?;
                     saw_invalid = true;
@@ -1062,6 +1023,7 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
     s: &str,
     options: &NumfmtOptions,
     eol: Option<u8>,
+    scratch: &mut FormatScratch,
 ) -> std::result::Result<bool, WriteError> {
     let mut saw_invalid = false;
     for (n, (prefix, field)) in (1..).zip(WhitespaceSplitter {
@@ -1086,8 +1048,8 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
                 None
             };
 
-            match format_string(field, options, implicit_padding) {
-                Ok(formatted) => writer.write_all(formatted.as_bytes())?,
+            match format_string(field, options, implicit_padding, scratch) {
+                Ok(()) => writer.write_all(scratch.buf.as_bytes())?,
                 Err(message) => {
                     // An invalid field is written as it is, like an unselected one.
                     report_invalid_field(options, message)?;
@@ -1168,12 +1130,17 @@ mod tests {
             f64::NEG_INFINITY,
             f64::NAN,
         ] {
+            let mut out = String::new();
             for precision in [0, 1, 2, 6] {
-                assert_eq!(
-                    format_float(value, precision),
-                    format!("{value:.precision$}"),
-                    "value {value}, precision {precision}"
-                );
+                for dec_sep in [".", ","] {
+                    out.clear();
+                    write_float_localized(&mut out, value, precision, dec_sep);
+                    assert_eq!(
+                        out,
+                        format!("{value:.precision$}").replacen('.', dec_sep, 1),
+                        "value {value}, precision {precision}, dec_sep {dec_sep}"
+                    );
+                }
             }
         }
     }
@@ -1487,15 +1454,26 @@ mod tests {
     #[test]
     fn test_apply_grouping_short_numbers() {
         // Numbers with fewer than 4 digits should be unchanged
-        assert_eq!(apply_grouping("0"), "0");
-        assert_eq!(apply_grouping("999"), "999");
-        assert_eq!(apply_grouping("-99"), "-99");
+        for s in ["0", "999", "-99"] {
+            let mut buf = s.to_string();
+            apply_grouping_in_place(
+                &mut buf,
+                locale_grouping_separator(),
+                locale_decimal_separator(),
+            );
+            assert_eq!(buf, s);
+        }
     }
 
     #[test]
     fn test_apply_grouping_with_fraction() {
         // Fraction part should not be grouped
-        let result = apply_grouping("1234.567");
+        let mut result = "1234.567".to_string();
+        apply_grouping_in_place(
+            &mut result,
+            locale_grouping_separator(),
+            locale_decimal_separator(),
+        );
         // Depending on locale, separator may or may not be present
         assert!(result.contains("567"));
         assert!(result.contains('.'));
@@ -1503,35 +1481,71 @@ mod tests {
 
     #[test]
     fn test_apply_grouping_negative() {
-        let result = apply_grouping("-1234");
+        let mut result = "-1234".to_string();
+        apply_grouping_in_place(
+            &mut result,
+            locale_grouping_separator(),
+            locale_decimal_separator(),
+        );
         assert!(result.starts_with('-'));
     }
 
     #[test]
     fn test_apply_grouping_large_numbers() {
         // These tests verify grouping structure; actual separator depends on locale
-        let result = apply_grouping("1000000");
-        // Should have separators inserted (length grows if separator is non-empty)
-        assert!(result.len() >= 7);
+        for (input, min_len) in [("1000000", 7), ("1234567890", 10), ("-9999999999999", 13)] {
+            let mut result = input.to_string();
+            apply_grouping_in_place(
+                &mut result,
+                locale_grouping_separator(),
+                locale_decimal_separator(),
+            );
+            assert!(result.len() >= min_len);
+            if input.starts_with('-') {
+                assert!(result.starts_with('-'));
+            }
+        }
 
-        let result = apply_grouping("1234567890");
-        assert!(result.len() >= 10);
-
-        let result = apply_grouping("-9999999999999");
-        assert!(result.starts_with('-'));
-        assert!(result.len() >= 13);
+        for (input, sep, dec_sep, expected) in [
+            ("999", ",", ".", "999"),
+            ("1000", ",", ".", "1,000"),
+            ("-123", ",", ".", "-123"),
+            ("-1234", ",", ".", "-1,234"),
+            ("1234567.891", ",", ".", "1,234,567.891"),
+            ("1234567", "\u{202f}", ".", "1\u{202f}234\u{202f}567"),
+            ("1234", "", ".", "1234"),
+            ("1234567,891", ".", ",", "1.234.567,891"),
+            ("-1234,5", "\u{202f}", ",", "-1\u{202f}234,5"),
+            ("999,1234", ".", ",", "999,1234"),
+        ] {
+            let mut buf = input.to_string();
+            apply_grouping_in_place(&mut buf, sep, dec_sep);
+            assert_eq!(buf, expected);
+        }
     }
 
     #[test]
     fn test_apply_grouping_tiny_fraction() {
         // Small decimal: integer part < 4 digits, so no grouping
-        assert_eq!(apply_grouping("0.000001"), "0.000001");
-        assert_eq!(apply_grouping("1.23456789"), "1.23456789");
+        for s in ["0.000001", "1.23456789"] {
+            let mut buf = s.to_string();
+            apply_grouping_in_place(
+                &mut buf,
+                locale_grouping_separator(),
+                locale_decimal_separator(),
+            );
+            assert_eq!(buf, s);
+        }
     }
 
     #[test]
     fn test_apply_grouping_exactly_four_digits() {
-        let result = apply_grouping("1000");
+        let mut result = "1000".to_string();
+        apply_grouping_in_place(
+            &mut result,
+            locale_grouping_separator(),
+            locale_decimal_separator(),
+        );
         // Should be grouped (4 digits)
         assert!(result.len() >= 4);
     }

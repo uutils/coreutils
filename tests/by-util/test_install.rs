@@ -36,10 +36,10 @@ fn test_install_basic_try_reflink() {
     at.touch(file1);
     at.touch(file2);
     at.mkdir(dir);
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     ucmd.arg(file1).arg(file2).arg(dir).succeeds().no_stderr();
     // mkfs.btrfs needs root. use strace instead.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     if std::process::Command::new("strace")
         .args(["-qqq", "-o", "strace.out", "-e", "trace=ioctl"])
         .arg(uutests::util::get_tests_binary())
@@ -852,38 +852,6 @@ fn test_install_and_strip() {
         .no_stderr();
 
     assert_eq!(at.metadata(STRIP_TARGET_FILE).len(), 0);
-}
-
-#[test]
-fn test_install_strip_program_sees_zeroed_umask() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    write_strip_program(&scene, "probe", "#!/bin/sh\numask > \"$1\"\n");
-    at.write("source", "file contents");
-
-    scene
-        .ucmd()
-        .umask(0o077)
-        .args(&[
-            "-s",
-            "--strip-program",
-            "./probe",
-            "source",
-            STRIP_TARGET_FILE,
-        ])
-        .succeeds()
-        .no_stderr();
-
-    // Follow GNU's behavior: the strip program sees a zeroed umask. Shells
-    // differ on whether they print it as 000 or 0000, so compare the value.
-    let reported = at.read(STRIP_TARGET_FILE);
-    let reported = reported.trim();
-    assert_eq!(
-        u32::from_str_radix(reported, 8).unwrap(),
-        0,
-        "strip program saw umask {reported}"
-    );
 }
 
 #[test]
@@ -3411,7 +3379,7 @@ fn test_install_d_parallel_mkdir_race() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_install_target_without_splice_support() {
     // Does eCryptfs not support splice on some kernel?
     use std::process::Command;
@@ -3452,4 +3420,24 @@ fn test_install_will_not_overwrite_just_created() {
         .stderr_contains("will not overwrite just-created 'c/f' with 'b/f'");
 
     assert_eq!(at.read("c/f"), "a");
+}
+
+#[test]
+fn test_install_strip_program_sees_caller_umask() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    write_strip_program(&scene, "recorder", "#!/bin/sh\numask > seen\n");
+    at.write("src", "x");
+    scene
+        .ucmd()
+        .umask(0o027)
+        .args(&["-s", "--strip-program=./recorder", "src", "dest"])
+        .succeeds();
+    let reported = at.read("seen");
+    let reported = reported.trim();
+    assert_eq!(
+        u32::from_str_radix(reported, 8).unwrap(),
+        0o027,
+        "strip program saw umask {reported}"
+    );
 }

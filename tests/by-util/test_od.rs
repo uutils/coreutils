@@ -483,8 +483,8 @@ fn test_multibyte() {
         ));
 }
 
-#[test]
-fn test_width() {
+#[rstest::rstest]
+fn test_width(#[values("-w4", "--width=4", "-vw4")] width: &str) {
     let input: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
     let expected_output = unindent(
         "
@@ -495,7 +495,7 @@ fn test_width() {
     );
 
     new_ucmd!()
-        .arg("-w4")
+        .arg(width)
         .arg("-v")
         .run_piped_stdin(&input[..])
         .success()
@@ -609,8 +609,11 @@ fn test_non_numeric_width_argument() {
         .stderr_only("od: invalid -w argument 'w'\n");
 }
 
-#[test]
-fn test_width_without_value() {
+#[rstest::rstest]
+fn test_width_without_value(
+    #[values("-w", "-vw", "-Bw", "--width", "--wid")] width: &str,
+    #[values("-", "input", "4")] file: &str,
+) {
     let input: [u8; 40] = [0; 40];
     let expected_output = unindent("
             0000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000
@@ -618,11 +621,27 @@ fn test_width_without_value() {
             0000050
             ");
 
-    new_ucmd!()
-        .arg("-w")
-        .run_piped_stdin(&input[..])
-        .success()
+    let (at, mut ucmd) = at_and_ucmd!();
+    if file == "-" {
+        ucmd.pipe_in(&input[..]);
+    } else {
+        at.write_bytes(file, &input);
+    }
+    ucmd.arg(width)
+        .arg(file)
+        .succeeds()
         .stdout_only(expected_output);
+}
+
+#[rstest::rstest]
+fn test_optional_value_operand_after_terminator(
+    #[values("-w", "-vw", "--width", "--wid", "--strings", "--str")] file: &str,
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(file, "abc");
+    ucmd.args(&["-An", "-tc", "--", file])
+        .succeeds()
+        .stdout_only("   a   b   c\n");
 }
 
 #[test]
@@ -1425,6 +1444,38 @@ fn test_od_options_after_filename() {
         .stdout_only(" 1c68 fdbb\n");
 }
 
+#[rstest::rstest]
+fn test_strings_without_value(
+    #[values("--strings", "--str", "--st")] option: &str,
+    #[values("-", "input", "4")] file: &str,
+) {
+    let input = b"ab\0abc\0abcd\0";
+    let (at, mut ucmd) = at_and_ucmd!();
+    if file == "-" {
+        ucmd.pipe_in(&input[..]);
+    } else {
+        at.write_bytes(file, input);
+    }
+    ucmd.arg(option)
+        .arg(file)
+        .succeeds()
+        .stdout_only("0000003 abc\n0000007 abcd\n");
+}
+
+#[rstest::rstest]
+#[case(&["-S4"])]
+#[case(&["-S", "4"])]
+#[case(&["--strings=4"])]
+#[case(&["--str=4"])]
+fn test_strings_with_value(#[case] options: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("input", b"ab\0abc\0abcd\0");
+    ucmd.args(options)
+        .arg("input")
+        .succeeds()
+        .stdout_only("0000007 abcd\n");
+}
+
 #[test]
 fn test_od_strings_option() {
     // Test -S option: output strings of at least N graphic chars
@@ -1713,6 +1764,7 @@ fn test_octal_alias() {
     for arg in ["-o", "-B"] {
         scene
             .ucmd()
+            .arg("--endian=little")
             .arg(arg)
             .arg("test")
             .succeeds()
@@ -1790,6 +1842,7 @@ fn test_od_zero_byte_type_size() {
             .no_stdout();
     }
     new_ucmd!()
+        .arg("--endian=little")
         .arg("-tx4")
         .pipe_in("abcd")
         .succeeds()
@@ -1810,4 +1863,23 @@ fn test_strings_with_type_option_is_error() {
             .code_is(1)
             .stderr_contains("no type may be specified when dumping strings");
     }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "an offset overflow must be diagnosed"]
+fn test_skip_near_max_offset_reports_overflow() {
+    let skip = (i64::MAX - 3).to_string();
+    new_ucmd!()
+        .args(&["-A", "d", "-t", "u2", "-j", &skip, "/dev/zero"])
+        .timeout(std::time::Duration::from_secs(5))
+        .fails_with_code(1)
+        .stdout_is(format!("{}{}\n", i64::MAX - 3, "     0".repeat(8)))
+        .stderr_is("od: offset overflow\n");
+    new_ucmd!()
+        .args(&["-A", "d", "-S", "4", "-j", &skip, "/dev/zero"])
+        .timeout(std::time::Duration::from_secs(5))
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("od: offset overflow\n");
 }

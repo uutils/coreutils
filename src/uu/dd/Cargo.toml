@@ -37,6 +37,7 @@ name = "dd"
 path = "src/main.rs"
 
 [dev-dependencies]
+temp-env = { workspace = true }
 divan = { workspace = true }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }

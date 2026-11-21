@@ -146,12 +146,14 @@ fn test_hex_identifier_in_wrong_place() {
         .usage_error("invalid floating point argument: '1234ABCD0x'");
 }
 
-#[test]
-fn test_rejects_nan() {
+#[rstest]
+#[case("NaN")]
+#[case("nan(1)")]
+fn test_rejects_nan(#[case] arg: &str) {
     new_ucmd!()
-        .arg("NaN")
+        .arg(arg)
         .fails()
-        .usage_error("invalid 'not-a-number' argument: 'NaN'");
+        .usage_error(format!("invalid 'not-a-number' argument: '{arg}'"));
 }
 
 #[test]
@@ -263,6 +265,7 @@ fn test_width_invalid_float() {
         .usage_error("invalid floating point argument: '1e2.3'");
 }
 
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
 #[cfg(unix)]
 fn test_sigpipe_ignored_reports_write_error() {
@@ -327,6 +330,7 @@ fn test_separator_and_terminator() {
         .stdout_is("2\\n3\\n4\\n5\\n6\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
 fn test_separator_non_utf8() {
@@ -350,6 +354,7 @@ fn test_separator_non_utf8() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
 fn test_terminator_non_utf8() {
@@ -727,7 +732,8 @@ fn test_width_floats() {
 }
 
 /// Test infinite sequences - these produce endless output, so we check they start correctly
-/// and terminate with SIGPIPE on Unix (or succeed on non-Unix where pipe behavior differs).
+/// and terminate with SIGPIPE on Unix, a write error on WASI (which reports a closed pipe as a
+/// generic I/O error rather than delivering a signal), or succeed on other non-Unix platforms.
 #[rstest]
 #[case::neg_inf(
     &["--", "-inf", "0"],
@@ -765,10 +771,17 @@ fn test_infinite_sequence(#[case] args: &[&str], #[case] expected_start: &[u8]) 
     let result = new_ucmd!()
         .args(args)
         .run_stdout_starts_with(expected_start);
-    #[cfg(unix)]
-    result.signal_name_is("PIPE");
-    #[cfg(not(unix))]
-    result.success();
+    #[cfg(not(wasi_runner))]
+    {
+        #[cfg(unix)]
+        result.signal_name_is("PIPE");
+        #[cfg(not(unix))]
+        result.success();
+    }
+    #[cfg(wasi_runner)]
+    result
+        .code_is(1)
+        .stderr_contains("seq: write error: I/O error");
 }
 
 #[test]
@@ -1319,4 +1332,35 @@ fn test_repeated_option_last_one_wins() {
         .args(&["-s", ",", "-s", ":", "3"])
         .succeeds()
         .stdout_only("1:2:3\n");
+}
+
+#[rstest]
+#[case::pos_inf_down_to_pos_inf(&["inf", "-1", "inf"], "inf\n")]
+#[case::neg_inf_up_to_neg_inf(&["--", "-inf", "3", "-inf"], "-inf\n")]
+#[case::inf_plus_neg_inf_is_nan(&["inf", "-inf", "0"], "inf\n")]
+#[ignore = "seq must stop once the value no longer changes"]
+fn test_stalled_value_stops(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .args(args)
+        .timeout(std::time::Duration::from_secs(5))
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[cfg(unix)]
+#[rstest]
+#[case::comma_operands(&["0,25", "0,25", "1"], "0,25\n0,50\n0,75\n1,00\n")]
+#[case::negative_comma_first(&["-,75", "1"], "-0,75\n0,25\n")]
+#[case::negative_comma_increment(&["2", "-0,5", "1"], "2,0\n1,5\n1,0\n")]
+#[ignore = "operands using the locale's decimal point must be accepted"]
+fn test_locale_decimal_point_operands(#[case] args: &[&str], #[case] expected: &str) {
+    let locale = "fr_FR.UTF-8";
+    if !uutests::util::is_locale_available(locale) {
+        return;
+    }
+    new_ucmd!()
+        .args(args)
+        .env("LC_ALL", locale)
+        .succeeds()
+        .stdout_only(expected);
 }

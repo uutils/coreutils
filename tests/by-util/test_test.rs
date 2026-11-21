@@ -1017,7 +1017,8 @@ fn test_file_owned_by_egid() {
     if user_gid != file_gid {
         let file_uid = rustix::fs::Uid::from_raw(metadata.uid());
         let path = at.plus("regular_file");
-        rustix::fs::chown(&path, Some(file_uid), Some(user_gid)).expect("chown failed");
+        std::os::unix::fs::chown(&path, Some(file_uid.as_raw()), Some(user_gid.as_raw()))
+            .expect("chown failed");
     }
 
     scene.ucmd().args(&["-G", "regular_file"]).succeeds();
