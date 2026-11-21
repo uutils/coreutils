@@ -81,7 +81,13 @@ impl Input {
                 path.canonicalize().ok()
             }
             InputKind::File(_) | InputKind::Stdin => {
-                // on macOS, /dev/fd isn't backed by /proc and canonicalize()
+                // Only a redirected regular file or directory has a path that can
+                // be reopened: `/dev/fd/0` for a pipe or FIFO resolves to a name
+                // that cannot be opened, and realpath(3) is unreliable under
+                // pseudo. Classify the fd before canonicalizing.
+                // See: https://github.com/uutils/coreutils/issues/9292
+                //
+                // On macOS, /dev/fd isn't backed by /proc and canonicalize()
                 // on dev/fd/0 (or /dev/stdin) will fail (NotFound),
                 // so we treat stdin as a pipe here
                 // https://github.com/rust-lang/rust/issues/95239
@@ -91,7 +97,14 @@ impl Input {
                 }
                 #[cfg(not(target_vendor = "apple"))]
                 {
-                    PathBuf::from(text::FD0).canonicalize().ok()
+                    // Pipes, FIFOs and other special files are left on the read path.
+                    if let Ok(metadata) = std::fs::metadata(text::FD0) {
+                        let file_type = metadata.file_type();
+                        if file_type.is_file() || file_type.is_dir() {
+                            return PathBuf::from(text::FD0).canonicalize().ok();
+                        }
+                    }
+                    None
                 }
             }
         }

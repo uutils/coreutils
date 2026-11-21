@@ -3309,6 +3309,85 @@ fn test_pid_controls_nonblocking_mode(#[case] with_pid: bool) {
     assert_eq!(flags & libc::O_NONBLOCK as u32 != 0, with_pid);
 }
 
+/// `tail -f --pid=P < FIFO` must exit cleanly once P is gone.
+///
+/// Guards the stdin classification in `paths.rs`: once FIFO stdin no longer
+/// resolves to a path, the follow map must still get the `-` stdin key or
+/// `follow()` reports "no files remaining" and exits 1. GNU exits 0, printing
+/// the data already read.
+#[uutests::wasi_ignore(NoFifo)]
+#[test]
+#[cfg(all(
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd"),
+    not(windows)
+))]
+fn test_fifo_stdin_with_pid() {
+    use std::process::{Command, Stdio};
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("FIFO");
+
+    // Queue the data and EOF on the FIFO, then hand its read end to tail as stdin.
+    let mut writer = Command::new("sh")
+        .arg("-c")
+        .arg(format!(
+            "printf 'q1\\nq2\\n' > '{}'",
+            at.plus("FIFO").display()
+        ))
+        .stdin(Stdio::null())
+        .spawn()
+        .unwrap();
+    let reader = File::open(at.plus("FIFO")).unwrap();
+    let _ = writer.wait();
+
+    // A process that is already gone by the time tail starts.
+    let mut dummy = Command::new("sh").stdin(Stdio::null()).spawn().unwrap();
+    let pid = dummy.id();
+    let _ = dummy.wait();
+
+    ts.ucmd()
+        .args(&["-f", &format!("--pid={pid}")])
+        .set_stdin(reader)
+        .run()
+        .success()
+        .stdout_is("q1\nq2\n")
+        .no_stderr();
+}
+
+/// `tail -f --pid=P < pipe` must exit cleanly once P is gone.
+///
+/// On main this exits 1 with "no files remaining": the pipe branch never inserts
+/// the stdin key, yet `follow()` still runs because `--pid` is set. GNU ignores
+/// `-f` for pipe stdin and exits 0 after reading EOF, printing the data.
+// WASI has no follow implementation yet: `follow()` returns
+// "follow mode is not supported on this platform". Drop the skip when that
+// target grows one, otherwise this test cannot run there for an implementation
+// reason rather than a language one.
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(unix)]
+fn test_pipe_stdin_with_pid() {
+    use std::process::{Command, Stdio};
+
+    let ts = TestScenario::new(util_name!());
+
+    // A process that is already gone by the time tail starts.
+    let mut dummy = Command::new("sh").stdin(Stdio::null()).spawn().unwrap();
+    let pid = dummy.id();
+    let _ = dummy.wait();
+
+    ts.ucmd()
+        .args(&["-f", &format!("--pid={pid}")])
+        .pipe_in("q1\nq2\n")
+        .run()
+        .success()
+        .stdout_is("q1\nq2\n")
+        .no_stderr();
+}
+
 #[test]
 #[cfg(unix)]
 #[ignore = "disabled until fixed"]
