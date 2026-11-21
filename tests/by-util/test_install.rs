@@ -1731,6 +1731,18 @@ fn test_install_compare_option() {
 }
 
 #[test]
+fn test_install_strip_with_directory() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene
+        .ucmd()
+        .args(&["-d", "-s", "newdir"])
+        .fails_with_code(1); // clap's error message
+    assert!(!at.dir_exists("newdir"));
+}
+
+#[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_install_compare_basic() {
     let scene = TestScenario::new(util_name!());
