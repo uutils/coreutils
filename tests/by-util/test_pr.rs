@@ -481,6 +481,22 @@ fn test_with_offset_space_option() {
 }
 
 #[test]
+fn test_offset_indents_header() {
+    // The margin goes on the first blank line and the header line too.
+    let header = format!("   \n\n   STAMP{0}TITLE{0}Page 1\n\n\n", " ".repeat(28));
+    new_ucmd!()
+        .args(&["-h", "TITLE", "-D", "STAMP", "-l", "12", "-o", "3"])
+        .pipe_in("line\n")
+        .succeeds()
+        .stdout_only(format!("{header}   line\n\n\n\n\n\n\n"));
+    new_ucmd!()
+        .args(&["-F", "-h", "TITLE", "-D", "STAMP", "-l", "12", "-o", "3"])
+        .pipe_in("line\n")
+        .succeeds()
+        .stdout_only(format!("{header}   line\n\x0c"));
+}
+
+#[test]
 fn test_offset_too_large() {
     let arg = "2147483648";
     new_ucmd!()
@@ -600,6 +616,14 @@ fn test_offset_large_value_does_not_abort_under_memory_limit() {
         .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
         .set_stdout(Stdio::null())
         .args(&["-t", "-o", "999999999"])
+        .pipe_in("hi\n")
+        .succeeds();
+
+    // With the page header, which is also indented
+    new_ucmd!()
+        .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
+        .set_stdout(Stdio::null())
+        .args(&["-o", "999999999"])
         .pipe_in("hi\n")
         .succeeds();
 }
