@@ -580,3 +580,39 @@ fn test_verbose_or_silent() {
         )
         .no_stdout();
 }
+
+#[rstest]
+#[case(&["-e", "-f"], "a/b", true)] // -f last: only the parent has to exist
+#[case(&["-f", "-e"], "a/b", false)] // -e last: the whole path has to exist
+#[case(&["-e", "-m"], "a/b", true)] // -m last: missing components are allowed
+#[case(&["-m", "-e"], "a/b", false)] // -e last: the whole path has to exist
+#[case(&["-f", "-m"], "missing/b", true)] // -m last: a missing parent is allowed
+#[case(&["-m", "-f"], "missing/b", false)] // -f last: the parent has to exist
+#[case(&["-m"], "x/y/z", true)] // -m alone accepts a fully missing path
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: canonicalized path resolves to the guest's virtual root, not the host's absolute path"
+)]
+fn test_last_of_canonicalize_flags_wins(
+    #[case] flags: &[&str],
+    #[case] path: &str,
+    #[case] should_succeed: bool,
+) {
+    // https://github.com/uutils/coreutils/issues/15995
+    // GNU uses whichever of -e/-f/-m comes last: -e needs the whole path to
+    // exist, -f only its parent, and -m lets every component be missing.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+
+    let cmd = ucmd.args(flags).arg(path);
+    if should_succeed {
+        let actual = cmd.succeeds().stdout_move_str();
+        let mut expect = std::path::PathBuf::from(at.root_dir_resolved());
+        for component in path.split('/') {
+            expect.push(component);
+        }
+        assert_eq!(actual, format!("{}\n", expect.display()));
+    } else {
+        cmd.fails_with_code(1).no_stdout();
+    }
+}
