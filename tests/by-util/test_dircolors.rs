@@ -5,7 +5,6 @@
 
 // spell-checker:ignore overridable colorterm
 
-#[cfg(target_os = "linux")]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
