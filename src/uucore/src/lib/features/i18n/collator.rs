@@ -31,9 +31,15 @@ pub fn init_collator(opts: CollatorOptions) {
         .expect("Collator already initialized");
 }
 
-/// Check if locale collation should be used.
+/// Check if locale collation should be used: only for UTF-8 locales that are
+/// not C/POSIX (e.g. `en_US.UTF-8`, but not `C.UTF-8` or `en_US`).
+///
+/// `sort` decides with this, so `comm`, `join` and `ls` must use it too:
+/// they read what `sort` wrote and have to agree with it on the order.
 pub fn should_use_locale_collation() -> bool {
-    get_collating_locale().0 != DEFAULT_LOCALE
+    use crate::i18n::{UEncoding, get_locale_encoding};
+
+    get_locale_encoding() == UEncoding::Utf8 && get_collating_locale().0 != DEFAULT_LOCALE
 }
 
 /// Initialize the collator for locale-aware string comparison if needed.
@@ -60,11 +66,7 @@ pub fn should_use_locale_collation() -> bool {
 /// }
 /// ```
 pub fn init_locale_collation() -> bool {
-    use crate::i18n::{UEncoding, get_locale_encoding};
-
-    // Use ICU collation only for UTF-8 locales that are NOT C/POSIX
-    // (e.g. en_US.UTF-8, but not C.UTF-8 — C still uses byte comparison)
-    if get_locale_encoding() != UEncoding::Utf8 || !should_use_locale_collation() {
+    if !should_use_locale_collation() {
         return false;
     }
 
