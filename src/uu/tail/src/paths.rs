@@ -8,6 +8,8 @@
 use crate::text;
 use std::ffi::OsStr;
 use std::fs::{File, Metadata};
+#[cfg(any(windows, target_os = "wasi"))]
+use std::io::ErrorKind;
 use std::io::{self, Seek, SeekFrom, Write, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
@@ -16,6 +18,50 @@ use std::path::{Path, PathBuf};
 use uucore::error::UResult;
 use uucore::quoting_style::locale_aware_shell_escape;
 use uucore::translate;
+
+/// Writer that ends the process silently once the reader of stdout has gone away.
+///
+/// Unix signals this case with SIGPIPE. Windows and WASI have no signals, so the
+/// process exits with the status that a SIGPIPE death reports.
+#[cfg(any(windows, target_os = "wasi"))]
+pub struct ExitOnClosedPipe<W>(pub W);
+
+#[cfg(any(windows, target_os = "wasi"))]
+impl<W: Write> ExitOnClosedPipe<W> {
+    // Preview 1 reports a closed pipe as a generic EIO instead of BrokenPipe, so a
+    // genuine EIO on stdout (e.g. a disk error on a redirected file) is indistinguishable
+    // from one and also exits silently; this is a known limitation until wasi-libc fixes
+    // https://github.com/WebAssembly/wasi-libc/pull/887.
+    #[cfg(target_env = "p1")]
+    fn is_closed_pipe(err: &io::Error) -> bool {
+        err.kind() == ErrorKind::BrokenPipe || err.raw_os_error() == Some(libc::EIO)
+    }
+
+    #[cfg(not(target_env = "p1"))]
+    fn is_closed_pipe(err: &io::Error) -> bool {
+        err.kind() == ErrorKind::BrokenPipe
+    }
+
+    fn check<T>(result: io::Result<T>) -> io::Result<T> {
+        if let Err(err) = &result
+            && Self::is_closed_pipe(err)
+        {
+            std::process::exit(13);
+        }
+        result
+    }
+}
+
+#[cfg(any(windows, target_os = "wasi"))]
+impl<W: Write> Write for ExitOnClosedPipe<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        Self::check(self.0.write(buf))
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Self::check(self.0.flush())
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum InputKind {
@@ -134,8 +180,13 @@ impl HeaderPrinter {
 
     pub fn print(&mut self, string: &str) -> io::Result<()> {
         if self.verbose {
+            #[cfg(any(windows, target_os = "wasi"))]
+            let mut stdout = ExitOnClosedPipe(stdout().lock());
+            #[cfg(not(any(windows, target_os = "wasi")))]
+            let mut stdout = stdout().lock();
+
             writeln!(
-                stdout().lock(),
+                stdout,
                 "{}==> {} <==",
                 if self.first_header { "" } else { "\n" },
                 // GNU quotes the name shown in the header when it needs it.

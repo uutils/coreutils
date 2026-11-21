@@ -27,6 +27,8 @@ use args::{FilterMode, Settings, Signum, parse_args};
 use chunks::ReverseChunks;
 use follow::Observer;
 use memchr::{memchr_iter, memrchr_iter};
+#[cfg(any(windows, target_os = "wasi"))]
+use paths::ExitOnClosedPipe;
 use paths::{FileExtTail, HeaderPrinter, Input, InputKind};
 use read::ReadAvailable;
 use std::cmp::Ordering;
@@ -555,6 +557,9 @@ fn bounded_tail(file: &mut File, settings: &Settings, end: Option<u64>) -> UResu
 }
 
 fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
+    #[cfg(any(windows, target_os = "wasi"))]
+    let mut writer = BufWriter::new(ExitOnClosedPipe(stdout().lock()));
+    #[cfg(not(any(windows, target_os = "wasi")))]
     let mut writer = BufWriter::new(stdout().lock());
     let mut reader = ReadAvailable::new(reader);
     match &settings.mode {
@@ -617,16 +622,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         }
         _ => {}
     }
-    #[cfg(not(windows))]
     writer.flush()?;
-
-    // SIGPIPE is not available on Windows.
-    #[cfg(windows)]
-    writer.flush().inspect_err(|err| {
-        if err.kind() == ErrorKind::BrokenPipe {
-            std::process::exit(13);
-        }
-    })?;
     Ok(())
 }
 
@@ -640,7 +636,11 @@ fn print_target_section<
     limit: Option<u64>,
 ) -> UResult<()> {
     let stdout = stdout();
-    let mut stdout = stdout.lock();
+    let stdout = stdout.lock();
+    #[cfg(any(windows, target_os = "wasi"))]
+    let mut stdout = ExitOnClosedPipe(stdout);
+    #[cfg(not(any(windows, target_os = "wasi")))]
+    let mut stdout = stdout;
     if let Some(limit) = limit {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         uucore::pipes::send_n_bytes(file, &mut stdout, limit)?;
