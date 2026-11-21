@@ -5,15 +5,21 @@
 
 // spell-checker:ignore reflink misalign deleters
 
+use std::cell::Cell;
+use std::ffi::c_void;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom};
+use std::os::windows::ffi::OsStrExt;
 use std::os::windows::fs::{FileExt, MetadataExt, OpenOptionsExt};
 use std::path::Path;
 
 use uucore::translate;
 
-use windows_sys::Win32::Foundation::{ERROR_INVALID_FUNCTION, ERROR_NOT_SUPPORTED};
-use windows_sys::Win32::Storage::FileSystem::{FILE_ATTRIBUTE_SPARSE_FILE, FILE_SHARE_READ};
+use windows_sys::Win32::Foundation::{ERROR_INVALID_FUNCTION, ERROR_NOT_SUPPORTED, HANDLE};
+use windows_sys::Win32::Storage::FileSystem::{
+    COPY_FILE_ALLOW_DECRYPTED_DESTINATION, CopyFileExW, FILE_ATTRIBUTE_SPARSE_FILE,
+    FILE_SHARE_READ, PROGRESS_CONTINUE,
+};
 
 use crate::{
     CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode,
@@ -22,6 +28,23 @@ use crate::{
 /// Fallback cluster size used when the destination volume's cluster size cannot
 /// be queried. 4 KiB is the default NTFS cluster size for volumes up to 16 TB.
 const DEFAULT_CLUSTER_SIZE: usize = 4096;
+
+/// Length threshold for keeping a short path in its traditional form.
+///
+/// A legacy Win32 path is limited to `MAX_PATH` (260) UTF-16 code units including
+/// the terminating NUL. Some APIs reserve one unit for a trailing separator, so
+/// std treats 248 (NUL included) as the safe legacy limit; since `wide_path`
+/// checks the length before appending the NUL, the equivalent content limit is
+/// 247. Paths at or above this length need the verbatim `\\?\` prefix to opt in
+/// to extended-length handling.
+const WINDOWS_LEGACY_MAX_FILE_PREFIX: usize = 247;
+
+/// UTF-16 code units for the ASCII characters used to recognize Windows path
+/// prefixes. All are in the ASCII range, so they cast directly to `u16`.
+const BACKSLASH: u16 = b'\\' as u16;
+const COLON: u16 = b':' as u16;
+const QUESTION: u16 = b'?' as u16;
+const DOT: u16 = b'.' as u16;
 
 /// Cluster (allocation unit) size of the volume that holds `dest`. The size is
 /// configurable at format time (512 B up to 2 MiB), so it is read at runtime.
@@ -139,7 +162,11 @@ impl From<std::io::Error> for SparseCopyError {
 /// `ERROR_NOT_SUPPORTED` and [`SparseCopyError::Unsupported`] is returned
 /// without any data having been copied; any other error is propagated as
 /// [`SparseCopyError::Io`].
-fn sparse_copy(src_file: &mut File, dest: &Path) -> Result<(), SparseCopyError> {
+fn sparse_copy(
+    src_file: &mut File,
+    dest: &Path,
+    destination_changed: &Cell<bool>,
+) -> Result<(), SparseCopyError> {
     let dst_file = OpenOptions::new()
         .write(true)
         .create(true)
@@ -148,6 +175,7 @@ fn sparse_copy(src_file: &mut File, dest: &Path) -> Result<(), SparseCopyError> 
         // the destination cannot be corrupted mid-copy; readers are unaffected.
         .share_mode(FILE_SHARE_READ)
         .open(dest)?;
+    destination_changed.set(true);
 
     let size = src_file.metadata()?.len();
 
@@ -184,7 +212,11 @@ fn sparse_copy(src_file: &mut File, dest: &Path) -> Result<(), SparseCopyError> 
 ///
 /// The source is rewound first, so this is safe to call after a sparse-copy
 /// attempt on the same handle.
-fn plain_copy(src_file: &mut File, dest: &Path) -> std::io::Result<()> {
+fn plain_copy(
+    src_file: &mut File,
+    dest: &Path,
+    destination_changed: &Cell<bool>,
+) -> std::io::Result<()> {
     src_file.seek(SeekFrom::Start(0))?;
     let mut dst_file = OpenOptions::new()
         .write(true)
@@ -192,6 +224,7 @@ fn plain_copy(src_file: &mut File, dest: &Path) -> std::io::Result<()> {
         .truncate(true)
         .share_mode(FILE_SHARE_READ)
         .open(dest)?;
+    destination_changed.set(true);
     std::io::copy(src_file, &mut dst_file)?;
     Ok(())
 }
@@ -202,11 +235,15 @@ fn plain_copy(src_file: &mut File, dest: &Path) -> std::io::Result<()> {
 /// Returns the sparse-detection debug value describing what actually happened:
 /// [`SparseDebug::Zeros`] for a sparse copy, [`SparseDebug::Unsupported`] for
 /// the plain-copy fallback.
-fn sparse_copy_or_plain(src_file: &mut File, dest: &Path) -> std::io::Result<SparseDebug> {
-    match sparse_copy(src_file, dest) {
+fn sparse_copy_or_plain(
+    src_file: &mut File,
+    dest: &Path,
+    destination_changed: &Cell<bool>,
+) -> std::io::Result<SparseDebug> {
+    match sparse_copy(src_file, dest, destination_changed) {
         Ok(()) => Ok(SparseDebug::Zeros),
         Err(SparseCopyError::Unsupported) => {
-            plain_copy(src_file, dest)?;
+            plain_copy(src_file, dest, destination_changed)?;
             Ok(SparseDebug::Unsupported)
         }
         Err(SparseCopyError::Io(e)) => Err(e),
@@ -221,6 +258,123 @@ fn is_sparse(file: &File) -> std::io::Result<bool> {
     Ok(file.metadata()?.file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE != 0)
 }
 
+/// Use the kernel copy path and record when its destination has been opened.
+fn copy_file(source: &Path, dest: &Path, destination_changed: &Cell<bool>) -> std::io::Result<()> {
+    fn wide_path(path: &Path) -> std::io::Result<Vec<u16>> {
+        let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+        if wide.contains(&0) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "path contains a null byte",
+            ));
+        }
+        // Keep short paths and already-prefixed paths in their original form, as fs::copy does.
+        if wide.len() < WINDOWS_LEGACY_MAX_FILE_PREFIX
+            || wide.starts_with(&[BACKSLASH, BACKSLASH, QUESTION, BACKSLASH])
+            || wide.starts_with(&[BACKSLASH, QUESTION, QUESTION, BACKSLASH])
+        {
+            wide.push(0);
+            return Ok(wide);
+        }
+        let path = std::path::absolute(path)?;
+        let wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+        let mut result: Vec<u16> = if wide.starts_with(&[BACKSLASH, BACKSLASH, QUESTION, BACKSLASH])
+            || wide.starts_with(&[BACKSLASH, QUESTION, QUESTION, BACKSLASH])
+        {
+            wide
+        } else if wide.starts_with(&[BACKSLASH, BACKSLASH, DOT, BACKSLASH]) {
+            "\\\\?\\"
+                .encode_utf16()
+                .chain(wide.into_iter().skip(4))
+                .collect()
+        } else if wide.starts_with(&[BACKSLASH, BACKSLASH]) {
+            "\\\\?\\UNC\\"
+                .encode_utf16()
+                .chain(wide.into_iter().skip(2))
+                .collect()
+        } else if wide.get(1) == Some(&COLON) && wide.get(2) == Some(&BACKSLASH) {
+            "\\\\?\\".encode_utf16().chain(wide).collect()
+        } else {
+            wide
+        };
+        result.push(0);
+        Ok(result)
+    }
+
+    /// # Safety
+    /// `data` must point to a valid `Cell<bool>` that lives until the copy returns.
+    unsafe extern "system" fn progress(
+        _total_size: i64,
+        _total_transferred: i64,
+        _stream_size: i64,
+        _stream_transferred: i64,
+        _stream_number: u32,
+        _reason: u32,
+        _source: HANDLE,
+        _dest: HANDLE,
+        data: *mut c_void,
+    ) -> u32 {
+        // CopyFileExW calls this synchronously after opening the destination.
+        // The Cell remains alive until CopyFileExW and its callbacks return.
+        if let Some(flag) = unsafe { data.cast::<Cell<bool>>().as_ref() } {
+            flag.set(true);
+        }
+        PROGRESS_CONTINUE
+    }
+
+    // windows-sys models the callback data as `*const c_void`, while the Win32
+    // LPPROGRESS_ROUTINE contract passes an LPVOID (`*mut c_void`). Adapt the
+    // const pointer from the binding to the mutable pointer `progress` expects.
+    //
+    /// # Safety
+    /// `data` must point to the live `Cell<bool>` passed to `CopyFileExW`.
+    unsafe extern "system" fn progress_adapter(
+        total_size: i64,
+        total_transferred: i64,
+        stream_size: i64,
+        stream_transferred: i64,
+        stream_number: u32,
+        reason: u32,
+        source: HANDLE,
+        dest: HANDLE,
+        data: *const c_void,
+    ) -> u32 {
+        unsafe {
+            progress(
+                total_size,
+                total_transferred,
+                stream_size,
+                stream_transferred,
+                stream_number,
+                reason,
+                source,
+                dest,
+                data.cast_mut(),
+            )
+        }
+    }
+
+    let source = wide_path(source)?;
+    let dest = wide_path(dest)?;
+    // Both paths are null terminated; the callback's data is a live Cell. Allow
+    // a decrypted destination, matching std::fs::copy's CopyFileExW flags.
+    let copied = unsafe {
+        CopyFileExW(
+            source.as_ptr(),
+            dest.as_ptr(),
+            Some(progress_adapter),
+            std::ptr::from_ref(destination_changed).cast::<c_void>(),
+            std::ptr::null_mut(),
+            COPY_FILE_ALLOW_DECRYPTED_DESTINATION,
+        )
+    };
+    if copied == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    destination_changed.set(true);
+    Ok(())
+}
+
 /// Copies `source` to `dest`, honoring `--sparse` on Windows.
 ///
 /// Windows has no copy-on-write reflink support, so `--reflink=always` is
@@ -233,6 +387,7 @@ pub(crate) fn copy_on_write(
     reflink_mode: ReflinkMode,
     sparse_mode: SparseMode,
     context: &str,
+    destination_changed: &Cell<bool>,
 ) -> CopyResult<CopyDebug> {
     if reflink_mode == ReflinkMode::Always {
         return Err(translate!("cp-error-reflink-not-supported")
@@ -251,7 +406,8 @@ pub(crate) fn copy_on_write(
         SparseMode::Always => {
             let mut src_file = File::open(source).map_err(context_err)?;
             copy_debug.sparse_detection =
-                sparse_copy_or_plain(&mut src_file, dest).map_err(context_err)?;
+                sparse_copy_or_plain(&mut src_file, dest, destination_changed)
+                    .map_err(context_err)?;
         }
         // `--sparse=auto` (the default) preserves holes only when the source is
         // already sparse, matching GNU. A sparse source is re-copied sparsely;
@@ -265,17 +421,18 @@ pub(crate) fn copy_on_write(
             let mut src_file = File::open(source).map_err(context_err)?;
             if is_sparse(&src_file).map_err(context_err)? {
                 copy_debug.sparse_detection =
-                    sparse_copy_or_plain(&mut src_file, dest).map_err(context_err)?;
+                    sparse_copy_or_plain(&mut src_file, dest, destination_changed)
+                        .map_err(context_err)?;
             } else {
-                // `fs::copy` (`CopyFileExW`) keeps the kernel copy path, ReFS
-                // block cloning and SMB offload on this — the default — copy
+                // `copy_file` (`CopyFileExW`) keeps the kernel copy path, ReFS
+                // block cloning and SMB offload on this - the default - copy
                 // path; see the PR discussion for the TOCTOU trade-off.
-                std::fs::copy(source, dest).map_err(context_err)?;
+                copy_file(source, dest, destination_changed).map_err(context_err)?;
             }
         }
         // `--sparse=never` performs a plain copy that never introduces holes.
         SparseMode::Never => {
-            std::fs::copy(source, dest).map_err(context_err)?;
+            copy_file(source, dest, destination_changed).map_err(context_err)?;
         }
     }
 

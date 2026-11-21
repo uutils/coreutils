@@ -5,7 +5,8 @@
 
 // spell-checker:ignore reflink
 
-use std::fs;
+use std::cell::Cell;
+use std::fs::{File, OpenOptions};
 use std::path::Path;
 use uucore::translate;
 
@@ -20,6 +21,7 @@ pub(crate) fn copy_on_write(
     reflink_mode: ReflinkMode,
     sparse_mode: SparseMode,
     context: &str,
+    destination_changed: &Cell<bool>,
 ) -> CopyResult<CopyDebug> {
     if reflink_mode == ReflinkMode::Always {
         return Err(translate!("cp-error-reflink-not-supported")
@@ -36,7 +38,20 @@ pub(crate) fn copy_on_write(
         reflink: OffloadReflinkDebug::Unsupported,
         sparse_detection: SparseDebug::Unsupported,
     };
-    fs::copy(source, dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+    let context_err = |e| CpError::IoErrContext(e, context.to_owned());
+    let mut source_file = File::open(source).map_err(context_err)?;
+    let mut dest_file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(dest)
+        .map_err(context_err)?;
+    destination_changed.set(true);
+    std::io::copy(&mut source_file, &mut dest_file).map_err(context_err)?;
+    #[cfg(not(target_os = "wasi"))]
+    dest_file
+        .set_permissions(source_file.metadata().map_err(context_err)?.permissions())
+        .map_err(context_err)?;
 
     Ok(copy_debug)
 }
