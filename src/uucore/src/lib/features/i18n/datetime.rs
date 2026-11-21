@@ -294,6 +294,67 @@ fn get_locale_months_inner() -> Option<[Vec<u8>; 12]> {
     Some(months)
 }
 
+/// Name of the Buddhist era as glibc's `th_TH` locale defines it, used for
+/// `%EY`/`%EC` in the Thai locales.
+const THAI_ERA_NAME: &str = "\u{0E1E}.\u{0E28}.";
+
+/// Resolves the locale-specific `E` conversions for `%EY`, `%Ey` and `%EC`;
+/// returns `None` when the caller should fall back to the base conversion.
+///
+/// `real_year` is the actual (Gregorian) year when formatting an
+/// out-of-range date whose `date` is the surrogate jiff's calendar range
+/// substitutes for it; `None` for ordinary in-range dates.
+pub fn resolve_e_conversion(spec: char, date: JiffDate, real_year: Option<i64>) -> Option<String> {
+    match spec {
+        'Y' | 'y' | 'C' => {
+            // glibc applies the E year conversions only where the locale
+            // defines an era. The Thai (Buddhist) locales have one: `%EY` is
+            // the era name and era year, `%EC` the era name and `%Ey` the era
+            // year. The other calendars fall back to the Gregorian year,
+            // century and two-digit year (GNU `fa_IR` renders `%EY` as
+            // `1999`, the base conversion's own year).
+            let (locale, _) = get_time_locale();
+            let iso_date = Date::<Iso>::convert_from(date);
+            let surrogate_year: i64 = iso_date.year().extended_year().into();
+            // Out-of-range dates are formatted through a 400-year-periodic
+            // surrogate, so a calendar year of the real date is the
+            // surrogate's calendar year plus the same year delta.
+            let delta = real_year.map_or(0, |year| year - surrogate_year);
+            let (era, alt_year) = match get_locale_calendar_type(locale) {
+                CalendarType::Buddhist => {
+                    let year: i64 = iso_date.to_calendar(Buddhist).year().extended_year().into();
+                    (Some(THAI_ERA_NAME), year + delta)
+                }
+                CalendarType::Persian | CalendarType::Gregorian => {
+                    (None, real_year.unwrap_or(surrogate_year))
+                }
+                CalendarType::Ethiopian => {
+                    let year: i64 = iso_date
+                        .to_calendar(Ethiopian::new())
+                        .year()
+                        .extended_year()
+                        .into();
+                    (None, year + delta)
+                }
+            };
+            // `%Ey` in an era locale is the era year itself (not a digit
+            // pair), which is also what `%EY` renders without an era; `%EC` is
+            // the era name where one is defined. glibc pads an era year to two
+            // digits (`พ.ศ. 08` for era year 8), while the Gregorian fallback
+            // keeps the year as it is (`%EY` at year 5 is `5`, not `05`).
+            Some(match (spec, era) {
+                ('Y', Some(name)) => format!("{name} {alt_year:02}"),
+                ('Y', None) => alt_year.to_string(),
+                ('y', Some(_)) => format!("{alt_year:02}"),
+                ('y', None) => format!("{:02}", alt_year.rem_euclid(100)),
+                (_, Some(name)) => name.to_string(),
+                (_, None) => (alt_year / 100).to_string(),
+            })
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

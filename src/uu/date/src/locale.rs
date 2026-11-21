@@ -140,6 +140,47 @@ cfg_nl_langinfo! { else
     static LOCALE_AMPM_MARKERS: [&str; 2] = POSIX_AMPM_MARKERS;
 }
 
+#[cfg(feature = "i18n-datetime")]
+cfg_langinfo! {
+    /// The locale's `ERA_D_FMT`, `ERA_T_FMT` and `ERA_D_T_FMT`, read once, in
+    /// the order of the `%Ex`, `%EX` and `%Ec` composites. A locale defines
+    /// them only when it has an era; an empty item stays `None`.
+    static LOCALE_ERA_FORMATS: LazyLock<[Option<&'static str>; 3]> = LazyLock::new(|| {
+        // The `nl_langinfo` items are glibc's `_NL_ITEM (LC_TIME, n)`
+        // encoding; the `libc` crate does not export them for glibc
+        // targets, so they are spelled out here.
+        [0x2002e, 0x20031, 0x20030].map(|item| {
+            langinfo(item)
+                .and_then(|value| String::from_utf8(value).ok())
+                .filter(|value| !value.is_empty())
+                .map(|value| &*Box::leak(value.into_boxed_str()))
+        })
+    });
+
+    /// Returns the locale's era format for `%Ex`, `%EX` or `%Ec`, and `None`
+    /// when the locale does not define one. Only `%EX` is rendered from it
+    /// so far.
+    pub fn get_era_locale_format(specifier: char) -> Option<&'static str> {
+        let index = match specifier {
+            'x' => 0,
+            'X' => 1,
+            'c' => 2,
+            _ => return None,
+        };
+        LOCALE_ERA_FORMATS[index]
+    }
+}
+
+#[cfg(feature = "i18n-datetime")]
+cfg_langinfo! { else
+    /// `date` queries the era items only on linux/glibc (the gate above);
+    /// other platforms — macOS included, where Apple libc also exports them —
+    /// keep the base composite.
+    pub fn get_era_locale_format(_specifier: char) -> Option<&'static str> {
+        None
+    }
+}
+
 /// Returns the locale's format for `%x`, `%X`, `%r` or `%c`, given the specifier
 /// without `%`, and `None` for any other specifier.
 pub fn get_locale_format(specifier: &str) -> Option<&'static str> {
