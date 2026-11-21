@@ -18,6 +18,7 @@ dircolors-error-extra-operand-print-database = opérande supplémentaire { $oper
   les opérandes de fichier ne peuvent pas être combinées avec --print-database (-p)
 dircolors-error-no-shell-environment = aucune variable d'environnement SHELL, et aucune option de type de shell donnée
 dircolors-error-extra-operand = opérande supplémentaire { $operand }
-dircolors-error-expected-file-got-directory = fichier attendu, répertoire obtenu { $path }
+dircolors-error-read = { $path } : erreur de lecture : { $error }
+dircolors-error-read-directory = { $path } : erreur de lecture : est un répertoire
 dircolors-error-invalid-line-missing-token = { $file }:{ $line } : ligne invalide ; jeton manquant
 dircolors-error-unrecognized-keyword = mot-clé non reconnu { $keyword }
