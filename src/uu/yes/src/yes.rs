@@ -30,6 +30,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     std::str::from_utf8(&buffer).map_err(|e| USimpleError::new(1, format!("{e}")))?;
 
     repeat_content_to_capacity(&mut buffer);
+    // Rust reopens a closed stdout as /dev/null before uumain runs, so the
+    // write loop would spin on /dev/null forever instead of failing.
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
+    if uucore::signals::stdout_was_closed() {
+        return Err(USimpleError::new(
+            1,
+            translate!(
+                "yes-error-standard-output",
+                "error" => strip_errno(&std::io::Error::from(rustix::io::Errno::BADF))
+            ),
+        ));
+    }
     match exec(&buffer) {
         Ok(()) => Ok(()),
         // On Windows and WASI, silently handle broken pipe since there's no SIGPIPE

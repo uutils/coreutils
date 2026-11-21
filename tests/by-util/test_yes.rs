@@ -5,7 +5,8 @@
 
 use std::ffi::OsStr;
 
-use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::{new_ucmd, util_name};
 
 const NO_ARGS: &[&str] = &[];
 
@@ -107,6 +108,52 @@ fn test_piped_to_dev_full() {
                 .stderr_contains("No space left on device");
         }
     }
+}
+
+/// A closed stdout is reopened as /dev/null by the runtime, so the write
+/// loop would never see the error. yes must still report it and exit.
+#[test]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
+fn test_closed_stdout_is_reported() {
+    use std::io::Read;
+    use std::os::unix::process::CommandExt;
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+
+    let ts = TestScenario::new(util_name!());
+    let mut command = Command::new(&ts.bin_path);
+    command.arg(util_name!());
+    command.stderr(Stdio::piped());
+    // SAFETY: the closure only closes fd 1 in the child, before exec.
+    unsafe {
+        command.pre_exec(|| {
+            libc::close(1);
+            Ok(())
+        });
+    }
+    let mut child = command.spawn().expect("spawn yes");
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            assert_eq!(status.code(), Some(1));
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "yes did not exit on closed stdout"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .expect("stderr pipe")
+        .read_to_string(&mut stderr)
+        .unwrap();
+    assert_eq!(stderr, "yes: standard output: Bad file descriptor\n");
 }
 
 #[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]

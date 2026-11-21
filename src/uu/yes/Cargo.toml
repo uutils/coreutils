@@ -19,10 +19,13 @@ doctest = false
 clap = { workspace = true }
 fluent = { workspace = true }
 itertools = { workspace = true }
-uucore = { workspace = true, features = ["fs", "pipes"] }
+uucore = { workspace = true, features = ["fs", "pipes", "signals"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 rustix = { workspace = true, features = ["stdio", "pipe"] }
+
+[target.'cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))'.dependencies]
+rustix = { workspace = true }
 
 [lints]
 workspace = true
