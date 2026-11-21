@@ -1114,6 +1114,27 @@ fn test_strings_skip_bytes_within_input() {
         .stdout_only("abcd\n");
 }
 
+// Like -j or -N, -S turns off the old `od FILE OFFSET` form, so `+4` is a file.
+#[test]
+fn test_strings_operand_is_not_an_offset() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("f", "hello\n");
+    at.write("+4", "wxyz\0");
+    scene
+        .ucmd()
+        .args(&["-S", "4", "f", "+4"])
+        .succeeds()
+        .stdout_only("0000006 wxyz\n");
+
+    at.remove("+4");
+    scene
+        .ucmd()
+        .args(&["-S", "4", "f", "+4"])
+        .fails_with_code(1)
+        .stderr_only("od: +4: No such file or directory\n");
+}
+
 // A seekable special file such as /dev/null can be skipped past its (empty)
 // end without error, matching GNU od.
 #[cfg(unix)]
