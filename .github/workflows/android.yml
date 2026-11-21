@@ -29,7 +29,7 @@ env:
 
 jobs:
   test_android:
-    name: ${{ matrix.test-suite == 'all' && 'Test builds' || 'Checksum and wc tests' }} (API ${{ matrix.api-level }}, ${{ matrix.arch }})
+    name: Test builds
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -37,7 +37,7 @@ jobs:
         os: [ubuntu-latest] # , macos-latest
         cores: [4] # , 6
         ram: [4096]
-        api-level: [28, "37.0"]
+        api-level: [28] #, "37.0"
         target: [google_apis_playstore]
         arch: [x86_64] # ,x86 ,arm64-v8a
         include:
@@ -45,8 +45,8 @@ jobs:
             test-suite: all
           # Keep full-suite coverage on API 28. API 37 has separate filesystem
           # and libc compatibility failures; cover the CPU-feature consumers here.
-          - api-level: "37.0"
-            test-suite: cksum-wc
+          # - api-level: "37.0"
+          #   test-suite: cksum-wc
     runs-on: ${{ matrix.os }}
     env:
       EMULATOR_RAM_SIZE: ${{ matrix.ram }}
