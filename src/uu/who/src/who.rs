@@ -5,6 +5,14 @@
 
 // spell-checker:ignore (ToDO) runlevel mesg
 
+#![cfg(any(
+    target_vendor = "apple",
+    target_os = "cygwin",
+    target_os = "freebsd",
+    target_os = "linux",
+    target_os = "netbsd"
+))]
+
 use clap::{Arg, ArgAction, Command};
 use uucore::format_usage;
 use uucore::translate;
