@@ -82,6 +82,7 @@ stat-word-free = Libres
 stat-word-available = Disponibles
 stat-word-inodes = Inodes
 stat-word-device = Périphérique
+stat-word-device-type = Type de périphérique
 stat-word-inode = Inode
 stat-word-links = Liens
 stat-word-io = E/S

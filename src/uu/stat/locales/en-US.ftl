@@ -97,6 +97,7 @@ stat-word-free = Free
 stat-word-available = Available
 stat-word-inodes = Inodes
 stat-word-device = Device
+stat-word-device-type = Device type
 stat-word-inode = Inode
 stat-word-links = Links
 stat-word-io = IO
