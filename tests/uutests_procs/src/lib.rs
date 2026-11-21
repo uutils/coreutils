@@ -118,6 +118,7 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
             "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
         }
         "TailFollowDisabled" => "WASI: tail follow mode disabled",
+        "UnsupportedIoHints" => "WASI sandbox: no O_DIRECT, posix_fadvise or atime control",
         "UnsupportedStdApi" => {
             "WASI: the std or libc API is unsupported (File::try_clone, setlocale LC_* constants)"
         }
