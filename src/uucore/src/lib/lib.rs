@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind
+// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind ohos
 
 //! library ~ (core/bundler file)
 
@@ -116,25 +116,7 @@ pub use crate::features::process;
 pub use crate::features::safe_copy;
 #[cfg(all(feature = "safe-traversal", unix, not(target_os = "redox")))]
 pub use crate::features::safe_traversal;
-#[cfg(all(
-    feature = "signals",
-    any(
-        windows,
-        target_vendor = "apple",
-        target_os = "aix",
-        target_os = "android",
-        target_os = "cygwin",
-        target_os = "freebsd",
-        target_os = "haiku",
-        target_os = "hurd",
-        target_os = "illumos",
-        target_os = "linux",
-        target_os = "netbsd",
-        target_os = "openbsd",
-        target_os = "redox",
-        target_os = "solaris"
-    )
-))]
+#[cfg(has_signals)]
 pub use crate::features::signals;
 #[cfg(all(
     feature = "utmpx",
@@ -463,6 +445,31 @@ pub fn args_os_filtered() -> impl Iterator<Item = OsString> {
 pub fn read_yes() -> bool {
     let mut s = String::new();
     std::io::stdin().read_line(&mut s).is_ok() && matches!(s.chars().next(), Some('y' | 'Y'))
+}
+
+/// Return `io::stdout()`, or, if stdout was closed at startup (Rust then
+/// reopens it as `/dev/null`), a line-buffered writer that fails with EBADF.
+/// Flush it at the end, or the error of a partial last line is lost.
+pub fn stdout_writer() -> Box<dyn std::io::Write> {
+    #[cfg(all(has_signals, unix))]
+    if signals::stdout_was_closed() {
+        /// A writer that fails like a closed file descriptor.
+        struct ClosedStdout;
+
+        impl std::io::Write for ClosedStdout {
+            fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+                Err(Errno::EBADF.into())
+            }
+
+            // With no output, a closed stdout is not an error.
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        return Box::new(std::io::LineWriter::new(ClosedStdout));
+    }
+    Box::new(std::io::stdout())
 }
 
 #[derive(Debug, thiserror::Error)]
