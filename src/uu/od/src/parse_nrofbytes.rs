@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use std::num::IntErrorKind;
+
 use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
 
 pub fn parse_number_of_bytes(s: &str) -> Result<u64, ParseSizeError> {
@@ -65,11 +67,9 @@ pub fn parse_number_of_bytes(s: &str) -> Result<u64, ParseSizeError> {
     }
 
     let digits = &s[start..len];
-    // A number made of valid digits that does not fit u64 is too large,
-    // not invalid: GNU accepts it as a number and reports the overflow.
-    let all_digits = !digits.is_empty() && digits.chars().all(|c| c.is_digit(radix));
+    // A number that does not fit u64 is too large, not invalid.
     let factor = u64::from_str_radix(digits, radix).map_err(|e| {
-        if all_digits {
+        if e.kind() == &IntErrorKind::PosOverflow {
             ParseSizeError::SizeTooBig(s.to_string())
         } else {
             ParseSizeError::ParseFailure(e.to_string())
@@ -126,6 +126,17 @@ fn test_parse_number_of_bytes() {
     );
     assert_eq!(1 << 40, parse_number_of_bytes("0x1T").unwrap());
     assert_eq!(1 << 50, parse_number_of_bytes("0x1P").unwrap());
+
+    // 9223372036854775807 is still accepted.
+    assert_eq!(
+        9_223_372_036_854_775_807,
+        parse_number_of_bytes("9223372036854775807").unwrap()
+    );
+    // An octal number past u64 is too large.
+    assert!(matches!(
+        parse_number_of_bytes("02000000000000000000000"),
+        Err(ParseSizeError::SizeTooBig(_))
+    ));
 }
 
 #[test]

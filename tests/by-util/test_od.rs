@@ -1423,7 +1423,11 @@ fn test_od_invalid_bytes() {
             .fails_with_code(1)
             .stderr_only(format!("od: {flag} argument '{TOO_LARGE}' too large\n"));
     }
-    for value in ["0x10000000000000000", "18446744073709551616"] {
+    for value in [
+        "0x10000000000000000",
+        "18446744073709551616",
+        "02000000000000000000000",
+    ] {
         new_ucmd!()
             .arg(format!("--skip-bytes={value}"))
             .arg("file")
