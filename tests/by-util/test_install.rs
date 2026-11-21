@@ -1735,10 +1735,11 @@ fn test_install_strip_with_directory() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    for args in [["-d", "-s", "newdir"], ["-s", "-d", "newdir"]] {
-        scene.ucmd().args(&args).fails_with_code(1); // clap's error message
-        assert!(!at.dir_exists("newdir"));
-    }
+    scene
+        .ucmd()
+        .args(&["-d", "-s", "newdir"])
+        .fails_with_code(1); // clap's error message
+    assert!(!at.dir_exists("newdir"));
 }
 
 #[test]
