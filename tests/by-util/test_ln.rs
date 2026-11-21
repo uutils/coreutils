@@ -1432,6 +1432,30 @@ fn test_ln_non_utf8_paths() {
 }
 
 #[test]
+fn test_ln_numeric_looking_name_in_directory_errors() {
+    use uucore::display::Quotable;
+    let scene = TestScenario::new(util_name!());
+    for name in ["007", "1e3"] {
+        scene.fixtures.mkdir(name);
+        scene
+            .ucmd()
+            .env("LC_ALL", "C")
+            .args(&[name, "link"])
+            .fails_with_code(1)
+            .stderr_is(format!("ln: {name}: hard link not allowed for directory\n"));
+        scene
+            .ucmd()
+            .env("LC_ALL", "C")
+            .args(&["-sfT", "x", name])
+            .fails_with_code(1)
+            .stderr_is(format!(
+                "ln: {}: cannot overwrite directory\n",
+                name.maybe_quote()
+            ));
+    }
+}
+
+#[test]
 fn test_ln_hard_link_dir() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
