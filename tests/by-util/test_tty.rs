@@ -87,10 +87,18 @@ fn test_stdout_fail() {
             ts.util_name
         ))
         .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
         .unwrap();
     drop(proc.stdout.take());
-    let status = proc.wait().unwrap();
+
+    let output = proc.wait_with_output().unwrap();
+
+    let stderr_output = String::from_utf8_lossy(&output.stderr);
+
+    assert!(stderr_output.contains("Broken pipe"));
+
+    let status = output.status;
     assert_eq!(status.code(), Some(3));
 }
 
