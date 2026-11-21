@@ -2170,3 +2170,19 @@ fn test_repeated_field_is_an_error() {
         .fails_with_code(1)
         .stderr_only("numfmt: multiple field specifications\n");
 }
+
+#[test]
+fn test_short_decimals_keep_their_value() {
+    new_ucmd!()
+        .args(&["0.07", "0.14", "0.28", "1.09", "--", "-0.07"])
+        .succeeds()
+        .stdout_is("0.07\n0.14\n0.28\n1.09\n-0.07\n");
+    new_ucmd!()
+        .args(&["--format=%.2f", "0.07"])
+        .succeeds()
+        .stdout_is("0.07\n");
+    new_ucmd!()
+        .args(&["--round=towards-zero", "1.005"])
+        .succeeds()
+        .stdout_is("1.005\n");
+}
