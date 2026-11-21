@@ -230,25 +230,39 @@ impl Uniq {
                 if self.is_c_locale {
                     // for C or POSIX we count bytes
                     key_start + remainder.len().min(limit)
-                } else if let Ok(valid) = std::str::from_utf8(remainder) {
-                    // for UTF-8 we count characters
-                    let prefix_len = Self::char_prefix_len(valid, limit);
-                    key_start + prefix_len
                 } else {
-                    // for invalid UTF-8 we count bytes
-                    key_start + remainder.len().min(limit)
+                    // for UTF-8 we count characters; an invalid byte counts as one
+                    key_start + Self::char_prefix_len(remainder, limit)
                 }
             }
         }
     }
 
-    fn char_prefix_len(text: &str, limit: usize) -> usize {
-        for (count, (idx, _)) in text.char_indices().enumerate() {
-            if count == limit {
-                return idx;
+    /// Length in bytes of the first `limit` characters of `bytes`. Bytes that
+    /// are not valid UTF-8 count as one character each, so they cannot change
+    /// how the characters before them are counted.
+    fn char_prefix_len(bytes: &[u8], limit: usize) -> usize {
+        // A character is at most 4 bytes, so the first `limit` characters
+        // always fit in the first `4 * limit` bytes; don't walk the rest.
+        let bytes = &bytes[..bytes.len().min(limit.saturating_mul(4))];
+        let mut remaining = limit;
+        let mut pos = 0;
+        for chunk in bytes.utf8_chunks() {
+            for (idx, _) in chunk.valid().char_indices() {
+                if remaining == 0 {
+                    return pos + idx;
+                }
+                remaining -= 1;
             }
+            pos += chunk.valid().len();
+            let invalid = chunk.invalid().len();
+            if remaining <= invalid {
+                return pos + remaining;
+            }
+            remaining -= invalid;
+            pos += invalid;
         }
-        text.len()
+        pos
     }
 
     fn build_meta(&self, line: &[u8], meta: &mut LineMeta) {
