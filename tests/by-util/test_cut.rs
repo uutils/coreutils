@@ -5,6 +5,7 @@
 
 // spell-checker:ignore defg naïve nave närd nøys ntøys nfjärd undelimited xbfw nbbbb
 
+use rstest::rstest;
 use uutests::{at_and_ucmd, new_ucmd};
 
 static INPUT: &str = "lists.txt";
@@ -391,6 +392,40 @@ fn test_equal_delimiter_file_operand_after_double_dash() {
     ucmd.args(&["-d:", "-f2", "--", "-d="])
         .succeeds()
         .stdout_only("b\n");
+}
+
+#[rstest]
+#[case::bytes(&["-b=1"], "invalid byte/character position '=1'")]
+#[case::characters(&["-c=1"], "invalid byte/character position '=1'")]
+#[case::fields(&["-f=1"], "invalid field value '=1'")]
+#[case::fields_merged(&["-F=1"], "invalid field value '=1'")]
+#[case::delimiter(&["-d=x", "-f1"], "the delimiter must be a single character")]
+#[case::clustered(&["-sd=x", "-f1"], "the delimiter must be a single character")]
+fn test_equal_kept_in_short_option_value(#[case] args: &[&str], #[case] err: &str) {
+    new_ucmd!()
+        .args(args)
+        .fails_with_code(1)
+        .stderr_contains(err);
+}
+
+#[test]
+fn test_equal_kept_in_short_output_delimiter() {
+    new_ucmd!()
+        .args(&["-d,", "-f1,2", "-O=x"])
+        .pipe_in("a,b\n")
+        .succeeds()
+        .stdout_only("a=xb\n");
+}
+
+#[test]
+fn test_equal_option_like_value_of_output_delimiter() {
+    for flag in ["-O", "--output-delimiter"] {
+        new_ucmd!()
+            .args(&["-b1,2", flag, "-b=1"])
+            .pipe_in("ab\n")
+            .succeeds()
+            .stdout_only("a-b=1b\n");
+    }
 }
 
 #[test]
