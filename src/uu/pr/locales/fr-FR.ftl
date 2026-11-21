@@ -106,6 +106,7 @@ pr-error-pages-argument-too-large = argument {$option} {$spec} trop grand
 pr-error-invalid-page-length = '-l PAGE_LENGTH' nombre de lignes invalide
 pr-error-invalid-column-width = '-w PAGE_WIDTH' nombre de caractères invalide
 pr-error-invalid-page-width = '-W PAGE_WIDTH' nombre de caractères invalide
+pr-error-page-width-too-narrow = largeur de page trop étroite
 pr-error-invalid-first-line-number = '-N NUMBER' numéro de ligne de départ invalide
 pr-error-invalid-number-of-columns = nombre de colonnes invalide
 pr-error-invalid-line-offset = '-o MARGIN' décalage de ligne invalide

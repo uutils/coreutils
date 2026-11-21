@@ -107,6 +107,7 @@ pr-error-pages-argument-too-large = {$option} argument {$spec} too large
 pr-error-invalid-page-length = '-l PAGE_LENGTH' invalid number of lines
 pr-error-invalid-column-width = '-w PAGE_WIDTH' invalid number of characters
 pr-error-invalid-page-width = '-W PAGE_WIDTH' invalid number of characters
+pr-error-page-width-too-narrow = page width too narrow
 pr-error-invalid-first-line-number = '-N NUMBER' invalid starting line number
 pr-error-invalid-number-of-columns = invalid number of columns
 pr-error-invalid-line-offset = '-o MARGIN' invalid line offset

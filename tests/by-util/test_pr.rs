@@ -877,16 +877,20 @@ fn test_page_header_width() {
 
 #[test]
 fn test_separator_options_default_values() {
-    // -s and -S without arguments should use default values (TAB and space)
+    // -s without a value separates with a TAB
     // TODO: verify output matches GNU pr behavior
     new_ucmd!()
         .args(&["-t", "-2", "-s"])
         .pipe_in("a\nb\n")
         .succeeds();
-    new_ucmd!()
-        .args(&["-t", "-2", "-S"])
-        .pipe_in("a\nb\n")
-        .succeeds();
+    // -S without a value separates like a space, unless -J joins the columns
+    for option in ["-S", "--sep-string=", "-S "] {
+        new_ucmd!()
+            .args(&["-t", "-2", option])
+            .pipe_in("a\nb\n")
+            .succeeds()
+            .stdout_only(format!("a{}b\n", " ".repeat(35)));
+    }
 }
 
 #[test]
@@ -1592,6 +1596,10 @@ fn test_numeric_option_diagnostics() {
             "pr: '-W PAGE_WIDTH' invalid number of characters: 'x'\n",
         ),
         (
+            &["-J", "-W", "x"],
+            "pr: '-W PAGE_WIDTH' invalid number of characters: 'x'\n",
+        ),
+        (
             &["-N", "x"],
             "pr: '-N NUMBER' invalid starting line number: 'x'\n",
         ),
@@ -1605,6 +1613,18 @@ fn test_numeric_option_diagnostics() {
         (
             &["--pages=99999999999999999999"],
             "pr: --pages argument '99999999999999999999' too large\n",
+        ),
+        (&["-80"], "pr: page width too narrow\n"),
+        (&["-37"], "pr: page width too narrow\n"),
+        (&["-2", "-w", "2"], "pr: page width too narrow\n"),
+        (&["-2", "-W", "2", "-J"], "pr: page width too narrow\n"),
+        (&["-3", "-w", "6", "-Sxx"], "pr: page width too narrow\n"),
+        (&["-3", "-w", "2", "-S"], "pr: page width too narrow\n"),
+        (&["-3", "-w", "4", "-S "], "pr: page width too narrow\n"),
+        (&["-2", "-w", "2", "-s\t"], "pr: page width too narrow\n"),
+        (
+            &["--columns=2", "-w", "2", "-a"],
+            "pr: page width too narrow\n",
         ),
         (&["+x"], "pr: invalid + argument 'x'\n"),
         (&["+1:"], "pr: invalid + argument '1:'\n"),
@@ -1624,6 +1644,40 @@ fn test_numeric_option_diagnostics() {
             .arg("test_one_page.log")
             .fails()
             .stderr_only(stderr);
+    }
+}
+
+#[test]
+fn test_join_lines_sep_string_without_value() {
+    for option in ["-S", "--sep-string="] {
+        new_ucmd!()
+            .args(&["-3", "-J", "-t", option])
+            .pipe_in("1\n2\n3\n4\n5\n6\n")
+            .succeeds()
+            .stdout_only("135\n246\n");
+    }
+}
+
+#[test]
+fn test_narrowest_page_width_for_columns() {
+    // Each column needs one character, plus the separators between them.
+    for args in [
+        &["-36"][..],
+        &["-2", "-w", "3"],
+        &["-3", "-w", "7", "-Sxx"],
+        &["-3", "-w", "3", "-S"],
+        &["-3", "-w", "3", "--sep-string="],
+        &["-3", "-w", "5", "-S "],
+        &["-2", "-w", "3", "-s\t"],
+        &["-2", "-w", "2", "-s"],
+        &["-1", "-w", "1"],
+        &["-m", "-w", "1"],
+    ] {
+        new_ucmd!()
+            .args(args)
+            .args(&["-t", "test_one_page.log"])
+            .succeeds()
+            .no_stderr();
     }
 }
 
