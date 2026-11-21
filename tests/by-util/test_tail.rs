@@ -2280,8 +2280,6 @@ fn test_follow_descriptor_vs_rename2() {
             .is_alive();
 
         at.rename(file_a, file_c);
-        // Descriptor follow keeps watching the same inode; brief settle before append.
-        p.delay(50);
 
         at.append(file_c, "X\n");
         p.wait_for_stdout_contains(
