@@ -152,6 +152,7 @@ fn test_id_real() {
 }
 
 #[test]
+#[cfg_attr(target_os = "freebsd", ignore = "should dedup same id's <https://github.com/uutils/coreutils/pull/15389>")]
 fn test_id_groups_ordering() {
     // `groups=` is headed by the effective gid and `-G` by the real gid, so the
     // two forms list the same set in a different order. Only observable when the
