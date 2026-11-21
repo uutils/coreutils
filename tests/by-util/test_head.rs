@@ -1311,6 +1311,26 @@ fn test_invalid_count_keeps_its_leading_zeros() {
 }
 
 #[test]
+fn test_count_with_trailing_blank_is_rejected() {
+    // Blanks are skipped before the count, not after it.
+    new_ucmd!()
+        .args(&["-c", " 2"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_is("ab");
+    for (count, reported) in [("2 ", "2 "), ("2K ", "2K "), ("-2 ", "2 ")] {
+        new_ucmd!()
+            .args(&["-c", count, "/dev/null"])
+            .fails_with_code(1)
+            .stderr_is(format!("head: invalid number of bytes: '{reported}'\n"));
+        new_ucmd!()
+            .args(&["-n", count, "/dev/null"])
+            .fails_with_code(1)
+            .stderr_is(format!("head: invalid number of lines: '{reported}'\n"));
+    }
+}
+
+#[test]
 fn test_lowercase_multiplier_suffixes_rejected() {
     // GNU accepts a lowercase suffix only for "k" and "m"; every other
     // multiplier must be uppercase. "b" is bare-only (no B/iB/D form).
