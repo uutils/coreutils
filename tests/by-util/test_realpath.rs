@@ -16,6 +16,11 @@ use std::path::{MAIN_SEPARATOR, Path};
 
 static GIBBERISH: &str = "supercalifragilisticexpialidocious";
 
+#[cfg(not(windows))]
+static NOT_A_DIRECTORY: &str = "Not a directory";
+#[cfg(windows)]
+static NOT_A_DIRECTORY: &str = "The directory name is invalid.";
+
 #[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_realpath_current_directory() {
@@ -151,6 +156,7 @@ fn test_realpath_physical_mode() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: absolute symlink targets")]
 fn test_realpath_logical_mode() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -669,4 +675,155 @@ fn test_realpath_canonicalize_vs_existing() {
             ucmd.fails();
         }
     }
+}
+
+#[test]
+fn test_realpath_followed_by_parent_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("regular_file");
+
+    scene
+        .ucmd()
+        .arg("regular_file/..")
+        .fails()
+        .code_is(1)
+        .stderr_contains(NOT_A_DIRECTORY)
+        .no_stdout();
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+fn test_realpath_directory_followed_by_parent_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("directory");
+
+    scene
+        .ucmd()
+        .arg("directory/..")
+        .succeeds()
+        .stdout_is(format!("{}\n", at.root_dir_resolved()));
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+fn test_realpath_directory_followed_by_parent_dir_missing_mode() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene
+        .ucmd()
+        .arg("-m")
+        .arg("missing/..")
+        .succeeds()
+        .stdout_is(format!("{}\n", at.root_dir_resolved()));
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+fn test_realpath_strip_followed_by_parent_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("directory");
+    at.touch("regular_file");
+
+    // With `-s` (no symlink resolution), GNU still validates that the
+    // component preceding `..` is an existing directory.
+    scene
+        .ucmd()
+        .arg("-s")
+        .arg("directory/..")
+        .succeeds()
+        .stdout_is(format!("{}\n", at.root_dir_resolved()));
+
+    scene
+        .ucmd()
+        .arg("-s")
+        .arg("regular_file/..")
+        .fails()
+        .code_is(1)
+        .stderr_contains(NOT_A_DIRECTORY)
+        .no_stdout();
+
+    scene
+        .ucmd()
+        .arg("-s")
+        .arg("missing/..")
+        .fails()
+        .code_is(1)
+        .stderr_contains("No such file or directory")
+        .no_stdout();
+
+    // `-m` relaxes the directory/existence check, so these succeed even
+    // combined with `-s`.
+    scene
+        .ucmd()
+        .args(&["-s", "-m"])
+        .arg("regular_file/..")
+        .succeeds()
+        .stdout_is(format!("{}\n", at.root_dir_resolved()));
+
+    scene
+        .ucmd()
+        .args(&["-s", "-m"])
+        .arg("missing/..")
+        .succeeds()
+        .stdout_is(format!("{}\n", at.root_dir_resolved()));
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+fn test_realpath_missing_mode_regular_file_followed_by_parent_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("regular_file");
+
+    // `-m` permits missing and non-directory components, so a regular file
+    // followed by `..` must succeed (matching GNU).
+    scene
+        .ucmd()
+        .arg("-m")
+        .arg("regular_file/..")
+        .succeeds()
+        .stdout_is(format!("{}\n", at.root_dir_resolved()));
+}
+
+#[test]
+
+fn test_realpath_logical_followed_by_parent_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("regular_file");
+
+    scene
+        .ucmd()
+        .arg("-L")
+        .arg("regular_file/..")
+        .fails()
+        .code_is(1)
+        .stderr_contains(NOT_A_DIRECTORY)
+        .no_stdout();
+}
+
+#[test]
+fn test_realpath_existing_followed_by_parent_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("regular_file");
+
+    scene
+        .ucmd()
+        .arg("-e")
+        .arg("regular_file/..")
+        .fails()
+        .code_is(1)
+        .stderr_contains(NOT_A_DIRECTORY)
+        .no_stdout();
 }
