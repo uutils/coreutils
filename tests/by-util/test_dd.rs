@@ -1270,14 +1270,11 @@ fn test_bytes_oseek_bytes_oflag() {
 #[test]
 #[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_bytes_oseek_bytes_trunc_oflag() {
-    // The test harness hands stdout over as a regular file. Where dd detects
-    // that (Linux, OpenBSD), it seeks in the file and, like GNU, writes
-    // nothing. Elsewhere the seek on stdout is emulated by writing zeros.
-    let expected: &[u8] = if cfg!(any(target_os = "linux", target_os = "openbsd")) {
-        b""
-    } else {
-        &[0; 8]
-    };
+    // The test harness hands stdout over as a regular file. On Unix, dd
+    // detects that via lseek(1, 0, SEEK_CUR) and seeks in the file without
+    // writing zeros, matching GNU behaviour. On Windows the seek is emulated
+    // by writing zeros.
+    let expected: &[u8] = if cfg!(unix) { b"" } else { &[0; 8] };
     new_ucmd!()
         .args(&["oseek=8", "oflag=seek_bytes", "bs=2", "count=0"])
         .pipe_in("abcdefghijklm")
@@ -2855,4 +2852,37 @@ fn test_ascii_ebcdic_without_cbs_still_convert() {
             .succeeds()
             .stdout_only_bytes(expected);
     }
+}
+
+/// `dd seek=N count=0` via a write-only stdout fd must not corrupt the file.
+#[test]
+#[cfg(unix)]
+fn test_seek_on_write_only_stdout_does_not_corrupt() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let content = b"KEEPtail";
+    at.write_bytes("out", content);
+
+    // Open a write-capable fd before revoking read permission on the path.
+    let stdout = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().write(true),
+        at.plus("out").as_path(),
+    )
+    .unwrap();
+
+    // Revoke read permission.  File::open on the path now fails with EACCES,
+    // but dd must still seek via the inherited descriptor without zeroing bytes.
+    std::fs::set_permissions(at.plus("out"), std::fs::Permissions::from_mode(0o200)).unwrap();
+
+    ts.ucmd()
+        .args(&["bs=1", "seek=4", "count=0", "conv=notrunc", "status=none"])
+        .set_stdout(Stdio::from(stdout))
+        .succeeds();
+
+    // Restore read permission so the fixture can be read back.
+    std::fs::set_permissions(at.plus("out"), std::fs::Permissions::from_mode(0o644)).unwrap();
+
+    assert_eq!(at.read_bytes("out"), content);
 }
