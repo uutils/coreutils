@@ -247,6 +247,12 @@ const SEARCH_ONLY: Option<OFlag> = Some(OFlag::O_SEARCH);
 #[cfg(not(any(has_o_path, has_o_search)))]
 const SEARCH_ONLY: Option<OFlag> = None;
 
+/// Flag for opening an anchor directory: search-only where the platform has
+/// one, plain `O_RDONLY` otherwise.
+fn anchor_flag() -> OFlag {
+    SEARCH_ONLY.unwrap_or(OFlag::O_RDONLY)
+}
+
 impl DirFd {
     /// Open a directory and return a file descriptor
     ///
@@ -326,6 +332,21 @@ impl DirFd {
         Ok(Self { fd })
     }
 
+    /// Open `path` as an anchor directory
+    pub fn open_anchor_with(path: &Path, symlink_behavior: SymlinkBehavior) -> io::Result<Self> {
+        let mut flags = anchor_flag() | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC | LARGEFILE;
+        if !symlink_behavior.should_follow() {
+            flags |= OFlag::O_NOFOLLOW;
+        }
+        let fd = nix::fcntl::open(path, flags, Mode::empty()).map_err(|e| {
+            SafeTraversalError::OpenFailed {
+                path: path.into(),
+                source: io::Error::from_raw_os_error(e as i32),
+            }
+        })?;
+        Ok(Self { fd })
+    }
+
     /// Get raw stat data for a file relative to this directory
     pub fn stat_at(&self, name: &OsStr, symlink_behavior: SymlinkBehavior) -> io::Result<FileStat> {
         let name_cstr =
@@ -339,6 +360,26 @@ impl DirFd {
         })?;
 
         Ok(stat)
+    }
+
+    pub fn open_subdir_anchor(
+        &self,
+        name: &OsStr,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<Self> {
+        let name_cstr =
+            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        let mut flags = anchor_flag() | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC | LARGEFILE;
+        if !symlink_behavior.should_follow() {
+            flags |= OFlag::O_NOFOLLOW;
+        }
+        let fd = openat(&self.fd, name_cstr.as_c_str(), flags, Mode::empty()).map_err(|e| {
+            SafeTraversalError::OpenFailed {
+                path: name.into(),
+                source: io::Error::from_raw_os_error(e as i32),
+            }
+        })?;
+        Ok(Self { fd })
     }
 
     /// Get metadata for a file relative to this directory
