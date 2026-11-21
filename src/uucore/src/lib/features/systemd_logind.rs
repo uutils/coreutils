@@ -14,6 +14,7 @@
 
 use core::ffi::CStr;
 use std::mem::MaybeUninit;
+use std::os::unix::fs::MetadataExt;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{UResult, USimpleError};
@@ -28,6 +29,8 @@ mod ffi {
         pub fn sd_session_get_uid(session: *const c_char, uid: *mut c_uint) -> c_int;
         pub fn sd_session_get_start_time(session: *const c_char, usec: *mut u64) -> c_int;
         pub fn sd_session_get_tty(session: *const c_char, tty: *mut *mut c_char) -> c_int;
+        pub fn sd_session_get_type(session: *const c_char, type_: *mut *mut c_char) -> c_int;
+        pub fn sd_session_get_service(session: *const c_char, service: *mut *mut c_char) -> c_int;
         pub fn sd_session_get_remote_host(
             session: *const c_char,
             remote_host: *mut *mut c_char,
@@ -35,6 +38,42 @@ mod ffi {
         pub fn sd_session_get_display(session: *const c_char, display: *mut *mut c_char) -> c_int;
         pub fn sd_session_get_seat(session: *const c_char, seat: *mut *mut c_char) -> c_int;
 
+    }
+}
+
+/// TTY sessions open a pty within a small interval after login. When no TTY is
+/// recorded, find the `/dev/pts` entry owned by the session UID.
+fn guess_pty_name(uid: u32, session_start: SystemTime) -> Option<String> {
+    // Limit the match to the first five seconds after session start.
+    const PTY_LOOKUP_WINDOW_SECS: i64 = 5;
+
+    let since_epoch = session_start.duration_since(UNIX_EPOCH).ok()?;
+    let start = (
+        i64::try_from(since_epoch.as_secs()).ok()?,
+        i64::from(since_epoch.subsec_nanos()),
+    );
+    let latest = (start.0.checked_add(PTY_LOOKUP_WINDOW_SECS)?, start.1);
+
+    let (_, name) = std::fs::read_dir("/dev/pts")
+        .ok()?
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name();
+            let metadata = entry.metadata().ok()?;
+            let changed = (metadata.ctime(), metadata.ctime_nsec());
+            (metadata.uid() == uid && (start..=latest).contains(&changed))
+                .then_some((changed, name))
+        })
+        .min_by_key(|(changed, _)| *changed)?;
+
+    Some(format!("pts/{}", name.to_string_lossy()))
+}
+
+fn combine_service_and_pty(service: &str, pty: Option<&str>) -> String {
+    match pty {
+        Some(pty) if !service.is_empty() => format!("{service} {pty}"),
+        Some(pty) => pty.to_owned(),
+        None => service.to_owned(),
     }
 }
 
@@ -208,7 +247,6 @@ impl SystemdLoginRecord {
 }
 
 /// Read login records from systemd-logind using safe wrapper functions
-/// This matches the approach used by GNU coreutils `read_utmp_from_systemd()`
 pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
     let mut records = Vec::new();
 
@@ -282,8 +320,25 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
             UNIX_EPOCH + std::time::Duration::from_micros(usec)
         });
 
-        // Get TTY using safe wrapper
+        // SSH can have Type=tty without a TTY property.
         let mut tty = login::get_session_string(&session_id, ffi::sd_session_get_tty);
+        let tty_is_device = !tty.is_empty();
+
+        if tty.is_empty() {
+            let session_type = login::get_session_string(&session_id, ffi::sd_session_get_type);
+            let service = login::get_session_string(&session_id, ffi::sd_session_get_service);
+
+            match session_type.as_str() {
+                "tty" => {
+                    let pty = guess_pty_name(uid, start_time);
+                    tty = combine_service_and_pty(&service, pty.as_deref());
+                }
+                "web" => {
+                    tty = service;
+                }
+                _ => {}
+            }
+        }
 
         // Get seat using safe wrapper
         let mut seat = login::get_session_string(&session_id, ffi::sd_session_get_seat);
@@ -315,10 +370,14 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
             continue;
         }
 
-        // A single session can be associated with both a TTY and a seat.
-        // GNU `who` and `pinky` create separate records for each.
-        // We replicate that behavior here.
-        // Order: seat first, then TTY to match expected output
+        // A session can have both a TTY and a seat; create one record for each.
+        // Keep the seat first, matching GNU `who` and `pinky`.
+
+        let tty_device = if tty_is_device {
+            tty.clone()
+        } else {
+            String::new()
+        };
 
         // Helper closure to create a record
         let create_record = |seat_or_tty: String,
@@ -352,24 +411,14 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
                 host.clone(),
             ));
 
-            let tty_formatted = if tty.starts_with("tty") {
-                format!("*{tty}")
-            } else {
-                tty.clone()
-            };
-            records.push(create_record(tty_formatted, tty, user, session_id, host)); // Move for second (and last) record
+            records.push(create_record(tty, tty_device, user, session_id, host));
         } else if !seat.is_empty() {
             // Only seat
             let seat_formatted = format!("?{seat}");
             records.push(create_record(seat_formatted, seat, user, session_id, host));
         } else if !tty.is_empty() {
             // Only tty
-            let tty_formatted = if tty.starts_with("tty") {
-                format!("*{tty}")
-            } else {
-                tty.clone()
-            };
-            records.push(create_record(tty_formatted, tty, user, session_id, host));
+            records.push(create_record(tty, tty_device, user, session_id, host));
         } else if !display.is_empty() {
             // Only display
             // No raw device for display sessions
@@ -633,5 +682,35 @@ mod tests {
         assert_eq!(compat.user(), "testuser");
         assert_eq!(compat.tty_device().as_str(), "seat0");
         assert_eq!(compat.host(), "localhost");
+    }
+
+    #[test]
+    fn test_combine_service_and_pty() {
+        assert_eq!(combine_service_and_pty("sshd", Some("pts/1")), "sshd pts/1");
+        assert_eq!(combine_service_and_pty("sshd", None), "sshd");
+        assert_eq!(combine_service_and_pty("", Some("pts/1")), "pts/1");
+        assert_eq!(combine_service_and_pty("", None), "");
+    }
+
+    #[test]
+    fn test_user_process_filter() {
+        let mut record = SystemdLoginRecord {
+            session_id: "session1".to_string(),
+            user: "user1".to_string(),
+            seat_or_tty: "pts/1".to_string(),
+            raw_device: "pts/1".to_string(),
+            host: String::new(),
+            login_time: UNIX_EPOCH,
+            pid: 0,
+            session_leader_pid: 0,
+            record_type: SystemdRecordType::UserProcess,
+        };
+
+        assert!(record.is_user_process());
+        record.record_type = SystemdRecordType::LoginProcess;
+        assert!(!record.is_user_process());
+        record.record_type = SystemdRecordType::UserProcess;
+        record.user.clear();
+        assert!(!record.is_user_process());
     }
 }
