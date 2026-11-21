@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore testf, ntestf
+// spell-checker:ignore testf, ntestf, Qychcc
 
 use uutests::util::TestScenario;
 use uutests::{new_ucmd, util_name};
@@ -615,6 +615,20 @@ fn test_check_empty_file_name_does_not_set_format() {
             .stdout_is("a: OK\n")
             .stderr_is("md5sum: WARNING: 1 line is improperly formatted\n");
     }
+}
+
+#[test]
+fn test_check_base64_digest_is_improperly_formatted() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("a", "a\n");
+
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .pipe_in("YLcl8QychccNl4gN/oGRsw==  a\n")
+        .fails()
+        .no_stdout()
+        .stderr_is("md5sum: 'standard input': no properly formatted checksum lines found\n");
 }
 
 #[test]
