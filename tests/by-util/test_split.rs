@@ -2566,6 +2566,50 @@ fn test_number_with_plus_prefix(
     assert_eq!(files, expected_files, "-n {number}");
 }
 
+#[test]
+fn test_unbuffered() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-u", "-n", "r/2"])
+        .pipe_in("1\n2\n3\n4\n5\n")
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("xaa"), "1\n3\n5\n");
+    assert_eq!(at.read("xab"), "2\n4\n");
+
+    new_ucmd!()
+        .args(&["--unbuffered", "-t", "\\0", "-n", "r/2/3"])
+        .pipe_in("1\x002\x003\x004\x005\x00")
+        .succeeds()
+        .stdout_is("2\x005\x00");
+
+    // The other modes accept it too, where it changes nothing.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-u", "-l", "2"])
+        .pipe_in("1\n2\n3\n")
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("xaa"), "1\n2\n");
+    assert_eq!(at.read("xab"), "3\n");
+}
+
+#[test]
+fn test_unbuffered_record_longer_than_buffer() {
+    let input = "abcde\nf\nghijk\nl\n";
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-u", "---io-blksize=2", "-n", "r/2"])
+        .pipe_in(input)
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("xaa"), "abcde\nghijk\n");
+    assert_eq!(at.read("xab"), "f\nl\n");
+
+    new_ucmd!()
+        .args(&["-u", "---io-blksize=2", "-n", "r/1/2"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("abcde\nghijk\n");
+}
+
 #[cfg(unix)]
 #[test]
 #[ignore = "a --filter that exits early must not abort the other -n chunks"]

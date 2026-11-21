@@ -50,6 +50,7 @@ split-help-number = générer CHUNKS fichiers de sortie ; voir l'explication ci-
 split-help-additional-suffix = SUFFIXE supplémentaire à ajouter aux noms de fichiers de sortie
 split-help-filter = écrire vers la COMMANDE shell ; le nom de fichier est $FILE (Actuellement non implémenté pour Windows)
 split-help-elide-empty-files = ne pas générer de fichiers de sortie vides avec '-n'
+split-help-unbuffered = copier immédiatement l'entrée vers la sortie avec '-n r/...'
 split-help-numeric-suffixes-short = utiliser des suffixes numériques commençant à 0, pas alphabétiques
 split-help-numeric-suffixes = identique à -d, mais permet de définir la valeur de départ
 split-help-hex-suffixes-short = utiliser des suffixes hexadécimaux commençant à 0, pas alphabétiques
