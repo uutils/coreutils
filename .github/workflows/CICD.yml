@@ -305,6 +305,12 @@ jobs:
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
         RUST_BACKTRACE: "1"
+    - name: Test utmpx with systemd-logind
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libsystemd-dev
+        cargo test -p uucore --lib --locked --features systemd_logind
     - name: Upload test results to Codecov
       if: ${{ !cancelled() }}
       uses: codecov/codecov-action@v7
