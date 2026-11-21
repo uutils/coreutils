@@ -565,7 +565,7 @@ jobs:
             # The account also has empty gecos fields.
             # To work around these issues for pinky (and who) tests, we create a fake utmp file with a
             # system boot entry and a login entry for the GH runner account.
-            sudo cp .github/utmp.bin /var/run/utmp # see .github/utmp.txt
+            sudo cp tests/fixtures/users/utmp_linux.bin /var/run/utmp
             # ... and add a full name to each account with a gecos field but no full name.
             sudo sed -i 's/:,/:runner name,/' /etc/passwd
             # We also create a couple optional files pinky looks for
@@ -805,7 +805,7 @@ jobs:
             # The account also has empty gecos fields.
             # To work around these issues for pinky (and who) tests, we create a fake utmp file with a
             # system boot entry and a login entry for the GH runner account.
-            sudo cp .github/utmp.bin /var/run/utmp # see .github/utmp.txt
+            sudo cp tests/fixtures/users/utmp_linux.bin /var/run/utmp
             # ... and add a full name to each account with a gecos field but no full name.
             sudo sed -i 's/:,/:runner name,/' /etc/passwd
             # We also create a couple optional files pinky looks for
