@@ -37,7 +37,9 @@ jobs:
       with:
         key: "${{ matrix.job.target }}"
     - name: Install wasmtime
-      uses: taiki-e/install-action@wasmtime
+      uses: taiki-e/install-action@v2
+      with:
+        tool: wasmtime
     - name: Run unit tests
       env:
         CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime
