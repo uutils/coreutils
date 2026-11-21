@@ -54,12 +54,7 @@ pub fn locale_encoding() -> Encoding {
             let enc = enc.split('@').next().unwrap_or(enc);
             encoding_from_name(&enc.to_ascii_lowercase())
         } else {
-            // Bare locale defaults from glibc localedata/SUPPORTED
-            match s.split('@').next().unwrap_or(s) {
-                "zh_CN" | "zh_SG" => Encoding::Gb18030,
-                "zh_TW" | "zh_HK" => Encoding::Big5,
-                _ => Encoding::Utf8,
-            }
+            bare_locale_encoding(s)
         }
     })
 }
@@ -116,6 +111,62 @@ impl Encoding {
 /// Byte length of the first character in `bytes` under the current locale encoding.
 pub fn mb_char_len(bytes: &[u8]) -> usize {
     locale_encoding().char_len(bytes)
+}
+
+#[cfg(has_locale_codeset)]
+fn bare_locale_encoding(s: &str) -> Encoding {
+    #[cfg(not(needs_nl_langinfo_l_binding))]
+    use nix::libc::nl_langinfo_l;
+    use nix::libc::{CODESET, LC_CTYPE_MASK, freelocale, newlocale};
+    #[cfg(needs_nl_langinfo_l_binding)]
+    use nix::libc::{locale_t, nl_item};
+    use std::ffi::{CStr, CString};
+
+    // These systems provide the function, but libc 0.2.191 omits its binding.
+    #[cfg(needs_nl_langinfo_l_binding)]
+    unsafe extern "C" {
+        fn nl_langinfo_l(item: nl_item, locale: locale_t) -> *mut std::ffi::c_char;
+    }
+
+    let Ok(name) = CString::new(s) else {
+        return Encoding::SingleByte;
+    };
+
+    // SAFETY: name is NUL-terminated. A null base creates a private object.
+    let locale = unsafe { newlocale(LC_CTYPE_MASK, name.as_ptr(), std::ptr::null_mut()) };
+    if locale.is_null() {
+        return Encoding::SingleByte;
+    }
+
+    // SAFETY: locale is valid and CODESET is a supported query.
+    let codeset = unsafe { nl_langinfo_l(CODESET, locale) };
+
+    let encoding = if codeset.is_null() {
+        Encoding::SingleByte
+    } else {
+        // SAFETY: codeset is a NUL-terminated string belonging to the live
+        // locale object. Convert it before freeing that object.
+        unsafe { CStr::from_ptr(codeset) }
+            .to_str()
+            .map_or(Encoding::SingleByte, |name| {
+                encoding_from_name(&name.to_ascii_lowercase())
+            })
+    };
+
+    // SAFETY: locale was created successfully and is no longer used.
+    unsafe { freelocale(locale) };
+
+    encoding
+}
+
+#[cfg(not(has_locale_codeset))]
+fn bare_locale_encoding(s: &str) -> Encoding {
+    // Match glibc's default encodings for bare locale names.
+    match s.split('@').next().unwrap_or(s) {
+        "zh_CN" | "zh_SG" => Encoding::Gb18030,
+        "zh_TW" | "zh_HK" => Encoding::Big5,
+        _ => Encoding::SingleByte,
+    }
 }
 
 /// Horizontal whitespace characters (glibc `iswblank`): excludes the
@@ -214,6 +265,20 @@ fn big5_len(b: &[u8], b0: u8) -> usize {
 #[cfg(test)]
 mod tests {
     use super::{Encoding, is_unicode_blank};
+
+    #[cfg(has_locale_codeset)]
+    #[test]
+    fn invalid_locale_is_single_byte() {
+        assert_eq!(
+            super::bare_locale_encoding("uutils_nonexistent_locale"),
+            Encoding::SingleByte
+        );
+    }
+
+    #[test]
+    fn private_c_locale_is_single_byte() {
+        assert_eq!(super::bare_locale_encoding("C"), Encoding::SingleByte);
+    }
 
     #[test]
     fn blank_len_ascii_is_encoding_independent() {

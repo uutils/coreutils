@@ -433,6 +433,25 @@ fn test_multi_byte_delimiter() {
     }
 }
 
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[test]
+fn test_bare_locale_name_uses_single_byte_delimiter_list() {
+    // UTF-8 bytes C3 A4 are two separate delimiters in these bare, single-byte
+    // locales (or in C when the locale is unavailable).
+    for locale in ["de_DE", "de_DE@euro"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("input", "a\nb\nc\n");
+        let delimiters = std::ffi::OsString::from_vec(vec![0xc3, 0xa4]);
+
+        ucmd.env("LC_ALL", locale)
+            .args(&["-s", "-d"])
+            .arg(&delimiters)
+            .arg("input")
+            .succeeds()
+            .stdout_only_bytes(b"a\xc3b\xa4c\n");
+    }
+}
+
 #[uutests::wasi_ignore(NoLocaleData)]
 #[test]
 fn test_data() {
