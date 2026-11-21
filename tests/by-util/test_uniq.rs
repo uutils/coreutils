@@ -6,7 +6,6 @@
 // spell-checker:ignore nabcd badoption schar nosuchfile
 
 use rstest::rstest;
-use uucore::posix::OBSOLETE;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -1163,10 +1162,6 @@ fn uniq_basic_dedup_cases() {
 
         // first - run a version of tests with regular file as input
         eprintln!("Test {}", case.name);
-        // set environment variable for obsolete skip char option tests
-        if case.name.starts_with("obs-plus") {
-            ucmd.env("_POSIX2_VERSION", OBSOLETE.to_string());
-        }
         let result = ucmd.args(case.args).arg("input-file").run();
         if let Some(stdout) = case.stdout {
             result.stdout_is(stdout);
@@ -1184,12 +1179,7 @@ fn uniq_basic_dedup_cases() {
         // For now we treat it as equivalent of piped in stdin variant
         // as in `cat input-file | uniq`
         eprintln!("Test {}.stdin", case.name);
-        // set environment variable for obsolete skip char option tests
-        let mut ucmd = new_ucmd!();
-        if case.name.starts_with("obs-plus") {
-            ucmd.env("_POSIX2_VERSION", OBSOLETE.to_string());
-        }
-        let result = ucmd.args(case.args).run_piped_stdin(case.input);
+        let result = new_ucmd!().args(case.args).run_piped_stdin(case.input);
         if let Some(stdout) = case.stdout {
             result.stdout_is(stdout);
         }
@@ -1419,4 +1409,33 @@ fn test_obsolete_skip_fields_not_read_after_double_dash() {
         .args(&["--", "-1"])
         .fails()
         .stderr_contains("-1");
+}
+
+#[rstest]
+#[case::one(&["+1"], "xa\nzb\n")]
+#[case::two(&["+1", "+2"], "xa\n")]
+fn test_obsolete_skip_chars_by_default(
+    #[case] args: &[&str],
+    #[case] expected: &str,
+    #[values(None, Some(""), Some("200111"), Some("200809"))] posix: Option<&str>,
+) {
+    let mut ucmd = new_ucmd!();
+    if let Some(version) = posix {
+        ucmd.env("_POSIX2_VERSION", version);
+    }
+    ucmd.args(args)
+        .pipe_in("xa\nya\nzb\n")
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[rstest]
+#[case::from_2001("200112")]
+#[case::until_2008("200808")]
+fn test_obsolete_skip_chars_disabled(#[case] posix: &str) {
+    new_ucmd!()
+        .env("_POSIX2_VERSION", posix)
+        .arg("+1")
+        .fails_with_code(1)
+        .stderr_is("uniq: +1: No such file or directory\n");
 }
