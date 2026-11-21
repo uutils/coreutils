@@ -616,6 +616,42 @@ fn test_round_with_to_unit() {
 }
 
 #[test]
+fn test_round_keeps_fraction_of_suffixed_input() {
+    // 0.0625K is 62.5, and is rounded like it. Without a format, only the
+    // suffixed number is printed as a whole number.
+    for (args, exp) in [
+        (&["--round=down"][..], "62\n62.5\n"),
+        (&["--round=down", "--format=%.0f"][..], "62\n62\n"),
+        (&["--round=down", "--format=%.1f"][..], "62.5\n62.5\n"),
+        (&["--round=up", "--format=%.1f"][..], "62.5\n62.5\n"),
+        (&["--round=towards-zero"][..], "62\n62.5\n"),
+        (&["--round=down", "--to=si"][..], "62\n62\n"),
+    ] {
+        new_ucmd!()
+            .args(&["--from=si"])
+            .args(args)
+            .args(&["--", "0.0625K", "62.5"])
+            .succeeds()
+            .stdout_only(exp);
+    }
+    // Negative values used to be rounded away from zero whatever the method.
+    for (args, exp) in [
+        (&["--round=up"][..], "-62\n-62.5\n"),
+        (&["--round=down"][..], "-63\n-62.5\n"),
+        (&["--round=towards-zero"][..], "-62\n-62.5\n"),
+        (&["--round=from-zero"][..], "-63\n-62.5\n"),
+        (&["--round=up", "--format=%.1f"][..], "-62.5\n-62.5\n"),
+    ] {
+        new_ucmd!()
+            .args(&["--from=si"])
+            .args(args)
+            .args(&["--", "-0.0625K", "-62.5"])
+            .succeeds()
+            .stdout_only(exp);
+    }
+}
+
+#[test]
 fn test_to_unit_with_unitless_small_value_uses_display_rounding() {
     new_ucmd!()
         .args(&["--to=iec", "--to-unit=689", "701"])
