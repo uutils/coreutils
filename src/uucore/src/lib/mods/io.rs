@@ -79,6 +79,7 @@ impl<F: io::BufRead, S: io::BufRead> io::BufRead for InputReader<F, S> {
 }
 
 // create reader without buffering
+// catch `EBADF` when fd is write-only or closed
 #[cfg(any(unix, target_os = "wasi"))]
 pub struct RawReader<T: AsFd>(pub T);
 #[cfg(any(unix, target_os = "wasi"))]
@@ -89,6 +90,7 @@ impl<T: AsFd> io::Read for RawReader<T> {
 }
 
 // create writer without buffering
+// catch `EBADF` when fd is read-only or closed
 #[cfg(any(unix, target_os = "wasi"))]
 pub struct RawWriter<T: AsFd>(pub T);
 #[cfg(any(unix, target_os = "wasi"))]
