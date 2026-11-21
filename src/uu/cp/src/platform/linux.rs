@@ -142,12 +142,9 @@ fn check_for_data(src_file: &mut File) -> io::Result<(bool, u64, u64)> {
 
 /// Checks whether a file is sparse i.e. it contains holes, uses the crude heuristic blocks < size / 512
 /// Reference:`<https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.blocks>`
-fn check_sparse_detection(src_file: &File) -> io::Result<bool> {
-    let metadata = src_file.metadata()?;
-    let size = metadata.size();
-    let blocks = metadata.blocks();
-
-    Ok(blocks < size / 512)
+/// Takes the size and blocks from [`check_for_data`], so the file is not stat'ed again.
+fn check_sparse_detection(size: u64, blocks: u64) -> bool {
+    blocks < size / 512
 }
 
 /// Optimized [`sparse_copy_fd`] doesn't create holes for large sequences of zeros in non `sparse_files`
@@ -469,7 +466,7 @@ fn handle_reflink_auto_sparse_always(
     };
     let mut copy_method = CopyMethod::Default;
     let (data_flag, size, blocks) = check_for_data(src_file)?;
-    let sparse_flag = check_sparse_detection(src_file)?;
+    let sparse_flag = check_sparse_detection(size, blocks);
 
     if data_flag || size < 512 {
         copy_debug.offload = OffloadReflinkDebug::Avoided;
@@ -500,8 +497,8 @@ fn handle_reflink_never_sparse_never(src_file: &mut File) -> io::Result<CopyDebu
         reflink: OffloadReflinkDebug::No,
         sparse_detection: SparseDebug::No,
     };
-    let (data_flag, size, _blocks) = check_for_data(src_file)?;
-    let sparse_flag = check_sparse_detection(src_file)?;
+    let (data_flag, size, blocks) = check_for_data(src_file)?;
+    let sparse_flag = check_sparse_detection(size, blocks);
 
     if sparse_flag {
         copy_debug.sparse_detection = SparseDebug::SeekHole;
@@ -522,8 +519,8 @@ fn handle_reflink_auto_sparse_never(src_file: &mut File) -> io::Result<CopyDebug
         sparse_detection: SparseDebug::No,
     };
 
-    let (data_flag, size, _blocks) = check_for_data(src_file)?;
-    let sparse_flag = check_sparse_detection(src_file)?;
+    let (data_flag, size, blocks) = check_for_data(src_file)?;
+    let sparse_flag = check_sparse_detection(size, blocks);
 
     if sparse_flag {
         copy_debug.sparse_detection = SparseDebug::SeekHole;
@@ -549,7 +546,7 @@ fn handle_reflink_auto_sparse_auto(
 
     let mut copy_method = CopyMethod::Default;
     let (data_flag, size, blocks) = check_for_data(src_file)?;
-    let sparse_flag = check_sparse_detection(src_file)?;
+    let sparse_flag = check_sparse_detection(size, blocks);
 
     if (data_flag && size != 0) || (size > 0 && size < 512) {
         copy_debug.offload = OffloadReflinkDebug::Yes;
@@ -591,7 +588,7 @@ fn handle_reflink_never_sparse_auto(
     };
 
     let (data_flag, size, blocks) = check_for_data(src_file)?;
-    let sparse_flag = check_sparse_detection(src_file)?;
+    let sparse_flag = check_sparse_detection(size, blocks);
 
     let mut copy_method = CopyMethod::Default;
     if data_flag || size < 512 {
@@ -628,7 +625,7 @@ fn handle_reflink_never_sparse_always(
     let mut copy_method = CopyMethod::SparseCopy;
 
     let (data_flag, size, blocks) = check_for_data(src_file)?;
-    let sparse_flag = check_sparse_detection(src_file)?;
+    let sparse_flag = check_sparse_detection(size, blocks);
 
     if data_flag || size < 512 {
         copy_debug.offload = OffloadReflinkDebug::Avoided;

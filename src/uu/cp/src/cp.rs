@@ -836,7 +836,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let (sources, target) = parse_path_args(paths, &options)?;
 
-    if let Err(error) = copy(&sources, &target, &options) {
+    // Nothing changes the umask during the copy: read it once rather than
+    // with two syscalls for every file.
+    #[cfg(unix)]
+    let result = uucore::mode::with_umask(uucore::mode::get_umask(), || {
+        copy(&sources, &target, &options)
+    });
+    #[cfg(not(unix))]
+    let result = copy(&sources, &target, &options);
+    if let Err(error) = result {
         match error {
             CpError::NotAllFilesCopied => {
                 // non-fatal; exit code still EXIT_ERR
@@ -1894,10 +1902,6 @@ pub(crate) fn copy_attributes(
     dest_is_freshly_created_dir: bool,
     skip_selinux_xattr: bool,
 ) -> CopyResult<()> {
-    let context = &*format!("{} -> {}", source.quote(), dest.quote());
-    let source_metadata =
-        fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-
     let mode_explicitly_disabled = matches!(attributes.mode, Preserve::No { explicit: true });
 
     // preserve is true by default if the destination is created by us and it's a directory
@@ -1906,6 +1910,23 @@ pub(crate) fn copy_attributes(
     } else {
         attributes.mode
     };
+
+    // A plain copy keeps none of these: don't stat the source for nothing.
+    let kept = [
+        #[cfg(unix)]
+        attributes.ownership,
+        mode,
+        attributes.timestamps,
+        attributes.context,
+        attributes.xattr,
+    ];
+    if kept.iter().all(|p| matches!(p, Preserve::No { .. })) {
+        return Ok(());
+    }
+
+    let context = &*format!("{} -> {}", source.quote(), dest.quote());
+    let source_metadata =
+        fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
     // A created directory only defaults to copying the source mode; unlike an
     // explicit preserve (-p/-a), GNU applies the umask to it.
@@ -2787,7 +2808,6 @@ fn copy_file(
     let dest_is_symlink = initial_dest_metadata
         .as_ref()
         .is_some_and(|md| md.file_type().is_symlink());
-    let dest_target_exists = dest.try_exists().unwrap_or(false);
     // Fail if dest is a dangling symlink or a symlink this program created previously
     if dest_is_symlink {
         if FileInformation::from_path(dest, false).is_ok_and(|info| symlinked_files.contains(&info))
@@ -2807,7 +2827,7 @@ fn copy_file(
 
         let copy_contents = options.dereference(source_in_command_line) || !source_is_symlink;
         if copy_contents
-            && !dest_target_exists
+            && !dest.try_exists().unwrap_or(false)
             && !matches!(
                 options.overwrite,
                 OverwriteMode::Clobber(ClobberMode::RemoveDestination)
@@ -2830,13 +2850,12 @@ fn copy_file(
         }
     }
 
-    // Path resolution is the last condition checked, only reached in the rare
+    // The stats and the path resolution come last, only reached in the rare
     // hardlink `--remove-destination` case rather than on every file `cp` touches.
-    if are_hardlinks_to_same_file(source, dest)
-        && matches!(
-            options.overwrite,
-            OverwriteMode::Clobber(ClobberMode::RemoveDestination)
-        )
+    if matches!(
+        options.overwrite,
+        OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+    ) && are_hardlinks_to_same_file(source, dest)
         && !paths_are_same_entry(source, dest)
     {
         fs::remove_file(dest)?;
@@ -2948,7 +2967,11 @@ fn copy_file(
         })?
     };
 
-    let dest_metadata = dest.symlink_metadata().ok();
+    // Look again only if the destination existed: the code above may have
+    // removed or replaced it, but never creates it.
+    let dest_metadata = initial_dest_metadata
+        .as_ref()
+        .and_then(|_| dest.symlink_metadata().ok());
 
     let dest_permissions = calculate_dest_permissions(
         dest_metadata.as_ref(),
