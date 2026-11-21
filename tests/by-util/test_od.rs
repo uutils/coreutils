@@ -1184,6 +1184,38 @@ fn test_read_bytes_large_suffix_with_radix_prefix() {
         .stdout_only(" 61 62\n");
 }
 
+// GNU's -j/-N number parser accepts a leading '+' and leading blanks; a blank
+// between the sign and the number, a doubled sign, or a '-' stays an error.
+#[test]
+fn test_skip_and_read_bytes_leading_plus() {
+    let input = "abcdefghijklmnopq";
+
+    for skip in ["+5", " +5", "  5"] {
+        new_ucmd!()
+            .args(&["-An", "-c", "-j", skip])
+            .run_piped_stdin(input.as_bytes())
+            .success()
+            .stdout_only("   f   g   h   i   j   k   l   m   n   o   p   q\n");
+    }
+
+    new_ucmd!()
+        .args(&["-An", "-tx1", "-N", "+4"])
+        .run_piped_stdin(input.as_bytes())
+        .success()
+        .stdout_only(" 61 62 63 64\n");
+}
+
+#[test]
+fn test_skip_bytes_sign_errors() {
+    for skip in ["+ 5", "++5", "+-5"] {
+        new_ucmd!()
+            .args(&["-c", "-j", skip])
+            .run_piped_stdin(b"abc".as_slice())
+            .failure()
+            .stderr_only(format!("od: invalid -j argument '{skip}'\n"));
+    }
+}
+
 #[test]
 fn test_ascii_dump() {
     let input: [u8; 22] = [
