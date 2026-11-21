@@ -13,9 +13,7 @@ use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
 use filetime::FileTime;
 #[cfg(all(any(not(unix), target_os = "redox"), not(target_os = "wasi")))]
-use filetime::set_file_times;
-#[cfg(not(target_os = "wasi"))]
-use filetime::set_symlink_file_times;
+use filetime::{set_file_times, set_symlink_file_times};
 use jiff::civil::Time;
 use jiff::fmt::strtime;
 use jiff::tz::TimeZone;
@@ -148,6 +146,12 @@ fn timestamp_to_filetime(ts: Timestamp) -> FileTime {
 #[cfg(target_os = "linux")]
 fn utime_now() -> FileTime {
     FileTime::from_unix_time(0, libc::UTIME_NOW as u32)
+}
+
+/// A [`FileTime`] holding the `UTIME_OMIT` sentinel, which leaves that time unchanged.
+#[cfg(all(unix, not(target_os = "redox")))]
+fn utime_omit() -> FileTime {
+    FileTime::from_unix_time(0, rustix::fs::UTIME_OMIT as u32)
 }
 
 fn filetime_to_zoned(ft: &FileTime) -> Option<Zoned> {
@@ -612,7 +616,17 @@ fn update_times(
     atime: FileTime,
     mtime: FileTime,
 ) -> UResult<()> {
-    // If changing "only" atime or mtime, grab the existing value of the other.
+    // If changing "only" atime or mtime, leave the other alone: reading it by
+    // path and writing it back would race with the path being replaced.
+    #[cfg(all(unix, not(target_os = "redox")))]
+    let (atime, mtime) = match opts.change_times {
+        ChangeTimes::AtimeOnly => (atime, utime_omit()),
+        ChangeTimes::MtimeOnly => (utime_omit(), mtime),
+        ChangeTimes::Both => (atime, mtime),
+    };
+
+    // Without `UTIME_OMIT`, grab the existing value of the other.
+    #[cfg(any(not(unix), target_os = "redox"))]
     let (atime, mtime) = match opts.change_times {
         ChangeTimes::AtimeOnly => (
             atime,
@@ -637,7 +651,11 @@ fn update_times(
     // The filename, access time (atime), and modification time (mtime) are provided as inputs.
 
     if opts.no_deref && !is_stdout {
-        return set_symlink_file_times(path, atime, mtime).map_err_context(
+        #[cfg(all(unix, not(target_os = "redox")))]
+        let result = set_times_by_path(path, atime, mtime, rustix::fs::AtFlags::SYMLINK_NOFOLLOW);
+        #[cfg(any(not(unix), target_os = "redox"))]
+        let result = set_symlink_file_times(path, atime, mtime);
+        return result.map_err_context(
             || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
         );
     }
@@ -668,7 +686,11 @@ fn update_times(
         // by path with utimensat, which never opens the file and so never
         // blocks — unlike filetime::set_file_times, which opens O_RDONLY and
         // would hang on a reader-less FIFO.
-        match set_times_by_path(path, atime, mtime) {
+        #[cfg(not(target_os = "redox"))]
+        let result = set_times_by_path(path, atime, mtime, rustix::fs::AtFlags::empty());
+        #[cfg(target_os = "redox")]
+        let result = set_times_by_path(path, atime, mtime);
+        match result {
             Ok(()) => Ok(()),
             Err(e)
                 if e.kind() == ErrorKind::PermissionDenied
@@ -696,32 +718,33 @@ fn update_times(
 /// preserving the `UTIME_NOW`/`UTIME_OMIT` sentinels in the nanoseconds field.
 #[cfg(unix)]
 fn build_timestamps(atime: FileTime, mtime: FileTime) -> Timestamps {
+    // Through i32 because the sentinels are negative on some targets.
     Timestamps {
         last_access: rustix::fs::Timespec {
             tv_sec: atime.unix_seconds(),
-            tv_nsec: atime.nanoseconds() as _,
+            tv_nsec: atime.nanoseconds() as i32 as _,
         },
         last_modification: rustix::fs::Timespec {
             tv_sec: mtime.unix_seconds(),
-            tv_nsec: mtime.nanoseconds() as _,
+            tv_nsec: mtime.nanoseconds() as i32 as _,
         },
     }
 }
 
-/// Set file times by path using `utimensat`, following symlinks.
+/// Set file times by path using `utimensat`.
 ///
 /// This never opens the file, so it does not block on special files such as
 /// FIFOs.
 #[cfg(all(unix, not(target_os = "redox")))]
-fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> std::io::Result<()> {
+fn set_times_by_path(
+    path: &Path,
+    atime: FileTime,
+    mtime: FileTime,
+    flags: rustix::fs::AtFlags,
+) -> std::io::Result<()> {
     let timestamps = build_timestamps(atime, mtime);
-    rustix::fs::utimensat(
-        rustix::fs::CWD,
-        path,
-        &timestamps,
-        rustix::fs::AtFlags::empty(),
-    )
-    .map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
+    rustix::fs::utimensat(rustix::fs::CWD, path, &timestamps, flags)
+        .map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
 }
 
 /// Set file times by path on Redox, which lacks `rustix::fs::utimensat`.
@@ -747,16 +770,7 @@ fn try_futimens_via_write_fd(path: &Path, atime: FileTime, mtime: FileTime) -> s
         .custom_flags(O_NONBLOCK)
         .open(path)?;
 
-    let timestamps = Timestamps {
-        last_access: rustix::fs::Timespec {
-            tv_sec: atime.unix_seconds(),
-            tv_nsec: atime.nanoseconds() as _,
-        },
-        last_modification: rustix::fs::Timespec {
-            tv_sec: mtime.unix_seconds(),
-            tv_nsec: mtime.nanoseconds() as _,
-        },
-    };
+    let timestamps = build_timestamps(atime, mtime);
 
     futimens(&file, &timestamps).map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
 }
