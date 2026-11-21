@@ -14,7 +14,7 @@ use uucore::diagnostics::{Snapshot, ValueOptions};
 use uucore::ranges::RangeError;
 use uucore::translate;
 
-use crate::format::{holds_number, invalid_span};
+use crate::format::{holds_number, invalid_span, overlong_number_len};
 use crate::options::{FormatError, FormatErrorKind, NumfmtOptions, OptionValueError};
 use crate::units::Unit;
 
@@ -97,12 +97,16 @@ pub fn render_input(
     else {
         return false;
     };
-    let span = invalid_span(input, options);
+    // A number with too many digits is refused as a whole, so it is what the
+    // caret marks, and no suffix advice would help.
+    let start = input.len() - input.trim_start().len();
+    let overlong = overlong_number_len(&input[start..]);
+    let span = overlong.map_or_else(|| invalid_span(input, options), |len| start..start + len);
     // Without --from there is no suffix to spell out, only the option to reach
     // for; an input with no number in it at all is not a suffix question, and
     // neither is one whose leading part only looks like the start of one.
     let help = match options.transform.from {
-        _ if !holds_number(input) => None,
+        _ if overlong.is_some() || !holds_number(input) => None,
         Unit::None => Some("numfmt-diag-help-input-no-from"),
         _ => Some("numfmt-diag-help-input-suffixes"),
     };
