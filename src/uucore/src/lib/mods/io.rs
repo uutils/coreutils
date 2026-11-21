@@ -17,7 +17,7 @@
 use std::fs::{File, OpenOptions};
 use std::io;
 #[cfg(not(windows))]
-use std::os::fd::{AsFd, OwnedFd};
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 #[cfg(windows)]
 use std::os::windows::io::{AsHandle, OwnedHandle};
 use std::path::Path;
@@ -85,6 +85,35 @@ pub struct RawReader<T: AsFd>(pub T);
 impl<T: AsFd> io::Read for RawReader<T> {
     fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
         rustix::io::read(&self.0, b).map_err(Into::into)
+    }
+}
+
+/// Stdin without buffering. Unlike [`io::Stdin`], a read error such as EBADF
+/// is returned instead of being read as end of file.
+#[cfg(any(unix, target_os = "wasi"))]
+pub struct StdinRaw(io::Stdin);
+#[cfg(any(unix, target_os = "wasi"))]
+impl StdinRaw {
+    pub fn new() -> Self {
+        Self(io::stdin())
+    }
+}
+#[cfg(any(unix, target_os = "wasi"))]
+impl Default for StdinRaw {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+#[cfg(any(unix, target_os = "wasi"))]
+impl io::Read for StdinRaw {
+    fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
+        rustix::io::read(&self.0, b).map_err(Into::into)
+    }
+}
+#[cfg(any(unix, target_os = "wasi"))]
+impl AsFd for StdinRaw {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.0.as_fd()
     }
 }
 
