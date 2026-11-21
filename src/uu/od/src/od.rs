@@ -762,6 +762,8 @@ fn write_bytes(
         // several times the width, which can be huge.
         let mut line_width = 0;
         let mut b = 0;
+        // Reused for the formats that append into a string.
+        let mut field = String::new();
         while b < input_decoder.length() {
             let spacing = f.spacing[b % output_info.byte_size_block];
             write_spaces(writer, spacing)?;
@@ -770,7 +772,9 @@ fn write_bytes(
             match f.formatter_item_info.formatter {
                 FormatWriter::IntWriter(func) => {
                     let p = input_decoder.read_uint(b, f.formatter_item_info.byte_size);
-                    write_field(writer, &func(p), &mut line_width)?;
+                    field.clear();
+                    func(p, &mut field);
+                    write_field(writer, &field, &mut line_width)?;
                 }
                 FormatWriter::FloatWriter(func) => {
                     let p = input_decoder.read_float(b, f.formatter_item_info.byte_size);
@@ -785,11 +789,9 @@ fn write_bytes(
                     write_field(writer, &func(p), &mut line_width)?;
                 }
                 FormatWriter::MultibyteWriter(func) => {
-                    write_field(
-                        writer,
-                        &func(input_decoder.get_full_buffer(b)),
-                        &mut line_width,
-                    )?;
+                    field.clear();
+                    func(input_decoder.get_full_buffer(b), &mut field);
+                    write_field(writer, &field, &mut line_width)?;
                 }
             }
 
