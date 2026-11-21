@@ -45,6 +45,10 @@ pub enum CsplitError {
     LineNumberSmallerThanPrevious(usize, usize),
     #[error("{}", translate!("csplit-error-invalid-pattern", "pattern" => _0.quote()))]
     InvalidPattern(String, Option<PatternProblem>),
+    #[error("{}", translate!("csplit-error-repeat-missing-brace", "pattern" => _0.quote()))]
+    RepeatMissingBrace(String),
+    #[error("{}", translate!("csplit-error-repeat-not-integer", "pattern" => _0.quote()))]
+    RepeatNotInteger(String),
     #[error("{}", translate!("csplit-error-invalid-number", "number" => _0.quote()))]
     InvalidNumber(String),
     #[error("{}", translate!("csplit-error-suffix-format-incorrect"))]
