@@ -114,6 +114,16 @@ rand = { version = "0.10.1", features = ["std_rng"] }
 rand_chacha = { version = "0.10.0" }
 rayon = "1.10"
 regex = "1.10.4"
+regex-automata = { version = "0.4.16", default-features = false, features = [
+  "std",
+  "meta",
+  "hybrid",
+  "dfa-onepass",
+  "nfa-backtrack",
+  "perf-inline",
+  "perf-literal",
+  "unicode",
+] }
 rlimit = "0.11.0"
 rstest = "0.28.0"
 rstest_reuse = "0.7.0"

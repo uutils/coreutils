@@ -6,6 +6,7 @@ tac-help-separator = utiliser CHAÎNE comme séparateur au lieu du saut de ligne
 
 # Messages d'erreur
 tac-error-invalid-regex = expression régulière invalide : { $error }
+tac-error-regex-size-limit = L'expression régulière compilée dépasse la limite de taille de { $limit } octets.
 tac-error-open-error = échec de l'ouverture de { $filename } en lecture : { $error }
 tac-error-read-error = { $filename } : erreur de lecture : { $error }
 tac-error-write-error = échec de l'écriture vers stdout : { $error }

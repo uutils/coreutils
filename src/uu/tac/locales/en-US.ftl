@@ -6,6 +6,7 @@ tac-help-separator = use STRING as the separator instead of newline
 
 # Error messages
 tac-error-invalid-regex = invalid regular expression: { $error }
+tac-error-regex-size-limit = Compiled regex exceeds size limit of { $limit } bytes.
 tac-error-open-error = failed to open { $filename } for reading: { $error }
 tac-error-read-error = { $filename }: read error: { $error }
 tac-error-write-error = failed to write to stdout: { $error }
