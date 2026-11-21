@@ -1229,7 +1229,6 @@ fn test_repeated_flags_are_accepted() {
 
 #[cfg(unix)]
 #[test]
-#[ignore = "chown -v must print +ID specs as plain IDs"]
 fn test_chown_verbose_broken_symlink_plus_ids() {
     let scene = TestScenario::new(util_name!());
     scene.fixtures.symlink_file("absent", "ghost");
@@ -1243,6 +1242,14 @@ fn test_chown_verbose_broken_symlink_plus_ids() {
         (
             format!(":+{gid}"),
             format!("failed to change group of 'ghost' to {gid}\n"),
+        ),
+        (
+            format!("+{uid}.+{gid}"),
+            format!("failed to change ownership of 'ghost' to {uid}:{gid}\n"),
+        ),
+        (
+            format!("+{uid}:{gid}"),
+            format!("failed to change ownership of 'ghost' to {uid}:{gid}\n"),
         ),
     ] {
         scene
