@@ -430,3 +430,38 @@ fn test_chroot_userspec_unknown_uid() {
         println!("Test skipped; requires root user");
     }
 }
+
+#[test]
+fn test_chroot_userspec_group_replaces_passwd_group() {
+    use uucore::entries::{Locate, Passwd};
+
+    let ts = TestScenario::new(util_name!());
+    let Ok(passwd) = Passwd::locate("daemon") else {
+        println!("Test skipped; requires 'daemon' user");
+        return;
+    };
+    let passwd_gid = passwd.gid;
+    let group = if passwd_gid == 65534 { 65533 } else { 65534 };
+    // NSS may retain the passwd group as a supplementary group even when
+    // another primary group is requested.
+    let gids = passwd.belongs_to_with_gid(group);
+    assert!(gids.contains(&group));
+    let listed_in_passwd_group = gids.contains(&passwd_gid);
+    if listed_in_passwd_group {
+        println!("Test skipped; requires 'daemon' not to be listed in its own group");
+        return;
+    }
+
+    let userspec = format!("--userspec=daemon:{group}");
+    if let Ok(result) = run_ucmd_as_root(&ts, &[&userspec, "/", "id", "-G"]) {
+        let stdout = result.success().no_stderr().stdout_str().to_owned();
+        let gids: Vec<&str> = stdout.split_whitespace().collect();
+        assert!(gids.contains(&group.to_string().as_str()), "{stdout}");
+        assert!(
+            !gids.contains(&passwd_gid.to_string().as_str()),
+            "passwd group {passwd_gid} kept: {stdout}"
+        );
+    } else {
+        println!("Test skipped; requires root user");
+    }
+}
