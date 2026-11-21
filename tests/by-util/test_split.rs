@@ -1939,6 +1939,43 @@ fn test_round_robin_limited_file_descriptors() {
         .succeeds();
 }
 
+// Chunks deferred because of the open files limit must still be created or
+// truncated when they receive no data, so a reused prefix keeps no stale bytes.
+#[rstest]
+#[case::bytes("20")]
+#[case::lines("l/20")]
+#[case::round_robin("r/20")]
+// TODO(#7542): Re-enable on Android once we figure out why rlimit is broken.
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
+fn test_limited_file_descriptors_truncates_unwritten_chunks(#[case] n: &str) {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let chunks: Vec<String> = (b'a'..=b't').map(|c| format!("xa{}", c as char)).collect();
+
+    at.touch("empty");
+    scene
+        .ucmd()
+        .args(&["-n", n, "empty"])
+        .limit(Resource::NOFILE, 9, 9)
+        .succeeds();
+    for chunk in &chunks {
+        assert!(at.file_exists(chunk), "{chunk} missing");
+        assert_eq!(at.read(chunk), "", "{chunk} not empty");
+    }
+
+    at.write("long", &"a\n".repeat(20));
+    at.write("short", "!\n");
+    for input in ["long", "short"] {
+        scene
+            .ucmd()
+            .args(&["-n", n, input])
+            .limit(Resource::NOFILE, 9, 9)
+            .succeeds();
+    }
+    let reassembled: String = chunks.iter().map(|c| at.read(c)).collect();
+    assert_eq!(reassembled, "!\n");
+}
+
 // A short write on the last chunk must not be silently dropped: the rest
 // has to be retried so that the resulting error is reported.
 #[test]
