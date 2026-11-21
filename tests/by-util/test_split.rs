@@ -994,6 +994,18 @@ fn test_suffix_start_past_number_of_chunks() {
         .stderr_only("split: output file suffixes exhausted\n");
 }
 
+/// Test that a suffix start below a huge number of chunks does not overflow
+/// the auto-width suffix length calculation
+#[rstest]
+#[case::numeric("r/1/18446744073709551615", "--numeric-suffixes=5")]
+#[case::hex("l/1/18446744073709551615", "--hex-suffixes=5")]
+fn test_suffix_start_with_huge_number_of_chunks(#[case] number: &str, #[case] suffix: &str) {
+    new_ucmd!()
+        .args(&["-n", number, suffix, "fivelines.txt"])
+        .succeeds()
+        .stdout_only("1\n");
+}
+
 /// Test for edge case of specifying 0 for suffix length
 #[test]
 fn test_suffix_length_zero() {

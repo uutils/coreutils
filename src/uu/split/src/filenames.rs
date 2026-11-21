@@ -210,7 +210,7 @@ impl Suffix {
         if let Strategy::Number(number_type) = strategy {
             let chunks = number_type.num_chunks();
             if (start as u64) < chunks {
-                let required_length = ((start as u64 + chunks) as f64)
+                let required_length = ((start as u64).saturating_add(chunks) as f64)
                     .log(stype.radix() as f64)
                     .ceil() as usize;
 
