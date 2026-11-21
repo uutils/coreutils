@@ -1379,6 +1379,7 @@ fn test_od_invalid_bytes() {
     const INVALID_SIZE: &str = "x";
     const INVALID_SUFFIX: &str = "1fb4t";
     const BIG_SIZE: &str = "1Y";
+    const TOO_LARGE: &str = "9223372036854775808";
 
     let options = [
         "--read-bytes",
@@ -1405,6 +1406,33 @@ fn test_od_invalid_bytes() {
             .arg("file")
             .fails_with_code(1)
             .stderr_only(format!("od: {option} argument '{BIG_SIZE}' too large\n"));
+
+        new_ucmd!()
+            .arg(format!("{option}={TOO_LARGE}"))
+            .arg("file")
+            .fails_with_code(1)
+            .stderr_only(format!("od: {option} argument '{TOO_LARGE}' too large\n"));
+    }
+
+    // The flag actually given is echoed, short or long, and a hex or decimal
+    // number past i64::MAX is too large as well.
+    for flag in ["-j", "-N", "-S"] {
+        new_ucmd!()
+            .args(&[flag, TOO_LARGE])
+            .arg("file")
+            .fails_with_code(1)
+            .stderr_only(format!("od: {flag} argument '{TOO_LARGE}' too large\n"));
+    }
+    for value in [
+        "0x10000000000000000",
+        "18446744073709551616",
+        "02000000000000000000000",
+    ] {
+        new_ucmd!()
+            .arg(format!("--skip-bytes={value}"))
+            .arg("file")
+            .fails_with_code(1)
+            .stderr_only(format!("od: --skip-bytes argument '{value}' too large\n"));
     }
 }
 
