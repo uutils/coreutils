@@ -101,11 +101,11 @@ enum CatError {
 type CatResult<T> = Result<T, CatError>;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-impl From<uucore::pipes::PipeError> for CatError {
-    fn from(error: uucore::pipes::PipeError) -> Self {
+impl From<uucore::io::ReadWriteError> for CatError {
+    fn from(error: uucore::io::ReadWriteError) -> Self {
         match error {
-            uucore::pipes::PipeError::Read(error) => Self::Io(error),
-            uucore::pipes::PipeError::Write(error) => Self::Write(error),
+            uucore::io::ReadWriteError::Read(error) => Self::Io(error),
+            uucore::io::ReadWriteError::Write(error) => Self::Write(error),
         }
     }
 }
@@ -457,12 +457,11 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
         Ok(md) => md.file_type(),
         Err(e) => {
             if let Some(raw_error) = e.raw_os_error() {
-                // On Unix-like systems, the error code for "Too many levels of symbolic links" is 40 (ELOOP).
-                // we want to provide a proper error message in this case.
-                #[cfg(not(any(target_vendor = "apple", target_os = "freebsd")))]
+                #[cfg(any(unix, target_os = "wasi"))]
+                let too_many_symlink_code = rustix::io::Errno::LOOP.raw_os_error();
+                // rustix::io is not available on Windows.
+                #[cfg(not(any(unix, target_os = "wasi")))]
                 let too_many_symlink_code = 40;
-                #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
-                let too_many_symlink_code = 62;
                 if raw_error == too_many_symlink_code {
                     return Err(CatError::TooManySymlinks);
                 }

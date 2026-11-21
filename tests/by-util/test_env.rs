@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel Secho sighandler putenv
+// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel Secho Sprintf Cdata iCdata uFOOa sighandler putenv
 
 #![allow(clippy::missing_errors_doc)]
 
@@ -13,6 +13,7 @@ use nix::libc;
 use nix::sys::signal::Signal;
 #[cfg(feature = "echo")]
 use regex::Regex;
+use rstest::rstest;
 use std::env;
 use std::path::Path;
 #[cfg(unix)]
@@ -204,7 +205,7 @@ fn test_debug_1() {
         .succeeds();
     result.stderr_matches(
         &Regex::new(concat!(
-            r"executing: [^\n]+(\/|\\)coreutils(\.exe)?\n",
+            r"executing: '[^\n]+(\/|\\)coreutils(\.exe)?'\n",
             r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(\.exe)?'\n",
             r"   arg\[1\]= 'echo'\n",
             r"   arg\[2\]= 'hello'"
@@ -231,7 +232,7 @@ fn test_debug_2() {
             r"arg\[2\]: '[^\n]+(\/|\\)coreutils(.exe)?'\n",
             r"arg\[3\]: 'echo'\n",
             r"arg\[4\]: 'hello2'\n",
-            r"executing: [^\n]+(\/|\\)coreutils(.exe)?\n",
+            r"executing: '[^\n]+(\/|\\)coreutils(.exe)?'\n",
             r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(.exe)?'\n",
             r"   arg\[1\]= 'echo'\n",
             r"   arg\[2\]= 'hello2'"
@@ -253,7 +254,7 @@ fn test_debug1_part_of_string_arg() {
         .succeeds();
     result.stderr_matches(
         &Regex::new(concat!(
-            r"executing: [^\n]+(\/|\\)coreutils(\.exe)?\n",
+            r"executing: '[^\n]+(\/|\\)coreutils(\.exe)?'\n",
             r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(\.exe)?'\n",
             r"   arg\[1\]= 'echo'\n",
             r"   arg\[2\]= 'hello1'"
@@ -280,7 +281,7 @@ fn test_debug2_part_of_string_arg() {
             r"arg\[2\]: '[^\n]+(\/|\\)coreutils(.exe)?'\n",
             r"arg\[3\]: 'echo'\n",
             r"arg\[4\]: 'hello2'\n",
-            r"executing: [^\n]+(\/|\\)coreutils(.exe)?\n",
+            r"executing: '[^\n]+(\/|\\)coreutils(.exe)?'\n",
             r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(.exe)?'\n",
             r"   arg\[1\]= 'echo'\n",
             r"   arg\[2\]= 'hello2'"
@@ -429,6 +430,31 @@ fn test_change_directory() {
     assert_eq!(out.trim(), temporary_path.as_os_str());
 }
 
+#[cfg(not(windows))]
+#[test]
+fn test_short_option_attached_value_keeps_leading_equals() {
+    let scene = TestScenario::new(util_name!());
+    for dir in ["=d", "="] {
+        scene.fixtures.mkdir(dir);
+    }
+    for (args, dir) in [
+        (&["-C=d", "pwd"][..], "=d"),
+        (&["-vC=d", "pwd"], "=d"),
+        (&["-S-C=d pwd"], "=d"),
+        (&["-C=", "pwd"], "="),
+    ] {
+        let expected = std::fs::canonicalize(scene.fixtures.plus(dir)).unwrap();
+        let out = scene.ucmd().args(args).succeeds().stdout_move_str();
+        assert_eq!(out.trim(), expected.as_os_str(), "args: {args:?}");
+    }
+
+    scene
+        .ucmd()
+        .args(&["-a=name", "sh", "-c", "echo $0"])
+        .succeeds()
+        .stdout_is("=name\n");
+}
+
 #[cfg(windows)]
 #[test]
 fn test_change_directory() {
@@ -478,6 +504,24 @@ fn test_fail_change_directory() {
 }
 
 #[test]
+fn test_help_lists_debug_without_ellipsis() {
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("-v, --debug ")
+        .stdout_does_not_contain("--debug...");
+}
+
+#[test]
+fn test_debug_counts_repeated_flags() {
+    // a second -v (in any spelling) also prints the input arguments
+    new_ucmd!()
+        .args(&["-v", "--debug", "-i"])
+        .succeeds()
+        .stderr_contains("input args:");
+}
+
+#[test]
 fn test_argv0_without_command_fails() {
     for arg in ["-a", "--argv0"] {
         let out = new_ucmd!()
@@ -486,6 +530,49 @@ fn test_argv0_without_command_fails() {
             .stderr_move_str();
         assert!(out.contains("must specify command with --argv0 (-a)"));
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn test_debug_always_quotes_executed_command() {
+    new_ucmd!()
+        // not "true": on Android it is our multicall binary, which can't run as "renamed"
+        .args(&["-v", "--argv0", "renamed", "sh", "-c", ":"])
+        .succeeds()
+        .stderr_only(
+            "argv0:     'renamed'\nexecuting: 'sh'\n   arg[0]= 'renamed'\n   arg[1]= '-c'\n   arg[2]= ':'\n",
+        );
+}
+
+#[test]
+fn test_split_string_after_assignment_is_an_assignment() {
+    // options end at the first NAME=VALUE, so "-Sx=y" sets a variable named "-Sx"
+    new_ucmd!()
+        .args(&["-i", "FIRST=1", "-Sx=y"])
+        .succeeds()
+        .stdout_contains_line("FIRST=1")
+        .stdout_contains_line("-Sx=y");
+}
+
+#[rstest]
+#[case::literal("literal", "my key=a value\n")]
+#[case::shell_always("shell-always", "'my key'='a value'\n")]
+#[case::c("c", "\"my key\"=\"a value\"\n")]
+fn test_quoting_style_option(#[case] style: &str, #[case] expected: &str) {
+    new_ucmd!()
+        .args(&["-i", &format!("--quoting-style={style}"), "my key=a value"])
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
+fn test_quoting_style_env_var_ignored_when_redirected() {
+    new_ucmd!()
+        .args(&["-i", "QUOTING_STYLE=shell-always", "my key=a value"])
+        .succeeds()
+        // the order of the variables is platform dependent
+        .stdout_contains_line("QUOTING_STYLE=shell-always")
+        .stdout_contains_line("my key=a value");
 }
 
 #[cfg(not(windows))] // windows has no executable "echo", its only supported as part of a batch-file
@@ -601,7 +688,7 @@ fn test_split_string_into_args_debug_output_whitespace_handling() {
     assert_eq!(
         out.stderr_str(),
         "input args:\narg[0]: 'env'\narg[1]: $\
-        '-vvS printf x%sx\\\\n A \\t B \\x0B\\x0C\\r\\n'\nexecuting: printf\
+        '-vvS printf x%sx\\\\n A \\t B \\x0B\\x0C\\r\\n'\nexecuting: 'printf'\
         \n   arg[0]= 'printf'\n   arg[1]= $'x%sx\\n'\n   arg[2]= 'A'\n   arg[3]= 'B'\n"
     );
 }
@@ -727,6 +814,69 @@ fn test_split_string_unset_variable_does_not_start_a_word() {
         .arg("-Sprintf [%s] a ${UU_EMPTY}")
         .succeeds()
         .stdout_is("[a][]");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_option_value_starting_with_split_string_is_not_split() {
+    let scene = TestScenario::new(util_name!());
+    let dir = "-Sprintf X";
+    scene.fixtures.mkdir(dir);
+
+    // GNU env takes the value of a detached -C, -u or -a as is
+    for args in [
+        ["-C", dir, "pwd"],
+        ["--chdir", dir, "pwd"],
+        ["--ch", dir, "pwd"],
+        ["-iC", dir, "pwd"],
+    ] {
+        scene
+            .ucmd()
+            .args(&args)
+            .succeeds()
+            .stdout_contains("/-Sprintf X\n");
+    }
+
+    for opt in ["-u", "--unset", "--un"] {
+        scene
+            .ucmd()
+            .args(&[opt, dir, "printf", "ok"])
+            .succeeds()
+            .stdout_is("ok");
+    }
+
+    // A multicall binary such as the coreutils one on Android would dispatch on
+    // the argv0, so let the shell print it.
+    for opt in ["-a", "--argv0"] {
+        scene
+            .ucmd()
+            .args(&[opt, dir, "sh", "-c", "echo \"$0\""])
+            .succeeds()
+            .stdout_is("-Sprintf X\n");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn test_attached_option_value_does_not_consume_command() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("data");
+
+    // `-Cdata` and `-uFOOa` carry their value: `printf` is the command and
+    // its `-S...` argument is passed through unchanged.
+    for opt in ["-Cdata", "-uFOOa", "-iCdata", "--chdir=data"] {
+        scene
+            .ucmd()
+            .args(&[opt, "printf", "%s", "-Sx y"])
+            .succeeds()
+            .stdout_is("-Sx y");
+    }
+
+    scene
+        .ucmd()
+        .args(&["-u", "-uX=1", "true"])
+        .fails_with_code(125)
+        .stderr_contains("cannot unset '-uX=1'");
 }
 
 #[test]
@@ -1057,53 +1207,89 @@ fn test_env_block_realtime_signal() {
 #[test]
 #[cfg(unix)]
 fn test_env_list_signal_handling_reports_ignore() {
-    let result = new_ucmd!()
+    // Other tests change the dispositions of this process while this one
+    // runs, and env lists what it inherits, so only the line asked for is
+    // checked.
+    new_ucmd!()
         .env("PATH", path())
         .args(&["--ignore-signal=INT", "--list-signal-handling", "true"])
-        .succeeds();
-    let stderr = result.stderr_str();
-    assert!(
-        stderr.contains("INT") && stderr.contains("IGNORE"),
-        "unexpected signal listing: {stderr}"
-    );
+        .succeeds()
+        .stderr_contains("INT        ( 2): IGNORE\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_list_signal_handling_states() {
+    // A signal at its default is not listed; one both blocked and ignored
+    // shows both states, as GNU prints them.
+    new_ucmd!()
+        .env("PATH", path())
+        .args(&["--default-signal=PIPE", "--list-signal-handling", "true"])
+        .succeeds()
+        .stderr_does_not_contain("PIPE")
+        .stderr_does_not_contain("DEFAULT");
+    new_ucmd!()
+        .env("PATH", path())
+        .args(&[
+            "--ignore-signal=INT",
+            "--block-signal=INT",
+            "--list-signal-handling",
+            "true",
+        ])
+        .succeeds()
+        .stderr_contains("INT        ( 2): BLOCK,IGNORE\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_list_signal_handling_reports_inherited_ignore() {
+    // The listing is the state of the signals, not only what env changed:
+    // the outer env ignores USR1, the inner one lists it. Tests share one
+    // process, so the disposition is changed in a child, not here.
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .env("PATH", path())
+        .arg("--ignore-signal=USR1")
+        .arg(&ts.bin_path)
+        .args(&["env", "--list-signal-handling", "true"])
+        .succeeds()
+        .stderr_contains(format!("USR1       ({:2}): IGNORE\n", libc::SIGUSR1));
 }
 
 #[test]
 #[cfg(unix)]
 fn test_env_signal_options_are_applied_in_the_order_given() {
+    // A signal back at its default is not listed; resetting the action keeps it blocked.
     for (args, expected) in [
-        (
-            &["--ignore-signal=INT", "--default-signal=INT"][..],
-            "DEFAULT",
-        ),
+        (&["--ignore-signal=INT", "--default-signal=INT"][..], None),
         (
             &["--default-signal=INT", "--ignore-signal=INT"][..],
-            "IGNORE",
+            Some("IGNORE"),
         ),
         (
             &["--block-signal=INT", "--default-signal=INT"][..],
-            "DEFAULT",
+            Some("BLOCK"),
         ),
-        (&["--ignore-signal=INT", "--default-signal"][..], "DEFAULT"),
-        (&["--default-signal", "--ignore-signal=INT"][..], "IGNORE"),
-        (&["--block-signal=INT", "--ignore-signal=INT"][..], "IGNORE"),
+        (&["--ignore-signal=INT", "--default-signal"][..], None),
+        (
+            &["--default-signal", "--ignore-signal=INT"][..],
+            Some("IGNORE"),
+        ),
+        (
+            &["--block-signal=INT", "--ignore-signal=INT"][..],
+            Some("BLOCK,IGNORE"),
+        ),
     ] {
         let mut cmd_args = args.to_vec();
         cmd_args.extend(["--list-signal-handling", "true"]);
 
         let result = new_ucmd!().env("PATH", path()).args(&cmd_args).succeeds();
-        let stderr = result.stderr_str();
-
-        assert!(
-            stderr.contains("INT") && stderr.contains(expected),
-            "{args:?}: expected INT to be {expected}, got: {stderr}"
-        );
-        for other in ["DEFAULT", "IGNORE", "BLOCK"] {
-            assert!(
-                other == expected || !stderr.contains(other),
-                "{args:?}: unexpected {other} for INT in: {stderr}"
-            );
-        }
+        let state = result
+            .stderr_str()
+            .lines()
+            .find(|line| line.starts_with("INT "))
+            .and_then(|line| line.rsplit(": ").next());
+        assert_eq!(state, expected, "{args:?}");
     }
 }
 
@@ -1134,7 +1320,7 @@ fn test_env_signal_option_without_value_applies_to_every_signal() {
         .succeeds();
     let stderr = result.stderr_str();
     assert!(
-        stderr.contains("INT") && stderr.contains("DEFAULT"),
+        stderr.contains("TERM") && !stderr.contains("INT "),
         "a later explicit option must win over a bare one, got: {stderr}"
     );
 }
@@ -1186,6 +1372,10 @@ fn disallow_equals_sign_on_short_unset_option() {
         .stderr_contains("env: cannot unset '=': Invalid argument");
     ts.ucmd()
         .arg("-u=A1B2C3")
+        .fails_with_code(125)
+        .stderr_contains("env: cannot unset '=A1B2C3': Invalid argument");
+    ts.ucmd()
+        .arg("-vu=A1B2C3")
         .fails_with_code(125)
         .stderr_contains("env: cannot unset '=A1B2C3': Invalid argument");
     ts.ucmd().arg("--split-string=A1B=2C3=").succeeds();
@@ -2350,4 +2540,143 @@ env: no terminating quote in -S string at position 18 for quote '''
             .fails_with_code(125)
             .stderr_is("env: no terminating quote in -S string at position 18 for quote '''\n");
     }
+}
+
+#[test]
+fn test_env0_from_basic() {
+    new_ucmd!()
+        .args(&["-i", "--env0-from=-"])
+        .pipe_in("A=1\0B=2\0")
+        .succeeds()
+        .stdout_is("A=1\nB=2\n");
+}
+
+#[test]
+fn test_env0_from_preserve_duplicates() {
+    new_ucmd!()
+        .args(&["-i", "--env0-from=-"])
+        .pipe_in("DUP=1\0DUP=2\0")
+        .succeeds()
+        .stdout_is("DUP=1\nDUP=2\n");
+}
+
+#[test]
+fn test_env0_from_nonstandard_entries() {
+    new_ucmd!()
+        .args(&["-i", "-0", "--env0-from=-"])
+        .pipe_in("NOEQUAL\0=STARTEQUAL\0\0A=B\0")
+        .succeeds()
+        .stdout_is("NOEQUAL\0=STARTEQUAL\0\0A=B\0");
+}
+
+#[test]
+fn test_env0_from_nonstandard_entries_preserved_when_merging() {
+    let out = new_ucmd!()
+        .arg("--env0-from=-")
+        .pipe_in("UU_ENV0_OPAQUE_14609\0")
+        .succeeds()
+        .stdout_move_str();
+
+    assert!(out.lines().any(|line| line == "UU_ENV0_OPAQUE_14609"));
+}
+
+#[test]
+fn test_env0_from_unset_and_override() {
+    new_ucmd!()
+        .args(&["-i", "--env0-from=-", "-u", "DUP"])
+        .pipe_in("DUP=1\0DUP=2\0OTHER=3\0")
+        .succeeds()
+        .stdout_is("OTHER=3\n");
+
+    new_ucmd!()
+        .args(&["-i", "--env0-from=-", "DUP=4"])
+        .pipe_in("DUP=1\0DUP=2\0")
+        .succeeds()
+        .stdout_is("DUP=4\nDUP=2\n");
+}
+
+#[test]
+fn test_env0_from_empty_file() {
+    let tmp = tempfile::NamedTempFile::new().unwrap();
+    new_ucmd!()
+        .arg("-i")
+        .arg(format!("--env0-from={}", tmp.path().display()))
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
+fn test_env0_from_missing_trailing_nul() {
+    new_ucmd!()
+        .args(&["-i", "--env0-from=-"])
+        .pipe_in("A=1\0B=2")
+        .fails_with_code(125)
+        .stderr_is("env: -: file must end with a NUL byte\n");
+}
+
+#[test]
+fn test_env0_from_nonexistent_file() {
+    new_ucmd!()
+        .arg("--env0-from=/nonexistent_file_12345")
+        .fails_with_code(125)
+        .stderr_contains("cannot read '/nonexistent_file_12345'");
+}
+
+#[test]
+fn test_env0_from_with_command() {
+    new_ucmd!()
+        .args(&["-i", "--env0-from=-", "echo", "hello"])
+        .pipe_in("FOO=BAR\0")
+        .succeeds()
+        .stdout_is("hello\n");
+}
+
+#[test]
+fn test_env0_from_multiple_last_wins() {
+    let mut tmp1 = tempfile::NamedTempFile::new().unwrap();
+    std::io::Write::write_all(&mut tmp1, b"A=1\0").unwrap();
+    let mut tmp2 = tempfile::NamedTempFile::new().unwrap();
+    std::io::Write::write_all(&mut tmp2, b"B=2\0").unwrap();
+
+    new_ucmd!()
+        .args(&[
+            "-i",
+            &format!("--env0-from={}", tmp1.path().display()),
+            &format!("--env0-from={}", tmp2.path().display()),
+        ])
+        .succeeds()
+        .stdout_is("B=2\n");
+}
+
+#[cfg(all(unix, not(target_os = "fuchsia")))]
+#[test]
+fn test_env0_from_default_sigpipe() {
+    new_ucmd!()
+        .args(&["-i", "--default-signal=PIPE", "--env0-from=-"])
+        .pipe_in("A=1\0")
+        .succeeds()
+        .stdout_is("A=1\nRUST_SIGPIPE=default\n");
+
+    new_ucmd!()
+        .args(&[
+            "-i",
+            "--default-signal=PIPE",
+            "--ignore-signal=PIPE",
+            "--env0-from=-",
+        ])
+        .pipe_in("A=1\0")
+        .succeeds()
+        .stdout_is("A=1\n");
+}
+
+#[test]
+fn test_env0_from_hyphen_value_not_split() {
+    let dir = tempdir().unwrap();
+    std::fs::write(dir.path().join("-S env"), b"A=1\0").unwrap();
+
+    new_ucmd!()
+        .current_dir(dir.path())
+        .args(&["-i", "--env0-from", "-S env"])
+        .succeeds()
+        .stdout_is("A=1\n");
 }

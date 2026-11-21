@@ -199,12 +199,9 @@ fn test_pathchk_non_utf8_paths() {
     new_ucmd!().arg(&filename).succeeds();
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: host paths (/dev/full) not visible"
-)]
 fn test_not_a_directory_clean() {
     // https://github.com/uutils/coreutils/issues/13888
     new_ucmd!()

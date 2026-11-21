@@ -88,7 +88,8 @@ patches: assistants can reproduce GPL sources verbatim.
   clearly distinct from GNU's fixtures.
 - Use `.no_output()` rather than `.no_stdout().no_stderr()`.
 - Anything that can't run under WASI needs `#[uutests::wasi_ignore(ReasonKey)]`,
-  not a raw `#[cfg_attr(wasi_runner, ignore = "...")]`. See
+  (or `#[uutests::wasip2_ignore(ReasonKey)]` for wasm32-wasip2 only), not a raw
+  `#[cfg_attr(wasi_runner, ignore = "...")]`. See
   `docs/src/wasi-test-gaps.md` for the reason-key policy.
 - If the test is essentially platform specific e.g. using `strace`, or WASI would not add API to pass the test, it needs `#[cfg(not(wasi_runner))]`.
 - If a GNU test was failing while the Rust suite passed, the PR should add a Rust

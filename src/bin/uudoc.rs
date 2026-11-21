@@ -297,34 +297,31 @@ fn main() -> io::Result<()> {
             ("unix", "feat_os_unix"),
             ("windows", "feat_os_windows"),
             ("unix_android", "feat_os_unix_android"),
+            ("linux", "feat_os_unix,feat_selinux"),
         ] {
-            let platform_utils: Vec<String> = String::from_utf8(
-                process::Command::new("./util/show-utils.sh")
-                    .arg(format!("--features={features}"))
-                    .output()?
-                    .stdout,
-            )
-            .unwrap()
-            .trim()
-            .split_ascii_whitespace()
-            .map(ToString::to_string)
-            .collect();
+            let output = process::Command::new("cargo")
+                .args([
+                    "tree",
+                    "--depth",
+                    "1",
+                    "--format",
+                    "{lib}",
+                    "--features",
+                    features,
+                    "--prefix",
+                    "none",
+                ])
+                .output()?;
+            if !output.status.success() {
+                return Err(io::Error::other(String::from_utf8_lossy(&output.stderr)));
+            }
+            let platform_utils: Vec<String> = String::from_utf8(output.stdout)
+                .unwrap()
+                .lines()
+                .filter_map(|l| l.trim().strip_prefix("uu_").map(ToString::to_string))
+                .collect();
             map.insert(platform, platform_utils);
         }
-
-        // Linux is a special case because it can support selinux
-        let platform_utils: Vec<String> = String::from_utf8(
-            process::Command::new("./util/show-utils.sh")
-                .arg("--features=feat_os_unix feat_selinux")
-                .output()?
-                .stdout,
-        )
-        .unwrap()
-        .trim()
-        .split_ascii_whitespace()
-        .map(ToString::to_string)
-        .collect();
-        map.insert("linux", platform_utils);
 
         map
     };

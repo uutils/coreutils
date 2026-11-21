@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore wipesync couldnt
+// spell-checker:ignore wipesync couldnt EOVERFLOW ETXTBSY
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -133,11 +133,8 @@ fn test_shred_u() {
     assert!(at.file_exists(file_b));
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: chmod has no ENOSYS-free syscall; -f can't restore write permission"
-)]
 fn test_shred_force() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -222,7 +219,7 @@ fn test_shred_fail_no_perm() {
     let binding = Path::new("dir").join(file);
     let path = binding.to_str().unwrap();
     at.mkdir(dir);
-    at.touch(path);
+    at.write(path, "top secret payload\n");
     at.touch(other);
     scene.ccmd("chmod").arg("a-w").arg(dir).succeeds();
 
@@ -234,7 +231,9 @@ fn test_shred_fail_no_perm() {
         .fails()
         .stderr_contains(format!("{path}: failed to remove: Permission denied\n"));
 
+    // The unlink failed, but the data must still have been deallocated.
     assert!(at.file_exists(path));
+    assert_eq!(at.metadata(path).len(), 0);
     assert!(!at.file_exists(other));
 }
 
@@ -274,11 +273,8 @@ fn test_all_patterns_present() {
     }
 }
 
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: File::try_clone() (used for --random-source) is unsupported"
-)]
 fn test_random_source_regular_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -376,11 +372,8 @@ fn test_shred_non_utf8_paths() {
     ts.ucmd().arg(file_name).succeeds();
 }
 
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: File::try_clone() (used for --random-source) is unsupported"
-)]
 fn test_shred_twenty_passes_with_known_random_source() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -436,11 +429,8 @@ fn test_shred_twenty_passes_with_known_random_source() {
     assert!(!at.file_exists(file));
 }
 
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: File::try_clone() (used for --random-source) is unsupported"
-)]
 fn test_shred_nineteen_passes_first_and_last_are_random() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -619,12 +609,10 @@ fn test_numeric_looking_file_name_verbose_remove() {
 
 // On Unix, '-' names the file attached to standard output, not a file
 // literally named '-'. Open without truncating so the test checks shredding.
+#[uutests::wasi_ignore(StdioHandlesOpaque)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: stdout is not accessible through /dev/fd/1"
-)]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_shred_dash_wipes_stdout_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "secret.txt";
@@ -648,12 +636,10 @@ fn test_shred_dash_wipes_stdout_file() {
     assert_ne!(contents.as_slice(), &original[..]);
 }
 
+#[uutests::wasi_ignore(StdioHandlesOpaque)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: stdout is not accessible through /dev/fd/1"
-)]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_shred_dash_remove_truncates_but_does_not_unlink_stdout() {
     for remove_arg in [
         "-u",
@@ -682,12 +668,9 @@ fn test_shred_dash_remove_truncates_but_does_not_unlink_stdout() {
     }
 }
 
+#[uutests::wasi_ignore(StdioHandlesOpaque)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: stdout is not accessible through /dev/fd/1"
-)]
 fn test_shred_dash_rejects_stdout_pipe() {
     new_ucmd!()
         .arg("-")
@@ -714,9 +697,9 @@ fn test_shred_missing_file() {
         .stderr_only("shred: missing: failed to open for writing: No such file or directory\n");
 }
 
+#[uutests::wasi_ignore(NoFifo)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO or socket file types")]
 fn test_shred_fifo() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("p");
@@ -725,9 +708,9 @@ fn test_shred_fifo() {
         .stderr_only("shred: p: invalid file type\n");
 }
 
+#[uutests::wasi_ignore(NoUnixDomainSockets)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO or socket file types")]
 fn test_shred_socket() {
     // GNU reaches the open and reports its failure; so does shred here.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -735,4 +718,80 @@ fn test_shred_socket() {
     ucmd.arg("s")
         .fails_with_code(1)
         .stderr_contains("shred: s: failed to open for writing: ");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
+fn test_stat_failure_reports_open_error() {
+    // Make stat and open fail with different errors on the same path: the
+    // one shown must come from open.
+    use std::process::Command;
+
+    let (at, _ucmd) = at_and_ucmd!();
+    at.touch("victim");
+    let path = at.plus("victim");
+
+    let Ok(out) = Command::new("strace")
+        .arg("-o")
+        .arg("/dev/null")
+        .arg("-P")
+        .arg(&path)
+        .args([
+            "-e",
+            "inject=%%stat:error=EOVERFLOW",
+            "-e",
+            "inject=open,openat:error=ETXTBSY",
+        ])
+        .arg(uutests::util::get_tests_binary())
+        .arg("shred")
+        .arg(&path)
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .output()
+    else {
+        return; // missing strace
+    };
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    if stderr.contains("ptrace") {
+        return; // tracing not permitted here
+    }
+    assert_eq!(out.status.code(), Some(1));
+    assert!(
+        stderr.ends_with("failed to open for writing: Text file busy\n"),
+        "{stderr}"
+    );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
+fn test_remove_reports_truncate_failure() {
+    // When the data cannot be deallocated, say so and keep the file.
+    use std::process::Command;
+
+    let (at, _ucmd) = at_and_ucmd!();
+    at.write("notes.txt", "keep me around\n");
+
+    let Ok(out) = Command::new("strace")
+        .current_dir(at.as_string())
+        .args(["-o", "/dev/null", "-e", "inject=ftruncate:error=EROFS"])
+        .arg(uutests::util::get_tests_binary())
+        .args(["shred", "-u", "notes.txt"])
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .output()
+    else {
+        return; // missing strace
+    };
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    if stderr.contains("ptrace") {
+        return; // tracing not permitted here
+    }
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(
+        stderr,
+        "shred: notes.txt: error truncating: Read-only file system\n"
+    );
+    assert!(at.file_exists("notes.txt"));
 }

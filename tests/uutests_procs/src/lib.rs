@@ -11,18 +11,9 @@ use proc_macro::TokenStream;
 use quote::{quote, quote_spanned};
 use syn::Item;
 
-/// Ignores an integration test under the WASI test runner, keyed by one of a fixed set of
-/// named, de-duplicated reasons.
-///
-/// Centralizing the reasons keeps the set of known WASI limitations in one place rather than
-/// scattered as ad hoc string literals across the test suite. The `wasi_runner` cfg is set
-/// only by the WASI CI job (see `.github/workflows/wasi.yml`). Applies to a `#[test]` function
-/// or to a module, where the reason attaches to every test within it.
-#[proc_macro_attribute]
-pub fn wasi_ignore(args: TokenStream, item: TokenStream) -> TokenStream {
-    let args = proc_macro2::TokenStream::from(args);
-    let key = args.to_string();
-    let reason = match key.as_str() {
+/// Returns the ignore reason registered for a `wasi_ignore` key.
+fn wasi_reason(key: &str) -> Option<&'static str> {
+    Some(match key {
         "AbsoluteHostTmpdirOutsideGuestRoot" => {
             "WASI sandbox: absolute host tmpdir path is outside the mapped guest root, so cp cannot stat it"
         }
@@ -42,12 +33,18 @@ pub fn wasi_ignore(args: TokenStream, item: TokenStream) -> TokenStream {
         "ClosedStdoutGenericIoError" => {
             "WASI: closed stdout reports a generic I/O error rather than BrokenPipe"
         }
+        "CompressProgramBypassed" => {
+            "WASI: ext_sort bypasses --compress-program entirely (single-threaded in-memory path)"
+        }
         "DebugReportsUnsupported" => {
             "WASI: --debug reports 'unsupported' instead of 'unknown' for this platform"
         }
         "DevNullNotSeekable" => "WASI sandbox: /dev/null is not a seekable device",
         "DirectoryModesUmaskNotFaithful" => {
             "WASI: directory modes/umask are not faithfully reproduced"
+        }
+        "DirectorySizeFromMetadata" => {
+            "WASI: the guest is not Unix, so a directory's size comes from its metadata rather than from a seek to its end"
         }
         "DotDotCanonicalizationDiffers" => {
             "WASI sandbox: relative '..' path canonicalization differs, causing a false self-copy detection"
@@ -56,11 +53,17 @@ pub fn wasi_ignore(args: TokenStream, item: TokenStream) -> TokenStream {
             "WASI: an empty path argument resolves to a directory instead of ENOENT"
         }
         "ErrnoMessageMismatch" => "WASI: errno/error-message mismatches",
+        "GuestRootPathResolution" => {
+            "WASI sandbox: paths resolve against the guest's preopened root, so '..', UNC-style, canonicalized, symlinked-cwd and host absolute paths differ from the host"
+        }
         "GuestRootWritablePreopen" => {
             "WASI: guest root is a writable preopen, not the protected system root"
         }
         "HostPathsNotVisible" => {
             "WASI sandbox: host paths (/dev, /private, /proc, /sys, etc.) not visible"
+        }
+        "HostSystemStateDiffers" => {
+            "WASI: host system state (clock, umask, uname, CPU features) is not shared with the guest"
         }
         "KillDiscardsUnflushedOutput" => {
             "WASI: killing the wasmtime process discards the unflushed output buffer, so the streamed bytes never reach stdout"
@@ -80,6 +83,9 @@ pub fn wasi_ignore(args: TokenStream, item: TokenStream) -> TokenStream {
         "NoRlimitSetrlimitSupport" => "WASI: rlimit/setrlimit not supported",
         "NoStdoutFileRedirection" => "WASI: no stdout-to-file redirection",
         "NoSubprocessSpawning" => "WASI: no subprocess spawning",
+        "NoThreadSpawning" => {
+            "WASI: sort -m spawns real OS threads for multi-file merge, unsupported under wasmtime's default config"
+        }
         "NoTzdb" => {
             "WASI: no tzdb; TZ env var is not honoured, so timezone-dependent behaviour (DST validation, timestamps) differs from the host"
         }
@@ -104,36 +110,92 @@ pub fn wasi_ignore(args: TokenStream, item: TokenStream) -> TokenStream {
             "WASI: path rename is not guaranteed to be an atomic replace, so a concurrent creator can win the race during a forced relink"
         }
         "StdinPositionNotPreserved" => "WASI: stdin file position not preserved through wasmtime",
+        "StdioHandlesOpaque" => {
+            "WASI sandbox: inherited stdin and stdout cannot be inspected, do not share a file offset and are not reachable through /dev/fd"
+        }
         "StdoutDashUnsupported" => "WASI: touch - (stdout) is unsupported",
         "SymlinkHardlinkCaps" => {
             "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
         }
-        "SymlinkLoopNoEloop" => {
-            "WASI: symlink loop traversal does not surface ELOOP ('Too many levels of symbolic links')"
-        }
         "TailFollowDisabled" => "WASI: tail follow mode disabled",
-        "Usize32BitOverflow" => "WASI: usize is 32-bit, the host usize::MAX does not parse",
-        other => {
-            let span = args
-                .into_iter()
-                .next()
-                .map_or_else(proc_macro2::Span::call_site, |token| token.span());
-            let message = format!(
-                "wasi_ignore: unknown reason key `{other}` (add it to tests/uutests_procs/src/lib.rs)"
-            );
-            let item = proc_macro2::TokenStream::from(item);
-            return TokenStream::from(quote_spanned! { span =>
-                compile_error!(#message);
-                #item
-            });
+        "UnsupportedStdApi" => {
+            "WASI: the std or libc API is unsupported (File::try_clone, setlocale LC_* constants)"
         }
-    };
+        "Usize32BitOverflow" => "WASI: usize is 32-bit, the host usize::MAX does not parse",
+        _ => return None,
+    })
+}
 
+/// Returns the ignore reason registered for a `wasip2_ignore` key.
+fn wasip2_reason(key: &str) -> Option<&'static str> {
+    Some(match key {
+        // FIXME: wasi-sdk-35 fixes this (wasi-libc #887); remove the ignore once Rust bundles it.
+        "StreamWriteGenericIoError" => {
+            "WASI P2: stream write errors report a generic I/O error instead of their errno, for example ENOSPC on a full device"
+        }
+        "OsErrorMessageDiffers" => {
+            "WASI P2: the error message text for this OS error differs from native Unix"
+        }
+        "OsStringRequiresUtf8" => "WASI P2: OsString requires valid UTF-8, unlike unix and WASI P1",
+        _ => return None,
+    })
+}
+
+/// Ignores an integration test under the WASI test runner, keyed by one of a fixed set of
+/// named, de-duplicated reasons.
+///
+/// Centralizing the reasons keeps the set of known WASI limitations in one place rather than
+/// scattered as ad hoc string literals across the test suite. The `wasi_runner` cfg is set
+/// only by the WASI CI job (see `.github/workflows/wasi.yml`). Applies to a `#[test]` function
+/// or to a module, where the reason attaches to every test within it.
+#[proc_macro_attribute]
+pub fn wasi_ignore(args: TokenStream, item: TokenStream) -> TokenStream {
+    expand("wasi_ignore", "wasi_runner", wasi_reason, args, item)
+}
+
+/// Ignores an integration test under the WASI preview 2 test runner, keyed by a named reason.
+///
+/// Reasons here are limitations specific to `wasm32-wasip2`; limitations shared with
+/// `wasm32-wasip1` belong to `wasi_ignore`. The `wasip2_runner` cfg is set only by the
+/// preview 2 job in `.github/workflows/wasi.yml`. Applies to a `#[test]` function or to a
+/// module, where the reason attaches to every test within it.
+#[proc_macro_attribute]
+pub fn wasip2_ignore(args: TokenStream, item: TokenStream) -> TokenStream {
+    expand("wasip2_ignore", "wasip2_runner", wasip2_reason, args, item)
+}
+
+/// Resolves the reason key and attaches the ignore attribute for the given runner cfg.
+fn expand(
+    macro_name: &str,
+    cfg_name: &str,
+    lookup: fn(&str) -> Option<&'static str>,
+    args: TokenStream,
+    item: TokenStream,
+) -> TokenStream {
+    let args = proc_macro2::TokenStream::from(args);
+    let key = args.to_string();
+    let Some(reason) = lookup(key.as_str()) else {
+        let span = args
+            .into_iter()
+            .next()
+            .map_or_else(proc_macro2::Span::call_site, |token| token.span());
+        let message = format!(
+            "{macro_name}: unknown reason key `{key}` (add it to tests/uutests_procs/src/lib.rs)"
+        );
+        let item = proc_macro2::TokenStream::from(item);
+        return TokenStream::from(quote_spanned! { span =>
+            compile_error!(#message);
+            #item
+        });
+    };
+    let cfg = syn::Ident::new(cfg_name, proc_macro2::Span::call_site());
     let input = syn::parse_macro_input!(item as Item);
     let output = match input {
-        Item::Fn(_) | Item::Mod(_) => apply_to_tests(input, reason),
+        Item::Fn(_) | Item::Mod(_) => apply_to_tests(input, &cfg, reason),
         other => {
-            let message = "wasi_ignore can only be applied to a #[test] function or a module containing tests";
+            let message = format!(
+                "{macro_name} can only be applied to a #[test] function or a module containing tests"
+            );
             return TokenStream::from(quote_spanned! { proc_macro2::Span::call_site() =>
                 compile_error!(#message);
                 #other
@@ -148,13 +210,13 @@ pub fn wasi_ignore(args: TokenStream, item: TokenStream) -> TokenStream {
 /// A function receives the attribute directly. A module recurses into its items and
 /// attaches the attribute only to functions that look like tests, so plain helper
 /// functions stay enabled under the WASI runner.
-fn apply_to_tests(item: Item, reason: &str) -> Item {
+fn apply_to_tests(item: Item, cfg: &syn::Ident, reason: &str) -> Item {
     match item {
         Item::Fn(mut func) => {
-            add_ignore_attr(&mut func, reason);
+            add_ignore_attr(&mut func, cfg, reason);
             Item::Fn(func)
         }
-        Item::Mod(module) => Item::Mod(apply_to_module(module, reason)),
+        Item::Mod(module) => Item::Mod(apply_to_module(module, cfg, reason)),
         other => other,
     }
 }
@@ -162,18 +224,18 @@ fn apply_to_tests(item: Item, reason: &str) -> Item {
 /// Recurses into a module and attaches the ignore reason to its test functions.
 ///
 /// The filter keeps plain helper functions runnable while still reaching nested modules.
-fn apply_to_module(mut module: syn::ItemMod, reason: &str) -> syn::ItemMod {
+fn apply_to_module(mut module: syn::ItemMod, cfg: &syn::Ident, reason: &str) -> syn::ItemMod {
     if let Some((brace, items)) = module.content.take() {
         let items = items
             .into_iter()
             .map(|it| match it {
                 Item::Fn(mut func) => {
                     if is_test_fn(&func) {
-                        add_ignore_attr(&mut func, reason);
+                        add_ignore_attr(&mut func, cfg, reason);
                     }
                     Item::Fn(func)
                 }
-                Item::Mod(nested) => Item::Mod(apply_to_module(nested, reason)),
+                Item::Mod(nested) => Item::Mod(apply_to_module(nested, cfg, reason)),
                 other => other,
             })
             .collect();
@@ -186,9 +248,9 @@ fn apply_to_module(mut module: syn::ItemMod, reason: &str) -> syn::ItemMod {
 ///
 /// The attribute is appended last so that under `#[rstest]` it follows the `#[case]`
 /// arguments and applies to every generated case, not only the first.
-fn add_ignore_attr(func: &mut syn::ItemFn, reason: &str) {
+fn add_ignore_attr(func: &mut syn::ItemFn, cfg: &syn::Ident, reason: &str) {
     func.attrs
-        .push(syn::parse_quote! { #[cfg_attr(wasi_runner, ignore = #reason)] });
+        .push(syn::parse_quote! { #[cfg_attr(#cfg, ignore = #reason)] });
 }
 
 /// Reports whether a function carries a `#[test]` or `#[rstest]` attribute.
@@ -231,9 +293,18 @@ mod tests {
             }
         };
 
-        let output = apply_to_tests(input, "some reason");
-        let rendered = quote!(#output).to_string();
+        for cfg in ["wasi_runner", "wasip2_runner"] {
+            let output =
+                apply_to_tests(input.clone(), &syn::parse_str(cfg).unwrap(), "some reason");
+            let rendered = quote!(#output).to_string();
 
-        assert_eq!(rendered.matches("ignore = \"some reason\"").count(), 3);
+            assert_eq!(
+                rendered
+                    .matches(&format!("cfg_attr ({cfg} , ignore = \"some reason\")"))
+                    .count(),
+                3,
+                "unexpected rendering for {cfg}"
+            );
+        }
     }
 }

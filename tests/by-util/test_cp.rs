@@ -134,12 +134,9 @@ fn test_cp_symlink_relative_source_in_cwd() {
 // The destination's parent is compared with the current directory by name
 // and then by device/inode, so a path that merely resolves to
 // the current directory is accepted.
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: '..' leaves the mapped guest root"
-)]
 fn test_cp_symlink_relative_source_dest_resolving_to_cwd() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("b.txt");
@@ -151,12 +148,9 @@ fn test_cp_symlink_relative_source_dest_resolving_to_cwd() {
     assert!(at.is_symlink("b2"));
 }
 
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
-)]
 fn test_cp_symlink_relative_source_dest_in_symlink_to_cwd() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("b.txt");
@@ -167,12 +161,9 @@ fn test_cp_symlink_relative_source_dest_in_symlink_to_cwd() {
     assert!(at.is_symlink("b2"));
 }
 
+#[uutests::wasi_ignore(AbsoluteHostTmpdirOutsideGuestRoot)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: absolute host tmpdir path is outside the mapped guest root, so cp cannot stat it"
-)]
 fn test_cp_symlink_absolute_source_into_subdir() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("sub");
@@ -203,12 +194,9 @@ fn test_cp_symlink_relative_source_outside_cwd_existing_dest() {
     }
 }
 
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
-)]
 fn test_cp_symlink_relative_source_outside_cwd_existing_symlink_dest() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("b.txt");
@@ -255,12 +243,9 @@ fn test_cp_symlink_recursive_relative_dir_into_existing_dir() {
     assert!(!at.is_symlink("out/dir/a.txt"));
 }
 
+#[uutests::wasi_ignore(AbsoluteHostTmpdirOutsideGuestRoot)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: absolute host tmpdir path is outside the mapped guest root, so cp cannot stat it"
-)]
 fn test_cp_symlink_recursive_absolute_dir_into_subdir() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
@@ -465,7 +450,6 @@ fn test_cp_multiple_files_with_nonexistent_file() {
     assert_eq!(at.read(TEST_HOW_ARE_YOU_DEST), "How are you?\n");
 }
 
-#[uutests::wasi_ignore(EmptyPathResolvesToDirectory)]
 #[test]
 fn test_cp_multiple_files_with_empty_file_name() {
     #[cfg(windows)]
@@ -597,7 +581,9 @@ fn test_cp_arg_no_target_directory() {
         .arg("-T")
         .arg(TEST_COPY_TO_FOLDER)
         .fails()
-        .stderr_contains("cannot overwrite directory");
+        .stderr_is(format!(
+            "cp: cannot overwrite directory '{TEST_COPY_TO_FOLDER}' with non-directory '{TEST_HELLO_WORLD_SOURCE}'\n"
+        ));
 }
 
 #[test]
@@ -640,6 +626,49 @@ fn test_cp_arg_no_target_directory_with_recursive_target_does_not_exists() {
     assert!(at.plus(target).join("a").exists());
     assert!(at.plus(target).join("b").exists());
     assert!(!at.plus(target).join("dir").exists());
+}
+
+/// A subdirectory named like the source must stay one level down (issue #15744).
+#[rstest]
+#[case::new_target(&["dir", "new"], "new")]
+#[case::new_target_trailing_slash(&["dir", "new/"], "new")]
+#[case::existing_target(&["dir", "existing"], "existing")]
+#[case::source_trailing_slash(&["dir/", "new"], "new")]
+#[case::source_curdir(&["dir/.", "new"], "new")]
+#[case::existing_target_source_curdir(&["dir/.", "existing"], "existing")]
+fn test_cp_no_target_directory_keeps_source_named_subdir(
+    #[case] args: &[&str],
+    #[case] target: &str,
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("dir/dir");
+    at.mkdir("existing");
+    at.write("dir/f", "outer");
+    at.write("dir/dir/f", "inner");
+    at.write("dir/dir/g", "g");
+
+    ucmd.arg("-rT").args(args).succeeds().no_output();
+
+    assert_eq!(at.read(format!("{target}/f")), "outer");
+    assert!(at.dir_exists(format!("{target}/dir")));
+    assert_eq!(at.read(format!("{target}/dir/f")), "inner");
+    assert_eq!(at.read(format!("{target}/dir/g")), "g");
+    assert!(!at.file_exists(format!("{target}/g")));
+}
+
+#[uutests::wasi_ignore(NoPermissionBits)]
+#[test]
+#[cfg(unix)]
+fn test_cp_archive_no_target_directory_preserves_outer_mode() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("dir/dir");
+    at.set_mode("dir", 0o700);
+    at.set_mode("dir/dir", 0o755);
+
+    ucmd.args(&["-aT", "dir", "new"]).succeeds().no_output();
+
+    assert_eq!(at.metadata("new").permissions().mode() & 0o777, 0o700);
+    assert_eq!(at.metadata("new/dir").permissions().mode() & 0o777, 0o755);
 }
 
 #[test]
@@ -4353,6 +4382,59 @@ fn test_dir_recursive_copy() {
 }
 
 #[test]
+#[cfg(windows)]
+fn test_cp_recursive_drive_root() {
+    use std::process::Command;
+
+    struct SubstDrive(String);
+
+    impl Drop for SubstDrive {
+        fn drop(&mut self) {
+            let _ = Command::new("subst").arg(&self.0).arg("/D").status();
+        }
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("src/sub");
+    at.write("src/id.dat", "root file");
+    at.write("src/sub/x.txt", "nested file");
+
+    let Some(drive) = (b'A'..=b'Z')
+        .rev()
+        .map(char::from)
+        .find(|letter| !Path::new(&format!("{letter}:\\")).exists())
+    else {
+        println!("No free drive letter available for subst; skipping test");
+        return;
+    };
+    let drive = format!("{drive}:");
+    match Command::new("subst")
+        .arg(&drive)
+        .arg(at.plus("src"))
+        .status()
+    {
+        Ok(status) if status.success() => {}
+        result => {
+            println!("subst {drive} failed ({result:?}); skipping test");
+            return;
+        }
+    }
+    let _subst_drive = SubstDrive(drive.clone());
+
+    for (source, dest) in [
+        (format!("{drive}/"), "dest_slash"),
+        (format!("{drive}\\"), "dest_backslash"),
+    ] {
+        // The bug only shows when the destination directory already exists.
+        at.mkdir(dest);
+        scene.ucmd().args(&["-r", &source, dest]).succeeds();
+        assert_eq!(at.read(format!("{dest}/id.dat")), "root file");
+        assert_eq!(at.read(format!("{dest}/sub/x.txt")), "nested file");
+    }
+}
+
+#[test]
 fn test_cp_dir_vs_file() {
     new_ucmd!()
         .arg("-R")
@@ -4364,9 +4446,11 @@ fn test_cp_dir_vs_file() {
         ));
 }
 
-#[test]
+#[rstest]
+#[case::recursive("-r")]
+#[case::no_target_dir("-rT")]
 #[cfg(unix)]
-fn test_cp_dir_vs_dangling_symlink() {
+fn test_cp_dir_vs_dangling_symlink(#[case] flags: &str) {
     // A symlink that leads nowhere is not a directory to copy into: following
     // it would create its target.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -4374,7 +4458,7 @@ fn test_cp_dir_vs_dangling_symlink() {
     at.touch("src/file");
     at.symlink_file("nowhere", "dangling");
 
-    ucmd.args(&["-r", "src", "dangling"])
+    ucmd.args(&[flags, "src", "dangling"])
         .fails()
         .stderr_only("cp: cannot overwrite non-directory 'dangling' with directory 'src'\n");
     assert!(!at.dir_exists("nowhere"));
@@ -7312,6 +7396,79 @@ fn test_cp_recursive_dest_subdir_symlink_not_followed() {
     );
 }
 
+/// With `-T` the target is the destination itself, so a target that is a
+/// symlink to a directory is a non-directory and must not be written through.
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
+#[rstest]
+#[case::dir("src")]
+#[case::dot("src/.")]
+#[case::dot_dot("src/sub/..")]
+#[cfg(unix)]
+fn test_cp_recursive_no_target_dir_refuses_symlink_target(#[case] src: &str) {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("src/sub");
+    at.write("src/f", "SOURCE");
+    at.mkdir("real");
+    at.write("real/f", "REAL");
+    at.symlink_dir("real", "dst");
+
+    scene
+        .ucmd()
+        .args(&["-rT", src, "dst"])
+        .fails()
+        .stderr_only(format!(
+            "cp: cannot overwrite non-directory 'dst' with directory '{src}'\n"
+        ));
+    assert_eq!(at.read("real/f"), "REAL");
+    assert!(!at.dir_exists("real/sub"));
+}
+
+/// A trailing slash asks for what the symlink resolves to, as in GNU.
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
+#[test]
+#[cfg(unix)]
+fn test_cp_recursive_no_target_dir_follows_trailing_slash() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("src");
+    at.write("src/f", "SOURCE");
+    at.mkdir("real");
+    at.symlink_dir("real", "dst");
+
+    scene
+        .ucmd()
+        .args(&["-rT", "src", "dst/"])
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("real/f"), "SOURCE");
+}
+
+/// Without `-T`, a source ending in `.` or `..` copies into what a symlinked
+/// target resolves to, as in GNU.
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
+#[rstest]
+#[case::dot("src/.")]
+#[case::dot_dot("src/sub/..")]
+#[cfg(unix)]
+fn test_cp_recursive_dot_source_into_symlink_target(#[case] src: &str) {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("src/sub");
+    at.write("src/f", "SOURCE");
+    at.mkdir("real");
+    at.symlink_dir("real", "dst");
+
+    scene
+        .ucmd()
+        .args(&["-r", src, "dst"])
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("real/f"), "SOURCE");
+    assert!(at.dir_exists("real/sub"));
+    assert!(at.is_symlink("dst"));
+}
+
 /// A symlinked directory named as the *target* is still a legitimate
 /// destination -- only entries discovered inside the tree are refused.
 #[uutests::wasi_ignore(SymlinkHardlinkCaps)]
@@ -8582,11 +8739,11 @@ fn test_cp_recurse_verbose_output() {
     let file = "file";
     #[cfg(not(windows))]
     let output = format!(
-        "'{source_dir}' -> '{target_dir}/'\n'{source_dir}/{file}' -> '{target_dir}/{file}'\n"
+        "'{source_dir}' -> '{target_dir}'\n'{source_dir}/{file}' -> '{target_dir}/{file}'\n"
     );
     #[cfg(windows)]
     let output = format!(
-        "'{source_dir}' -> '{target_dir}\\'\n'{source_dir}\\{file}' -> '{target_dir}\\{file}'\n"
+        "'{source_dir}' -> '{target_dir}'\n'{source_dir}\\{file}' -> '{target_dir}\\{file}'\n"
     );
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -8611,11 +8768,11 @@ fn test_cp_recurse_verbose_output_with_symlink() {
     let symlink = "symlink";
     #[cfg(not(windows))]
     let output = format!(
-        "'{source_dir}' -> '{target_dir}/'\n'{source_dir}/{symlink}' -> '{target_dir}/{symlink}'\n"
+        "'{source_dir}' -> '{target_dir}'\n'{source_dir}/{symlink}' -> '{target_dir}/{symlink}'\n"
     );
     #[cfg(windows)]
     let output = format!(
-        "'{source_dir}' -> '{target_dir}\\'\n'{source_dir}\\{symlink}' -> '{target_dir}\\{symlink}'\n"
+        "'{source_dir}' -> '{target_dir}'\n'{source_dir}\\{symlink}' -> '{target_dir}\\{symlink}'\n"
     );
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -9288,6 +9445,44 @@ fn test_cp_preserve_setuid_when_chown_succeeds() {
     );
 }
 
+// The setuid/setgid bits are only applied once the ownership has been set
+// (like GNU), so a mode-preserving copy must still end up with them, while a
+// plain copy drops them.
+#[uutests::wasi_ignore(NoPermissionBits)]
+#[test]
+#[cfg(unix)]
+fn test_cp_setuid_setgid_applied_after_ownership() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("src");
+    at.set_mode("src", 0o6755);
+
+    for (i, (args, expected)) in [
+        (&[][..], 0o755),
+        (&["-p"][..], 0o6755),
+        (&["-a"][..], 0o6755),
+        (&["--preserve=mode"][..], 0o6755),
+        (&["--preserve=mode,ownership"][..], 0o6755),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let dst = format!("dst{i}");
+        scene
+            .ucmd()
+            .umask(0o022)
+            .args(args)
+            .arg("src")
+            .arg(&dst)
+            .succeeds();
+        assert_eq!(
+            at.metadata(&dst).mode() & 0o7777,
+            expected,
+            "cp {args:?} src {dst}"
+        );
+    }
+}
+
 #[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
@@ -9422,6 +9617,61 @@ fn test_cp_p_preserves_posix_acls() {
     );
 }
 
+// `cp -r` without -p only copies the mode bits of the directories it
+// creates, like GNU; it must not copy their access or default ACLs.
+// `cp -rp` preserves them, as ACLs are part of the mode.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: ACL/xattr syscalls are not implemented")]
+fn test_cp_r_copies_dir_posix_acls_only_with_p() {
+    use std::process::Command;
+
+    if Command::new("setfacl").arg("--version").output().is_err() {
+        return;
+    }
+    if Command::new("getfacl").arg("--version").output().is_err() {
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("src");
+
+    let setfacl = Command::new("setfacl")
+        .arg("-m")
+        .arg("user:bin:rwx,default:user:bin:rwx")
+        .arg(at.plus("src"))
+        .status();
+    let Ok(status) = setfacl else { return };
+    if !status.success() {
+        // Filesystem doesn't support ACLs; skip.
+        return;
+    }
+
+    let getfacl = |dir: &str| {
+        let output = Command::new("getfacl")
+            .arg("--omit-header")
+            .arg(at.plus(dir))
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&output.stdout).into_owned()
+    };
+
+    scene.ucmd().arg("-r").arg("src").arg("dst").succeeds();
+    let dst_acl = getfacl("dst");
+    assert!(
+        !dst_acl.contains("user:bin:"),
+        "cp -r must not copy POSIX ACLs:\n{dst_acl}",
+    );
+
+    scene.ucmd().arg("-rp").arg("src").arg("dst_p").succeeds();
+    assert_eq!(
+        getfacl("src"),
+        getfacl("dst_p"),
+        "cp -rp must preserve the access and default POSIX ACLs of a directory",
+    );
+}
+
 #[test]
 fn test_progressbar_inexistent_source() {
     let (_, mut ucmd) = at_and_ucmd!();
@@ -9430,4 +9680,36 @@ fn test_progressbar_inexistent_source() {
         .arg("inexistent2")
         .fails_with_code(1)
         .stderr_contains("cp: cannot stat 'inexistent1': No such file or directory");
+}
+
+#[rstest]
+#[case::plain(&[])]
+#[case::recursive(&["-r"])]
+#[cfg(unix)]
+fn test_cp_source_with_trailing_slash_on_file(#[case] flags: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    ucmd.args(flags)
+        .args(&["f/", "dest"])
+        .fails_with_code(1)
+        .stderr_only("cp: cannot stat 'f/': Not a directory\n");
+    assert!(!at.file_exists("dest"));
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no chmod syscall")]
+fn test_cp_source_in_unsearchable_dir() {
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    at.touch("d/f");
+    at.set_mode("d", 0);
+    ucmd.args(&["d/f", "dest"])
+        .fails_with_code(1)
+        .stderr_only("cp: cannot stat 'd/f': Permission denied\n");
+    at.set_mode("d", 0o755);
+    assert!(!at.file_exists("dest"));
 }

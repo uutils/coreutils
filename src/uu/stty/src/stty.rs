@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore clocal erange tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime cflag lflag ispeed ospeed
+// spell-checker:ignore clocal erange tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime cflag lflag ispeed ospeed openpty
 // spell-checker:ignore parenb parodd cmspar hupcl cstopb cread clocal crtscts CSIZE
 // spell-checker:ignore ignbrk brkint ignpar parmrk inpck istrip inlcr igncr icrnl ixoff ixon iuclc ixany imaxbel iutf
 // spell-checker:ignore opost olcuc ocrnl onlcr onocr onlret ofdel nldly crdly tabdly bsdly vtdly ffdly ofill
@@ -104,6 +104,16 @@ impl<T> Flag<T> {
     pub const fn sane(mut self) -> Self {
         self.sane = true;
         self
+    }
+
+    fn apply(&self, termios: &mut Termios, enabled: bool)
+    where
+        T: TermiosFlag,
+    {
+        if enabled && let Some(group) = self.group {
+            group.apply(termios, false);
+        }
+        self.flag.apply(termios, enabled);
     }
 }
 
@@ -266,17 +276,17 @@ fn stty(opts: &Options) -> UResult<()> {
                 }
                 "line" => {
                     let line = args_iter.next().ok_or_else(|| missing_arg(arg))?;
-                    let n = parse_u8_or_err(line).map_err(|e| USimpleError::new(1, e))?;
+                    let n = line.parse::<u8>().map_err(|e| create_parse_err(&e, line))?;
                     valid_args.push(ArgOptions::Special(SpecialSetting::Line(n)));
                 }
                 "min" => {
                     let min = args_iter.next().ok_or_else(|| missing_arg(arg))?;
-                    let n = parse_u8_or_err(min).map_err(|e| USimpleError::new(1, e))?;
+                    let n = min.parse::<u8>().map_err(|e| create_parse_err(&e, min))?;
                     valid_args.push(ArgOptions::Mapping((S::VMIN, n)));
                 }
                 "time" => {
                     let time = args_iter.next().ok_or_else(|| missing_arg(arg))?;
-                    let n = parse_u8_or_err(time).map_err(|e| USimpleError::new(1, e))?;
+                    let n = time.parse::<u8>().map_err(|e| create_parse_err(&e, time))?;
                     valid_args.push(ArgOptions::Mapping((S::VTIME, n)));
                 }
                 "rows" => {
@@ -421,15 +431,14 @@ fn invalid_speed(arg: &str, speed: &str) -> Box<dyn UError> {
 }
 
 /// GNU uses different error messages if values overflow or underflow a u8,
-/// this function returns the appropriate error message in the case of overflow or underflow, or u8 on success
-fn parse_u8_or_err(arg: &str) -> Result<u8, String> {
-    arg.parse::<u8>().map_err(|e| {
-        if *e.kind() == IntErrorKind::PosOverflow {
-            translate!("stty-error-invalid-integer-argument-value-too-large", "value" => format!("'{arg}'"))
-        } else {
-            translate!("stty-error-invalid-integer-argument", "value" => format!("'{arg}'"))
-        }
-    })
+/// this function returns the appropriate error message in the case of overflow or underflow
+fn create_parse_err(e: &std::num::ParseIntError, arg: &str) -> Box<dyn UError> {
+    let msg = if *e.kind() == IntErrorKind::PosOverflow {
+        translate!("stty-error-invalid-integer-argument-value-too-large", "value" => format!("'{arg}'"))
+    } else {
+        translate!("stty-error-invalid-integer-argument", "value" => format!("'{arg}'"))
+    };
+    USimpleError::new(1, msg)
 }
 
 /// Parse an integer with hex (0x/0X) and octal (0) prefix support, wrapping to u16.
@@ -559,11 +568,14 @@ fn print_terminal_size(
         );
     }
 
-    #[cfg(any(target_os = "linux", target_os = "redox"))]
-    {
-        let line = termios.line_discipline;
-        printer.print(&translate!("stty-output-line", "line" => line));
-    }
+    #[cfg(any(
+        target_os = "android",
+        target_os = "fuchsia",
+        target_os = "haiku",
+        target_os = "linux",
+        target_os = "redox"
+    ))]
+    printer.print(&translate!("stty-output-line", "line" => termios.line_discipline));
     printer.flush();
 }
 
@@ -825,16 +837,16 @@ fn apply_setting(termios: &mut Termios, setting: &AllFlags) -> nix::Result<()> {
     match setting {
         AllFlags::Baud(_, _) => apply_baud_rate_flag(termios, setting)?,
         AllFlags::ControlFlags((setting, disable)) => {
-            setting.flag.apply(termios, !disable);
+            setting.apply(termios, !disable);
         }
         AllFlags::InputFlags((setting, disable)) => {
-            setting.flag.apply(termios, !disable);
+            setting.apply(termios, !disable);
         }
         AllFlags::LocalFlags((setting, disable)) => {
-            setting.flag.apply(termios, !disable);
+            setting.apply(termios, !disable);
         }
         AllFlags::OutputFlags((setting, disable)) => {
-            setting.flag.apply(termios, !disable);
+            setting.apply(termios, !disable);
         }
     }
     Ok(())
@@ -881,7 +893,11 @@ fn apply_saved_state(termios: &mut Termios, state: &(CFlags, CCFlags)) {
 }
 
 fn apply_special_setting(
-    _termios: &mut Termios,
+    #[cfg_attr(
+        not(any(target_os = "linux", target_os = "android")),
+        expect(unused_variables)
+    )]
+    termios: &mut Termios,
     setting: &SpecialSetting,
     fd: impl AsFd,
 ) -> io::Result<()> {
@@ -897,7 +913,7 @@ fn apply_special_setting(
             // nix only defines Termios's `line_discipline` field on these platforms
             #[cfg(any(target_os = "linux", target_os = "android"))]
             {
-                _termios.line_discipline = *n;
+                termios.line_discipline = *n;
             }
         }
     }
@@ -922,12 +938,8 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
     // try to parse integer (hex, octal, or decimal)
     let ascii_num = if let Some(hex) = s.strip_prefix("0x") {
         u32::from_str_radix(hex, 16).ok()
-    } else if let Some(octal) = s.strip_prefix("0") {
-        if octal.is_empty() {
-            Some(0)
-        } else {
-            u32::from_str_radix(octal, 8).ok()
-        }
+    } else if s.starts_with('0') {
+        u32::from_str_radix(s, 8).ok()
     } else {
         s.parse::<u32>().ok()
     };
@@ -1123,6 +1135,29 @@ impl TermiosFlag for LocalFlags {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(not(any(target_os = "aix", target_os = "redox", target_os = "fuchsia")))]
+    fn test_apply_character_size_preserves_other_control_flags() {
+        let pty = nix::pty::openpty(None, None).unwrap();
+        let mut termios = tcgetattr(&pty.slave).unwrap();
+        let other_flags = ControlFlags::CLOCAL | ControlFlags::CREAD;
+        let sizes = [
+            ("cs5", ControlFlags::CS5),
+            ("cs6", ControlFlags::CS6),
+            ("cs7", ControlFlags::CS7),
+            ("cs8", ControlFlags::CS8),
+        ];
+
+        for (_, initial) in sizes {
+            for (name, expected) in sizes {
+                termios.control_flags = initial | other_flags;
+                let flag = CONTROL_FLAGS.iter().find(|flag| flag.name == name).unwrap();
+                apply_setting(&mut termios, &AllFlags::ControlFlags((flag, false))).unwrap();
+                assert_eq!(termios.control_flags, expected | other_flags);
+            }
+        }
+    }
 
     // Essential unit tests for complex internal parsing and logic functions.
 
@@ -1368,47 +1403,32 @@ mod tests {
         assert_eq!(get_sane_control_char(S::VDISCARD), 15); // ^O
     }
 
-    // Tests for parse_u8_or_err
+    // Tests for create_parse_err
     #[test]
-    fn test_parse_u8_or_err_valid() {
-        assert_eq!(parse_u8_or_err("0").unwrap(), 0);
-        assert_eq!(parse_u8_or_err("255").unwrap(), 255);
-        assert_eq!(parse_u8_or_err("128").unwrap(), 128);
-        assert_eq!(parse_u8_or_err("1").unwrap(), 1);
-    }
-
-    #[test]
-    fn test_parse_u8_or_err_overflow() {
-        // Test that overflow values return an error
+    fn test_create_parse_err_overflow() {
+        // Test error message for overflow
         // Note: In test environment, translate!() returns the key, not the translated string
         // spell-checker:ignore Valeur
-        let err = parse_u8_or_err("256").unwrap_err();
+        let err = create_parse_err(&"256".parse::<u8>().unwrap_err(), "256").to_string();
         assert!(
             err.contains("value-too-large")
                 || err.contains("Value too large")
                 || err.contains("Valeur trop grande"),
             "Expected overflow error, got: {err}"
         );
-
-        assert!(parse_u8_or_err("1000").is_err());
-        assert!(parse_u8_or_err("65536").is_err());
     }
 
     #[test]
-    fn test_parse_u8_or_err_invalid() {
-        // Test that invalid values return an error
+    fn test_create_parse_err_invalid() {
+        // Test error message for invalid values
         // Note: In test environment, translate!() returns the key, not the translated string
         // spell-checker:ignore entier invalide
-        let err = parse_u8_or_err("-1").unwrap_err();
+        let err = create_parse_err(&"-1".parse::<u8>().unwrap_err(), "-1").to_string();
         assert!(
             err.contains("invalid-integer-argument")
                 || err.contains("invalid integer argument")
                 || err.contains("argument entier invalide"),
             "Expected invalid argument error, got: {err}"
         );
-
-        assert!(parse_u8_or_err("abc").is_err());
-        assert!(parse_u8_or_err("").is_err());
-        assert!(parse_u8_or_err("12.5").is_err());
     }
 }

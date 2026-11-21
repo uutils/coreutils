@@ -548,12 +548,9 @@ fn test_mv_file_to_broken_symlink_directory() {
     assert!(!at.file_exists("file"));
 }
 
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: mv doesn't recognize a symlink-to-directory as a directory target, so it overwrites the symlink with a plain file instead of moving into the directory it points to"
-)]
 fn test_mv_file_to_symlink_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -631,12 +628,9 @@ fn test_mv_same_file_no_clobber() {
         .fails_with_code(1);
 }
 
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: rustix::fs::stat doesn't return stable inode identity, so same-file detection via a hard link fails"
-)]
 fn test_mv_same_hardlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_same_file_a";
@@ -665,12 +659,9 @@ fn test_mv_dangling_symlink_to_folder() {
     assert!(at.symlink_exists("x/abc"));
 }
 
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: rustix::fs::stat doesn't return stable inode identity, so same-file detection via a symlink fails"
-)]
 fn test_mv_same_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_same_file_a";
@@ -759,12 +750,9 @@ fn test_mv_broken_symlink_to_another_fs() {
     scene.ucmd().arg("foo").arg(dest).succeeds().no_output();
 }
 
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: rustix::fs::stat doesn't return stable inode identity, so same-file detection via a symlink/hardlink pair fails"
-)]
 fn test_mv_hardlink_to_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
@@ -1481,7 +1469,7 @@ fn test_mv_errors() {
         .arg(dir)
         .fails()
         .stderr_only(format!(
-            "mv: cannot overwrite directory '{dir}' with non-directory\n"
+            "mv: cannot overwrite directory '{dir}' with non-directory '{file_a}'\n"
         ));
 
     // $ at.mkdir dir && at.touch file
@@ -1527,13 +1515,10 @@ fn test_mv_verbose() {
         ));
 }
 
+#[uutests::wasi_ignore(PathCreateDirectoryNoModeParam)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))] // mkdir does not support -m on windows. Freebsd doesn't return a permission error either.
 #[cfg(feature = "mkdir")]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: mkdir -m444 does not restrict write access under the WASI sandbox, so the subsequent mv succeeds instead of failing with a permission error"
-)]
 fn test_mv_permission_error() {
     let scene = TestScenario::new("mkdir");
     let folder1 = "bar";
@@ -1669,6 +1654,38 @@ fn test_mv_dir_into_dir_with_source_name_a_prefix_of_target_name() {
 }
 
 #[test]
+fn test_mv_rename_error_names_source_and_target() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    let result = scene.ucmd().arg("a").arg("missing/b").fails_with_code(1);
+    #[cfg(unix)]
+    result.stderr_only("mv: cannot move 'a' to 'missing/b': No such file or directory\n");
+    #[cfg(not(unix))]
+    result.stderr_contains("mv: cannot move 'a' to 'missing/b': ");
+
+    assert!(at.file_exists("a"));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_mv_rename_error_permission_denied_names_paths() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.mkdir("ro");
+    at.set_mode("ro", 0o555);
+    scene
+        .ucmd()
+        .arg("a")
+        .arg("ro/b")
+        .fails_with_code(1)
+        .stderr_only("mv: cannot move 'a' to 'ro/b': Permission denied\n");
+    assert!(at.file_exists("a"));
+    assert!(!at.file_exists("ro/b"));
+}
+
+#[test]
 fn test_mv_file_into_dir_where_both_are_files() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1749,11 +1766,8 @@ fn test_mv_seen_multiple_files_to_directory() {
     assert!(at.plus("c").join("g").exists());
 }
 
+#[uutests::wasi_ignore(ErrnoMessageMismatch)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: raw ENOTDIR (\"Not a directory\") surfaces instead of the translated cannot-stat message, because stat() doesn't enforce the trailing-slash-requires-directory rule for non-directory sources"
-)]
 fn test_mv_dir_into_file_where_both_are_files() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1952,6 +1966,117 @@ mod inter_partition_copying {
             mode, 0o6755,
             "setuid/setgid must be kept when ownership was preserved, got {mode:o}"
         );
+    }
+
+    // Directories below the moved one keep their mode and their ACL (#15784).
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
+    #[test]
+    pub(crate) fn test_mv_inter_partition_keeps_subdir_mode_and_acl() {
+        use std::path::Path;
+        use std::process::Command;
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.mkdir_all("site/private");
+        at.write("site/private/notes.txt", "internal only");
+        set_permissions(at.plus("site/private"), PermissionsExt::from_mode(0o700))
+            .expect("Unable to set the mode of site/private");
+        set_permissions(at.plus("site"), PermissionsExt::from_mode(0o700))
+            .expect("Unable to set the mode of site");
+
+        let get_acl = |path: &Path| {
+            Command::new("getfacl")
+                .args(["-c", "-n"])
+                .arg(path)
+                .output()
+                .ok()
+                .filter(|out| out.status.success())
+                .map(|out| out.stdout)
+        };
+        // The ACL part is skipped when setfacl is missing or either filesystem has no ACLs.
+        let set_acl = |path: &Path| {
+            Command::new("setfacl")
+                .args(["-m", "u:65534:---"])
+                .arg(path)
+                .status()
+                .is_ok_and(|status| status.success())
+        };
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        let dest = other_fs_tempdir.path().join("site");
+
+        let check_acl = set_acl(&at.plus("site/private")) && set_acl(other_fs_tempdir.path());
+        let acl_before = get_acl(&at.plus("site/private"));
+
+        scene
+            .ucmd()
+            .arg("site")
+            .arg(dest.to_str().unwrap())
+            .succeeds();
+
+        let mode_of = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o7777;
+        let mode = mode_of(&dest);
+        assert_eq!(mode, 0o700, "site should stay 0700, got {mode:o}");
+        let moved = dest.join("private");
+        let mode = mode_of(&moved);
+        assert_eq!(mode, 0o700, "site/private should stay 0700, got {mode:o}");
+        if check_acl {
+            assert_eq!(get_acl(&moved), acl_before, "site/private lost its ACL");
+        }
+    }
+
+    // The source mode is applied to a copied directory only after its contents,
+    // so when the copy fails the directories created so far must not be left
+    // with the umask-based mode, which would open a 0700 source to everyone.
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
+    #[test]
+    pub(crate) fn test_mv_inter_partition_failed_copy_keeps_dirs_private() {
+        use std::path::Path;
+
+        if rustix::process::geteuid().is_root() {
+            println!("test skipped: root can read the unreadable file");
+            return;
+        }
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.mkdir_all("private/sub");
+        at.write("private/notes.txt", "secret");
+        at.write("private/sub/unreadable", "x");
+        set_permissions(
+            at.plus("private/sub/unreadable"),
+            PermissionsExt::from_mode(0o000),
+        )
+        .expect("Unable to make private/sub/unreadable unreadable");
+        set_permissions(at.plus("private/sub"), PermissionsExt::from_mode(0o700))
+            .expect("Unable to set the mode of private/sub");
+        set_permissions(at.plus("private"), PermissionsExt::from_mode(0o700))
+            .expect("Unable to set the mode of private");
+
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        let dest = other_fs_tempdir.path().join("private");
+
+        scene
+            .ucmd()
+            .umask(0o022)
+            .arg("private")
+            .arg(dest.to_str().unwrap())
+            .fails();
+
+        let mode_of = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o7777;
+        for dir in [dest.clone(), dest.join("sub")] {
+            let mode = mode_of(&dir);
+            assert_eq!(
+                mode,
+                0o700,
+                "{} should be 0700, got {mode:o}",
+                dir.display()
+            );
+        }
+        assert!(at.dir_exists("private/sub"), "the source must be kept");
     }
 
     // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
@@ -3037,28 +3162,103 @@ fn test_mv_no_prompt_unwriteable_file_with_no_tty() {
     assert!(at.file_exists("target_notty"));
 }
 
-/// Test mv silently succeeds when dest filesystem doesn't support xattrs (ENOTSUP)
+/// Moving a file with xattrs onto a file system without xattr support warns
+/// once for the file, however many attributes it has, and still succeeds, as
+/// GNU 9.12 does. A file without xattrs, or with only a POSIX ACL, moves
+/// without a word. Mounting ramfs needs root, so this skips without sudo.
+#[uutests::wasi_ignore(AclXattrPreservationFails)]
 #[test]
 #[cfg(target_os = "linux")]
-fn test_mv_xattr_enotsup_silent() {
-    use std::process::Command;
+fn test_mv_xattr_enotsup_warns_once() {
+    // spell-checker:ignore noxattr ramfs
+    use rustc_hash::FxHashMap;
+    use std::ffi::OsString;
+    use uucore::fsxattr::apply_xattrs;
+    use uutests::util::path;
+
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.write("src", "x");
 
-    if Command::new("setfattr")
-        .args(["-n", "user.t", "-v", "v", &at.plus_as_string("src")])
-        .status()
-        .is_ok_and(|s| s.success())
-    {
-        scene
-            .ucmd()
-            .arg(at.plus("src"))
-            .arg("/dev/shm/mv_test")
-            .succeeds()
-            .no_stderr();
-        std::fs::remove_file("/dev/shm/mv_test").ok();
+    let set_xattrs = |name: &str, attrs: &[(&str, &[u8])]| {
+        at.write(name, "content");
+        let attrs: FxHashMap<OsString, Vec<u8>> = attrs
+            .iter()
+            .map(|(attr, value)| (OsString::from(attr), value.to_vec()))
+            .collect();
+        apply_xattrs(at.plus(name), attrs)
+    };
+    if set_xattrs("one_attr", &[("user.test", b"v")]).is_err() {
+        println!("test skipped: the test directory does not accept xattrs");
+        return;
     }
+    at.write("acl_only", "content");
+    match std::process::Command::new("setfacl")
+        .args(["-m", "u:0:r"])
+        .arg(at.plus("acl_only"))
+        .status()
+    {
+        Ok(status) if status.success() => {}
+        Ok(_) => {
+            println!("test skipped: setfacl failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfacl failed with {e}");
+            return;
+        }
+    }
+    let three: &[(&str, &[u8])] = &[("user.one", b"1"), ("user.two", b"2"), ("user.three", b"3")];
+    set_xattrs("three_attrs", three).unwrap();
+    set_xattrs("same_fs", &[("user.test", b"v")]).unwrap();
+    at.write("no_attrs", "content");
+
+    at.mkdir("noxattr");
+    // sudo may not even be installed, as in the cross containers.
+    let mounted = std::process::Command::new("sudo")
+        .current_dir(at.as_string())
+        .env("PATH", path())
+        .args(["-E", "--non-interactive", "mount", "-t", "ramfs"])
+        .args(["-o", "mode=0777", "ramfs", "noxattr"])
+        .status()
+        .is_ok_and(|status| status.success());
+    if !mounted {
+        println!("test skipped: mounting ramfs requires root");
+        return;
+    }
+
+    let move_onto_ramfs = |name: &str| {
+        let dest = format!("noxattr/{name}");
+        let result = scene.ucmd().arg(name).arg(&dest).run();
+        let moved = !at.file_exists(name) && at.file_exists(&dest);
+        (name.to_owned(), result, moved)
+    };
+    let warned = [move_onto_ramfs("one_attr"), move_onto_ramfs("three_attrs")];
+    let silent = [move_onto_ramfs("no_attrs"), move_onto_ramfs("acl_only")];
+
+    // Unmount before the asserts so a failure does not leave it mounted.
+    scene
+        .cmd("sudo")
+        .env("PATH", path())
+        .args(&["-E", "--non-interactive", "umount", "noxattr"])
+        .succeeds();
+
+    for (name, result, moved) in warned {
+        assert!(moved, "{name} was not moved");
+        result.success().stderr_is(format!(
+            "mv: setting attributes for 'noxattr/{name}': Operation not supported\n"
+        ));
+    }
+    for (name, result, moved) in silent {
+        assert!(moved, "{name} was not moved");
+        result.success().no_stderr();
+    }
+
+    scene
+        .ucmd()
+        .arg("same_fs")
+        .arg("same_fs_moved")
+        .succeeds()
+        .no_stderr();
 }
 
 /// Cross-device mv of a directory must preserve the directory's own xattrs.

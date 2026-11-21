@@ -508,3 +508,131 @@ fn test_backspaces_before_last_tab_stop_resume_conversion() {
         .succeeds()
         .stdout_is("abcde\x08\x08\tX\n");
 }
+
+// A blank at or past the last tab stop ends conversion for the rest of the
+// line, even when backspaces later move the column back before that tab stop.
+#[rstest]
+#[case::tab_past_last_stop("2,5", "1-\t\t\x08\n", "1-\t\t\x08\n")]
+#[case::space_at_last_stop("2,5", "   x  \x08\n", "\t x  \x08\n")]
+#[case::spaces_past_last_stop("3,5", "abcd  \x08\x08\x08  X\n", "abcd  \x08\x08\x08  X\n")]
+#[case::tab_past_last_stop_then_back("2,5", "1-\t\t\x08\x08\x08   x\n", "1-\t\t\x08\x08\x08   x\n")]
+#[case::text_past_last_stop_then_back("3,5", "abcdef\x08\x08\x08  X\n", "abcdef\x08\x08\x08\tX\n")]
+#[case::next_line_converts_again(
+    "3,5",
+    "abcd  \x08\x08\x08  X\nabcd \x08\x08  X\n",
+    "abcd  \x08\x08\x08  X\nabcd \x08\x08\tX\n"
+)]
+fn test_blank_from_last_tab_stop_ends_conversion(
+    #[case] tabs: &str,
+    #[case] input: &str,
+    #[case] expected: &str,
+) {
+    new_ucmd!()
+        .args(&["-t", tabs])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected);
+}
+
+// A line that goes on in the next file keeps its state: once a blank past the
+// last tab stop has ended conversion, backspaces in the next file do not
+// resume it.
+#[rstest]
+#[case::backspace("\x08\n", "1-\t\t\x08\n")]
+#[case::backspaces_then_spaces("\x08\x08\x08   x\n", "1-\t\t\x08\x08\x08   x\n")]
+fn test_blank_from_last_tab_stop_ends_conversion_across_files(
+    #[case] second: &str,
+    #[case] expected: &str,
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("first", "1-\t\t");
+    at.write("second", second);
+    ucmd.args(&["-t", "2,5", "first", "second"])
+        .succeeds()
+        .stdout_only(expected);
+}
+
+// clap treats a repeated boolean flag as a conflict unless the command
+// allows an argument to override itself.
+#[rstest]
+#[case::all(&["-a"], "\tA\t B\n")]
+#[case::all_repeated(&["-a", "-a"], "\tA\t B\n")]
+#[case::first_only(&["--first-only"], "\tA        B\n")]
+#[case::first_only_repeated(&["--first-only", "--first-only"], "\tA        B\n")]
+#[case::first_only_repeated_short_long(&["-f", "--first-only"], "\tA        B\n")]
+#[case::no_utf8(&["-U"], "\tA        B\n")]
+#[case::no_utf8_repeated(&["-U", "-U"], "\tA        B\n")]
+fn test_repeated_flags_are_accepted(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in("        A        B\n")
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
+fn test_nul_has_zero_width() {
+    // The NUL takes no column, so the 7 spaces end at column 7, before the
+    // tab stop at 8, and stay as they are.
+    new_ucmd!()
+        .arg("-a")
+        .pipe_in("\0       x\n")
+        .succeeds()
+        .stdout_is("\0       x\n");
+    new_ucmd!()
+        .arg("-a")
+        .pipe_in("\0        x\n")
+        .succeeds()
+        .stdout_is("\0\tx\n");
+}
+
+#[test]
+fn test_line_continues_into_next_file() {
+    // Neither first file ends in a newline, so its blanks and text continue
+    // the line in the next file.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "    ");
+    at.write("b", "    x\n");
+    ucmd.args(&["a", "b"]).succeeds().stdout_is("\tx\n");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("c", "abcdef");
+    at.write("d", "  x\n");
+    ucmd.args(&["-a", "c", "d"])
+        .succeeds()
+        .stdout_is("abcdef\tx\n");
+}
+
+#[test]
+fn test_trailing_blanks_of_last_file_are_kept() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "x\n");
+    at.write("b", "   ");
+    ucmd.args(&["a", "b"]).succeeds().stdout_is("x\n   ");
+}
+
+#[test]
+fn test_line_continues_past_unreadable_file() {
+    // A file that cannot be read does not end the line started before it.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "    ");
+    at.mkdir("dir");
+    at.write("b", "    x\n");
+    ucmd.args(&["a", "dir", "b"])
+        .fails()
+        .stdout_is("\tx\n")
+        .stderr_contains("unexpand: dir: Is a directory");
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "a multi-byte char split across reads must count as one column"]
+fn test_multibyte_char_split_across_reads() {
+    let scene = uutests::util::TestScenario::new(uutests::util_name!());
+    scene
+        .cmd_shell("(printf '\\303'; sleep 0.3; printf '\\251       z\\n') | \"$BIN\" unexpand -a")
+        .env("BIN", &scene.bin_path)
+        .env("LC_ALL", "C.UTF-8")
+        .succeeds()
+        .stdout_only("\u{e9}\tz\n");
+}

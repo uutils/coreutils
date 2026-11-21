@@ -21,7 +21,7 @@ mv-error-no-such-file = impossible de lire {$path} : Aucun fichier ou répertoir
 mv-error-cannot-stat-not-directory = impossible de lire {$path} : N'est pas un répertoire
 mv-error-same-file = {$source} et {$target} sont le même fichier
 mv-error-self-target-subdirectory = impossible de déplacer {$source} vers un sous-répertoire de lui-même, {$target}
-mv-error-directory-to-non-directory = impossible d'écraser le répertoire {$path} avec un non-répertoire
+mv-error-directory-to-non-directory = impossible d'écraser le répertoire {$path} avec le non-répertoire {$source}
 mv-error-non-directory-to-directory = impossible d'écraser le non-répertoire {$target} avec le répertoire {$source}
 mv-error-not-directory = cible {$path} : N'est pas un répertoire
 mv-error-target-not-directory = répertoire cible {$path} : N'est pas un répertoire
@@ -39,6 +39,7 @@ mv-error-no-symlink-support = votre système d'exploitation ne prend pas en char
 mv-error-permission-denied = Permission refusée
 mv-error-inter-device-move-failed = échec du déplacement inter-périphérique : {$from} vers {$to} ; impossible de supprimer la cible : {$err}
 mv-error-setting-attribute = définition de l'attribut {$name} : {$err}
+mv-error-setting-attributes = définition des attributs pour {$path} : {$err}
 mv-error-exchange-two-operands = --exchange nécessite exactement deux opérandes
 mv-error-exchange-not-supported = --exchange n'est pas pris en charge sur cette plateforme
 

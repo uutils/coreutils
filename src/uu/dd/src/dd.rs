@@ -665,6 +665,8 @@ impl Dest {
                         translate!("dd-error-cannot-seek-invalid", "output" => "standard output")
                     );
                     set_exit_code(1);
+                    // Nothing may be written past the end of the device.
+                    *self = Self::Sink;
                     return Ok(len);
                 }
                 f.seek(SeekFrom::Current(n.try_into().unwrap()))
@@ -929,7 +931,15 @@ impl<'a> Output<'a> {
         // file for reading. But then we need to close the file and
         // re-open it for writing.
         if settings.seek > 0 {
-            Dest::Fifo(File::open(filename)?).seek(settings.seek, settings.obs)?;
+            // `oflag=` flags such as `nofollow` and `nonblock` apply to this
+            // open as well, or the seek reads from a FIFO they would refuse.
+            let mut opts = OpenOptions::new();
+            opts.read(true);
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
+                opts.custom_flags(libc_flags & !(libc::O_APPEND | libc::O_DSYNC | libc::O_SYNC));
+            }
+            Dest::Fifo(opts.open(filename)?).seek(settings.seek, settings.obs)?;
         }
         // If `count=0`, then we don't bother opening the file for
         // writing because that would cause this process to block
@@ -1167,7 +1177,15 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
 
     // Optimization: if no blocks are to be written, then don't
     // bother allocating any buffers.
-    if let Some(Num::Blocks(0) | Num::Bytes(0)) = i.settings.count {
+    //
+    // `Dest::Sink` also gets here when seeking past the end of a block
+    // device failed (see `Dest::seek`): the error was already reported, so
+    // we only print the stats and neither read nor write anything.
+    #[cfg(unix)]
+    let sink = matches!(o.dst, Dest::Sink);
+    #[cfg(not(unix))]
+    let sink = false;
+    if sink || matches!(i.settings.count, Some(Num::Blocks(0) | Num::Bytes(0))) {
         // Even though we are not reading anything from the input
         // file, we still need to honor the `nocache` flag, which
         // requests that we inform the system that we no longer
@@ -1630,7 +1648,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
     let o = match settings.outfile {
         #[cfg(unix)]
-        Some(ref outfile) if is_fifo(outfile) => Output::new_fifo(Path::new(&outfile), &settings)?,
+        // `conv=excl` must fail on an existing FIFO, which the exclusive create
+        // in `new_file` does before anything is read from it.
+        Some(ref outfile) if is_fifo(outfile) && !settings.oconv.excl => {
+            Output::new_fifo(Path::new(&outfile), &settings)?
+        }
         Some(ref outfile) => Output::new_file(Path::new(&outfile), &settings)?,
         None if is_stdout_redirected_to_seekable_file() => Output::new_file_from_stdout(&settings)?,
         None => Output::new_stdout(&settings)?,
@@ -1651,9 +1673,42 @@ pub fn uu_app() -> Command {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    use crate::{Dest, Input, Source, dd_copy};
     use crate::{Output, Parser, calc_bsize};
 
     use std::path::Path;
+
+    #[test]
+    #[cfg(unix)]
+    fn sink_dest_reads_and_writes_nothing() {
+        // A `Dest::Sink` is what `seek` leaves behind after seeking past
+        // the end of a block device. Even with non-empty input, nothing
+        // may be read or written.
+        use std::io::{Read, Seek, Write};
+
+        let settings = Parser::new()
+            .parse_with_diagnostics(["bs=1"], None)
+            .unwrap();
+        let mut file = tempfile::tempfile().unwrap();
+        file.write_all(b"hello").unwrap();
+        file.rewind().unwrap();
+        // shares the file offset with `file`
+        let src = Source::File(file.try_clone().unwrap());
+        let i = Input {
+            src,
+            settings: &settings,
+        };
+        let o = Output {
+            dst: Dest::Sink,
+            settings: &settings,
+        };
+        dd_copy(i, o).unwrap();
+
+        let mut rest = Vec::new();
+        file.read_to_end(&mut rest).unwrap();
+        assert_eq!(rest, b"hello");
+    }
 
     #[test]
     fn bsize_test_primes() {

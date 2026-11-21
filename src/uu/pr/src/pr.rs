@@ -90,8 +90,11 @@ struct OutputOptions {
 struct FileLine {
     file_id: usize,
     page_number: usize,
-    line_number: usize,
+    /// `None` for the blank filler cells of merged output.
+    line_number: Option<usize>,
     line_content: Vec<u8>,
+    /// The last line of the input, which has no newline.
+    unterminated: bool,
 }
 
 impl FileLine {
@@ -101,8 +104,20 @@ impl FileLine {
         line_number: usize,
         buf: &[u8],
         options: &OutputOptions,
-    ) -> Self {
+    ) -> Result<Self, PrError> {
         let line_content = if let Some(expand_tabs) = &options.expand_tabs {
+            // Expanding tabs can make a line far longer than the input, so
+            // bound it like GNU does. The exact length is only worth measuring
+            // when every byte growing to a full tab stop could pass the limit.
+            let widest_stop = (expand_tabs.width as usize).max(8);
+            if buf.len().saturating_mul(widest_stop) > i32::MAX as usize {
+                let expanded = buf
+                    .iter()
+                    .fold(0, |len, b| len + expanded_byte_width(len, *b, expand_tabs));
+                if expanded > i32::MAX as usize {
+                    return Err(PrError::IntegerOverflow);
+                }
+            }
             let mut result =
                 Vec::with_capacity(buf.len() + buf.len() / 20 * expand_tabs.width as usize);
             for b in buf {
@@ -113,12 +128,13 @@ impl FileLine {
             buf.to_vec()
         };
 
-        Self {
+        Ok(Self {
             file_id,
             page_number,
-            line_number,
+            line_number: Some(line_number),
             line_content,
-        }
+            unterminated: false,
+        })
     }
 }
 
@@ -133,7 +149,7 @@ struct ColumnModeOptions {
 struct NumberingMode {
     width: usize,
     separator: String,
-    first_number: usize,
+    first_number: Option<usize>,
 }
 
 impl Default for NumberingMode {
@@ -141,7 +157,7 @@ impl Default for NumberingMode {
         Self {
             width: 5,
             separator: TAB.to_string(),
-            first_number: 1,
+            first_number: None,
         }
     }
 }
@@ -174,6 +190,9 @@ enum PrError {
 
     #[error("pr: {path}: {}", strip_errno(error))]
     ReadPath { path: PathBuf, error: io::Error },
+
+    #[error("pr: {}", translate!("pr-error-integer-overflow"))]
+    IntegerOverflow,
 }
 
 impl From<FromUtf8Error> for PrError {
@@ -455,15 +474,25 @@ fn recreate_arguments(args: &[OsString], cmd: &Command) -> (Vec<OsString>, Colum
 
     // `-e` takes an optional attached argument, which clap cannot express, so it is filled in
     // here. Without it clap would report a missing value for `-tre`, or swallow the following
-    // argument, usually a file name, for a bare `-e`.
+    // argument, usually a file name, for a bare `-e`. clap also drops the `=` of `-e=VALUE`,
+    // yet for `-e` it is the CHAR to expand, so that value is handed over as its own argument.
     let expand_tabs_option = arguments
         .iter()
         .take_while(|arg| *arg != "--")
         .enumerate()
-        .filter_map(|(pos, value)| value.to_str().map(|value| (pos, value)))
-        .find(|(_, value)| e_regex.is_match(value.trim()));
-    if let Some((pos, value)) = expand_tabs_option {
-        arguments[pos] = format!("{}\t8", value.trim()).into();
+        .find_map(|(pos, value)| {
+            let value = value.to_str()?;
+            if e_regex.is_match(value.trim()) {
+                return Some((pos, vec![format!("{}\t8", value.trim())]));
+            }
+            let split = value.find("e=")? + 1;
+            let (flags, char_value) = value.split_at(split);
+            e_regex
+                .is_match(flags)
+                .then(|| (pos, vec![flags.to_string(), char_value.to_string()]))
+        });
+    if let Some((pos, replacement)) = expand_tabs_option {
+        arguments.splice(pos..=pos, replacement.into_iter().map(OsString::from));
     }
 
     // Take out the whole-token legacy operands before `--`, keeping the first
@@ -582,6 +611,9 @@ enum PageSpecError {
 fn parse_page_spec(spec: &str) -> Result<(usize, Option<usize>), PageSpecError> {
     use PageSpecError::{InvalidSuffix, NotANumber, NotARange, TooLarge};
     fn number(part: &str) -> Result<(usize, &str), PageSpecError> {
+        // Blanks and one `+` may come before the digits.
+        let part = part.trim_start_matches([' ', '\t', '\n', '\r', '\x0B', '\x0C']);
+        let part = part.strip_prefix('+').unwrap_or(part);
         let digits_end = part
             .bytes()
             .position(|b| !b.is_ascii_digit())
@@ -768,13 +800,12 @@ fn build_options(
         OsString::from,
     );
 
-    let default_first_number = NumberingMode::default().first_number;
     let first_number = parse_usize(
         matches,
         options::FIRST_LINE_NUMBER,
         &translate!("pr-error-invalid-first-line-number"),
     )
-    .unwrap_or(Ok(default_first_number))?;
+    .transpose()?;
 
     let number = matches
         .get_one::<String>(options::NUMBER_LINES)
@@ -782,7 +813,7 @@ fn build_options(
             let invalid = |arg: &str| PrError::EncounteredErrors {
                 msg: format!(
                     "{}\n{}",
-                    translate!("pr-error-invalid-number-argument", "arg" => arg),
+                    translate!("pr-error-invalid-number-argument", "arg" => arg.quote()),
                     translate!("pr-try-help-message")
                 ),
             };
@@ -840,11 +871,12 @@ fn build_options(
         })
         .transpose()?
         .or_else(|| {
-            if matches.contains_id(options::NUMBER_LINES) {
-                Some(NumberingMode::default())
-            } else {
-                None
-            }
+            matches
+                .contains_id(options::NUMBER_LINES)
+                .then(|| NumberingMode {
+                    first_number,
+                    ..NumberingMode::default()
+                })
         });
 
     let expand_tabs = matches
@@ -856,7 +888,7 @@ fn build_options(
                     let invalid = |arg: &str| PrError::EncounteredErrors {
                         msg: format!(
                             "{}\n{}",
-                            translate!("pr-error-invalid-expand-tab-argument", "arg" => arg),
+                            translate!("pr-error-invalid-expand-tab-argument", "arg" => arg.quote()),
                             translate!("pr-try-help-message")
                         ),
                     };
@@ -1018,7 +1050,7 @@ fn build_options(
     let column_mode_options = column_option_value.map(|columns| ColumnModeOptions {
         columns,
         width: column_width,
-        column_separator,
+        column_separator: column_separator.clone(),
         across_mode,
     });
 
@@ -1048,7 +1080,7 @@ fn build_options(
     let col_sep_for_printing = column_mode_options.as_ref().map_or_else(
         || {
             merge_files_print
-                .map(|_k| DEFAULT_COLUMN_SEPARATOR.to_string())
+                .map(|_k| column_separator.clone())
                 .unwrap_or_default()
         },
         |i| i.column_separator.clone(),
@@ -1057,13 +1089,20 @@ fn build_options(
     let columns_to_print =
         merge_files_print.unwrap_or_else(|| column_mode_options.as_ref().map_or(1, |i| i.columns));
 
-    let line_width = if join_lines {
+    // Like GNU pr, -s without -w or -W merges files unpadded and untruncated.
+    let merge_with_char_separator = merge_files_print.is_some()
+        && matches.contains_id(options::COLUMN_CHAR_SEPARATOR)
+        && !matches.contains_id(options::COLUMN_WIDTH)
+        && !matches.contains_id(options::PAGE_WIDTH);
+
+    let line_width = if join_lines || merge_with_char_separator {
         None
     } else if columns_to_print > 1 {
         Some(
             column_mode_options
                 .as_ref()
-                .map_or(DEFAULT_COLUMN_WIDTH, |i| i.width),
+                // -W sets the merged line width and takes precedence over -w.
+                .map_or(page_width.unwrap_or(column_width), |i| i.width),
         )
     } else {
         page_width
@@ -1106,23 +1145,28 @@ fn read_to_end(name: &OsStr) -> Result<Vec<u8>, PrError> {
     }
 }
 
-fn apply_expand_tab(chunk: &mut Vec<u8>, byte: u8, expand_options: &ExpandTabsOptions) {
+/// How many bytes `byte` takes once expanded, written at column `len`.
+fn expanded_byte_width(len: usize, byte: u8, expand_options: &ExpandTabsOptions) -> usize {
     if byte == expand_options.input_char as u8 {
         // If the byte encountered is the input char we use width to calculate
         // the amount of spaces needed (if no input char given we stored '\t'
         // in our struct)
-        let spaces_needed =
-            expand_options.width as usize - (chunk.len() % expand_options.width as usize);
-        chunk.extend(std::iter::repeat_n(b' ', spaces_needed));
+        expand_options.width as usize - (len % expand_options.width as usize)
     } else if byte == TAB as u8 {
         // If a byte got passed to the -e flag (eg -ea1)  which is not '\t' GNU
         // still expands it but does not use an optionally given width parameter
         // but does the '\t' expansion with the default value (8)
-        let spaces_needed = 8 - (chunk.len() % 8);
+        8 - (len % 8)
+    } else {
+        1
+    }
+}
+
+fn apply_expand_tab(chunk: &mut Vec<u8>, byte: u8, expand_options: &ExpandTabsOptions) {
+    if byte == expand_options.input_char as u8 || byte == TAB as u8 {
+        let spaces_needed = expanded_byte_width(chunk.len(), byte, expand_options);
         chunk.extend(std::iter::repeat_n(b' ', spaces_needed));
     } else {
-        // This arm means the byte is neither '\t' nor the bytes to be
-        // expanded
         chunk.push(byte);
     }
 }
@@ -1134,7 +1178,7 @@ fn pr(name: &OsStr, options: &OutputOptions) -> Result<i32, PrError> {
     let buf = read_to_end(name)?;
 
     let mut writer = stdout().lock();
-    let (pages, page_count) = get_pages(options, 0, &buf);
+    let (pages, page_count) = get_pages(options, 0, &buf)?;
     if options.start_page > page_count {
         show_error!(
             "{}",
@@ -1157,15 +1201,17 @@ fn pr(name: &OsStr, options: &OutputOptions) -> Result<i32, PrError> {
     Ok(0)
 }
 
+/// A page of lines, along with its page number.
+type NumberedPage = (usize, Vec<FileLine>);
+
 /// Group lines of a file into pages.
 ///
 /// Returns a list of the form `(page_num, lines)` and the total page count.
-///
 fn get_pages(
     options: &OutputOptions,
     file_id: usize,
     buf: &[u8],
-) -> (Vec<(usize, Vec<FileLine>)>, usize) {
+) -> Result<(Vec<NumberedPage>, usize), PrError> {
     let start_page = options.start_page;
     let end_page = options.end_page;
     let lines_needed_per_page = lines_to_read_for_page(options);
@@ -1173,6 +1219,9 @@ fn get_pages(
     // Keep a running total of the number of lines read, starting with
     // 0 or another specified number.
     let mut line_num = get_start_line_number(options);
+    // An explicit `-N` numbers from the first printed page, so lines on
+    // skipped pages must not count towards it.
+    let explicit_first_number = options.number.as_ref().and_then(|n| n.first_number);
 
     // We will collect each page into a list of pages, along with
     // its page number.
@@ -1188,6 +1237,19 @@ fn get_pages(
     // beginning of the next line.
     let mut prev = 0;
 
+    // Keep a finished page if it is printed and start the next one. With an
+    // explicit `-N`, a skipped page restarts the line numbering (pages past
+    // `end_page` are never printed, so resetting there is harmless).
+    let mut finish_page = |page_num: &mut usize, page: &mut Vec<FileLine>, line_num: &mut usize| {
+        if start_page <= *page_num + 1 && end_page.is_none_or(|e| *page_num < e) {
+            pages.push((*page_num, std::mem::take(page)));
+        } else if let Some(n) = explicit_first_number {
+            *line_num = n;
+        }
+        *page_num += 1;
+        page.clear();
+    };
+
     // Search for either the form feed character `\f` or the newline
     // character `\n`. The newline character marks the end of a line,
     // and a page comprises several lines. A form feed character marks
@@ -1201,7 +1263,7 @@ fn get_pages(
                 // `\f` as its own line; instead ignore the empty line.
             } else {
                 let file_line =
-                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options);
+                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options)?;
                 page.push(file_line);
                 line_num += 1;
             }
@@ -1215,11 +1277,7 @@ fn get_pages(
             //
             // TODO Optimization opportunity: don't bother pushing
             // lines and pages if we aren't going to display it.
-            if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-                pages.push((page_num, std::mem::take(&mut page)));
-            }
-            page_num += 1;
-            page.clear();
+            finish_page(&mut page_num, &mut page, &mut line_num);
         } else {
             // Add everything up to (but not including) the newline
             // character as one line of the page.
@@ -1228,7 +1286,7 @@ fn get_pages(
                 // `\n` as its own line; instead ignore the empty line.
             } else {
                 let file_line =
-                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options);
+                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options)?;
                 page.push(file_line);
                 line_num += 1;
             }
@@ -1239,18 +1297,15 @@ fn get_pages(
             // If the page is finished, add it to the list of pages
             // and clear the `page` buffer for the next iteration.
             if page.len() >= lines_needed_per_page {
-                if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-                    pages.push((page_num, std::mem::take(&mut page)));
-                }
-                page_num += 1;
-                page.clear();
+                finish_page(&mut page_num, &mut page, &mut line_num);
             }
         }
     }
 
     // Consider all trailing bytes as the last line.
     if prev < buf.len() {
-        let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..], options);
+        let mut file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..], options)?;
+        file_line.unterminated = true;
         page.push(file_line);
     }
 
@@ -1259,7 +1314,7 @@ fn get_pages(
         pages.push((page_num, std::mem::take(&mut page)));
     }
 
-    (pages, page_num + 1)
+    Ok((pages, page_num + 1))
 }
 
 /// Key used to group lines together according to their file and page number.
@@ -1315,7 +1370,7 @@ fn get_file_line_groups(
 
         // Split the text into pages and collect each line for
         // subsequent grouping.
-        let (pages, _) = get_pages(options, file_id, &buf);
+        let (pages, _) = get_pages(options, file_id, &buf)?;
         for (_, mut page) in pages {
             all_lines.append(&mut page);
         }
@@ -1579,7 +1634,11 @@ fn write_columns(
                 Some(file_line) => file_line,
             };
 
-            write_offset_spaces(writer, options.offset_spaces)?;
+            // Like GNU pr, the margin is written once per line, before the
+            // first column.
+            if i == 0 {
+                write_offset_spaces(writer, options.offset_spaces)?;
+            }
             writer.write_all(&get_line_for_printing(
                 options,
                 line_to_print,
@@ -1596,7 +1655,18 @@ fn write_columns(
         if cells_written == 0 && not_found_break && no_trailer {
             break;
         }
-        writer.write_all(line_separator)?;
+        // Like GNU pr, -d adds its blank line only after a line that ended
+        // with a newline, so an input whose last line lacks one ends there.
+        // With a header and trailer the page is padded to its length anyway.
+        let single_unterminated = !options.display_header_and_trailer
+            && !merge
+            && columns == 1
+            && matches!(row.first(), Some(Some(line)) if line.unterminated);
+        if single_unterminated {
+            writer.write_all(b"\n")?;
+        } else {
+            writer.write_all(line_separator)?;
+        }
     }
 
     Ok(())
@@ -1663,10 +1733,14 @@ fn char_prefix_len(bytes: &[u8], n: usize) -> usize {
     len
 }
 
-fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: usize) -> String {
+fn get_formatted_line_number(
+    opts: &OutputOptions,
+    line_number: Option<usize>,
+    index: usize,
+) -> String {
     let should_show_line_number =
         opts.number.is_some() && (opts.merge_files_print.is_none() || index == 0);
-    if should_show_line_number && line_number != 0 {
+    if let Some(line_number) = line_number.filter(|_| should_show_line_number) {
         let line_str = line_number.to_string();
         let num_opt = opts.number.as_ref().unwrap();
         let width = num_opt.width;
@@ -1751,7 +1825,10 @@ fn trailer_content(options: &OutputOptions) -> Vec<String> {
 /// If -N is specified the first line number changes otherwise
 /// default is 1.
 fn get_start_line_number(opts: &OutputOptions) -> usize {
-    opts.number.as_ref().map_or(1, |i| i.first_number)
+    opts.number
+        .as_ref()
+        .and_then(|i| i.first_number)
+        .unwrap_or(1)
 }
 
 /// Returns number of lines to read from input for constructing one page of pr output.

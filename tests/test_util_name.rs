@@ -10,19 +10,15 @@ use uutests::util::TestScenario;
 #[cfg(unix)]
 use std::os::unix::fs::symlink as symlink_file;
 
-use std::env;
-pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
-
-// Set the environment variable for any tests
-
 // Use the ctor attribute to run this function before any tests
 #[ctor::ctor(unsafe)]
 fn init() {
-    unsafe {
-        env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
-    }
+    uutests::util::set_default_tests_binary("coreutils");
     // Print for debugging
-    eprintln!("Setting UUTESTS_BINARY_PATH={TESTS_BINARY}");
+    eprintln!(
+        "UUTESTS_BINARY_PATH={}",
+        uutests::util::try_get_tests_binary().unwrap_or("<not found>")
+    );
 }
 
 #[test]
@@ -340,4 +336,68 @@ fn test_sorted_utils() {
     )
     .unwrap();
     assert!(out.lines().filter(|s| !s.is_empty()).is_sorted());
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu", feature = "echo"))]
+#[rstest::rstest]
+#[case::relative_target_absolute_alias(false, false, false)]
+#[case::relative_target_path_lookup(false, true, false)]
+#[case::absolute_target_absolute_alias(true, false, false)]
+#[case::absolute_target_path_lookup(true, true, false)]
+#[case::relative_target_without_path(false, false, true)]
+fn test_utility_alias_symlink_chain(
+    #[case] absolute_target: bool,
+    #[case] path_lookup: bool,
+    #[case] unset_path: bool,
+) {
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+    let scene = TestScenario::new("alias");
+    let at = &scene.fixtures;
+    at.mkdir("bin");
+    symlink_file(&scene.bin_path, at.plus("bin/echo")).unwrap();
+    let target = if absolute_target {
+        at.plus("bin/echo")
+    } else {
+        std::path::PathBuf::from("bin/echo")
+    };
+    symlink_file(target, at.plus("dummy")).unwrap();
+    let binary = if path_lookup {
+        std::path::PathBuf::from("dummy")
+    } else {
+        at.plus("dummy")
+    };
+    let mut command = Command::new(binary);
+    command.args(["hello", "world"]).current_dir(at.plus("bin"));
+    if unset_path {
+        command.arg0("dummy").env_remove("PATH");
+    } else {
+        command.env("PATH", at.root_dir_resolved());
+    }
+    let output = command.output().unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(output.stdout, b"hello world\n");
+    assert!(output.stderr.is_empty());
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[rstest::rstest]
+#[case::direct(false)]
+#[case::chain(true)]
+fn test_utility_alias_rejects_unknown_target(#[case] chain: bool) {
+    let scene = TestScenario::new("alias");
+    let at = &scene.fixtures;
+    let target = if chain {
+        symlink_file(&scene.bin_path, at.plus("foo")).unwrap();
+        at.plus("foo")
+    } else {
+        scene.bin_path.clone()
+    };
+    symlink_file(target, at.plus("dummy")).unwrap();
+    let output = std::process::Command::new(at.plus("dummy"))
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(output.stderr, b"coreutils: unknown program 'dummy'\n");
 }

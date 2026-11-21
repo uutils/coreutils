@@ -28,6 +28,15 @@ and a temporary file. Runs only on Unix.
 cargo bench --package uu_basenc --bench basenc_bench
 ```
 
+## Base58 benchmark
+
+Base58 converts the whole input as a single number instead of streaming it, so the same bench also
+measures `--base58` encoding (24 KiB input) and decoding (64 KiB of digits), both to `/dev/null`.
+
+```Shell
+cargo bench --package uu_basenc --bench basenc_bench -- base58
+```
+
 ## Expected performance
 
 uutils' `basenc` performs streaming decoding and encoding, and therefore should perform all operations with a constant

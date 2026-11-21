@@ -61,10 +61,11 @@ fn process_num_block(
     let mut quiet = false;
     let mut verbose = false;
     let mut zero_terminated = false;
-    let mut multiplier = None;
+    let mut count_lines = true;
+    let mut multiplier = 1;
     let mut c = last_char;
     loop {
-        // note that here, we only match lower case 'k', 'c', and 'm'
+        // note that here, we only match lower case 'k', 'c', 'l', and 'm'
         match c {
             // we want to preserve order
             // this also saves us 1 heap allocation
@@ -77,10 +78,17 @@ fn process_num_block(
                 quiet = false;
             }
             'z' => zero_terminated = true,
-            'c' => multiplier = Some(1),
-            'b' => multiplier = Some(512),
-            'k' => multiplier = Some(1024),
-            'm' => multiplier = Some(1024 * 1024),
+            'c' | 'b' | 'k' | 'm' => {
+                count_lines = false;
+                multiplier = match c {
+                    'b' => 512,
+                    'k' => 1024,
+                    'm' => 1024 * 1024,
+                    _ => 1,
+                };
+            }
+            // `l` switches back to lines and keeps the current multiplier
+            'l' => count_lines = true,
             '\0' => {}
             _ => return Err(ParseError),
         }
@@ -100,14 +108,9 @@ fn process_num_block(
     if zero_terminated {
         options.push(OsString::from("-z"));
     }
-    if let Some(n) = multiplier {
-        options.push(OsString::from("-c"));
-        let num = num.saturating_mul(n);
-        options.push(OsString::from(format!("{num}")));
-    } else {
-        options.push(OsString::from("-n"));
-        options.push(OsString::from(format!("{num}")));
-    }
+    let num = num.saturating_mul(multiplier);
+    options.push(OsString::from(if count_lines { "-n" } else { "-c" }));
+    options.push(OsString::from(format!("{num}")));
     Ok(options)
 }
 
@@ -158,6 +161,13 @@ mod tests {
             obsolete_result(&["-q", "-z", "-n", "1"])
         );
         assert_eq!(obsolete("-1vzc"), obsolete_result(&["-v", "-z", "-c", "1"]));
+        assert_eq!(obsolete("-5l"), obsolete_result(&["-n", "5"]));
+        assert_eq!(obsolete("-5cl"), obsolete_result(&["-n", "5"]));
+        assert_eq!(obsolete("-5lc"), obsolete_result(&["-c", "5"]));
+        assert_eq!(obsolete("-1bl"), obsolete_result(&["-n", "512"]));
+        assert_eq!(obsolete("-1lk"), obsolete_result(&["-c", "1024"]));
+        assert_eq!(obsolete("-1kll"), obsolete_result(&["-n", "1024"]));
+        assert_eq!(obsolete("-2lz"), obsolete_result(&["-z", "-n", "2"]));
         assert_eq!(
             obsolete("-105kzm"),
             obsolete_result(&["-z", "-c", "110100480"])
@@ -168,6 +178,8 @@ mod tests {
     fn test_parse_errors_obsolete() {
         assert_eq!(obsolete("-5n"), Some(Err(ParseError)));
         assert_eq!(obsolete("-5c5"), Some(Err(ParseError)));
+        assert_eq!(obsolete("-5L"), Some(Err(ParseError)));
+        assert_eq!(obsolete("-5l5"), Some(Err(ParseError)));
     }
 
     #[test]

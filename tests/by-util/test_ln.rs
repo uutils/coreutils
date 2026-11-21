@@ -1267,13 +1267,13 @@ fn test_hard_logical_dir_fail() {
     at.mkdir(dir);
     let target = "link-to-dir";
 
-    scene.ucmd().args(&["-s", dir, target]);
+    scene.ucmd().args(&["-s", dir, target]).succeeds();
 
     scene
         .ucmd()
         .args(&["-L", target, "hard-to-dir-link"])
         .fails()
-        .stderr_contains("failed to create hard link 'hard-to-dir-link'");
+        .stderr_contains("hard link not allowed for directory");
 }
 
 #[test]
@@ -1515,4 +1515,63 @@ fn test_hard_link_force_failed_link_keeps_destination() {
 
     assert!(at.file_exists("dst"));
     assert_eq!(at.read("dst"), "keep\n");
+}
+
+#[test]
+fn test_hard_link_inaccessible_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.args(&["missing", "link"])
+        .fails_with_code(1)
+        .stderr_only("ln: failed to access 'missing': No such file or directory\n");
+    assert!(!at.file_exists("link"));
+}
+
+#[test]
+fn test_hard_link_force_inaccessible_source_keeps_destination() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("link", "keep\n");
+
+    ucmd.args(&["-f", "missing", "link"])
+        .fails_with_code(1)
+        .stderr_only("ln: failed to access 'missing': No such file or directory\n");
+    assert_eq!(at.read("link"), "keep\n");
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_hard_link_source_with_trailing_slash() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+
+    ucmd.args(&["f/", "link"])
+        .fails_with_code(1)
+        .stderr_only("ln: failed to access 'f/': Not a directory\n");
+    assert!(!at.file_exists("link"));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_hard_link_source_permission_denied() {
+    use rustix::process::geteuid;
+    use std::os::unix::fs::PermissionsExt;
+
+    // root can still look inside a mode 0 directory
+    if geteuid().is_root() {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/x");
+    std::fs::set_permissions(at.plus("dir"), PermissionsExt::from_mode(0o000)).unwrap();
+
+    let result = ucmd.args(&["dir/x", "link"]).run();
+
+    std::fs::set_permissions(at.plus("dir"), PermissionsExt::from_mode(0o755)).unwrap();
+    result
+        .failure()
+        .code_is(1)
+        .stderr_only("ln: failed to access 'dir/x': Permission denied\n");
+    assert!(!at.file_exists("link"));
 }

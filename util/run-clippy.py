@@ -75,7 +75,6 @@ def build_clippy_command(
     if target:
         extra.extend(["--no-default-features", "--target", target])
         # For cross-compilation targets, just check -pcoreutils
-        # (show-utils.sh over-resolves due to default features)
         extra.append("-pcoreutils")
     else:
         # -puucore is required: a dependency's own tests aren't compiled otherwise.

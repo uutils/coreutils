@@ -12,7 +12,7 @@
     not(target_os = "openbsd"),
     not(windows)
 ))]
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
@@ -313,6 +313,39 @@ fn test_obsolete_extras() {
         .pipe_in("1\x002\x003\x004\x005\x006")
         .succeeds()
         .stdout_is("==> 'standard input' <==\n1\x002\x003\x004\x005\0");
+}
+
+#[test]
+fn test_obsolete_lines_suffix() {
+    // `l` selects lines and keeps the multiplier of an earlier suffix.
+    for (arg, expected) in [
+        ("-2l", "a\nb\n"),
+        ("-2cl", "a\nb\n"),
+        ("-2lc", "a\n"),
+        ("-3lq", "a\nb\nc\n"),
+    ] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\nb\nc\nd\n")
+            .succeeds()
+            .stdout_only(expected);
+    }
+    new_ucmd!()
+        .args(&["-0l", "lorem_ipsum.txt"])
+        .succeeds()
+        .no_output();
+
+    let input = "x\n".repeat(600);
+    new_ucmd!()
+        .arg("-1bl")
+        .pipe_in(input.as_str())
+        .succeeds()
+        .stdout_only("x\n".repeat(512));
+    new_ucmd!()
+        .arg("-1lb")
+        .pipe_in(input.as_str())
+        .succeeds()
+        .stdout_only("x\n".repeat(256));
 }
 
 #[test]
@@ -675,6 +708,63 @@ fn test_validate_stdin_offset_lines() {
         .set_stdin(file_shadow)
         .succeeds()
         .stdout_only_fixture(seq_1001_20000_file_name);
+
+    // Test 4 - All but the last n lines of a large file whose stdin offset is
+    // already past the first line.
+    scene
+        .cmd("seq")
+        .args(&["2", "1000"])
+        .set_stdout(fixtures.make_file("seq_2_1000"))
+        .succeeds();
+    let file = fixtures.open(seq_20000_file_name);
+    let mut file_shadow = file.try_clone().unwrap();
+    let mut first_line = [0u8; 2];
+    file_shadow.read_exact(&mut first_line).unwrap();
+    assert_eq!(&first_line, b"1\n");
+    scene
+        .ucmd()
+        .args(&["-n", "-19000"])
+        .set_stdin(file)
+        .succeeds()
+        .stdout_only_fixture("seq_2_1000");
+    scene
+        .cmd("cat")
+        .set_stdin(file_shadow)
+        .succeeds()
+        .stdout_only_fixture(seq_1001_20000_file_name);
+}
+
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd"),
+    not(windows)
+))]
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: stdin file position not preserved through wasmtime"
+)]
+fn test_stdin_offset_past_eof() {
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+    scene
+        .cmd("seq")
+        .arg("20000")
+        .set_stdout(fixtures.make_file("seq_20000"))
+        .succeeds();
+
+    for args in [["-n", "-1"], ["-c", "-1"]] {
+        let mut file = fixtures.open("seq_20000");
+        file.seek(SeekFrom::End(100)).unwrap();
+        scene
+            .ucmd()
+            .args(&args)
+            .set_stdin(file)
+            .succeeds()
+            .no_output();
+    }
 }
 
 #[cfg(all(
@@ -801,6 +891,36 @@ fn test_validate_stdin_offset_bytes() {
         .set_stdin(file_shadow)
         .succeeds()
         .stdout_only_fixture(seq_19001_20000_file_name);
+
+    // Test 5 - All but the last n bytes of a large file whose stdin offset is
+    // already past the first line.
+    scene
+        .cmd("seq")
+        .args(&["2", "10000"])
+        .set_stdout(fixtures.make_file("seq_2_10000"))
+        .succeeds();
+    scene
+        .cmd("seq")
+        .args(&["10001", "20000"])
+        .set_stdout(fixtures.make_file("seq_10001_20000"))
+        .succeeds();
+    let file = fixtures.open(seq_20000_file_name);
+    let mut file_shadow = file.try_clone().unwrap();
+    let mut first_line = [0u8; 2];
+    file_shadow.read_exact(&mut first_line).unwrap();
+    assert_eq!(&first_line, b"1\n");
+    let suffix_length = fixtures.open("seq_10001_20000").metadata().unwrap().len();
+    scene
+        .ucmd()
+        .args(&["-c", &format!("-{suffix_length}")])
+        .set_stdin(file)
+        .succeeds()
+        .stdout_only_fixture("seq_2_10000");
+    scene
+        .cmd("cat")
+        .set_stdin(file_shadow)
+        .succeeds()
+        .stdout_only_fixture("seq_10001_20000");
 }
 
 #[cfg(all(

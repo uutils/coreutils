@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) dirfd subdirs openat FDCWD rwxr
+// spell-checker:ignore (words) dirfd subdirs openat FDCWD rwxr Nofile
 
 use std::fs::{OpenOptions, Permissions, metadata, set_permissions};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
@@ -597,6 +597,36 @@ fn test_chmod_readonly_filesystem() {
 }
 
 #[test]
+fn test_chmod_recursive_reports_real_error_below_operand() {
+    use rustix::process::geteuid;
+
+    // '-L' makes chmod follow the link to a root-owned file: EPERM
+    let target = "/etc/passwd";
+    let Ok(meta) = metadata(target) else { return };
+    if geteuid().is_root() || meta.uid() != 0 {
+        return;
+    }
+    let mode = meta.mode() & 0o7777;
+
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkdir("tree");
+    ts.fixtures.symlink_file(target, "tree/link");
+
+    ts.ucmd()
+        .args(&["-R", "-L", "u+r", "tree"])
+        .fails_with_code(1)
+        .stderr_is("chmod: changing permissions of 'tree/link': Operation not permitted\n");
+
+    ts.ucmd()
+        .args(&["-v", "-R", "-L", "u+r", "tree"])
+        .fails_with_code(1)
+        .stdout_contains(format!(
+            "failed to change mode of 'tree/link' from {mode:04o} ("
+        ))
+        .stdout_contains(format!(") to {:04o} (", mode | 0o400));
+}
+
+#[test]
 #[allow(clippy::unreadable_literal)]
 fn test_chmod_recursive_correct_exit_code() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -821,6 +851,225 @@ fn test_chmod_preserve_root_symlink_during_recursion() {
         .stderr_contains(
             "chmod: it is dangerous to operate recursively on 'tree/link' (same as '/')",
         );
+}
+
+#[test]
+fn test_chmod_preserve_root_symlink_operand() {
+    // A symlink to '/' is '/' whenever followed: by default, with -H/-L, and with -P
+    // plus a trailing slash. `u+u` changes nothing, should the check ever let it by.
+    let cases: [(&[&str], &str); 4] = [
+        (&["-R"], "root"),
+        (&["-R", "-H"], "root"),
+        (&["-R", "-L"], "root"),
+        (&["-R", "-P"], "root/"),
+    ];
+    for (flags, operand) in cases {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.symlink_dir("/", "root");
+        ucmd.args(flags)
+            .args(&["--preserve-root", "u+u", operand])
+            .fails_with_code(1)
+            .stderr_is(format!(
+                "chmod: it is dangerous to operate recursively on '{operand}' (same as '/')\n\
+                 chmod: use --no-preserve-root to override this failsafe\n"
+            ));
+    }
+}
+
+#[test]
+fn test_chmod_recursive_operand_that_does_not_open() {
+    // An operand that cannot be opened yet still has its mode changed, and is then
+    // descended into, also through a symlink operand, which -P leaves alone.
+    for flags in [&["-R"][..], &["-R", "-H"], &["-R", "-L"], &["-R", "-P"]] {
+        for operand in ["d", "link"] {
+            let (at, mut ucmd) = at_and_ucmd!();
+            at.mkdir("d");
+            at.touch("d/f");
+            at.set_mode("d/f", 0o644);
+            at.set_mode("d", 0o000);
+            at.relative_symlink_dir("d", "link");
+
+            ucmd.args(flags)
+                .args(&["u+rwx", operand])
+                .succeeds()
+                .no_output();
+
+            let mode = |file| at.metadata(file).permissions().mode() & 0o7777;
+            if operand == "link" && flags.contains(&"-P") {
+                assert_eq!(mode("d"), 0o000, "{flags:?} {operand}");
+                at.set_mode("d", 0o755);
+                continue;
+            }
+            assert_eq!(mode("d"), 0o700, "{flags:?} {operand}");
+            assert_eq!(mode("d/f"), 0o744, "{flags:?} {operand}");
+        }
+    }
+}
+
+#[test]
+fn test_chmod_recursive_operand_made_unreadable() {
+    // An operand that the mode change leaves unreadable keeps its new mode, and
+    // the failed descent names it. Root reads it regardless.
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    for flags in [&["-R"][..], &["-R", "-H"], &["-R", "-L"], &["-R", "-P"]] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("d");
+        at.touch("d/f");
+        at.set_mode("d/f", 0o644);
+        at.set_mode("d", 0o755);
+
+        ucmd.args(flags)
+            .args(&["a-r", "d"])
+            .fails_with_code(1)
+            .stderr_is("chmod: cannot read directory 'd': Permission denied\n");
+
+        assert_eq!(
+            at.metadata("d").permissions().mode() & 0o7777,
+            0o311,
+            "{flags:?}"
+        );
+        at.set_mode("d", 0o755);
+        assert_eq!(
+            at.metadata("d/f").permissions().mode() & 0o7777,
+            0o644,
+            "{flags:?}"
+        );
+    }
+}
+
+#[test]
+fn test_chmod_recursive_no_dereference_operand() {
+    // With -h, a directory operand followed by -H or -L has its mode changed by
+    // path rather than through a descriptor; it is still changed and descended.
+    for flags in [
+        &["-R", "-h"][..],
+        &["-R", "-H", "-h"],
+        &["-R", "-L", "-h"],
+        &["-R", "-P", "-h"],
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("d");
+        at.touch("d/f");
+        at.set_mode("d", 0o755);
+        at.set_mode("d/f", 0o644);
+
+        ucmd.args(flags).args(&["700", "d"]).succeeds().no_output();
+
+        assert_eq!(at.metadata("d").permissions().mode() & 0o7777, 0o700);
+        assert_eq!(at.metadata("d/f").permissions().mode() & 0o7777, 0o700);
+    }
+}
+
+/// `chmod -R` must only descend into the directory whose mode it changed. A racer
+/// re-points the operand between two fixture directories and a file meanwhile.
+#[test]
+#[cfg(not(target_os = "redox"))]
+fn test_chmod_recursive_descends_only_into_the_directory_it_changed() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    for dir in ["a", "b"] {
+        at.mkdir(dir);
+        at.touch(format!("{dir}/f"));
+    }
+    at.touch("x");
+    at.relative_symlink_dir("a", "op");
+
+    let stop = Arc::new(AtomicBool::new(false));
+    let (op, tmp) = (at.plus("op"), at.plus("op.tmp"));
+    let racer_stop = stop.clone();
+    let racer = std::thread::spawn(move || {
+        for target in ["b", "x", "a", "x"].iter().cycle() {
+            if racer_stop.load(Ordering::Relaxed) {
+                break;
+            }
+            std::os::unix::fs::symlink(target, &tmp).unwrap();
+            std::fs::rename(&tmp, &op).unwrap();
+        }
+    });
+
+    for _ in 0..200 {
+        for dir in ["a", "b"] {
+            at.set_mode(dir, 0o755);
+            at.set_mode(format!("{dir}/f"), 0o644);
+        }
+
+        let result = scene.ucmd().args(&["-R", "700", "op"]).run();
+
+        for dir in ["a", "b"] {
+            let mode = |file: &str| at.metadata(file).permissions().mode() & 0o7777;
+            assert!(
+                mode(&format!("{dir}/f")) == 0o644 || mode(dir) == 0o700,
+                "descended into {dir} without changing its mode"
+            );
+        }
+        if !result.succeeded() {
+            // One error about the operand. Its cause varies with the timing:
+            // macOS can also fail a lookup through a symlink being replaced.
+            let stderr = result.code_is(1).stderr_str();
+            assert!(
+                stderr.starts_with("chmod: ")
+                    && stderr.contains("'op'")
+                    && stderr.lines().count() == 1,
+                "{stderr}"
+            );
+        }
+    }
+
+    stop.store(true, Ordering::Relaxed);
+    racer.join().unwrap();
+}
+
+/// A directory operand the system refuses to open, as TCC or a sandbox does, gets
+/// its mode by path, then cannot be read, as with GNU.
+#[cfg(target_vendor = "apple")]
+#[test]
+fn test_chmod_recursive_operand_refused_by_sandbox() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.set_mode("dir", 0o755);
+    let dir = at.plus("dir").canonicalize().unwrap();
+    let profile = format!("(version 1)(allow default)(deny file-read-data (literal {dir:?}))");
+
+    scene
+        .cmd("sandbox-exec")
+        .args(&["-p", &profile])
+        .arg(&scene.bin_path)
+        .args(&["chmod", "-R", "700", "dir"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("chmod: cannot read directory 'dir': Operation not permitted\n");
+    assert_eq!(at.metadata("dir").permissions().mode() & 0o7777, 0o700);
+}
+
+/// Each directory reached through a symlink under -L takes one descriptor
+/// while the walk is below it, not more.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_chmod_recursive_dereference_one_descriptor_per_level() {
+    use rlimit::Resource;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    for i in 0..=10 {
+        at.mkdir(format!("d{i}"));
+    }
+    for i in 0..10 {
+        at.relative_symlink_dir(format!("../d{}", i + 1), format!("d{i}/next"));
+    }
+    at.touch("d10/f");
+    at.set_mode("d10/f", 0o644);
+
+    ucmd.args(&["-R", "-L", "700", "d0"])
+        .limit(Resource::NOFILE, 20, 20)
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.metadata("d10/f").permissions().mode() & 0o7777, 0o700);
 }
 
 #[test]
@@ -1132,6 +1381,19 @@ fn test_gnu_invalid_mode() {
     let at = &scene.fixtures;
     at.touch("file");
     scene.ucmd().arg("u+gr").arg("file").fails();
+}
+
+#[test]
+fn test_chmod_whitespace_in_mode_is_rejected() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    set_permissions(at.plus("file"), Permissions::from_mode(0o600)).unwrap();
+
+    for mode in [" 644", "644 ", "+ 644", "u+x, +755", "u+x, ,g+w"] {
+        scene.ucmd().args(&["--", mode, "file"]).fails_with_code(1);
+        assert_eq!(at.metadata("file").permissions().mode() & 0o7777, 0o600);
+    }
 }
 
 #[test]
@@ -1530,6 +1792,54 @@ fn test_chmod_dangling_symlink_recursive_combos() {
 }
 
 #[test]
+fn test_chmod_recursive_dereference_dangling_symlink_below_operand() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    at.symlink_file("missing", "d/dang");
+
+    ucmd.args(&["-v", "-R", "-L", "755", "d"])
+        .fails_with_code(1)
+        .stderr_is("chmod: cannot operate on dangling symlink 'd/dang'\n")
+        .stdout_contains("'d/dang' could not be accessed\n");
+}
+
+#[test]
+fn test_chmod_recursive_verbose_unstatable_entry_below_operand() {
+    use rustix::process::geteuid;
+
+    // `d` loses its search bit before its entries are visited, so `d/f` can
+    // be listed but not stat'ed. root ignores directory permissions.
+    if geteuid().is_root() {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    at.touch("d/f");
+
+    let result = ucmd.args(&["-v", "-R", "u=r", "d"]).run();
+    at.set_mode("d", 0o755);
+    result
+        .code_is(1)
+        .stderr_is("chmod: cannot access 'd/f': Permission denied\n")
+        .stdout_contains("'d/f' could not be accessed\n");
+}
+
+#[test]
+fn test_chmod_recursive_dereference_symlink_loop_below_operand() {
+    // Errors other than a dangling symlink or EACCES still name the entry.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    std::os::unix::fs::symlink("loop", at.plus("d/loop")).unwrap();
+    let error = uucore::error::strip_errno(&std::io::Error::from_raw_os_error(libc::ELOOP));
+
+    ucmd.args(&["-v", "-R", "-L", "755", "d"])
+        .fails_with_code(1)
+        .stderr_is(format!("chmod: cannot access 'd/loop': {error}\n"))
+        .stdout_contains("'d/loop' could not be accessed\n");
+}
+
+#[test]
 fn test_chmod_traverse_symlink_combo() {
     let scenarios = [
         (
@@ -1894,7 +2204,7 @@ fn test_chmod_reports_every_failing_operand() {
         .args(&["-v", "-f", "0", "/", "/"])
         .fails_with_code(1)
         .no_stderr()
-        .stdout_contains("failed to change mode of file '/' from");
+        .stdout_contains("failed to change mode of '/' from");
 }
 
 #[test]
@@ -2201,4 +2511,22 @@ fn test_chmod_changes_does_not_report_inaccessible_operand() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("chmod: cannot access 'missing': No such file or directory\n");
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "chmod -R --dereference must change the target of symlinks found while recursing"]
+fn test_recursive_dereference_changes_link_targets() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("tree");
+    at.touch("target");
+    set_permissions(at.plus("target"), Permissions::from_mode(0o600)).unwrap();
+    at.symlink_file("../target", "tree/link");
+    scene
+        .ucmd()
+        .args(&["-R", "--dereference", "g+r", "tree"])
+        .succeeds()
+        .no_output();
+    assert_eq!(at.metadata("target").permissions().mode() & 0o777, 0o640);
 }

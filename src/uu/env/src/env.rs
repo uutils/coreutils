@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable sigset sigaddset sigemptyset
+// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable sigset sigaddset sigemptyset sigismember
 
 pub mod diagnostics;
 pub mod native_int_str;
@@ -25,16 +25,15 @@ use nix::sys::signal::{SigSet, SigmaskHow, Signal, sigprocmask};
 #[cfg(unix)]
 use nix::unistd::execvp;
 use std::borrow::Cow;
-#[cfg(all(unix, not(target_os = "fuchsia")))]
-use std::collections::BTreeMap;
 #[cfg(unix)]
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::env;
 #[cfg(unix)]
 use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
-#[cfg(not(unix))]
 use std::io;
+use std::io::Read as _;
 use std::io::Write as _;
 use std::io::stderr;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
@@ -42,9 +41,13 @@ use std::mem::zeroed;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 
-use uucore::display::{Quotable, print_all_env_vars};
+#[cfg(not(unix))]
+use uucore::display::print_all_env_vars;
+use uucore::display::{Quotable, print_all_env_vars_quoted};
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, strip_errno};
+use uucore::i18n::get_ctype_encoding;
 use uucore::line_ending::LineEnding;
+use uucore::quoting_style::{QuotingStyle, parser as qs_parser, quoting_style_or_tty_env};
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::signals::{
     realtime_signal_bounds, signal_by_name_or_value, signal_name_by_value,
@@ -97,12 +100,15 @@ mod options {
     pub const DEFAULT_SIGNAL: &str = "default-signal";
     pub const BLOCK_SIGNAL: &str = "block-signal";
     pub const LIST_SIGNAL_HANDLING: &str = "list-signal-handling";
+    pub const ENV0_FROM: &str = "env0-from";
 }
 
 struct Options<'a> {
     ignore_env: bool,
     line_ending: LineEnding,
+    quoting_style: Option<QuotingStyle>,
     running_directory: Option<&'a OsStr>,
+    env0_from: Option<&'a OsStr>,
     unsets: Vec<&'a OsStr>,
     sets: Vec<(Cow<'a, OsStr>, Cow<'a, OsStr>)>,
     program: Vec<&'a OsStr>,
@@ -199,13 +205,13 @@ impl SignalRequest {
 
     fn for_each_signal<F>(&self, mut f: F) -> UResult<()>
     where
-        F: FnMut(usize, bool) -> UResult<()>,
+        F: FnMut(usize) -> UResult<()>,
     {
         if self.is_empty() {
             return Ok(());
         }
         for &sig in &self.signals {
-            f(sig, true)?;
+            f(sig)?;
         }
         if self.apply_all {
             for sig_value in 1..=signal_number_upper_bound() {
@@ -216,7 +222,7 @@ impl SignalRequest {
                 if sig_value == libc::SIGKILL as usize || sig_value == libc::SIGSTOP as usize {
                     continue;
                 }
-                f(sig_value, false)?;
+                f(sig_value)?;
             }
         }
         Ok(())
@@ -229,34 +235,6 @@ enum SignalActionKind {
     Default,
     Ignore,
     Block,
-}
-
-#[cfg(all(unix, not(target_os = "fuchsia")))]
-#[derive(Copy, Clone)]
-struct SignalActionRecord {
-    kind: SignalActionKind,
-    explicit: bool,
-}
-
-#[cfg(all(unix, not(target_os = "fuchsia")))]
-#[derive(Default)]
-struct SignalActionLog {
-    records: BTreeMap<usize, SignalActionRecord>,
-}
-
-#[cfg(all(unix, not(target_os = "fuchsia")))]
-impl SignalActionLog {
-    fn record(&mut self, sig_value: usize, kind: SignalActionKind, explicit: bool) {
-        self.records
-            .entry(sig_value)
-            .and_modify(|entry| {
-                entry.kind = kind;
-                if explicit {
-                    entry.explicit = true;
-                }
-            })
-            .or_insert(SignalActionRecord { kind, explicit });
-    }
 }
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
@@ -319,6 +297,200 @@ fn signal_is_valid(sig: usize) -> bool {
     true
 }
 
+fn validate_unset_arg(name: &OsStr) -> UResult<()> {
+    let native_name = NativeStr::new(name);
+    if name.is_empty()
+        || native_name.contains('\0').unwrap_or(false)
+        || native_name.contains('=').unwrap_or(false)
+    {
+        return Err(USimpleError::new(
+            125,
+            translate!("env-error-cannot-unset-invalid", "name" => name.quote()),
+        ));
+    }
+    Ok(())
+}
+
+fn entry_key(entry: &[u8]) -> Option<&[u8]> {
+    entry
+        .iter()
+        .position(|&b| b == b'=')
+        .map(|pos| &entry[..pos])
+}
+
+fn read_env0_file(file: &OsStr) -> UResult<Vec<u8>> {
+    let res = if file == "-" {
+        let mut buf = Vec::new();
+        io::stdin().read_to_end(&mut buf).map(|_| buf)
+    } else {
+        std::fs::read(file)
+    };
+    let bytes = res.map_err(|e| {
+        USimpleError::new(
+            125,
+            translate!(
+                "env-error-cannot-read-file",
+                "file" => file.quote(),
+                "error" => strip_errno(&e)
+            ),
+        )
+    })?;
+
+    if bytes.last().is_some_and(|&byte| byte != 0) {
+        return Err(USimpleError::new(
+            125,
+            translate!(
+                "env-error-file-must-end-nul",
+                "file" => file.maybe_quote()
+            ),
+        ));
+    }
+
+    Ok(bytes)
+}
+
+// https://doc.rust-lang.org/src/std/sys/env/unix.rs.html
+#[cfg(all(unix, target_vendor = "apple"))]
+/// Returns the address of the process's `environ` pointer.
+///
+/// # Safety
+///
+/// The result may only be dereferenced while no other thread reads or
+/// changes the environment.
+unsafe fn environ() -> *mut *mut *mut libc::c_char {
+    // SAFETY: _NSGetEnviron takes no arguments and returns the process's environ pointer.
+    unsafe { libc::_NSGetEnviron() }
+}
+
+#[cfg(all(unix, target_os = "freebsd"))]
+/// Returns the address of the process's `environ` pointer.
+///
+/// # Safety
+///
+/// The result may only be dereferenced while no other thread reads or
+/// changes the environment.
+unsafe fn environ() -> *mut *mut *mut libc::c_char {
+    use std::sync::LazyLock;
+
+    struct Environ(*mut *mut *mut libc::c_char);
+    // SAFETY: the pointer is the address of the process-wide `environ`, which
+    // lives for the whole program; it is only read or written from this thread.
+    unsafe impl Send for Environ {}
+    // SAFETY: see Send above.
+    unsafe impl Sync for Environ {}
+
+    static ENVIRON: LazyLock<Environ> = LazyLock::new(|| {
+        // SAFETY: looking up a symbol by a valid C string in the global scope.
+        Environ(unsafe { libc::dlsym(libc::RTLD_DEFAULT, c"environ".as_ptr()).cast() })
+    });
+    ENVIRON.0
+}
+
+#[cfg(all(unix, not(any(target_os = "freebsd", target_vendor = "apple"))))]
+/// Returns the address of the process's `environ` pointer.
+///
+/// # Safety
+///
+/// The result may only be dereferenced while no other thread reads or
+/// changes the environment.
+unsafe fn environ() -> *mut *mut *mut libc::c_char {
+    unsafe extern "C" {
+        static mut environ: *mut *mut libc::c_char;
+    }
+    &raw mut environ
+}
+
+fn load_env0_from(opts: &Options, env0_file: &OsStr) -> UResult<Vec<Vec<u8>>> {
+    let mut entries = if opts.ignore_env {
+        Vec::new()
+    } else {
+        #[cfg(unix)]
+        {
+            let mut cur = Vec::new();
+            // SAFETY: environ() points at the process's environ, a
+            // null-terminated array of NUL-terminated strings; nothing
+            // modifies it while it is copied here.
+            let mut ptr = unsafe { *environ() };
+            // SAFETY: as above, every entry before the null one is a valid C string.
+            unsafe {
+                while !ptr.is_null() && !(*ptr).is_null() {
+                    let cstr = std::ffi::CStr::from_ptr(*ptr);
+                    cur.push(cstr.to_bytes().to_vec());
+                    ptr = ptr.add(1);
+                }
+            }
+            cur
+        }
+        #[cfg(not(unix))]
+        {
+            env::vars_os()
+                .map(|(k, v)| {
+                    let mut b = k.as_encoded_bytes().to_vec();
+                    b.push(b'=');
+                    b.extend_from_slice(v.as_encoded_bytes());
+                    b
+                })
+                .collect()
+        }
+    };
+
+    let raw_data = read_env0_file(env0_file)?;
+
+    if opts.ignore_env {
+        entries.extend(
+            raw_data
+                .split_inclusive(|&b| b == 0)
+                .map(|chunk| chunk[..chunk.len() - 1].to_vec()),
+        );
+    } else {
+        let mut key_map = HashMap::<Cow<[u8]>, usize>::with_capacity(entries.len());
+        for (i, entry) in entries.iter().enumerate() {
+            if let Some(key) = entry_key(entry) {
+                key_map.entry(Cow::Owned(key.to_vec())).or_insert(i);
+            }
+        }
+        for chunk in raw_data.split_inclusive(|&b| b == 0) {
+            let entry_slice = &chunk[..chunk.len() - 1];
+            if let Some(key) = entry_key(entry_slice) {
+                if let Some(&idx) = key_map.get(key) {
+                    entries[idx] = entry_slice.to_vec();
+                } else {
+                    key_map.insert(Cow::Borrowed(key), entries.len());
+                    entries.push(entry_slice.to_vec());
+                }
+            } else {
+                entries.push(entry_slice.to_vec());
+            }
+        }
+    }
+
+    for name in &opts.unsets {
+        validate_unset_arg(name)?;
+        let name_bytes = name.as_encoded_bytes();
+        entries.retain(|e| entry_key(e) != Some(name_bytes));
+    }
+
+    for (name, val) in &opts.sets {
+        if name.is_empty() {
+            show_warning!(
+                "{}",
+                translate!("env-warning-no-name-specified", "value" => val.quote())
+            );
+            continue;
+        }
+        let mut new_entry = name.as_encoded_bytes().to_vec();
+        new_entry.push(b'=');
+        new_entry.extend_from_slice(val.as_encoded_bytes());
+        let key = name.as_encoded_bytes();
+        if let Some(idx) = entries.iter().position(|e| entry_key(e) == Some(key)) {
+            entries[idx] = new_entry;
+        } else {
+            entries.push(new_entry);
+        }
+    }
+
+    Ok(entries)
+}
 pub fn uu_app() -> Command {
     Command::new("env")
         .version(uucore::crate_version!())
@@ -343,6 +515,7 @@ pub fn uu_app() -> Command {
                 .value_name("DIR")
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::DirPath)
+                .allow_hyphen_values(true)
                 .help(translate!("env-help-chdir")),
         )
         .arg(
@@ -352,6 +525,18 @@ pub fn uu_app() -> Command {
                 .help(translate!("env-help-null"))
                 .action(ArgAction::SetTrue),
         )
+        .arg(qs_parser::clap_quoting_argument())
+        .arg(
+            Arg::new(options::ENV0_FROM)
+                .overrides_with(options::ENV0_FROM)
+                .long(options::ENV0_FROM)
+                .value_name("FILE")
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(ValueParser::os_string())
+                .allow_hyphen_values(true)
+                .action(ArgAction::Set)
+                .help(translate!("env-help-env0-from")),
+        )
         .arg(
             Arg::new(options::UNSET)
                 .short('u')
@@ -359,13 +544,17 @@ pub fn uu_app() -> Command {
                 .value_name("NAME")
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
+                .allow_hyphen_values(true)
                 .help(translate!("env-help-unset")),
         )
         .arg(
             Arg::new(options::DEBUG)
                 .short('v')
                 .long(options::DEBUG)
-                .action(ArgAction::Count)
+                // Not ArgAction::Count: clap would show "--debug..." in --help
+                .action(ArgAction::Append)
+                .num_args(0)
+                .default_missing_value("")
                 .help(translate!("env-help-debug")),
         )
         .arg(
@@ -385,6 +574,7 @@ pub fn uu_app() -> Command {
                 .value_name("a")
                 .action(ArgAction::Set)
                 .value_parser(ValueParser::os_string())
+                .allow_hyphen_values(true)
                 .help(translate!("env-help-argv0")),
         )
         .arg(
@@ -550,6 +740,47 @@ fn check_and_handle_string_args(
     }
 }
 
+/// Walk an argument in option position. Set `expecting_arg` when the next
+/// argument is this option's value, and keep a leading `=` in a value attached
+/// to a short option: clap consumes it as a separator, whereas env treats it as
+/// part of the value.
+fn scan_option(
+    arg: &mut OsString,
+    short_flags_with_args: &[u8],
+    flags_with_args: &[&str],
+    expecting_arg: &mut bool,
+    options_ended: &mut bool,
+) -> UResult<()> {
+    if std::mem::take(expecting_arg) || *options_ended {
+        return Ok(());
+    }
+    let bytes = arg.as_encoded_bytes();
+    if bytes == b"--" {
+        *options_ended = true;
+    } else if let Some(long) = bytes.strip_prefix(b"--") {
+        *expecting_arg = flags_with_args
+            .iter()
+            .any(|name| name.as_bytes().starts_with(long));
+    } else if let Some(short) = bytes.strip_prefix(b"-").filter(|s| !s.is_empty()) {
+        if let Some(index) = short
+            .iter()
+            .position(|option| short_flags_with_args.contains(option))
+        {
+            if short.get(index + 1) == Some(&b'=') {
+                let mut value = bytes.to_vec();
+                value.insert(index + 2, b'=');
+                *arg = uucore::os_str_from_bytes(&value)?.to_os_string();
+            } else {
+                *expecting_arg = index + 1 == short.len();
+            }
+        }
+    } else {
+        // The first operand ends the options.
+        *options_ended = true;
+    }
+    Ok(())
+}
+
 #[derive(Default)]
 struct EnvAppData {
     do_debug_printing: bool,
@@ -583,30 +814,49 @@ impl EnvAppData {
         original_args: &Vec<OsString>,
     ) -> UResult<Vec<OsString>> {
         let mut all_args: Vec<OsString> = Vec::new();
-        let mut process_flags = true;
         let mut expecting_arg = false;
-        // Leave out split-string since it's a special case below
-        let flags_with_args = [options::ARGV0, options::CHDIR, options::UNSET];
-        let short_flags_with_args = ['a', 'C', 'u'];
+        // Set by scan_option at "--" or at the first operand (NAME=VALUE or
+        // the command); later arguments are passed through untouched.
+        let mut options_ended = false;
+        let app = uu_app();
+        let args_with_values: Vec<&Arg> = app
+            .get_arguments()
+            .filter(|arg| {
+                arg.get_action().takes_values()
+                    && !arg.is_require_equals_set()
+                    && arg
+                        .get_num_args()
+                        .is_none_or(|range| range.max_values() > 0)
+            })
+            .collect();
+        let short_flags_with_args: Vec<u8> = args_with_values
+            .iter()
+            .filter_map(|arg| arg.get_short())
+            .filter(char::is_ascii)
+            .map(|short| short as u8)
+            .collect();
+        let flags_with_args: Vec<&str> = args_with_values
+            .iter()
+            .filter_map(|arg| arg.get_long())
+            .collect();
         let mut consumed_split_payload_arg: Option<usize> = None;
         for (n, arg) in original_args.iter().enumerate() {
             if consumed_split_payload_arg == Some(n) {
                 consumed_split_payload_arg = None;
                 continue;
             }
-            let arg_str = arg.to_string_lossy();
-            // Stop processing env flags once we reach the command or -- argument
-            if 0 < n
-                && !expecting_arg
-                && (arg == "--" || !(arg_str.starts_with('-') || arg_str.contains('=')))
-            {
-                process_flags = false;
-            }
-            if !process_flags {
+            if options_ended {
                 all_args.push(arg.clone());
                 continue;
             }
-            expecting_arg = false;
+            // The value of a detached -C, -u or -a is taken as is, even when
+            // it starts with -S, like GNU env does.
+            if expecting_arg {
+                expecting_arg = false;
+                all_args.push(arg.clone());
+                continue;
+            }
+            let start = all_args.len();
             // Where the `-S` string sits, for the caret: the argument the
             // parser is looking at right now.
             let located = uucore::diagnostics::enabled().then_some((original_args.as_slice(), n));
@@ -691,29 +941,21 @@ impl EnvAppData {
                     consumed_split_payload_arg = Some(n + 1);
                 }
                 _ => {
-                    if let Some(flag) = arg_str.strip_prefix("--") {
-                        if flags_with_args.contains(&flag) {
-                            expecting_arg = true;
-                        }
-                    } else if let Some(flag) = arg_str.strip_prefix("-") {
-                        for c in flag.chars() {
-                            expecting_arg = short_flags_with_args.contains(&c);
-                        }
-                    }
-                    // Short unset option (-u) is not allowed to contain '='
-                    if arg_str.contains('=')
-                        && arg_str.starts_with("-u")
-                        && !arg_str.starts_with("--")
-                    {
-                        let name = &arg_str[arg_str.find('=').unwrap()..];
-                        return Err(USimpleError::new(
-                            125,
-                            translate!("env-error-cannot-unset", "name" => name),
-                        ));
-                    }
-
                     all_args.push(arg.clone());
+                    if n == 0 {
+                        continue;
+                    }
                 }
+            }
+            // Arguments split out of a `-S` string are options too.
+            for new_arg in &mut all_args[start..] {
+                scan_option(
+                    new_arg,
+                    &short_flags_with_args,
+                    &flags_with_args,
+                    &mut expecting_arg,
+                    &mut options_ended,
+                )?;
             }
         }
 
@@ -777,10 +1019,11 @@ impl EnvAppData {
             signal_apply_all,
         } = self.parse_arguments(original_args)?;
 
-        self.do_debug_printing = self.do_debug_printing || (0 != matches.get_count("debug"));
-        self.do_input_debug_printing = self
-            .do_input_debug_printing
-            .or(Some(matches.get_count("debug") >= 2));
+        let debug_level = matches
+            .get_many::<String>(options::DEBUG)
+            .map_or(0, Iterator::count);
+        self.do_debug_printing = self.do_debug_printing || debug_level != 0;
+        self.do_input_debug_printing = self.do_input_debug_printing.or(Some(debug_level >= 2));
         if Some(true) == self.do_input_debug_printing {
             debug_print_args(&original_args);
             self.do_input_debug_printing = Some(false);
@@ -792,25 +1035,43 @@ impl EnvAppData {
             &signal_apply_all,
         )?;
 
-        // NOTE: we manually set and unset the env vars below rather than using Command::env() to more
-        //       easily handle the case where no command is given
+        #[allow(unused_mut)]
+        let mut custom_env = opts
+            .env0_from
+            .map(|env0_file| load_env0_from(&opts, env0_file))
+            .transpose()?;
 
-        apply_removal_of_all_env_vars(&opts);
-
-        apply_unset_env_vars(&opts)?;
-
-        apply_specified_env_vars(&opts);
+        if custom_env.is_none() {
+            apply_removal_of_all_env_vars(&opts);
+            apply_unset_env_vars(&opts)?;
+            apply_specified_env_vars(&opts);
+        }
 
         #[cfg(all(unix, not(target_os = "fuchsia")))]
         {
-            let mut signal_action_log = SignalActionLog::default();
+            let mut sigpipe_action = None;
             // GNU applies the options in the order they are given, so the last one for a
             // signal wins.
             for (action_kind, request) in &opts.signal_actions {
-                apply_signal_action(request, &mut signal_action_log, *action_kind)?;
+                if let Some(kind) = apply_signal_action(request, *action_kind)? {
+                    sigpipe_action = Some(kind);
+                }
             }
             if opts.list_signal_handling {
-                list_signal_handling(&signal_action_log);
+                list_signal_handling();
+            }
+            if let Some(ref mut entries) = custom_env
+                && matches!(sigpipe_action, Some(SignalActionKind::Default))
+            {
+                let sigpipe_entry = b"RUST_SIGPIPE=default".to_vec();
+                if let Some(idx) = entries
+                    .iter()
+                    .position(|e| entry_key(e) == Some(b"RUST_SIGPIPE"))
+                {
+                    entries[idx] = sigpipe_entry;
+                } else {
+                    entries.push(sigpipe_entry);
+                }
             }
         }
 
@@ -825,10 +1086,53 @@ impl EnvAppData {
 
         apply_change_directory(&opts)?;
         if opts.program.is_empty() {
-            // no program provided, so just dump all env vars to stdout
-            print_all_env_vars(opts.line_ending)?;
+            if let Some(ref entries) = custom_env {
+                let stdout = io::stdout().lock();
+                let mut writer = io::BufWriter::new(stdout);
+                for entry in entries {
+                    writer.write_all(entry)?;
+                    match opts.line_ending {
+                        LineEnding::Nul => writer.write_all(b"\0")?,
+                        LineEnding::Newline => writer.write_all(b"\n")?,
+                    }
+                }
+                writer.flush()?;
+            } else if let Some(style) = quoting_style_or_tty_env(opts.quoting_style) {
+                print_all_env_vars_quoted(
+                    io::stdout(),
+                    opts.line_ending,
+                    style,
+                    get_ctype_encoding(),
+                )?;
+            } else {
+                // no program provided, so just dump all env vars to stdout
+                #[cfg(unix)]
+                {
+                    let stdout = io::stdout().lock();
+                    let mut writer = io::BufWriter::new(stdout);
+                    // SAFETY: environ is a null-terminated array of C strings,
+                    // left untouched while it is printed.
+                    unsafe {
+                        let mut ptr = *environ();
+                        while !(*ptr).is_null() {
+                            let cstr = std::ffi::CStr::from_ptr(*ptr);
+                            writer.write_all(cstr.to_bytes())?;
+                            match opts.line_ending {
+                                LineEnding::Nul => writer.write_all(b"\0")?,
+                                LineEnding::Newline => writer.write_all(b"\n")?,
+                            }
+                            ptr = ptr.add(1);
+                        }
+                    }
+                    writer.flush()?;
+                }
+                #[cfg(not(unix))]
+                {
+                    print_all_env_vars(io::stdout(), opts.line_ending)?;
+                }
+            }
         } else {
-            return self.run_program(&opts, self.do_debug_printing);
+            return self.run_program(&opts, self.do_debug_printing, custom_env.as_deref());
         }
 
         Ok(())
@@ -847,6 +1151,7 @@ impl EnvAppData {
         &mut self,
         opts: &Options<'_>,
         do_debug_printing: bool,
+        custom_env: Option<&[Vec<u8>]>,
     ) -> Result<(), Box<dyn UError>> {
         let prog = Cow::from(opts.program[0]);
 
@@ -871,7 +1176,7 @@ impl EnvAppData {
 
         if do_debug_printing {
             let mut error = stderr().lock();
-            let _ = writeln!(error, "executing: {}", prog.maybe_quote());
+            let _ = writeln!(error, "executing: {}", prog.quote());
             let arg_prefix = "   arg";
             let _ = writeln!(error, "{arg_prefix}[{}]= {}", 0, arg0.quote());
             for (i, arg) in args.iter().enumerate() {
@@ -909,11 +1214,41 @@ impl EnvAppData {
                 argv.push(arg_cstring);
             }
 
+            let env_cstrings = custom_env.map(|entries| {
+                entries
+                    .iter()
+                    .filter_map(|e| CString::new(e.clone()).ok())
+                    .collect::<Vec<_>>()
+            });
+            let mut envp_ptrs = env_cstrings.as_ref().map(|cstrings| {
+                let mut ptrs: Vec<*mut libc::c_char> =
+                    cstrings.iter().map(|cs| cs.as_ptr().cast_mut()).collect();
+                ptrs.push(std::ptr::null_mut());
+                ptrs
+            });
+
+            // SAFETY: ptrs is a null-terminated array of pointers into
+            // env_cstrings, both alive until execvp; env is single-threaded here.
+            let orig = envp_ptrs.as_mut().map(|ptrs| unsafe {
+                let p = *environ();
+                *environ() = ptrs.as_mut_ptr();
+                p
+            });
+
             // Execute the program using execvp. this replaces the current
             // process. The execvp function takes care of appending a NULL
             // argument to the argument list so that we don't have to.
             // unwrap_err since execvp should never return on success
-            match execvp(&prog_cstring, &argv).unwrap_err() {
+            let exec_error = execvp(&prog_cstring, &argv).unwrap_err();
+
+            if let Some(orig) = orig {
+                // SAFETY: restores the pointer saved above.
+                unsafe {
+                    *environ() = orig;
+                }
+            }
+
+            match exec_error {
                 nix::errno::Errno::ENOENT => Err(self.make_error_no_such_file_or_dir(&prog)),
                 e => {
                     uucore::show_error!("{}: {}", prog.quote(), strip_errno(&e.into()));
@@ -927,6 +1262,18 @@ impl EnvAppData {
             // Fallback to Command::status for non-Unix systems
             let mut cmd = std::process::Command::new(&*prog);
             cmd.args(args);
+            if let Some(entries) = custom_env {
+                cmd.env_clear();
+                for entry in entries {
+                    if let Some(key) = entry_key(entry) {
+                        let val = &entry[key.len() + 1..];
+                        if let (Ok(k), Ok(v)) = (std::str::from_utf8(key), std::str::from_utf8(val))
+                        {
+                            cmd.env(k, v);
+                        }
+                    }
+                }
+            }
 
             match cmd.status() {
                 Ok(exit) if !exit.success() => Err(exit.code().unwrap_or(1).into()),
@@ -966,8 +1313,14 @@ fn make_options<'a>(
 ) -> UResult<Options<'a>> {
     let ignore_env = matches.get_flag("ignore-environment");
     let line_ending = LineEnding::from_zero_flag(matches.get_flag("null"));
+    let quoting_style = matches
+        .get_one::<String>(qs_parser::QUOTING_STYLE)
+        .and_then(QuotingStyle::parse);
     let running_directory = matches
         .get_one::<OsString>("chdir")
+        .map(OsString::as_os_str);
+    let env0_from = matches
+        .get_one::<OsString>(options::ENV0_FROM)
         .map(OsString::as_os_str);
     let unsets = match matches.get_many::<OsString>("unset") {
         Some(v) => v.map(OsString::as_os_str).collect(),
@@ -985,7 +1338,9 @@ fn make_options<'a>(
     let mut opts = Options {
         ignore_env,
         line_ending,
+        quoting_style,
         running_directory,
+        env0_from,
         unsets,
         sets: vec![],
         program: vec![],
@@ -1022,16 +1377,7 @@ fn make_options<'a>(
 
 fn apply_unset_env_vars(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
     for name in &opts.unsets {
-        let native_name = NativeStr::new(name);
-        if name.is_empty()
-            || native_name.contains('\0').unwrap()
-            || native_name.contains('=').unwrap()
-        {
-            return Err(USimpleError::new(
-                125,
-                translate!("env-error-cannot-unset-invalid", "name" => name.quote()),
-            ));
-        }
+        validate_unset_arg(name)?;
         unsafe {
             env::remove_var(name);
         }
@@ -1103,10 +1449,10 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 fn apply_signal_action(
     request: &SignalRequest,
-    log: &mut SignalActionLog,
     action_kind: SignalActionKind,
-) -> UResult<()> {
-    request.for_each_signal(|sig_value, explicit| {
+) -> UResult<Option<SignalActionKind>> {
+    let mut sigpipe_action = None;
+    request.for_each_signal(|sig_value| {
         // On some platforms ALL_SIGNALS may contain values that are not valid in libc.
         // Skip those invalid ones and continue (GNU env also ignores undefined signals).
         if !signal_is_valid(sig_value) {
@@ -1118,18 +1464,21 @@ fn apply_signal_action(
             SignalActionKind::Ignore => ignore_signal(sig_value)?,
             SignalActionKind::Block => block_signal(sig_value)?,
         }
-        log.record(sig_value, action_kind, explicit);
 
-        // Set environment variable to communicate to Rust child processes
-        // that SIGPIPE should be default (not ignored)
-        if matches!(action_kind, SignalActionKind::Default) && sig_value == libc::SIGPIPE as usize {
-            unsafe {
-                env::set_var("RUST_SIGPIPE", "default");
+        if sig_value == libc::SIGPIPE as usize {
+            sigpipe_action = Some(action_kind);
+            // Set environment variable to communicate to Rust child processes
+            // that SIGPIPE should be default (not ignored)
+            if matches!(action_kind, SignalActionKind::Default) {
+                unsafe {
+                    env::set_var("RUST_SIGPIPE", "default");
+                }
             }
         }
 
         Ok(())
-    })
+    })?;
+    Ok(sigpipe_action)
 }
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
@@ -1217,19 +1566,35 @@ fn block_signal(sig: usize) -> UResult<()> {
     Ok(())
 }
 
+/// List the signals that are not at their default, blocked or ignored,
+/// whether env was asked for that or inherited it, as GNU does.
 #[cfg(all(unix, not(target_os = "fuchsia")))]
-fn list_signal_handling(log: &SignalActionLog) {
-    for (&sig_value, record) in &log.records {
-        if !record.explicit {
+fn list_signal_handling() {
+    let mask = SigSet::thread_get_mask().unwrap_or_else(|_| SigSet::empty());
+    for sig_value in 1..=signal_number_upper_bound() {
+        let Some(signal_name) = signal_name_by_value(sig_value) else {
+            continue;
+        };
+        if !signal_is_valid(sig_value) {
             continue;
         }
-        let action = match record.kind {
-            SignalActionKind::Default => "DEFAULT",
-            SignalActionKind::Ignore => "IGNORE",
-            SignalActionKind::Block => "BLOCK",
+        let sig = sig_value as libc::c_int;
+        // SAFETY: a null new action only queries the current one, into a
+        // zeroed `sigaction` that `sigaction(2)` fills in entirely.
+        let ignored = unsafe {
+            let mut current: libc::sigaction = zeroed();
+            libc::sigaction(sig, std::ptr::null(), &raw mut current) == 0
+                && current.sa_sigaction == libc::SIG_IGN
         };
-        let signal_name = signal_name_by_value(sig_value).unwrap_or("?".to_string());
-        eprintln!("{signal_name:<10} ({}): {action}", sig_value as i32);
+        // SAFETY: `sigismember` only reads the set it is given.
+        let blocked = unsafe { libc::sigismember(mask.as_ref(), sig) == 1 };
+        let state = match (blocked, ignored) {
+            (true, true) => "BLOCK,IGNORE",
+            (true, false) => "BLOCK",
+            (false, true) => "IGNORE",
+            (false, false) => continue,
+        };
+        eprintln!("{signal_name:<10} ({sig:2}): {state}");
     }
 }
 
@@ -1245,12 +1610,13 @@ mod tests {
 
     #[test]
     fn test_split_string_environment_vars_test() {
-        unsafe { env::set_var("FOO", "BAR") };
-        assert_eq!(
-            NCvt::convert(vec!["FOO=bar", "sh", "-c", "echo xBARx =$FOO="]),
-            parse_args_from_str(&NCvt::convert(r#"FOO=bar sh -c "echo x${FOO}x =\$FOO=""#))
-                .unwrap(),
-        );
+        temp_env::with_var("FOO", Some("BAR"), || {
+            assert_eq!(
+                NCvt::convert(vec!["FOO=bar", "sh", "-c", "echo xBARx =$FOO="]),
+                parse_args_from_str(&NCvt::convert(r#"FOO=bar sh -c "echo x${FOO}x =\$FOO=""#))
+                    .unwrap(),
+            );
+        });
     }
 
     #[test]
@@ -1276,7 +1642,9 @@ mod tests {
 
     #[test]
     fn test_error_cases() {
-        let _ = locale::setup_localization("env");
+        temp_env::with_var("LANG", Some("C"), || {
+            let _ = locale::setup_localization("env");
+        });
 
         // Test EnvBackslashCNotAllowedInDoubleQuotes
         let result = parse_args_from_str(&NCvt::convert(r#"sh -c "echo \c""#));

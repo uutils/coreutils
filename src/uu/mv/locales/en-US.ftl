@@ -21,7 +21,7 @@ mv-error-no-such-file = cannot stat {$path}: No such file or directory
 mv-error-cannot-stat-not-directory = cannot stat {$path}: Not a directory
 mv-error-same-file = {$source} and {$target} are the same file
 mv-error-self-target-subdirectory = cannot move {$source} to a subdirectory of itself, {$target}
-mv-error-directory-to-non-directory = cannot overwrite directory {$path} with non-directory
+mv-error-directory-to-non-directory = cannot overwrite directory {$path} with non-directory {$source}
 mv-error-non-directory-to-directory = cannot overwrite non-directory {$target} with directory {$source}
 mv-error-not-directory = target {$path}: Not a directory
 mv-error-target-not-directory = target directory {$path}: Not a directory
@@ -39,6 +39,7 @@ mv-error-no-symlink-support = your operating system does not support symlinks
 mv-error-permission-denied = Permission denied
 mv-error-inter-device-move-failed = inter-device move failed: {$from} to {$to}; unable to remove target: {$err}
 mv-error-setting-attribute = setting attribute {$name}: {$err}
+mv-error-setting-attributes = setting attributes for {$path}: {$err}
 mv-error-exchange-two-operands = --exchange requires exactly two operands
 mv-error-exchange-not-supported = --exchange is not supported on this platform
 

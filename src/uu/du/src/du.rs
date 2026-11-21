@@ -111,6 +111,17 @@ enum Deref {
     None,
 }
 
+impl Deref {
+    /// Whether `path` is followed when it is a symbolic link.
+    fn follows(&self, path: &Path) -> bool {
+        match self {
+            Self::All => true,
+            Self::Args(paths) => paths.contains(&path.to_path_buf()),
+            Self::None => false,
+        }
+    }
+}
+
 #[derive(Clone)]
 enum SizeFormat {
     HumanDecimal,
@@ -140,14 +151,7 @@ impl Stat {
         dir_entry: Option<&DirEntry>,
         options: &TraversalOptions,
     ) -> io::Result<Self> {
-        // Determine whether to dereference (follow) the symbolic link
-        let should_dereference = match &options.dereference {
-            Deref::All => true,
-            Deref::Args(paths) => paths.contains(&path.to_path_buf()),
-            Deref::None => false,
-        };
-
-        let metadata = if should_dereference {
+        let metadata = if options.dereference.follows(path) {
             // Get metadata, following symbolic links if necessary
             fs::metadata(path)
         } else if let Some(dir_entry) = dir_entry {
@@ -413,7 +417,7 @@ fn safe_du(
         Err(_e) => {
             // Only the root path can reach this branch (subdirectories always pass a
             // valid stat). Try using our DirFd method for the root directory.
-            match DirFd::open(path, SymlinkBehavior::Follow) {
+            match DirFd::open(path, options.dereference.follows(path).into()) {
                 Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path, options.time) {
                     Ok(s) => s,
                     Err(e) => {
@@ -448,13 +452,15 @@ fn safe_du(
         return Ok(my_stat);
     }
 
-    // Open the directory using DirFd
+    // Open the directory using DirFd. A subdirectory is opened with O_NOFOLLOW:
+    // it was classified with a no-follow stat, so if it has been swapped for a
+    // symlink since then, the open must fail instead of walking into the target.
     let open_result = match parent_fd {
         Some(parent) => parent.open_subdir(
             path.file_name().unwrap_or(path.as_os_str()),
-            SymlinkBehavior::Follow,
+            SymlinkBehavior::NoFollow,
         ),
-        None => DirFd::open(path, SymlinkBehavior::Follow),
+        None => DirFd::open(path, options.dereference.follows(path).into()),
     };
 
     let dir_fd = match open_result {
@@ -1497,7 +1503,11 @@ pub fn uu_app() -> Command {
                 .long(options::DEREFERENCE)
                 .help(translate!("du-help-dereference"))
                 .action(ArgAction::SetTrue)
-                .overrides_with(options::DEREFERENCE),
+                .overrides_with_all([
+                    options::DEREFERENCE,
+                    options::DEREFERENCE_ARGS,
+                    options::NO_DEREFERENCE,
+                ]),
         )
         .arg(
             Arg::new(options::DEREFERENCE_ARGS)
@@ -1506,15 +1516,22 @@ pub fn uu_app() -> Command {
                 .long(options::DEREFERENCE_ARGS)
                 .help(translate!("du-help-dereference-args"))
                 .action(ArgAction::SetTrue)
-                .overrides_with(options::DEREFERENCE_ARGS),
+                .overrides_with_all([
+                    options::DEREFERENCE,
+                    options::DEREFERENCE_ARGS,
+                    options::NO_DEREFERENCE,
+                ]),
         )
         .arg(
             Arg::new(options::NO_DEREFERENCE)
                 .short('P')
                 .long(options::NO_DEREFERENCE)
                 .help(translate!("du-help-no-dereference"))
-                .overrides_with(options::DEREFERENCE)
-                .overrides_with(options::NO_DEREFERENCE)
+                .overrides_with_all([
+                    options::DEREFERENCE,
+                    options::DEREFERENCE_ARGS,
+                    options::NO_DEREFERENCE,
+                ])
                 .action(ArgAction::SetTrue),
         )
         .arg(

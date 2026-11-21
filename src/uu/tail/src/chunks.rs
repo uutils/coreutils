@@ -46,21 +46,21 @@ pub struct ReverseChunks<'a> {
 }
 
 impl<'a> ReverseChunks<'a> {
-    pub fn new(file: &'a mut File) -> Self {
-        let current = if cfg!(unix) {
-            file.stream_position().unwrap()
-        } else {
-            0
-        };
-        let size = file.seek(SeekFrom::End(0)).unwrap() - current;
+    /// Iterates backwards from `end`, the position seen as the end of the file.
+    pub fn new(file: &'a mut File, end: SeekFrom) -> std::io::Result<Self> {
+        let current = file.stream_position()?;
+        let size = file.seek(end)?.saturating_sub(current);
+        if size == 0 {
+            file.seek(SeekFrom::Start(current))?;
+        }
         let max_blocks_to_read = (size as f64 / BLOCK_SIZE as f64).ceil() as usize;
         let block_idx = 0;
-        ReverseChunks {
+        Ok(ReverseChunks {
             file,
             size,
             max_blocks_to_read,
             block_idx,
-        }
+        })
     }
 }
 

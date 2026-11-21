@@ -3,7 +3,7 @@ name: make
 # spell-checker:ignore (env/flags) CHERE RUSTDOCFLAGS RUSTFLAGS CARGOFLAGS CLEVEL relocs EAGAIN
 # spell-checker:ignore (jargon) deps softprops toolchain
 # spell-checker:ignore (people) dawidd
-# spell-checker:ignore (shell/tools) bsdtar nextest pacman sccache zstd
+# spell-checker:ignore (shell/tools) bsdtar nextest pacman zstd
 # spell-checker:ignore (misc) bindir busytest defconfig dynamicbase DESTDIR libopenssl manpages multisize noconfirm runtest testsuite toybox uutils
 
 env:
@@ -136,7 +136,7 @@ jobs:
       shell: bash
       run: |
         # Check that libstdbuf is present too
-        mv target/release/deps/libstdbuf.so -t /tmp/individual/usr/local/bin
+        mv target/release/libstdbuf.so -t /tmp/individual/usr/local/bin
         ZSTD_CLEVEL=19 tar --zstd -caf individual-x86_64-unknown-linux-gnu.tar.zst -C /tmp/individual/usr/local bin
     - name: Publish
       uses: softprops/action-gh-release@v3
@@ -341,7 +341,7 @@ jobs:
         ! test -f /tmp/c/usr/local/share/bash-completion/completions/uu-head.bash
         ! test -f /tmp/c/usr/local/share/fish/vendor_completions.d/uu-cat.fish
         # package
-        mv target/release-small/deps/stdbuf.dll -t /tmp/c/usr/local/bin
+        mv target/release-small/libstdbuf.dll -t /tmp/c/usr/local/bin
         bsdtar -caf individual-x86_64-pc-cygwin.tar.zst -C /tmp/c/usr/local bin
       env:
         CHERE_INVOKING: 1

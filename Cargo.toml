@@ -34,7 +34,7 @@ members = [
 [workspace.package]
 categories = ["command-line-utilities"]
 edition = "2024"
-rust-version = "1.88.0"
+rust-version = "1.89"
 homepage = "https://github.com/uutils/coreutils"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 license = "MIT"
@@ -122,9 +122,12 @@ rustix = { version = "1.1.4", default-features = false }
 self_cell = "1.0.4"
 selinux = "0.6"
 syn = { version = "3.0", features = ["full"] }
+temp-env = "0.3.6"
 tempfile = "3.15.0"
 terminal_size = "0.4.0"
-textwrap = { version = "0.16.1", features = ["terminal_size"] }
+textwrap = { version = "0.16.1", default-features = false, features = [
+  "terminal_size",
+] }
 thiserror = "2.0.3"
 time = { version = "0.3.36" }
 quote = "1.0.36"
@@ -506,7 +509,6 @@ feat_common_core = [
   "cksum",
   "b2sum",
   "md5sum",
-  "nice",
   "sha1sum",
   "sha224sum",
   "sha256sum",
@@ -584,6 +586,7 @@ feat_Tier1 = [
   "env",
   "hostname",
   "kill",
+  "nice",
   "nohup",
   "nproc",
   "more",
@@ -625,6 +628,32 @@ feat_os_unix_android = [
   "feat_Tier1",
   #
   "feat_require_unix",
+]
+# "feat_os_unix_illumos" == set of utilities which can be built on the "x86_64-unknown-illumos" target
+feat_os_unix_illumos = [
+  "feat_common_core",
+  # todo: use feat_Tier1 if whoami and uptime were supported <https://github.com/uutils/coreutils/issues/15520>
+  # mknod, stat: wrong unsafe? <https://github.com/rust-lang/libc/issues/5646>
+  "chgrp",
+  "chmod",
+  "chown",
+  "df",
+  "du",
+  "env",
+  "groups",
+  "hostname",
+  # "id" has wrong cfg?
+  "install",
+  "kill",
+  "logname",
+  "mkfifo",
+  "more",
+  "nice",
+  "nohup",
+  "nproc",
+  "stty",
+  "sync",
+  "timeout",
 ]
 ## feature sets with requirements (restricting cross-platform availability)
 #
@@ -668,14 +697,29 @@ feat_os_unix_fuchsia = [
   "logname",
   "mkfifo",
   "mknod",
+  "nice",
   "unlink",
 ]
 # "feat_os_unix_redox" == set of utilities which can be built/run on "Redox OS" (refs: <https://www.redox-os.org>; <https://en.wikipedia.org/wiki/Redox_(operating_system)>)
 feat_os_unix_redox = [
   "feat_common_core",
-  #
+  "chgrp",
   "chmod",
+  "chown",
+  "df",
+  "du",
+  "env",
+  "install",
+  "kill",
+  "logname",
+  "more",
+  "nice",
+  "nohup",
+  "nproc",
   "stat",
+  "stty",
+  "timeout",
+  "whoami",
 ]
 ##
 # * bypass/override ~ translate 'test' feature name to avoid dependency collision with rust core 'test' crate (o/w surfaces as compiler errors during testing)
