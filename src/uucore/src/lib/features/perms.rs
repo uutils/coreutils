@@ -318,16 +318,12 @@ impl ChownExecutor {
         let ret = if self.matched(meta.uid(), meta.gid()) {
             // Use safe syscalls for root directory to prevent TOCTOU attacks on Linux
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            let chown_result = if meta.is_dir() {
-                match operand_fd.as_ref() {
-                    Some(dir_fd) => self
-                        .safe_chown_dir(dir_fd, path, &meta)
-                        .map(|_| String::new()),
-                    // The open failed; safe_dive_into reports it.
-                    None => Ok(String::new()),
-                }
+            let chown_result = if let Some(dir_fd) = operand_fd.as_ref() {
+                self.safe_chown_dir(dir_fd, path, &meta)
+                    .map(|_| String::new())
             } else {
-                // For non-directories (files, symlinks), use the regular wrap_chown method
+                // Files, symlinks, and directories we cannot open (e.g. mode 000):
+                // the latter can still have their owner changed by path.
                 wrap_chown(
                     path,
                     &meta,

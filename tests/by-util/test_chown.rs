@@ -1115,7 +1115,7 @@ fn test_chown_symlink_cycles() {
 
     let result = scene.ucmd().arg("-vRL").arg(&user_name).arg("a").run();
 
-    if cfg!(target_vendor = "apple") || cfg!(target_os = "openbsd") || cfg!(target_os = "android") {
+    if cfg!(target_vendor = "apple") || cfg!(target_os = "openbsd") {
         result
             .stdout_contains(format!("ownership of 'a' retained as {user_name}"))
             .stdout_contains(format!("ownership of 'a/b' retained as {user_name}"))
