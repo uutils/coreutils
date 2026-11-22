@@ -390,9 +390,8 @@ impl ChownExecutor {
 
     #[cfg(target_os = "linux")]
     fn safe_chown_dir(&self, dir_fd: &DirFd, path: &Path, meta: &Metadata) -> Result<(), String> {
-        // Use fchown (safe) to change the directory's ownership
-        if let Err(e) = dir_fd.fchown(self.dest_uid, self.dest_gid) {
-            return Err(format!(
+        std::os::unix::fs::fchown(dir_fd, self.dest_uid, self.dest_gid).map_err(|e| {
+            format!(
                 "changing {} of {}: {}",
                 if self.verbosity.groups_only {
                     "group"
@@ -401,8 +400,8 @@ impl ChownExecutor {
                 },
                 path.quote(),
                 strip_errno(&e),
-            ));
-        }
+            )
+        })?;
 
         // Report the change if verbose (similar to wrap_chown)
         self.report_ownership_change_success(path, meta.uid(), meta.gid());
