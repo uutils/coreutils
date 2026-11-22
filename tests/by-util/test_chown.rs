@@ -1166,9 +1166,9 @@ fn test_chown_symlink_two_links_same_dir() {
 
     let result = scene.ucmd().arg("-vRL").arg(&user_name).arg("base").run();
 
-    // Only linux uses the safe-traversal cycle detection that this test exercises;
+    // Only linux and android use the safe-traversal cycle detection that this test exercises;
     // other platforms fall back to walkdir with its own loop handling.
-    if cfg!(target_os = "linux") {
+    if cfg!(any(target_os = "linux", target_os = "android")) {
         result
             .success()
             .stdout_contains(format!(

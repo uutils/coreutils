@@ -15,17 +15,17 @@ use crate::{show_error, translate};
 use clap::{Arg, ArgMatches, Command};
 
 use options::traverse;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::collections::HashSet;
 use std::ffi::OsString;
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 use walkdir::WalkDir;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::features::fs::FileInformation;
 use crate::features::fs::{metadata_is_root_dir, path_is_root_dir};
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::features::safe_traversal::{DirFd, FileInfo, SymlinkBehavior};
 
 use std::fs::Metadata;
@@ -220,7 +220,7 @@ fn report_root(path: &Path) {
 ///
 /// A pathname can be re-pointed between the stat and the open, so comparing
 /// (device, inode) is what detects the swap. The descriptor cannot be re-pointed after.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn fd_is(dir_fd: &DirFd, meta: &Metadata) -> std::io::Result<bool> {
     let opened = FileInfo::from_stat(&dir_fd.fstat()?);
     Ok(opened == FileInfo::new(meta.dev(), meta.ino()))
@@ -280,7 +280,7 @@ impl ChownExecutor {
         // Resolve the operand once. `--from`, `--preserve-root` and the
         // directory-vs-file classification were all decided on `meta`; re-opening the
         // pathname would let a swap apply those decisions to a different object.
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "android"))]
         // We cannot check path.is_dir() here, as this would resolve symlinks
         let operand_fd = if meta.is_dir() {
             match DirFd::open(path, SymlinkBehavior::Follow) {
@@ -317,7 +317,7 @@ impl ChownExecutor {
 
         let ret = if self.matched(meta.uid(), meta.gid()) {
             // Use safe syscalls for root directory to prevent TOCTOU attacks on Linux
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "android"))]
             let chown_result = if meta.is_dir() {
                 match operand_fd.as_ref() {
                     Some(dir_fd) => self
@@ -338,7 +338,7 @@ impl ChownExecutor {
                 )
             };
 
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(any(target_os = "linux", target_os = "android")))]
             let chown_result = wrap_chown(
                 path,
                 &meta,
@@ -375,11 +375,11 @@ impl ChownExecutor {
         };
 
         if self.recursive {
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "android"))]
             {
                 ret | self.safe_dive_into(&root, &meta, operand_fd)
             }
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(any(target_os = "linux", target_os = "android")))]
             {
                 ret | self.dive_into(&root)
             }
@@ -388,7 +388,7 @@ impl ChownExecutor {
         }
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     fn safe_chown_dir(&self, dir_fd: &DirFd, path: &Path, meta: &Metadata) -> Result<(), String> {
         // Use fchown (safe) to change the directory's ownership
         if let Err(e) = dir_fd.fchown(self.dest_uid, self.dest_gid) {
@@ -410,7 +410,7 @@ impl ChownExecutor {
     }
 
     /// `operand_fd` is the descriptor `traverse` opened and verified against `meta`.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     fn safe_dive_into<P: AsRef<Path>>(
         &self,
         root: P,
@@ -451,7 +451,7 @@ impl ChownExecutor {
         ret
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     fn safe_traverse_dir(
         &self,
         dir_fd: &DirFd,
@@ -584,7 +584,7 @@ impl ChownExecutor {
         }
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     #[allow(clippy::cognitive_complexity)]
     fn dive_into<P: AsRef<Path>>(&self, root: P) -> i32 {
         let root = root.as_ref();
@@ -776,7 +776,7 @@ impl ChownExecutor {
     }
 
     /// Try to open directory with error reporting
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     fn try_open_dir(&self, path: &Path) -> Option<DirFd> {
         DirFd::open(path, SymlinkBehavior::Follow)
             .map_err(|e| {
@@ -792,7 +792,7 @@ impl ChownExecutor {
 
     /// Report ownership change with proper verbose output
     /// Returns 0 on success
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     fn report_ownership_change_success(
         &self,
         path: &Path,
@@ -1070,7 +1070,7 @@ mod tests {
     use tempfile::tempdir;
 
     /// `fd_is` must accept the directory that was stat'd and reject anything else.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     #[test]
     fn test_fd_is_identifies_the_stated_directory() {
         let temp_dir = tempdir().unwrap();
