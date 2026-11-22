@@ -2591,7 +2591,7 @@ fn handle_copy_mode(
                 )
             })?;
         }
-        CopyMode::Copy => {
+        CopyMode::Copy | CopyMode::AttrOnly => {
             copy_helper(
                 source,
                 dest,
@@ -2674,42 +2674,6 @@ fn handle_copy_mode(
                     created_parent_dirs,
                 )?;
             }
-        }
-        CopyMode::AttrOnly => {
-            // The destination must have the source's type. Creating a regular
-            // file for a FIFO or a device both gets the type wrong and, for a
-            // FIFO, makes the later xattr copy open it and block forever with
-            // no writer.
-            #[cfg(unix)]
-            {
-                let ft = source_metadata.file_type();
-                if ft.is_fifo() {
-                    return copy_fifo(dest, options.overwrite, options.debug)
-                        .map(|()| PerformedAction::Copied);
-                }
-                if ft.is_socket() {
-                    return copy_socket(dest, options.overwrite, options.debug)
-                        .map(|()| PerformedAction::Copied);
-                }
-                if ft.is_char_device() || ft.is_block_device() {
-                    return copy_node(dest, source_metadata, options.overwrite, options.debug)
-                        .map(|()| PerformedAction::Copied);
-                }
-            }
-            OpenOptions::new()
-                .write(true)
-                .truncate(false)
-                .create(true)
-                .open(dest)
-                .map_err(|e| {
-                    CpError::IoErrContext(
-                        e,
-                        translate!(
-                            "cp-error-cannot-create-regular-file",
-                            "path" => dest.quote()
-                        ),
-                    )
-                })?;
         }
     }
 
@@ -3129,8 +3093,8 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
     org_mode
 }
 
-/// Copy the file from `source` to `dest` either using the normal `fs::copy` or a
-/// copy-on-write scheme if --reflink is specified and the filesystem supports it.
+/// Create the destination according to the source file type and copy its data
+/// unless only attributes were requested.
 #[allow(clippy::too_many_arguments)]
 fn copy_helper(
     source: &Path,
@@ -3153,8 +3117,11 @@ fn copy_helper(
         return Err(CpError::NotADirectory(dest.to_path_buf()));
     }
 
+    // Library callers can select AttrOnly without setting the CLI flag.
+    // Conversely, -u --attributes-only selects Update and sets the flag.
+    let attributes_only = options.attributes_only || options.copy_mode == CopyMode::AttrOnly;
     #[cfg(unix)]
-    if options.recursive && !options.copy_contents {
+    if attributes_only || (options.recursive && !options.copy_contents) {
         let ft = source_metadata.file_type();
         if ft.is_socket() {
             return copy_socket(dest, options.overwrite, options.debug);
@@ -3169,6 +3136,21 @@ fn copy_helper(
 
     if source_metadata.is_symlink() {
         copy_link(source, dest, symlinked_files, options)?;
+    } else if attributes_only {
+        OpenOptions::new()
+            .write(true)
+            .truncate(false)
+            .create(true)
+            .open(dest)
+            .map_err(|e| {
+                CpError::IoErrContext(
+                    e,
+                    translate!(
+                        "cp-error-cannot-create-regular-file",
+                        "path" => dest.quote()
+                    ),
+                )
+            })?;
     } else {
         // Use O_NOFOLLOW on the source open iff cp is in no-dereference mode.
         // In that case source_metadata was obtained via lstat, so a path swap
@@ -3190,7 +3172,7 @@ fn copy_helper(
             nofollow,
         )?;
 
-        if !options.attributes_only && options.debug {
+        if options.debug {
             show_debug(&copy_debug)
                 .map_err(|e| CpError::IoErrContext(e, translate!("cp-error-write")))?;
         }

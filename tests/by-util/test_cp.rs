@@ -5463,6 +5463,99 @@ fn test_cp_attributes_only() {
 }
 
 #[test]
+fn test_cp_attr_only_copy_mode_preserves_contents() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("source", "source data");
+    at.write("dest", "keep this");
+
+    let options = cp::Options {
+        copy_mode: cp::CopyMode::AttrOnly,
+        ..cp::Options::default()
+    };
+    cp::copy(&[at.plus("source")], &at.plus("dest"), &options).unwrap();
+
+    assert_eq!(at.read("dest"), "keep this");
+}
+
+#[rstest]
+#[case::empty_template("")]
+#[case::nonempty_template("template contents")]
+fn test_cp_update_attributes_only(#[case] template: &str) {
+    use filetime::{FileTime, set_file_mtime};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let src_time = FileTime::from_unix_time(1_600_003_600, 0);
+    let dest_time = FileTime::from_unix_time(1_600_000_000, 0);
+    at.write("template", template);
+    at.write("document", "keep this");
+    set_file_mtime(at.plus("template"), src_time).unwrap();
+    set_file_mtime(at.plus("document"), dest_time).unwrap();
+
+    ucmd.args(&[
+        "-u",
+        "--attributes-only",
+        "--preserve=timestamps",
+        "template",
+        "document",
+    ])
+    .succeeds()
+    .no_output();
+
+    assert_eq!(at.read("document"), "keep this");
+    assert_eq!(
+        FileTime::from_last_modification_time(&at.metadata("document")),
+        src_time
+    );
+}
+
+#[test]
+fn test_cp_update_attributes_only_missing_destination() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("template", "template contents");
+
+    ucmd.args(&["-u", "--attributes-only", "template", "new"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("new"), "");
+}
+
+#[test]
+fn test_cp_remove_destination_attributes_only_regular_file() {
+    use filetime::{FileTime, set_file_mtime};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("template", "template contents");
+    at.write("document", "old contents");
+    #[cfg(unix)]
+    let old_document = at.open("document");
+    let src_time = FileTime::from_unix_time(1_600_003_600, 0);
+    set_file_mtime(at.plus("template"), src_time).unwrap();
+
+    ucmd.args(&[
+        "--remove-destination",
+        "--attributes-only",
+        "--preserve=timestamps",
+        "template",
+        "document",
+    ])
+    .succeeds()
+    .no_output();
+
+    assert_eq!(at.read("document"), "");
+    #[cfg(unix)]
+    assert_eq!(
+        std::io::read_to_string(old_document).unwrap(),
+        "old contents"
+    );
+    assert_eq!(
+        FileTime::from_last_modification_time(&at.metadata("document")),
+        src_time
+    );
+}
+
+#[test]
 #[cfg(unix)]
 fn test_cp_attributes_only_dest_open_error() {
     let (at, mut ucmd) = at_and_ucmd!();
