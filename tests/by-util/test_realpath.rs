@@ -678,11 +678,13 @@ fn test_realpath_canonicalize_vs_existing() {
     }
 }
 
+#[uutests::wasi_ignore(AbsoluteSymlinkTargetsUnfollowable)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: absolute symlink targets")]
 fn test_realpath_no_symlinks_existing_dangling_symlink_fails() {
     let (at, mut ucmd) = at_and_ucmd!();
-    at.symlink_file("missing", "dangling");
+    // An absolute target, which is what the WASI sandbox cannot follow.
+    let target = at.plus("missing");
+    at.symlink_file(target, "dangling");
     ucmd.args(&["-s", "-e", "dangling"])
         .fails_with_code(1)
         .no_stdout()
@@ -722,7 +724,9 @@ fn test_realpath_no_symlinks_parent_of_missing_fails() {
 fn test_realpath_no_symlinks_parent_of_directory_succeeds() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
-    ucmd.args(&["-s", "-e", "dir/.."]).succeeds();
+    ucmd.args(&["-s", "-e", "dir/.."])
+        .succeeds()
+        .stdout_is(at.root_dir_resolved() + "\n");
 }
 
 #[test]
