@@ -211,3 +211,124 @@ fn test_nproc_omp_num_threads_with_whitespace() {
     let nproc: u8 = result.stdout_str().trim().parse().unwrap();
     assert_eq!(nproc, 42);
 }
+
+/// Tests that run `nproc` in a transient systemd scope with CPU quotas.
+///
+/// They need a systemd user manager that can delegate the cpu controller
+/// (`systemd-run --user` on a desktop session or GitHub's Ubuntu runners),
+/// and are skipped otherwise.
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
+mod cgroup_quota {
+    use std::process::Command;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use uutests::util::TestScenario;
+    use uutests::util_name;
+
+    /// Moves the shell into a `leaf` child of the delegated scope, optionally
+    /// sets a quota of `$1` CPUs there, and runs the rest of the arguments.
+    /// systemd removes the scope and its children when the command exits.
+    const SCRIPT: &str = r#"cg=/sys/fs/cgroup$(sed -n 's/^0:://p' /proc/self/cgroup) &&
+mkdir "$cg/leaf" && echo 0 > "$cg/leaf/cgroup.procs" &&
+echo +cpu > "$cg/cgroup.subtree_control" &&
+{ [ -z "$1" ] || echo "$(($1 * 100000)) 100000" > "$cg/leaf/cpu.max"; } &&
+shift && exec "$@""#;
+
+    /// Run `nproc` in a delegated scope named `unit` with a `CPUQuota` of
+    /// `scope_quota` and a quota of `leaf_quota` CPUs on its `leaf` child.
+    /// Returns `None` if the scope cannot be set up here (no user manager,
+    /// no cpu delegation, broken D-Bus session, ...).
+    fn nproc_in_scope(
+        unit: &str,
+        scope_quota: Option<&str>,
+        leaf_quota: Option<u32>,
+    ) -> Option<usize> {
+        // systemd may still be collecting a scope that just exited, so never
+        // reuse a unit name.
+        static RUN: AtomicUsize = AtomicUsize::new(0);
+        let run = RUN.fetch_add(1, Ordering::Relaxed);
+        let ts = TestScenario::new(util_name!());
+        let mut command = Command::new("systemd-run");
+        command
+            .args(["--user", "--quiet", "--scope", "--collect"])
+            .arg("--expand-environment=no")
+            .arg(format!(
+                "--unit=uu-nproc-{unit}-{}-{run}",
+                std::process::id()
+            ))
+            .args(["-p", "Delegate=yes"]);
+        if let Some(quota) = scope_quota {
+            command.arg("-p").arg(format!("CPUQuota={quota}"));
+        }
+        let output = command
+            .args(["sh", "-c", SCRIPT, "sh"])
+            .arg(leaf_quota.map(|q| q.to_string()).unwrap_or_default())
+            .arg(&ts.bin_path)
+            .arg(util_name!())
+            .env_remove("OMP_NUM_THREADS")
+            .env_remove("OMP_THREAD_LIMIT")
+            .output();
+        match output {
+            Ok(output) if output.status.success() => Some(
+                String::from_utf8_lossy(&output.stdout)
+                    .trim()
+                    .parse()
+                    .unwrap(),
+            ),
+            Ok(output) => {
+                println!(
+                    "test skipped: systemd-run --user failed: {}",
+                    String::from_utf8_lossy(&output.stderr).trim()
+                );
+                None
+            }
+            Err(e) => {
+                println!("test skipped: cannot run systemd-run: {e}");
+                None
+            }
+        }
+    }
+
+    fn unlimited() -> usize {
+        TestScenario::new(util_name!())
+            .ucmd()
+            .succeeds()
+            .stdout_str()
+            .trim()
+            .parse()
+            .unwrap()
+    }
+
+    #[test]
+    fn test_nproc_cgroup_quota() {
+        if let Some(n) = nproc_in_scope("leaf", None, Some(1)) {
+            assert_eq!(n, unlimited().min(1));
+        }
+    }
+
+    #[test]
+    fn test_nproc_cgroup_quota_path_with_colon() {
+        if let Some(n) = nproc_in_scope("a:b", None, Some(1)) {
+            assert_eq!(n, unlimited().min(1));
+        }
+    }
+
+    #[test]
+    fn test_nproc_cgroup_quota_on_parent() {
+        if let Some(n) = nproc_in_scope("parent", Some("149%"), None) {
+            assert_eq!(n, unlimited().min(1));
+        }
+        if let Some(n) = nproc_in_scope("parent", Some("151%"), None) {
+            assert_eq!(n, unlimited().min(2));
+        }
+    }
+
+    #[test]
+    fn test_nproc_cgroup_quota_smallest_wins() {
+        if let Some(n) = nproc_in_scope("small-parent", Some("100%"), Some(3)) {
+            assert_eq!(n, unlimited().min(1));
+        }
+        if let Some(n) = nproc_in_scope("small-leaf", Some("300%"), Some(1)) {
+            assert_eq!(n, unlimited().min(1));
+        }
+    }
+}
