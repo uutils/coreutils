@@ -56,6 +56,12 @@ fn test_invalid_input() {
 #[case::base64_decode(&["--base64", "-d"], "dG8+YmU/", "to>be?")]
 #[case::base64url(&["--base64url"], "to>be?", "dG8-YmU_\n")]
 #[case::base64url_decode(&["--base64url", "-d"], "dG8-YmU_", "to>be?")]
+#[case::base64url_encode_padded(&["--base64url"], "to>be", "dG8-YmU=\n")]
+#[case::base64url_decode_unpadded(&["--base64url", "-d"], "Pz8", "??")]
+#[case::base64url_decode_unpadded_tail(&["--base64url", "-d"], "dG8-YmU_YQ", "to>be?a")]
+#[case::base64url_decode_concatenated(&["--base64url", "-d"], "Pz8=Pz8", "????")]
+#[case::base64url_decode_ignore_garbage(&["--base64url", "-d", "-i"], "P+z8/", "??")]
+#[case::base64url_decode_ignore_garbage_concatenated(&["--base64url", "-d", "-i"], "Pz8=+Pz8", "????")]
 #[case::base32_autopad_short_quantum(&["--base32", "--decode"], "MFRGG", "abc")]
 #[case::base32_autopad_multiline_stream(&["--base32", "--decode"], "MFRGGZDF\nMFRGG", "abcdeabc")]
 #[case::base32hex_autopad_short_quantum(&["--base32hex", "--decode"], "C5H66", "abc")]
@@ -78,6 +84,15 @@ fn test_basenc_stdin(#[case] args: &[&str], #[case] input: &str, #[case] expecte
         .pipe_in(input)
         .succeeds()
         .stdout_only(expected);
+}
+
+#[test]
+fn test_base64url_decode_rejects_standard_alphabet() {
+    new_ucmd!()
+        .args(&["--base64url", "-d"])
+        .pipe_in("dG8+YmU/")
+        .fails_with_code(1)
+        .stderr_only("basenc: invalid input\n");
 }
 
 #[test]
@@ -147,9 +162,9 @@ fn test_base32hex_truncated_block_keeps_prefix() {
 }
 
 // This test fails if the Base16 output buffer is not explicitly flushed.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_base16_write_error_is_reported() {
     new_ucmd!()
         .arg("--base16")
@@ -202,6 +217,25 @@ fn test_base58_decode_large_input_round_trip() {
         .pipe_in(encoded)
         .succeeds()
         .stdout_is(input);
+}
+
+#[test]
+fn test_base58_round_trip_large_binary_with_leading_zeros() {
+    let mut input = vec![0u8; 3];
+    input.extend((0..40_000u32).map(|i| (i * 89 + 41) as u8));
+    let encoded = new_ucmd!()
+        .args(&["--base58", "-w0"])
+        .pipe_in(input.clone())
+        .succeeds()
+        .stdout_move_str();
+    // One '1' per leading zero byte, and no more.
+    assert!(encoded.starts_with("111") && !encoded.starts_with("1111"));
+
+    new_ucmd!()
+        .args(&["--base58", "-d"])
+        .pipe_in(encoded)
+        .succeeds()
+        .stdout_is_bytes(input);
 }
 
 #[test]
@@ -268,9 +302,9 @@ fn test_file() {
         .stdout_is("Zm9v\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_file_with_non_utf8_name() {
     use std::os::unix::ffi::OsStringExt;
     let (at, mut ucmd) = at_and_ucmd!();

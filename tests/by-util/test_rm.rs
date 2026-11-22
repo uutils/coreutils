@@ -495,12 +495,31 @@ fn test_invalid_symlink() {
 
 #[test]
 fn test_force_no_operand() {
-    new_ucmd!().arg("-f").succeeds().no_stderr();
+    for args in [&["-f"][..], &["-f", "--interactive=never"], &["-i", "-f"]] {
+        new_ucmd!().args(args).succeeds().no_stderr();
+    }
 }
 
 #[test]
 fn test_no_operand() {
     new_ucmd!().fails().usage_error("missing operand");
+}
+
+#[test]
+fn test_force_then_interactive_no_operand() {
+    // A later -i, -I or --interactive=always/once cancels -f,
+    // so the missing operand must be reported.
+    for args in [
+        &["-f", "-i"][..],
+        &["--force", "-I"],
+        &["-f", "--interactive=always"],
+        &["-f", "--interactive=once"],
+    ] {
+        new_ucmd!()
+            .args(args)
+            .fails()
+            .usage_error("missing operand");
+    }
 }
 
 #[test]
@@ -1704,7 +1723,7 @@ fn test_preserve_root_literal_root() {
 
 /// `rm -rf / --no-preserve-root` must get past the failsafe. `strace` fakes the
 /// removals and sends SIGINT on the first one, so nothing is deleted.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_no_preserve_root_literal_root() {
     use std::os::unix::process::ExitStatusExt;

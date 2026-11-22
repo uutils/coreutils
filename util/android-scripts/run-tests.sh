@@ -8,19 +8,30 @@ export PATH=$HOME/.cargo/bin:$PATH
 export RUST_BACKTRACE=full
 export CARGO_TERM_COLOR=always
 export CARGO_INCREMENTAL=0
+export CARGO_BUILD_JOBS=2
 
 echo "PATH: $PATH"
 
+case "${1:-all}" in
+    all) test_filter=() ;;
+    cksum-wc) test_filter=(-E 'test(test_cksum::) | test(test_wc::)') ;;
+    *) echo "Unknown test suite: $1" >&2; exit 1 ;;
+esac
+
 run_with_retry() {
-    tries=$1
+    local tries=$1
     shift 1
+    local exit_code=0
 
-    for i in $(seq 1 $tries); do
+    for ((i = 1; i <= tries; i++)); do
         echo "Try #$i of $tries: run $*"
-        "$@" && echo "Done in try#$i" && return 0
+        if "$@"; then
+            echo "Done in try#$i"
+            return 0
+        else
+            exit_code=$?
+        fi
     done
-
-    exit_code=$?
 
     echo "Still failing after $tries. Code: $exit_code"
 
@@ -28,9 +39,6 @@ run_with_retry() {
 }
 
 run_tests_in_subprocess() (
-
-    # limit virtual memory to 3GB to avoid that OS kills sshd
-    ulimit -v $((1024 * 1024 * 3))
 
     watchplus() {
         # call: watchplus <interval> <command>
@@ -48,7 +56,9 @@ run_tests_in_subprocess() (
     watchplus 2 df -h &
     watchplus 2 free -hm &
 
-    nextest_params=(--profile ci --hide-progress-bar --features feat_os_unix_android)
+    # Recent Android allocators reserve more virtual memory than a 3 GiB limit
+    # allows. Limit parallelism to reduce memory pressure without capping addresses.
+    nextest_params=(--profile ci --hide-progress-bar --test-threads 2 --features feat_os_unix_android "${test_filter[@]}")
 
     # run tests
     cd ~/coreutils && \
@@ -64,5 +74,5 @@ run_tests_in_subprocess() (
     return $result
 )
 
-# run sub-shell to be able to use ulimit without affecting the sshd
+# Keep the resource monitors and their cleanup in a separate shell.
 run_tests_in_subprocess

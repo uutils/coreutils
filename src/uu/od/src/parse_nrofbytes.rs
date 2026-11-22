@@ -37,17 +37,14 @@ pub fn parse_number_of_bytes(s: &str) -> Result<u64, ParseSizeError> {
             multiply = 1024 * 1024 * 1024;
             len -= 1;
         }
-        #[cfg(target_pointer_width = "64")]
         Some('T') => {
             multiply = 1024 * 1024 * 1024 * 1024;
             len -= 1;
         }
-        #[cfg(target_pointer_width = "64")]
         Some('P') => {
             multiply = 1024 * 1024 * 1024 * 1024 * 1024;
             len -= 1;
         }
-        #[cfg(target_pointer_width = "64")]
         Some('E') if radix != 16 => {
             multiply = 1024 * 1024 * 1024 * 1024 * 1024 * 1024;
             len -= 1;
@@ -58,11 +55,8 @@ pub fn parse_number_of_bytes(s: &str) -> Result<u64, ParseSizeError> {
                 Some('k' | 'K') => 1000,
                 Some('m' | 'M') => 1000 * 1000,
                 Some('G') => 1000 * 1000 * 1000,
-                #[cfg(target_pointer_width = "64")]
                 Some('T') => 1000 * 1000 * 1000 * 1000,
-                #[cfg(target_pointer_width = "64")]
                 Some('P') => 1000 * 1000 * 1000 * 1000 * 1000,
-                #[cfg(target_pointer_width = "64")]
                 Some('E') => 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
                 _ => return Err(ParseSizeError::ParseFailure(s.to_string())),
             }
@@ -107,6 +101,22 @@ fn test_parse_number_of_bytes() {
     assert_eq!(27, parse_number_of_bytes("0x1b").unwrap());
     assert_eq!(16 * 1024, parse_number_of_bytes("0x10k").unwrap());
     assert_eq!(16 * 1_048_576, parse_number_of_bytes("0x10m").unwrap());
+
+    // suffixes above 4 GiB, on 32-bit targets too
+    assert_eq!(1 << 40, parse_number_of_bytes("01T").unwrap());
+    assert_eq!(1 << 50, parse_number_of_bytes("01P").unwrap());
+    assert_eq!(1 << 60, parse_number_of_bytes("01E").unwrap());
+    assert_eq!(1_000_000_000_000, parse_number_of_bytes("01TB").unwrap());
+    assert_eq!(
+        1_000_000_000_000_000,
+        parse_number_of_bytes("01PB").unwrap()
+    );
+    assert_eq!(
+        1_000_000_000_000_000_000,
+        parse_number_of_bytes("01EB").unwrap()
+    );
+    assert_eq!(1 << 40, parse_number_of_bytes("0x1T").unwrap());
+    assert_eq!(1 << 50, parse_number_of_bytes("0x1P").unwrap());
 }
 
 #[test]

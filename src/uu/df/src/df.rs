@@ -419,6 +419,13 @@ where
                 ));
             }
             #[cfg(not(windows))]
+            Err(FsError::StatFailed { path, error }) => {
+                show!(USimpleError::new(
+                    1,
+                    format!("{}: {error}", path.maybe_quote())
+                ));
+            }
+            #[cfg(not(windows))]
             Err(FsError::OverMounted) => {
                 show!(USimpleError::new(
                     1,

@@ -6,7 +6,7 @@
 //! Unix backend of `df`: `statfs` usage probes, over-mount detection and the
 //! fallback used when the mount table is unavailable.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
@@ -23,14 +23,13 @@ pub(crate) fn sync() {
     rustix::fs::sync();
 }
 
-/// Usage of the filesystem at `mount_info`, `None` if it cannot be queried.
-pub(crate) fn fs_usage(mount_info: &MountInfo) -> Option<FsUsage> {
-    let stat_path = if mount_info.mount_dir.is_empty() {
+/// The path `statfs` is called on to query the filesystem at `mount_info`.
+fn stat_path(mount_info: &MountInfo) -> &OsStr {
+    if mount_info.mount_dir.is_empty() {
         mount_info.dev_name.as_ref()
     } else {
         mount_info.mount_dir.as_os_str()
-    };
-    Some(FsUsage::new(statfs(stat_path).ok()?))
+    }
 }
 
 /// Check whether `mount` has been over-mounted.
@@ -56,10 +55,22 @@ pub(crate) fn filesystem_from_mount(
     file: Option<OsString>,
 ) -> Result<Filesystem, FsError> {
     if is_over_mounted(mounts, mount) {
-        Err(FsError::OverMounted)
-    } else {
-        Filesystem::new(mount.clone(), file).ok_or(FsError::MountMissing)
+        return Err(FsError::OverMounted);
     }
+
+    // Like GNU, report why the mount point could not be queried, e.g.
+    // "Permission denied", instead of skipping the mount.
+    let path = stat_path(mount);
+    let usage = statfs(path).map_err(|error| FsError::StatFailed {
+        path: path.to_owned(),
+        error,
+    })?;
+
+    Ok(Filesystem {
+        file,
+        mount_info: mount.clone(),
+        usage: FsUsage::new(usage),
+    })
 }
 
 /// Find and create the filesystem that contains `path`, through the mount
@@ -72,11 +83,10 @@ pub(crate) fn filesystem_for_path<P>(
 where
     P: AsRef<Path>,
 {
-    let path = path.as_ref();
     if use_fallback {
         from_path_direct(path)
     } else {
-        Filesystem::from_path(mounts, path).or_else(|_| from_path_direct_with_mounts(mounts, path))
+        Filesystem::from_path(mounts, path)
     }
 }
 
@@ -96,8 +106,13 @@ fn find_mount_point<P: AsRef<Path>>(path: P) -> io::Result<PathBuf> {
     Ok(current)
 }
 
-/// Fallback using statfs with a mount table available.
-fn from_path_direct_with_mounts<P>(mounts: &[MountInfo], path: P) -> Result<Filesystem, FsError>
+/// Fallback using statfs when the mount table has no entry covering `path`.
+///
+/// Returns the last element of `mounts` on the same filesystem as `path`.
+pub(crate) fn from_path_direct_with_mounts<P>(
+    mounts: &[MountInfo],
+    path: P,
+) -> Result<Filesystem, FsError>
 where
     P: AsRef<Path>,
 {
@@ -168,7 +183,7 @@ pub(crate) fn maybe_unsupported_options(_matches: &ArgMatches) -> Option<UResult
 mod tests {
     use std::ffi::OsString;
 
-    use super::{filesystem_from_mount, is_over_mounted};
+    use super::{filesystem_for_path, filesystem_from_mount, is_over_mounted};
     use crate::filesystem::FsError;
     use uucore::fsext::MountInfo;
 
@@ -212,5 +227,66 @@ mod tests {
             filesystem_from_mount(&mounts, &mounts[0], None).unwrap_err(),
             FsError::OverMounted
         );
+    }
+
+    /// Mount table entries that make the statfs fallback find a match for
+    /// `/dev/null`, so that a test fails if the fallback runs when it
+    /// should not.
+    fn mounts_holding_dev_null() -> [MountInfo; 2] {
+        [
+            mount_info_with_dev_name("/", None),
+            mount_info_with_dev_name("/dev", None),
+        ]
+    }
+
+    #[test]
+    fn test_for_path_device_over_mounted() {
+        let mut mounts = mounts_holding_dev_null().to_vec();
+        mounts.push(mount_info_with_dev_name(
+            "/non-existent-dir",
+            Some("/dev/null"),
+        ));
+        mounts.push(mount_info_with_dev_name(
+            "/non-existent-dir",
+            Some("/non-existent-dev"),
+        ));
+
+        assert_eq!(
+            filesystem_for_path(&mounts, false, "/dev/null").unwrap_err(),
+            FsError::OverMounted
+        );
+    }
+
+    #[test]
+    fn test_for_path_device_mount_point_statfs_fails() {
+        let mut mounts = mounts_holding_dev_null().to_vec();
+        mounts.push(mount_info_with_dev_name(
+            "/non-existent-dir",
+            Some("/dev/null"),
+        ));
+
+        assert!(matches!(
+            filesystem_for_path(&mounts, false, "/dev/null").unwrap_err(),
+            FsError::StatFailed { path, .. } if path == "/non-existent-dir"
+        ));
+    }
+
+    #[test]
+    fn test_for_path_no_mount_entry_uses_fallback() {
+        // Two sibling directories share a filesystem, but neither is a
+        // prefix of the other, so only the statfs fallback can match them.
+        let tmp_dir = tempfile::TempDir::new().expect("Failed to create temp dir");
+        let tmp = std::fs::canonicalize(tmp_dir.path()).expect("Failed to canonicalize tmp path");
+        let mount_dir = tmp.join("mount");
+        let path = tmp.join("path");
+        std::fs::create_dir(&mount_dir).expect("Failed to create mount dir");
+        std::fs::create_dir(&path).expect("Failed to create path");
+
+        let mounts = [mount_info_with_dev_name(
+            mount_dir.to_str().expect("non-UTF-8 tmp path"),
+            None,
+        )];
+        let fs = filesystem_for_path(&mounts, false, &path).unwrap();
+        assert_eq!(fs.mount_info.mount_dir, mount_dir.into_os_string());
     }
 }

@@ -191,20 +191,17 @@ fn test_empty_path_portability_message() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_pathchk_non_utf8_paths() {
     let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
     new_ucmd!().arg(&filename).succeeds();
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: host paths (/dev/full) not visible"
-)]
 fn test_not_a_directory_clean() {
     // https://github.com/uutils/coreutils/issues/13888
     new_ucmd!()

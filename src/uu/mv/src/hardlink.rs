@@ -15,19 +15,21 @@ use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
 use uucore::display::Quotable;
+use uucore::fs::FileInfo;
+use uucore::translate;
 
 /// Tracks hardlinks during cross-partition moves to preserve them
 #[derive(Debug, Default)]
 pub struct HardlinkTracker {
     /// Maps (device, inode) -> destination path for the first occurrence
-    inode_map: FxHashMap<(u64, u64), PathBuf>,
+    inode_map: FxHashMap<FileInfo, PathBuf>,
 }
 
 /// Pre-scans files to identify hardlink groups with optimized memory usage
 #[derive(Debug, Default)]
 pub struct HardlinkGroupScanner {
     /// Maps (device, inode) -> list of source paths that are hardlinked together
-    hardlink_groups: FxHashMap<(u64, u64), Vec<PathBuf>>,
+    hardlink_groups: FxHashMap<FileInfo, Vec<PathBuf>>,
     /// List of source files/directories being moved (for destination mapping)
     source_files: Vec<PathBuf>,
     /// Whether scanning has been performed
@@ -42,50 +44,23 @@ pub struct HardlinkOptions {
 }
 
 /// Errors that can occur during hardlink operations
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum HardlinkError {
-    Io(io::Error),
+    #[error("{}", translate!("mv-error-hardlink-io", "error" => .0))]
+    Io(#[from] io::Error),
+    #[error("{}", translate!("mv-error-hardlink-scan", "error" => .0))]
     Scan(String),
-    Preservation { source: PathBuf, target: PathBuf },
-    Metadata { path: PathBuf, error: io::Error },
-}
-
-impl std::fmt::Display for HardlinkError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Io(e) => write!(f, "I/O error during hardlink operation: {e}"),
-            Self::Scan(msg) => {
-                write!(f, "Failed to scan files for hardlinks: {msg}")
-            }
-            Self::Preservation { source, target } => {
-                write!(
-                    f,
-                    "Failed to preserve hardlink: {} -> {}",
-                    source.quote(),
-                    target.quote()
-                )
-            }
-            Self::Metadata { path, error } => {
-                write!(f, "Metadata access error for {}: {error}", path.quote())
-            }
-        }
-    }
-}
-
-impl std::error::Error for HardlinkError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Io(e) => Some(e),
-            Self::Metadata { error, .. } => Some(error),
-            _ => None,
-        }
-    }
-}
-
-impl From<io::Error> for HardlinkError {
-    fn from(error: io::Error) -> Self {
-        Self::Io(error)
-    }
+    #[error("{}", translate!("mv-error-hardlink-preserve", "source" => .source_path.quote(), "target" => .target_path.quote()))]
+    Preservation {
+        source_path: PathBuf,
+        target_path: PathBuf,
+    },
+    #[error("{}", translate!("mv-error-hardlink-metadata", "path" => .path.quote(), "error" => .error))]
+    Metadata {
+        path: PathBuf,
+        #[source]
+        error: io::Error,
+    },
 }
 
 impl From<HardlinkError> for io::Error {
@@ -93,16 +68,7 @@ impl From<HardlinkError> for io::Error {
         match error {
             HardlinkError::Io(e) => e,
             HardlinkError::Scan(msg) => Self::other(msg),
-            HardlinkError::Preservation { source, target } => Self::other(format!(
-                "Failed to preserve hardlink: {} -> {}",
-                source.quote(),
-                target.quote()
-            )),
-
-            HardlinkError::Metadata { path, error } => Self::other(format!(
-                "Metadata access error for {}: {error}",
-                path.quote(),
-            )),
+            other => Self::other(other.to_string()),
         }
     }
 }
@@ -120,8 +86,6 @@ impl HardlinkTracker {
         scanner: &HardlinkGroupScanner,
         options: &HardlinkOptions,
     ) -> Option<PathBuf> {
-        use std::os::unix::fs::MetadataExt;
-
         let metadata = match source.symlink_metadata() {
             Ok(meta) => meta,
             Err(e) => {
@@ -137,7 +101,7 @@ impl HardlinkTracker {
             }
         };
 
-        let key = (metadata.dev(), metadata.ino());
+        let key = FileInfo::from(&metadata);
 
         // Check if we've already processed a file with this inode
         if let Some(existing_path) = self.inode_map.get(&key) {
@@ -221,7 +185,7 @@ impl HardlinkGroupScanner {
             // Recursively scan directory contents
             self.scan_directory_recursive(path)?;
         } else if metadata.is_file() && metadata.nlink() > 1 {
-            let key = (metadata.dev(), metadata.ino());
+            let key = FileInfo::from(&metadata);
             self.hardlink_groups
                 .entry(key)
                 .or_default()
@@ -243,7 +207,7 @@ impl HardlinkGroupScanner {
             } else {
                 let metadata = entry.metadata()?;
                 if metadata.is_file() && metadata.nlink() > 1 {
-                    let key = (metadata.dev(), metadata.ino());
+                    let key = FileInfo::from(&metadata);
                     self.hardlink_groups
                         .entry(key)
                         .or_default()

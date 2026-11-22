@@ -69,8 +69,6 @@ pub const IEC_BASES: [u128; 11] = [
     1_267_650_600_228_229_401_496_703_205_376,
 ];
 
-use std::error::Error;
-use std::fmt;
 use std::num::{IntErrorKind, ParseIntError};
 use std::ops::Range;
 
@@ -534,42 +532,23 @@ pub fn parse_size_u128_max(size: &str) -> Result<u128, ParseSizeError> {
 }
 
 /// Error type for [`parse_size`]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ParseSizeError {
     /// Suffix
+    #[error("{0}")]
     InvalidSuffix(String),
 
     /// Syntax
+    #[error("{0}")]
     ParseFailure(String),
 
     /// Overflow
+    #[error("{0}")]
     SizeTooBig(String),
 
     /// Could not determine total physical memory size.
+    #[error("{0}")]
     PhysicalMem(String),
-}
-
-impl Error for ParseSizeError {
-    fn description(&self) -> &str {
-        match *self {
-            Self::InvalidSuffix(ref s)
-            | Self::ParseFailure(ref s)
-            | Self::SizeTooBig(ref s)
-            | Self::PhysicalMem(ref s) => s,
-        }
-    }
-}
-
-impl fmt::Display for ParseSizeError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        let s = match self {
-            Self::InvalidSuffix(s)
-            | Self::ParseFailure(s)
-            | Self::SizeTooBig(s)
-            | Self::PhysicalMem(s) => s,
-        };
-        write!(f, "{s}")
-    }
 }
 
 // FIXME: It's more idiomatic to move the formatting into the Display impl,

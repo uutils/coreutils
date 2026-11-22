@@ -5,6 +5,7 @@
 
 // spell-checker:ignore regfile parentdir
 
+use rstest::rstest;
 use uutests::util::{TestScenario, get_root_path};
 use uutests::{at_and_ucmd, new_ucmd, path_concat, util_name};
 
@@ -80,11 +81,39 @@ fn test_canonicalize_existing_keeps_going_after_a_missing_operand() {
     assert_eq!(actual, expect);
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
+#[rstest]
+#[case::canonicalize("-f")]
+#[case::canonicalize_existing("-e")]
+#[case::canonicalize_missing("-m")]
+fn test_canonicalize_empty_operand(#[case] mode: &str) {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    let dir = path_concat!(at.root_dir_resolved(), "dir") + "\n";
+
+    // An empty operand is a missing file, not the current directory, and
+    // does not stop the operands after it.
+    scene
+        .ucmd()
+        .args(&[mode, "", "dir"])
+        .fails_with_code(1)
+        .stdout_is(&dir)
+        .no_stderr();
+
+    let result = scene
+        .ucmd()
+        .args(&["-v", mode, "", "dir"])
+        .fails_with_code(1);
+    result.stdout_is(&dir);
+    #[cfg(not(windows))]
+    result.stderr_is("readlink: '': No such file or directory\n");
+    #[cfg(windows)]
+    result.stderr_contains("readlink: '': ");
+}
+
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: canonicalized path resolves to the guest's virtual root, not the host's absolute path"
-)]
 fn test_canonicalize() {
     let (at, mut ucmd) = at_and_ucmd!();
     let actual = ucmd.arg("-f").arg(".").succeeds().stdout_move_str();
@@ -94,11 +123,8 @@ fn test_canonicalize() {
     assert_eq!(actual, expect);
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: canonicalized path resolves to the guest's virtual root, not the host's absolute path"
-)]
 fn test_canonicalize_existing() {
     let (at, mut ucmd) = at_and_ucmd!();
     let actual = ucmd.arg("-e").arg(".").succeeds().stdout_move_str();
@@ -108,11 +134,8 @@ fn test_canonicalize_existing() {
     assert_eq!(actual, expect);
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: canonicalized path resolves to the guest's virtual root, not the host's absolute path"
-)]
 fn test_canonicalize_missing() {
     let (at, mut ucmd) = at_and_ucmd!();
     let actual = ucmd.arg("-m").arg(GIBBERISH).succeeds().stdout_move_str();
@@ -122,12 +145,9 @@ fn test_canonicalize_missing() {
     assert_eq!(actual, expect);
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: canonicalized path resolves to the guest's virtual root, not the host's absolute path"
-)]
 fn test_canonicalize_symlink_before_parentdir() {
     // GNU readlink follows the symlink first and only then evaluates `..`.
     // Logical resolution would collapse `link/..` up front and return the current directory instead.
@@ -141,11 +161,8 @@ fn test_canonicalize_symlink_before_parentdir() {
     assert_eq!(actual, expect);
 }
 
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: canonicalized path resolves to the guest's virtual root, not the host's absolute path"
-)]
 fn test_long_redirection_to_current_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     // Create a 256-character path to current directory
@@ -506,9 +523,9 @@ fn test_delimiters() {
         .stdout_is("/a\n/a\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_readlink_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;

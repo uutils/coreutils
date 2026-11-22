@@ -61,6 +61,8 @@ fn test_invalid_input() {
 // with -d and -s, set2 is only the set to squeeze, so any class is allowed
 #[case::delete_and_squeeze_digit_class_in_set2(&["-ds", "x", "[:digit:]"], "aab-x1122", "aab-12")]
 #[case::delete_and_squeeze_upper_class_in_set2(&["-ds", "a", "[:upper:]"], "aAAb", "Ab")]
+// the upper/lower alignment rule is about translating only
+#[case::delete_and_squeeze_misaligned_classes(&["-ds", "[:alpha:]", "[:upper:]"], "aZ1", "1")]
 #[case::set1_shorter_than_set2(&["ab", "xyz"], "abcde", "xycde")]
 #[case::truncate_multi(&["-tt", "-t", "abc", "xy"], "abcde", "xycde")]
 #[case::truncate_with_set1_shorter_than_set2(&["-t", "ab", "xyz"], "abcde", "xycde")]
@@ -330,6 +332,46 @@ fn test_translate_and_squeeze_multiple_lines() {
         .pipe_in("xxaax\nxaaxx") // spell-checker:disable-line
         .succeeds()
         .stdout_is("yaay\nyaay"); // spell-checker:disable-line
+}
+
+/// An 'upper'/'lower' in SET2 must line up with an 'upper'/'lower' in SET1;
+/// any other class there leaves the mapping undefined. GNU calls that a
+/// misaligned construct.
+#[rstest]
+#[case::alpha_to_upper(&["[:alpha:]", "[:upper:]"])]
+#[case::digit_to_upper(&["[:digit:]", "[:upper:]"])]
+#[case::chars_to_upper(&["abc", "[:upper:]"])]
+#[case::shifted_classes(&["a[:lower:]", "[:upper:]b"])]
+#[case::extra_class_in_set2(&["[:lower:]", "[:upper:][:lower:]"])]
+// -s alone still translates, so the alignment rule still applies.
+#[case::squeeze(&["-s", "[:alpha:]", "[:upper:]"])]
+fn test_misaligned_upper_lower_construct(#[case] args: &[&str]) {
+    new_ucmd!()
+        .args(args)
+        // No input: the sets are validated before stdin is read, so tr exits
+        // while the harness is still writing and the write hits a broken pipe.
+        .pipe_in("")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("tr: misaligned [:upper:] and/or [:lower:] construct\n");
+}
+
+/// A class in SET2 that is rejected for another reason keeps that reason's
+/// message instead of the misaligned-construct one.
+#[rstest]
+// plain -d takes one set, so SET2 is an extra operand
+#[case::delete(&["-d", "[:alpha:]", "[:upper:]"], "extra operand '[:upper:]'")]
+#[case::set1_longer_than_set2(
+    &["[:upper:][:lower:]", "[:lower:]"],
+    "when translating with string1 longer than string2,\n"
+)]
+fn test_class_in_set2_other_error(#[case] args: &[&str], #[case] err: &str) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in("")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains(err);
 }
 
 #[test]
@@ -1062,9 +1104,9 @@ fn check_complement_set2_too_big() {
         .stderr_contains("when translating with complemented character classes,\nstring2 must map all characters in the domain to one");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_truncate_non_utf8_set() {
     let stdin = b"\x01amp\xfe\xff";
     let set1 = OsStr::from_bytes(b"a\xfe\xffz"); // spell-checker:disable-line
@@ -1162,10 +1204,7 @@ fn test_backwards_range() {
 }
 
 #[cfg(target_pointer_width = "64")]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: usize is 32-bit, so these repeat counts do not parse"
-)]
+#[uutests::wasi_ignore(Usize32BitOverflow)]
 #[test]
 fn test_huge_repeat_count_in_set1() {
     // A repeat count this large used to be expanded character by character,
@@ -1193,10 +1232,7 @@ fn test_huge_repeat_count_in_set1() {
 }
 
 #[cfg(target_pointer_width = "64")]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: usize is 32-bit, so these repeat counts do not parse"
-)]
+#[uutests::wasi_ignore(Usize32BitOverflow)]
 #[test]
 fn test_huge_repeat_count_in_set2() {
     new_ucmd!()
@@ -1217,10 +1253,7 @@ fn test_huge_repeat_count_in_set2() {
 }
 
 #[cfg(target_pointer_width = "64")]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: usize is 32-bit, so these repeat counts do not parse"
-)]
+#[uutests::wasi_ignore(Usize32BitOverflow)]
 #[test]
 fn test_repeat_lengths_beyond_usize() {
     // Set lengths are kept exact when repeat counts add up past usize::MAX,
@@ -1241,7 +1274,7 @@ fn test_repeat_lengths_beyond_usize() {
             "[x*18446744073709551615][:upper:]",
         ])
         .fails()
-        .stderr_contains("must be matched by");
+        .stderr_contains("misaligned [:upper:] and/or [:lower:] construct");
 }
 
 #[test]
@@ -1271,6 +1304,54 @@ fn test_repeat_in_set1_padded_by_star_in_set2() {
         .stdout_only("yyz");
 }
 
+// With `-d -s` set2 is only the set to squeeze, which a star cannot fill.
+#[rstest]
+#[case::star("[b*]")]
+#[case::star_zero("[b*0]")]
+#[case::star_in_middle("b[b*]c")]
+#[case::star_after_equivalence("[=b=][b*]")]
+fn test_star_in_set2_only_when_translating(#[case] set2: &str) {
+    new_ucmd!()
+        .args(&["-ds", "a", set2])
+        .fails_with_code(1)
+        .stderr_only("tr: the [c*] construct may appear in string2 only when translating\n");
+}
+
+#[rstest]
+#[case::translate(&["a", "[=b=]"])]
+#[case::translate_after_char(&["a", "b[=b=]"])]
+#[case::translate_and_squeeze(&["-s", "a", "[=b=]"])]
+#[case::truncate(&["-t", "a", "[=b=]"])]
+#[case::complement(&["-c", "a", "[=b=]"])]
+#[case::before_class(&["a", "[=b=][:digit:]"])]
+fn test_equivalence_class_in_set2_only_with_delete_and_squeeze(#[case] args: &[&str]) {
+    new_ucmd!()
+        .args(args)
+        .fails_with_code(1)
+        .stderr_only("tr: [=c=] expressions may not appear in string2 when translating\n");
+}
+
+// A repeat with a count still fills set2 with `-d -s`.
+#[rstest]
+#[case::repeat("[b*3]")]
+#[case::equivalence("[=b=]")]
+fn test_set2_constructs_allowed_with_delete_and_squeeze(#[case] set2: &str) {
+    new_ucmd!()
+        .args(&["-ds", "a", set2])
+        .pipe_in("xaabb")
+        .succeeds()
+        .stdout_only("xb");
+}
+
+#[test]
+fn test_equivalence_class_in_set1_when_translating() {
+    new_ucmd!()
+        .args(&["[=a=]", "b"])
+        .pipe_in("xaab")
+        .succeeds()
+        .stdout_only("xbbb");
+}
+
 #[test]
 fn test_non_digit_repeat() {
     new_ucmd!()
@@ -1280,9 +1361,9 @@ fn test_non_digit_repeat() {
         .stderr_only("tr: invalid repeat count 'c' in [c*n] construct\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_octal_escape_ambiguous_followed_by_non_utf8() {
     // This case does not trigger the panic
     let set1 = OsStr::from_bytes(b"\\501a");
@@ -1316,8 +1397,8 @@ fn test_failed_write_is_reported() {
         .stderr_is("tr: write error: No space left on device\n");
 }
 
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no pipe support")]
 fn test_unbuffered_partial_line() {
     // With -u, a chunk without a trailing newline must come out before more
     // input arrives, as in `tail -f log | tr -u a-z A-Z | consumer`.
@@ -1354,8 +1435,8 @@ fn test_unbuffered_partial_line() {
     handle.join().unwrap();
 }
 
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no pipe/signal support")]
 fn test_broken_pipe_no_error() {
     // More than a pipe buffer, so that the output blocks until the reader is gone.
     new_ucmd!()

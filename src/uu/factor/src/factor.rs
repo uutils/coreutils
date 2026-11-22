@@ -81,22 +81,25 @@ fn parse_num(slice: &[u8]) -> UResult<Number> {
         )
     };
     let num = str::from_utf8(slice).map_err(|_| err_invalid(&NumError(slice).to_string()))?;
+    // Only leading spaces are skipped; other whitespace makes the number invalid.
+    let digits = num.trim_start_matches(' ');
 
-    match num.parse::<u64>() {
+    match digits.parse::<u64>() {
         Ok(x) => return Ok(Number::U64(x)),
         // If overflown, attempt a greater width
         Err(e) if *e.kind() == IntErrorKind::PosOverflow => {}
         Err(_) => return Err(err_invalid(num)),
     }
 
-    match num.parse::<u128>() {
+    match digits.parse::<u128>() {
         Ok(x) => return Ok(Number::U128(x)),
         // If overflown, attempt a greater width
         Err(e) if *e.kind() == IntErrorKind::PosOverflow => {}
         Err(_) => return Err(err_invalid(num)),
     }
 
-    num.parse::<BigUint>()
+    digits
+        .parse::<BigUint>()
         .map(Number::BigUint)
         .map_err(|_| err_invalid(num))
 }
@@ -159,7 +162,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if let Some(values) = matches.get_many::<String>(options::NUMBER) {
         for number in values {
-            write_factors_str(number.trim().as_bytes(), &mut w, print_exponents)?;
+            write_factors_str(number.as_bytes(), &mut w, print_exponents)?;
         }
     } else {
         let stdin = stdin();

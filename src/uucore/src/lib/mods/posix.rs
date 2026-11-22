@@ -39,6 +39,12 @@ pub fn posix_version() -> Option<usize> {
         .and_then(|v| v.parse::<usize>().ok())
 }
 
+/// Whether obsolete usage such as `+N` is accepted: it is, unless
+/// `_POSIX2_VERSION` is in [`TRADITIONAL`, `MODERN`).
+pub fn allows_traditional_usage() -> bool {
+    !posix_version().is_some_and(|v| (TRADITIONAL..MODERN).contains(&v))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::posix::*;
@@ -46,13 +52,14 @@ mod tests {
     #[test]
     fn test_posix_version() {
         // default
-        assert_eq!(posix_version(), None);
+        temp_env::with_var_unset("_POSIX2_VERSION", || {
+            assert_eq!(posix_version(), None);
+        });
         // set specific version
-        unsafe { env::set_var("_POSIX2_VERSION", OBSOLETE.to_string()) };
-        assert_eq!(posix_version(), Some(OBSOLETE));
-        unsafe { env::set_var("_POSIX2_VERSION", TRADITIONAL.to_string()) };
-        assert_eq!(posix_version(), Some(TRADITIONAL));
-        unsafe { env::set_var("_POSIX2_VERSION", MODERN.to_string()) };
-        assert_eq!(posix_version(), Some(MODERN));
+        for version in [OBSOLETE, TRADITIONAL, MODERN] {
+            temp_env::with_var("_POSIX2_VERSION", Some(version.to_string()), || {
+                assert_eq!(posix_version(), Some(version));
+            });
+        }
     }
 }

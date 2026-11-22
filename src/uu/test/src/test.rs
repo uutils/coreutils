@@ -36,6 +36,8 @@ use std::os::unix::fs::MetadataExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
+#[cfg(unix)]
+use uucore::fs::FileInfo;
 #[cfg(not(any(windows, target_os = "wasi")))]
 use uucore::fs::mode::{S_ISGID, S_ISUID, S_ISVTX};
 use uucore::i18n::collator::{init_locale_collation, locale_cmp};
@@ -326,7 +328,7 @@ fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
 
     let result = match (op.to_str(), f_a, f_b) {
         #[cfg(unix)]
-        (Some("-ef"), Ok(f_a), Ok(f_b)) => f_a.ino() == f_b.ino() && f_a.dev() == f_b.dev(),
+        (Some("-ef"), Ok(f_a), Ok(f_b)) => FileInfo::from(&f_a) == FileInfo::from(&f_b),
         #[cfg(any(windows, target_os = "wasi"))]
         (Some("-ef"), Ok(_), Ok(_)) => platform::same_file(a, b),
         (Some("-nt"), Ok(f_a), Ok(f_b)) => f_a.modified().unwrap() > f_b.modified().unwrap(),

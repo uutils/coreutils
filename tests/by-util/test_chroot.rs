@@ -310,6 +310,40 @@ fn test_chroot_skip_chdir_not_root() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
+fn test_options_after_newroot_are_command() {
+    // Like GNU, everything after NEWROOT is COMMAND [ARG]..., even when it
+    // looks like a chroot option, so none of these may be parsed by chroot.
+    for args in [
+        &["--groups=,", "id"][..],
+        &["--g=,", "id"],
+        &["--skip-chdir", "pwd"],
+        &["--userspec=", "id"],
+        &["--help"],
+        &["--version"],
+        &["--", "id"],
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("jail");
+
+        ucmd.arg("jail")
+            .args(args)
+            .fails_with_code(125)
+            .stderr_only("chroot: cannot chroot to 'jail': Operation not permitted\n");
+    }
+}
+
+#[test]
+fn test_options_before_newroot_are_parsed() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("jail");
+
+    ucmd.args(&["--groups=,", "jail", "id"])
+        .fails_with_code(125)
+        .stderr_only("chroot: invalid group list: ','\n");
+}
+
+#[test]
 fn test_chroot_skip_chdir_nonexistent() {
     new_ucmd!()
         .arg("--skip-chdir")
@@ -326,7 +360,7 @@ fn test_chroot_skip_chdir() {
     at.symlink_file("/", "isroot");
     for dir in dirs {
         let env_cd = std::env::current_dir().unwrap();
-        if let Ok(result) = run_ucmd_as_root(&ts, &[dir, "--skip-chdir"]) {
+        if let Ok(result) = run_ucmd_as_root(&ts, &["--skip-chdir", dir]) {
             // Should return the same path
             assert_eq!(
                 result.success().no_stderr().stdout_str(),

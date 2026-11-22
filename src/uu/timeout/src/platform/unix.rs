@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sigstr setpgid sigchld sigwait getpid TTIN TTOU
+// spell-checker:ignore (ToDO) sigstr setpgid sigchld sigwait getpid TTIN TTOU rlimit setrlimit Dumpable
 
 use std::io;
 use std::os::unix::process::CommandExt;
@@ -56,8 +56,6 @@ pub(crate) fn prepare(
     {
         #[cfg(target_os = "linux")]
         let death_sig = signal_from_raw(signal as i32);
-        #[cfg(not(target_os = "linux"))]
-        let _ = signal;
         let sigpipe_was_ignored = uucore::signals::sigpipe_was_ignored();
         let stdin_was_closed = uucore::signals::stdin_was_closed();
 
@@ -69,6 +67,10 @@ pub(crate) fn prepare(
                 // Preserve SIGPIPE ignore status if parent had it ignored
                 if sigpipe_was_ignored {
                     let _ = libc::signal(Signal::as_raw(Signal::PIPE), libc::SIG_IGN);
+                }
+                // Don't let an inherited SIG_IGN make the child immune to our signal
+                if signal != 0 {
+                    let _ = libc::signal(signal as libc::c_int, libc::SIG_DFL);
                 }
                 // If stdin was closed before Rust reopened it as /dev/null, close it in child
                 if stdin_was_closed {
@@ -136,9 +138,27 @@ pub(crate) fn preserve_signal_info(signal: core::ffi::c_int) -> core::ffi::c_int
     // The easiest way to preserve the latter seems to be to kill
     // ourselves with whatever signal our child exited with, which is
     // what the following is intended to accomplish.
-    if let Some(sig) = signal_from_raw(signal) {
+    //
+    // If the child dumped core, re-raising a signal like SIGSEGV would make
+    // us dump core too and get blamed for the crash, so only do it once
+    // core dumps are off.
+    if let Some(sig) = signal_from_raw(signal)
+        && disable_core_dumps()
+    {
         let _ = unblock_signal(sig);
         let _ = kill_process(getpid(), sig);
     }
     signal
+}
+
+/// Make sure this process won't dump core, returning whether that worked.
+fn disable_core_dumps() -> bool {
+    use rlimit::{Resource, setrlimit};
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if rustix::process::set_dumpable_behavior(rustix::process::DumpableBehavior::NotDumpable)
+        .is_ok()
+    {
+        return true;
+    }
+    setrlimit(Resource::CORE, 0, 0).is_ok()
 }

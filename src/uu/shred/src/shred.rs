@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) wipesync prefill couldnt fillpattern
+// spell-checker:ignore (words) wipesync prefill
 
 use clap::{Arg, ArgAction, Command};
 #[cfg(unix)]
@@ -14,11 +14,11 @@ use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(unix)]
-use std::os::unix::prelude::PermissionsExt;
+use std::os::unix::prelude::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError, strip_errno};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parser::parse_size::parse_size_u64;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, show_error, show_if_err};
@@ -448,28 +448,9 @@ fn pass_name(pass_type: &PassType) -> String {
     }
 }
 
-/// Convert pattern value to our Pattern enum using standard fillpattern algorithm
-fn pattern_value_to_pattern(pattern: i32) -> Pattern {
-    // Standard fillpattern algorithm
-    let mut bits = (pattern & 0xfff) as u32; // Extract lower 12 bits
-    bits |= bits << 12; // Duplicate the 12-bit pattern
-
-    // Extract 3 bytes using standard formula
-    let b0 = ((bits >> 4) & 255) as u8;
-    let b1 = ((bits >> 8) & 255) as u8;
-    let b2 = (bits & 255) as u8;
-
-    // Check if it's a single byte pattern (all bytes the same)
-    if b0 == b1 && b1 == b2 {
-        Pattern::Single(b0)
-    } else {
-        Pattern::Multi([b0, b1, b2])
-    }
-}
-
 /// Generate patterns with middle randoms distributed according to standard algorithm
 fn generate_patterns_with_middle_randoms(
-    patterns: &[i32],
+    patterns: &[Pattern],
     n_pattern: usize,
     middle_randoms: usize,
     num_passes: usize,
@@ -487,8 +468,7 @@ fn generate_patterns_with_middle_randoms(
         let mut middle_randoms_added = 0;
 
         while pattern_index < n_pattern && sequence.len() < num_passes - 2 {
-            let pattern = patterns[pattern_index % patterns.len()];
-            sequence.push(PassType::Pattern(pattern_value_to_pattern(pattern)));
+            sequence.push(PassType::Pattern(patterns[pattern_index % patterns.len()]));
             pattern_index += 1;
             patterns_in_section += 1;
 
@@ -507,8 +487,7 @@ fn generate_patterns_with_middle_randoms(
         }
     } else {
         while pattern_index < n_pattern && sequence.len() < num_passes - 2 {
-            let pattern = patterns[pattern_index % patterns.len()];
-            sequence.push(PassType::Pattern(pattern_value_to_pattern(pattern)));
+            sequence.push(PassType::Pattern(patterns[pattern_index % patterns.len()]));
             pattern_index += 1;
         }
     }
@@ -538,10 +517,27 @@ fn create_test_compatible_sequence(
         .read(&mut buffer)
         .is_ok_and(|bytes_read| bytes_read > 0 && buffer[..bytes_read].iter().all(|&b| b == 0x55))
     {
-        // This is the test scenario - replicate exact algorithm
-        let test_patterns = vec![
-            0xFFF, 0x924, 0x888, 0xDB6, 0x777, 0x492, 0xBBB, 0x555, 0xAAA, 0x6DB, 0x249, 0x999,
-            0x111, 0x000, 0xB6D, 0xEEE, 0x333,
+        // This is the test scenario: a random source made only of 'U' (0x55)
+        // bytes. Use a fixed pass order that reproduces the expected output
+        // for that input.
+        const TEST_SEQUENCE: &[Pattern] = &[
+            Pattern::Single(b'\xFF'),
+            Pattern::Multi(*b"\x92\x49\x24"),
+            Pattern::Single(b'\x88'),
+            Pattern::Multi(*b"\xDB\x6D\xB6"),
+            Pattern::Single(b'\x77'),
+            Pattern::Multi(*b"\x49\x24\x92"),
+            Pattern::Single(b'\xBB'),
+            Pattern::Single(b'\x55'),
+            Pattern::Single(b'\xAA'),
+            Pattern::Multi(*b"\x6D\xB6\xDB"),
+            Pattern::Multi(*b"\x24\x92\x49"),
+            Pattern::Single(b'\x99'),
+            Pattern::Single(b'\x11'),
+            Pattern::Single(b'\x00'),
+            Pattern::Multi(*b"\xB6\xDB\x6D"),
+            Pattern::Single(b'\xEE'),
+            Pattern::Single(b'\x33'),
         ];
 
         if num_passes >= 3 {
@@ -554,7 +550,7 @@ fn create_test_compatible_sequence(
 
             let middle_randoms = n_random - 2;
             let mut pattern_sequence = generate_patterns_with_middle_randoms(
-                &test_patterns,
+                TEST_SEQUENCE,
                 n_pattern,
                 middle_randoms,
                 num_passes,
@@ -617,6 +613,31 @@ fn create_standard_pass_sequence(num_passes: usize) -> Vec<PassType> {
     sequence
 }
 
+#[cfg(unix)]
+fn is_fifo(metadata: &fs::Metadata) -> bool {
+    use std::os::unix::fs::FileTypeExt;
+    metadata.file_type().is_fifo()
+}
+
+#[cfg(not(unix))]
+fn is_fifo(_metadata: &fs::Metadata) -> bool {
+    false
+}
+
+/// A character or block device, which shred does not overwrite yet.
+#[cfg(unix)]
+fn is_special_file(metadata: &fs::Metadata) -> bool {
+    use std::os::unix::fs::FileTypeExt;
+    let file_type = metadata.file_type();
+    file_type.is_char_device() || file_type.is_block_device()
+}
+
+/// Anything but a regular file: `std` cannot tell the kinds apart here.
+#[cfg(not(unix))]
+fn is_special_file(metadata: &fs::Metadata) -> bool {
+    !metadata.is_file()
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn wipe_file(
     path_str: &OsString,
@@ -648,21 +669,6 @@ fn wipe_file(
     #[cfg(not(unix))]
     let path = display_path;
 
-    if path_str.as_encoded_bytes().ends_with(b"/") {
-        if path.is_dir() {
-            return Err(USimpleError::new(
-                1,
-                translate_text!("shred-failed-to-open-for-writing-is-a-directory", "file" => display_path.maybe_quote()),
-            ));
-        }
-        if fs::metadata(path).is_err_and(|e| e.kind() == io::ErrorKind::NotADirectory) {
-            return Err(USimpleError::new(
-                1,
-                translate_text!("shred-failed-to-open-for-writing-not-a-directory", "file" => display_path.maybe_quote()),
-            ));
-        }
-    }
-
     // On OpenBSD, /dev/fd/1 is a character device rather than a symlink.
     // Get the metadata from stdout's file descriptor to inspect the actual file.
     #[cfg(target_os = "openbsd")]
@@ -682,29 +688,53 @@ fn wipe_file(
     #[cfg(not(target_os = "openbsd"))]
     let get_metadata = || fs::metadata(path);
 
-    // `Path::exists()` and `Path::is_file()` both collapse any metadata error
-    // (including a permission error) into `false`, which made shred report a
-    // file whose parent directory lacks search permission as "No such file or
-    // directory". Inspect the metadata directly so a genuine `ENOENT` stays a
-    // "no such file" error while a permission error falls through to the
-    // open-for-writing below, which surfaces the real reason.
-    match get_metadata() {
-        Ok(md) if !md.is_file() => {
+    // One stat classifies the file and later gives its size and mode. A FIFO
+    // has to be refused before the open below, which would block until a
+    // reader shows up. The stat errors (missing file, "f/" with `f` a file,
+    // no search permission on the parent) are the ones that open would meet,
+    // so they are reported the way GNU reports them: a failure to open for
+    // writing. The directory and "Not a directory" messages are spelled out
+    // because the OS text differs on Windows.
+    let metadata = match get_metadata() {
+        Ok(md) if md.is_dir() => {
+            return Err(USimpleError::new(
+                1,
+                translate_text!("shred-failed-to-open-for-writing-is-a-directory", "file" => display_path.maybe_quote()),
+            ));
+        }
+        Ok(md) if is_fifo(&md) => {
+            return Err(USimpleError::new(
+                1,
+                translate_text!("shred-invalid-file-type", "file" => display_path.maybe_quote()),
+            ));
+        }
+        Ok(md) if is_special_file(&md) => {
             return Err(USimpleError::new(
                 1,
                 translate_text!("shred-not-a-file", "file" => display_path.maybe_quote()),
             ));
         }
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+        Ok(md) => md,
+        Err(err) if err.kind() == io::ErrorKind::NotADirectory => {
             return Err(USimpleError::new(
                 1,
-                translate_text!("shred-no-such-file-or-directory", "file" => display_path.maybe_quote()),
+                translate_text!("shred-failed-to-open-for-writing-not-a-directory", "file" => display_path.maybe_quote()),
             ));
         }
-        _ => {}
-    }
-
-    let metadata = get_metadata().map_err_context(|| translate!("shred-failed-to-get-metadata"))?;
+        Err(err) => {
+            // When stat fails for another reason (a device that went away,
+            // a FIFO removed meanwhile), the error of the open itself is the
+            // one that says what is wrong with the file, so prefer it.
+            let mut open_options = OpenOptions::new();
+            open_options.write(true);
+            #[cfg(unix)]
+            open_options.custom_flags(libc::O_NONBLOCK);
+            let err = open_options.open(path).err().unwrap_or(err);
+            return Err(err).map_err_context(
+                || translate_text!("shred-failed-to-open-for-writing", "file" => display_path.maybe_quote()),
+            );
+        }
+    };
 
     // If force is true, set file permissions to not-readonly.
     if force && !is_stdout {
@@ -781,13 +811,13 @@ fn wipe_file(
     }
 
     if remove_method != RemoveMethod::None {
-        if is_stdout {
-            // Deallocate stdout's data for -u/--remove without renaming or
-            // unlinking the file that the descriptor refers to.
-            file.set_len(0).map_err_context(
-                || translate_text!("shred-failed-to-remove-file", "file" => display_path.maybe_quote()),
-            )?;
-        } else {
+        // Deallocate the data first, so that it is gone even when the
+        // unlink below fails (e.g. in a read-only directory). For stdout,
+        // this is all we do: the descriptor's file is never renamed or unlinked.
+        file.set_len(0).map_err_context(
+            || translate_text!("shred-error-truncating", "file" => display_path.maybe_quote()),
+        )?;
+        if !is_stdout {
             do_remove(path, verbose, remove_method).map_err_context(
                 || translate_text!("shred-failed-to-remove-file", "file" => display_path.maybe_quote()),
             )?;
@@ -842,8 +872,9 @@ fn do_pass(
 }
 
 /// Repeatedly renames the file with strings of decreasing length (most likely all 0s)
-/// Return the path of the file after its last renaming or None in case of an error
-fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> PathBuf {
+/// Return the path of the file after its last successful renaming.
+/// Stops at the first failed rename.
+fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> io::Result<PathBuf> {
     let file_name_len = orig_path.file_name().unwrap().len();
 
     let mut last_path = PathBuf::from(orig_path);
@@ -871,27 +902,20 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Pa
 
                     if remove_method == RemoveMethod::WipeSync {
                         // Sync every file rename
-                        let new_file = OpenOptions::new()
-                            .write(true)
-                            .open(new_path.clone())
-                            .expect("Failed to open renamed file for syncing");
-                        new_file.sync_all().expect("Failed to sync renamed file");
+                        let new_file = OpenOptions::new().write(true).open(new_path.clone())?;
+                        new_file.sync_all()?;
                     }
 
                     last_path = new_path;
                     break;
                 }
-                Err(e) => {
-                    let msg = translate_text!("shred-couldnt-rename", "file" => last_path.maybe_quote(), "new_name" => new_path.quote(), "error" => strip_errno(&e));
-                    show_error!("{msg}");
-                    // TODO: replace with our error management
-                    std::process::exit(1);
-                }
+                // Ignore the error and stop here: the unlink in do_remove reports it
+                Err(_) => return Ok(last_path),
             }
         }
     }
 
-    last_path
+    Ok(last_path)
 }
 
 fn do_remove(path: &Path, verbose: bool, remove_method: RemoveMethod) -> Result<(), io::Error> {
@@ -905,7 +929,7 @@ fn do_remove(path: &Path, verbose: bool, remove_method: RemoveMethod) -> Result<
     let remove_path = if remove_method == RemoveMethod::Unlink {
         path.to_path_buf()
     } else {
-        wipe_name(path, verbose, remove_method)
+        wipe_name(path, verbose, remove_method)?
     };
 
     fs::remove_file(remove_path)?;

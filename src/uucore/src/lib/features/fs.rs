@@ -191,6 +191,39 @@ impl Hash for FileInformation {
     }
 }
 
+/// The device and inode numbers of a file, which together identify it.
+#[cfg(unix)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct FileInfo {
+    pub dev: u64,
+    pub ino: u64,
+}
+
+#[cfg(unix)]
+impl FileInfo {
+    /// Create [`FileInfo`] from device and inode numbers
+    pub fn new(dev: u64, ino: u64) -> Self {
+        Self { dev, ino }
+    }
+
+    /// Get the device number
+    pub fn device(&self) -> u64 {
+        self.dev
+    }
+
+    /// Get the inode number
+    pub fn inode(&self) -> u64 {
+        self.ino
+    }
+}
+
+#[cfg(unix)]
+impl From<&fs::Metadata> for FileInfo {
+    fn from(metadata: &fs::Metadata) -> Self {
+        Self::new(metadata.dev(), metadata.ino())
+    }
+}
+
 /// Controls how symbolic links should be handled when canonicalizing a path.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MissingHandling {
@@ -634,6 +667,14 @@ pub fn path_is_root_dir<P: AsRef<Path>>(path: P, dereference: bool) -> bool {
         let _ = (path, dereference);
         false
     }
+}
+
+/// Whether `meta`, a stat already taken, describes `/`. Unlike [`path_is_root_dir`],
+/// it does not look the path up again, which a rename could have re-pointed.
+#[cfg(unix)]
+pub fn metadata_is_root_dir(meta: &impl MetadataExt) -> bool {
+    root_file_information()
+        .is_some_and(|root| root.dev() == meta.dev() && root.inode() == meta.ino())
 }
 
 /// Check if two files are identical by comparing their contents.
@@ -1229,19 +1270,29 @@ mod tests {
     #[cfg(unix)]
     use tempfile::{NamedTempFile, tempdir};
 
-    // `tempfile` is unusable on WASI (`std::env::temp_dir` aborts there), so
-    // tests create a uniquely named directory under the current (preopened,
-    // on WASI) directory and clean it up on drop.
+    // Keep fixtures outside the crate so Cargo's concurrent doctest/build-script
+    // scans cannot race their removal. WASI needs the preopened current directory
+    // because `std::env::temp_dir` aborts there.
     struct ScratchDir(PathBuf);
 
     impl ScratchDir {
         fn new(tag: &str) -> Self {
-            use std::sync::atomic::{AtomicU32, Ordering};
-            static COUNTER: AtomicU32 = AtomicU32::new(0);
-            let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-            let path = PathBuf::from(format!("uucore_fs_test_{tag}_{n}"));
-            let _ = fs::remove_dir_all(&path);
-            fs::create_dir(&path).unwrap();
+            #[cfg(not(target_os = "wasi"))]
+            let path = tempfile::Builder::new()
+                .prefix(&format!("uucore_fs_test_{tag}_"))
+                .tempdir()
+                .unwrap()
+                .keep();
+            #[cfg(target_os = "wasi")]
+            let path = {
+                use std::sync::atomic::{AtomicU32, Ordering};
+                static COUNTER: AtomicU32 = AtomicU32::new(0);
+                let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+                let path = PathBuf::from(format!("uucore_fs_test_{tag}_{n}"));
+                let _ = fs::remove_dir_all(&path);
+                fs::create_dir(&path).unwrap();
+                path
+            };
             Self(path)
         }
 
@@ -1254,6 +1305,21 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[cfg(not(target_os = "wasi"))]
+    #[test]
+    fn test_scratch_dir_uses_temp_directory_and_cleans_up() {
+        let first = ScratchDir::new("isolation");
+        let second = ScratchDir::new("isolation");
+        let path = first.0.clone();
+        assert_eq!(path.parent(), Some(env::temp_dir().as_path()));
+        assert_ne!(path, second.0);
+        fs::write(first.join("fixture"), "test").unwrap();
+        drop(second);
+        assert_eq!(fs::read_to_string(first.join("fixture")).unwrap(), "test");
+        drop(first);
+        assert!(!path.exists());
     }
 
     struct NormalizePathTestCase<'a> {
@@ -1642,6 +1708,9 @@ mod tests {
         assert!(!path_is_root_dir(dir.path(), true));
         assert!(!path_is_root_dir(dir.path().join("nonexistent"), true));
         assert!(!path_is_root_dir("", true));
+
+        assert!(metadata_is_root_dir(&fs::metadata("/").unwrap()));
+        assert!(!metadata_is_root_dir(&fs::metadata(dir.path()).unwrap()));
     }
 
     /// A symlink to `/` counts only when the caller would follow it.
@@ -1761,6 +1830,24 @@ mod tests {
         // Source symlink resolves (stat) to the target, matched against the
         // target's own lstat.
         assert!(are_hardlinks_or_one_way_symlink_to_same_file(&link, &file));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_file_info_from_metadata() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("file");
+        let link = dir.path().join("link");
+        let other = dir.path().join("other");
+        fs::write(&file, "a").unwrap();
+        fs::hard_link(&file, &link).unwrap();
+        fs::write(&other, "a").unwrap();
+
+        let info = FileInfo::from(&fs::metadata(&file).unwrap());
+        let meta = fs::metadata(&file).unwrap();
+        assert_eq!(info, FileInfo::new(meta.dev(), meta.ino()));
+        assert_eq!(info, FileInfo::from(&fs::metadata(&link).unwrap()));
+        assert_ne!(info, FileInfo::from(&fs::metadata(&other).unwrap()));
     }
 
     #[cfg(unix)]

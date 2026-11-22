@@ -97,7 +97,6 @@ else
     for binary in $("${UU_BUILD_DIR}"/coreutils --list)
         do ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
     done
-    ln -vf "${UU_BUILD_DIR}"/deps/libstdbuf.* -t "${UU_BUILD_DIR}"
 fi
 ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use ginstall
 ##
@@ -159,6 +158,8 @@ else
     # Remove tests checking for --version & --help
     # Not really interesting for us and logs are too big
     sed -i '/tests\/help\/help-version.sh/ D' Makefile
+    # GNU/Hurd specific
+    sed -i '/tests\/id\/gnu-zero-uids.sh/ D' Makefile
     touch gnu-built
 fi
 
@@ -210,6 +211,9 @@ sed -i 's/^print_ver_.*/require_selinux_/' tests/chcon/chcon-fail.sh
 
 # We use coreutils yes
 sed -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
+
+# Do not skip
+sed -i "s|skip_|true|g" tests/install/stdin.sh
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 sed -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
@@ -273,11 +277,6 @@ sed -i -e "s|framework_failure_ 'no inotify_add_watch';|fail=1;|" tests/tail/ino
 # This prevents the test from overwhelming logs while still reporting failures
 sed -i '/^my $fail = run_tests/i no warnings "redefine"; *Coreutils::_compare_files = sub { my ($p, $t, $io, $a, $e) = @_; my $d = File::Compare::compare($a, $e); warn "$p: test $t: mismatch\\n" if $d; return $d; };' tests/pr/pr-tests.pl
 
-# We don't have the same error message and no need to be that specific
-sed -i -e "s|invalid suffix in --pages argument|invalid --pages argument|" \
-    -e "s|--pages argument '\$too_big' too large|invalid --pages argument '\$too_big'|"  \
-    -e "s|invalid page range|invalid --pages argument|" tests/misc/xstrtol.pl
-
 # When decoding an invalid base32/64 string, gnu writes everything it was able to decode until
 # it hit the decode error, while we don't write anything if the input is invalid.
 sed -i "s/\(baddecode.*OUT=>\"\).*\"/\1\"/g" tests/basenc/base64.pl
@@ -304,8 +303,9 @@ sed -i -e "s~  sed -n \"1s/'\\\/'/'OPT'/p\" < err >> pat || framework_failure_~ 
 sed -i -e "s/rcexp=1$/rcexp=1\n  case \"\$prg\" in runcon|stdbuf) return;; esac/" tests/misc/usage_vs_getopt.sh
 # GNU has option=[SUFFIX], clap is <SUFFIX>
 sed -i -e "s/cat opts/sed -i -e \"s| <.\*$||g\" opts/" tests/misc/usage_vs_getopt.sh
-# for some reasons, some stuff are duplicated, strip that
-sed -i -e "s/provoked error./provoked error\ncat pat |sort -u > pat/" tests/misc/usage_vs_getopt.sh
+# for some reasons, some stuff are duplicated, strip that (sort -o, as a
+# pipe back into pat could truncate it before it is read)
+sed -i -e "s/provoked error./provoked error\nsort -u -o pat pat/" tests/misc/usage_vs_getopt.sh
 
 # install verbose messages shows ginstall as command
 sed -i -e "s/ginstall: creating directory/install: creating directory/g" tests/install/basic-1.sh

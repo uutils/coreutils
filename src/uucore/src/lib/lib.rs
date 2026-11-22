@@ -465,22 +465,15 @@ pub fn read_yes() -> bool {
     std::io::stdin().read_line(&mut s).is_ok() && matches!(s.chars().next(), Some('y' | 'Y'))
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("{}", translate!(
+    "error-non-utf8-os-str",
+    "input" => os_display::Quotable::quote(.input_lossy_string.as_str())
+))]
 pub struct NonUtf8OsStrError {
     input_lossy_string: String,
 }
 
-impl std::fmt::Display for NonUtf8OsStrError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use os_display::Quotable;
-        let quoted = self.input_lossy_string.quote();
-        f.write_fmt(format_args!(
-            "invalid UTF-8 input {quoted} encountered when converting to bytes on a platform that doesn't expose byte arguments",
-        ))
-    }
-}
-
-impl std::error::Error for NonUtf8OsStrError {}
 impl error::UError for NonUtf8OsStrError {}
 
 /// Converts an `OsStr` to a UTF-8 `&[u8]`.

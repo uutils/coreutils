@@ -477,6 +477,18 @@ fn test_null_fullblock() {
         .no_output();
 }
 
+// fullblock is an input flag only: unlike count_bytes, GNU rejects it in oflag.
+#[test]
+fn test_oflag_fullblock_is_rejected() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "abc");
+    ucmd.args(&["if=in", "of=out", "oflag=fullblock", "status=none"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("dd: invalid output flag: 'fullblock'");
+    assert!(!at.file_exists("out"));
+}
+
 #[cfg(unix)]
 #[ignore = "See note below before using this test."]
 #[test]
@@ -850,6 +862,39 @@ fn test_block_keeps_trailing_record_of_spaces() {
         .stdout_is("ab      ");
 }
 
+#[test]
+fn test_unblock_record_across_default_blocks() {
+    // 512 is not a multiple of 80, so the default block size ends inside a record.
+    use std::fmt::Write;
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut input = String::new();
+    let mut expected = String::new();
+    for i in 0..10 {
+        write!(input, "{:<80}", format!("REC{i}")).unwrap();
+        writeln!(expected, "REC{i}").unwrap();
+    }
+    at.write("in", &input);
+    ucmd.args(&["if=in", "conv=unblock", "cbs=80", "status=none"])
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
+fn test_unblock_record_across_small_ibs() {
+    // With ibs=3, each record and the spaces ending it span several reads.
+    new_ucmd!()
+        .args(&["conv=unblock", "cbs=8", "ibs=3", "obs=3"])
+        .pipe_in("ab  c   ef      gh")
+        .succeeds()
+        .stdout_is("ab  c\nef\ngh\n");
+    // 0x40 and 0xc1 are the EBCDIC ' ' and 'A'.
+    new_ucmd!()
+        .args(&["conv=ascii", "cbs=4", "ibs=3", "obs=3"])
+        .pipe_in(b"\x40\xc1\x40\xc1\x40\xc1\x40\x40".to_vec())
+        .succeeds()
+        .stdout_is(" A A\n A\n");
+}
+
 #[rstest]
 #[case::block_cbs16(&["conv=block", "cbs=16"], "dd-block-cbs16.test", "dd-block-cbs16.spec")]
 #[case::block_cbs16_as_cbs8(&["conv=block", "cbs=8"], "dd-block-cbs16.test", "dd-block-cbs8.spec")]
@@ -1213,6 +1258,7 @@ fn test_bytes_iseek_skip_not_additive() {
 }
 
 #[test]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_bytes_oseek_bytes_oflag() {
     new_ucmd!()
         .args(&["oseek=8", "oflag=seek_bytes", "bs=2"])
@@ -1222,6 +1268,7 @@ fn test_bytes_oseek_bytes_oflag() {
 }
 
 #[test]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_bytes_oseek_bytes_trunc_oflag() {
     // The test harness hands stdout over as a regular file. Where dd detects
     // that (Linux, OpenBSD), it seeks in the file and, like GNU, writes
@@ -1330,6 +1377,25 @@ fn test_invalid_flag_arg_gnu_compatibility() {
             .args(&[format!("{command}=29d")])
             .fails()
             .usage_error(format!("invalid {direction} flag: '29d'"));
+    }
+}
+
+#[test]
+fn test_numeric_looking_values_are_kept_verbatim_in_errors() {
+    // Values such as "007" or "1e3" must not be reformatted as numbers.
+    for (arg, msg) in [
+        ("007", "unrecognized operand '007'"),
+        ("iflag=007", "invalid input flag: '007'"),
+        ("oflag=1e3", "invalid output flag: '1e3'"),
+        ("conv=007", "invalid conversion: '007'"),
+        ("status=007", "invalid status level: '007'"),
+        ("count=1.50", "invalid number: '1.50'"),
+        ("bs=1e3", "invalid number: '1e3'"),
+    ] {
+        new_ucmd!()
+            .arg(arg)
+            .fails_with_code(1)
+            .stderr_contains(format!("dd: {msg}\n"));
     }
 }
 
@@ -1547,6 +1613,34 @@ fn test_seekable_stdout_without_of_is_not_truncated() {
     assert!(out[1024..].iter().all(|&b| b == b'x'));
 }
 
+/// An `oflag=` on a seekable stdout must keep the flags it was opened with,
+/// so output redirected with `>>` is still appended, with or without
+/// `conv=notrunc`.
+#[rstest]
+#[cfg(target_os = "linux")]
+fn test_oflag_keeps_append_mode_of_stdout(
+    #[values("oflag=dsync", "oflag=sync", "oflag=nonblock")] oflag: &str,
+    #[values(&[][..], &["conv=notrunc"][..])] conv: &[&str],
+) {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("out", "old\n");
+    let stdout = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().append(true),
+        at.plus("out").as_path(),
+    )
+    .unwrap();
+
+    ts.ucmd()
+        .args(&[oflag, "status=none"])
+        .args(conv)
+        .pipe_in("new\n")
+        .set_stdout(Stdio::from(stdout))
+        .succeeds();
+
+    assert_eq!(at.read("out"), "old\nnew\n");
+}
+
 /// A failed truncate of the output names the file and the size, the copy
 /// still runs and prints its statistics, and the exit status is 1.
 #[test]
@@ -1592,6 +1686,85 @@ fn test_seek_output_fifo() {
         .unwrap()
         .success()
         .stderr_only("0+0 records in\n0+0 records out\n");
+}
+
+/// `conv=excl` fails on an existing output FIFO, also through a symlink and
+/// with `seek=`, before reading from it (#15763). Without the check, `dd`
+/// blocks opening the FIFO for reading, so the timeout turns that into a failure.
+#[cfg(unix)]
+#[rstest]
+#[case::fifo("fifo", "seek=0")]
+#[case::fifo_seek("fifo", "seek=1")]
+#[case::symlink_seek("slot", "seek=1")]
+fn test_excl_output_fifo_fails(#[case] of: &str, #[case] seek: &str) {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("fifo");
+    at.symlink_file("fifo", "slot");
+
+    ts.ucmd()
+        .args(&[
+            "if=/dev/null",
+            &format!("of={of}"),
+            "conv=excl",
+            seek,
+            "count=0",
+        ])
+        .timeout(Duration::from_secs(10))
+        .fails()
+        .stderr_contains("File exists");
+}
+
+/// `oflag=nofollow` refuses a symlink to an output FIFO before the seek
+/// reads from it (#15763).
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_seek_output_fifo_symlink_nofollow() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("fifo");
+    at.symlink_file("fifo", "slot");
+
+    // The C libraries word ELOOP differently.
+    #[cfg(all(target_os = "linux", not(target_env = "musl")))]
+    let eloop = "Too many levels of symbolic links";
+    #[cfg(all(target_os = "linux", target_env = "musl"))]
+    let eloop = "Symbolic link loop";
+    #[cfg(target_os = "android")]
+    let eloop = "Too many symbolic links encountered";
+
+    ts.ucmd()
+        .args(&[
+            "if=/dev/null",
+            "of=slot",
+            "oflag=nofollow",
+            "seek=1",
+            "count=0",
+        ])
+        .timeout(Duration::from_secs(10))
+        .fails()
+        .stderr_contains(eloop);
+}
+
+/// `oflag=nonblock` reaches the open that seeks in an output FIFO, so it does
+/// not wait for a writer (#15763).
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_seek_output_fifo_nonblock() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("fifo");
+
+    ts.ucmd()
+        .args(&[
+            "if=/dev/null",
+            "of=fifo",
+            "oflag=nonblock",
+            "seek=1",
+            "count=0",
+        ])
+        .timeout(Duration::from_secs(10))
+        .succeeds();
 }
 
 /// Test that a skip on an input FIFO results in a read.
@@ -2165,7 +2338,7 @@ fn test_nocache_eof() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(not(wasi_runner))]
 fn test_nocache_eof_fadvise_zero_length() {
     use std::process::Command;
@@ -2200,6 +2373,7 @@ fn test_nocache_eof_fadvise_zero_length() {
 
 #[test]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_iso8859_1_case_conversion() {
     use std::process::Command;
     // Test ISO-8859-1 case conversion for accented characters

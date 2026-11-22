@@ -14,8 +14,13 @@ const POSIX_DEFAULT_FORMAT: &[u8] = b"%a %b %e %X %Z %Y";
 
 /// The specifiers that expand to a locale format, and their C locale formats,
 /// used without `nl_langinfo` or when the locale leaves one empty.
-const LOCALE_FORMAT_SPECIFIERS: [&str; 3] = ["x", "X", "r"];
-const POSIX_LOCALE_FORMATS: [&str; 3] = ["%m/%d/%y", "%H:%M:%S", "%I:%M:%S %p"];
+const LOCALE_FORMAT_SPECIFIERS: [&str; 4] = ["x", "X", "r", "c"];
+const POSIX_LOCALE_FORMATS: [&str; 4] = [
+    "%m/%d/%y",
+    "%H:%M:%S",
+    "%I:%M:%S %p",
+    "%a %b %e %H:%M:%S %Y",
+];
 const POSIX_AMPM_MARKERS: [&str; 2] = ["AM", "PM"];
 
 // `_DATE_FMT` is the only langinfo item that spells the full date line the way
@@ -40,8 +45,8 @@ macro_rules! cfg_langinfo {
     };
 }
 
-// `nl_langinfo`, with the POSIX items `D_FMT`, `T_FMT` and `T_FMT_AMPM` behind
-// `%x`, `%X` and `%r`, exists on every unix but Android, Cygwin and Redox;
+// `nl_langinfo`, with the POSIX items `D_FMT`, `T_FMT`, `T_FMT_AMPM` and `D_T_FMT` behind
+// `%x`, `%X`, `%r` and `%c`, exists on every unix but Android, Cygwin and Redox;
 // `cfg_nl_langinfo!(else ...)` gates the items for the other platforms.
 macro_rules! cfg_nl_langinfo {
     (else $($item:item)*) => {
@@ -83,9 +88,9 @@ cfg_nl_langinfo! {
     #[cfg(test)]
     static LOCALE_MUTEX: Mutex<()> = Mutex::new(());
 
-    /// The locale's `D_FMT`, `T_FMT` and `T_FMT_AMPM`, read once.
-    static LOCALE_FORMATS: LazyLock<[&'static str; 3]> = LazyLock::new(|| {
-        let items = [libc::D_FMT, libc::T_FMT, libc::T_FMT_AMPM];
+    /// The locale's `D_FMT`, `T_FMT`, `T_FMT_AMPM` and `D_T_FMT`, read once.
+    static LOCALE_FORMATS: LazyLock<[&'static str; 4]> = LazyLock::new(|| {
+        let items = [libc::D_FMT, libc::T_FMT, libc::T_FMT_AMPM, libc::D_T_FMT];
         let mut formats = POSIX_LOCALE_FORMATS;
         for (format, item) in formats.iter_mut().zip(items) {
             if let Some(value) = langinfo(item)
@@ -131,11 +136,11 @@ cfg_nl_langinfo! {
 }
 
 cfg_nl_langinfo! { else
-    static LOCALE_FORMATS: [&str; 3] = POSIX_LOCALE_FORMATS;
+    static LOCALE_FORMATS: [&str; 4] = POSIX_LOCALE_FORMATS;
     static LOCALE_AMPM_MARKERS: [&str; 2] = POSIX_AMPM_MARKERS;
 }
 
-/// Returns the locale's format for `%x`, `%X` or `%r`, given the specifier
+/// Returns the locale's format for `%x`, `%X`, `%r` or `%c`, given the specifier
 /// without `%`, and `None` for any other specifier.
 pub fn get_locale_format(specifier: &str) -> Option<&'static str> {
     let index = LOCALE_FORMAT_SPECIFIERS

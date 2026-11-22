@@ -35,6 +35,16 @@ fn escape_trailing_backslash(pattern: &str) -> String {
     }
 }
 
+/// Compile a `-S` or `-W` pattern, naming it as given when it is invalid.
+fn compile_user_regex(pattern: &str) -> UResult<Regex> {
+    Regex::new(&escape_trailing_backslash(pattern)).map_err(|_| {
+        USimpleError::new(
+            1,
+            translate!("ptx-error-invalid-regexp", "pattern" => pattern.quote()),
+        )
+    })
+}
+
 #[derive(Debug, PartialEq)]
 enum OutFormat {
     Dumb,
@@ -158,14 +168,12 @@ impl WordFilter {
             None
         };
         // Ignore empty string regex from cmd-line-args
-        let arg_reg: Option<String> = if matches.contains_id(options::WORD_REGEXP) {
-            matches
-                .get_one::<String>(options::WORD_REGEXP)
-                .filter(|v| !v.is_empty())
-                .map(|v| escape_trailing_backslash(v))
-        } else {
-            None
-        };
+        let arg_reg: Option<String> = matches
+            .get_one::<String>(options::WORD_REGEXP)
+            .filter(|v| !v.is_empty())
+            .map(|v| compile_user_regex(v))
+            .transpose()?
+            .map(|re| re.as_str().to_owned());
         let reg = match arg_reg {
             Some(arg_reg) => arg_reg,
             None => {
@@ -209,26 +217,18 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
         config.format = OutFormat::Roff;
         "[^ \t\n]+".clone_into(&mut config.context_regex);
     }
-    if let Some(regex) = matches
-        .remove_one::<String>(options::SENTENCE_REGEXP)
-        .map(|r| escape_trailing_backslash(&r))
-    {
+    if let Some(regex) = matches.remove_one::<String>(options::SENTENCE_REGEXP) {
         // TODO: The regex crate used here is not fully compatible with GNU's regex implementation.
         // For example, it does not support backreferences.
         // In the future, we might want to switch to the fancy-regex crate for better compatibility.
 
         // Verify regex is valid and doesn't match empty string
-        let re = Regex::new(&regex).map_err(|error| {
-            USimpleError::new(
-                1,
-                translate!("ptx-error-invalid-regexp", "error" => error.to_string()),
-            )
-        })?;
+        let re = compile_user_regex(&regex)?;
         if re.is_match("") {
             return Err(USimpleError::new(1, translate!("ptx-error-empty-regexp")));
         }
 
-        config.sentence_regex = Some(regex);
+        config.sentence_regex = Some(re.as_str().to_owned());
     }
     config.auto_ref = matches.get_flag(options::AUTO_REFERENCE);
     config.input_ref = matches.get_flag(options::REFERENCES);
@@ -290,14 +290,14 @@ fn read_input(input_files: &[OsString], config: &Config) -> UResult<FileMap> {
             Box::new(stdin())
         } else {
             // Attach the quoted filename to the error context if opening fails
-            let file =
-                File::open(Path::new(filename)).map_err_context(|| filename.quote().to_string())?;
+            let file = File::open(Path::new(filename))
+                .map_err_context(|| filename.maybe_quote().to_string())?;
             Box::new(file)
         });
 
         // Attach the quoted filename context if reading the contents fails
         let lines = read_lines(sentence_splitter.as_ref(), &mut reader)
-            .map_err_context(|| filename.quote().to_string())?;
+            .map_err_context(|| filename.maybe_quote().to_string())?;
 
         // Indexing UTF-8 string requires walking from the beginning, which can hurts performance badly when the line is long.
         // Since we will be jumping around the line a lot, we dump the content into a Vec<char>, which can be indexed in constant time.
@@ -796,7 +796,7 @@ fn write_traditional_output(
             Box::new(stdout())
         } else {
             let file = File::create(output_filename)
-                .map_err_context(|| output_filename.quote().to_string())?;
+                .map_err_context(|| output_filename.maybe_quote().to_string())?;
             Box::new(file)
         });
 

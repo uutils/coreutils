@@ -3,15 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) autoformat FILENUM whitespaces nocheck memmem
+// spell-checker:ignore (ToDO) autoformat FILENUM whitespaces nocheck memmem aejotv
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
 use memchr::{Memchr3, memchr_iter, memchr3, memmem::Finder};
 use std::cmp::Ordering;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, Split, Stdin, Write, stdin, stdout};
+use std::io::{self, BufRead, BufReader, BufWriter, Stdin, Write, stdin, stdout};
 use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -61,8 +61,8 @@ enum SepSetting {
 }
 
 trait Separator: Clone {
-    /// Using this separator, return the start and end index of all fields in the haystack.
-    fn field_ranges(&self, haystack: &[u8], len_guess: usize) -> Vec<(usize, usize)>;
+    /// Using this separator, populate `field_ranges` with the start and end index of all fields in `haystack`.
+    fn fill_field_ranges(&self, haystack: &[u8], field_ranges: &mut Vec<(usize, usize)>);
     /// The separator as it appears when in the output.
     fn output_separator(&self) -> &[u8];
 }
@@ -74,8 +74,8 @@ struct OneByteSep {
 }
 
 impl Separator for OneByteSep {
-    fn field_ranges(&self, haystack: &[u8], len_guess: usize) -> Vec<(usize, usize)> {
-        let mut field_ranges = Vec::with_capacity(len_guess);
+    fn fill_field_ranges(&self, haystack: &[u8], field_ranges: &mut Vec<(usize, usize)>) {
+        field_ranges.clear();
         let mut last_end = 0;
 
         for i in memchr_iter(self.byte[0], haystack) {
@@ -83,7 +83,6 @@ impl Separator for OneByteSep {
             last_end = i + 1;
         }
         field_ranges.push((last_end, haystack.len()));
-        field_ranges
     }
 
     fn output_separator(&self) -> &[u8] {
@@ -98,8 +97,8 @@ struct MultiByteSep<'a> {
 }
 
 impl Separator for MultiByteSep<'_> {
-    fn field_ranges(&self, haystack: &[u8], len_guess: usize) -> Vec<(usize, usize)> {
-        let mut field_ranges = Vec::with_capacity(len_guess);
+    fn fill_field_ranges(&self, haystack: &[u8], field_ranges: &mut Vec<(usize, usize)>) {
+        field_ranges.clear();
         let mut last_end = 0;
 
         for i in self.finder.find_iter(haystack) {
@@ -107,7 +106,6 @@ impl Separator for MultiByteSep<'_> {
             last_end = i + self.finder.needle().len();
         }
         field_ranges.push((last_end, haystack.len()));
-        field_ranges
     }
 
     fn output_separator(&self) -> &[u8] {
@@ -120,8 +118,9 @@ impl Separator for MultiByteSep<'_> {
 struct LineSep {}
 
 impl Separator for LineSep {
-    fn field_ranges(&self, haystack: &[u8], _len_guess: usize) -> Vec<(usize, usize)> {
-        vec![(0, haystack.len())]
+    fn fill_field_ranges(&self, haystack: &[u8], field_ranges: &mut Vec<(usize, usize)>) {
+        field_ranges.clear();
+        field_ranges.push((0, haystack.len()));
     }
 
     fn output_separator(&self) -> &[u8] {
@@ -136,8 +135,8 @@ struct WhitespaceSep {
 }
 
 impl Separator for WhitespaceSep {
-    fn field_ranges(&self, haystack: &[u8], len_guess: usize) -> Vec<(usize, usize)> {
-        let mut field_ranges = Vec::with_capacity(len_guess);
+    fn fill_field_ranges(&self, haystack: &[u8], field_ranges: &mut Vec<(usize, usize)>) {
+        field_ranges.clear();
         let mut last_end = 0;
 
         // Only UTF-8 has multi-byte blanks, and all of them (U+1680,
@@ -171,8 +170,11 @@ impl Separator for WhitespaceSep {
                 }
             }
         }
-        field_ranges.push((last_end, haystack.len()));
-        field_ranges
+        // trailing whitespace should be dropped too, rather than ending an empty field,
+        // but a line with no fields at all still has an empty one to join on
+        if last_end < haystack.len() || field_ranges.is_empty() {
+            field_ranges.push((last_end, haystack.len()));
+        }
     }
 
     fn output_separator(&self) -> &[u8] {
@@ -419,21 +421,13 @@ impl Spec {
     }
 }
 
+#[derive(Default)]
 struct Line {
     field_ranges: Vec<(usize, usize)>,
     string: Vec<u8>,
 }
 
 impl Line {
-    fn new<Sep: Separator>(string: Vec<u8>, separator: &Sep, len_guess: usize) -> Self {
-        let field_ranges = separator.field_ranges(&string, len_guess);
-
-        Self {
-            field_ranges,
-            string,
-        }
-    }
-
     /// Get field at index.
     fn get_field(&self, index: usize) -> Option<&[u8]> {
         if index < self.field_ranges.len() {
@@ -450,9 +444,10 @@ struct State<'a> {
     file_name: &'a OsString,
     file_num: FileNum,
     print_unpaired: bool,
-    lines: Split<Box<dyn BufRead + 'a>>,
-    max_len: usize,
+    reader: Box<dyn BufRead + 'a>,
+    line_ending: u8,
     seq: Vec<Line>,
+    free_lines: Vec<Line>,
     line_num: usize,
     has_failed: bool,
     has_unpaired: bool,
@@ -467,7 +462,7 @@ impl<'a> State<'a> {
         line_ending: LineEnding,
         print_unpaired: bool,
     ) -> UResult<Self> {
-        let file_buf = if name == "-" {
+        let reader = if name == "-" {
             Box::new(stdin.lock()) as Box<dyn BufRead>
         } else {
             let file = File::open(name).map_err_context(|| format!("{}", name.maybe_quote()))?;
@@ -479,9 +474,10 @@ impl<'a> State<'a> {
             file_name: name,
             file_num,
             print_unpaired,
-            lines: file_buf.split(line_ending as u8),
-            max_len: 1,
+            reader,
+            line_ending: line_ending as u8,
             seq: Vec::new(),
+            free_lines: Vec::new(),
             line_num: 0,
             has_failed: false,
             has_unpaired: false,
@@ -581,7 +577,7 @@ impl<'a> State<'a> {
 
     /// Reset with the next line.
     fn reset(&mut self, next_line: Option<Line>) {
-        self.seq.clear();
+        self.free_lines.append(&mut self.seq);
 
         if let Some(line) = next_line {
             self.seq.push(line);
@@ -645,17 +641,18 @@ impl<'a> State<'a> {
 
     /// Get the next line without the order check.
     fn read_line<Sep: Separator>(&mut self, sep: &Sep) -> io::Result<Option<Line>> {
-        match self.lines.next() {
-            Some(value) => {
-                self.line_num += 1;
-                let line = Line::new(value?, sep, self.max_len);
-                if line.field_ranges.len() > self.max_len {
-                    self.max_len = line.field_ranges.len();
-                }
-                Ok(Some(line))
-            }
-            None => Ok(None),
+        let mut line = self.free_lines.pop().unwrap_or_default();
+        line.string.clear();
+        if self.reader.read_until(self.line_ending, &mut line.string)? == 0 {
+            self.free_lines.push(line);
+            return Ok(None);
         }
+        if line.string.last() == Some(&self.line_ending) {
+            line.string.pop();
+        }
+        self.line_num += 1;
+        sep.fill_field_ranges(&line.string, &mut line.field_ranges);
+        Ok(Some(line))
     }
 
     /// Get the next line with the order check.
@@ -802,6 +799,9 @@ fn get_and_parse_field_number(matches: &clap::ArgMatches, key: &str) -> UResult<
     parse_field_number_option(value)
 }
 
+/// What separates the fields of a `-o` list.
+const O_SEPARATORS: [char; 3] = [' ', ',', '\t'];
+
 /// Parses the command-line arguments and constructs a `Settings` struct.
 ///
 /// This function takes the matches from the command-line arguments, processes them,
@@ -841,9 +841,14 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
                 }
                 // `-o` has no long form.
                 let option = OptionValue::with_names(format, Some('o'), None);
+                // Like GNU, a single separator may end the list.
+                let list = format
+                    .strip_suffix(O_SEPARATORS)
+                    .filter(|rest| !rest.is_empty() && !rest.ends_with(O_SEPARATORS))
+                    .unwrap_or(format);
                 // Each field carries its place in the value, so that the caret can
                 // take the one that is at fault out of a long list.
-                for (part, span) in uucore::diagnostics::list_items(format, &[' ', ',', '\t']) {
+                for (part, span) in uucore::diagnostics::list_items(list, &O_SEPARATORS) {
                     specs.push(Spec::parse(part).map_err(|error| {
                         let message = error.to_string();
                         uucore::diagnostics::error_after_report(diag_args, error, |args, _| {
@@ -891,13 +896,91 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
     Ok(settings)
 }
 
+/// Whether `arg` is a GNU `-o` field token (`0`, `N.M`, `auto`, or a
+/// comma/blank-separated list of those), so consecutive operands after `-o`
+/// can be absorbed like GNU join.
+fn looks_like_o_field(arg: &OsStr) -> bool {
+    let Some(s) = arg.to_str() else {
+        return false;
+    };
+    if s.is_empty() {
+        return false;
+    }
+    s.split([' ', ',', '\t'])
+        .filter(|part| !part.is_empty())
+        .all(|part| part == "auto" || Spec::parse(part).is_ok())
+}
+
+/// Count the file operands on the command line (program name excluded), so
+/// that absorbing `-o` fields never steals FILE1 or FILE2.
+fn count_operands(args: &[OsString]) -> usize {
+    // Short options taking a value as the next argument when not attached.
+    const SHORT_WITH_VALUE: &[u8] = b"aejotv12";
+    let mut count = 0;
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        let bytes = arg.as_encoded_bytes();
+        if bytes == b"--" {
+            count += iter.len();
+            break;
+        }
+        match bytes {
+            [b'-', b'-', ..] | [b'-'] | [] => count += usize::from(!bytes.starts_with(b"--")),
+            [b'-', flags @ ..] => {
+                // In a cluster like `-it`, the first value-taking option eats
+                // the rest of the argument, or the next one if nothing is left.
+                if let Some(pos) = flags.iter().position(|f| SHORT_WITH_VALUE.contains(f))
+                    && pos + 1 == flags.len()
+                {
+                    iter.next();
+                }
+            }
+            _ => count += 1,
+        }
+    }
+    count
+}
+
+/// Merge separate `-o` field operands into one value so clap does not treat
+/// them as file operands (`join -o 1.1 1.2 2.2 f1 f2`), but only while the
+/// missing file operands still follow.
+fn coalesce_o_fields(args: Vec<OsString>) -> Vec<OsString> {
+    let mut out = Vec::with_capacity(args.len());
+    let mut i = 0;
+
+    while i < args.len() {
+        let is_o = args[i] == "-o";
+        out.push(args[i].clone());
+        i += 1;
+
+        // if there is at least one o-field, consume and join them
+        if !is_o || !args.get(i).is_some_and(|f| looks_like_o_field(f)) {
+            continue;
+        }
+        let files_needed = 2_usize.saturating_sub(count_operands(&out[1..]));
+        let mut joined = args[i].clone();
+        i += 1;
+        while files_needed > 0
+            && args.get(i).is_some_and(|f| looks_like_o_field(f))
+            && count_operands(&args[i + 1..]) >= files_needed
+        {
+            joined.push(" ");
+            joined.push(&args[i]);
+            i += 1;
+        }
+        out.push(joined);
+    }
+    out
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // The command line is kept for the caret in `-o` diagnostics, which needs
-    // the list as typed.
+    // the list as typed. Coalesce separate `-o` field operands first so clap
+    // does not eat them as FILE1/FILE2.
     let (matches, diag_args) = uucore::clap_localization::handle_clap_result_with_diagnostics(
         uu_app(),
-        args.collect(),
+        coalesce_o_fields(args.collect()),
         1,
     )?;
 
@@ -1048,13 +1131,15 @@ pub fn uu_app() -> Command {
             Arg::new("check-order")
                 .long("check-order")
                 .help(translate!("join-help-check-order"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with("nocheck-order"),
         )
         .arg(
             Arg::new("nocheck-order")
                 .long("nocheck-order")
                 .help(translate!("join-help-nocheck-order"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with("check-order"),
         )
         .arg(
             Arg::new("header")

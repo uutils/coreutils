@@ -23,10 +23,60 @@ use std::os::windows::io::{AsHandle, OwnedHandle};
 use std::path::Path;
 use std::process::Stdio;
 
+/// Label error by read or write
+#[derive(Debug)]
+pub enum ReadWriteError {
+    Read(io::Error),
+    Write(io::Error),
+}
+
+impl From<ReadWriteError> for io::Error {
+    fn from(error: ReadWriteError) -> Self {
+        match error {
+            ReadWriteError::Read(e) | ReadWriteError::Write(e) => e,
+        }
+    }
+}
+
 #[cfg(windows)]
 type NativeType = OwnedHandle;
 #[cfg(not(windows))]
 type NativeType = OwnedFd;
+
+/// Represents an input source, either standard input or a file.
+///
+/// By default, buffer files and retain the stdin lock, preserving buffered bytes
+/// between calls to `Read` and `BufRead`. The generic types also let callers
+/// preserve an existing outer `BufReader` around unbuffered input sources.
+pub enum InputReader<F = io::BufReader<File>, S = io::StdinLock<'static>> {
+    Stdin(S),
+    File(F),
+}
+
+impl<F: io::Read, S: io::Read> io::Read for InputReader<F, S> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Stdin(input) => input.read(buf),
+            Self::File(input) => input.read(buf),
+        }
+    }
+}
+
+impl<F: io::BufRead, S: io::BufRead> io::BufRead for InputReader<F, S> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        match self {
+            Self::Stdin(input) => input.fill_buf(),
+            Self::File(input) => input.fill_buf(),
+        }
+    }
+
+    fn consume(&mut self, amount: usize) {
+        match self {
+            Self::Stdin(input) => input.consume(amount),
+            Self::File(input) => input.consume(amount),
+        }
+    }
+}
 
 // create reader without buffering
 #[cfg(any(unix, target_os = "wasi"))]

@@ -8,7 +8,6 @@
 //! Set of functions to parse modes
 
 use std::ffi::OsString;
-use std::fmt::{self, Display};
 use std::ops::Range;
 
 #[cfg(windows)]
@@ -22,7 +21,8 @@ use crate::translate;
 /// `span` is a byte range inside the mode string that was handed to the parser,
 /// so that a caller can point a caret at the one clause — often the one
 /// character — that broke it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{message}")]
 pub struct ModeError {
     pub message: String,
     pub span: Range<usize>,
@@ -195,27 +195,17 @@ impl ModeError {
     }
 }
 
-impl Display for ModeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.message)
-    }
-}
-
-impl std::error::Error for ModeError {}
-
 pub fn parse_numeric(fperm: u32, mode: &str, considering_dir: bool) -> Result<u32, ModeError> {
     let original = mode;
     let (op, pos) = parse_op(mode).map_or_else(|_| (None, 0), |(op, pos)| (Some(op), pos));
-    let digits = mode[pos..].trim();
-    let mode = digits;
+    let mode = &mode[pos..];
     let change = if mode.is_empty() {
         0
     } else {
-        let at = original.len() - original.trim_end().len();
         u32::from_str_radix(mode, 8).map_err(|e| {
             ModeError::new(
                 e.to_string(),
-                pos..original.len() - at,
+                pos..original.len(),
                 ModeErrorKind::InvalidNumber,
             )
         })?
@@ -371,12 +361,11 @@ pub fn parse_chmod(
 
     // Split by commas and process each mode part sequentially
     let mut offset = 0;
-    for raw_part in mode_string.split(',') {
-        let start = offset + (raw_part.len() - raw_part.trim_start().len());
+    for mode_part in mode_string.split(',') {
+        let start = offset;
         // Past the part and the comma that followed it.
-        offset += raw_part.len() + 1;
+        offset += mode_part.len() + 1;
 
-        let mode_part = raw_part.trim();
         if mode_part.is_empty() {
             continue;
         }
@@ -558,10 +547,22 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_comma_separated_with_spaces() {
-        // Comma-separated with spaces (should be trimmed)
-        assert_eq!(parse("u+rw, g+rw, o+r", false, 0).unwrap(), 0o664);
-        assert_eq!(parse(" u+x , g+x ", false, 0).unwrap(), 0o110);
+    fn test_parse_rejects_whitespace() {
+        for mode in [
+            " 644",
+            "644 ",
+            "+ 644",
+            "   ",
+            "u+rw, g+rw, o+r",
+            " u+x , g+x ",
+            "u+x, +755",
+            "u+x, ,g+w",
+        ] {
+            assert!(
+                parse(mode, false, 0).is_err(),
+                "{mode:?} should be rejected"
+            );
+        }
     }
 
     #[test]
@@ -575,7 +576,6 @@ mod tests {
     fn test_parse_empty_string() {
         // Empty string should return 0
         assert_eq!(parse("", false, 0).unwrap(), 0);
-        assert_eq!(parse("   ", false, 0).unwrap(), 0);
         assert_eq!(parse(",,", false, 0).unwrap(), 0);
     }
 

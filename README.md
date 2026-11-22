@@ -79,16 +79,6 @@ installing anything.
 
 <!-- ANCHOR: build (this mark is needed for mdbook) -->
 
-## Requirements
-
-- Rust (`cargo`, `rustc`)
-- GNU Make (optional)
-
-### Rust Version
-
-uutils follows Rust's release channels and is tested against stable, beta and
-nightly.
-
 ## Building
 
 There are currently two methods to build the uutils binaries: either Cargo or
@@ -144,8 +134,8 @@ cargo build --release --features openssl
 ```
 By default OpenSSL is built from source and statically linked into the
 binary, so no runtime dependency on system libcrypto/libssl is added. To link
-dynamically against the system libcrypto instead, set `OPENSSL_NO_VENDOR=1` at build time.
-MinGW (Windows) needs `OPENSSL_STATIC=0` too for dynamic linkage.
+against the system libcrypto instead, set `OPENSSL_NO_VENDOR=1` at build time.
+If both static and dynamic libcrypto are installed, also set `OPENSSL_STATIC=0` to link dynamically.
 
 The speedup is largest on CPUs without SHA-NI hardware acceleration.
 `aws-lc` backend is used on MSVC. Setting `AWS_LC_SYS_NO_JITTER_ENTROPY=1`
