@@ -380,7 +380,9 @@ impl<'a> StyleManager<'a> {
             return self.indicator_for_symlink(&mut entry_exists);
         }
 
-        if self.has_indicator_style(Indicator::MissingFile) && !entry_exists() {
+        // Metadata already fetched proves the entry exists: don't stat it again.
+        let metadata_cached = matches!(path.md.get(), Some(Some(_)));
+        if self.has_indicator_style(Indicator::MissingFile) && !metadata_cached && !entry_exists() {
             return Some(Indicator::MissingFile);
         }
 
