@@ -3842,6 +3842,45 @@ fn test_mv_exchange_file_and_dir() {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[uutests::wasi_ignore(UnsupportedStdApi)]
+#[test]
+fn test_mv_exchange_single_source_into_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("staging");
+    at.write("staging/manifest", "staged");
+    at.mkdir("release");
+    at.write("release/manifest", "current");
+    at.write("release/notes", "other");
+
+    ucmd.args(&["--exchange", "staging/manifest", "release/"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("staging/manifest"), "current");
+    assert_eq!(at.read("release/manifest"), "staged");
+    assert_eq!(at.read("release/notes"), "other");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[uutests::wasi_ignore(UnsupportedStdApi)]
+#[test]
+fn test_mv_exchange_single_source_missing_directory_entry() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("manifest", "staged");
+    at.mkdir("release");
+    at.write("release/notes", "other");
+
+    ucmd.args(&["--exchange", "manifest", "release"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("release/manifest");
+
+    assert_eq!(at.read("manifest"), "staged");
+    assert_eq!(at.read("release/notes"), "other");
+    assert!(!at.plus("release/manifest").exists());
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 #[cfg(not(wasi_runner))]
 fn test_mv_exchange_verbose() {

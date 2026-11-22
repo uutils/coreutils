@@ -633,9 +633,8 @@ pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
 
 /// Atomically exchange two paths with `--exchange` (renameat2 `RENAME_EXCHANGE`).
 ///
-/// With more than two operands, the last operand must be a directory, and
-/// each of the other operands is exchanged with the file of the same name
-/// inside that directory (matching GNU `mv --exchange a b c dir/`).
+/// Unless `-T` is given, a directory destination selects the entry with the
+/// same name as each source.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn exchange_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
     match paths {
@@ -643,11 +642,8 @@ fn exchange_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
             1,
             translate!("mv-error-exchange-two-operands"),
         )),
-        [from, to] => exchange_two_paths(from, to, opts),
-        [sources @ .., target_dir] => {
-            if !target_dir.is_dir() {
-                return Err(MvError::TargetNotADirectory(target_dir.quote().to_string()).into());
-            }
+        [from, to] if opts.no_target_dir => exchange_two_paths(from, to, opts),
+        [sources @ .., target_dir] if target_dir.is_dir() => {
             for source in sources {
                 let name = source
                     .file_name()
@@ -656,6 +652,8 @@ fn exchange_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
             }
             Ok(())
         }
+        [from, to] => exchange_two_paths(from, to, opts),
+        [.., target] => Err(MvError::TargetNotADirectory(target.quote().to_string()).into()),
     }
 }
 
