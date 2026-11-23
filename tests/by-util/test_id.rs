@@ -581,3 +581,15 @@ fn test_id_digital_username() {
 
     new_ucmd!().arg("200").succeeds();
 }
+
+#[test]
+#[cfg(all(target_os = "linux", feature = "feat_selinux", feature = "feat_smack"))]
+fn test_security_contexts_disabled() {
+    if !uutests::util::security_contexts_disabled() {
+        return;
+    }
+    new_ucmd!()
+        .arg("-Z")
+        .fails_with_code(1)
+        .stderr_only("id: --context (-Z) works only on an SELinux/SMACK-enabled kernel\n");
+}
