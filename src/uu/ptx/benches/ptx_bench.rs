@@ -34,6 +34,19 @@ fn ptx_short_lines(bencher: Bencher, num_lines: usize) {
     bench_ptx(bencher, &data, &[]);
 }
 
+/// Benchmark Unicode words, including combining marks and non-Latin scripts.
+#[divan::bench(args = [10_000])]
+fn ptx_non_ascii(bencher: Bencher, num_lines: usize) {
+    let lines = [
+        "café naïve résumé",
+        "Καλημέρα κόσμε",
+        "中文 字词",
+        "a\u{301} _élan α\u{200c}β",
+    ];
+    let data = text_data::generate_data_from_words(&lines, num_lines);
+    bench_ptx(bencher, &data, &[]);
+}
+
 /// Benchmark a fixed ~1 MiB input spread across 100 lines.
 #[divan::bench(args = [100])]
 fn ptx_long_lines(bencher: Bencher, num_lines: usize) {
