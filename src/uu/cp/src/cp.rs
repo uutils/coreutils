@@ -2150,13 +2150,13 @@ fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyRe
     Ok(())
 }
 
-/// Decide whether `source` and `dest` are the same directory entry, as opposed
-/// to merely being two different hard links to the same inode.
-fn paths_are_same_entry(source: &Path, dest: &Path) -> bool {
+/// Only allow a backup or unlink of a hard link if the paths resolve to
+/// distinct entries. A failed lookup cannot establish that it is safe.
+fn paths_are_distinct_entries(source: &Path, dest: &Path) -> bool {
     canonicalize(source, MissingHandling::Normal, ResolveMode::Physical)
         .ok()
         .zip(canonicalize(dest, MissingHandling::Normal, ResolveMode::Physical).ok())
-        .is_some_and(|(s, d)| s == d)
+        .is_some_and(|(s, d)| s != d)
 }
 
 /// Decide whether source and destination files are the same and
@@ -2190,7 +2190,7 @@ fn is_forbidden_to_copy_to_same_file(
         if dest_is_symlink {
             return false;
         }
-        if !dest_is_symlink && !source_is_symlink && dest != source {
+        if !dest_is_symlink && !source_is_symlink && paths_are_distinct_entries(source, dest) {
             return false;
         }
     }
@@ -2837,7 +2837,7 @@ fn copy_file(
             options.overwrite,
             OverwriteMode::Clobber(ClobberMode::RemoveDestination)
         )
-        && !paths_are_same_entry(source, dest)
+        && paths_are_distinct_entries(source, dest)
     {
         fs::remove_file(dest)?;
     }
