@@ -5604,6 +5604,19 @@ fn test_cp_no_such() {
         .stderr_is("cp: 'no-such/' is not a directory\n");
 }
 
+#[cfg(not(windows))]
+#[rstest]
+#[case::recursive(&["-r", "dir", "no-such/dir"])]
+#[case::archive(&["-a", "dir", "no-such/dir"])]
+#[case::no_target_directory(&["-rT", "dir", "no-such/dir"])]
+fn test_cp_recursive_missing_target_parent(#[case] args: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    ucmd.args(args)
+        .fails()
+        .stderr_only("cp: cannot create directory 'no-such/dir': No such file or directory\n");
+}
+
 #[cfg(any(
     target_os = "freebsd",
     target_os = "hurd",
