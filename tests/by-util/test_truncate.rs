@@ -39,6 +39,21 @@ fn test_increase_file_size_kb() {
 }
 
 #[test]
+fn test_zero_padded_decimal_size() {
+    for (size, original, expected) in [
+        ("010", "ABCDEFGHIJKL", "ABCDEFGHIJ"),
+        ("<010", "ABCDEFGHIJ", "ABCDEFGHIJ"),
+        ("009", "ABCDEFGHIJ", "ABCDEFGHI"),
+        ("00K", "ABCDEFGHIJ", ""),
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write(FILE1, original);
+        ucmd.args(&["-s", size, FILE1]).succeeds().no_output();
+        assert_eq!(at.read(FILE1), expected, "size {size}");
+    }
+}
+
+#[test]
 fn test_size_above_i64_max_is_rejected_without_creating_file() {
     // A size above i64::MAX is rejected up front and the file is not created.
     let (at, mut ucmd) = at_and_ucmd!();

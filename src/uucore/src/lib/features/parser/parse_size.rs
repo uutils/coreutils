@@ -259,11 +259,17 @@ impl<'parser> Parser<'parser> {
     /// assert_eq!(Ok(44251 * 1024 * 1024), parser.parse("0b1010110011011011")); // 0b1010110011011011 is 44251 in decimal, default M
     /// ```
     pub fn parse(&self, size: &str) -> Result<u128, ParseSizeError> {
+        self.parse_with_number_system(size, Self::determine_number_system(size))
+    }
+
+    fn parse_with_number_system(
+        &self,
+        size: &str,
+        number_system: NumberSystem,
+    ) -> Result<u128, ParseSizeError> {
         if size.is_empty() {
             return Err(ParseSizeError::parse_failure(size));
         }
-
-        let number_system = Self::determine_number_system(size);
 
         // Split the size argument into numeric and unit parts
         // For example, if the argument is "123K", the numeric part is "123", and
@@ -391,9 +397,25 @@ impl<'parser> Parser<'parser> {
 
     /// Same as `parse()` but tries to return u64
     pub fn parse_u64(&self, size: &str) -> Result<u64, ParseSizeError> {
-        self.parse(size).and_then(|num_u128| {
-            u64::try_from(num_u128).map_err(|_| ParseSizeError::size_too_big(size))
-        })
+        self.parse_u64_with_number_system(size, Self::determine_number_system(size))
+    }
+
+    /// Like [`Self::parse_u64`], but a leading zero is decimal padding.
+    pub fn parse_u64_with_decimal_leading_zeros(&self, size: &str) -> Result<u64, ParseSizeError> {
+        let system = match Self::determine_number_system(size) {
+            NumberSystem::Octal => NumberSystem::Decimal,
+            system => system,
+        };
+        self.parse_u64_with_number_system(size, system)
+    }
+
+    fn parse_u64_with_number_system(
+        &self,
+        size: &str,
+        number_system: NumberSystem,
+    ) -> Result<u64, ParseSizeError> {
+        let value = self.parse_with_number_system(size, number_system)?;
+        u64::try_from(value).map_err(|_| ParseSizeError::size_too_big(size))
     }
 
     /// Same as `parse_u64()`, except returns `u64::MAX` on overflow
