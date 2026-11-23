@@ -1576,6 +1576,7 @@ fn test_hard_link_source_permission_denied() {
     assert!(!at.file_exists("link"));
 }
 
+#[uutests::wasi_ignore(AbsoluteSymlinkTargetsUnfollowable)]
 #[test]
 fn test_logical_dangling_source_backup_keeps_files() {
     let scene = TestScenario::new(util_name!());
