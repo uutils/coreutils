@@ -6,6 +6,7 @@
 // spell-checker:ignore roff
 // spell-checker:ignore funnnnnnnnnnnnnnnnn
 
+use rstest::rstest;
 use uutests::new_ucmd;
 
 #[test]
@@ -298,12 +299,19 @@ fn test_sentence_regexp_newlines_are_spaces() {
         .stdout_contains("Start of sentence");
 }
 
-#[test]
-fn test_sentence_regexp_invalid_syntax_failure() {
+#[rstest]
+#[case::sentence("-S", "ab[c")]
+#[case::word("-W", "(wrong")]
+fn test_invalid_regexp(#[case] option: &str, #[case] pattern: &str) {
     new_ucmd!()
-        .args(&["-S", "^["])
-        .fails()
-        .stderr_contains("Invalid regexp");
+        .args(&[option, pattern])
+        .pipe_in("ab\n")
+        .ignore_stdin_write_error()
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is(format!(
+            "ptx: Invalid regular expression (for regexp '{pattern}')\n"
+        ));
 }
 
 #[test]
@@ -453,16 +461,25 @@ fn test_invalid_regex_word_trailing_backslash() {
 }
 
 #[test]
-fn test_invalid_regex_word_unclosed_group() {
-    new_ucmd!().args(&["-W", "(wrong"]).succeeds().no_stderr();
-}
-
-#[test]
 fn test_missing_file_error_contains_filename() {
     new_ucmd!()
         .arg("zxc")
         .fails()
-        .stderr_is("ptx: 'zxc': No such file or directory\n");
+        .stderr_is("ptx: zxc: No such file or directory\n");
+}
+
+#[test]
+fn test_file_errors_quote_names_only_when_needed() {
+    // File names are quoted only when they need it, so plain names stay bare.
+    new_ucmd!()
+        .arg("a b")
+        .fails()
+        .stderr_is("ptx: 'a b': No such file or directory\n");
+    new_ucmd!()
+        .args(&["-G", "-", "missing/out"])
+        .pipe_in("hello\n")
+        .fails()
+        .stderr_is("ptx: missing/out: No such file or directory\n");
 }
 
 #[test]
@@ -499,4 +516,24 @@ fn test_nullable_word_regexp_no_empty_matches() {
         .pipe_in("aa bb cc\n")
         .succeeds()
         .stdout_only(expected);
+}
+
+#[test]
+fn test_repeated_flags_are_accepted() {
+    new_ucmd!()
+        .args(&["-G", "-A", "-A"])
+        .pipe_in("hello world\n")
+        .succeeds()
+        .stdout_only(concat!(
+            ".xx \"\" \"\" \"hello world\" \"\" \":1\"\n",
+            ".xx \"\" \"hello\" \"world\" \"\" \":1\"\n"
+        ));
+    new_ucmd!()
+        .args(&["-f", "-f"])
+        .pipe_in("hello world\n")
+        .succeeds()
+        .stdout_only(concat!(
+            "                                       hello world\n",
+            "                               hello   world\n"
+        ));
 }

@@ -14,7 +14,6 @@ use crate::{show_error, translate};
 
 use clap::{Arg, ArgMatches, Command};
 
-use libc::{gid_t, uid_t};
 use options::traverse;
 #[cfg(target_os = "linux")]
 use std::collections::HashSet;
@@ -25,23 +24,18 @@ use walkdir::WalkDir;
 
 #[cfg(target_os = "linux")]
 use crate::features::fs::FileInformation;
-use crate::features::fs::path_is_root_dir;
+use crate::features::fs::{metadata_is_root_dir, path_is_root_dir};
 #[cfg(target_os = "linux")]
 use crate::features::safe_traversal::{DirFd, FileInfo, SymlinkBehavior};
 
-use std::ffi::CString;
 use std::fs::Metadata;
-use std::io::Error as IOError;
-use std::io::Result as IOResult;
 use std::os::unix::fs::MetadataExt;
-
-use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
 #[derive(Debug, thiserror::Error)]
 enum PermsError {
     #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
-    Write(IOError),
+    Write(std::io::Error),
 }
 
 /// The various level of verbosity
@@ -68,24 +62,6 @@ impl Default for Verbosity {
     }
 }
 
-/// Actually perform the change of owner on a path
-fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IOResult<()> {
-    let path = path.as_ref();
-    let s = CString::new(path.as_os_str().as_bytes()).unwrap();
-    let ret = unsafe {
-        if follow {
-            libc::chown(s.as_ptr(), uid, gid)
-        } else {
-            libc::lchown(s.as_ptr(), uid, gid)
-        }
-    };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(IOError::last_os_error())
-    }
-}
-
 /// Perform the change of owner on a path
 /// with the various options
 /// and error messages management
@@ -102,43 +78,23 @@ pub fn wrap_chown<P: AsRef<Path>>(
     let path = path.as_ref();
     let mut out: String = String::new();
 
-    if let Err(e) = chown(path, dest_uid, dest_gid, follow) {
-        match verbosity.level {
-            VerbosityLevel::Silent => (),
-            level => {
-                out = format!(
-                    "changing {} of {}: {}",
-                    if verbosity.groups_only {
-                        "group"
-                    } else {
-                        "ownership"
-                    },
-                    path.quote(),
-                    strip_errno(&e),
-                );
-                if level == VerbosityLevel::Verbose {
-                    out = if verbosity.groups_only {
-                        let gid = meta.gid();
-                        format!(
-                            "{out}\nfailed to change group of {} from {} to {}",
-                            path.quote(),
-                            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                            entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
-                        )
-                    } else {
-                        let uid = meta.uid();
-                        let gid = meta.gid();
-                        format!(
-                            "{out}\nfailed to change ownership of {} from {}:{} to {}:{}",
-                            path.quote(),
-                            entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                            entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
-                            entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
-                        )
-                    };
-                }
-            }
+    let res = if follow {
+        std::os::unix::fs::chown(path, Some(dest_uid), Some(dest_gid))
+    } else {
+        std::os::unix::fs::lchown(path, Some(dest_uid), Some(dest_gid))
+    };
+    if let Err(e) = res {
+        if verbosity.level != VerbosityLevel::Silent {
+            out = format!(
+                "changing {} of {}: {}",
+                if verbosity.groups_only {
+                    "group"
+                } else {
+                    "ownership"
+                },
+                path.quote(),
+                strip_errno(&e),
+            );
         }
         return Err(out);
     }
@@ -226,13 +182,13 @@ pub fn check_root(path: &Path, would_recurse_symlink: bool) -> bool {
 ///
 /// Prohibit further traversal only if:
 ///     (--preserve-root and -R present) &&
-///     (path *is* "/" by (st_dev, st_ino), so a bind mount of "/" counts too) &&
+///     (path *is* "/" by (`st_dev`, `st_ino`), so a bind mount of "/" counts too) &&
 ///     (
 ///         (path is a symlink && would traverse/recurse this symlink) ||
 ///         (path is not a symlink)
 ///     )
 /// The first clause is checked by the caller, the second and third here.
-/// The caller has to evaluate -P/-H/-L into 'would_recurse_symlink'.
+/// The caller has to evaluate -P/-H/-L into `would_recurse_symlink`.
 fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
     // Compare by (st_dev, st_ino), not name: a bind mount of "/" is an ordinary
     // directory whose path never resolves to "/", so the old syntactic "looks
@@ -244,7 +200,11 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
     if !path_is_root_dir(path, would_traverse_symlink) {
         return false;
     }
+    report_root(path);
+    true
+}
 
+fn report_root(path: &Path) {
     if path.as_os_str() == "/" {
         show_error!("it is dangerous to operate recursively on '/'");
     } else {
@@ -254,7 +214,6 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
         );
     }
     show_error!("use --no-preserve-root to override this failsafe");
-    true
 }
 
 /// Whether `dir_fd` refers to the very object `meta` describes.
@@ -262,7 +221,7 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
 /// A pathname can be re-pointed between the stat and the open, so comparing
 /// (device, inode) is what detects the swap. The descriptor cannot be re-pointed after.
 #[cfg(target_os = "linux")]
-fn fd_is(dir_fd: &DirFd, meta: &Metadata) -> IOResult<bool> {
+fn fd_is(dir_fd: &DirFd, meta: &Metadata) -> std::io::Result<bool> {
     let opened = FileInfo::from_stat(&dir_fd.fstat()?);
     Ok(opened == FileInfo::new(meta.dev(), meta.ino()))
 }
@@ -306,10 +265,14 @@ impl ChownExecutor {
             return 1;
         };
 
+        // `meta` pins the descent below, so a later swap cannot slip "/" past; the
+        // path lookup still catches a symlink to "/", which `meta` did not follow.
         if self.recursive
             && self.preserve_root
-            && is_root(path, self.traverse_symlinks != TraverseSymlinks::None)
+            && (path_is_root_dir(path, self.traverse_symlinks != TraverseSymlinks::None)
+                || metadata_is_root_dir(&meta))
         {
+            report_root(path);
             // Fail-fast, do not attempt to recurse.
             return 1;
         }
@@ -399,6 +362,7 @@ impl ChownExecutor {
                     if self.verbosity.level != VerbosityLevel::Silent {
                         show_error!("{e}");
                     }
+                    self.report_failed_change(path, &meta);
                     1
                 }
             }
@@ -426,12 +390,9 @@ impl ChownExecutor {
 
     #[cfg(target_os = "linux")]
     fn safe_chown_dir(&self, dir_fd: &DirFd, path: &Path, meta: &Metadata) -> Result<(), String> {
-        let dest_uid = self.dest_uid.unwrap_or_else(|| meta.uid());
-        let dest_gid = self.dest_gid.unwrap_or_else(|| meta.gid());
-
         // Use fchown (safe) to change the directory's ownership
         if let Err(e) = dir_fd.fchown(self.dest_uid, self.dest_gid) {
-            let mut error_msg = format!(
+            return Err(format!(
                 "changing {} of {}: {}",
                 if self.verbosity.groups_only {
                     "group"
@@ -440,32 +401,7 @@ impl ChownExecutor {
                 },
                 path.quote(),
                 strip_errno(&e),
-            );
-
-            if self.verbosity.level == VerbosityLevel::Verbose {
-                error_msg = if self.verbosity.groups_only {
-                    let gid = meta.gid();
-                    format!(
-                        "{error_msg}\nfailed to change group of {} from {} to {}",
-                        path.quote(),
-                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                        entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
-                    )
-                } else {
-                    let uid = meta.uid();
-                    let gid = meta.gid();
-                    format!(
-                        "{error_msg}\nfailed to change ownership of {} from {}:{} to {}:{}",
-                        path.quote(),
-                        entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                        entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
-                        entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
-                    )
-                };
-            }
-
-            return Err(error_msg);
+            ));
         }
 
         // Report the change if verbose (similar to wrap_chown)
@@ -604,6 +540,7 @@ impl ChownExecutor {
                         );
                         show_error!("{msg}");
                     }
+                    self.report_failed_change(&entry_path, &meta);
                 } else {
                     // Report the successful ownership change using the shared helper
                     self.report_ownership_change_success(&entry_path, meta.uid(), meta.gid());
@@ -736,6 +673,7 @@ impl ChownExecutor {
                     if self.verbosity.level != VerbosityLevel::Silent {
                         show_error!("{e}");
                     }
+                    self.report_failed_change(path, &meta);
                     1
                 }
             }
@@ -748,9 +686,19 @@ impl ChownExecutor {
         get_metadata(path, follow)
             .inspect_err(|e| {
                 if self.verbosity.level != VerbosityLevel::Silent {
+                    // Like GNU, only say "dereference" when the operand itself
+                    // exists and is a symlink whose target can't be reached.
+                    let dangling_symlink = follow
+                        && path
+                            .symlink_metadata()
+                            .is_ok_and(|m| m.file_type().is_symlink());
                     show_error!(
                         "cannot {} {}: {}",
-                        if follow { "dereference" } else { "access" },
+                        if dangling_symlink {
+                            "dereference"
+                        } else {
+                            "access"
+                        },
                         path.quote(),
                         strip_errno(e)
                     );
@@ -760,7 +708,7 @@ impl ChownExecutor {
     }
 
     #[inline]
-    fn matched(&self, uid: uid_t, gid: gid_t) -> bool {
+    fn matched(&self, uid: u32, gid: u32) -> bool {
         match self.filter {
             IfFrom::All => true,
             IfFrom::User(u) => u == uid,
@@ -774,6 +722,34 @@ impl ChownExecutor {
     fn write_verbose_line(&self, line: &str) -> i32 {
         use std::io::Write;
         i32::from(writeln!(std::io::stdout(), "{line}").is_err())
+    }
+
+    /// With -v, say on stdout which change of the owner of `path` was not made.
+    fn report_failed_change(&self, path: &Path, meta: &impl MetadataExt) {
+        if self.verbosity.level != VerbosityLevel::Verbose {
+            return;
+        }
+        let (uid, gid) = (meta.uid(), meta.gid());
+        let dest_uid = self.dest_uid.unwrap_or(uid);
+        let dest_gid = self.dest_gid.unwrap_or(gid);
+        let line = if self.verbosity.groups_only {
+            format!(
+                "failed to change group of {} from {} to {}",
+                path.quote(),
+                entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
+            )
+        } else {
+            format!(
+                "failed to change ownership of {} from {}:{} to {}:{}",
+                path.quote(),
+                entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
+                entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
+            )
+        };
+        self.write_verbose_line(&line);
     }
 
     fn print_verbose_ownership_retained_as(&self, path: &Path, uid: u32, gid: Option<u32>) -> i32 {

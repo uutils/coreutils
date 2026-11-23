@@ -44,6 +44,8 @@ pub mod fsext;
 pub mod i18n;
 #[cfg(feature = "lines")]
 pub mod lines;
+#[cfg(feature = "numeric-str-cmp")]
+pub mod numeric_str_cmp;
 #[cfg(any(
     feature = "parser",
     feature = "parser-num",

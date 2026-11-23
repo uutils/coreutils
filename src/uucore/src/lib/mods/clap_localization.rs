@@ -13,7 +13,7 @@
 //!
 
 use crate::error::{UResult, USimpleError};
-use crate::locale::translate;
+use crate::locale::{translate, translate_text};
 
 use clap::error::{ContextKind, ErrorKind};
 use clap::{ArgMatches, Command, Error};
@@ -21,8 +21,7 @@ use clap::{ArgMatches, Command, Error};
 use std::error::Error as StdError;
 use std::ffi::OsString;
 
-use std::io::Write as _;
-use std::io::stderr;
+use std::io::{Write as _, stderr};
 
 /// Color enum for consistent styling
 #[derive(Debug, Clone, Copy)]
@@ -68,7 +67,7 @@ fn should_use_color_for_stream<S: std::io::IsTerminal>(stream: &S) -> bool {
 struct ColorManager(bool);
 
 impl ColorManager {
-    /// Create a new ColorManager based on environment variables
+    /// Create a new [`ColorManager`] based on environment variables
     fn from_env() -> Self {
         Self(should_use_color_for_stream(&stderr()))
     }
@@ -151,7 +150,7 @@ impl<'a> ErrorFormatter<'a> {
             let _ = write!(
                 stderr(),
                 "{}\n\n",
-                translate!(
+                translate_text!(
                     "clap-error-unexpected-argument",
                     "arg" => self.color_mgr.colorize(&arg_str, Color::Yellow),
                     "error_word" => self.color_mgr.colorize(&error_word, Color::Red)
@@ -164,7 +163,7 @@ impl<'a> ErrorFormatter<'a> {
                 let _ = write!(
                     stderr(),
                     "{}\n\n",
-                    translate!(
+                    translate_text!(
                         "clap-error-similar-argument",
                         "tip_word" => self.color_mgr.colorize(&tip_word, Color::Green),
                         "suggestion" => self.color_mgr.colorize(&suggested_arg.to_string(), Color::Green)
@@ -204,7 +203,7 @@ impl<'a> ErrorFormatter<'a> {
             } else {
                 // Invalid value provided
                 let error_word = translate!("common-error");
-                let error_msg = translate!(
+                let error_msg = translate_text!(
                     "clap-error-invalid-value",
                     "error_word" => self.color_mgr.colorize(&error_word, Color::Red),
                     "value" => self.color_mgr.colorize(&value, Color::Yellow),
@@ -641,41 +640,50 @@ mod tests {
 
     #[test]
     fn test_color_environment_vars() {
-        use std::env;
+        use temp_env::with_vars;
 
         // Test NO_COLOR disables colors
-        unsafe {
-            env::set_var("NO_COLOR", "1");
-        }
-        assert_eq!(get_color_choice(), clap::ColorChoice::Never);
-        assert!(!should_use_color_for_stream(&stderr()));
-        let mgr = ColorManager::from_env();
-        assert!(!mgr.0);
-        unsafe {
-            env::remove_var("NO_COLOR");
-        }
+        with_vars(
+            [
+                ("NO_COLOR", Some("1")),
+                ("CLICOLOR_FORCE", None),
+                ("FORCE_COLOR", None),
+            ],
+            || {
+                assert_eq!(get_color_choice(), clap::ColorChoice::Never);
+                assert!(!should_use_color_for_stream(&stderr()));
+                let mgr = ColorManager::from_env();
+                assert!(!mgr.0);
+            },
+        );
 
         // Test CLICOLOR_FORCE enables colors
-        unsafe {
-            env::set_var("CLICOLOR_FORCE", "1");
-        }
-        assert_eq!(get_color_choice(), clap::ColorChoice::Always);
-        assert!(should_use_color_for_stream(&stderr()));
-        let mgr = ColorManager::from_env();
-        assert!(mgr.0);
-        unsafe {
-            env::remove_var("CLICOLOR_FORCE");
-        }
+        with_vars(
+            [
+                ("NO_COLOR", None),
+                ("CLICOLOR_FORCE", Some("1")),
+                ("FORCE_COLOR", None),
+            ],
+            || {
+                assert_eq!(get_color_choice(), clap::ColorChoice::Always);
+                assert!(should_use_color_for_stream(&stderr()));
+                let mgr = ColorManager::from_env();
+                assert!(mgr.0);
+            },
+        );
 
         // Test FORCE_COLOR also enables colors
-        unsafe {
-            env::set_var("FORCE_COLOR", "1");
-        }
-        assert_eq!(get_color_choice(), clap::ColorChoice::Always);
-        assert!(should_use_color_for_stream(&stderr()));
-        unsafe {
-            env::remove_var("FORCE_COLOR");
-        }
+        with_vars(
+            [
+                ("NO_COLOR", None),
+                ("CLICOLOR_FORCE", None),
+                ("FORCE_COLOR", Some("1")),
+            ],
+            || {
+                assert_eq!(get_color_choice(), clap::ColorChoice::Always);
+                assert!(should_use_color_for_stream(&stderr()));
+            },
+        );
     }
 
     #[test]
@@ -713,27 +721,14 @@ mod tests {
     #[test]
     fn test_french_localization() {
         use crate::locale::{get_message, setup_localization};
-        use std::env;
 
-        let original_lang = env::var_os("LANG").unwrap_or_default();
-
-        unsafe {
-            env::set_var("LANG", "fr_FR.UTF-8");
-        }
-
-        if setup_localization("test").is_ok() {
-            assert_eq!(get_message("common-error"), "erreur");
-            assert_eq!(get_message("common-usage"), "Utilisation");
-            assert_eq!(get_message("common-tip"), "conseil");
-        }
-
-        unsafe {
-            if original_lang.is_empty() {
-                env::remove_var("LANG");
-            } else {
-                env::set_var("LANG", original_lang);
+        temp_env::with_var("LANG", Some("fr_FR.UTF-8"), || {
+            if setup_localization("test").is_ok() {
+                assert_eq!(get_message("common-error"), "erreur");
+                assert_eq!(get_message("common-usage"), "Utilisation");
+                assert_eq!(get_message("common-tip"), "conseil");
             }
-        }
+        });
     }
 }
 // spell-checker:enable

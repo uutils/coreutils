@@ -10,6 +10,7 @@ use std::fmt::Write;
 use std::io;
 
 use uucore::display::Quotable;
+use uucore::error::strip_errno;
 use uucore::translate;
 
 pub(crate) type Result<T> = std::result::Result<T, Error>;
@@ -22,14 +23,14 @@ pub(crate) enum Error {
     #[error("{}", translate!("chcon-error-no-files-specified"))]
     MissingFiles,
 
-    #[error("{}", translate!("chcon-error-data-out-of-range"))]
-    OutOfRange,
-
     #[error("{0}")]
     ArgumentsMismatch(String),
 
     #[error(transparent)]
     CommandLine(#[from] clap::Error),
+
+    #[error("{}", translate!("chcon-error-write", "error" => strip_errno(.0)))]
+    Write(io::Error),
 
     #[error("{}", translate!("chcon-error-operation-failed", "operation" => operation))]
     SELinux {

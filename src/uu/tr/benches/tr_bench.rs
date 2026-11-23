@@ -42,7 +42,7 @@ mod benches {
     const SIZE_MB: usize = 16;
 
     /// ASCII lowercase->uppercase range translation.
-    /// Exercises the AVX2 ASCII-range fast path on x86_64 hosts that
+    /// Exercises the AVX2 ASCII-range fast path on `x86_64` hosts that
     /// support it, and the scalar range fallback on other targets.
     #[divan::bench]
     fn tr_ascii_range_lower_to_upper(bencher: Bencher) {

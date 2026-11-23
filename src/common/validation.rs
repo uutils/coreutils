@@ -3,12 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore execveat fexecve memfd prefixcat rsplit testcat atexit profraw Cprofile
+// spell-checker:ignore prefixcat rsplit testcat atexit profraw Cprofile
 
 use std::ffi::{OsStr, OsString};
 use std::io::{Write, stderr};
 use std::path::{Path, PathBuf};
-use std::process;
+use std::process::{self, ExitCode};
 
 use uucore::Args;
 use uucore::display::Quotable;
@@ -49,24 +49,24 @@ pub fn get_all_utilities<T: Args>(
         .collect()
 }
 
-/// Prints a "utility not found" error and exits
-pub fn not_found(util: &OsStr) -> ! {
+/// Prints a "utility not found" error
+pub fn not_found(util: &OsStr) -> ExitCode {
     let _ = writeln!(
         stderr(),
         "coreutils: unknown program '{}'",
         util.maybe_quote()
     );
-    exit(1);
+    ExitCode::FAILURE
 }
 
-/// Prints an "unrecognized option" error and exits
-pub fn unrecognized_option(binary_name: &str, option: &OsStr) -> ! {
+/// Prints an "unrecognized option" error
+pub fn unrecognized_option(binary_name: &str, option: &OsStr) -> ExitCode {
     let _ = writeln!(
         stderr(),
         "{binary_name}: unrecognized option '{}'",
         option.to_string_lossy()
     );
-    exit(1);
+    ExitCode::FAILURE
 }
 
 /// Sets up localization for a utility with proper error handling
@@ -127,11 +127,14 @@ pub fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
     let exec_path = Path::new(OsStr::from_bytes(execfn_bytes));
     let argv0 = args.next().unwrap();
     let mut shebang_buf = [0u8; 2];
+    // When the names match, keep the kernel path: argv0 may lack the directory after PATH lookup.
+    if execfn_bytes.rsplit(|&b| b == b'/').next() == argv0.as_bytes().rsplit(|&b| b == b'/').next()
+    {
+        return exec_path.into();
+    }
     // exec_path is wrong when called from a shebang, or via fexecve/execveat:
     // the kernel reports /dev/fd/* and memfd_create/glibc's fallback /proc/self/fd/*
-    // argv0 is not full-path when called from PATH
-    if execfn_bytes.rsplit(|&b| b == b'/').next() == argv0.as_bytes().rsplit(|&b| b == b'/').next()
-        || execfn_bytes.starts_with(b"/proc/")
+    if execfn_bytes.starts_with(b"/proc/")
         || execfn_bytes.starts_with(b"/dev/fd/")
         || (File::open(Path::new(exec_path))
             .and_then(|mut f| f.read_exact(&mut shebang_buf))

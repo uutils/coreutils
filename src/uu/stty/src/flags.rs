@@ -78,7 +78,7 @@ pub const INPUT_FLAGS: &[Flag<I>] = &[
     // Flag::new("iuclc", I::IUCLC),
     #[cfg(not(target_os = "redox"))]
     Flag::new("ixany", I::IXANY),
-    #[cfg(not(target_os = "redox"))]
+    #[cfg(not(any(target_os = "haiku", target_os = "redox")))]
     Flag::new("imaxbel", I::IMAXBEL).sane(),
     #[cfg(any(target_vendor = "apple", target_os = "android", target_os = "linux"))]
     Flag::new("iutf8", I::IUTF8),
@@ -245,7 +245,7 @@ pub const LOCAL_FLAGS: &[Flag<L>] = &[
     Flag::new("crtkill", L::ECHOKE).sane().hidden(),
     #[cfg(not(target_os = "redox"))]
     Flag::new("flusho", L::FLUSHO),
-    #[cfg(not(any(target_os = "cygwin", target_os = "redox")))]
+    #[cfg(not(any(target_os = "cygwin", target_os = "haiku", target_os = "redox")))]
     Flag::new("extproc", L::EXTPROC),
 ];
 
@@ -275,6 +275,7 @@ pub const BAUD_RATES: &[(&str, BaudRate)] = &[
     #[cfg(not(any(
         target_os = "cygwin",
         target_os = "fuchsia",
+        target_os = "haiku",
         target_os = "hurd",
         target_os = "redox"
     )))]
@@ -287,6 +288,7 @@ pub const BAUD_RATES: &[(&str, BaudRate)] = &[
     #[cfg(not(any(
         target_os = "cygwin",
         target_os = "fuchsia",
+        target_os = "haiku",
         target_os = "hurd",
         target_os = "redox"
     )))]
@@ -349,12 +351,16 @@ pub const CONTROL_CHARS: &[(&str, S)] = &[
     // Sends a suspend signal (SIGTSTP).
     ("susp", S::VSUSP),
     // Reprints the current line.
+    #[cfg(not(target_os = "haiku"))]
     ("rprnt", S::VREPRINT),
     // Deletes the last word typed.
+    #[cfg(not(target_os = "haiku"))]
     ("werase", S::VWERASE),
     // Enters literal mode (next character is taken literally).
+    #[cfg(not(target_os = "haiku"))]
     ("lnext", S::VLNEXT),
     // Discards the current line.
+    #[cfg(not(target_os = "haiku"))]
     ("discard", S::VDISCARD),
 ];
 

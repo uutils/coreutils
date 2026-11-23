@@ -119,7 +119,7 @@ pub fn unblock_signal(signal: RixSignal) -> io::Result<()> {
     set.thread_unblock().map_err(Into::into)
 }
 
-/// Ensures there is no overflow on time_t operations. Some BSDs (notably XNU)
+/// Ensures there is no overflow on `time_t` operations. Some BSDs (notably XNU)
 /// will return EINVAL otherwise; POSIX only defines it up to 10e8, so we cap
 /// it on all targets we do not trust to support the full integer range.
 #[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
@@ -132,7 +132,6 @@ const MAX_KTIME_T: Duration = if cfg!(target_os = "linux") {
 /// Sets up a timer on SIGALRM for platforms that support POSIX.1-2008 realtime
 /// clock extensions. Notably, both Android and Redox do not support the latter
 /// fallback since it was removed in that same spec.
-// TODO: Enable support for DragonFly BSD once https://github.com/rust-lang/libc/issues/5649 is resolved.
 #[cfg(not(any(
     target_vendor = "apple",
     target_os = "dragonfly",

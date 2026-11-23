@@ -22,7 +22,6 @@ use crate::error::{UError, UResult};
 use crate::translate;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
-use libc::time_t;
 
 #[cfg(unix)]
 mod unix;
@@ -60,7 +59,7 @@ pub fn get_formatted_time() -> String {
         .to_string()
 }
 
-/// The format used to display a FormattedUptime.
+/// The format used to display a `FormattedUptime`.
 pub enum OutputFormat {
     /// Typical `uptime` output (e.g. 2 days, 3:04).
     HumanReadable,
@@ -111,15 +110,15 @@ impl FormattedUptime {
 ///
 /// # Arguments
 ///
-/// boot_time: Option<time_t> - Manually specify the boot time, or None to try to get it from the system.
-/// output_format: OutputFormat - Selects the format of the output string.
+/// `boot_time`: Unix timestamp in seconds as a signed 64-bit integer, or None to try to get it from the system.
+/// `output_format`: [`OutputFormat`] - Selects the format of the output string.
 ///
 /// # Returns
 ///
-/// Returns a UResult with the uptime in a human-readable format(e.g. "1 day, 3:45") if successful, otherwise an UptimeError.
+/// Returns a `UResult` with the uptime in a human-readable format(e.g. "1 day, 3:45") if successful, otherwise an [`UptimeError`].
 #[inline]
 pub fn get_formatted_uptime(
-    boot_time: Option<time_t>,
+    boot_time: Option<i64>,
     output_format: OutputFormat,
 ) -> UResult<String> {
     let uptime = get_uptime(boot_time)?;
@@ -159,7 +158,7 @@ pub fn get_formatted_nusers() -> String {
 ///
 /// # Returns
 ///
-/// Returns a UResult with the load average in a human-readable format if successful, otherwise an UptimeError.
+/// Returns a `UResult` with the load average in a human-readable format if successful, otherwise an [`UptimeError`].
 /// e.g. "load average: 0.00, 0.00, 0.00"
 #[inline]
 pub fn get_formatted_loadavg() -> UResult<String> {
@@ -181,10 +180,9 @@ mod tests {
 
     #[test]
     fn test_format_nusers() {
-        unsafe {
-            std::env::set_var("LANG", "en_US.UTF-8");
-        }
-        let _ = locale::setup_localization("uptime");
+        temp_env::with_var("LANG", Some("en_US.UTF-8"), || {
+            let _ = locale::setup_localization("uptime");
+        });
         assert_eq!("0 users", format_nusers(0));
         assert_eq!("1 user", format_nusers(1));
         assert_eq!("2 users", format_nusers(2));
@@ -192,10 +190,9 @@ mod tests {
 
     #[test]
     fn test_human_readable_uptime_hours_not_zero_padded() {
-        unsafe {
-            std::env::set_var("LANG", "en_US.UTF-8");
-        }
-        let _ = locale::setup_localization("uptime");
+        temp_env::with_var("LANG", Some("en_US.UTF-8"), || {
+            let _ = locale::setup_localization("uptime");
+        });
         // Hours below 10 are not zero-padded (issue #13027).
         assert_eq!(
             "1:27",

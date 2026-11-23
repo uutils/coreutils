@@ -70,9 +70,9 @@ fn test_reference() {
     assert_eq!(expected, actual, "expected '{expected}' got '{actual}'");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_reference_non_utf8_path() {
     use std::os::unix::ffi::OsStrExt;
 
@@ -298,6 +298,67 @@ fn test_reference_file_not_found() {
         .stderr_contains("cannot stat 'a': No such file or directory");
 }
 
+#[uutests::wasi_ignore(NoUnixDomainSockets)]
+#[test]
+#[cfg(unix)]
+fn test_reference_socket_has_no_size() {
+    use std::os::unix::net::UnixListener;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let _listener = UnixListener::bind(at.plus("sock")).expect("failed to create socket");
+    at.write(FILE1, "1234567890");
+
+    // The reason differs between platforms (ENXIO on Linux).
+    ucmd.args(&["-r", "sock", FILE1])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("truncate: cannot get the size of 'sock': ");
+    assert_eq!(at.read(FILE1), "1234567890");
+}
+
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
+#[cfg(unix)]
+fn test_reference_character_device() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(FILE1, "1234567890");
+
+    ucmd.args(&["-r", "/dev/null", FILE1])
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read(FILE1), "");
+}
+
+// Like GNU, a directory's size is where a seek to its end lands, not its
+// metadata length. The seek fails on tmpfs, gives 0 on btrfs, and on ext4
+// lands on a hash offset too large for a file.
+#[uutests::wasi_ignore(DirectorySizeFromMetadata)]
+#[test]
+#[cfg(unix)]
+fn test_reference_directory_size_is_its_end_offset() {
+    use std::io::{Seek, SeekFrom};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/entry");
+    at.write(FILE1, "1234567890");
+
+    let end = std::fs::File::open(at.plus("dir")).and_then(|mut dir| dir.seek(SeekFrom::End(0)));
+    let result = ucmd.args(&["-r", "dir", FILE1]).run();
+    if let Ok(end) = end {
+        if result.succeeded() {
+            assert_eq!(at.metadata(FILE1).len(), end);
+        } else {
+            assert_eq!(at.read(FILE1), "1234567890");
+        }
+    } else {
+        result
+            .failure()
+            .stderr_contains("truncate: cannot get the size of 'dir': ");
+        assert_eq!(at.read(FILE1), "1234567890");
+    }
+}
+
 #[test]
 fn test_reference_with_size_file_not_found() {
     new_ucmd!()
@@ -334,8 +395,8 @@ fn test_relative_size_overflow_preserves_file() {
 }
 
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoBlockSizeSupport)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no block size support")]
 fn test_io_blocks_uses_file_block_size() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write(FILE1, "x");
@@ -349,8 +410,8 @@ fn test_io_blocks_uses_file_block_size() {
 }
 
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoBlockSizeSupport)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no block size support")]
 fn test_io_blocks_uses_parent_block_size_for_new_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let block_size = at.metadata(".").blksize();
@@ -505,15 +566,15 @@ fn test_negative_size_with_space() {
     assert!(at.read_bytes(FILE1).is_empty());
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_truncate_non_utf8_paths() {
     use std::os::unix::ffi::OsStrExt;
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     let file_name = std::ffi::OsStr::from_bytes(b"test_\xFF\xFE.txt");
-    at.write(&file_name.to_string_lossy(), "test content");
+    at.write(file_name, "test content");
 
     // Test that truncate can handle non-UTF-8 filenames
     ts.ucmd().arg("-s").arg("10").arg(file_name).succeeds();
@@ -577,8 +638,8 @@ mod diagnostics {
     }
 }
 
+#[uutests::wasi_ignore(NoFifo)]
 #[cfg(not(windows))]
-#[cfg(not(wasi_runner))] // WASI: no FIFO/mkfifo support
 mod fifo {
     use super::*;
 
@@ -590,6 +651,20 @@ mod fifo {
             .fails()
             .no_stdout()
             .stderr_contains("cannot open 'fifo' for writing: No such device or address");
+    }
+
+    #[test]
+    fn test_fifo_as_reference_has_no_size() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkfifo("fifo");
+        at.write(FILE1, "1234567890");
+
+        // ESPIPE reads "Illegal seek" with glibc and "Invalid seek" with musl.
+        ucmd.args(&["-r", "fifo", FILE1])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("truncate: cannot get the size of 'fifo': ");
+        assert_eq!(at.read(FILE1), "1234567890");
     }
 
     #[test]

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) RFILE RDONLY CLOEXEC fgetfilecon fsetfilecon
+// spell-checker:ignore (vars) RFILE RDONLY CLOEXEC ENODATA relabeler readlinkat
 
 #![cfg(any(target_os = "linux", target_os = "android"))]
 #![allow(clippy::upper_case_acronyms)]
@@ -14,18 +14,18 @@ use uucore::translate;
 use uucore::{display::Quotable, format_usage, show_error, show_warning};
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use rustix::fs::{Mode, OFlags, openat};
+use rustix::fs::{FileType, Mode, OFlags, Stat, openat};
 use selinux::{OpaqueSecurityContext, SecurityContext};
 
-use uucore::safe_traversal::{DirFd, Metadata as TraversalMetadata, SymlinkBehavior};
+use uucore::safe_traversal::{DirFd, FileInfo, SymlinkBehavior, open_path_at, proc_fd_path};
 
 use core::ffi::CStr;
 use std::borrow::Cow;
-use std::collections::HashSet;
 use std::ffi::{CString, OsStr, OsString};
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
+use std::io;
+use std::io::Write;
+use std::os::fd::{AsFd, BorrowedFd, IntoRawFd, OwnedFd};
 use std::path::{Path, PathBuf};
-use std::{fs, io};
 
 mod errors;
 
@@ -76,87 +76,93 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    let context = match &options.mode {
-        CommandLineMode::ReferenceBased { reference } => {
-            let result = match SecurityContext::of_path(reference, true, false) {
-                Ok(Some(context)) => Ok(context),
+    let fatal =
+        |e: Error| USimpleError::new(libc::EXIT_FAILURE, format!("{}.", report_full_error(&e)));
 
+    let target = match &options.mode {
+        CommandLineMode::ReferenceBased { reference } => {
+            let getting = translate!("chcon-op-getting-security-context");
+            let context = match SecurityContext::of_path(reference, true, false) {
+                Ok(Some(context)) => context,
                 Ok(None) => {
                     let err = io::Error::from_raw_os_error(libc::ENODATA);
-                    Err(Error::from_io1(
-                        translate!("chcon-op-getting-security-context"),
-                        reference,
+                    return Err(fatal(Error::from_io1(getting, reference, err)));
+                }
+                Err(e) => return Err(fatal(Error::from_selinux(getting, e))),
+            };
+            let text = context
+                .to_c_string()
+                .map_err(|e| fatal(Error::from_selinux(getting, e)))?
+                .ok_or_else(|| {
+                    let err = io::Error::from_raw_os_error(libc::ENODATA);
+                    fatal(Error::from_io(
+                        translate!("chcon-op-creating-security-context"),
                         err,
                     ))
-                }
-
-                Err(r) => Err(Error::from_selinux(
-                    translate!("chcon-op-getting-security-context"),
-                    r,
-                )),
-            };
-
-            match result {
-                Err(r) => {
-                    return Err(USimpleError::new(
-                        libc::EXIT_FAILURE,
-                        format!("{}.", report_full_error(&r)),
-                    ));
-                }
-
-                Ok(file_context) => SELinuxSecurityContext::File(file_context),
-            }
+                })?;
+            Target::Whole(text.into_owned())
         }
 
         CommandLineMode::ContextBased { context } => {
-            let c_context = match os_str_to_c_string(context) {
-                Ok(context) => context,
-
-                Err(_r) => {
-                    return Err(USimpleError::new(
-                        libc::EXIT_FAILURE,
-                        translate!("chcon-error-invalid-context", "context" => context.quote()),
-                    ));
-                }
-            };
-
-            if SecurityContext::from_c_str(&c_context, false).check() == Some(false) {
-                return Err(USimpleError::new(
+            let invalid = || {
+                USimpleError::new(
                     libc::EXIT_FAILURE,
                     translate!("chcon-error-invalid-context", "context" => context.quote()),
-                ));
+                )
+            };
+            let c_context = os_str_to_c_string(context).map_err(|_| invalid())?;
+            if SecurityContext::from_c_str(&c_context, false).check() == Some(false) {
+                return Err(invalid());
             }
-
-            SELinuxSecurityContext::String(Some(c_context))
+            Target::Whole(c_context)
         }
 
-        CommandLineMode::Custom { .. } => SELinuxSecurityContext::String(None),
+        CommandLineMode::Custom {
+            user,
+            role,
+            the_type,
+            range,
+        } => {
+            let setters: [(Setter, _); 4] = [
+                (OpaqueSecurityContext::set_user, user),
+                (OpaqueSecurityContext::set_role, role),
+                (OpaqueSecurityContext::set_type, the_type),
+                (OpaqueSecurityContext::set_range, range),
+            ];
+            let mut fields = Vec::new();
+            for (set, value) in setters {
+                if let Some(value) = value {
+                    fields.push((set, os_str_to_c_string(value).map_err(fatal)?));
+                }
+            }
+            Target::Fields(fields)
+        }
     };
 
     let root_id = if options.preserve_root && options.recursive_mode.is_recursive() {
-        match root_identity() {
-            Ok(r) => Some(r),
-
-            Err(r) => {
-                return Err(USimpleError::new(
-                    libc::EXIT_FAILURE,
-                    format!("{}.", report_full_error(&r)),
-                ));
-            }
-        }
+        Some(root_identity().map_err(fatal)?)
     } else {
         None
     };
 
-    let results = relabel_all(&options, &context, root_id);
-    if results.is_empty() {
-        return Ok(());
+    let mut relabeler = Relabeler {
+        options: &options,
+        target,
+        root_id,
+        status: Status {
+            verbose: options.verbose,
+            failed: false,
+        },
+        open_dirs: Vec::new(),
+    };
+    for path in &options.files {
+        relabeler.operand(path);
     }
-
-    for result in &results {
-        show_error!("{}.", report_full_error(result));
+    if relabeler.status.failed {
+        Err(libc::EXIT_FAILURE.into())
+    } else {
+        Ok(())
     }
-    Err(libc::EXIT_FAILURE.into())
 }
 
 pub fn uu_app() -> Command {
@@ -304,7 +310,7 @@ struct Options {
     verbose: bool,
     preserve_root: bool,
     recursive_mode: RecursiveMode,
-    affect_symlink_referent: bool,
+    follow_operand_links: bool,
     mode: CommandLineMode,
     files: Vec<PathBuf>,
 }
@@ -312,7 +318,7 @@ struct Options {
 fn parse_command_line(matches: &ArgMatches) -> Result<Options> {
     let verbose = matches.get_flag(options::VERBOSE);
 
-    let (recursive_mode, affect_symlink_referent) = if matches.get_flag(options::RECURSIVE) {
+    let (recursive_mode, follow_operand_links) = if matches.get_flag(options::RECURSIVE) {
         if matches.get_flag(options::sym_links::FOLLOW_DIR_SYM_LINKS) {
             if matches.get_flag(options::dereference::NO_DEREFERENCE) {
                 return Err(Error::ArgumentsMismatch(translate!(
@@ -380,7 +386,7 @@ fn parse_command_line(matches: &ArgMatches) -> Result<Options> {
         verbose,
         preserve_root,
         recursive_mode,
-        affect_symlink_referent,
+        follow_operand_links,
         mode,
         files,
     })
@@ -425,396 +431,286 @@ enum CommandLineMode {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct DeviceAndINode {
-    device_id: u64,
-    inode: u64,
+/// Open the directory behind `handle` for reading, through the handle itself
+/// rather than by name, so it is the very same directory.
+fn reopen_dir(handle: &OwnedFd) -> io::Result<DirFd> {
+    let flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC;
+    let fd = openat(handle, c".", flags, Mode::empty())?;
+    DirFd::from_raw_fd(fd.into_raw_fd())
 }
 
-#[cfg(unix)]
-impl From<fs::Metadata> for DeviceAndINode {
-    fn from(md: fs::Metadata) -> Self {
-        use std::os::unix::fs::MetadataExt;
-
-        Self {
-            device_id: md.dev(),
-            inode: md.ino(),
-        }
+/// Pull the underlying OS error out of a libselinux failure, so that it can be
+/// reported against the user's file name instead of the internal /proc path.
+fn selinux_to_io(err: selinux::errors::Error) -> io::Error {
+    use selinux::errors::Error as E;
+    match err {
+        E::IO { source, .. }
+        | E::IO1Path { source, .. }
+        | E::IO1Name { source, .. }
+        | E::IO1Process { source, .. } => source,
+        other => io::Error::other(other),
     }
 }
 
-impl From<&TraversalMetadata> for DeviceAndINode {
-    fn from(md: &TraversalMetadata) -> Self {
-        let info = md.file_info();
-        Self {
-            device_id: info.device(),
-            inode: info.inode(),
-        }
-    }
+/// Replaces one field of a security context, as selected by -u, -r, -t or -l.
+type Setter = fn(&OpaqueSecurityContext, &CStr) -> selinux::errors::Result<()>;
+
+/// What every file is relabeled to.
+enum Target {
+    /// A complete context, from CONTEXT or from --reference.
+    Whole(CString),
+    /// Fields to replace in each file's existing context.
+    Fields(Vec<(Setter, CString)>),
 }
 
-impl TryFrom<&libc::stat> for DeviceAndINode {
-    type Error = Error;
-
-    #[allow(clippy::useless_conversion)]
-    fn try_from(st: &libc::stat) -> Result<Self> {
-        let device_id = u64::try_from(st.st_dev).map_err(|_r| Error::OutOfRange)?;
-        let inode = u64::try_from(st.st_ino).map_err(|_r| Error::OutOfRange)?;
-        Ok(Self { device_id, inode })
-    }
+/// Outcome of the run so far, and whether verbose output is still wanted.
+struct Status {
+    /// Cleared after the first failure to write the verbose output, so that
+    /// the write error is only reported once.
+    verbose: bool,
+    failed: bool,
 }
 
-/// Whether a symlink at this position should be resolved before it is examined.
-///
-/// `-P` never resolves, `-L` always does, and `-H` resolves only the operands
-/// named on the command line.
-fn follows_symlinks(mode: RecursiveMode, top_level: bool) -> SymlinkBehavior {
-    match mode {
-        RecursiveMode::RecursiveAndFollowAllDirSymLinks => SymlinkBehavior::Follow,
-        RecursiveMode::RecursiveAndFollowArgDirSymLinks => top_level.into(),
-        RecursiveMode::NotRecursive | RecursiveMode::RecursiveButDoNotFollowSymLinks => {
-            SymlinkBehavior::NoFollow
-        }
-    }
-}
-
-/// Whether a directory's contents were fully dealt with.
-#[derive(PartialEq, Eq, Clone, Copy)]
-enum Descent {
-    Complete,
-    Abandoned,
-}
-
-/// Whether revisiting a directory indicates real damage rather than an ordinary
-/// consequence of following symlinks.
-fn cycle_is_alarming(mode: RecursiveMode, top_level: bool) -> bool {
-    match mode {
-        RecursiveMode::RecursiveAndFollowAllDirSymLinks => false,
-        RecursiveMode::RecursiveAndFollowArgDirSymLinks => !top_level,
-        RecursiveMode::NotRecursive | RecursiveMode::RecursiveButDoNotFollowSymLinks => true,
-    }
-}
-
-fn relabel_all(
-    options: &Options,
-    context: &SELinuxSecurityContext,
-    root_id: Option<DeviceAndINode>,
-) -> Vec<Error> {
-    let mut errors = Vec::default();
-
-    // Operands are named relative to where we were started, so anchor them to a
-    // descriptor for that directory rather than re-resolving each path.
-    let start = match DirFd::open(Path::new("."), SymlinkBehavior::Follow) {
-        Ok(dir) => dir,
-        Err(err) => {
-            errors.push(Error::from_io1(translate!("chcon-op-accessing"), ".", err));
-            return errors;
-        }
-    };
-
-    let mut walk = Walk {
-        options,
-        context,
-        root_id,
-        // Directories reached on the way down, so a symlink loop is noticed
-        // instead of followed forever.
-        open_ancestors: HashSet::new(),
-        errors,
-    };
-
-    for operand in &options.files {
-        let behavior = follows_symlinks(options.recursive_mode, true);
-        walk.visit(&start, operand.as_os_str(), operand, behavior, true);
+impl Status {
+    fn report(&mut self, err: &Error) {
+        show_error!("{}.", report_full_error(err));
+        self.failed = true;
     }
 
-    walk.errors
-}
-
-/// State carried down the walk. Directories are relabelled on the way back up,
-/// so a context that forbids reading one is applied only once we are done with it.
-struct Walk<'a> {
-    options: &'a Options,
-    context: &'a SELinuxSecurityContext<'a>,
-    root_id: Option<DeviceAndINode>,
-    open_ancestors: HashSet<DeviceAndINode>,
-    errors: Vec<Error>,
-}
-
-impl Walk<'_> {
     fn fail(&mut self, op: String, display: &Path, err: io::Error) {
-        self.errors.push(Error::from_io1(op, display, err));
+        self.report(&Error::from_io1(op, display, err));
     }
 
-    fn reject(&mut self, op: String, display: &Path, kind: io::ErrorKind) {
-        self.errors.push(Error::from_io1(op, display, kind.into()));
-    }
-
-    fn visit(
-        &mut self,
-        parent: &DirFd,
-        name: &OsStr,
-        display: &Path,
-        behavior: SymlinkBehavior,
-        top_level: bool,
-    ) {
-        let meta = match parent.metadata_at(name, behavior) {
-            Ok(meta) => meta,
-            Err(err) => return self.fail(translate!("chcon-op-accessing"), display, err),
-        };
-        let id = DeviceAndINode::from(&meta);
-
-        let recursive = self.options.recursive_mode.is_recursive();
-
-        // `--preserve-root` guards recursion only: naming `/` outright is still
-        // allowed, it is descending into it that is refused.
-        if recursive && self.root_id == Some(id) {
-            warn_recursive_root(display);
-            return self.reject(
-                translate!("chcon-op-modifying-root-path"),
-                display,
-                io::ErrorKind::PermissionDenied,
-            );
+    fn announce(&mut self, display: &Path) {
+        if !self.verbose {
+            return;
         }
+        let line = translate!(
+            "chcon-verbose-changing-context",
+            "util_name" => uucore::util_name(),
+            "file" => display.quote()
+        );
+        let mut out = io::stdout().lock();
+        if let Err(e) = writeln!(out, "{line}").and_then(|()| out.flush()) {
+            self.verbose = false;
+            self.report(&Error::Write(e));
+        }
+    }
+}
 
-        // A symlink is only descended when this position resolves symlinks; the
-        // metadata above already reflects that choice.
-        let descended = if recursive
-            && meta.is_dir()
-            && (behavior.should_follow() || !meta.file_type().is_symlink())
-        {
-            self.descend(parent, name, display, behavior, id, top_level)
+/// Walks the operands and relabels what they name.
+struct Relabeler<'a> {
+    options: &'a Options,
+    target: Target,
+    root_id: Option<FileInfo>,
+    status: Status,
+    /// Identities of the directories currently being walked, outermost first.
+    open_dirs: Vec<FileInfo>,
+}
+
+impl Relabeler<'_> {
+    fn operand(&mut self, path: &Path) {
+        let follow = if self.options.follow_operand_links {
+            SymlinkBehavior::Follow
         } else {
-            Descent::Complete
+            SymlinkBehavior::NoFollow
+        };
+        let object = match open_path_at(rustix::fs::CWD, path, follow) {
+            Ok(fd) => fd,
+            Err(e) => return self.status.fail(translate!("chcon-op-accessing"), path, e),
         };
 
-        // A directory we could not read is reported, not relabelled: its context
-        // would otherwise change while its contents were left untouched.
-        if descended == Descent::Complete {
-            self.relabel(parent, name, display);
+        if !self.options.recursive_mode.is_recursive() {
+            self.label(object.as_fd(), path);
+        } else if let Some(st) = self.stat(&object, path) {
+            self.object(&object, &st, path, false);
         }
     }
 
-    fn descend(
-        &mut self,
-        parent: &DirFd,
-        name: &OsStr,
-        display: &Path,
-        behavior: SymlinkBehavior,
-        id: DeviceAndINode,
-        top_level: bool,
-    ) -> Descent {
-        if !self.open_ancestors.insert(id) {
-            // Following symlinks is expected to reach the same directory twice, so
-            // only a walk that stays on the physical tree treats this as damage.
-            if !cycle_is_alarming(self.options.recursive_mode, top_level) {
-                return Descent::Complete;
-            }
-            warn_directory_cycle(display);
-            self.reject(
-                translate!("chcon-op-reading-cyclic-directory"),
-                display,
-                io::ErrorKind::InvalidData,
-            );
-            return Descent::Abandoned;
+    /// The file status of `object`, or `None` after reporting the failure.
+    fn stat(&mut self, object: &OwnedFd, display: &Path) -> Option<Stat> {
+        rustix::fs::fstat(object)
+            .inspect_err(|e| {
+                let op = translate!("chcon-op-getting-meta-data");
+                self.status.fail(op, display, (*e).into());
+            })
+            .ok()
+    }
+
+    /// Handle an object reached during a recursive walk.
+    ///
+    /// `through_link` tells whether it was reached by resolving a symbolic link.
+    fn object(&mut self, object: &OwnedFd, st: &Stat, display: &Path, through_link: bool) {
+        if FileType::from_raw_mode(st.st_mode) == FileType::Directory {
+            self.directory(object, display, FileInfo::from_stat(st), through_link);
+        } else {
+            self.label(object.as_fd(), display);
+        }
+    }
+
+    /// Relabel everything below a directory, then the directory itself.
+    fn directory(&mut self, object: &OwnedFd, display: &Path, id: FileInfo, through_link: bool) {
+        if self.root_id.as_ref() == Some(&id) {
+            warn_recursive_root(display);
+            self.status.failed = true;
+            return;
         }
 
-        let outcome = match parent.open_subdir(name, behavior) {
-            Ok(dir) => match dir.read_dir() {
-                Ok(children) => {
-                    let inner = follows_symlinks(self.options.recursive_mode, false);
-                    for child in children {
-                        self.visit(&dir, &child, &display.join(&child), inner, false);
-                    }
-                    Descent::Complete
+        if self.open_dirs.contains(&id) {
+            // With -L, a link back to a directory that is being walked is
+            // expected and is simply not descended. Reaching one without a
+            // link means the file system itself loops: report it and leave
+            // the directory alone.
+            if through_link {
+                self.label(object.as_fd(), display);
+            } else {
+                warn_directory_cycle(display);
+                self.status.failed = true;
+            }
+            return;
+        }
+
+        // Reopen the very same directory for reading, through its handle.
+        let listing = reopen_dir(object).and_then(|dir| dir.read_dir().map(|names| (dir, names)));
+
+        match listing {
+            Ok((dir, names)) => {
+                self.open_dirs.push(id);
+                for name in names {
+                    self.entry(&dir, &name, &display.join(&name));
                 }
-                Err(err) => {
-                    self.fail(translate!("chcon-op-reading-directory"), display, err);
-                    Descent::Abandoned
+                self.open_dirs.pop();
+            }
+            // A directory that cannot be read is reported, not relabeled: its
+            // context would otherwise change while its contents were left as is.
+            Err(e) => {
+                return self
+                    .status
+                    .fail(translate!("chcon-op-reading-directory"), display, e);
+            }
+        }
+
+        self.label(object.as_fd(), display);
+    }
+
+    /// Handle one entry of a directory being walked.
+    fn entry(&mut self, dir: &DirFd, name: &OsStr, display: &Path) {
+        let entry = match open_path_at(dir, name, SymlinkBehavior::NoFollow) {
+            Ok(fd) => fd,
+            Err(e) => {
+                return self
+                    .status
+                    .fail(translate!("chcon-op-accessing"), display, e);
+            }
+        };
+
+        let Some(st) = self.stat(&entry, display) else {
+            return;
+        };
+        if FileType::from_raw_mode(st.st_mode) != FileType::Symlink {
+            return self.object(&entry, &st, display, false);
+        }
+
+        let walk = match self.options.recursive_mode {
+            // -P: the link itself is relabeled.
+            RecursiveMode::RecursiveButDoNotFollowSymLinks | RecursiveMode::NotRecursive => {
+                return self.label(entry.as_fd(), display);
+            }
+            // -H: links below an operand are not walked, but what they point
+            // to is relabeled.
+            RecursiveMode::RecursiveAndFollowArgDirSymLinks => false,
+            // -L: links are resolved, and directories they lead to are walked.
+            RecursiveMode::RecursiveAndFollowAllDirSymLinks => true,
+        };
+        // Read the link we just examined through its handle, then resolve
+        // its target from the same directory, so the name is looked up once.
+        let target = match rustix::fs::readlinkat(&entry, c"", Vec::new()) {
+            Ok(target) => target,
+            Err(e) => {
+                return self
+                    .status
+                    .fail(translate!("chcon-op-accessing"), display, e.into());
+            }
+        };
+        match open_path_at(dir, target.as_c_str(), SymlinkBehavior::Follow) {
+            Ok(referent) if walk => {
+                if let Some(st) = self.stat(&referent, display) {
+                    self.object(&referent, &st, display, true);
                 }
+            }
+            Ok(referent) => self.label(referent.as_fd(), display),
+            Err(e) => self
+                .status
+                .fail(translate!("chcon-op-accessing"), display, e),
+        }
+    }
+
+    /// Relabel the object behind `object`, named `display` in messages.
+    fn label(&mut self, object: BorrowedFd<'_>, display: &Path) {
+        let path = proc_fd_path(object);
+        self.status.announce(display);
+
+        let context: Cow<'_, CStr> = match &self.target {
+            Target::Whole(text) => Cow::Borrowed(text),
+            Target::Fields(fields) => match with_fields(&path, display, fields) {
+                Ok(Some(text)) => Cow::Owned(text),
+                // The fields already have the requested values.
+                Ok(None) => return,
+                Err(e) => return self.status.report(&e),
             },
-            Err(err) => {
-                self.fail(translate!("chcon-op-reading-directory"), display, err);
-                Descent::Abandoned
-            }
         };
 
-        // Sibling subtrees may legitimately reach this directory again, so only
-        // the path currently being walked counts as a cycle.
-        self.open_ancestors.remove(&id);
-        outcome
-    }
-
-    fn relabel(&mut self, parent: &DirFd, name: &OsStr, display: &Path) {
-        if self.options.verbose {
-            println!(
-                "{}",
-                translate!("chcon-verbose-changing-context", "util_name" => "chcon", "file" => display.quote())
-            );
+        if let Err(e) =
+            SecurityContext::from_c_str(&context, false).set_for_path(&path, true, false)
+        {
+            let op = translate!("chcon-op-setting-security-context");
+            self.status.fail(op, display, selinux_to_io(e));
         }
+    }
+}
 
-        if let Err(err) = apply_context(
-            self.options,
-            self.context,
-            parent.as_fd(),
-            Path::new(name),
+/// The current context of the file at `path`, with `fields` replaced, or `None`
+/// if that leaves it unchanged.
+fn with_fields(
+    path: &Path,
+    display: &Path,
+    fields: &[(Setter, CString)],
+) -> Result<Option<CString>> {
+    let building = |e| {
+        Error::from_io1(
+            translate!("chcon-op-creating-security-context"),
             display,
-        ) {
-            self.errors.push(err);
-        }
+            selinux_to_io(e),
+        )
+    };
+
+    let current = SecurityContext::of_path(path, true, false)
+        .map_err(|e| {
+            Error::from_io1(
+                translate!("chcon-op-getting-security-context"),
+                display,
+                selinux_to_io(e),
+            )
+        })?
+        // An unlabeled file has no fields to keep, so -u/-r/-t/-l cannot apply.
+        .ok_or_else(|| {
+            Error::from_io1(
+                translate!("chcon-op-applying-partial-context"),
+                display,
+                io::Error::from_raw_os_error(libc::ENODATA),
+            )
+        })?;
+
+    let current = current
+        .to_c_string()
+        .map_err(building)?
+        .ok_or_else(|| building(selinux::errors::Error::UnexpectedSecurityContextFormat))?;
+    let parts = OpaqueSecurityContext::from_c_str(&current).map_err(building)?;
+    for (set, value) in fields {
+        set(&parts, value).map_err(building)?;
     }
-}
-
-fn open_target_fd(
-    traversal_dir_fd: BorrowedFd<'_>,
-    target_path: &Path,
-    affect_symlink_referent: bool,
-    display_path: &Path,
-) -> Result<OwnedFd> {
-    // Anchor the open to the traversal directory fd so a concurrent rename or
-    // symlink swap cannot redirect the relabel off-tree. O_PATH hands back the
-    // entry itself without opening it for I/O: it never blocks on a FIFO and
-    // does not require read permission, yet the SELinux get/set still work
-    // through /proc/self/fd (see apply_context). O_NOFOLLOW keeps us on
-    // the symlink itself unless we were asked to act on its referent.
-    let mut flags = OFlags::PATH | OFlags::CLOEXEC;
-    if !affect_symlink_referent {
-        flags |= OFlags::NOFOLLOW;
-    }
-
-    openat(traversal_dir_fd, target_path, flags, Mode::empty())
-        .map_err(io::Error::from)
-        .map_err(|err| Error::from_io1(translate!("chcon-op-accessing"), display_path, err))
-}
-
-fn apply_context(
-    options: &Options,
-    context: &SELinuxSecurityContext,
-    traversal_dir_fd: BorrowedFd<'_>,
-    target_path: &Path,
-    display_path: &Path,
-) -> Result<()> {
-    type SetValueProc = fn(&OpaqueSecurityContext, &CStr) -> selinux::errors::Result<()>;
-
-    let target_fd = open_target_fd(
-        traversal_dir_fd,
-        target_path,
-        options.affect_symlink_referent,
-        display_path,
-    )?;
-
-    // The fd is O_PATH, so fgetfilecon/fsetfilecon would fail with EBADF. Reach
-    // the same inode through its /proc/self/fd entry and always dereference it:
-    // the open above already encoded the follow/no-follow choice, so this magic
-    // symlink resolves to exactly the inode we anchored. `target_fd` must stay
-    // alive for as long as this path is used.
-    let target = PathBuf::from(format!("/proc/self/fd/{}", target_fd.as_raw_fd()));
-
-    match &options.mode {
-        CommandLineMode::Custom {
-            user,
-            role,
-            the_type,
-            range,
-        } => {
-            let err0 = || -> Result<()> {
-                // Setting only part of a context needs an existing one to merge into.
-                // When the file carries none there is nothing sensible to assume, so
-                // report it rather than invent a default.
-                let op = translate!("chcon-op-applying-partial-context");
-                let err = io::ErrorKind::InvalidInput.into();
-                Err(Error::from_io1(op, display_path, err))
-            };
-
-            let file_context = match SecurityContext::of_path(&target, true, false) {
-                Ok(Some(context)) => context,
-
-                Ok(None) => return err0(),
-                Err(r) => {
-                    return Err(Error::from_selinux(
-                        translate!("chcon-op-getting-security-context"),
-                        r,
-                    ));
-                }
-            };
-
-            let c_file_context = match file_context.to_c_string() {
-                Ok(Some(context)) => context,
-
-                Ok(None) => return err0(),
-                Err(r) => {
-                    return Err(Error::from_selinux(
-                        translate!("chcon-op-getting-security-context"),
-                        r,
-                    ));
-                }
-            };
-
-            let se_context =
-                OpaqueSecurityContext::from_c_str(c_file_context.as_ref()).map_err(|_r| {
-                    let err = io::ErrorKind::InvalidInput.into();
-                    Error::from_io1(
-                        translate!("chcon-op-creating-security-context"),
-                        display_path,
-                        err,
-                    )
-                })?;
-
-            let list: &[(&Option<OsString>, SetValueProc)] = &[
-                (user, OpaqueSecurityContext::set_user),
-                (role, OpaqueSecurityContext::set_role),
-                (the_type, OpaqueSecurityContext::set_type),
-                (range, OpaqueSecurityContext::set_range),
-            ];
-
-            for (new_value, set_value_proc) in list {
-                if let Some(new_value) = new_value {
-                    let c_new_value = os_str_to_c_string(new_value).map_err(|_r| {
-                        let err = io::ErrorKind::InvalidInput.into();
-                        Error::from_io1(
-                            translate!("chcon-op-creating-security-context"),
-                            display_path,
-                            err,
-                        )
-                    })?;
-
-                    set_value_proc(&se_context, &c_new_value).map_err(|r| {
-                        Error::from_selinux(translate!("chcon-op-setting-security-context-user"), r)
-                    })?;
-                }
-            }
-
-            let context_string = se_context.to_c_string().map_err(|r| {
-                Error::from_selinux(translate!("chcon-op-getting-security-context"), r)
-            })?;
-
-            if c_file_context.as_ref().to_bytes() == context_string.as_ref().to_bytes() {
-                Ok(()) // Nothing to change.
-            } else {
-                SecurityContext::from_c_str(&context_string, false)
-                    .set_for_path(&target, true, false)
-                    .map_err(|r| {
-                        Error::from_selinux(translate!("chcon-op-setting-security-context"), r)
-                    })
-            }
-        }
-
-        CommandLineMode::ReferenceBased { .. } | CommandLineMode::ContextBased { .. } => {
-            if let Some(c_context) = context.to_c_string()? {
-                SecurityContext::from_c_str(c_context.as_ref(), false)
-                    .set_for_path(&target, true, false)
-                    .map_err(|r| {
-                        Error::from_selinux(translate!("chcon-op-setting-security-context"), r)
-                    })
-            } else {
-                let err = io::ErrorKind::InvalidInput.into();
-                Err(Error::from_io1(
-                    translate!("chcon-op-setting-security-context"),
-                    display_path,
-                    err,
-                ))
-            }
-        }
-    }
+    let wanted = parts.to_c_string().map_err(building)?;
+    Ok((wanted.as_c_str() != current.as_ref()).then_some(wanted))
 }
 
 #[cfg(unix)]
@@ -826,11 +722,10 @@ pub(crate) fn os_str_to_c_string(s: &OsStr) -> Result<CString> {
 }
 
 /// Identify the root directory by device and inode, without following it.
-#[cfg(unix)]
-fn root_identity() -> Result<DeviceAndINode> {
-    fs::symlink_metadata("/")
-        .map(DeviceAndINode::from)
-        .map_err(|r| Error::from_io1("std::fs::symlink_metadata", "/", r))
+fn root_identity() -> Result<FileInfo> {
+    rustix::fs::lstat("/")
+        .map(|st| FileInfo::from_stat(&st))
+        .map_err(|e| Error::from_io1(translate!("chcon-op-getting-meta-data"), "/", e.into()))
 }
 
 fn warn_recursive_root(dir_name: &Path) {
@@ -852,22 +747,4 @@ fn warn_directory_cycle(file_name: &Path) {
         "{}",
         translate!("chcon-warning-circular-directory", "file" => file_name.quote())
     );
-}
-
-#[derive(Debug)]
-enum SELinuxSecurityContext<'t> {
-    File(SecurityContext<'t>),
-    String(Option<CString>),
-}
-
-impl SELinuxSecurityContext<'_> {
-    fn to_c_string(&self) -> Result<Option<Cow<'_, CStr>>> {
-        match self {
-            Self::File(context) => context
-                .to_c_string()
-                .map_err(|r| Error::from_selinux("SELinuxSecurityContext::to_c_string()", r)),
-
-            Self::String(context) => Ok(context.as_deref().map(Cow::Borrowed)),
-        }
-    }
 }

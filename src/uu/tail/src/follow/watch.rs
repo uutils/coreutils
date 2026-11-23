@@ -467,8 +467,9 @@ impl Observer {
                             display_name,
                             translate!("tail-no-such-file-or-directory")
                         );
-                        if !self.files.files_remaining() && self.use_polling {
-                            // NOTE: GNU's tail exits here for `---disable-inotify`
+                        if !self.files.files_remaining() {
+                            // GNU's tail exits here for both inotify and polling when
+                            // --follow=name is used without --retry and no files remain.
                             return Err(USimpleError::new(1, translate!("tail-no-files-remaining")));
                         }
                     }
@@ -512,7 +513,9 @@ impl Observer {
                     let new_path = event.paths.last().unwrap();
                     paths.push(new_path.clone());
 
-                    let new_data = PathData::from_other_with_path(self.files.remove(event_path), new_path);
+                    let new_data = PathData::from_other_with_path(
+                        self.files.remove(event_path), new_path, self.files.nonblocking
+                    );
                     self.files.insert(
                         new_path,
                         new_data,

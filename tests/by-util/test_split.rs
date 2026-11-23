@@ -3,12 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit Nofile
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit NOFILE
 
 use rand::{RngExt as _, SeedableRng, rng};
 use regex::Regex;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use rustix::process::Resource;
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
+use rlimit::Resource;
+use rstest::rstest;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::path::Path;
@@ -131,6 +132,7 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
 fn test_split_to_non_seekable() {
@@ -308,6 +310,7 @@ fn test_split_additional_suffix_hyphen_value() {
 // the `cmd` call right
 // see https://github.com/rust-lang/rust/issues/29494
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 #[cfg(unix)]
 fn test_filter() {
@@ -351,6 +354,23 @@ fn test_filter_with_env_var_set() {
     assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[rstest]
+#[case::lines(&["-l1"], "executing with FILE=xaa\nexecuting with FILE=xab\n")]
+#[case::bytes(&["-b2"], "executing with FILE=xaa\nexecuting with FILE=xab\n")]
+#[case::line_bytes(&["-C2"], "executing with FILE=xaa\nexecuting with FILE=xab\n")]
+#[case::quoted_prefix(&["-l1", "-", "x y"], "executing with FILE='x yaa'\nexecuting with FILE='x yab'\n")]
+#[cfg(unix)]
+fn test_filter_verbose(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .args(&["--verbose", "--filter=cat > /dev/null"])
+        .args(args)
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 #[cfg(unix)]
 fn test_filter_command_fails() {
@@ -525,6 +545,28 @@ fn test_split_obs_lines_within_combined_shorts() {
     assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
+/// Digits that are the value of an option in the same combined short options,
+/// as in `-dn10`, are not an obsolete lines option
+#[test]
+fn test_split_option_value_within_combined_shorts() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "option-value-within-shorts";
+    RandomFile::new(&at, name).add_lines(100);
+
+    ucmd.args(&["-dn10", name]).succeeds().no_output();
+    let glob = Glob::new(&at, ".", r"x\d\d$");
+    assert_eq!(glob.count(), 10);
+    assert_eq!(glob.collate(), at.read_bytes(name));
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    RandomFile::new(&at, name).add_lines(100);
+
+    ucmd.args(&["-xl25", name]).succeeds().no_output();
+    let glob = Glob::new(&at, ".", r"x[[:xdigit:]]{2}$");
+    assert_eq!(glob.count(), 4);
+    assert_eq!(glob.collate(), at.read_bytes(name));
+}
+
 /// Test for obsolete lines option as part of combined short options with tailing suffix length with value
 #[test]
 fn test_split_obs_lines_within_combined_shorts_tailing_suffix_length() {
@@ -635,6 +677,32 @@ fn test_split_obs_lines_as_other_option_value() {
         .args(&["--number", "-e200", "file"])
         .fails_with_code(1)
         .stderr_contains("split: invalid number of chunks: '-e200'\n");
+}
+
+/// A short option that requires value at the end of combined short options, as in `-dl`,
+/// takes the following hyphen prefixed argument as its value
+#[test]
+fn test_split_obs_lines_as_value_of_option_ending_combined_shorts() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+
+    scene
+        .ucmd()
+        .args(&["-dl", "-200", "file"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid number of lines: '-200'\n");
+    scene
+        .ucmd()
+        .args(&["-xa", "-200", "file"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid suffix length: '-200'\n");
+    // `-a` takes `2l` as its value here, so `-5` is not the value of `-l`
+    scene
+        .ucmd()
+        .args(&["-a2l", "-5", "file"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid suffix length: '2l'\n");
 }
 
 #[test]
@@ -880,6 +948,96 @@ fn test_suffix_auto_width_with_number() {
         .fails();
 }
 
+/// Test that a suffix start value too large for the suffix length is rejected
+/// before the input is read, even when the input is empty
+#[rstest]
+#[case::numeric(&["--numeric-suffixes=100"], "")]
+#[case::numeric_with_input(&["--numeric-suffixes=100"], "a\n")]
+#[case::hex(&["--hex-suffixes=100"], "")]
+#[case::hex_with_input(&["--hex-suffixes=100"], "a\n")]
+#[case::length_1(&["-a", "1", "--numeric-suffixes=10"], "")]
+#[case::length_0(&["-a", "0", "--numeric-suffixes=100"], "")]
+#[case::number(&["-n", "2", "--numeric-suffixes=100"], "")]
+#[case::number_with_input(&["-n", "2", "--numeric-suffixes=100"], "a\n")]
+#[case::number_round_robin(&["-n", "r/2", "--hex-suffixes=100"], "")]
+fn test_suffix_start_too_large(#[case] args: &[&str], #[case] input: &str) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in(input)
+        .ignore_stdin_write_error()
+        .fails()
+        .usage_error("numerical suffix start value is too large for the suffix length");
+}
+
+/// Test that the suffix start value is checked before the input is opened
+#[test]
+fn test_suffix_start_too_large_missing_input() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--numeric-suffixes=100", "non-existing"])
+        .fails()
+        .usage_error("numerical suffix start value is too large for the suffix length");
+    assert!(!at.file_exists("x100"));
+}
+
+#[rstest]
+#[case::plus(
+    "--numeric-suffixes=+5",
+    "'+5': invalid start value for numerical suffix"
+)]
+#[case::hex_plus(
+    "--hex-suffixes=+5",
+    "'+5': invalid start value for hexadecimal suffix"
+)]
+#[case::minus(
+    "--numeric-suffixes=-1",
+    "'-1': invalid start value for numerical suffix"
+)]
+#[case::blank(
+    "--numeric-suffixes= 5",
+    "' 5': invalid start value for numerical suffix"
+)]
+#[case::not_hex(
+    "--hex-suffixes=zz",
+    "'zz': invalid start value for hexadecimal suffix"
+)]
+#[case::overflow(
+    "--numeric-suffixes=99999999999999999999",
+    "numerical suffix start value is too large for the suffix length"
+)]
+#[case::hex_overflow(
+    "--hex-suffixes=ffffffffffffffffff",
+    "numerical suffix start value is too large for the suffix length"
+)]
+fn test_invalid_suffix_start(#[case] arg: &str, #[case] error: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(arg).fails().usage_error(error);
+    assert!(!at.file_exists("x05"));
+}
+
+#[rstest]
+#[case::numeric("--numeric-suffixes=")]
+#[case::hex("--hex-suffixes=")]
+fn test_empty_suffix_start_is_zero(#[case] arg: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(arg).pipe_in("a\n").succeeds().no_output();
+    assert_eq!(at.read("x00"), "a\n");
+}
+
+/// Test that a suffix start at or past the number of chunks is not checked
+/// against the auto-width suffix length, but against the default one
+#[test]
+fn test_suffix_start_past_number_of_chunks() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-n", "2", "--numeric-suffixes=98", "fivelines.txt"])
+        .succeeds();
+    assert_eq!(at.read("x98") + &at.read("x99"), at.read("fivelines.txt"));
+
+    new_ucmd!()
+        .args(&["-n", "2", "--numeric-suffixes=99", "fivelines.txt"])
+        .fails()
+        .stderr_only("split: output file suffixes exhausted\n");
+}
+
 /// Test for edge case of specifying 0 for suffix length
 #[test]
 fn test_suffix_length_zero() {
@@ -919,6 +1077,24 @@ fn test_suffix_length_zero() {
 }
 
 #[test]
+fn test_suffix_length_zero_with_number_uses_default_length() {
+    // `-a 0` is the same as no `-a`, so the suffixes start at length 2
+    // even when a shorter suffix would fit the number of chunks.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-n2", "-a0", "fivelines.txt"]).succeeds();
+    assert!(at.file_exists("xaa"));
+    assert!(at.file_exists("xab"));
+    assert!(!at.file_exists("xa"));
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let args = ["-d", "-n10", "-a0", "fivelines.txt"];
+    ucmd.args(&args).succeeds();
+    assert!(at.file_exists("x00"));
+    assert!(at.file_exists("x09"));
+    assert!(!at.file_exists("x0"));
+}
+
+#[test]
 fn test_suffixes_exhausted() {
     new_ucmd!()
         .args(&["-b", "1", "-a", "1", "asciilowercase.txt"])
@@ -932,6 +1108,26 @@ fn test_suffix_length_req() {
         .args(&["-n", "100", "-a", "1", "asciilowercase.txt"])
         .fails()
         .stderr_only("split: the suffix length needs to be at least 2\n");
+}
+
+#[test]
+fn test_suffix_length_req_huge_chunk_count() {
+    // The suffix start plus a chunk count near u64::MAX used to overflow.
+    for (suffixes, required) in [("--numeric-suffixes=5", 20), ("--hex-suffixes=5", 16)] {
+        new_ucmd!()
+            .args(&[
+                "-n",
+                "18446744073709551615",
+                suffixes,
+                "-a",
+                "2",
+                "asciilowercase.txt",
+            ])
+            .fails()
+            .stderr_only(format!(
+                "split: the suffix length needs to be at least {required}\n"
+            ));
+    }
 }
 
 #[test]
@@ -967,7 +1163,7 @@ fn test_number_n() {
     assert_eq!(at.read("xac"), "mnopq");
     assert_eq!(at.read("xad"), "rstuv");
     assert_eq!(at.read("xae"), "wxyz\n");
-    #[cfg(unix)]
+    #[cfg(all(unix, not(wasi_runner)))]
     new_ucmd!()
         .args(&["--number=100", "/dev/null"])
         .succeeds()
@@ -988,7 +1184,7 @@ fn test_number_kth_of_n() {
         .args(&["-e", "--number=99/100", "asciilowercase.txt"])
         .succeeds()
         .stdout_only("");
-    #[cfg(unix)]
+    #[cfg(all(unix, not(wasi_runner)))]
     new_ucmd!()
         .args(&["--number=3/10", "/dev/null"])
         .succeeds()
@@ -1073,6 +1269,22 @@ fn test_split_number_with_io_blksize() {
     assert_eq!(at.read("xae"), "wxyz\n");
 }
 
+/// A small `--io-blksize` forces reads that split lines across buffers and
+/// chunk boundaries that fall in the middle of a read, rather than aligning
+/// with it.
+#[test]
+fn test_split_lines_with_small_io_blksize() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-l", "2", "---io-blksize", "5"])
+        .pipe_in("1\n2\n3\n4\n5\n6\n")
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("xaa"), "1\n2\n");
+    assert_eq!(at.read("xab"), "3\n4\n");
+    assert_eq!(at.read("xac"), "5\n6\n");
+    assert!(!at.plus("xad").exists());
+}
+
 #[test]
 fn test_split_default_with_io_blksize() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1102,6 +1314,7 @@ fn test_split_invalid_io_blksize() {
         .stderr_only("split: invalid IO block size: '2146435072'\n");
 }
 
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
 fn test_split_number_oversized_stdin() {
     new_ucmd!()
@@ -1111,6 +1324,7 @@ fn test_split_number_oversized_stdin() {
         .stdout_only("a".repeat(163));
 }
 
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
 fn test_split_number_by_lines_oversized_stdin() {
     new_ucmd!()
@@ -1120,6 +1334,7 @@ fn test_split_number_by_lines_oversized_stdin() {
         .stdout_only("x\n".repeat(75));
 }
 
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
 fn test_split_number_piped_stdin_files() {
     let scene = TestScenario::new(util_name!());
@@ -1138,6 +1353,7 @@ fn test_split_number_piped_stdin_files() {
     assert_eq!(at.read("xac"), "a".repeat(217));
 }
 
+#[uutests::wasi_ignore(UnsupportedStdApi)]
 #[test]
 fn test_split_number_lines_piped_stdin_files() {
     let scene = TestScenario::new(util_name!());
@@ -1230,6 +1446,7 @@ fn test_elide_empty_files_n_chunks() {
     assert!(!at.plus("xad").exists());
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(unix)]
 fn test_elide_dev_null_n_chunks() {
@@ -1242,6 +1459,7 @@ fn test_elide_dev_null_n_chunks() {
     assert!(!at.plus("xac").exists());
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(unix)]
 fn test_dev_zero() {
@@ -1269,6 +1487,7 @@ fn test_elide_empty_files_l_chunks() {
     assert!(!at.plus("xag").exists());
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(unix)]
 fn test_elide_dev_null_l_chunks() {
@@ -1281,6 +1500,23 @@ fn test_elide_dev_null_l_chunks() {
     assert!(!at.plus("xac").exists());
 }
 
+#[test]
+fn test_elide_empty_files_preserves_line_chunks() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input", "aaaaaa\nb\nc\nd\ne\n");
+    ucmd.args(&["-e", "-n", "l/6", "input"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("xaa"), "aaaaaa\n");
+    assert_eq!(at.read("xab"), "b\n");
+    assert_eq!(at.read("xac"), "c\n");
+    assert_eq!(at.read("xad"), "d\n");
+    assert_eq!(at.read("xae"), "e\n");
+    assert!(!at.plus("xaf").exists());
+}
+
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(unix)]
 fn test_number_by_bytes_dev_zero() {
@@ -1340,6 +1576,7 @@ fn test_number_by_lines_kth_huge_number_of_chunks() {
         .stdout_only("a");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(unix)]
 fn test_number_by_lines_kth_dev_null() {
@@ -1478,6 +1715,33 @@ fn test_guard_input() {
         .fails()
         .stderr_only("split: 'xaa' would overwrite input; aborting\n");
     assert_eq!(at.read("xaa"), "1\n2\n3\n");
+}
+
+/// Reopening an existing output must retain `O_CREAT` so Linux's
+/// `fs.protected_regular` and `fs.protected_fifos` checks apply. A dangling
+/// symlink makes that flag observable without needing a multi-user test.
+#[test]
+#[cfg(all(unix, not(wasi_runner)))]
+fn test_existing_output_is_reopened_with_create() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("input", "AB");
+
+    // An existing caller-owned output must still be truncated.
+    at.write("xaa", "stale contents that are longer than the chunk\n");
+
+    at.symlink_file("xab_target", "xab");
+    assert!(!at.file_exists("xab_target"));
+
+    ucmd.args(&["-b", "1", "input"]).succeeds().no_output();
+
+    assert_eq!(at.read("xaa"), "A");
+    assert!(at.plus("xab").is_symlink());
+    assert_eq!(
+        fs::read_link(at.plus("xab")).unwrap(),
+        at.plus("xab_target")
+    );
+    assert_eq!(at.read("xab_target"), "B");
 }
 
 #[test]
@@ -1731,13 +1995,29 @@ fn test_round_robin() {
 
 #[test]
 // TODO(#7542): Re-enable on Android once we figure out why rlimit is broken.
-// #[cfg(any(target_os = "linux", target_os = "android"))]
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
 fn test_round_robin_limited_file_descriptors() {
     new_ucmd!()
         .args(&["-n", "r/40", "onehundredlines.txt"])
-        .limit(Resource::Nofile, 9, 9)
+        .limit(Resource::NOFILE, 9, 9)
         .succeeds();
+}
+
+// A short write on the last chunk must not be silently dropped: the rest
+// has to be retried so that the resulting error is reported.
+#[test]
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
+fn test_short_write_on_last_chunk_is_reported() {
+    for args in [&["-b", "8192"][..], &["-l", "1"][..]] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("in", &"x".repeat(6000));
+        ucmd.args(args)
+            .arg("in")
+            .limit(Resource::FSIZE, 4096, 4096)
+            .ignore_sigxfsz()
+            .fails_with_code(1)
+            .stderr_contains("File too large");
+    }
 }
 
 #[test]
@@ -1775,6 +2055,7 @@ fn test_split_invalid_input() {
 
 /// Test if there are invalid (non UTF-8) in the arguments - unix
 /// clap is expected to fail/panic
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_split_non_utf8_argument_unix() {
@@ -2070,6 +2351,7 @@ fn test_long_lines() {
     assert!(!at.plus("xad").exists());
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_split_non_utf8_paths() {
@@ -2084,6 +2366,7 @@ fn test_split_non_utf8_paths() {
     assert!(at.plus("xaa").exists());
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_split_non_utf8_prefix_is_byte_preserving() {
@@ -2123,6 +2406,7 @@ fn test_split_non_utf8_prefix_is_byte_preserving() {
     assert_eq!(at.read("p�ab"), "keep-ab");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_split_non_utf8_additional_suffix_is_byte_preserving() {
@@ -2224,6 +2508,7 @@ fn test_split_directory_already_exists() {
     }
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 fn test_io_error() {
@@ -2236,6 +2521,7 @@ fn test_io_error() {
 }
 
 /// Writing a chunk to a full device must be reported and must stop the split.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_write_error_on_full_device() {
@@ -2335,4 +2621,64 @@ fn test_obsolete_lines_not_read_after_double_dash() {
         .args(&["--", "-1"])
         .fails()
         .stderr_contains("cannot open '-1' for reading");
+}
+
+#[rstest]
+#[case::bytes("+2", &[("xaa", "a\nb\n"), ("xab", "c\nd\n")], "")]
+#[case::lines("l/+2", &[("xaa", "a\nb\n"), ("xab", "c\nd\n")], "")]
+#[case::round_robin("r/+2", &[("xaa", "a\nc\n"), ("xab", "b\nd\n")], "")]
+#[case::bytes_first_half("+1/2", &[], "a\nb\n")]
+#[case::lines_first_half("l/+1/2", &[], "a\nb\n")]
+#[case::round_robin_first_half("r/+1/2", &[], "a\nc\n")]
+fn test_number_with_plus_prefix(
+    #[case] number: &str,
+    #[case] expected_files: &[(&str, &str)],
+    #[case] expected_stdout: &str,
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a.txt", "a\nb\nc\nd\n");
+
+    let stdout = ucmd
+        .args(&["-n", number, "a.txt"])
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(stdout, expected_stdout, "-n {number}");
+
+    let mut files: Vec<(String, String)> = fs::read_dir(at.as_string())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .filter(|name| name.to_string_lossy().starts_with('x'))
+        .map(|name| {
+            let contents = at.read(at.plus(&name));
+            (name.to_string_lossy().into_owned(), contents)
+        })
+        .collect();
+    files.sort();
+
+    let expected_files: Vec<(String, String)> = expected_files
+        .iter()
+        .map(|(name, contents)| (name.to_string(), contents.to_string()))
+        .collect();
+    assert_eq!(files, expected_files, "-n {number}");
+}
+
+#[cfg(unix)]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[test]
+fn test_number_filter_exiting_early_keeps_other_chunks() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut data = vec![b'k'; 200_000];
+    data.extend(vec![b'm'; 200_000]);
+    data.extend(vec![b'n'; 200_000]);
+    at.write_bytes("three", &data);
+    // `head -c` is not POSIX and OpenBSD's head lacks it; dd also stops after one byte.
+    ucmd.args(&[
+        "-n",
+        "3",
+        "--filter=dd bs=1 count=1 2>/dev/null > $FILE",
+        "three",
+    ])
+    .succeeds()
+    .no_output();
+    assert_eq!(at.read("xaa") + &at.read("xab") + &at.read("xac"), "kmn");
 }

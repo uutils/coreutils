@@ -12,6 +12,7 @@ use std::io::{BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::show;
 use uucore::translate;
 
 use uucore::format_usage;
@@ -36,8 +37,6 @@ enum FmtError {
     InvalidTabWidth(String),
     #[error("{}", translate!("fmt-error-first-option-width", "option" => .0))]
     FirstOptionWidth(char),
-    #[error("{}", translate!("fmt-error-read"))]
-    ReadError,
     #[error("{}", translate!("fmt-error-invalid-width-malformed", "width" => .0.quote()))]
     InvalidWidthMalformed(String),
 }
@@ -71,6 +70,7 @@ mod options {
     pub const QUICK: &str = "quick";
     pub const TAB_WIDTH: &str = "tab-width";
     pub const FILES_OR_WIDTH: &str = "files";
+    pub const FILES_AFTER_DASHES: &str = "files-after-dashes";
 }
 
 pub type FileOrStdReader = BufReader<Box<dyn Read + 'static>>;
@@ -112,10 +112,8 @@ impl FmtOptions {
         let xprefix = matches.get_flag(options::EXACT_PREFIX);
         let xanti_prefix = matches.get_flag(options::EXACT_SKIP_PREFIX);
 
-        let prefix = matches.get_one::<String>(options::PREFIX).map(String::from);
-        let anti_prefix = matches
-            .get_one::<String>(options::SKIP_PREFIX)
-            .map(String::from);
+        let prefix = matches.get_one::<String>(options::PREFIX).cloned();
+        let anti_prefix = matches.get_one::<String>(options::SKIP_PREFIX).cloned();
 
         let width_opt = extract_width(matches)?;
         let goal_opt_str = matches.get_one::<String>(options::GOAL);
@@ -209,16 +207,31 @@ fn process_file(
         Box::new(stdin()) as Box<dyn Read + 'static>
     } else {
         let path = Path::new(file_name);
-        let f = File::open(path).map_err_context(
-            || translate!("fmt-error-cannot-open-for-reading", "file" => path.quote()),
-        )?;
-        if f.metadata()
-            .map_err_context(
-                || translate!("fmt-error-cannot-get-metadata", "file" => path.quote()),
-            )?
-            .is_dir()
-        {
-            return Err(FmtError::ReadError.into());
+        // Like GNU fmt, report a file that can't be read and go on with the next one.
+        let f = match File::open(path) {
+            Ok(f) => f,
+            Err(e) => {
+                show!(e.map_err_context(
+                    || translate!("fmt-error-cannot-open-for-reading", "file" => path.quote())
+                ));
+                return Ok(());
+            }
+        };
+        match f.metadata() {
+            Ok(m) if m.is_dir() => {
+                show!(USimpleError::new(
+                    1,
+                    translate!("fmt-error-reading-is-directory", "file" => path.quote())
+                ));
+                return Ok(());
+            }
+            Ok(_) => {}
+            Err(e) => {
+                show!(e.map_err_context(
+                    || translate!("fmt-error-cannot-get-metadata", "file" => path.quote())
+                ));
+                return Ok(());
+            }
         }
 
         Box::new(f) as Box<dyn Read + 'static>
@@ -227,13 +240,21 @@ fn process_file(
     let p_stream = ParagraphStream::new(fmt_opts, &mut fp);
     for para_result in p_stream {
         match para_result {
-            Err(s) => {
+            Err(parasplit::ParagraphStreamError::IoError(e)) => {
+                show!(e.map_err_context(
+                    || translate!("fmt-error-read", "file" => Path::new(file_name).quote())
+                ));
+                break;
+            }
+            Err(parasplit::ParagraphStreamError::NoFormatLine(nfl)) => {
                 ostream
-                    .write_all(&s)
+                    .write_all(&nfl.line)
                     .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?;
-                ostream
-                    .write_all(b"\n")
-                    .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?;
+                if nfl.newline {
+                    ostream
+                        .write_all(b"\n")
+                        .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?;
+                }
             }
             Ok(para) => break_lines(&para, fmt_opts, ostream)
                 .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?,
@@ -258,7 +279,7 @@ fn extract_files(matches: &ArgMatches) -> UResult<Vec<OsString>> {
     let in_first_pos = matches
         .index_of(options::FILES_OR_WIDTH)
         .is_some_and(|x| x == 1);
-    let is_neg = |s: &str| s.parse::<isize>().is_ok_and(|w| w < 0);
+    let is_width = |s: &str| s.starts_with('-') && s.parse::<isize>().is_ok_and(|w| w <= 0);
 
     let files: UResult<Vec<OsString>> = matches
         .get_many::<OsString>(options::FILES_OR_WIDTH)
@@ -267,7 +288,7 @@ fn extract_files(matches: &ArgMatches) -> UResult<Vec<OsString>> {
         .enumerate()
         .filter_map(|(i, x)| {
             let x_str = x.to_string_lossy();
-            if is_neg(&x_str) {
+            if is_width(&x_str) {
                 if in_first_pos && i == 0 {
                     None
                 } else {
@@ -281,6 +302,13 @@ fn extract_files(matches: &ArgMatches) -> UResult<Vec<OsString>> {
                 Some(Ok(x.clone()))
             }
         })
+        .chain(
+            matches
+                .get_many::<OsString>(options::FILES_AFTER_DASHES)
+                .into_iter()
+                .flatten()
+                .map(|x| Ok(x.clone())),
+        )
         .collect();
 
     if files.as_ref().is_ok_and(Vec::is_empty) {
@@ -315,9 +343,47 @@ fn extract_width(matches: &ArgMatches) -> UResult<Option<usize>> {
     }
 }
 
+/// Keep a leading `=` in an attached short prefix value. Clap consumes it as
+/// an option/value separator, whereas fmt treats it as part of the prefix.
+fn preserve_prefix_equals(args: &mut [OsString]) -> UResult<()> {
+    let app = uu_app();
+    let flags: Vec<_> = app
+        .get_arguments()
+        .filter(|arg| matches!(arg.get_action(), ArgAction::SetTrue))
+        .filter_map(Arg::get_short)
+        .filter(char::is_ascii)
+        .map(|short| short as u8)
+        .collect();
+    for arg in args.iter_mut().skip(1) {
+        if arg == "--" {
+            break;
+        }
+        let bytes = arg.as_encoded_bytes();
+        let Some(short) = bytes.strip_prefix(b"-") else {
+            continue;
+        };
+        for (index, option) in short.iter().enumerate() {
+            match option {
+                b'p' | b'P' => {
+                    if short.get(index + 1) == Some(&b'=') {
+                        let mut value = bytes.to_vec();
+                        value.insert(index + 2, b'=');
+                        *arg = uucore::os_str_from_bytes(&value)?.to_os_string();
+                    }
+                    break;
+                }
+                option if flags.contains(option) => {}
+                // Another option may consume the remainder as its value.
+                _ => break,
+            }
+        }
+    }
+    Ok(())
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args: Vec<_> = args.collect();
+    let mut args: Vec<_> = args.collect();
 
     // Warn the user if it looks like we're trying to pass a number in the first
     // argument with non-numeric characters
@@ -335,6 +401,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
+    preserve_prefix_equals(&mut args)?;
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), &args)?;
 
     let files = extract_files(&matches)?;
@@ -460,6 +527,13 @@ pub fn uu_app() -> Command {
                 .value_parser(clap::value_parser!(OsString))
                 .allow_negative_numbers(true),
         )
+        .arg(
+            Arg::new(options::FILES_AFTER_DASHES)
+                .action(ArgAction::Append)
+                .value_parser(clap::value_parser!(OsString))
+                .last(true)
+                .hide(true),
+        )
 }
 
 #[cfg(test)]
@@ -513,5 +587,22 @@ mod tests {
 
         assert_eq!(extract_files(&matches).unwrap(), vec!["some-file"]);
         assert_eq!(extract_width(&matches).ok(), Some(Some(3)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn preserve_equals_before_non_utf8_prefix() {
+        use super::preserve_prefix_equals;
+        use std::ffi::OsString;
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+        for (input, expected) in [
+            (b"-p=\xff".as_slice(), b"-p==\xff".as_slice()),
+            (b"-uP=\xff".as_slice(), b"-uP==\xff".as_slice()),
+        ] {
+            let mut args = vec![OsString::from("fmt"), OsString::from_vec(input.to_vec())];
+            preserve_prefix_equals(&mut args).unwrap();
+            assert_eq!(args[1].as_bytes(), expected);
+        }
     }
 }

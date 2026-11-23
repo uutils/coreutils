@@ -146,12 +146,14 @@ fn test_hex_identifier_in_wrong_place() {
         .usage_error("invalid floating point argument: '1234ABCD0x'");
 }
 
-#[test]
-fn test_rejects_nan() {
+#[rstest]
+#[case("NaN")]
+#[case("nan(1)")]
+fn test_rejects_nan(#[case] arg: &str) {
     new_ucmd!()
-        .arg("NaN")
+        .arg(arg)
         .fails()
-        .usage_error("invalid 'not-a-number' argument: 'NaN'");
+        .usage_error(format!("invalid 'not-a-number' argument: '{arg}'"));
 }
 
 #[test]
@@ -178,6 +180,37 @@ fn test_option_with_detected_negative_argument() {
         .args(&["-1", "2"])
         .succeeds()
         .stdout_is("-1,0,1,2\n");
+}
+
+#[rstest]
+#[case::unknown_long(&["--no-such-flag"])]
+#[case::unknown_short(&["-x", "1"])]
+#[case::inf(&["-inf", "1"])]
+fn test_option_like_argument_before_operands(#[case] args: &[&str]) {
+    // in front of the first operand, an argument starting with "-" is an
+    // option unless a digit or "." follows, so these are not numbers
+    new_ucmd!()
+        .args(args)
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("unexpected argument");
+}
+
+#[rstest]
+#[case::after_operand(&["1", "--no-such-flag"], "--no-such-flag")]
+#[case::after_double_dash(&["--", "-x"], "-x")]
+fn test_option_like_argument_as_operand(#[case] args: &[&str], #[case] arg: &str) {
+    new_ucmd!()
+        .args(args)
+        .fails()
+        .usage_error(format!("invalid floating point argument: '{arg}'"));
+}
+
+#[rstest]
+#[case::separator(&["--separator", "-x", "1", "3"], "1-x2-x3\n")]
+#[case::negative_first(&["-w", "-.5", "1"], "-0.5\n00.5\n")]
+fn test_hyphen_values_before_operands(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!().args(args).succeeds().stdout_is(expected);
 }
 
 #[test]
@@ -232,6 +265,7 @@ fn test_width_invalid_float() {
         .usage_error("invalid floating point argument: '1e2.3'");
 }
 
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
 #[cfg(unix)]
 fn test_sigpipe_ignored_reports_write_error() {
@@ -296,6 +330,7 @@ fn test_separator_and_terminator() {
         .stdout_is("2\\n3\\n4\\n5\\n6\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
 fn test_separator_non_utf8() {
@@ -319,6 +354,7 @@ fn test_separator_non_utf8() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
 fn test_terminator_non_utf8() {
@@ -696,7 +732,8 @@ fn test_width_floats() {
 }
 
 /// Test infinite sequences - these produce endless output, so we check they start correctly
-/// and terminate with SIGPIPE on Unix (or succeed on non-Unix where pipe behavior differs).
+/// and terminate with SIGPIPE on Unix, a write error on WASI (which reports a closed pipe as a
+/// generic I/O error rather than delivering a signal), or succeed on other non-Unix platforms.
 #[rstest]
 #[case::neg_inf(
     &["--", "-inf", "0"],
@@ -734,10 +771,17 @@ fn test_infinite_sequence(#[case] args: &[&str], #[case] expected_start: &[u8]) 
     let result = new_ucmd!()
         .args(args)
         .run_stdout_starts_with(expected_start);
-    #[cfg(unix)]
-    result.signal_name_is("PIPE");
-    #[cfg(not(unix))]
-    result.success();
+    #[cfg(not(wasi_runner))]
+    {
+        #[cfg(unix)]
+        result.signal_name_is("PIPE");
+        #[cfg(not(unix))]
+        result.success();
+    }
+    #[cfg(wasi_runner)]
+    result
+        .code_is(1)
+        .stderr_contains("seq: write error: I/O error");
 }
 
 #[test]
@@ -1252,4 +1296,71 @@ fn test_format_zero_precision_above_formatter_limit() {
         .args(&["-f", "%.70000e", "0", "0"])
         .succeeds()
         .stdout_only(format!("0.{}e+00\n", "0".repeat(70000)));
+}
+
+/// The increment is never printed, so its sign and leading zeros must not widen
+/// the output; only its fractional digits count (like for the other arguments).
+#[rstest]
+#[case::negative_increment(&["-w", "5", "-1", "3"], "5\n4\n3\n")]
+#[case::negative_increment_to_zero(&["-w", "1", "-1", "0"], "1\n0\n")]
+#[case::negative_increment_fractional(&["-w", "2", "-1.5", "0"], "2.0\n0.5\n")]
+#[case::negative_hex_increment(&["-w", "5", "-0x1", "3"], "5\n4\n3\n")]
+#[case::leading_zeros_increment(&["-w", "1", "007", "8"], "1\n8\n")]
+#[case::leading_zeros_increment_negative_start(&["-w", "99", "-007", "80"], "99\n92\n85\n")]
+#[case::plus_sign_increment(&["-w", "1", "+02", "5"], "1\n3\n5\n")]
+#[case::wide_increment(&["-w", "1", "100", "3"], "1\n")]
+#[case::scientific_increment(&["-w", "1", "1e2", "3"], "1\n")]
+#[case::wide_fractional_increment(&["-w", "1", "007.5", "9"], "1.0\n8.5\n")]
+#[case::fractional_increment(&["-w", "1", ".5", "2"], "1.0\n1.5\n2.0\n")]
+#[case::fractional_negative_increment(&["-w", "1", "-1.5", "-3"], "01.0\n-0.5\n-2.0\n")]
+#[case::fractional_increment_trailing_zero(&["-w", "1", "0.50", "2"], "1.00\n1.50\n2.00\n")]
+#[case::narrow_increment_unchanged(&["-w", "10", "-3", "1"], "10\n07\n04\n01\n")]
+#[case::narrow_increment_negative_range(&["-w", "-5", "-1", "-7"], "-5\n-6\n-7\n")]
+#[case::sign_of_last_still_counts(&["-w", "5", "-10", "-20"], "005\n-05\n-15\n")]
+#[case::zero_padded_last_still_counts(&["-w", "1", "1", "003"], "001\n002\n003\n")]
+fn test_equal_width_ignores_increment_integer_width(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!().args(args).succeeds().stdout_only(expected);
+}
+
+#[test]
+fn test_repeated_option_last_one_wins() {
+    new_ucmd!()
+        .args(&["-w", "-w", "8", "10"])
+        .succeeds()
+        .stdout_only("08\n09\n10\n");
+    new_ucmd!()
+        .args(&["-s", ",", "-s", ":", "3"])
+        .succeeds()
+        .stdout_only("1:2:3\n");
+}
+
+#[rstest]
+#[case::pos_inf_down_to_pos_inf(&["inf", "-1", "inf"], "inf\n")]
+#[case::neg_inf_up_to_neg_inf(&["--", "-inf", "3", "-inf"], "-inf\n")]
+#[case::inf_plus_neg_inf_is_nan(&["inf", "-inf", "0"], "inf\n")]
+#[ignore = "seq must stop once the value no longer changes"]
+fn test_stalled_value_stops(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .args(args)
+        .timeout(std::time::Duration::from_secs(5))
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[cfg(unix)]
+#[rstest]
+#[case::comma_operands(&["0,25", "0,25", "1"], "0,25\n0,50\n0,75\n1,00\n")]
+#[case::negative_comma_first(&["-,75", "1"], "-0,75\n0,25\n")]
+#[case::negative_comma_increment(&["2", "-0,5", "1"], "2,0\n1,5\n1,0\n")]
+#[ignore = "operands using the locale's decimal point must be accepted"]
+fn test_locale_decimal_point_operands(#[case] args: &[&str], #[case] expected: &str) {
+    let locale = "fr_FR.UTF-8";
+    if !uutests::util::is_locale_available(locale) {
+        return;
+    }
+    new_ucmd!()
+        .args(args)
+        .env("LC_ALL", locale)
+        .succeeds()
+        .stdout_only(expected);
 }

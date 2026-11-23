@@ -16,17 +16,16 @@ use std::convert::identity;
 use std::env;
 use std::fs::{self, exists};
 use std::io;
-use std::path::{Path, PathBuf, StripPrefixError};
+use std::path::{Component, Path, PathBuf, StripPrefixError};
 
 use indicatif::ProgressBar;
 use uucore::display::Quotable;
-use uucore::error::{UIoError, set_exit_code};
+use uucore::error::set_exit_code;
 use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, canonicalize, path_ends_with_terminator,
 };
 use uucore::show;
 use uucore::translate;
-use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -71,8 +70,10 @@ fn adjust_canonicalization(p: &Path) -> Cow<'_, Path> {
 
 /// Get a descendant path relative to the given parent directory.
 ///
-/// If `root_parent` is `None`, then this just returns the `path`
-/// itself. Otherwise, this function strips the parent prefix from the
+/// If `root_parent` is `None` (the source is a filesystem root), then
+/// this returns the `path` without its drive prefix and root directory,
+/// so that joining it to the target does not discard the target.
+/// Otherwise, this function strips the parent prefix from the
 /// given `path`, leaving only the portion of the path relative to the
 /// parent.
 fn get_local_to_root_parent(
@@ -92,7 +93,10 @@ fn get_local_to_root_parent(
             let path = path.strip_prefix(parent)?;
             Ok(path.to_path_buf())
         }
-        None => Ok(path.to_path_buf()),
+        None => Ok(path
+            .components()
+            .filter(|c| !matches!(c, Component::Prefix(_) | Component::RootDir))
+            .collect()),
     }
 }
 
@@ -107,34 +111,35 @@ struct Context<'a> {
     /// The current working directory at the time of starting the traversal.
     current_dir: PathBuf,
 
-    /// The path to the parent of the source directory, if any.
+    /// The base that entry paths are made relative to: the parent of the
+    /// source directory, or the source directory itself.
     root_parent: Option<PathBuf>,
 
     /// The target path to which the directory will be copied.
     target: &'a Path,
-
-    /// The source path from which the directory will be copied.
-    root: &'a Path,
 }
 
-// True if the path ends with a dot component (e.g. ".", "./", "dir/.").
-fn ends_with_curdir(path: &Path) -> bool {
+// True if the path ends with a "." or ".." component (e.g. ".", "dir/.", "..", "dir/../").
+fn ends_with_dot_component(path: &Path) -> bool {
     let mut bytes = path.as_os_str().as_encoded_bytes();
     while let [rest @ .., b'/' | b'\\'] = bytes {
         bytes = rest;
     }
-    bytes == b"." || bytes.ends_with(b"/.") || bytes.ends_with(b"\\.")
+    let last = bytes.rsplit(|&b| b == b'/' || b == b'\\').next();
+    matches!(last, Some(b"." | b".."))
 }
 
 impl<'a> Context<'a> {
-    fn new(root: &'a Path, target: &'a Path) -> io::Result<Self> {
+    fn new(root: &'a Path, target: &'a Path, no_target_dir: bool) -> io::Result<Self> {
         let current_dir = if root.is_absolute() {
             PathBuf::new()
         } else {
             env::current_dir()?
         };
         let root_path = current_dir.join(root);
-        let root_parent = if target.exists() && !ends_with_curdir(root) {
+        // With `-T` the contents of `root` go directly into `target`, so
+        // destination paths are always relative to `root` itself.
+        let root_parent = if !no_target_dir && target.exists() && !ends_with_dot_component(root) {
             root_path.parent().map(ToOwned::to_owned)
         } else {
             Some(root_path)
@@ -143,7 +148,6 @@ impl<'a> Context<'a> {
             current_dir,
             root_parent,
             target,
-            root,
         })
     }
 }
@@ -200,31 +204,33 @@ impl Entry {
         let source = source.as_ref();
         let source_relative = source.to_path_buf();
         let source_absolute = context.current_dir.join(&source_relative);
-        let mut descendant =
+        let descendant =
             get_local_to_root_parent(&source_absolute, context.root_parent.as_deref())?;
-        if no_target_dir {
-            let source_is_dir = source.is_dir();
-            if path_ends_with_terminator(context.target)
-                && source_is_dir
-                && !exists(context.target).is_ok_and(identity)
-            {
-                if let Err(e) = fs::create_dir_all(context.target) {
-                    eprintln!(
-                        "{}",
-                        translate!("cp-error-failed-to-create-directory", "error" => e)
-                    );
-                }
-            } else if let Some(stripped) = context
-                .root
-                .components()
-                .next_back()
-                .and_then(|stripped| descendant.strip_prefix(stripped).ok())
-            {
-                descendant = stripped.to_path_buf();
-            }
+        if no_target_dir
+            && path_ends_with_terminator(context.target)
+            && source.is_dir()
+            && !exists(context.target).is_ok_and(identity)
+            && let Err(e) = fs::create_dir_all(context.target)
+        {
+            eprintln!(
+                "{}",
+                translate!("cp-error-failed-to-create-directory", "error" => e)
+            );
         }
 
-        let local_to_target = context.target.join(descendant);
+        // `join("")` adds a separator that makes `copy_direntry` look through a
+        // symlinked target; only `src/.` or `src/..` without `-T` keeps it, to copy into it.
+        let local_to_target = if descendant.as_os_str().is_empty()
+            && (no_target_dir
+                || !context
+                    .root_parent
+                    .as_deref()
+                    .is_some_and(ends_with_dot_component))
+        {
+            context.target.to_path_buf()
+        } else {
+            context.target.join(descendant)
+        };
         Ok(Self {
             source_absolute,
             source_relative,
@@ -323,14 +329,7 @@ fn copy_direntry(
             // cause us to continue walking the directory?
             match err {
                 CpError::IoErrContext(e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
-                    show!(uio_error!(
-                        e,
-                        "{}",
-                        translate!(
-                            "cp-error-cannot-open-for-reading",
-                            "source" => entry.source_relative.quote()
-                        ),
-                    ));
+                    show!(CpError::CannotOpenForReading(entry.source_relative.clone()));
                 }
                 e => return Err(e),
             }
@@ -406,38 +405,39 @@ pub(crate) fn copy_directory(
     let parents_dest = options.parents.then(|| target.join(root));
     let mut parent_dirs = Vec::new();
     let mut copy_tree = || -> CopyResult<()> {
-        let tmp =
-            match (parents_dest.as_ref(), root.parent()) {
-                (Some(parents_dest), Some(parent)) => {
-                    create_parent_dirs(root, parents_dest, options, &mut parent_dirs)?;
-                    if root.components().next_back().is_some_and(|component| {
-                        matches!(component, std::path::Component::ParentDir)
-                    }) {
-                        build_dir(parents_dest, false, options, Some(root)).map_err(
-                            |err| match err {
-                                CpError::IoErr(io_err) => CpError::IoErrContext(
-                                    io_err,
-                                    format!("cannot create directory {}", parents_dest.quote()),
-                                ),
-                                err => err,
-                            },
-                        )?;
-                    }
-                    if options.verbose {
-                        // For example, if copying file `a/b/c` and its parents
-                        // to directory `d/`, then print
-                        //
-                        //     a -> d/a
-                        //     a/b -> d/a/b
-                        //
-                        for (x, y) in aligned_ancestors(root, parents_dest) {
-                            println!("{} -> {}", x.display(), y.display());
-                        }
-                    }
-                    target.join(parent)
+        let tmp = match (parents_dest.as_ref(), root.parent()) {
+            (Some(parents_dest), Some(parent)) => {
+                create_parent_dirs(root, parents_dest, options, &mut parent_dirs)?;
+                if root
+                    .components()
+                    .next_back()
+                    .is_some_and(|component| matches!(component, Component::ParentDir))
+                {
+                    build_dir(parents_dest, false, options, Some(root)).map_err(
+                        |err| match err {
+                            CpError::IoErr(io_err) => CpError::IoErrContext(
+                                io_err,
+                                format!("cannot create directory {}", parents_dest.quote()),
+                            ),
+                            err => err,
+                        },
+                    )?;
                 }
-                _ => target.to_path_buf(),
-            };
+                if options.verbose {
+                    // For example, if copying file `a/b/c` and its parents
+                    // to directory `d/`, then print
+                    //
+                    //     a -> d/a
+                    //     a/b -> d/a/b
+                    //
+                    for (x, y) in aligned_ancestors(root, parents_dest) {
+                        println!("{} -> {}", x.display(), y.display());
+                    }
+                }
+                target.join(parent)
+            }
+            _ => target.to_path_buf(),
+        };
         let target = tmp.as_path();
 
         let preserve_hard_links = options.preserve_hard_links();
@@ -445,7 +445,7 @@ pub(crate) fn copy_directory(
         // Collect some paths here that are invariant during the traversal
         // of the given directory, like the current working directory and
         // the target directory.
-        let context = match Context::new(root, target) {
+        let context = match Context::new(root, target, options.no_target_dir) {
             Ok(c) => c,
             Err(e) => {
                 return Err(translate!("cp-error-failed-get-current-dir", "error" => e).into());
@@ -695,4 +695,26 @@ fn build_dir(
 
     builder.create(path)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_local_to_root_parent_without_parent_is_relative() {
+        // Copying a filesystem root (`cp -r / dst`, or `cp -r W:/ dst` on
+        // Windows) has no parent; the result must not be absolute, or
+        // `target.join(..)` would discard the target.
+        let local = get_local_to_root_parent(Path::new("/a/b"), None).unwrap();
+        assert_eq!(local, Path::new("a").join("b"));
+        assert!(local.is_relative());
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_local_to_root_parent_without_parent_drops_drive() {
+        let local = get_local_to_root_parent(Path::new("W:/id.dat"), None).unwrap();
+        assert_eq!(local, Path::new("id.dat"));
+    }
 }

@@ -4,14 +4,14 @@
 // file that was distributed with this source code.
 
 use crate::platform::Writer;
+use crate::platform::output_file::open_output_file;
 use std::env;
 use std::ffi::{OsStr, OsString};
-use std::io::{Error, Result};
-use std::io::{ErrorKind, Write};
+use std::io::Result;
+use std::io::Write;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
-use uucore::display::Quotable;
-use uucore::error::{USimpleError, strip_errno};
+use uucore::error::USimpleError;
 use uucore::fs;
 use uucore::fs::FileInformation;
 use uucore::show;
@@ -135,80 +135,12 @@ pub fn instantiate_current_writer(
     is_new: bool,
 ) -> Result<Writer> {
     match filter {
-        None => {
-            let file = if is_new {
-                create_or_truncate_output_file(input, filename)?
-            } else {
-                // re-open file that we previously created to append to it
-                let file = std::fs::OpenOptions::new()
-                    .append(true)
-                    .open(Path::new(filename))
-                    .map_err(|_| {
-                        Error::other(translate!(
-                            "split-error-unable-to-reopen-file",
-                            "file" => filename.quote()
-                        ))
-                    })?;
-
-                if input_and_output_refer_to_same_file(input, &file) {
-                    return Err(Error::other(
-                        translate!("split-error-would-overwrite-input", "file" => filename.quote()),
-                    ));
-                }
-
-                file
-            };
-            Ok(Writer::File(file))
-        }
+        None => Ok(Writer::File(open_output_file(input, filename, is_new)?)),
         Some(filter_command) => Ok(
             // spawn a shell command and write to it
             Writer::Filter(FilterWriter::new(filter_command, filename)?),
         ),
     }
-}
-
-fn create_or_truncate_output_file(input: &OsStr, filename: &OsStr) -> Result<std::fs::File> {
-    match std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(Path::new(filename))
-    {
-        Ok(file) => Ok(file),
-        Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-            let file = std::fs::OpenOptions::new()
-                .write(true)
-                .open(Path::new(filename))
-                .map_err(|e| open_file_error(filename, e))?;
-
-            if input_and_output_refer_to_same_file(input, &file) {
-                return Err(Error::other(
-                    translate!("split-error-would-overwrite-input", "file" => filename.quote()),
-                ));
-            }
-
-            match file.set_len(0) {
-                // allow writing to symlink to nonseekable
-                Err(e) if e.kind() != ErrorKind::InvalidInput => Err(open_file_error(filename, e)),
-                _ => Ok(file),
-            }
-        }
-        Err(e) => Err(open_file_error(filename, e)),
-    }
-}
-
-fn open_file_error(filename: &OsStr, e: Error) -> Error {
-    let e = strip_errno(&e);
-    Error::other(format!("{}: {e}", filename.quote()))
-}
-
-fn input_and_output_refer_to_same_file(input: &OsStr, output: &std::fs::File) -> bool {
-    let input_info = if input == "-" {
-        FileInformation::from_file(&std::io::stdin())
-    } else {
-        FileInformation::from_path(Path::new(input), true)
-    };
-
-    fs::infos_refer_to_same_file(input_info, FileInformation::from_file(output))
 }
 
 pub fn paths_refer_to_same_file(p1: &OsStr, p2: &OsStr) -> bool {

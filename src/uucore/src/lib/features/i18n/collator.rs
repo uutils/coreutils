@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::{cmp::Ordering, sync::OnceLock};
+use std::cmp::Ordering;
+use std::sync::OnceLock;
 
 use icu_collator::{self, CollatorBorrowed};
 

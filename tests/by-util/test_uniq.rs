@@ -5,7 +5,7 @@
 
 // spell-checker:ignore nabcd badoption schar nosuchfile
 
-use uucore::posix::OBSOLETE;
+use rstest::rstest;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -178,6 +178,18 @@ fn test_repeated_all_repeated_uses_final_delimiter() {
         .pipe_in(DUPLICATE_RUNS)
         .succeeds()
         .stdout_is("copper\ncopper\n\ngold\ngold\n");
+}
+
+#[rstest]
+#[case::abbreviated("-D=n")]
+#[case::full("-D=prepend")]
+#[case::clustered("-uD=separate")]
+fn test_short_all_repeated_takes_no_method(#[case] arg: &str) {
+    new_ucmd!()
+        .arg(arg)
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("unexpected argument '-=' found");
 }
 
 #[test]
@@ -1120,7 +1132,7 @@ fn uniq_basic_dedup_cases() {
             input: "",
             stdout: Some(""),
             stderr: Some(concat!(
-                "error: the argument '--group[=<group-method>]' cannot be used with '--all-repeated[=<delimit-method>]'\n",
+                "error: the argument '--group[=<group-method>]' cannot be used with '-D'\n",
                 "\n",
                 "For more information, try '--help'.\n"
             )),
@@ -1150,10 +1162,6 @@ fn uniq_basic_dedup_cases() {
 
         // first - run a version of tests with regular file as input
         eprintln!("Test {}", case.name);
-        // set environment variable for obsolete skip char option tests
-        if case.name.starts_with("obs-plus") {
-            ucmd.env("_POSIX2_VERSION", OBSOLETE.to_string());
-        }
         let result = ucmd.args(case.args).arg("input-file").run();
         if let Some(stdout) = case.stdout {
             result.stdout_is(stdout);
@@ -1171,12 +1179,7 @@ fn uniq_basic_dedup_cases() {
         // For now we treat it as equivalent of piped in stdin variant
         // as in `cat input-file | uniq`
         eprintln!("Test {}.stdin", case.name);
-        // set environment variable for obsolete skip char option tests
-        let mut ucmd = new_ucmd!();
-        if case.name.starts_with("obs-plus") {
-            ucmd.env("_POSIX2_VERSION", OBSOLETE.to_string());
-        }
-        let result = ucmd.args(case.args).run_piped_stdin(case.input);
+        let result = new_ucmd!().args(case.args).run_piped_stdin(case.input);
         if let Some(stdout) = case.stdout {
             result.stdout_is(stdout);
         }
@@ -1189,8 +1192,8 @@ fn uniq_basic_dedup_cases() {
     }
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: locale database not visible")]
 fn test_stdin_w1_multibyte() {
     let input = "à\ná\n";
     new_ucmd!()
@@ -1199,6 +1202,62 @@ fn test_stdin_w1_multibyte() {
         .pipe_in(input)
         .succeeds()
         .stdout_is("à\ná\n");
+}
+
+#[uutests::wasi_ignore(NoLocaleData)]
+#[test]
+fn test_skip_chars_multibyte() {
+    // Skipping two characters leaves "y" and "xy", which differ.
+    new_ucmd!()
+        .args(&["-s", "2", "-c"])
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in("éxy\nABxy\n")
+        .succeeds()
+        .stdout_is("      1 éxy\n      1 ABxy\n");
+    // In the C locale, two bytes are skipped and both keys are "xy".
+    new_ucmd!()
+        .args(&["-s", "2", "-c"])
+        .env("LC_ALL", "C")
+        .pipe_in("éxy\nABxy\n")
+        .succeeds()
+        .stdout_is("      2 éxy\n");
+}
+
+#[uutests::wasi_ignore(NoLocaleData)]
+#[test]
+fn test_skip_chars_with_check_chars_multibyte() {
+    // Skip one character, then compare one: é, é and è.
+    new_ucmd!()
+        .args(&["-s", "1", "-w", "1", "-c"])
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in("xé1\nyé2\nzè3\n")
+        .succeeds()
+        .stdout_is("      2 xé1\n      1 zè3\n");
+    // In the C locale both count bytes: the first byte of é and è is the same.
+    new_ucmd!()
+        .args(&["-s", "1", "-w", "1", "-c"])
+        .env("LC_ALL", "C")
+        .pipe_in("xé1\nyé2\nzè3\n")
+        .succeeds()
+        .stdout_is("      3 xé1\n");
+}
+
+#[uutests::wasi_ignore(NoLocaleData)]
+#[test]
+fn test_skip_chars_invalid_utf8_counts_bytes() {
+    // Invalid UTF-8 falls back to bytes, as for -w.
+    new_ucmd!()
+        .args(&["-s", "3", "-c"])
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(&b"a\xff\xfeX\nb\xff\xfeY\n"[..])
+        .succeeds()
+        .stdout_is_bytes(&b"      1 a\xff\xfeX\n      1 b\xff\xfeY\n"[..]);
+    new_ucmd!()
+        .args(&["-s", "1", "-w", "2", "-c"])
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(&b"a\xff\xfeX\nb\xff\xfeY\n"[..])
+        .succeeds()
+        .stdout_is_bytes(&b"      2 a\xff\xfeX\n"[..]);
 }
 
 #[test]
@@ -1223,6 +1282,78 @@ fn test_failed_write_is_reported() {
         .stderr_is("uniq: write error: No space left on device\n");
 }
 
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
+mod read_errors {
+    use rustix::termios::{OptionalActions, OutputModes, tcgetattr, tcsetattr};
+    use std::io::Write;
+    use uutests::{new_ucmd, util::pty_path};
+
+    fn check_read_error(args: &[&str], input: &[u8], expected: &[u8]) {
+        let (_, controller, mut replica) = pty_path();
+        let mut termios = tcgetattr(&replica).unwrap();
+        // Preserve the input bytes, including newlines and NUL delimiters.
+        termios.output_modes.remove(OutputModes::OPOST);
+        tcsetattr(&replica, OptionalActions::Now, &termios).unwrap();
+        replica.write_all(input).unwrap();
+        // Linux reads the queued bytes before returning EIO once the replica closes.
+        drop(replica);
+
+        new_ucmd!()
+            .args(args)
+            .set_stdin(controller)
+            .fails_with_code(1)
+            .stdout_is_bytes(expected)
+            .stderr_contains("uniq: read error:");
+    }
+
+    #[test]
+    fn test_read_error_preserves_complete_lines() {
+        for (input, expected) in [
+            (&b"cedar\nmaple\n"[..], &b"cedar\nmaple\n"[..]),
+            (b"cedar\ncedar\n", b"cedar\n"),
+            (b"cedar\nmaple", b"cedar\n"),
+            (b"cedar\ncedar", b"cedar\n"),
+            (b"\n\n", b"\n"),
+            (b"partial", b""),
+            (b"", b""),
+        ] {
+            check_read_error(&[], input, expected);
+        }
+    }
+
+    #[test]
+    fn test_read_error_preserves_zero_terminated_lines() {
+        check_read_error(&["-z"], b"cedar\0maple\0partial", b"cedar\0maple\0");
+    }
+
+    #[test]
+    fn test_read_error_preserves_group_delimiters() {
+        for (arg, expected) in [
+            ("--group=separate", &b"cedar\ncedar\n\nmaple\n"[..]),
+            ("--group=prepend", b"\ncedar\ncedar\n\nmaple\n"),
+            ("--group=append", b"cedar\ncedar\n\nmaple\n\n"),
+            ("--group=both", b"\ncedar\ncedar\n\nmaple\n\n"),
+        ] {
+            check_read_error(&[arg], b"cedar\ncedar\nmaple\npartial", expected);
+        }
+    }
+
+    #[test]
+    fn test_read_error_does_not_finalize_counts_or_filtered_groups() {
+        for (arg, input, expected) in [
+            ("-c", &b"cedar\nmaple\n"[..], &b"      1 cedar\n"[..]),
+            ("-c", b"cedar\nmaple", b""),
+            ("-c", b"cedar\ncedar\n", b""),
+            ("-u", b"cedar\nmaple\n", b"cedar\n"),
+            ("-d", b"cedar\ncedar\nmaple\n", b"cedar\n"),
+            ("-d", b"cedar\ncedar\n", b""),
+            ("-D", b"cedar\ncedar\n", b"cedar\n"),
+        ] {
+            check_read_error(&[arg], input, expected);
+        }
+    }
+}
+
 #[test]
 fn test_repeated_skip_fields_takes_the_last() {
     // GNU lets a later -f override an earlier one rather than erroring.
@@ -1231,6 +1362,35 @@ fn test_repeated_skip_fields_takes_the_last() {
         .pipe_in("x y a\nz w a\n")
         .succeeds()
         .stdout_is("x y a\n");
+}
+
+#[test]
+fn test_skip_fields_carriage_return_is_not_a_separator() {
+    // Only space and tab separate fields, so each line is a single field.
+    new_ucmd!()
+        .args(&["-f1"])
+        .pipe_in("a\rb\nc\rd\n")
+        .succeeds()
+        .stdout_is("a\rb\n");
+}
+
+#[test]
+fn test_skip_fields_form_feed_is_not_a_separator() {
+    new_ucmd!()
+        .args(&["-c", "-f1"])
+        .pipe_in("a\x0cb\nc\x0cd\n")
+        .succeeds()
+        .stdout_is("      2 a\x0cb\n");
+}
+
+#[test]
+fn test_skip_fields_newline_inside_zero_terminated_record_still_separates() {
+    // GNU still ends a field at a newline with -z, so "b" and "d" are compared.
+    new_ucmd!()
+        .args(&["-z", "-c", "-f1"])
+        .pipe_in("a\nb\0c\nd\0")
+        .succeeds()
+        .stdout_is("      1 a\nb\0      1 c\nd\0");
 }
 
 #[test]
@@ -1249,4 +1409,33 @@ fn test_obsolete_skip_fields_not_read_after_double_dash() {
         .args(&["--", "-1"])
         .fails()
         .stderr_contains("-1");
+}
+
+#[rstest]
+#[case::one(&["+1"], "xa\nzb\n")]
+#[case::two(&["+1", "+2"], "xa\n")]
+fn test_obsolete_skip_chars_by_default(
+    #[case] args: &[&str],
+    #[case] expected: &str,
+    #[values(None, Some(""), Some("200111"), Some("200809"))] posix: Option<&str>,
+) {
+    let mut ucmd = new_ucmd!();
+    if let Some(version) = posix {
+        ucmd.env("_POSIX2_VERSION", version);
+    }
+    ucmd.args(args)
+        .pipe_in("xa\nya\nzb\n")
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[rstest]
+#[case::from_2001("200112")]
+#[case::until_2008("200808")]
+fn test_obsolete_skip_chars_disabled(#[case] posix: &str) {
+    new_ucmd!()
+        .env("_POSIX2_VERSION", posix)
+        .arg("+1")
+        .fails_with_code(1)
+        .stderr_is("uniq: +1: No such file or directory\n");
 }

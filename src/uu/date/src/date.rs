@@ -4,8 +4,9 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz unparseable
-// spell-checker:ignore ohos OHOS tzdata tzdb tzif zoneinfo euctw nonrelative wednes
+// spell-checker:ignore ohos OHOS tzdata tzdb tzif zoneinfo euctw nonrelative wednes Ihours
 
+mod date_names;
 mod format_modifiers;
 mod locale;
 
@@ -37,7 +38,7 @@ use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetS
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 
 /// OHOS helper: pass through the system time zone ID returned by
-/// TimeService (OH_TimeService_GetTimeZone, e.g. "Asia/Shanghai") and
+/// `TimeService` (`OH_TimeService_GetTimeZone`, e.g. "Asia/Shanghai") and
 /// resolve it against the embedded IANA tzdata (jiff-tzdb) so that
 /// historical DST rules and transitions are preserved. jiff's
 /// `try_system()` is useless on OHOS because both `/etc/localtime` and
@@ -87,6 +88,64 @@ const OPT_SET: &str = "set";
 const OPT_REFERENCE: &str = "reference";
 const OPT_UNIVERSAL: &str = "universal";
 const OPT_UNIVERSAL_2: &str = "utc";
+
+// GNU treats `-I` followed by a space as a flag and the next word as a format operand. Clap would
+// consume that word as the optional value, so translate attached `-I<fmt>` forms, including short
+// option groups such as `-uIhours`, to `--iso-8601=<fmt>` and let Clap handle bare `-I`. A preceding
+// value-taking short option owns the rest of the group, so stop before its attached value.
+fn normalize_iso_8601_args(args: impl uucore::Args) -> impl Iterator<Item = OsString> {
+    args.scan(false, |options_ended, arg| {
+        if *options_ended {
+            return Some(vec![arg]);
+        }
+
+        let Some(arg_str) = arg.to_str() else {
+            return Some(vec![arg]);
+        };
+
+        if arg_str == "--" {
+            *options_ended = true;
+            return Some(vec![arg]);
+        }
+
+        let Some(iso_index) = arg_str
+            .strip_prefix('-')
+            .filter(|arg| !arg.starts_with('-'))
+            .and_then(|arg| {
+                let bytes = arg.as_bytes();
+                let mut index = 0;
+                while let Some(&byte) = bytes.get(index) {
+                    match byte {
+                        b'I' => return Some(index),
+                        b'd' | b'f' | b'r' | b's' => return None,
+                        _ => index += 1,
+                    }
+                }
+                None
+            })
+        else {
+            return Some(vec![arg]);
+        };
+
+        let prefix = &arg_str[..=iso_index];
+        let value = &arg_str[iso_index + 2..];
+        let mut normalized = Vec::with_capacity(2);
+        if prefix.len() > 1 {
+            normalized.push(OsString::from(prefix));
+        }
+        if value.is_empty() && prefix.len() == 1 {
+            normalized.push(arg);
+        } else if value.is_empty() {
+            normalized.push(OsString::from("-I"));
+        } else {
+            let value = value.strip_prefix('=').unwrap_or(value);
+            normalized.push(OsString::from(format!("--{OPT_ISO_8601}={value}")));
+        }
+
+        Some(normalized)
+    })
+    .flatten()
+}
 
 #[derive(Debug, thiserror::Error)]
 enum DateError {
@@ -278,7 +337,7 @@ fn strip_parenthesized_comments(input: &str) -> Cow<'_, str> {
 
 /// Parse military timezone with optional hour offset.
 /// Pattern: single letter (a-z except j) optionally followed by 1-2 digits.
-/// Returns Some(total_hours_in_utc) or None if pattern doesn't match.
+/// Returns `Some(total_hours_in_utc)` or None if pattern doesn't match.
 ///
 /// Military timezone mappings:
 /// - A-I: UTC+1 to UTC+9 (J is skipped for local time)
@@ -335,7 +394,8 @@ fn parse_military_timezone_with_offset(s: &str) -> Option<(i32, DayDelta)> {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let matches =
+        uucore::clap_localization::handle_clap_result(uu_app(), normalize_iso_8601_args(args))?;
 
     let date_source = if let Some(date_os) = matches
         .get_many::<OsString>(OPT_DATE)
@@ -375,7 +435,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let arg = operand_for_error(fmt);
             // if an optional Format String was found but the user has not provided an input date
             // GNU prints an invalid date Error
-            if !matches!(date_source, DateSource::Human(_)) {
+            if matches!(date_source, DateSource::Now) {
                 return Err(Box::new(DateError::InvalidDate { date: arg }));
             }
             // If the user did provide an input date with the --date flag and the Format String is
@@ -692,8 +752,9 @@ pub fn uu_app() -> Command {
                     DATE, HOURS, MINUTES, SECONDS, NS,
                 ]))
                 .num_args(0..=1)
+                .require_equals(true)
                 .default_missing_value(OPT_DATE)
-                .action(ArgAction::Append)
+                .overrides_with(OPT_ISO_8601)
                 .help(translate!("date-help-iso-8601")),
         )
         .arg(
@@ -744,6 +805,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_SET)
                 .value_name("STRING")
                 .allow_hyphen_values(true)
+                .conflicts_with_all([OPT_DATE, OPT_FILE, OPT_REFERENCE, OPT_RESOLUTION])
                 .help({
                     #[cfg(not(target_os = "redox"))]
                     {
@@ -778,13 +840,13 @@ pub fn uu_app() -> Command {
 /// GNU `date` rounds `%s` toward negative infinity for negative fractional
 /// timestamps, whereas jiff's `%s` truncates toward zero. `%%` escapes are
 /// preserved and every other specifier is left untouched for jiff to render.
-fn substitute_epoch_seconds(fmt: &str, date: &Zoned) -> String {
+fn substitute_epoch_seconds<'a>(fmt: &'a str, date: &Zoned) -> Cow<'a, str> {
     if !fmt.contains('%') || !fmt.contains('s') {
-        return fmt.to_string();
+        return Cow::Borrowed(fmt);
     }
 
     let seconds = timestamp_seconds_floor(date.timestamp());
-    substitute_epoch_seconds_value(fmt, seconds)
+    Cow::Owned(substitute_epoch_seconds_value(fmt, seconds))
 }
 
 fn timestamp_seconds_floor(timestamp: Timestamp) -> i64 {
@@ -916,9 +978,9 @@ fn format_epoch_seconds(seconds: i64, flags: &str, width: Option<usize>) -> Stri
 /// when a specifier letter follows it. A dangling `%O` (at the end of the
 /// string, or followed by a non-letter) stays literal, as does any `O`
 /// that merely follows the `%%` escape.
-fn strip_o_modifier(fmt: &str) -> String {
+fn strip_o_modifier(fmt: &str) -> Cow<'_, str> {
     if !fmt.contains("%O") {
-        return fmt.to_string();
+        return Cow::Borrowed(fmt);
     }
 
     let mut out = String::with_capacity(fmt.len());
@@ -945,7 +1007,7 @@ fn strip_o_modifier(fmt: &str) -> String {
             _ => out.push('%'),
         }
     }
-    out
+    Cow::Owned(out)
 }
 
 /// A piece of a format string.
@@ -1006,6 +1068,9 @@ fn format_chunks(
     chunks: &[FormatChunk],
     mut format_chunk: impl FnMut(&str) -> Result<String, String>,
 ) -> Result<Vec<u8>, String> {
+    if let [FormatChunk::Specifiers(fmt)] = chunks {
+        return format_chunk(fmt).map(String::into_bytes);
+    }
     let mut output = Vec::new();
     for chunk in chunks {
         match chunk {
@@ -1345,17 +1410,20 @@ fn format_extended_year_value(
     width: Option<usize>,
 ) -> String {
     let mut digits = value.to_string();
-    let force_sign = flags.contains('+');
-    let add_sign = force_sign && (width.is_some() || digits.len() > default_width);
     let mut pad = format_modifiers::Pad::Zero;
+    // `+` only adds a sign when no other padding flag follows it.
+    let mut force_sign = false;
     for flag in flags.chars() {
         match flag {
             '-' => pad = format_modifiers::Pad::None,
             '_' => pad = format_modifiers::Pad::Space,
             '0' | '+' => pad = format_modifiers::Pad::Zero,
-            _ => {}
+            _ => continue,
         }
+        force_sign = flag == '+';
     }
+    let add_sign = force_sign
+        && (width.is_some_and(|width| width > default_width) || digits.len() > default_width);
     if add_sign {
         digits.insert(0, '+');
     }
@@ -1402,8 +1470,8 @@ fn format_date_with_locale_aware_months(
     // negative infinity (e.g. `@-1.5` → `-2`, not `-1`). Every other field jiff
     // produces already agrees with GNU, so only `%s` needs correcting; rewrite it
     // to the floored epoch second before jiff sees the format string.
-    let fmt_owned = strip_o_modifier(&substitute_epoch_seconds(fmt, date));
-    let fmt = fmt_owned.as_str();
+    let fmt = &*substitute_epoch_seconds(fmt, date);
+    let fmt = &*strip_o_modifier(fmt);
 
     // Check if format string has GNU modifiers (width/flags) and format if present
     if let Some(result) = format_modifiers::format_with_modifiers_if_present(date, fmt, config) {
@@ -1480,7 +1548,7 @@ static FIXED_OFFSET_ABBREVIATIONS: &[(&str, i32)] = &[
 static TZ_ABBREV_CACHE: OnceLock<HashMap<String, String>> = OnceLock::new();
 
 /// Build timezone abbreviation lookup map from IANA database.
-/// This is a fallback for abbreviations not covered by FIXED_OFFSET_ABBREVIATIONS.
+/// This is a fallback for abbreviations not covered by [`FIXED_OFFSET_ABBREVIATIONS`].
 fn build_tz_abbrev_map() -> HashMap<String, String> {
     let mut map = HashMap::new();
 
@@ -1595,37 +1663,38 @@ fn parse_dates_from_reader<R: Read + 'static>(
     now: &Zoned,
     dbg_opts: DebugOptions,
 ) -> Box<dyn Iterator<Item = Result<ParsedDateTime, DateInputError>> + '_> {
-    let lines = BufReader::new(reader).split(b'\n').map(move |line| {
-        let mut bytes = match line {
-            Ok(bytes) => bytes,
+    let mut reader = BufReader::new(reader);
+    let mut bytes = Vec::new();
+    let mut failed = false;
+    Box::new(std::iter::from_fn(move || {
+        if failed {
+            return None;
+        }
+        bytes.clear();
+        match reader.read_until(b'\n', &mut bytes) {
+            Ok(0) => return None,
+            Ok(_) => {}
             Err(error) => {
-                return Err(DateInputError::Read {
+                failed = true;
+                return Some(Err(DateInputError::Read {
                     path: path.clone(),
                     error,
-                });
+                }));
             }
-        };
-        // GNU handles each line as a C string, so a NUL byte ends it
-        if let Some(nul) = bytes.iter().position(|&b| b == 0) {
-            bytes.truncate(nul);
+        }
+        // GNU handles each line as a C string, so a NUL byte (or trailing LF) ends it
+        if let Some(end) = bytes.iter().position(|&b| b == 0 || b == b'\n') {
+            bytes.truncate(end);
         }
         // Strip a trailing '\r' (CRLF input; GNU's lexer ignores it too)
         if bytes.last() == Some(&b'\r') {
             bytes.pop();
         }
-        match String::from_utf8(bytes) {
+        Some(match std::str::from_utf8(&bytes) {
             Ok(s) => parse_date(s, now, dbg_opts)
                 .map_err(|(input, _)| DateInputError::InvalidDate(input)),
-            Err(e) => Err(DateInputError::InvalidDate(escape_for_error(e.as_bytes()))),
-        }
-    });
-    Box::new(lines.scan(false, |failed, result| {
-        if *failed {
-            None
-        } else {
-            *failed = matches!(&result, Err(DateInputError::Read { .. }));
-            Some(result)
-        }
+            Err(_) => Err(DateInputError::InvalidDate(escape_for_error(&bytes))),
+        })
     }))
 }
 
@@ -1635,8 +1704,7 @@ fn rewrite_whitespace_tokens(
     input: &str,
     mut rewrite: impl FnMut(&str) -> Option<String>,
 ) -> Option<String> {
-    let mut output = String::with_capacity(input.len());
-    let mut changed = false;
+    let mut output: Option<String> = None;
     let bytes = input.as_bytes();
     let mut start = 0;
 
@@ -1648,23 +1716,25 @@ fn rewrite_whitespace_tokens(
         }
 
         let part = &input[start..end];
-        if whitespace {
-            output.push_str(part);
-        } else if let Some(replacement) = rewrite(part) {
-            output.push_str(&replacement);
-            changed = true;
-        } else {
-            output.push_str(part);
+        if !whitespace && let Some(replacement) = rewrite(part) {
+            output
+                .get_or_insert_with(|| input[..start].to_owned())
+                .push_str(&replacement);
+        } else if let Some(out) = &mut output {
+            out.push_str(part);
         }
         start = end;
     }
 
-    changed.then_some(output)
+    output
 }
 
 /// Convert the European `DD.MM[.][YYYY]` spelling to the slash-separated form
 /// understood by the underlying parser, preserving a missing year.
 fn rewrite_european_date_token(token: &str) -> Option<String> {
+    if !token.contains('.') {
+        return None;
+    }
     let trailing_dot = token.ends_with('.');
     let core = token.strip_suffix('.').unwrap_or(token);
     let parts: Vec<&str> = core.split('.').collect();
@@ -1686,9 +1756,7 @@ fn rewrite_european_date_token(token: &str) -> Option<String> {
         _ => return None,
     };
 
-    let day_number = day.parse::<u16>().ok()?;
-    let month_number = month.parse::<u16>().ok()?;
-    if !(1..=31).contains(&day_number) || !(1..=12).contains(&month_number) {
+    if !is_calendar_day(day) || !is_calendar_month(month) {
         return None;
     }
 
@@ -1747,43 +1815,6 @@ fn normalize_european_dates(input: &str) -> Option<String> {
     time_rewritten.or(Some(rewritten))
 }
 
-fn is_weekday_name(token: &str) -> bool {
-    // GNU documents these forms in its "Day of week items" section:
-    // https://www.gnu.org/software/coreutils/manual/html_node/Day-of-week-items.html
-    // Full names, three-letter abbreviations with an optional period, and the
-    // special `tues`, `wednes`, `thur`, and `thurs` forms are accepted. Single-
-    // letter forms are intentionally excluded because they are ambiguous with
-    // other syntax.
-    matches!(
-        token.to_ascii_lowercase().as_str(),
-        "monday"
-            | "mon"
-            | "mon."
-            | "tuesday"
-            | "tue"
-            | "tue."
-            | "tues"
-            | "wednesday"
-            | "wed"
-            | "wed."
-            | "wednes"
-            | "thursday"
-            | "thu"
-            | "thu."
-            | "thur"
-            | "thurs"
-            | "friday"
-            | "fri"
-            | "fri."
-            | "saturday"
-            | "sat"
-            | "sat."
-            | "sunday"
-            | "sun"
-            | "sun."
-    )
-}
-
 fn looks_like_explicit_calendar_date(input: &str) -> bool {
     let Some(token) = input.split_whitespace().next() else {
         return false;
@@ -1800,31 +1831,50 @@ fn looks_like_explicit_calendar_date(input: &str) -> bool {
         || (token.chars().all(|c| c.is_ascii_digit()) && token.len() >= 6)
 }
 
-fn is_weekday_prefix(token: &str) -> bool {
-    token.parse::<u32>().is_ok()
-        || matches!(
-            token.to_ascii_lowercase().as_str(),
-            "first"
-                | "second"
-                | "third"
-                | "fourth"
-                | "fifth"
-                | "sixth"
-                | "seventh"
-                | "eighth"
-                | "ninth"
-                | "tenth"
-                | "eleventh"
-                | "twelfth"
-                | "last"
-                | "next"
-                | "this"
-        )
+fn is_calendar_number(token: &str, range: std::ops::RangeInclusive<u8>) -> bool {
+    let token = token.strip_suffix(',').unwrap_or(token);
+    token
+        .parse::<u8>()
+        .is_ok_and(|value| range.contains(&value))
+}
+
+fn is_calendar_day(token: &str) -> bool {
+    is_calendar_number(token, 1..=31)
+}
+
+fn is_calendar_month(token: &str) -> bool {
+    is_calendar_number(token, 1..=12)
+}
+
+fn is_calendar_year(token: &str) -> bool {
+    let token = token.strip_suffix(',').unwrap_or(token);
+    (2..=4).contains(&token.len()) && token.chars().all(|c| c.is_ascii_digit())
+}
+
+fn named_date_end(tokens: &[&str], date_index: usize) -> Option<usize> {
+    // Keep the day, month, and optional year together so a following number is
+    // not mistaken for an ordinal weekday prefix.
+    let first = tokens.get(date_index)?;
+    let second = tokens.get(date_index + 1)?;
+
+    let month_day = date_names::is_month_name(first) && is_calendar_day(second);
+    let day_month = is_calendar_day(first) && date_names::is_month_name(second);
+    if !month_day && !day_month {
+        return None;
+    }
+
+    let has_year = tokens
+        .get(date_index + 2)
+        .is_some_and(|year| is_calendar_year(year));
+    Some(date_index + if has_year { 2 } else { 1 })
 }
 
 /// Drop weekday items when an explicit calendar date is present.
 /// Relative-only inputs must remain untouched because the weekday can matter.
 fn strip_weekday_for_explicit_date(input: &str) -> Option<String> {
+    if !input.contains(|c: char| c.is_ascii_alphabetic() || !c.is_ascii()) {
+        return None;
+    }
     let mut spans = Vec::new();
     let mut token_start = None;
     for (index, character) in input.char_indices() {
@@ -1844,23 +1894,29 @@ fn strip_weekday_for_explicit_date(input: &str) -> Option<String> {
         .iter()
         .map(|&(start, end)| &input[start..end])
         .collect();
-    let date_index = tokens.iter().position(|token| {
-        !token.starts_with("TZ=\"")
+    let (date_index, named_date_end) = tokens.iter().enumerate().find_map(|(index, token)| {
+        let numeric_date = !token.starts_with("TZ=\"")
             && !token.ends_with(',')
-            && looks_like_explicit_calendar_date(token)
+            && looks_like_explicit_calendar_date(token);
+        if numeric_date {
+            Some((index, None))
+        } else {
+            named_date_end(&tokens, index).map(|end| (index, Some(end)))
+        }
     })?;
     let weekday_index = tokens.iter().enumerate().find_map(|(index, token)| {
         let weekday = token.strip_suffix(',').unwrap_or(token);
-        (index != date_index && is_weekday_name(weekday)).then_some(index)
+        (index != date_index && date_names::is_weekday_name(weekday)).then_some(index)
     })?;
 
     let mut removed = vec![false; tokens.len()];
     removed[weekday_index] = true;
-    if weekday_index > 0
-        && weekday_index - 1 != date_index
-        && is_weekday_prefix(tokens[weekday_index - 1])
+    if let Some(prefix_index) = weekday_index.checked_sub(1)
+        && prefix_index != date_index
+        && !named_date_end.is_some_and(|end| (date_index + 1..=end).contains(&prefix_index))
+        && date_names::is_weekday_prefix(tokens[prefix_index])
     {
-        removed[weekday_index - 1] = true;
+        removed[prefix_index] = true;
     }
 
     let mut result = String::with_capacity(input.len());
@@ -1873,7 +1929,7 @@ fn strip_weekday_for_explicit_date(input: &str) -> Option<String> {
         cursor = end;
     }
     result.push_str(&input[cursor..]);
-    Some(result)
+    Some(result.trim().to_owned())
 }
 
 /// Normalize offsets whose minute component exceeds 59 into total minutes.
@@ -1936,6 +1992,9 @@ fn is_clock_with_seconds(token: &str) -> bool {
 /// parser for its timezone offset and relative item, rather than rewriting the
 /// input into unrelated syntax.
 fn parse_relative_plus(input: &str, now: &Zoned) -> Option<ParsedDateTime> {
+    if !input.contains('+') {
+        return None;
+    }
     let words: Vec<&str> = input.split_whitespace().collect();
     if !words.iter().any(|word| is_clock_with_seconds(word))
         || words.iter().any(|word| {
@@ -1992,7 +2051,7 @@ fn parse_relative_plus(input: &str, now: &Zoned) -> Option<ParsedDateTime> {
     None
 }
 
-/// Apply only the targeted syntax rewrites needed before parse_datetime.
+/// Apply only the targeted syntax rewrites needed before [`parse_datetime`].
 /// Keeping the input borrowed when possible also preserves the original text
 /// for diagnostics.
 fn normalize_parse_input(input: &str) -> Cow<'_, str> {
@@ -2013,18 +2072,13 @@ fn normalize_parse_input(input: &str) -> Cow<'_, str> {
 /// Extract a local wall-clock value for the DST-gap check and its diagnostics.
 /// This is intentionally narrower than the full date parser.
 fn parse_local_datetime(input: &str) -> Option<jiff::civil::DateTime> {
-    let normalized = input.replace(['T', 't'], " ");
-    let (year, month, day) = normalized.split_whitespace().find_map(|token| {
-        let parts: Vec<&str> = if token.contains('-') {
-            token.split('-').collect()
-        } else if token.contains('/') {
-            token.split('/').collect()
-        } else {
-            return None;
-        };
-        let (year, month, day) = match parts.as_slice() {
-            [year, month, day] if token.contains('-') => (*year, *month, *day),
-            [month, day, year] if token.contains('/') => (*year, *month, *day),
+    let tokens = || input.split(|c: char| c.is_whitespace() || matches!(c, 'T' | 't'));
+    let (year, month, day) = tokens().find_map(|token| {
+        let sep = if token.contains('-') { '-' } else { '/' };
+        let mut parts = token.split(sep);
+        let (year, month, day) = match (parts.next(), parts.next(), parts.next(), parts.next()) {
+            (Some(y), Some(m), Some(d), None) if sep == '-' => (y, m, d),
+            (Some(m), Some(d), Some(y), None) if sep == '/' => (y, m, d),
             _ => return None,
         };
         if !year.chars().all(|c| c.is_ascii_digit())
@@ -2039,7 +2093,7 @@ fn parse_local_datetime(input: &str) -> Option<jiff::civil::DateTime> {
             day.parse::<i8>().ok()?,
         ))
     })?;
-    let (hour, minute, second, nanosecond) = normalized.split_whitespace().find_map(|token| {
+    let (hour, minute, second, nanosecond) = tokens().find_map(|token| {
         let token = token
             .char_indices()
             .skip(1)
@@ -2115,12 +2169,11 @@ fn is_numeric_timezone(offset: &str) -> bool {
 
 /// Detect a local wall-clock time that falls inside a timezone transition gap.
 /// Explicit numeric offsets are absolute instants and therefore cannot be gaps.
-fn is_nonexistent_local_time(input: &str, now: &Zoned) -> bool {
+fn is_nonexistent_local_time(input: &str, normalized: &str, now: &Zoned) -> bool {
     if has_explicit_numeric_timezone(input) {
         return false;
     }
-    let normalized = normalize_parse_input(input);
-    let Some(local) = parse_local_datetime(normalized.as_ref()) else {
+    let Some(local) = parse_local_datetime(normalized) else {
         return false;
     };
     matches!(
@@ -2177,7 +2230,7 @@ fn parse_date<S: AsRef<str>>(
         Ok(ParsedDateTime::InRange(date)) => {
             // parse_datetime may normalize a nonexistent wall-clock time;
             // reject that result so DST gaps are not silently accepted.
-            if is_nonexistent_local_time(input_str, now) {
+            if is_nonexistent_local_time(input_str, parse_input, now) {
                 return Err((
                     escape_for_error(input_str.as_bytes()),
                     parse_datetime::ParseDateTimeError::InvalidInput,
@@ -2494,6 +2547,29 @@ mod tests {
         assert_eq!(strip_parenthesized_comments("a(b(c)d)e"), "ae"); // Nested balanced
         assert_eq!(strip_parenthesized_comments("a(b(c)d"), "a"); // Nested unbalanced
         assert_eq!(strip_parenthesized_comments("a(b)c(d)e(f"), "ace"); // Multiple groups, last unmatched
+    }
+
+    #[test]
+    fn test_strip_weekday_from_day_month_dates() {
+        for input in ["Monday 17 August 2026", "Wednesday 17 August 2026"] {
+            assert_eq!(
+                strip_weekday_for_explicit_date(input).as_deref(),
+                Some("17 August 2026")
+            );
+        }
+        assert_eq!(strip_weekday_for_explicit_date("2026-08-17"), None);
+    }
+
+    #[test]
+    fn test_rewrite_whitespace_tokens() {
+        assert_eq!(
+            rewrite_whitespace_tokens("a  10.03.2024\tb", rewrite_european_date_token).as_deref(),
+            Some("a  03/10/2024\tb")
+        );
+        assert_eq!(
+            rewrite_whitespace_tokens("a b", rewrite_european_date_token),
+            None
+        );
     }
 
     /// Run one date through the shared writer used by the display loop and

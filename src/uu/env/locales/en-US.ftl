@@ -14,6 +14,7 @@ env-help-ignore-signal = set handling of SIG signal(s) to do nothing
 env-help-default-signal = reset handling of SIG signal(s) to the default action
 env-help-block-signal = block delivery of SIG signal(s) while running COMMAND
 env-help-list-signal-handling = list signal handling changes requested by preceding options
+env-help-env0-from = read NUL-delimited environment entries from FILE
 
 # Error messages
 env-error-missing-closing-quote = no terminating quote in -S string at position { $position } for quote '{ $quote }'
@@ -30,12 +31,14 @@ env-error-invalid-signal = { $signal }: invalid signal
 env-error-generic = Error: { $error }
 env-error-no-such-file = { $program }: No such file or directory
 env-error-use-s-shebang = use -[v]S to pass options in shebang lines
-env-error-cannot-unset = cannot unset '{ $name }': Invalid argument
 env-error-cannot-unset-invalid = cannot unset { $name }: Invalid argument
 env-error-must-specify-command-with-chdir = must specify command with --chdir (-C)
+env-error-must-specify-command-with-argv0 = must specify command with --argv0 (-a)
 env-error-cannot-change-directory = cannot change directory to { $directory }: { $error }
 env-error-argv0-not-supported = --argv0 is currently not supported on this platform
 env-error-failed-set-signal-action = failed to set signal action for signal { $signal }: { $error }
+env-error-file-must-end-nul = { $file }: file must end with a NUL byte
+env-error-cannot-read-file = cannot read { $file }: { $error }
 
 # Warning messages
 env-warning-no-name-specified = no name specified for value { $value }

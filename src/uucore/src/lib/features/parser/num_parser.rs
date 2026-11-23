@@ -7,13 +7,9 @@
 
 //! Utilities for parsing numbers in various formats
 
-use bigdecimal::{
-    BigDecimal,
-    num_bigint::{BigInt, BigUint, Sign},
-};
-use num_traits::Signed;
-use num_traits::ToPrimitive;
-use num_traits::Zero;
+use bigdecimal::BigDecimal;
+use bigdecimal::num_bigint::{BigInt, BigUint, Sign};
+use num_traits::{Signed, ToPrimitive, Zero};
 
 use crate::extendedbigdecimal::ExtendedBigDecimal;
 
@@ -279,7 +275,7 @@ impl ExtendedParser for f64 {
 }
 
 impl ExtendedParser for ExtendedBigDecimal {
-    /// Parse a number as an ExtendedBigDecimal
+    /// Parse a number as an [`ExtendedBigDecimal`]
     fn extended_parse(input: &str) -> Result<Self, ExtendedParserError<Self>> {
         parse(input, ParseTarget::Decimal, &[])
     }
@@ -362,8 +358,20 @@ fn parse_special_value(
                 special = -special;
             }
 
+            let mut rest = &input[str.len()..];
+            // A NaN may carry a payload of letters, digits and '_' in parentheses; it is ignored.
+            if matches!(ebd, ExtendedBigDecimal::Nan)
+                && let Some((payload, after)) =
+                    rest.strip_prefix('(').and_then(|r| r.split_once(')'))
+                && payload
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            {
+                rest = after;
+            }
+
             // "infs" is a valid duration, so parse suffix multiplier in the original input string, but ignore the multiplier.
-            let (_, rest) = parse_suffix_multiplier(&input[str.len()..], allowed_suffixes);
+            let (_, rest) = parse_suffix_multiplier(rest, allowed_suffixes);
 
             return if rest.is_empty() {
                 Ok(special)
@@ -393,6 +401,13 @@ fn make_error(overflow: bool, negative: bool) -> ExtendedParserError<ExtendedBig
         ExtendedParserError::Underflow(v)
     }
 }
+
+/// Largest binary exponent (in absolute value) accepted for hexadecimal floats:
+/// `floor(i32::MAX * log2(10))` (= `7_133_786_260`). Since `2**e == 10**(e * log10(2))`,
+/// a larger exponent has a decimal exponent that does not fit in an `i32` (the limit
+/// the decimal parser applies) and would overflow the `BigDecimal` scale in `powi`,
+/// so it is treated as overflow/underflow instead.
+const MAX_HEX_EXPONENT: u64 = (i32::MAX as f64 * std::f64::consts::LOG2_10) as u64;
 
 /// Construct an [`ExtendedBigDecimal`] based on parsed data
 fn construct_extended_big_decimal(
@@ -445,16 +460,14 @@ fn construct_extended_big_decimal(
         let bd = BigDecimal::from_bigint(signed_digits, 0)
             / BigDecimal::from_bigint(BigInt::from(16).pow(scale as u32), 0);
 
-        // powi "only" supports i64 values. Just overflow/underflow if the value provided
-        // is > 2**64 or < 2**-64.
+        // See MAX_HEX_EXPONENT for why larger exponents overflow/underflow.
         let exponent = exponent
             .to_i64()
+            .filter(|e| e.unsigned_abs() <= MAX_HEX_EXPONENT)
             .ok_or_else(|| make_error(exponent.is_positive(), negative))?;
 
         // Confusingly, exponent is in base 2 for hex floating point numbers.
         let base: BigDecimal = 2.into();
-        // Note: We cannot overflow/underflow BigDecimal here, as we will not be able to reach the
-        // maximum/minimum scale (i64 range).
         let pow2 = base.powi(exponent);
 
         bd * pow2
@@ -583,7 +596,7 @@ mod tests {
 
     use crate::extendedbigdecimal::ExtendedBigDecimal;
 
-    use super::{ExtendedParser, ExtendedParserError};
+    use super::{ExtendedParser, ExtendedParserError, MAX_HEX_EXPONENT};
 
     #[test]
     fn test_decimal_u64() {
@@ -750,6 +763,12 @@ mod tests {
         assert!(f64::extended_parse("nan").unwrap().is_sign_positive());
         assert!(f64::extended_parse("NAN").unwrap().is_nan());
         assert!(f64::extended_parse("NAN").unwrap().is_sign_positive());
+        assert!(f64::extended_parse("nan(Ab_1)").unwrap().is_nan());
+        assert!(f64::extended_parse("-nan()").unwrap().is_sign_negative());
+        assert!(matches!(
+            f64::extended_parse("nan(a-b)"),
+            Err(ExtendedParserError::PartialMatch(n, rest)) if n.is_nan() && rest == "(a-b)"
+        ));
         assert_eq!(
             f64::extended_parse("-infinit"),
             Err(ExtendedParserError::PartialMatch(
@@ -1017,6 +1036,53 @@ mod tests {
         ));
         assert!(matches!(
             ExtendedBigDecimal::extended_parse(&format!("-0x0.100p-{}", u64::MAX as u128 + 1)),
+            Err(ExtendedParserError::Underflow(
+                ExtendedBigDecimal::MinusZero
+            ))
+        ));
+        // Exponents that fit in an i64 but are still far too large for BigDecimal.
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse(&format!("0x1p{}", i64::MAX)),
+            Err(ExtendedParserError::Overflow(ExtendedBigDecimal::Infinity))
+        ));
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse(&format!("0x1p{}", i64::MIN)),
+            Err(ExtendedParserError::Underflow(ebd)) if ebd == ExtendedBigDecimal::zero()
+        ));
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse(&format!("-0x1p{}", i64::MIN)),
+            Err(ExtendedParserError::Underflow(
+                ExtendedBigDecimal::MinusZero
+            ))
+        ));
+
+        // Right at the limit: the largest accepted binary exponent still parses...
+        assert_eq!(MAX_HEX_EXPONENT, 7_133_786_260);
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse(&format!("0x1p{MAX_HEX_EXPONENT}")),
+            Ok(ExtendedBigDecimal::BigDecimal(_))
+        ));
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse(&format!("0x1p-{MAX_HEX_EXPONENT}")),
+            Ok(ExtendedBigDecimal::BigDecimal(_))
+        ));
+        // ... and one past it overflows/underflows.
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse(&format!("0x1p{}", MAX_HEX_EXPONENT + 1)),
+            Err(ExtendedParserError::Overflow(ExtendedBigDecimal::Infinity))
+        ));
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse(&format!("-0x1p{}", MAX_HEX_EXPONENT + 1)),
+            Err(ExtendedParserError::Overflow(
+                ExtendedBigDecimal::MinusInfinity
+            ))
+        ));
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse(&format!("0x1p-{}", MAX_HEX_EXPONENT + 1)),
+            Err(ExtendedParserError::Underflow(ebd)) if ebd == ExtendedBigDecimal::zero()
+        ));
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse(&format!("-0x1p-{}", MAX_HEX_EXPONENT + 1)),
             Err(ExtendedParserError::Underflow(
                 ExtendedBigDecimal::MinusZero
             ))

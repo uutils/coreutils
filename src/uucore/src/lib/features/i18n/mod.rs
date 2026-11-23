@@ -30,7 +30,7 @@ const DEFAULT_LOCALE: Locale = locale!("und");
 
 /// Look at 3 environment variables in the following order
 ///
-/// 1. LC_ALL
+/// 1. `LC_ALL`
 /// 2. `locale_name`
 /// 3. LANG
 ///
@@ -141,7 +141,7 @@ pub fn get_locale_from_os() -> (Locale, UEncoding) {
     (locale, UEncoding::Utf8)
 }
 
-/// Returns the default POSIX locale representing LC_ALL=C.
+/// Returns the default POSIX locale representing `LC_ALL=C`.
 #[cfg(not(windows))]
 pub fn get_locale_from_os() -> (Locale, UEncoding) {
     (DEFAULT_LOCALE, UEncoding::Ascii)

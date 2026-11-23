@@ -38,7 +38,7 @@ use uucore::{
     fsext::metadata_get_time,
     os_str_as_bytes_lossy,
     parser::shortcut_value_parser::ShortcutValueParser,
-    show, translate,
+    quoting_style, show, translate,
     version_cmp::version_cmp,
 };
 
@@ -83,7 +83,7 @@ enum LsError {
         _ => if 9 == .1.raw_os_error().unwrap_or(1) {
             translate!("ls-error-cannot-open-directory-bad-descriptor", "path" => .0.quote())
         } else {
-            translate!("ls-error-unknown-io-error", "path" => .0.quote(), "error" => format!("{:?}", .1))
+            translate!("ls-error-cannot-access", "path" => .0.quote(), "error" => strip_errno(.1))
         },
     })]
     IOErrorContext(PathBuf, std::io::Error, bool),
@@ -297,27 +297,12 @@ pub fn uu_app() -> Command {
     )
     // Quoting style
     .arg(
-        Arg::new(QUOTING_STYLE)
-            .long(QUOTING_STYLE)
-            .help(translate!("ls-help-set-quoting-style"))
-            .value_parser(ShortcutValueParser::new([
-                PossibleValue::new("literal"),
-                PossibleValue::new("locale"),
-                PossibleValue::new("shell"),
-                PossibleValue::new("shell-escape"),
-                PossibleValue::new("shell-always"),
-                PossibleValue::new("shell-escape-always"),
-                PossibleValue::new("clocale"),
-                PossibleValue::new("c"),
-                PossibleValue::new("c-maybe"),
-                PossibleValue::new("escape"),
-            ]))
-            .overrides_with_all([
-                QUOTING_STYLE,
-                options::quoting::LITERAL,
-                options::quoting::ESCAPE,
-                options::quoting::C,
-            ]),
+        quoting_style::parser::clap_quoting_argument().overrides_with_all([
+            QUOTING_STYLE,
+            options::quoting::LITERAL,
+            options::quoting::ESCAPE,
+            options::quoting::C,
+        ]),
     )
     .arg(
         Arg::new(options::quoting::LITERAL)
@@ -821,7 +806,7 @@ pub struct PathData<'a> {
 }
 
 impl<'a> PathData<'a> {
-    /// Convert this PathData to an EntryInfo for programmatic access
+    /// Convert this [`PathData`] to an [`EntryInfo`] for programmatic access
     pub fn to_entry_info(&self, config: &Config) -> EntryInfo {
         EntryInfo {
             path: self.p_buf.clone().into_owned(),
@@ -858,10 +843,21 @@ impl<'a> PathData<'a> {
             )
         };
 
+        let md: OnceCell<Option<Metadata>> = OnceCell::new();
         let must_dereference = match &config.dereference {
             Dereference::All => true,
             Dereference::Args => command_line,
-            Dereference::DirArgs => command_line && p_buf.metadata().is_ok_and(|m| m.is_dir()),
+            Dereference::DirArgs => {
+                if command_line
+                    && let Ok(metadata) = p_buf.metadata()
+                    && metadata.is_dir()
+                {
+                    md.get_or_init(|| Some(metadata));
+                    true
+                } else {
+                    false
+                }
+            }
             Dereference::None => false,
         };
 
@@ -872,7 +868,6 @@ impl<'a> PathData<'a> {
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
         let ft: OnceCell<Option<FileType>> = OnceCell::new();
-        let md: OnceCell<Option<Metadata>> = OnceCell::new();
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
         let de: RefCell<Option<DirEntry>> = if let Some(de) = dir_entry {
@@ -964,8 +959,13 @@ impl<'a> PathData<'a> {
     }
 
     fn security_context(&self, config: &Config) -> &str {
-        self.security_context
-            .get_or_init(|| get_security_context(&self.p_buf, self.must_dereference, config).into())
+        self.security_context.get_or_init(|| {
+            // metadata() reports lookup errors once and retains the result for all columns.
+            if self.must_dereference && self.metadata().is_none() {
+                return "?".into();
+            }
+            get_security_context(&self.p_buf, self.must_dereference, config).into()
+        })
     }
 
     fn path(&self) -> &Path {
@@ -1348,15 +1348,13 @@ fn write_directory_entries<O: LsOutput>(
     output: &mut O,
 ) -> UResult<()> {
     if config.format == Format::Long || config.alloc_size {
-        let total_size: u64 = entries
+        // GNU adds up the allocated bytes and scales the sum once, so a
+        // partly used block is rounded up for the total, not once per file.
+        let total_bytes: u64 = entries
             .iter()
-            .map(|item| {
-                item.metadata()
-                    .as_ref()
-                    .map_or(0, |md| get_block_size(md, config))
-            })
+            .map(|item| item.metadata().as_ref().map_or(0, |md| get_block_bytes(md)))
             .sum();
-        output.write_total(total_size, config)?;
+        output.write_total(scale_block_bytes(total_bytes, config), config)?;
     }
 
     if matches!(output.stream_mode(), StreamMode::Streaming) {
@@ -1448,10 +1446,6 @@ fn enter_directory<O: LsOutput>(
             false,
         );
 
-        if !entry.is_first {
-            output.write_dir_header(&path_data, config, false)?;
-        }
-
         let mut current_read_dir = if entry.is_first {
             initial_read_dir
                 .take()
@@ -1471,6 +1465,10 @@ fn enter_directory<O: LsOutput>(
             }
         };
 
+        if !entry.is_first {
+            output.write_dir_header(&path_data, config, false)?;
+        }
+
         collect_directory_entries(entries, &path_data, config, output, &mut current_read_dir)?;
         write_directory_entries(entries, config, output)?;
 
@@ -1483,17 +1481,6 @@ fn enter_directory<O: LsOutput>(
                 let child_path = child.path().to_path_buf();
                 let child_must_dereference = child.must_dereference;
                 let child_command_line = child.command_line;
-
-                // Try to read_dir now to eagerly report errors, matching GNU.
-                if let Err(err) = fs::read_dir(&child_path) {
-                    output.flush()?;
-                    show!(LsError::IOErrorContext(
-                        child_path.clone(),
-                        err,
-                        child_command_line,
-                    ));
-                    continue;
-                }
 
                 let info = match FileInformation::from_path(&child_path, child_must_dereference) {
                     Ok(info) => info,
@@ -1628,23 +1615,17 @@ fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Resu
     }
 }
 
-#[allow(unused_variables)]
-fn get_block_size(md: &Metadata, config: &Config) -> u64 {
+/// Allocated size of a file in bytes, before it is scaled to the block size.
+fn get_block_bytes(md: &Metadata) -> u64 {
     /* GNU ls will display sizes in terms of block size
        md.len() will differ from this value when the file has some holes
     */
     #[cfg(unix)]
     {
-        use uucore::format::human::SizeFormat;
-
-        let raw_blocks = if md.file_type().is_char_device() || md.file_type().is_block_device() {
+        if md.file_type().is_char_device() || md.file_type().is_block_device() {
             0u64
         } else {
             md.blocks() * 512
-        };
-        match config.size_format {
-            SizeFormat::Binary | SizeFormat::Decimal => raw_blocks,
-            SizeFormat::Bytes => raw_blocks / config.block_size,
         }
     }
     #[cfg(not(unix))]
@@ -1652,6 +1633,35 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
         // no way to get block size for windows, fall-back to file size
         md.len()
     }
+}
+
+/// Scale an allocated size in bytes to `config.block_size`.
+///
+/// A partly used block still occupies a whole block, so the division rounds
+/// up: with `--block-size=1000`, 4096 allocated bytes are five blocks, not
+/// four. `-h`/`--si` keep the byte count, which the human-readable formatter
+/// scales itself.
+#[cfg_attr(not(unix), allow(unused_variables))]
+fn scale_block_bytes(bytes: u64, config: &Config) -> u64 {
+    #[cfg(unix)]
+    {
+        use uucore::format::human::SizeFormat;
+
+        match config.size_format {
+            SizeFormat::Binary | SizeFormat::Decimal => bytes,
+            SizeFormat::Bytes => bytes.div_ceil(config.block_size),
+        }
+    }
+    // On non-unix `get_block_bytes` falls back to the file size rather than an
+    // allocation figure, which was never scaled here. Left as it was.
+    #[cfg(not(unix))]
+    {
+        bytes
+    }
+}
+
+fn get_block_size(md: &Metadata, config: &Config) -> u64 {
+    scale_block_bytes(get_block_bytes(md), config)
 }
 
 #[cfg(unix)]
@@ -1667,25 +1677,19 @@ fn file_is_executable(md: &Metadata) -> bool {
 
 /// This returns the `SELinux` security context as UTF8 `String`.
 /// In the long term this should be changed to [`OsStr`], see discussions at #2621/#2656
+#[cfg_attr(
+    not(any(
+        all(feature = "selinux", any(target_os = "linux", target_os = "android")),
+        all(feature = "smack", target_os = "linux")
+    )),
+    allow(unused_variables)
+)]
 fn get_security_context<'a>(
     path: &'a Path,
     must_dereference: bool,
     config: &'a Config,
 ) -> Cow<'a, str> {
     static SUBSTITUTE_STRING: &str = "?";
-
-    // If we must dereference, ensure that the symlink is actually valid even if the system
-    // does not support SELinux.
-    // Conforms to the GNU coreutils where a dangling symlink results in exit code 1.
-    if must_dereference && let Err(err) = get_metadata_with_deref_opt(path, must_dereference) {
-        // The Path couldn't be dereferenced, so return early and set exit code 1
-        // to indicate a minor error
-        // Only show error when context display is requested to avoid duplicate messages
-        if config.context {
-            show!(LsError::IOErrorContext(path.to_path_buf(), err, false));
-        }
-        return Cow::Borrowed(SUBSTITUTE_STRING);
-    }
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     if config.selinux_supported {

@@ -8,9 +8,9 @@
 use clap::Command;
 use uu_checksum_common::{ChecksumCommand, checksum_main, default_checksum_app, options};
 
-use uucore::checksum::compute::OutputFormat;
+use uucore::checksum::compute::{DigestFormat, OutputFormat};
 use uucore::checksum::{
-    AlgoKind, BlakeLength, ChecksumError, HashLength, parse_blake_length,
+    AlgoKind, BlakeLength, ChecksumError, HashLength, ReadingMode, parse_blake_length,
     sanitize_sha2_sha3_length_str,
 };
 use uucore::error::UResult;
@@ -103,12 +103,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(ChecksumError::TextWithoutUntagged.into());
     }
 
+    let reading_mode = if binary {
+        ReadingMode::Binary
+    } else {
+        ReadingMode::Text
+    };
+    let digest_format = if matches.get_flag(options::BASE64) {
+        DigestFormat::Base64
+    } else {
+        DigestFormat::Hexadecimal
+    };
+
     let output_format = OutputFormat::from_cksum(
         algo_cli.unwrap_or(AlgoKind::Crc),
         tag,
-        binary,
+        reading_mode,
         /* raw */ matches.get_flag(options::RAW),
-        /* base64 */ matches.get_flag(options::BASE64),
+        digest_format,
     );
 
     // Print hardware debug info if requested

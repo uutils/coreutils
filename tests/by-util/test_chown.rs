@@ -117,7 +117,7 @@ fn test_chown_only_owner() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains("failed to change");
+        .stdout_contains("failed to change");
 }
 
 #[test]
@@ -170,7 +170,7 @@ fn test_chown_only_owner_colon() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains("failed to change");
+        .stdout_contains("failed to change");
 }
 
 /// Test that `chown USER:` sets the group to USER's login group.
@@ -334,16 +334,43 @@ fn test_chown_only_colon() {
         .stderr_contains("invalid group: '..'");
 }
 
+/// With -v, a change that fails is reported on stdout.
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_chown_failed_stdout() {
-    // test chown root file.txt
+    use chown::entries::{gid2grp, uid2usr};
 
-    // TODO: implement once output "failed to change" to stdout is fixed
-    // expected:
-    // $ chown -v root file.txt 2>out_err ; echo $? ; cat out_err
-    // failed to change ownership of 'file.txt' from jhs to root
-    // 1
-    // chown: changing ownership of 'file.txt': Operation not permitted
+    // Root can give the files to root, so nothing fails.
+    if rustix::process::geteuid().is_root() {
+        println!("Test skipped: running as root");
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    at.mkdir("dir");
+    at.touch("dir/file");
+    let user = uid2usr(rustix::process::geteuid().as_raw()).unwrap();
+    let root = uid2usr(0).unwrap();
+    let group = gid2grp(at.plus("dir").metadata().unwrap().gid()).unwrap();
+    let failed = |path| {
+        format!("failed to change ownership of '{path}' from {user}:{group} to {root}:{group}\n")
+    };
+    let denied = |path| format!("chown: changing ownership of '{path}': Operation not permitted\n");
+
+    scene
+        .ucmd()
+        .args(&["-R", "-v", "root", "file"])
+        .fails_with_code(1)
+        .stdout_is(failed("file"))
+        .stderr_is(denied("file"));
+    // Files inside the directory get the line too.
+    scene
+        .ucmd()
+        .args(&["-R", "-v", "root", "dir"])
+        .fails_with_code(1)
+        .stdout_is(failed("dir") + &failed("dir/file"))
+        .stderr_is(denied("dir") + &denied("dir/file"));
 }
 
 #[test]
@@ -405,7 +432,7 @@ fn test_chown_owner_group() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains("failed to change");
+        .stdout_contains("failed to change");
 }
 
 #[test]
@@ -503,7 +530,7 @@ fn test_chown_only_group() {
             .arg("--verbose")
             .arg(file1)
             .fails()
-            .stderr_contains("failed to change");
+            .stdout_contains("failed to change");
     }
 }
 
@@ -538,7 +565,7 @@ fn test_chown_only_user_id() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains("failed to change");
+        .stdout_contains("failed to change");
 }
 
 #[test]
@@ -637,7 +664,7 @@ fn test_chown_only_group_id() {
             .arg("--verbose")
             .arg(file1)
             .fails()
-            .stderr_contains("failed to change");
+            .stdout_contains("failed to change");
     }
 }
 
@@ -721,7 +748,7 @@ fn test_chown_owner_group_id() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains("failed to change");
+        .stdout_contains("failed to change");
 }
 
 #[test]
@@ -763,7 +790,7 @@ fn test_chown_owner_group_mix() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains("failed to change");
+        .stdout_contains("failed to change");
 }
 
 #[test]
@@ -780,10 +807,10 @@ fn test_chown_recursive() {
 
     at.mkdir_all("a/b/c");
     at.mkdir("z");
-    at.touch(at.plus_as_string("a/a"));
-    at.touch(at.plus_as_string("a/b/b"));
-    at.touch(at.plus_as_string("a/b/c/c"));
-    at.touch(at.plus_as_string("z/y"));
+    at.touch(at.plus("a/a"));
+    at.touch(at.plus("a/b/b"));
+    at.touch(at.plus("a/b/c/c"));
+    at.touch(at.plus("z/y"));
 
     scene
         .ucmd()
@@ -858,9 +885,39 @@ fn test_chown_file_notexisting() {
         .fails()
         .stdout_contains(format!(
             "failed to change ownership of 'not_existing' to {user_name}"
-        ));
-    // TODO: uncomment once message changed from "cannot dereference" to "cannot access"
-    // result.stderr_contains("cannot access 'not_existing': No such file or directory");
+        ))
+        .stderr_contains("cannot access 'not_existing': No such file or directory");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "openbsd")))]
+fn test_chown_cannot_access_vs_cannot_dereference() {
+    // GNU says "cannot dereference" only for a symlink whose target is missing,
+    // and "cannot access" when the operand itself can't be reached.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("f");
+    at.symlink_file("missing", "dangling");
+    let uid = at.metadata("f").uid().to_string();
+
+    scene
+        .ucmd()
+        .arg(&uid)
+        .arg("f/")
+        .fails_with_code(1)
+        .stderr_is("chown: cannot access 'f/': Not a directory\n");
+    scene
+        .ucmd()
+        .arg(&uid)
+        .arg("dir/missing")
+        .fails_with_code(1)
+        .stderr_is("chown: cannot access 'dir/missing': No such file or directory\n");
+    scene
+        .ucmd()
+        .arg(&uid)
+        .arg("dangling")
+        .fails_with_code(1)
+        .stderr_is("chown: cannot dereference 'dangling': No such file or directory\n");
 }
 
 #[test]
@@ -1041,6 +1098,7 @@ fn test_chown_no_dereference_symlink_to_dir() {
 }
 
 #[test]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_chown_symlink_cycles() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1140,4 +1198,58 @@ fn verbose_missing_file_write_error_is_reported_not_panic() {
         .set_stdout(dev_full)
         .fails_with_code(1)
         .stderr_contains("chown: write error: No space left on device");
+}
+
+#[test]
+fn test_repeated_flags_are_accepted() {
+    use rustix::process::geteuid;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.touch("dir/file");
+
+    // GNU chown accepts a flag given more than once; the last one wins.
+    for flags in [
+        vec!["-R", "-R"],
+        vec!["-R", "--recursive"],
+        vec!["-v", "-v"],
+        vec!["-c", "-c"],
+        vec!["-f", "-f"],
+        vec!["-R", "-c", "-c"],
+    ] {
+        scene
+            .ucmd()
+            .args(&flags)
+            .arg(geteuid().to_string())
+            .arg("dir")
+            .succeeds();
+    }
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "chown -v must print +ID specs as plain IDs"]
+fn test_chown_verbose_broken_symlink_plus_ids() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.symlink_file("absent", "ghost");
+    let uid = rustix::process::geteuid().as_raw();
+    let gid = rustix::process::getegid().as_raw();
+    for (spec, expected) in [
+        (
+            format!("+{uid}"),
+            format!("failed to change ownership of 'ghost' to {uid}\n"),
+        ),
+        (
+            format!(":+{gid}"),
+            format!("failed to change group of 'ghost' to {gid}\n"),
+        ),
+    ] {
+        scene
+            .ucmd()
+            .args(&["-v", &spec, "ghost"])
+            .fails_with_code(1)
+            .stdout_is(expected)
+            .stderr_contains("chown: cannot dereference 'ghost': ");
+    }
 }

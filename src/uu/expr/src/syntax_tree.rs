@@ -275,11 +275,6 @@ fn transpile_bre_to_ere(pattern_str: &str) -> ExprResult<String> {
     let mut is_start_of_expression = true;
     let mut after_anchor_caret = false;
 
-    // All patterns are anchored so they begin with a caret (^)
-    if pattern_chars.peek() != Some(&'^') {
-        re_string.push('^');
-    }
-
     while let Some(curr) = pattern_chars.next() {
         let curr_is_escaped = prev == '\\' && !prev_is_escaped;
         let mut next_is_start = false;
@@ -425,7 +420,9 @@ fn build_regex(pattern_bytes: Vec<u8>) -> ExprResult<Regex> {
 
     let re_string = transpile_bre_to_ere(&pattern_str)?;
 
-    RegexBuilder::new(&format!("(?s){re_string}"))
+    // Patterns are anchored at the start of the string. The group makes the
+    // anchor apply to every top-level `\|` alternative, not just the first one.
+    RegexBuilder::new(&format!("(?s)^(?:{re_string})"))
         .oniguruma_mode(true)
         .leftmost_longest(true)
         .build()
@@ -575,21 +572,32 @@ impl From<MaybeNonUtf8String> for NumOrStr {
     }
 }
 
+/// Parse an integer operand: an optional `-` followed by decimal digits.
+///
+/// `BigInt`'s own parser also takes a leading `+` and `_` separators, which
+/// `expr` treats as plain strings.
+fn parse_integer(bytes: &[u8]) -> Option<BigInt> {
+    let digits = bytes.strip_prefix(b"-").unwrap_or(bytes);
+    if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    std::str::from_utf8(bytes).ok()?.parse().ok()
+}
+
 impl NumOrStr {
     pub fn to_bigint(&self) -> Option<BigInt> {
         match self {
             Self::Num(num) => Some(num.clone()),
-            Self::Str(str) => std::str::from_utf8(str).ok()?.parse::<BigInt>().ok(),
+            Self::Str(str) => parse_integer(str),
         }
     }
 
     pub fn eval_as_bigint(self) -> ExprResult<BigInt> {
         match self {
             Self::Num(num) => Ok(num),
-            Self::Str(str) => std::str::from_utf8(&str)
-                .ok()
-                .and_then(|s| s.parse::<BigInt>().ok())
-                .ok_or_else(|| ExprError::NonIntegerArgument(str.clone())),
+            Self::Str(str) => {
+                parse_integer(&str).ok_or_else(|| ExprError::NonIntegerArgument(str.clone()))
+            }
         }
     }
 
@@ -1030,6 +1038,8 @@ impl<'a, S: AsRef<MaybeNonUtf8Str>> Parser<'a, S> {
                         stack.push(ParseFrame::CloseParen);
                         ParseState::Expression { min_prec: 0 }
                     }
+                    // Only `+ )` makes a value out of it.
+                    b")" => return Err(ExprError::UnexpectedClosingParenthesis),
                     s => ParseState::Value(AstNode::new(AstNodeInner::Leaf {
                         value: s.into(),
                         position: self.index - 1,
@@ -1504,6 +1514,27 @@ mod test {
 
         let result = evaluate_match_expression(b"world".to_vec(), b"world$".to_vec()).unwrap();
         assert_eq!(result.eval_as_string(), b"5");
+
+        // Every top-level alternative is anchored, not just the first one
+        let result = evaluate_match_expression(b"xab".to_vec(), b"a\\|b".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"0");
+
+        let result = evaluate_match_expression(b"xab".to_vec(), b"^a\\|b".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"0");
+
+        let result = evaluate_match_expression(
+            b"evil status".to_vec(),
+            b"start$\\|stop$\\|status$".to_vec(),
+        )
+        .unwrap();
+        assert_eq!(result.eval_as_string(), b"0");
+
+        let result =
+            evaluate_match_expression(b"zabc".to_vec(), b"x\\|\\(abc\\)".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"");
+
+        let result = evaluate_match_expression(b"bx".to_vec(), b"a\\|b".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"1");
     }
 
     #[test]

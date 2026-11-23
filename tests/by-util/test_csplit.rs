@@ -132,6 +132,35 @@ fn test_binary_input_regex() {
 }
 
 #[test]
+fn test_regex_does_not_ignore_carriage_return() {
+    for (pattern, stdout) in [("/^---$/", "9\n"), ("/^---$/-1", "9\n"), ("%^---$%", "")] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["-", pattern])
+            .pipe_in("x\n---\r\ny\n")
+            .fails_with_code(1)
+            .stdout_is(stdout)
+            .stderr_is(format!("csplit: '{pattern}': match not found\n"));
+
+        assert!(!at.file_exists("xx00"));
+    }
+}
+
+#[test]
+fn test_regex_matches_carriage_return() {
+    let input = "x\n---\r\ny\n";
+    for (pattern, split) in [("/^---.$/", 2), ("/^y$/-1", 2), ("/^---.$/+1", 7)] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["-", pattern])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(format!("{split}\n{}\n", input.len() - split));
+
+        assert_eq!(at.read("xx00"), &input[..split]);
+        assert_eq!(at.read("xx01"), &input[split..]);
+    }
+}
+
+#[test]
 fn test_binary_input_skip_regex() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-", "%match%"])
@@ -805,6 +834,37 @@ fn test_suppress_line_number_before_current_position() {
         assert_eq!(at.read("xx01"), "");
         assert_eq!(at.read("xx02"), generate(12, 51));
     }
+}
+
+#[test]
+fn test_up_to_line_one_past_end_suppress_matched() {
+    // There is no line 51 to suppress, so the split is complete.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "--suppress-matched", "51"])
+        .succeeds()
+        .stdout_only("141\n0\n");
+    assert_eq!(at.read("xx00"), generate(1, 51));
+    assert_eq!(at.read("xx01"), "");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "--suppress-matched", "17", "{2}"])
+        .succeeds()
+        .stdout_only("39\n48\n48\n0\n");
+    assert_eq!(at.read("xx02"), generate(35, 51));
+    assert_eq!(at.read("xx03"), "");
+
+    new_ucmd!()
+        .args(&["numbers50.txt", "-k", "--suppress-matched", "17", "{*}"])
+        .fails()
+        .stdout_is("39\n48\n48\n0\n")
+        .stderr_is("csplit: '17': line number out of range on repetition 3\n");
+
+    // Line 50 was already suppressed, so there is nothing left for line 51.
+    new_ucmd!()
+        .args(&["numbers50.txt", "--suppress-matched", "50", "51"])
+        .fails()
+        .stdout_is("138\n0\n")
+        .stderr_is("csplit: '51': line number out of range\n");
 }
 
 #[test]
@@ -1848,8 +1908,9 @@ fn test_create_error_reports_filename() {
         .stderr_is("csplit: xx00: Permission denied\n");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg(all(target_os = "linux", not(wasi_runner)))]
+#[cfg(target_os = "linux")]
 fn test_csplit_dev_full_stdout() {
     use std::fs::OpenOptions;
 
@@ -1883,4 +1944,66 @@ fn test_empty_skip_to_regex_is_accepted() {
 
     ucmd.args(&["letters", "%%"]).succeeds().stdout_only("19\n");
     assert_eq!(at.read("xx00"), "delta\necho\nfoxtrot\n");
+}
+
+/// `-z` must not remove an existing file that this run never created.
+#[test]
+fn test_elide_empty_files_keeps_input_on_invalid_pattern() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("xx00", "original data\n");
+
+    ucmd.args(&["-z", "-k", "xx00", "/[/"]).fails_with_code(1);
+
+    assert_eq!(at.read("xx00"), "original data\n");
+}
+
+/// `-z` must not remove an existing split file that could not be opened for writing.
+#[test]
+#[cfg(unix)]
+fn test_elide_empty_files_keeps_file_it_failed_to_create() {
+    // Root can open a read-only file for writing, so File::create would not fail.
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input", "a\nb\n");
+    at.write("xx00", "KEEP THIS\n");
+    at.set_mode("xx00", 0o444);
+
+    ucmd.args(&["-z", "-k", "input", "2"])
+        .fails_with_code(1)
+        .stderr_is("csplit: xx00: Permission denied\n");
+
+    assert_eq!(at.read("xx00"), "KEEP THIS\n");
+}
+
+#[test]
+fn test_repeat_count_overflow() {
+    // Repro for #12495: a `{N}` count above usize::MAX used to panic on
+    // `parse::<usize>().unwrap()`; it must now fail cleanly.
+    new_ucmd!()
+        .args(&["numbers50.txt", "10", "{99999999999999999999999999999999}"])
+        .fails_with_code(1)
+        .stderr_is("csplit: '{99999999999999999999999999999999}': invalid pattern\n");
+}
+
+#[test]
+fn test_repeat_count_saturates_at_usize_max() {
+    // Repro for #12495: the `+ 1` on a usize::MAX count used to overflow.
+    // usize::MAX is formatted so the count parses on 32- and 64-bit alike.
+    let max = usize::MAX;
+    new_ucmd!()
+        .args(&["numbers50.txt", "10", &format!("{{{max}}}")])
+        .fails_with_code(1)
+        .stderr_is("csplit: '10': line number out of range on repetition 5\n");
+}
+
+#[test]
+fn test_match_offset_overflow() {
+    // Repro for #12495: a `/regex/OFF` offset outside i32 range used to panic
+    // on `parse().unwrap()`; it must now fail cleanly.
+    new_ucmd!()
+        .args(&["numbers50.txt", "/9$/-2147483649"])
+        .fails_with_code(1)
+        .stderr_is("csplit: '/9$/-2147483649': line number out of range\n");
 }

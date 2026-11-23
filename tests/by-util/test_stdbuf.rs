@@ -447,7 +447,7 @@ fn test_stdbuf_child_execs_command() {
 
 /// Verify that stdbuf does not leak temporary directories.
 /// Each invocation should clean up its own tmpdir.
-/// Regression test for https://github.com/uutils/coreutils/issues/13939
+/// Regression test for <https://github.com/uutils/coreutils/issues/13939>
 #[test]
 #[cfg(all(target_os = "linux", not(feature = "feat_external_libstdbuf")))]
 fn test_stdbuf_no_tmpdir_leak() {
@@ -483,7 +483,7 @@ fn test_stdbuf_no_tmpdir_leak() {
 
 /// Verify that the temporary directory created for libstdbuf.so is private (0700)
 /// and the embedded library file is owner read/write only (0600).
-/// Regression test for https://github.com/uutils/coreutils/issues/13939
+/// Regression test for <https://github.com/uutils/coreutils/issues/13939>
 #[test]
 #[cfg(all(target_os = "linux", not(feature = "feat_external_libstdbuf")))]
 fn test_stdbuf_tmpdir_is_private() {
@@ -549,12 +549,15 @@ fn test_stdbuf_tmpdir_is_private() {
 /// signal must still be reported as `128 + signal`, not as a clean 0.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_stdbuf_reports_signalled_command() {
-    // SIGQUIT (3) rather than the usual SIGTERM, so the expected 131 cannot be
-    // confused with a status the shell would produce on its own.
+    // SIGKILL (9 on every Unix) because no process can ignore or catch it, so
+    // the shell is guaranteed to die from it. Other signals are not reliable
+    // here: bash, when it is /bin/sh, ignores SIGQUIT for `sh -c`, and any
+    // signal ignored by the parent is inherited as ignored.
     new_ucmd!()
-        .args(&["-o0", "sh", "-c", "kill -QUIT $$"])
-        .fails_with_code(131);
+        .args(&["-o0", "sh", "-c", "kill -KILL $$"])
+        .fails_with_code(137);
 }
 
 #[cfg(unix)]

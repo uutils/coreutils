@@ -20,6 +20,7 @@ fn test_invalid_arg() {
 
 #[test]
 #[cfg(not(target_os = "android"))]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_uptime() {
     let result = new_ucmd!().succeeds();
     result.stdout_contains(" up ");
@@ -61,7 +62,7 @@ fn test_uptime_for_file_without_utmpx_records() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("file1", "hello");
 
-    ucmd.arg(at.plus_as_string("file1"))
+    ucmd.arg(at.plus("file1"))
         .fails()
         .stderr_contains("uptime: couldn't get boot time")
         .stdout_contains("up ???? days ??:??")
@@ -86,8 +87,8 @@ fn test_uptime_with_fifo() {
     // Creating a child process to write to the fifo
     let mut child = ts
         .ccmd("cp")
-        .arg(at.plus_as_string("a"))
-        .arg(at.plus_as_string("fifo1"))
+        .arg(at.plus("a"))
+        .arg(at.plus("fifo1"))
         .run_no_wait();
 
     ts.ucmd()
@@ -123,6 +124,7 @@ fn test_uptime_with_non_existent_file() {
     all(target_arch = "aarch64", target_os = "linux"),
     ignore = "Issue #7159 - Test not supported on ARM64 Linux"
 )]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 #[allow(clippy::too_many_lines, clippy::items_after_statements)]
 fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
     use std::fs::File;
@@ -325,6 +327,7 @@ fn test_uptime_check_users_openbsd() {
 }
 
 #[test]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_uptime_since() {
     let re = Regex::new(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}").unwrap();
 
@@ -332,6 +335,7 @@ fn test_uptime_since() {
 }
 
 #[test]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_uptime_pretty_print() {
     new_ucmd!()
         .arg("-p")

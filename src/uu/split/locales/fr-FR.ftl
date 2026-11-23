@@ -15,6 +15,8 @@ split-after-help = Sortir des morceaux de taille fixe d'ENTRÉE vers PREFIXEaa, 
     - r/N comme 'l' mais utiliser la distribution round robin
     - r/K/N pareillement mais ne sortir que le Kème de N vers stdout
 
+# Messages
+split-executing-with-file = exécution avec FILE={ $file }
 # Messages d'erreur
 split-error-suffix-not-parsable = longueur de suffixe invalide : { $value }
 split-error-suffix-contains-separator = suffixe invalide { $value }, contient un séparateur de répertoire
@@ -32,6 +34,8 @@ split-error-cannot-split-more-than-one-way = impossible de diviser de plus d'une
 split-error-overflow = Débordement
 split-error-output-file-suffixes-exhausted = suffixes de fichiers de sortie épuisés
 split-error-numerical-suffix-start-too-large = la valeur de départ du suffixe numérique est trop grande pour la longueur du suffixe
+split-error-invalid-numeric-suffix-start = { $value } : valeur de départ invalide pour un suffixe numérique
+split-error-invalid-hex-suffix-start = { $value } : valeur de départ invalide pour un suffixe hexadécimal
 split-error-cannot-open-for-reading = impossible d'ouvrir { $file } en lecture
 split-error-would-overwrite-input = { $file } écraserait l'entrée ; abandon
 split-error-cannot-determine-file-size = { $input } : impossible de déterminer la taille du fichier

@@ -95,10 +95,12 @@ cachegrind
 chglog
 codespell
 commitlint
+dpkg
 dprint
 dtrace
 flamegraph
 flamegraphs
+getenforce
 gcov
 gmake
 gnuls
@@ -109,9 +111,11 @@ markdownlint
 rerast
 rollup
 samply
+sccache
 sed
 selinuxenabled
 sestatus
+setenforce
 vdir
 wslpath
 xargs

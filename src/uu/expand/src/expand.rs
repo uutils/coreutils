@@ -8,13 +8,14 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
 use uucore::char_width::char_width_at;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
+use uucore::io::InputReader;
 use uucore::{format_usage, show, translate};
 
 pub mod options {
@@ -25,6 +26,9 @@ pub mod options {
 }
 
 static DEFAULT_TABSTOP: usize = 8;
+
+/// Characters that separate the values of a tab stop list.
+const TAB_STOP_SEPARATORS: [char; 3] = [' ', '\t', ','];
 
 /// The mode to use when replacing tabs beyond the last one specified in
 /// the `--tabs` argument.
@@ -69,7 +73,7 @@ impl UError for ParseError {}
 /// list specified here.
 fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
     // Leading spaces, tabs, and commas are ignored.
-    let s = s.trim_start_matches([' ', '\t', ',']);
+    let s = s.trim_start_matches(TAB_STOP_SEPARATORS);
 
     // If there were only spaces, tabs, and commas in the string, just use the
     // default tabstops.
@@ -80,7 +84,7 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
     let mut nums = vec![];
     let mut remaining_mode = RemainingMode::None;
     let mut is_specifier_already_used = false;
-    for word in s.split([' ', '\t', ',']) {
+    for word in s.split(TAB_STOP_SEPARATORS) {
         let bytes = word.as_bytes();
         for i in 0..bytes.len() {
             match bytes[i] {
@@ -90,10 +94,24 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
                     // Parse a number from the byte sequence.
                     let s = from_utf8(&bytes[i..]).unwrap();
                     match s.parse::<usize>() {
+                        // After a tab list, `+0` or `/0` sets no tab size yet,
+                        // as in GNU: a later number still gives one, and if
+                        // none does the list is used as if it were not there.
+                        Ok(0)
+                            if remaining_mode != RemainingMode::None
+                                && !nums.is_empty()
+                                && !is_specifier_already_used =>
+                        {
+                            break;
+                        }
                         // Tab size must be positive.
                         Ok(0) => return Err(ParseError::TabSizeCannotBeZero),
-                        // Tab sizes must be ascending.
-                        Ok(num) if nums.last().is_some_and(|last| *last >= num) => {
+                        // Tab stops must be ascending. A number after `/` or `+` is a
+                        // tab size for the remaining columns, not a tab stop.
+                        Ok(num)
+                            if remaining_mode == RemainingMode::None
+                                && nums.last().is_some_and(|last| *last >= num) =>
+                        {
                             return Err(ParseError::TabSizesMustBeAscending);
                         }
                         Ok(num) => {
@@ -134,6 +152,11 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
             }
         }
     }
+
+    // A `+0` or `/0` that no later number replaced leaves the list as given.
+    if !is_specifier_already_used {
+        remaining_mode = RemainingMode::None;
+    }
     // If no numbers could be parsed (for example, if `s` were "+,+,+"),
     // then just use the default tabstops.
     if nums.is_empty() {
@@ -144,6 +167,25 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
         remaining_mode = RemainingMode::None;
     }
     Ok((remaining_mode, nums))
+}
+
+/// Join the values of a repeated `--tabs` into one list. A `+N` or `/N` ending
+/// one of them applies after all the tab stops, so it is moved to the end.
+fn join_tabs_values<'a>(values: impl Iterator<Item = &'a str>) -> String {
+    let mut stops = vec![];
+    let mut specifiers = vec![];
+    for value in values {
+        let value = value.trim_end_matches(TAB_STOP_SEPARATORS);
+        let start = value.rfind(TAB_STOP_SEPARATORS).map_or(0, |i| i + 1);
+        if value[start..].starts_with(['+', '/']) {
+            specifiers.push(&value[start..]);
+            stops.push(value[..start].trim_end_matches(TAB_STOP_SEPARATORS));
+        } else {
+            stops.push(value);
+        }
+    }
+    stops.extend(specifiers);
+    stops.join(",")
 }
 
 struct Options {
@@ -160,7 +202,7 @@ struct Options {
 impl Options {
     fn new(matches: &ArgMatches) -> Result<Self, ParseError> {
         let (remaining_mode, tabstops) = match matches.get_many::<String>(options::TABS) {
-            Some(s) => tabstops_parse(&s.map(String::as_str).collect::<Vec<_>>().join(","))?,
+            Some(s) => tabstops_parse(&join_tabs_values(s.map(String::as_str)))?,
             None => (RemainingMode::None, vec![DEFAULT_TABSTOP]),
         };
 
@@ -189,11 +231,12 @@ fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
     let mut processed_args = Vec::with_capacity(args.len());
 
     for arg in args {
-        if let Some(arg) = arg.to_str()
-            && arg.starts_with('-')
-            && arg[1..].chars().all(is_digit_or_comma)
+        if let Some(shortcut) = arg
+            .to_str()
+            .and_then(|arg| arg.strip_prefix('-'))
+            .filter(|shortcut| !shortcut.is_empty() && shortcut.chars().all(is_digit_or_comma))
         {
-            arg[1..]
+            shortcut
                 .split(',')
                 .filter(|s| !s.is_empty())
                 .for_each(|s| processed_args.push(OsString::from(format!("--tabs={s}"))));
@@ -254,9 +297,9 @@ pub fn uu_app() -> Command {
     )
 }
 
-fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read>>> {
+fn open(path: &OsString) -> UResult<InputReader> {
     if path == "-" {
-        return Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>));
+        return Ok(InputReader::Stdin(stdin().lock()));
     }
     let path_ref = Path::new(path);
     // some platforms cannot catch this as read error. accept additional overhead.
@@ -270,7 +313,7 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read>>> {
     let file = File::open(path_ref).map_err_context(|| path.maybe_quote().to_string())?;
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
     let _ = rustix::fs::fadvise(&file, 0, None, rustix::fs::Advice::Sequential);
-    Ok(BufReader::new(Box::new(file) as Box<dyn Read>))
+    Ok(InputReader::File(BufReader::new(file)))
 }
 
 /// Compute the number of spaces to the next tabstop.
@@ -317,6 +360,14 @@ fn next_tabstop(tabstops: &[usize], col: usize, remaining_mode: &RemainingMode) 
     }
 }
 
+/// Where the output is in the current line.
+struct LineState {
+    /// The column of the cursor.
+    col: usize,
+    /// Whether only blanks have been seen so far, for `--initial`.
+    init: bool,
+}
+
 #[derive(PartialEq, Eq, Debug)]
 enum CharType {
     Backspace,
@@ -336,6 +387,8 @@ fn classify_char(buf: &[u8], byte: usize, utf8: bool) -> (CharType, usize, usize
         return match b {
             b'\t' => (Tab, 0, 1),
             b'\x08' => (Backspace, 0, 1),
+            // NUL has no display width (`wcwidth(L'\0')` is 0).
+            b'\0' => (Other, 0, 1),
             _ => (Other, 1, 1),
         };
     }
@@ -345,6 +398,13 @@ fn classify_char(buf: &[u8], byte: usize, utf8: bool) -> (CharType, usize, usize
         return (Other, width, nbytes);
     }
     (Other, 1, 1) // implicit assumption: non-UTF-8 char is 1 col wide
+}
+
+/// Whether `b` is an ASCII byte that takes one column and needs no special
+/// handling: not a tab, backspace, newline or NUL.
+#[inline]
+fn is_plain(b: u8) -> bool {
+    b.is_ascii() && !matches!(b, b'\t' | b'\x08' | b'\n' | b'\0')
 }
 
 /// Write spaces for a tab expansion.
@@ -366,36 +426,56 @@ fn expand_buf(
     output: &mut BufWriter<std::io::Stdout>,
     tabstops: &[usize],
     options: &Options,
-    col: &mut usize,
+    line: &mut LineState,
 ) -> std::io::Result<()> {
     use self::CharType::{Backspace, Other, Tab};
 
+    // The state carries over to the next buffer and the next file, as they
+    // continue the same line. Copied into locals so that the loop does not
+    // reload it through the reference after every write.
+    let LineState { mut col, mut init } = *line;
+    let mut byte = 0;
+
     // Fast path: if there are no tabs, backspaces, and (in UTF-8 mode or no carriage returns),
-    // we can write the buffer directly without character-by-character processing.
+    // the lines can be written directly without character-by-character processing.
     // Single pass with early exit instead of up to 3 separate .contains() scans.
+    // Only the complete lines are written this way, the rest of the buffer goes
+    // through the loop below so that the column is known when the line goes on.
     let needs_processing = buf
         .iter()
         .any(|&b| b == b'\t' || b == b'\x08' || (!options.utf8 && b == b'\r'));
-    if !needs_processing {
-        output.write_all(buf)?;
-        if let Some(n) = buf.iter().rposition(|&b| b == b'\n') {
-            *col = buf.len() - n - 1;
-        }
-        return Ok(());
+    if !needs_processing && let Some(n) = buf.iter().rposition(|&b| b == b'\n') {
+        output.write_all(&buf[..=n])?;
+        col = 0;
+        init = true;
+        byte = n + 1;
     }
 
-    let mut byte = 0;
-    let mut init = true;
-
     while byte < buf.len() {
+        // Write a run of plain one-column ASCII bytes at once.
+        if is_plain(buf[byte]) {
+            let end = buf[byte + 1..]
+                .iter()
+                .position(|&b| !is_plain(b))
+                .map_or(buf.len(), |n| byte + 1 + n);
+            let plain = &buf[byte..end];
+            if init {
+                init = plain.iter().all(|&b| b == b' ');
+            }
+            col += plain.len();
+            output.write_all(plain)?;
+            byte = end;
+            continue;
+        }
+
         let (ctype, cwidth, nbytes) = classify_char(buf, byte, options.utf8);
 
         // figure out how many columns this char takes up
         match ctype {
             Tab => {
                 // figure out how many spaces to the next tabstop
-                let nts = next_tabstop(tabstops, *col, &options.remaining_mode);
-                *col += nts;
+                let nts = next_tabstop(tabstops, col, &options.remaining_mode);
+                col += nts;
 
                 // now dump out either spaces if we're expanding, or a literal tab if we're not
                 if init || !options.iflag {
@@ -405,7 +485,7 @@ fn expand_buf(
                 }
             }
             Backspace => {
-                *col = col.saturating_sub(1);
+                col = col.saturating_sub(1);
 
                 // if we're writing anything other than a space, then we're
                 // done with the line's leading spaces
@@ -416,7 +496,7 @@ fn expand_buf(
                 output.write_all(&buf[byte..byte + nbytes])?;
             }
             Other => {
-                *col += cwidth;
+                col += cwidth;
 
                 // if we're writing anything other than a space, then we're
                 // done with the line's leading spaces
@@ -425,7 +505,7 @@ fn expand_buf(
                 }
 
                 if buf[byte] == b'\n' {
-                    *col = 0;
+                    col = 0;
                     init = true;
                 }
 
@@ -436,6 +516,7 @@ fn expand_buf(
         byte += nbytes; // advance the pointer
     }
 
+    *line = LineState { col, init };
     Ok(())
 }
 
@@ -443,15 +524,15 @@ fn expand_file(
     file: &OsString,
     output: &mut BufWriter<std::io::Stdout>,
     options: &Options,
+    line: &mut LineState,
 ) -> UResult<()> {
     let mut input = open(file)?;
     let ts = options.tabstops.as_ref();
-    let mut col = 0;
     loop {
         match input.fill_buf() {
             Ok([]) => break,
             Ok(buf) => {
-                expand_buf(buf, output, ts, options, &mut col)
+                expand_buf(buf, output, ts, options, line)
                     .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
                 let len = buf.len();
                 input.consume(len);
@@ -464,9 +545,12 @@ fn expand_file(
 
 fn expand(options: &Options) -> UResult<()> {
     let mut output = BufWriter::new(stdout());
+    // The files are one stream: a line without a newline at the end of a file
+    // goes on in the next one.
+    let mut line = LineState { col: 0, init: true };
 
     for file in &options.files {
-        if let Err(e) = expand_file(file, &mut output, options) {
+        if let Err(e) = expand_file(file, &mut output, options, &mut line) {
             show!(e);
             set_exit_code(1);
         }

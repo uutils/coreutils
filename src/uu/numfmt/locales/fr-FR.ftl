@@ -78,6 +78,7 @@ numfmt-error-invalid-format-width-overflow = format invalide { $format } (débor
 numfmt-error-invalid-precision = précision invalide dans le format { $format }
 numfmt-error-format-too-many-percent = le format { $format } a trop de directives %
 numfmt-error-unknown-invalid-mode = Mode invalide inconnu : { $mode }
+numfmt-error-multiple-field-specifications = spécifications de champ multiples
 
 # Messages de débogage
 numfmt-debug-no-conversion = aucune option de conversion spécifiée

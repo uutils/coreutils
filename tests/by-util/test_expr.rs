@@ -289,6 +289,38 @@ fn test_regex_trailing_backslash() {
 }
 
 #[test]
+fn test_regex_alternation_is_anchored() {
+    new_ucmd!()
+        .args(&["xab", ":", "a\\|b"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["xab", ":", "^a\\|b"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["file:///etc/shadow#ssh://", ":", "https://\\|ssh://"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["evil status", ":", "start$\\|stop$\\|status$"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["zabc", ":", "x\\|\\(abc\\)"])
+        .fails_with_code(1)
+        .stdout_only("\n");
+    new_ucmd!()
+        .args(&["match", "xab", "a\\|b"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["ssh://host", ":", "https://\\|ssh://"])
+        .succeeds()
+        .stdout_only("6\n");
+}
+
+#[test]
 fn test_regex_caret() {
     new_ucmd!()
         .args(&["a^b", ":", "a^b"])
@@ -581,11 +613,8 @@ fn test_invalid_substr() {
         .stdout_only("\n");
 }
 
+#[uutests::wasi_ignore(Usize32BitOverflow)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: usize is 32-bit, the host usize::MAX does not parse"
-)]
 fn test_substr_large_length_capacity_overflow() {
     new_ucmd!()
         .args(&["substr", "abc", "1", &usize::MAX.to_string()])
@@ -626,11 +655,68 @@ fn test_invalid_syntax() {
 }
 
 #[test]
+fn test_closing_parenthesis_is_not_a_value() {
+    for args in [
+        &[")"][..],
+        &["length", ")"],
+        &["(", ")"],
+        &["1", "+", ")"],
+        &[")", "=", "a"],
+        &["a", "|", ")"],
+    ] {
+        new_ucmd!()
+            .args(args)
+            .fails_with_code(2)
+            .stderr_only("expr: syntax error: unexpected ')'\n");
+    }
+
+    // `+` still quotes it.
+    new_ucmd!().args(&["+", ")"]).succeeds().stdout_only(")\n");
+    new_ucmd!()
+        .args(&["(", "+", ")", ")"])
+        .succeeds()
+        .stdout_only(")\n");
+}
+
+#[test]
 fn test_num_str_comparison() {
     new_ucmd!()
         .args(&["1a", "<", "1", "+", "1"])
         .succeeds()
         .stdout_is("1\n");
+}
+
+#[test]
+fn test_integer_syntax_is_optional_minus_and_digits() {
+    // Anything else, like a leading `+` or a `_` separator, is a string.
+    for args in [
+        &["+1", "+", "1"],
+        &["1", "+", "+1"],
+        &["1_0", "+", "5"],
+        &["1_", "+", "1"],
+        &["6", "/", "+2"],
+    ] {
+        new_ucmd!()
+            .args(args)
+            .fails_with_code(2)
+            .stderr_only("expr: non-integer argument\n");
+    }
+
+    for (args, expected) in [
+        (&["+5", "=", "5"], "0\n"),
+        (&["1_0", "=", "10"], "0\n"),
+        (&["1_0", "<", "9"], "1\n"),
+        (&["+5", "!=", "5"], "1\n"),
+        (&["-00", "=", "0"], "1\n"),
+        (&["01", "+", "1"], "2\n"),
+    ] {
+        new_ucmd!().args(args).run().stdout_only(expected);
+    }
+
+    new_ucmd!()
+        .args(&["substr", "abcdef", "+2", "3"])
+        .fails_with_code(1)
+        .stdout_only("\n");
 }
 
 #[test]
@@ -1574,8 +1660,8 @@ mod expr_arithmetic {
 mod locale_aware {
     use uutests::new_ucmd;
 
+    #[uutests::wasi_ignore(NoLocaleData)]
     #[test]
-    #[cfg_attr(wasi_runner, ignore = "WASI: no locale data, every locale is C")]
     fn test_expr_collating() {
         for (loc, code, output) in [
             ("C", 0, "1\n"),
@@ -2042,8 +2128,8 @@ mod expr_multibyte_arithmetic {
     }
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no locale data, every locale is C")]
 fn test_emoji_operations() {
     new_ucmd!()
         .args(&["🚀", "=", "🚀"])
@@ -2161,6 +2247,26 @@ expr: syntax error: expecting ')' after '7'
    │
  1 │ ( 6 + 7
    │       ─
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unexpected_closing_parenthesis() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["6", "+", ")"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+expr: syntax error: unexpected ')'
+   ╭─[ expr:1:5 ]
+   │
+ 1 │ 6 + )
+   │     ─
 ───╯"
         );
     }

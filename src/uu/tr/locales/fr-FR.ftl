@@ -33,10 +33,12 @@ tr-error-invalid-char-class = classe de caractères non valide { $class }
 tr-error-missing-equivalence-class-char = caractère de classe d'équivalence manquant '[==]'
 tr-error-multiple-char-repeat-in-set2 = seule une construction de répétition [c*] peut apparaître dans string2
 tr-error-char-repeat-in-set1 = la construction de répétition [c*] ne peut pas apparaître dans string1
+tr-error-char-repeat-in-set2-when-not-translating = la construction [c*] ne peut apparaître dans string2 que lors de la traduction
+tr-error-equivalence-class-in-set2-when-translating = les expressions [=c=] ne peuvent pas apparaître dans string2 lors de la traduction
 tr-error-invalid-repeat-count = nombre de répétitions invalide { $count } dans la construction [c*n]
 tr-error-empty-set2-when-not-truncating = quand on ne tronque pas set1, string2 doit être non-vide
 tr-error-class-except-lower-upper-in-set2 = lors de la traduction, les seules classes de caractères qui peuvent apparaître dans set2 sont 'upper' et 'lower'
-tr-error-class-in-set2-not-matched = lors de la traduction, chaque 'upper'/'lower' dans set2 doit être associé à un 'upper'/'lower' à la même position dans set1
+tr-error-class-in-set2-not-matched = les structures [:upper:] ou [:lower:] ne sont pas alignées correctement
 tr-error-set1-longer-set2-ends-in-class = lors de la traduction avec string1 plus long que string2,
   cette dernière chaîne ne doit pas se terminer par une classe de caractères
 tr-error-complement-more-than-one-unique = lors de la traduction avec des classes de caractères complémentées,

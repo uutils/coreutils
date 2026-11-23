@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command, value_parser};
 use nix::libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t};
 use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io::{self, Write as _};
 
 use uucore::display::Quotable;
@@ -69,7 +69,7 @@ struct Config {
     context: Option<String>,
 }
 
-fn mknod(file_name: &str, config: Config) -> i32 {
+fn mknod(file_name: &OsStr, config: Config) -> i32 {
     #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
     let selinux_enabled = uucore::selinux::is_selinux_enabled();
     #[cfg(not(all(feature = "selinux", any(target_os = "android", target_os = "linux"))))]
@@ -158,18 +158,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(str_mode) => {
             use_umask = false;
             let mode =
-                uucore::mode::parse_chmod(MODE_RW_UGO, str_mode, true, uucore::mode::get_umask())
+                uucore::mode::parse_chmod(MODE_RW_UGO, str_mode, false, uucore::mode::get_umask())
                     .map_err(|err| {
-                    let message =
-                        translate!("mknod-error-invalid-mode", "error" => err.to_string());
-                    if let Some(args) = &diag_args
-                        && err.render_mode_value(args, str_mode, 0, &message)
-                    {
-                        // The diagnostic is already on stderr; exit quietly.
-                        return ExitCode::new(1);
-                    }
-                    USimpleError::new(1, message)
-                })?;
+                        let message =
+                            translate!("mknod-error-invalid-mode", "error" => err.to_string());
+                        if let Some(args) = &diag_args
+                            && err.render_mode_value(args, str_mode, 0, &message)
+                        {
+                            // The diagnostic is already on stderr; exit quietly.
+                            return ExitCode::new(1);
+                        }
+                        USimpleError::new(1, message)
+                    })?;
             if mode > 0o777 {
                 return Err(USimpleError::new(
                     1,
@@ -182,7 +182,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mode = Mode::from_bits_truncate(mode_permissions as mode_t);
 
     let file_name = matches
-        .get_one::<String>("name")
+        .get_one::<OsString>("name")
         .expect("Missing argument 'NAME'");
 
     // Extract the security context related flags and options
@@ -252,7 +252,8 @@ pub fn uu_app() -> Command {
                 .value_name("NAME")
                 .help(translate!("mknod-help-name"))
                 .required(true)
-                .value_hint(clap::ValueHint::AnyPath),
+                .value_hint(clap::ValueHint::AnyPath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::TYPE)

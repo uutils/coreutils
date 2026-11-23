@@ -14,8 +14,6 @@ use std::ffi::OsString;
 use std::io::{Write, stdout};
 use std::time::Duration;
 use uucore::error::UResult;
-#[cfg(not(any(target_os = "openbsd", target_os = "android")))]
-use uucore::libc::time_t;
 use uucore::translate;
 use uucore::uptime::get_uptime;
 #[cfg(not(any(target_os = "openbsd", target_os = "android")))]
@@ -150,7 +148,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
 }
 
 #[cfg(not(any(target_os = "openbsd", target_os = "android")))]
-fn process_utmpx(file: Option<&OsString>) -> (Option<time_t>, usize) {
+fn process_utmpx(file: Option<&OsString>) -> (Option<i64>, usize) {
     let mut nusers = 0;
     let mut boot_time = None;
 
@@ -165,7 +163,7 @@ fn process_utmpx(file: Option<&OsString>) -> (Option<time_t>, usize) {
             x if x == BOOT_TIME => {
                 let dt = line.login_time();
                 if dt.unix_timestamp() > 0 {
-                    boot_time = Some(dt.unix_timestamp() as time_t);
+                    boot_time = Some(dt.unix_timestamp());
                 }
             }
             _ => (),

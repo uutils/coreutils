@@ -25,8 +25,9 @@ fmt-error-invalid-tabwidth = Invalid TABWIDTH specification: {$tabwidth}
 fmt-error-first-option-width = invalid option -- {$option}; -WIDTH is recognized only when it is the first
   option; use -w N instead
   Try 'fmt --help' for more information.
-fmt-error-read = read error
+fmt-error-reading-is-directory = error reading {$file}: Is a directory
 fmt-error-invalid-width-malformed = invalid width: {$width}
 fmt-error-cannot-open-for-reading = cannot open {$file} for reading
 fmt-error-cannot-get-metadata = cannot get metadata for {$file}
 fmt-error-failed-to-write-output = failed to write output
+fmt-error-read = error reading {$file}

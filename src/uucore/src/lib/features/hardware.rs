@@ -6,7 +6,7 @@
 //! CPU hardware capability detection for performance-sensitive utilities
 //!
 //! This module provides a unified interface for detecting CPU features and
-//! respecting environment-based SIMD policies (e.g., GLIBC_TUNABLES).
+//! respecting environment-based SIMD policies (e.g., `GLIBC_TUNABLES`).
 //!
 //! It provides 2 structures, from which we can get capabilities:
 //! - [`CpuFeatures`], which contains the raw available CPU features;
@@ -16,7 +16,7 @@
 //! # Use Cases
 //!
 //! - `cksum --debug`: Report hardware acceleration capabilities
-//! - `wc --debug`: Report SIMD usage and GLIBC_TUNABLES restrictions
+//! - `wc --debug`: Report SIMD usage and `GLIBC_TUNABLES` restrictions
 //! - Runtime decisions: Enable/disable SIMD paths based on environment
 //!
 //! # Examples
@@ -48,15 +48,15 @@ use std::sync::OnceLock;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum HardwareFeature {
-    /// AVX-512 support (x86/x86_64 only)
+    /// AVX-512 support (`x86/x86_64` only)
     Avx512,
-    /// AVX2 support (x86/x86_64 only)
+    /// AVX2 support (`x86/x86_64` only)
     Avx2,
-    /// PCLMULQDQ support for CRC acceleration (x86/x86_64 only)
+    /// PCLMULQDQ support for CRC acceleration (`x86/x86_64` only)
     Pclmulqdq,
     /// PMULL (polynomial multiply) support for CRC acceleration (aarch64 only)
     Pmull,
-    /// SSE2 support (x86/x86_64 only)
+    /// SSE2 support (`x86/x86_64` only)
     Sse2,
     /// ARM ASIMD/NEON support (aarch64 only)
     Asimd,
@@ -93,19 +93,19 @@ pub trait HasHardwareFeatures {
 
     fn iter_features(&self) -> impl Iterator<Item = HardwareFeature>;
 
-    /// Check if AVX-512 is available (x86/x86_64 only)
+    /// Check if AVX-512 is available (`x86/x86_64` only)
     #[inline]
     fn has_avx512(&self) -> bool {
         self.has_feature(HardwareFeature::Avx512)
     }
 
-    /// Check if AVX2 is available (x86/x86_64 only)
+    /// Check if AVX2 is available (`x86/x86_64` only)
     #[inline]
     fn has_avx2(&self) -> bool {
         self.has_feature(HardwareFeature::Avx2)
     }
 
-    /// Check if PCLMULQDQ is available (x86/x86_64 only)
+    /// Check if PCLMULQDQ is available (`x86/x86_64` only)
     #[inline]
     fn has_pclmulqdq(&self) -> bool {
         self.has_feature(HardwareFeature::Pclmulqdq)
@@ -117,7 +117,7 @@ pub trait HasHardwareFeatures {
         self.has_feature(HardwareFeature::Pmull)
     }
 
-    /// Check if SSE2 is available (x86/x86_64 only)
+    /// Check if SSE2 is available (`x86/x86_64` only)
     #[inline]
     fn has_sse2(&self) -> bool {
         self.has_feature(HardwareFeature::Sse2)
@@ -173,11 +173,11 @@ impl HasHardwareFeatures for CpuFeatures {
 
 /// SIMD policy based on environment variables
 ///
-/// Respects GLIBC_TUNABLES environment variable to disable specific CPU features.
+/// Respects `GLIBC_TUNABLES` environment variable to disable specific CPU features.
 /// This is used by GNU utilities to allow users to disable hardware acceleration.
 #[derive(Debug, Clone)]
 pub struct SimdPolicy {
-    /// Features disabled via GLIBC_TUNABLES (e.g., ["AVX2", "AVX512F"])
+    /// Features disabled via `GLIBC_TUNABLES`
     disabled_by_env: BTreeSet<HardwareFeature>,
     hardware_features: &'static CpuFeatures,
 }
@@ -185,7 +185,7 @@ pub struct SimdPolicy {
 impl SimdPolicy {
     /// Get the global SIMD policy (cached)
     ///
-    /// This checks both hardware capabilities and the GLIBC_TUNABLES environment
+    /// This checks both hardware capabilities and the `GLIBC_TUNABLES` environment
     /// variable. The result is cached for the lifetime of the process.
     ///
     /// # Examples
@@ -216,7 +216,7 @@ impl SimdPolicy {
         }
     }
 
-    /// Returns true if any SIMD feature remains enabled after applying GLIBC_TUNABLES.
+    /// Returns true if any SIMD feature remains enabled after applying `GLIBC_TUNABLES`.
     pub fn allows_simd(&self) -> bool {
         self.iter_features().next().is_some()
     }
@@ -243,12 +243,8 @@ impl HasHardwareFeatures for SimdPolicy {
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn detect_avx512() -> bool {
-    if cfg!(target_os = "android") {
-        false
-    } else {
-        std::arch::is_x86_feature_detected!("avx512f")
-            && std::arch::is_x86_feature_detected!("avx512bw")
-    }
+    std::arch::is_x86_feature_detected!("avx512f")
+        && std::arch::is_x86_feature_detected!("avx512bw")
 }
 
 #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
@@ -258,11 +254,7 @@ fn detect_avx512() -> bool {
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn detect_avx2() -> bool {
-    if cfg!(target_os = "android") {
-        false
-    } else {
-        std::arch::is_x86_feature_detected!("avx2")
-    }
+    std::arch::is_x86_feature_detected!("avx2")
 }
 
 #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
@@ -272,11 +264,7 @@ fn detect_avx2() -> bool {
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn detect_pclmulqdq() -> bool {
-    if cfg!(target_os = "android") {
-        false
-    } else {
-        std::arch::is_x86_feature_detected!("pclmulqdq")
-    }
+    std::arch::is_x86_feature_detected!("pclmulqdq")
 }
 
 #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
@@ -286,11 +274,7 @@ fn detect_pclmulqdq() -> bool {
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn detect_sse2() -> bool {
-    if cfg!(target_os = "android") {
-        false
-    } else {
-        std::arch::is_x86_feature_detected!("sse2")
-    }
+    std::arch::is_x86_feature_detected!("sse2")
 }
 
 #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
@@ -298,16 +282,12 @@ fn detect_sse2() -> bool {
     false
 }
 
-#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
+#[cfg(target_arch = "aarch64")]
 fn detect_asimd() -> bool {
-    if cfg!(target_os = "android") {
-        false
-    } else {
-        std::arch::is_aarch64_feature_detected!("asimd")
-    }
+    std::arch::is_aarch64_feature_detected!("asimd")
 }
 
-#[cfg(not(all(target_arch = "aarch64", target_endian = "little")))]
+#[cfg(not(target_arch = "aarch64"))]
 fn detect_asimd() -> bool {
     false
 }
@@ -315,11 +295,7 @@ fn detect_asimd() -> bool {
 #[cfg(target_arch = "aarch64")]
 fn detect_pmull() -> bool {
     // PMULL is an optional extension. ASIMD alone is not enough.
-    if cfg!(target_os = "android") {
-        false
-    } else {
-        std::arch::is_aarch64_feature_detected!("pmull")
-    }
+    std::arch::is_aarch64_feature_detected!("pmull")
 }
 
 #[cfg(not(target_arch = "aarch64"))]

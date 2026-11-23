@@ -79,9 +79,8 @@ impl FsUsage {
 /// Safe wrappers around the Win32 calls; every `unsafe` lives here.
 mod sys {
     use std::ffi::{OsStr, OsString};
-    use std::io;
     use std::os::windows::ffi::OsStringExt;
-    use std::ptr;
+    use std::{io, ptr};
 
     use crate::wide::{FromWide, ToWide};
     use windows_sys::Win32::Foundation::{
