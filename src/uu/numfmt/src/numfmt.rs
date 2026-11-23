@@ -7,8 +7,8 @@
 
 use crate::errors::NumfmtError;
 use crate::format::{
-    FormatScratch, WriteError, escape_line, write_formatted_with_delimiter,
-    write_formatted_with_whitespace, write_unconverted_with_whitespace,
+    FormatScratch, WriteError, write_formatted_with_delimiter, write_formatted_with_whitespace,
+    write_formatted_with_whitespace_bytes, write_unconverted_with_whitespace,
 };
 use crate::options::{
     DEBUG, DELIMITER, FIELD, FIELD_DEFAULT, FORMAT, FROM, FROM_DEFAULT, FROM_UNIT,
@@ -64,11 +64,10 @@ fn format_and_write(
             // Scientific notation is rejected per field when the number is
             // parsed, so a token in a field that is not converted is left alone.
             Ok(s) => write_formatted_with_whitespace(writer, s, options, eol, scratch),
-            Err(_) => Err(translate!(
-                "numfmt-error-invalid-number",
-                "input" => escape_line(line).quote()
-            )
-            .into()),
+            // A byte that is not valid UTF-8 can sit in a field that is not
+            // converted; only the selected fields need to read as numbers,
+            // so the line is split on bytes instead of rejected whole.
+            Err(_) => write_formatted_with_whitespace_bytes(writer, line, options, eol, scratch),
         }
     };
 
@@ -81,7 +80,8 @@ fn format_and_write(
         Err(WriteError::Invalid(message)) => message,
     };
 
-    // Only --invalid=abort, or a line that is not valid UTF-8, gets here.
+    // Only --invalid=abort gets here: the other modes already wrote the
+    // field unchanged and carried on.
     match options.invalid {
         InvalidModes::Abort => {
             return Err(Box::new(NumfmtError::FormattingError(msg)));

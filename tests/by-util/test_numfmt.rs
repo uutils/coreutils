@@ -115,6 +115,59 @@ fn test_numfmt_stdin(#[case] args: &[&str], #[case] input: &str, #[case] expecte
 }
 
 #[test]
+fn test_non_utf8_in_unselected_field() {
+    // https://github.com/uutils/coreutils/issues/16771
+    // A non-UTF-8 byte in a field that is not converted must not stop the
+    // selected field from being converted, and the byte must survive.
+    new_ucmd!()
+        .args(&["--field=1", "--to=si"])
+        .pipe_in(b"1500 caf\xe9.txt\n2500 notes.txt\n")
+        .succeeds()
+        .stdout_is_bytes(b"1.5k caf\xe9.txt\n2.5k notes.txt\n");
+}
+
+#[test]
+fn test_non_utf8_in_unselected_field_with_invalid_ignore() {
+    // https://github.com/uutils/coreutils/issues/16771
+    new_ucmd!()
+        .args(&["--field=1", "--to=si", "--invalid=ignore"])
+        .pipe_in(b"1500 caf\xe9.txt\n2500 notes.txt\n")
+        .succeeds()
+        .stdout_is_bytes(b"1.5k caf\xe9.txt\n2.5k notes.txt\n");
+}
+
+#[test]
+fn test_non_utf8_in_unselected_field_other_field() {
+    // https://github.com/uutils/coreutils/issues/16771
+    new_ucmd!()
+        .args(&["--field=2", "--to=si"])
+        .pipe_in(b"caf\xe9.txt 1500\nnotes.txt 2500\n")
+        .succeeds()
+        .stdout_is_bytes(b"caf\xe9.txt 1.5k\nnotes.txt 2.5k\n");
+}
+
+#[test]
+fn test_non_utf8_in_selected_field_fails() {
+    // https://github.com/uutils/coreutils/issues/16771
+    // A selected field still has to read as a number.
+    new_ucmd!()
+        .args(&["--field=1", "--to=si"])
+        .pipe_in(b"caf\xe9.txt 1500\n")
+        .fails_with_code(2)
+        .stderr_is("numfmt: invalid number: 'caf\\351.txt'\n");
+}
+
+#[test]
+fn test_non_utf8_in_selected_field_with_invalid_ignore() {
+    // https://github.com/uutils/coreutils/issues/16771
+    new_ucmd!()
+        .args(&["--field=1", "--to=si", "--invalid=ignore"])
+        .pipe_in(b"caf\xe9.txt 1500\n")
+        .succeeds()
+        .stdout_is_bytes(b"caf\xe9.txt 1500\n");
+}
+
+#[test]
 fn test_from_iec_i_requires_suffix() {
     new_ucmd!()
         .args(&["--from=iec-i", "10M"])
