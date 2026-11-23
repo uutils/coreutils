@@ -1613,13 +1613,14 @@ fn write_columns(
     // Without a page trailer there is nothing to pad the page out to.
     let no_trailer = feed_line_present || !options.display_header_and_trailer;
     for row in table {
-        // Merged files are padded with empty cells to fill the page; once
-        // every file has run out there is nothing left to print.
+        // Merged files are padded with empty cells to fill the page. Once every
+        // file has run out, the rest of the page is filled with empty lines like
+        // GNU pr, unless there is no trailer, in which case nothing is left to
+        // print.
         if merge && row.iter().all(Option::is_none) {
             if no_trailer {
                 break;
             }
-            // Like GNU pr, the rest of the page is filled with empty lines.
             writer.write_all(line_separator)?;
             continue;
         }
