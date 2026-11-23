@@ -1407,6 +1407,41 @@ fn test_invalid_utf8_input() {
 }
 
 #[test]
+fn test_invalid_utf8_in_unselected_field() {
+    // A non-UTF-8 file name doesn't keep the size in another field from being
+    // converted, and its bytes are written unchanged.
+    new_ucmd!()
+        .args(&["--field=1", "--to=si"])
+        .pipe_in(*b"1500 file\xFF.txt\n2500 notes.txt\n")
+        .succeeds()
+        .stdout_is_bytes(b"1.5k file\xFF.txt\n2.5k notes.txt\n");
+
+    new_ucmd!()
+        .args(&["--field=2", "--to=si"])
+        .pipe_in(*b"\xFF\xFE 3000 \xE9\xA0\n")
+        .succeeds()
+        .stdout_is_bytes(b"\xFF\xFE 3.0k \xE9\xA0\n");
+}
+
+#[test]
+fn test_invalid_utf8_in_selected_field() {
+    // Only the field that isn't valid UTF-8 is invalid; --invalid decides what
+    // to do with it, as for any other field that isn't a number.
+    new_ucmd!()
+        .args(&["--field=1-2", "--to=si", "--invalid=ignore"])
+        .pipe_in(*b"1500 file\xFF\n")
+        .succeeds()
+        .stdout_is_bytes(b"1.5k file\xFF\n");
+
+    new_ucmd!()
+        .args(&["--field=1-2", "--to=si", "--invalid=warn"])
+        .pipe_in(*b"1500 file\xFF\n")
+        .succeeds()
+        .stdout_is_bytes(b"1.5k file\xFF\n")
+        .stderr_is("numfmt: invalid number: 'file\\377'\n");
+}
+
+#[test]
 fn test_format_value_too_large_issue_11936() {
     // value * 10^precision needing 20+ digits should be rejected
     let cases = [

@@ -7,8 +7,7 @@
 
 use crate::errors::NumfmtError;
 use crate::format::{
-    FormatScratch, WriteError, escape_line, write_formatted_with_delimiter,
-    write_formatted_with_whitespace, write_unconverted_with_whitespace,
+    FormatScratch, WriteError, write_formatted_with_delimiter, write_formatted_with_whitespace,
 };
 use crate::options::{
     DEBUG, DELIMITER, FIELD, FIELD_DEFAULT, FORMAT, FROM, FROM_DEFAULT, FROM_UNIT,
@@ -28,7 +27,7 @@ use uucore::i18n::decimal::locale_grouping_separator;
 use uucore::parser::parse_size::{IEC_BASES, SI_BASES};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::ranges::Range;
-use uucore::{format_usage, os_str_as_bytes, show, translate};
+use uucore::{format_usage, os_str_as_bytes, translate};
 
 pub mod errors;
 pub mod format;
@@ -57,58 +56,23 @@ fn format_and_write(
 
     // A field that cannot be converted is reported and written unchanged by
     // the writers below, unless --invalid=abort, where it fails the line.
+    // Scientific notation is rejected per field when the number is parsed, so
+    // a token in a field that is not converted is left alone.
     let result = if options.delimiter.is_some() {
         write_formatted_with_delimiter(writer, line, options, eol, scratch)
     } else {
-        match std::str::from_utf8(line) {
-            // Scientific notation is rejected per field when the number is
-            // parsed, so a token in a field that is not converted is left alone.
-            Ok(s) => write_formatted_with_whitespace(writer, s, options, eol, scratch),
-            Err(_) => Err(translate!(
-                "numfmt-error-invalid-number",
-                "input" => escape_line(line).quote()
-            )
-            .into()),
-        }
+        write_formatted_with_whitespace(writer, line, options, eol, scratch)
     };
 
-    // A failure to write is fatal, whatever --invalid says.
-    let msg = match result {
-        Ok(saw_invalid) => return Ok(saw_invalid),
+    match result {
+        Ok(saw_invalid) => Ok(saw_invalid),
+        // A failure to write is fatal, whatever --invalid says.
         Err(WriteError::Io(error)) => {
-            return Err::<bool, _>(error).map_err_context(|| translate!("numfmt-error-write"));
+            Err::<bool, _>(error).map_err_context(|| translate!("numfmt-error-write"))
         }
-        Err(WriteError::Invalid(message)) => message,
-    };
-
-    // Only --invalid=abort, or a line that is not valid UTF-8, gets here.
-    match options.invalid {
-        InvalidModes::Abort => {
-            return Err(Box::new(NumfmtError::FormattingError(msg)));
-        }
-        InvalidModes::Fail => {
-            show!(NumfmtError::FormattingError(msg));
-        }
-        InvalidModes::Warn => {
-            let _ = writeln!(stderr(), "numfmt: {msg}");
-        }
-        InvalidModes::Ignore => {}
+        // The writers only return this for --invalid=abort.
+        Err(WriteError::Invalid(message)) => Err(Box::new(NumfmtError::FormattingError(message))),
     }
-    // Echo the original line, with the blanks between fields written as
-    // usual unless an explicit delimiter is set.
-    match std::str::from_utf8(input_line) {
-        Ok(s) if options.delimiter.is_none() => {
-            write_unconverted_with_whitespace(writer, s, options)
-        }
-        _ => writer.write_all(input_line),
-    }
-    .map_err_context(|| translate!("numfmt-error-write"))?;
-    if let Some(eol) = eol {
-        writer
-            .write_all(&[eol])
-            .map_err_context(|| translate!("numfmt-error-write"))?;
-    }
-    Ok(true)
 }
 
 /// Run `body` with stdout buffered the way stdio buffers it: a block at a time

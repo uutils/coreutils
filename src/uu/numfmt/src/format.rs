@@ -331,18 +331,48 @@ fn apply_grouping_in_place(buf: &mut String, sep: &str, dec_sep: &str) {
     }
 }
 
-fn split_next_field(s: &str) -> (&str, &str, &str) {
-    let prefix_len = s.find(|c: char| !c.is_whitespace()).unwrap_or(s.len());
-    let field_end = s[prefix_len..]
-        .find(char::is_whitespace)
-        .map_or(s.len(), |i| prefix_len + i);
+/// Returns the first character of `s` and its length in bytes, or `None` if
+/// `s` is empty or doesn't start with a valid UTF-8 character.
+fn first_char(s: &[u8]) -> Option<(char, usize)> {
+    let head = &s[..s.len().min(4)];
+    let valid = match std::str::from_utf8(head) {
+        Ok(valid) => valid,
+        Err(e) => std::str::from_utf8(&head[..e.valid_up_to()]).unwrap_or_default(),
+    };
+    valid.chars().next().map(|c| (c, c.len_utf8()))
+}
+
+/// Returns the length of the blank at the start of `s`, or `None` if `s`
+/// doesn't start with one. Bytes that aren't valid UTF-8 are never blanks.
+fn blank_len(s: &[u8]) -> Option<usize> {
+    first_char(s)
+        .filter(|(c, _)| c.is_whitespace())
+        .map(|(_, len)| len)
+}
+
+/// Splits `s` into the blanks before its first field, the field, and the rest.
+///
+/// This works on bytes, so a field that isn't valid UTF-8 (such as a file
+/// name) doesn't keep the other fields of the line from being converted.
+fn split_next_field(s: &[u8]) -> (&[u8], &[u8], &[u8]) {
+    let mut prefix_len = 0;
+    while let Some(len) = blank_len(&s[prefix_len..]) {
+        prefix_len += len;
+    }
+    let mut field_end = prefix_len;
+    while field_end < s.len() && blank_len(&s[field_end..]).is_none() {
+        field_end += first_char(&s[field_end..]).map_or(1, |(_, len)| len);
+    }
     (&s[..prefix_len], &s[prefix_len..field_end], &s[field_end..])
 }
 
 /// When an explicit whitespace unit separator is set (e.g. `--unit-separator=" "`),
 /// a suffix like "K" may appear as a separate whitespace-delimited field.  Detect
 /// this case so the caller can merge the suffix back into the preceding number field.
-fn split_mergeable_suffix<'a>(s: &'a str, options: &NumfmtOptions) -> Option<(&'a str, &'a str)> {
+fn split_mergeable_suffix<'a>(
+    s: &'a [u8],
+    options: &NumfmtOptions,
+) -> Option<(&'a [u8], &'a [u8])> {
     if !options.explicit_unit_separator
         || options.unit_separator.is_empty()
         || !options.unit_separator.chars().all(char::is_whitespace)
@@ -350,20 +380,21 @@ fn split_mergeable_suffix<'a>(s: &'a str, options: &NumfmtOptions) -> Option<(&'
         return None;
     }
 
-    if !s.starts_with(&options.unit_separator) {
+    let unit_separator = options.unit_separator.as_bytes();
+    if !s.starts_with(unit_separator) {
         return None;
     }
 
     let (prefix, field, _) = split_next_field(s);
-    if prefix != options.unit_separator {
+    if prefix != unit_separator {
         return None;
     }
 
-    let first_char = field.chars().next()?;
-    RawSuffix::try_from(&first_char).ok()?;
+    let (suffix, _) = first_char(field)?;
+    RawSuffix::try_from(&suffix).ok()?;
     match field.len() {
         1 => {}
-        2 if field.ends_with('i') => {}
+        2 if field.ends_with(b"i") => {}
         _ => return None,
     }
 
@@ -371,12 +402,12 @@ fn split_mergeable_suffix<'a>(s: &'a str, options: &NumfmtOptions) -> Option<(&'
 }
 
 struct WhitespaceSplitter<'a, 'b> {
-    s: Option<&'a str>,
+    s: Option<&'a [u8]>,
     options: &'b NumfmtOptions,
 }
 
 impl<'a> Iterator for WhitespaceSplitter<'a, '_> {
-    type Item = (&'a str, &'a str);
+    type Item = (&'a [u8], &'a [u8]);
 
     fn next(&mut self) -> Option<Self::Item> {
         let haystack = self.s?;
@@ -989,24 +1020,24 @@ pub fn write_formatted_with_delimiter<W: std::io::Write + ?Sized>(
 /// fields, and returns the blanks that follow it.
 fn write_separator<'a, W: std::io::Write + ?Sized>(
     writer: &mut W,
-    blanks: &'a str,
-) -> std::io::Result<&'a str> {
+    blanks: &'a [u8],
+) -> std::io::Result<&'a [u8]> {
     writer.write_all(b" ")?;
-    Ok(&blanks[blanks.chars().next().map_or(0, char::len_utf8)..])
+    Ok(&blanks[blank_len(blanks).unwrap_or(0)..])
 }
 
-/// Writes `s` with each selected field converted, and returns whether a field
-/// could not be converted.
+/// Writes `input` with each selected field converted, and returns whether a
+/// field could not be converted.
 pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
     writer: &mut W,
-    s: &str,
+    input: &[u8],
     options: &NumfmtOptions,
     eol: Option<u8>,
     scratch: &mut FormatScratch,
 ) -> std::result::Result<bool, WriteError> {
     let mut saw_invalid = false;
     for (n, (prefix, field)) in (1..).zip(WhitespaceSplitter {
-        s: Some(s),
+        s: Some(input),
         options,
     }) {
         let field_selected = uucore::ranges::contain(&options.fields, n);
@@ -1027,14 +1058,20 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
                 None
             };
 
-            match format_string(field, options, implicit_padding, scratch) {
+            // Field must be valid UTF-8 for numeric conversion
+            let formatted = std::str::from_utf8(field)
+                .map_err(|_| translate!("numfmt-error-invalid-number", "input" => escape_line(field).quote()))
+                .and_then(|field_str| {
+                    format_string(field_str, options, implicit_padding, scratch)
+                });
+            match formatted {
                 Ok(()) => writer.write_all(scratch.buf.as_bytes())?,
                 Err(message) => {
                     // An invalid field is written as it is, like an unselected one.
                     report_invalid_field(options, message)?;
                     saw_invalid = true;
-                    writer.write_all(prefix.as_bytes())?;
-                    writer.write_all(field.as_bytes())?;
+                    writer.write_all(prefix)?;
+                    writer.write_all(field)?;
                 }
             }
         } else {
@@ -1045,8 +1082,8 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
                 prefix
             };
             // add unselected field without conversion
-            writer.write_all(prefix.as_bytes())?;
-            writer.write_all(field.as_bytes())?;
+            writer.write_all(prefix)?;
+            writer.write_all(field)?;
         }
     }
 
@@ -1055,29 +1092,6 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
     }
 
     Ok(saw_invalid)
-}
-
-/// Writes a line that could not be converted, with the blanks between its
-/// fields written as `write_formatted_with_whitespace` writes them.
-pub fn write_unconverted_with_whitespace<W: std::io::Write + ?Sized>(
-    writer: &mut W,
-    s: &str,
-    options: &NumfmtOptions,
-) -> std::io::Result<()> {
-    for (n, (prefix, field)) in (1..).zip(WhitespaceSplitter {
-        s: Some(s),
-        options,
-    }) {
-        let prefix = if n > 1 {
-            write_separator(writer, prefix)?
-        } else {
-            prefix
-        };
-        writer.write_all(prefix.as_bytes())?;
-        writer.write_all(field.as_bytes())?;
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]
