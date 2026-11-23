@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (words) RFILE
 
+use rstest::rstest;
 use std::io::{Seek, SeekFrom, Write};
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
@@ -253,6 +254,19 @@ fn test_size_and_reference() {
     assert_eq!(expected, actual, "expected '{expected}' got '{actual}'");
 }
 
+#[rstest]
+#[case::reference_exists(&["--reference", FILE1, "--size", "5", FILE2])]
+#[case::reference_missing(&["-r", "missing", "-s", "5", FILE2])]
+#[case::zero_size(&["-s", "0", "-r", "missing", FILE2])]
+fn test_absolute_size_with_reference(#[case] args: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(FILE1, "1234567890");
+    ucmd.args(args)
+        .fails_with_code(1)
+        .usage_error("you must specify a relative '--size' with '--reference'");
+    assert!(!at.file_exists(FILE2));
+}
+
 #[test]
 fn test_error_filename_only() {
     // truncate: you must specify either '--size' or '--reference'
@@ -288,6 +302,10 @@ fn test_invalid_numbers() {
         .args(&["-s", "1b", "file"])
         .fails()
         .stderr_contains("Invalid number: '1b'");
+    new_ucmd!()
+        .args(&["-s", "x", "-r", "missing", "file"])
+        .fails_with_code(1)
+        .stderr_only("truncate: Invalid number: 'x'\n");
 }
 
 #[test]

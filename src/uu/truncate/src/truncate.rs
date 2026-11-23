@@ -14,7 +14,7 @@ use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
 use std::path::Path;
 use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::show_if_err;
 use uucore::translate;
@@ -380,27 +380,6 @@ fn truncate(
     size: Option<String>,
     diag_args: Option<&[OsString]>,
 ) -> UResult<()> {
-    let reference_size = match reference {
-        Some(reference_path) => {
-            let reference_metadata = metadata(&reference_path).map_err(|error| match error.kind() {
-                ErrorKind::NotFound => USimpleError::new(
-                    1,
-                    translate!("truncate-error-cannot-stat-no-such-file", "filename" => reference_path.quote()),
-                ),
-                _ => error.map_err_context(String::new),
-            })?;
-
-            let reference_size =
-                reference_file_size(Path::new(&reference_path), &reference_metadata)
-                    .map_err_context(|| {
-                        translate!("truncate-error-cannot-get-size", "filename" => reference_path.quote())
-                    })?;
-
-            Some(reference_size)
-        }
-        None => None,
-    };
-
     let size_string = size.as_deref();
 
     // Omitting the mode is equivalent to extending a file by 0 bytes.
@@ -424,12 +403,33 @@ fn truncate(
     };
 
     // If a reference file has been given, the truncate mode cannot be absolute.
-    if reference_size.is_some() && mode.is_absolute() {
-        return Err(USimpleError::new(
+    if reference.is_some() && mode.is_absolute() {
+        return Err(UUsageError::new(
             1,
             translate!("truncate-error-must-specify-relative-size"),
         ));
     }
+
+    let reference_size = match reference {
+        Some(reference_path) => {
+            let reference_metadata = metadata(&reference_path).map_err(|error| match error.kind() {
+                ErrorKind::NotFound => USimpleError::new(
+                    1,
+                    translate!("truncate-error-cannot-stat-no-such-file", "filename" => reference_path.quote()),
+                ),
+                _ => error.map_err_context(String::new),
+            })?;
+
+            let reference_size =
+                reference_file_size(Path::new(&reference_path), &reference_metadata)
+                    .map_err_context(|| {
+                        translate!("truncate-error-cannot-get-size", "filename" => reference_path.quote())
+                    })?;
+
+            Some(reference_size)
+        }
+        None => None,
+    };
 
     // Process every file: a failure on one (e.g. a directory) must not
     // prevent the remaining files from being truncated.
