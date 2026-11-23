@@ -996,6 +996,27 @@ fn test_streaming_stdin_from_infinite_source() {
 }
 
 #[cfg(unix)]
+#[test]
+fn test_streaming_stdin_stops_at_last_page_before_eof() {
+    use std::io::{Write, pipe};
+    use std::time::Duration;
+
+    let (reader, mut writer) = pipe().unwrap();
+    writer.write_all(b"first\n").unwrap();
+
+    let result = new_ucmd!()
+        .args(&["+1:1", "-t", "-l", "1"])
+        .set_stdin(reader)
+        .timeout(Duration::from_secs(5))
+        .run_no_wait()
+        .wait();
+
+    // Keep stdin open until pr has stopped at the requested page.
+    drop(writer);
+    result.unwrap().success().stdout_only("first\n");
+}
+
+#[cfg(unix)]
 #[uutests::wasi_ignore(NoFifo)]
 #[test]
 fn test_streaming_fifo_with_invalid_utf8_succeeds() {

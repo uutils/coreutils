@@ -12,8 +12,6 @@ use std::ffi::{OsStr, OsString};
 use std::fs::metadata;
 use std::io::{self, BufWriter, Read, Write, stderr, stdin, stdout};
 use std::num::IntErrorKind;
-#[cfg(unix)]
-use std::os::fd::AsFd;
 use std::path::PathBuf;
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
@@ -1177,16 +1175,16 @@ fn should_use_streaming_pr(path: &OsStr, options: &OutputOptions) -> bool {
     metadata(path).is_ok_and(|meta| !meta.file_type().is_file())
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 fn should_stream_stdin() -> bool {
-    rustix::fs::fstat(stdin().as_fd())
+    rustix::fs::fstat(stdin())
         .is_ok_and(|stat| !rustix::fs::FileType::from_raw_mode(stat.st_mode).is_file())
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, target_os = "wasi")))]
 fn should_stream_stdin() -> bool {
-    // Stdin type detection currently uses Unix fstat. On other platforms,
-    // including Windows, piped stdin is read entirely into memory.
+    // Platforms without this stdin type detection, including Windows,
+    // still read piped stdin entirely into memory.
     false
 }
 
