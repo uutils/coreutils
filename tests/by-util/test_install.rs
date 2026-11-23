@@ -1298,6 +1298,40 @@ fn test_install_backup_file_to_dir(#[case] backup_arg: &str) {
 }
 
 #[rstest]
+#[case::single(&["a.conf"])]
+#[case::multiple(&["a.conf", "b.conf"])]
+fn test_install_backup_files_to_own_dir(#[case] files: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    for &file in files {
+        at.write(file, &format!("current {file}"));
+        at.write(format!("{file}~"), &format!("previous {file}"));
+    }
+
+    let result = ucmd.arg("-b").args(files).arg(".").fails_with_code(1);
+
+    for &file in files {
+        result.stderr_contains(format!("'{file}' and './{file}' are the same file"));
+        assert_eq!(at.read(file), format!("current {file}"));
+        assert_eq!(at.read(format!("{file}~")), format!("previous {file}"));
+    }
+}
+
+#[test]
+#[cfg(not(target_os = "android"))] // The Android test filesystem does not support hard links.
+fn test_install_backup_hard_link_in_other_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dest");
+    at.write("file", "contents");
+    at.hard_link("file", "dest/file");
+
+    ucmd.args(&["-b", "file", "dest"]).succeeds().no_output();
+    assert_eq!(at.read("dest/file"), "contents");
+    at.write("file", "changed");
+    assert_eq!(at.read("dest/file~"), "changed");
+    assert_eq!(at.read("dest/file"), "contents");
+}
+
+#[rstest]
 #[case::simple("-b", "~")]
 #[case::numbered("--backup=numbered", ".~1~")]
 #[cfg(unix)]
