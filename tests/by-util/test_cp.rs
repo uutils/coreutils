@@ -2472,6 +2472,70 @@ fn test_cp_preserve_xattr_fails_on_android() {
         .fails();
 }
 
+// Android denies hard links in the test directory.
+#[cfg(all(unix, not(target_os = "android")))]
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
+#[rstest]
+#[case::archive(&["-a"], true)]
+#[case::preserve_links(&["--preserve=links"], true)]
+#[case::no_preserve_links(&["-a", "--no-preserve=links"], false)]
+fn test_cp_overwrite_hardlinked_destination(#[case] flags: &[&str], #[case] split_links: bool) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("yesterday", "v1");
+    at.hard_link("yesterday", "today");
+    at.write("incoming", "v2");
+
+    // On Apple platforms, retrying clonefile can unlink an existing destination.
+    // Exercise an in-place copy when link preservation is disabled.
+    #[cfg(target_vendor = "apple")]
+    if !split_links {
+        ucmd.arg("--reflink=never");
+    }
+    ucmd.args(flags)
+        .args(&["incoming", "today"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("today"), "v2");
+    if split_links {
+        assert_eq!(at.read("yesterday"), "v1");
+        assert_ne!(at.metadata("yesterday").ino(), at.metadata("today").ino());
+    } else {
+        assert_eq!(at.read("yesterday"), "v2");
+        assert_eq!(at.metadata("yesterday").ino(), at.metadata("today").ino());
+    }
+}
+
+#[cfg(all(unix, not(target_os = "android")))]
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
+#[rstest]
+#[case::single_link(false, "'incoming' -> 'dest'\n")]
+#[case::hard_link(true, "removed 'dest'\n'incoming' -> 'dest'\n")]
+fn test_cp_archive_verbose_to_symlink(#[case] shared: bool, #[case] stdout: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("target", "v1");
+    at.relative_symlink_file("target", "dest");
+    if shared {
+        at.hard_link("target", "backup");
+    }
+    at.write("incoming", "v2");
+
+    ucmd.args(&["-av", "incoming", "dest"])
+        .succeeds()
+        .stdout_only(stdout);
+
+    assert_eq!(at.read("dest"), "v2");
+    if shared {
+        assert!(at.symlink_metadata("dest").is_file());
+        assert_eq!(at.read("target"), "v1");
+        assert_eq!(at.metadata("target").ino(), at.metadata("backup").ino());
+        assert_ne!(at.metadata("dest").ino(), at.metadata("target").ino());
+    } else {
+        assert!(at.symlink_metadata("dest").is_symlink());
+        assert_eq!(at.read("target"), "v2");
+    }
+}
+
 #[test]
 // android platform will causing stderr = cp: Permission denied (os error 13)
 #[cfg(not(target_os = "android"))]
