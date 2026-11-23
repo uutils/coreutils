@@ -761,55 +761,6 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     #[test]
-    fn compression_pipe_final_flush_error() {
-        const CHILD_MODE: &str = "UU_SORT_TEST_COMPRESSION_PIPE_FLUSH";
-
-        if let Ok(mode) = std::env::var(CHILD_MODE) {
-            // SAFETY: SIG_DFL is a predefined disposition, not a custom handler.
-            unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
-            let dir = tempfile::tempdir().unwrap();
-            let mut tmp_dir = TmpDirWrapper::new(dir.path().to_owned());
-            let mut tmp_file =
-                WriteableCompressedTmpFile::create(tmp_dir.next_file().unwrap(), Some("true"))
-                    .unwrap();
-            // Ensure the reader has closed the pipe before the buffered write.
-            assert!(tmp_file.child.wait().unwrap().success());
-            let error = tmp_file
-                .write_and_finish(|writer| {
-                    writer.write_all(b"x").unwrap();
-                    assert_eq!(writer.buffer(), b"x");
-                    if mode == "write-error" {
-                        Err(uucore::error::USimpleError::new(2, "test write error"))
-                    } else {
-                        Ok(())
-                    }
-                })
-                .err()
-                .unwrap();
-            assert_eq!(error.code(), 2);
-            if mode == "write-error" {
-                assert!(error.to_string().contains("test write error"));
-            }
-            return;
-        }
-
-        // Signal dispositions are process-wide: isolate from the test runner.
-        for mode in ["flush-error", "write-error"] {
-            let output = Command::new(std::env::current_exe().unwrap())
-                .args([
-                    "--exact",
-                    "merge::tests::compression_pipe_final_flush_error",
-                    "--nocapture",
-                ])
-                .env(CHILD_MODE, mode)
-                .output()
-                .unwrap();
-            assert!(output.status.success(), "{mode}: {output:?}");
-            assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
-        }
-    }
-
-    #[test]
     #[cfg(target_vendor = "apple")]
     fn compression_pipe_suppresses_sigpipe_before_writing() {
         use std::os::fd::AsRawFd;

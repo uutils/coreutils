@@ -1994,6 +1994,13 @@ fn test_compress_ignored_sigchld() {
         .stdout_only(&expected);
 }
 
+#[cfg(unix)]
+const COMPRESSOR_FAILURE_AFTER_INPUT_SCRIPT: &str = "cat >/dev/null\nexit 7\n";
+#[cfg(unix)]
+const COMPRESSOR_TERMINATED_BY_SIGNAL_SCRIPT: &str = "cat >/dev/null\nkill -TERM $$\n";
+#[cfg(unix)]
+const DECOMPRESSOR_FAILURE_AFTER_OUTPUT_SCRIPT: &str = "cat\nif [ \"$1\" = -d ]; then exit 7; fi\n";
+
 #[test]
 #[cfg(target_os = "linux")]
 #[uutests::wasi_ignore(NoSubprocessSpawning)]
@@ -2001,9 +2008,9 @@ fn test_compress_failures_ignored_sigchld() {
     let ts = TestScenario::new("sort");
     ts.fixtures.write("input", &compressor_input(600, 4, ""));
     for script in [
-        "#!/bin/sh\ncat >/dev/null\nexit 7\n",
-        "#!/bin/sh\ncat >/dev/null\nkill -TERM $$\n",
-        "#!/bin/sh\ncat\nif [ \"$1\" = -d ]; then exit 7; fi\n",
+        COMPRESSOR_FAILURE_AFTER_INPUT_SCRIPT,
+        COMPRESSOR_TERMINATED_BY_SIGNAL_SCRIPT,
+        DECOMPRESSOR_FAILURE_AFTER_OUTPUT_SCRIPT,
     ] {
         write_compressor_script(&ts.fixtures, script);
         sort_with_ignored_sigchld(&ts)
@@ -2054,18 +2061,23 @@ fn compressor_input(count: usize, width: usize, suffix: &str) -> String {
 }
 
 #[cfg(unix)]
-fn write_compressor_script(at: &uutests::util::AtPath, script: &str) {
+fn write_compressor_script(at: &uutests::util::AtPath, script_body: &str) {
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
 
-    at.write("compressor", script);
+    #[cfg(target_os = "android")]
+    let shell = "/system/bin/sh";
+    #[cfg(not(target_os = "android"))]
+    let shell = "/bin/sh";
+
+    at.write("compressor", &format!("#!{shell}\n{script_body}"));
     fs::set_permissions(at.plus("compressor"), fs::Permissions::from_mode(0o755)).unwrap();
 }
 
 #[cfg(unix)]
-fn run_with_compressor(script: &str, input: &str, buffer_size: &str, expected_error: &str) {
+fn run_with_compressor(script_body: &str, input: &str, buffer_size: &str, expected_error: &str) {
     let (at, mut ucmd) = at_and_ucmd!();
-    write_compressor_script(&at, script);
+    write_compressor_script(&at, script_body);
     at.write("input", input);
     ucmd.timeout(Duration::from_secs(30))
         .args(&[
@@ -2085,11 +2097,38 @@ fn run_with_compressor(script: &str, input: &str, buffer_size: &str, expected_er
 fn test_compressor_exits_before_reading() {
     let input = compressor_input(30_000, 8, "xxxxxxxxxxxxxxxxxxxxxxxx");
     run_with_compressor(
-        "#!/bin/sh\nexit 0\n",
+        "exit 0\n",
         &input,
         "300k",
         "failed to write temporary file:",
     );
+}
+
+#[rstest]
+#[case::flush_error("input", "sort: failed to write temporary file: Broken pipe\n")]
+#[case::read_error("directory", "sort: read failed: Is a directory\n")]
+#[cfg(unix)]
+#[uutests::wasi_ignore(NoFifo)]
+fn test_compressor_pipe_final_flush(#[case] second_input: &str, #[case] expected_error: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    at.write("input", "b\n");
+    // The read error from this input should take precedence over the flush error.
+    at.mkdir("directory");
+    // Close the compressor's pipe before feeding the merge input. The short
+    // lines fit in sort's buffer, so the pipe write happens during final flush.
+    write_compressor_script(&at, "exec 0<&-\nprintf 'a\\n' > fifo\n");
+    ucmd.timeout(Duration::from_secs(30))
+        .args(&[
+            "-m",
+            "--batch-size=2",
+            "--compress-program=./compressor",
+            "fifo",
+            second_input,
+            "input",
+        ])
+        .fails_with_code(2)
+        .stderr_only(expected_error);
 }
 
 #[test]
@@ -2097,7 +2136,7 @@ fn test_compressor_exits_before_reading() {
 #[uutests::wasi_ignore(NoSubprocessSpawning)]
 fn test_compressor_exits_during_intermediate_merge() {
     let (at, mut ucmd) = at_and_ucmd!();
-    write_compressor_script(&at, "#!/bin/sh\nexit 7\n");
+    write_compressor_script(&at, "exit 7\n");
     // Exceed the pipe capacity so the failure occurs while merging, before
     // finished_writing checks the compressor's exit status.
     at.write("input", &"a long sorted input line\n".repeat(100_000));
@@ -2120,7 +2159,7 @@ fn test_compressor_exits_during_intermediate_merge() {
 fn test_compressor_failure_after_input() {
     let input = compressor_input(600, 4, "");
     run_with_compressor(
-        "#!/bin/sh\ncat >/dev/null\nexit 7\n",
+        COMPRESSOR_FAILURE_AFTER_INPUT_SCRIPT,
         &input,
         "1k",
         "'./compressor' terminated abnormally",
@@ -2133,7 +2172,7 @@ fn test_compressor_failure_after_input() {
 fn test_compressor_terminated_by_signal() {
     let input = compressor_input(600, 4, "");
     run_with_compressor(
-        "#!/bin/sh\ncat >/dev/null\nkill -TERM $$\n",
+        COMPRESSOR_TERMINATED_BY_SIGNAL_SCRIPT,
         &input,
         "1k",
         "'./compressor' terminated abnormally",
@@ -2146,7 +2185,7 @@ fn test_compressor_terminated_by_signal() {
 fn test_decompressor_failure_after_output() {
     let input = compressor_input(600, 4, "");
     run_with_compressor(
-        "#!/bin/sh\ncat\nif [ \"$1\" = -d ]; then exit 7; fi\n",
+        DECOMPRESSOR_FAILURE_AFTER_OUTPUT_SCRIPT,
         &input,
         "1k",
         "'./compressor' terminated abnormally",
@@ -2392,10 +2431,7 @@ fn test_compressed_sort_closed_stdout() {
 fn test_compressor_sigpipe_not_ignored() {
     let (at, mut cmd) = at_and_ucmd!();
     // An ignored SIGPIPE survives exec and cannot be caught by the shell.
-    write_compressor_script(
-        &at,
-        "#!/bin/sh\nkill -PIPE $$\necho SIGPIPE-was-ignored >&2\nexit 7\n",
-    );
+    write_compressor_script(&at, "kill -PIPE $$\necho SIGPIPE-was-ignored >&2\nexit 7\n");
     at.write("input", "a\n");
     cmd.timeout(Duration::from_secs(30))
         .args(&[
