@@ -114,7 +114,7 @@ rand = { version = "0.10.1", features = ["std_rng"] }
 rand_chacha = { version = "0.10.0" }
 rayon = "1.10"
 regex = "1.10.4"
-rlimit = "0.11.0"
+rlimit = "0.12.0"
 rstest = "0.29.0"
 rstest_reuse = "0.7.2"
 rustc-hash = "2.1.1"
