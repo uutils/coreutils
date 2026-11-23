@@ -1694,6 +1694,30 @@ fn test_cp_backup_simple_protect_source() {
     assert_eq!(at.read(&source), "");
 }
 
+#[rstest]
+#[case::backup(&["-b"])]
+#[case::remove_destination(&["-b", "--remove-destination"])]
+fn test_cp_backup_into_source_directory(#[case] flags: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let files = [("a.txt", "A2", "A1"), ("b.txt", "B2", "B1")];
+    for (name, current, previous) in files {
+        at.write(name, current);
+        at.write(format!("{name}~"), previous);
+    }
+
+    let result = ucmd
+        .args(flags)
+        .args(&["a.txt", "b.txt", "."])
+        .fails_with_code(1);
+
+    for (name, current, previous) in files {
+        let dest = path!(".", name);
+        result.stderr_contains(format!("'{name}' and {} are the same file", dest.quote()));
+        assert_eq!(at.read(name), current);
+        assert_eq!(at.read(format!("{name}~")), previous);
+    }
+}
+
 #[test]
 // Android denies hard links on the filesystem backing the test directory, so
 // the setup cannot be built there; see the mv analogue.
