@@ -561,19 +561,8 @@ fn safe_du(
         };
 
         // Check excludes
-        if !options.excludes.is_empty() {
-            let path_string = this_stat.path.to_string_lossy();
-            for pattern in &options.excludes {
-                if is_excluded(pattern, &path_string) {
-                    if options.verbose {
-                        println!(
-                            "{}",
-                            translate!("du-verbose-ignored", "path" => this_stat.path.quote())
-                        );
-                    }
-                    continue 'file_loop;
-                }
-            }
+        if skip_excluded(options, &this_stat.path) {
+            continue 'file_loop;
         }
 
         // Handle inodes
@@ -721,22 +710,9 @@ fn du_regular(
                                 continue 'file_loop;
                             }
 
-                            // We have an exclude list
-                            if !options.excludes.is_empty() {
-                                let path_string = this_stat.path.to_string_lossy();
-                                for pattern in &options.excludes {
-                                    if is_excluded(pattern, &path_string) {
-                                        // if the directory is ignored, leave early
-                                        if options.verbose {
-                                            println!(
-                                                "{}",
-                                                translate!("du-verbose-ignored", "path" => this_stat.path.quote())
-                                            );
-                                        }
-                                        // Go to the next file
-                                        continue 'file_loop;
-                                    }
-                                }
+                            // if the directory is ignored, leave early
+                            if skip_excluded(options, &this_stat.path) {
+                                continue 'file_loop;
                             }
 
                             if let Some(inode) = this_stat.inode
@@ -871,6 +847,28 @@ fn is_excluded(pattern: &Pattern, path: &str) -> bool {
             .is_some_and(|i| pattern.matches(&path[i..]));
     }
     starts.any(|i| pattern.matches(&path[i..]))
+}
+
+/// Whether `path` matches an `--exclude` pattern, saying so with `--verbose`.
+fn skip_excluded(options: &TraversalOptions, path: &Path) -> bool {
+    if options.excludes.is_empty() {
+        return false;
+    }
+    let path_string = path.to_string_lossy();
+    if !options
+        .excludes
+        .iter()
+        .any(|pattern| is_excluded(pattern, &path_string))
+    {
+        return false;
+    }
+    if options.verbose {
+        println!(
+            "{}",
+            translate!("du-verbose-ignored", "path" => path.quote())
+        );
+    }
+    true
 }
 
 /// Collapse trailing separators to one like GNU du, so the operand `a//`
@@ -1298,21 +1296,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut seen_inodes: FxHashSet<FileInfo> = FxHashSet::default();
 
     'loop_file: for path in files {
-        // Skip if we don't want to ignore anything
-        if !&traversal_options.excludes.is_empty() {
-            let path_string = path.to_string_lossy();
-            for pattern in &traversal_options.excludes {
-                if is_excluded(pattern, &path_string) {
-                    // if the directory is ignored, leave early
-                    if traversal_options.verbose {
-                        println!(
-                            "{}",
-                            translate!("du-verbose-ignored", "path" => path_string.quote())
-                        );
-                    }
-                    continue 'loop_file;
-                }
-            }
+        if skip_excluded(&traversal_options, &path) {
+            continue 'loop_file;
         }
 
         // Determine which traversal method to use
