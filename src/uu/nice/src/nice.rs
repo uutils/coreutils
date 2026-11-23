@@ -66,7 +66,8 @@ fn standardize_nice_args(mut args: impl uucore::Args) -> impl uucore::Args {
         if saw_command {
             v.push(s);
         } else if saw_n {
-            let mut new_arg: OsString = "-n".into();
+            // "-n" followed by an empty value would take the next argument as its value
+            let mut new_arg: OsString = "--adjustment=".into();
             new_arg.push(s);
             v.push(new_arg);
             saw_n = false;

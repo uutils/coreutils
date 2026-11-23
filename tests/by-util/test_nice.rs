@@ -148,6 +148,30 @@ fn test_trailing_empty_adjustment() {
     );
 }
 
+#[rstest::rstest]
+#[case::short(&["-n", "", "echo", "a"])]
+#[case::short_before_number(&["-n", "", "5", "echo", "a"])]
+#[case::long(&["--adjustment", "", "echo", "a"])]
+#[case::long_prefix(&["--adj", "", "echo", "a"])]
+#[case::last_wins(&["-n", "1", "-n", "", "echo", "a"])]
+#[cfg(unix)]
+fn test_empty_adjustment(#[case] args: &[&str]) {
+    new_ucmd!()
+        .args(args)
+        .fails_with_code(125)
+        .no_stdout()
+        .stderr_is("nice: \"\" is not a valid number: cannot parse integer from empty string\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_empty_adjustment_overridden() {
+    new_ucmd!()
+        .args(&["-n", "", "-n", "1", "echo", "a"])
+        .succeeds()
+        .stdout_is("a\n");
+}
+
 #[test]
 #[cfg(unix)]
 fn test_nice_huge() {
