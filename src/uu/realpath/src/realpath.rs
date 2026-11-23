@@ -21,6 +21,7 @@ use uucore::{
     format_usage,
     fs::{MissingHandling, ResolveMode, canonicalize},
     line_ending::LineEnding,
+    quoting_style::quote_name_for_tty,
 };
 use uucore::{error::set_exit_code, fs::make_path_relative_to, show};
 
@@ -307,7 +308,7 @@ fn resolve_path(
 
     let abs = process_relative(abs, relative_base, relative_to);
 
-    print_verbatim(abs)?;
+    print_verbatim(quote_name_for_tty(abs.as_os_str()))?;
     stdout().write_all(&[line_ending.into()])?;
     Ok(())
 }

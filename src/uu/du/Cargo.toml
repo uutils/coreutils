@@ -28,6 +28,7 @@ uucore = { workspace = true, features = [
   "i18n-decimal",
   "parser-size",
   "parser-glob",
+  "quoting-style",
   "time",
 ] }
 

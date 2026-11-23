@@ -344,3 +344,26 @@ fn test_win_non_unicode_path() {
     new_ucmd!().arg(&path).succeeds().stdout_is(".\n");
     new_ucmd!().arg("-z").arg(&path).succeeds().stdout_is(".\0");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_quoting_on_terminal() {
+    new_ucmd!()
+        .arg("my dir/file")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("'my dir'\r\n");
+
+    new_ucmd!()
+        .arg("my dir/file")
+        .env("QUOTING_STYLE", "literal")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("my dir\r\n");
+
+    // Not a terminal: no quoting.
+    new_ucmd!()
+        .arg("my dir/file")
+        .succeeds()
+        .stdout_only("my dir\n");
+}

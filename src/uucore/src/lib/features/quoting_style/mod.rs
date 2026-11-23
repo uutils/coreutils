@@ -231,6 +231,19 @@ pub fn quoting_style_or_tty_env(cli_style: Option<QuotingStyle>) -> Option<Quoti
     })
 }
 
+/// Quote `name` the way `ls` does when standard output is a terminal.
+///
+/// On a terminal the style from `QUOTING_STYLE` is used if it is set and
+/// valid, otherwise shell-escape. When standard output is not a terminal the
+/// name is returned unchanged.
+pub fn quote_name_for_tty(name: &OsStr) -> OsString {
+    if !std::io::stdout().is_terminal() {
+        return name.to_os_string();
+    }
+    let style = quoting_style_from_env().unwrap_or(QuotingStyle::SHELL_ESCAPE);
+    locale_aware_escape_name(name, style)
+}
+
 /// Common interface of quoting mechanisms.
 trait Quoter {
     /// Push a valid character.

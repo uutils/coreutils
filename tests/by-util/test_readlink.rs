@@ -580,3 +580,31 @@ fn test_verbose_or_silent() {
         )
         .no_stdout();
 }
+
+#[test]
+#[cfg(unix)]
+fn test_quoting_on_terminal() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("my file");
+    at.relative_symlink_file("my file", "my link");
+
+    ucmd.arg("my link")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("'my file'\r\n");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("my file");
+    at.relative_symlink_file("my file", "my link");
+    ucmd.arg("my link")
+        .env("QUOTING_STYLE", "literal")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("my file\r\n");
+
+    // Not a terminal: no quoting.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("my file");
+    at.relative_symlink_file("my file", "my link");
+    ucmd.arg("my link").succeeds().stdout_only("my file\n");
+}

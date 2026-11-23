@@ -311,3 +311,26 @@ fn test_emoji_handling() {
         .succeeds()
         .stdout_only("file🎯\n");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_quoting_on_terminal() {
+    new_ucmd!()
+        .arg("dir/my file")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("'my file'\r\n");
+
+    new_ucmd!()
+        .arg("dir/my file")
+        .env("QUOTING_STYLE", "literal")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("my file\r\n");
+
+    // Not a terminal: no quoting.
+    new_ucmd!()
+        .arg("dir/my file")
+        .succeeds()
+        .stdout_only("my file\n");
+}

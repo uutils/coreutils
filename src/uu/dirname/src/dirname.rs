@@ -11,6 +11,8 @@ use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;
+#[cfg(unix)]
+use uucore::quoting_style::quote_name_for_tty;
 
 use uucore::translate;
 
@@ -170,7 +172,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         {
             use std::os::unix::ffi::OsStrExt;
             let result_os = OsStr::from_bytes(result);
-            print_verbatim(result_os)?;
+            print_verbatim(quote_name_for_tty(result_os))?;
         }
         #[cfg(not(unix))]
         {

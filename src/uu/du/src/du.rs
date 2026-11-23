@@ -30,6 +30,7 @@ use uucore::fsext::{MetadataTimeField, metadata_get_time};
 use uucore::i18n::decimal::locale_grouping_separator;
 use uucore::i18n::{UEncoding, get_numeric_locale};
 use uucore::line_ending::LineEnding;
+use uucore::quoting_style::quote_name_for_tty;
 #[cfg(all(unix, not(target_os = "redox")))]
 use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 use uucore::translate;
@@ -1012,7 +1013,7 @@ impl StatPrinter {
             }
         }
 
-        print_verbatim(&stat.path)?;
+        print_verbatim(quote_name_for_tty(stat.path.as_os_str()))?;
         write!(stdout(), "{}", self.line_ending)?;
 
         Ok(())

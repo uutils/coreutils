@@ -16,6 +16,7 @@ use uucore::error::{FromIo, UResult};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::libc::{EINVAL, ENOENT};
 use uucore::line_ending::LineEnding;
+use uucore::quoting_style::quote_name_for_tty;
 use uucore::translate;
 use uucore::{format_usage, show_error};
 
@@ -187,7 +188,7 @@ pub fn uu_app() -> Command {
 }
 
 fn show(path: &Path, line_ending: Option<LineEnding>) -> std::io::Result<()> {
-    uucore::display::print_verbatim(path)?;
+    uucore::display::print_verbatim(quote_name_for_tty(path.as_os_str()))?;
     if let Some(line_ending) = line_ending {
         write!(stdout(), "{line_ending}")?;
     }
