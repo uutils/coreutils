@@ -33,7 +33,7 @@ libc = { workspace = true }
 notify = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-rustix = { workspace = true, features = ["fs", "process"] }
+rustix = { workspace = true, features = ["event", "fs", "process"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 uucore = { workspace = true, features = ["pipes"] }

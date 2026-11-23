@@ -193,7 +193,7 @@ impl MetadataExtTail for Metadata {
     fn file_id_eq(&self, #[cfg(unix)] other: &Metadata, #[cfg(not(unix))] _: &Metadata) -> bool {
         #[cfg(unix)]
         {
-            self.ino().eq(&other.ino())
+            self.dev() == other.dev() && self.ino() == other.ino()
         }
         #[cfg(windows)]
         {
@@ -251,4 +251,29 @@ pub fn stdin_is_bad_fd() -> bool {
 #[cfg(not(all(unix, not(target_os = "fuchsia"))))]
 pub fn stdin_is_bad_fd() -> bool {
     false
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn file_identity_matches_open_descriptor() {
+        let file = File::open("/dev/null").unwrap();
+        let opened = file.metadata().unwrap();
+        assert!(opened.file_id_eq(&std::fs::metadata("/dev/null").unwrap()));
+        assert!(!opened.file_id_eq(&std::fs::metadata("/dev/zero").unwrap()));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn file_identity_includes_device() {
+        // These filesystem roots have the same inode number on Linux.
+        let proc = std::fs::metadata("/proc").unwrap();
+        let pts = std::fs::metadata("/dev/pts").unwrap();
+        assert_eq!(proc.ino(), pts.ino());
+        assert_ne!(proc.dev(), pts.dev());
+        assert!(proc.file_id_eq(&std::fs::metadata("/proc").unwrap()));
+        assert!(!proc.file_id_eq(&pts));
+    }
 }

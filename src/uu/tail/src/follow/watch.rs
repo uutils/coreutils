@@ -4,15 +4,21 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) tailable untailable stdlib kqueue Uncategorized unwatch
+// spell-checker:ignore nonblocking
 
 use crate::args::{FollowMode, Settings};
 use crate::follow::files::{FileHandling, PathData};
 use crate::paths::{Input, InputKind, MetadataExtTail, PathExtTail};
 use crate::{platform, text};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
-use std::io::BufRead;
+use std::collections::HashSet;
+use std::fs::File;
+use std::io::BufReader;
+#[cfg(unix)]
+use std::os::unix::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, channel};
+use std::time::{Duration, Instant};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, set_exit_code};
 #[cfg(target_os = "linux")]
@@ -35,7 +41,10 @@ impl WatcherRx {
     }
 
     /// Wrapper for `notify::Watcher::watch` to also add the parent directory of `path` if necessary.
-    fn watch_with_parent(&mut self, path: &Path) -> UResult<()> {
+    fn watch_with_parent(&mut self, path: &Path, use_polling: bool) -> UResult<()> {
+        if self.watch_character_device(path, use_polling)? {
+            return Ok(());
+        }
         let mut path = path.to_owned();
         #[cfg(target_os = "linux")]
         if path.is_file() {
@@ -74,6 +83,33 @@ impl WatcherRx {
         // for syscalls: 2x "inotify_add_watch" ("filename" and ".") and 1x "inotify_rm_watch"
         self.watch(&path, RecursiveMode::NonRecursive)?;
         Ok(())
+    }
+
+    #[cfg(unix)]
+    fn watch_character_device(&mut self, path: &Path, use_polling: bool) -> UResult<bool> {
+        if !path
+            .metadata()
+            .is_ok_and(|metadata| metadata.file_type().is_char_device())
+        {
+            return Ok(false);
+        }
+        // kqueue opens watched paths in blocking mode, which can wait for a
+        // carrier on serial devices. Native watchers only need the parent to
+        // report name replacements; device input is polled separately.
+        if use_polling {
+            // Watching the parent would also hash unrelated siblings.
+            self.watch(path, RecursiveMode::NonRecursive)?;
+        } else if let Some(parent) = path.parent() {
+            // The polling pass checks names even if the parent is unreadable.
+            let _ = self.watcher.watch(parent, RecursiveMode::NonRecursive);
+        }
+        Ok(true)
+    }
+
+    #[cfg(not(unix))]
+    #[allow(clippy::unnecessary_wraps)] // Match the fallible Unix implementation.
+    fn watch_character_device(&mut self, _path: &Path, _use_polling: bool) -> UResult<bool> {
+        Ok(false)
     }
 
     fn watch(&mut self, path: &Path, mode: RecursiveMode) -> UResult<()> {
@@ -147,7 +183,7 @@ impl Observer {
         &mut self,
         path: &Path,
         display_name: &str,
-        reader: Option<Box<dyn BufRead>>,
+        reader: Option<BufReader<File>>,
         update_last: bool,
     ) -> UResult<()> {
         if self.follow.is_some() {
@@ -159,7 +195,7 @@ impl Observer {
             let metadata = path.metadata().ok();
             self.files.insert(
                 &path,
-                PathData::new(reader, metadata, display_name, path.is_symlink()),
+                PathData::new(reader, metadata, display_name, path.is_symlink())?,
                 update_last,
             );
         }
@@ -268,7 +304,9 @@ impl Observer {
                     InputKind::Stdin => (),
                     InputKind::File(path) => {
                         #[cfg(all(unix, not(target_os = "linux")))]
-                        if !path.is_file() {
+                        if !path.metadata().is_ok_and(|metadata| {
+                            metadata.is_file() || metadata.file_type().is_char_device()
+                        }) {
                             continue;
                         }
                         let mut path = path.clone();
@@ -278,7 +316,7 @@ impl Observer {
 
                         if path.is_tailable() {
                             // Add existing regular files to `Watcher` (InotifyWatcher).
-                            watcher_rx.watch_with_parent(&path)?;
+                            watcher_rx.watch_with_parent(&path, self.use_polling)?;
                         } else if let Some(active_parent) = path.parent().filter(|p| p.is_dir()) {
                             // If `path` is not a tailable file, add its parent to `Watcher`.
                             watcher_rx.watch(active_parent, RecursiveMode::NonRecursive)?;
@@ -297,17 +335,53 @@ impl Observer {
         Ok(())
     }
 
-    /// Open `path` again and, on Linux, watch the file it names now: a
-    /// watch on a symlink follows the link when it is added, so one added
-    /// before the link was changed still reports the old target.
+    /// Open `path` again and refresh device watches and Linux symlink watches.
+    /// These watches can still refer to the old target after a name replacement.
     fn reopen(&mut self, path: &Path) -> UResult<()> {
+        let was_device = self.files.character_devices().contains(path);
         self.files.update_reader(path)?;
+        if was_device && let Some(watcher_rx) = &mut self.watcher_rx {
+            let _ = watcher_rx.unwatch(path);
+            watcher_rx.watch_with_parent(path, self.use_polling)?;
+        }
         #[cfg(target_os = "linux")]
-        if path.is_symlink()
+        if !was_device
+            && path.is_symlink()
             && let Some(watcher_rx) = &mut self.watcher_rx
         {
             let _ = watcher_rx.unwatch(path);
             watcher_rx.watch(path, RecursiveMode::NonRecursive)?;
+        }
+        Ok(())
+    }
+
+    fn check_device_name(&mut self, path: &Path, settings: &Settings) -> UResult<()> {
+        use notify::event::{EventKind, ModifyKind, RemoveKind, RenameMode};
+
+        if !self.follow_name() || !self.files.character_devices().contains(path) {
+            return Ok(());
+        }
+        let kind = match path.metadata() {
+            Ok(metadata) => {
+                // Compare with the open device: cached path metadata may already
+                // describe a replacement that arrived during the previous read.
+                let reader = self.files.get(path).reader.as_ref().unwrap();
+                if reader.get_ref().metadata()?.file_id_eq(&metadata) {
+                    return Ok(());
+                }
+                EventKind::Modify(ModifyKind::Name(RenameMode::To))
+            }
+            Err(_) => EventKind::Remove(RemoveKind::Any),
+        };
+        self.handle_event(
+            &notify::Event::new(kind).add_path(path.to_owned()),
+            settings,
+        )?;
+        if self.retry
+            && self.files.get(path).reader.is_none()
+            && !self.orphans.iter().any(|orphan| orphan == path)
+        {
+            self.orphans.push(path.to_owned());
         }
         Ok(())
     }
@@ -365,8 +439,11 @@ impl Observer {
                                     translate!("tail-status-has-appeared-following-new-file", "file" => display_name.quote())
                                 );
                                 self.reopen(event_path)?;
-                            } else if event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To))
+                            } else if (event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To))
+                                && !pd.reader.as_ref().unwrap().get_ref().metadata()?.file_id_eq(&new_md))
                             || (self.use_polling && !old_md.file_id_eq(&new_md)) {
+                                // Compare with the open reader: a device-name check may
+                                // have handled the replacement before its native event.
                                 show_error!(
                                     "{}",
                                     translate!("tail-status-has-been-replaced-following-new-file", "file" => display_name.quote())
@@ -479,16 +556,8 @@ impl Observer {
                     let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
                     self.files.remove(event_path);
                 } else if self.use_polling && event.kind == EventKind::Remove(RemoveKind::Any) {
-                    /*
-                    BUG: The watched file was removed. Since we're using Polling, this
-                    could be a rename. We can't tell because `notify::PollWatcher` doesn't
-                    recognize renames properly.
-                    Ideally we want to call seek to offset 0 on the file handle.
-                    But because we only have access to `PathData::reader` as `BufRead`,
-                    we cannot seek to 0 with `BufReader::seek_relative`.
-                    Also because we don't have the new name, we cannot work around this
-                    by simply reopening the file.
-                    */
+                    // PollWatcher may report a rename as a removal without the new
+                    // path, so we cannot reopen the file under its new name.
                 }
             }
             EventKind::Modify(ModifyKind::Name(RenameMode::Both))
@@ -515,7 +584,7 @@ impl Observer {
 
                     let new_data = PathData::from_other_with_path(
                         self.files.remove(event_path), new_path, self.files.nonblocking
-                    );
+                    )?;
                     self.files.insert(
                         new_path,
                         new_data,
@@ -524,7 +593,7 @@ impl Observer {
 
                     // Unwatch old path and watch new path
                     let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
-                    self.watcher_rx.as_mut().unwrap().watch_with_parent(new_path)?;
+                    self.watcher_rx.as_mut().unwrap().watch_with_parent(new_path, self.use_polling)?;
                 }
             _ => {}
         }
@@ -551,11 +620,11 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
     let process = platform::ProcessChecker::new(observer.pid);
 
     let mut timeout_counter = 0;
+    let mut last_device_poll = Instant::now();
+    let mut read_devices_again = false;
 
     // main follow loop
     loop {
-        let mut _read_some = false;
-
         // If `--pid=p`, tail checks whether process p
         // is alive at least every `--sleep-interval=N` seconds
         if settings.follow.is_some() && observer.pid != 0 && process.is_dead() {
@@ -580,12 +649,13 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                         );
                         observer.files.update_metadata(new_path, Some(md));
                         observer.files.update_reader(new_path)?;
-                        _read_some = observer.files.tail_file(new_path, settings.verbose)?;
+                        read_devices_again |=
+                            observer.files.tail_file(new_path, settings.verbose)?;
                         observer
                             .watcher_rx
                             .as_mut()
                             .unwrap()
-                            .watch_with_parent(new_path)?;
+                            .watch_with_parent(new_path, observer.use_polling)?;
                     }
                 }
             }
@@ -593,34 +663,78 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
 
         // With  -f, sleep for approximately N seconds (default 1.0) between iterations;
         // We wake up if Notify sends an Event or if we wait more than `sleep_sec`.
+        let timeout = if read_devices_again {
+            Duration::ZERO
+        } else if observer.files.character_devices().is_empty() {
+            settings.sleep_sec
+        } else {
+            settings
+                .sleep_sec
+                .saturating_sub(last_device_poll.elapsed())
+        };
         let rx_result = observer
             .watcher_rx
             .as_mut()
             .unwrap()
             .receiver
-            .recv_timeout(settings.sleep_sec);
+            .recv_timeout(timeout);
 
         if rx_result.is_ok() {
             timeout_counter = 0;
         }
 
         let mut paths = vec![]; // Paths worth checking for new content to print
+        let mut scheduled = HashSet::new();
 
         // Helper closure to process a single event
-        let process_event = |observer: &mut Observer,
-                             event: notify::Event,
-                             settings: &Settings,
-                             paths: &mut Vec<PathBuf>|
+        let mut process_event = |observer: &mut Observer,
+                                 event: notify::Event,
+                                 settings: &Settings,
+                                 paths: &mut Vec<PathBuf>|
          -> UResult<()> {
+            // A content or metadata update to a tracked input cannot replace a
+            // sibling device's name. Avoid scanning all devices for such events.
+            let input_update = matches!(
+                event.kind,
+                notify::EventKind::Access(_)
+                    | notify::EventKind::Modify(
+                        notify::event::ModifyKind::Data(_) | notify::event::ModifyKind::Metadata(_)
+                    )
+            ) && event.paths.iter().all(|path| {
+                observer.files.contains_key(path) && observer.files.get(path).reader.is_some()
+            });
+            // kqueue can report a directory change without the replaced child's
+            // name. Recheck devices in that directory before reading their FDs.
+            if observer.follow_name() && !input_update {
+                for device in observer.files.character_devices() {
+                    if event.paths.iter().any(|path| {
+                        device
+                            .parent()
+                            .is_some_and(|parent| path == parent || path.parent() == Some(parent))
+                    }) && scheduled.insert(device.clone())
+                    {
+                        paths.push(device.clone());
+                    }
+                }
+            }
             if event
                 .paths
                 .first()
                 .is_some_and(|path| observer.files.contains_key(path))
             {
+                let path = &event.paths[0];
+                if observer.files.character_devices().contains(path) {
+                    // Device events can describe the old target after a rename.
+                    // Check the current name in the print loop; -f keeps its FD.
+                    if scheduled.insert(path.clone()) {
+                        paths.push(path.clone());
+                    }
+                    return Ok(());
+                }
                 // Handle Event if it is about a path that we are monitoring
                 let new_paths = observer.handle_event(&event, settings)?;
                 for p in new_paths {
-                    if !paths.contains(&p) {
+                    if scheduled.insert(p.clone()) {
                         paths.push(p);
                     }
                 }
@@ -699,9 +813,30 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             paths = observer.files.keys().cloned().collect::<Vec<_>>();
         }
 
+        // Devices don't report new input through filesystem notifications. Poll
+        // them on schedule even when other files keep producing events.
+        if !observer.files.character_devices().is_empty()
+            && (read_devices_again || last_device_poll.elapsed() >= settings.sleep_sec)
+        {
+            // The polling backend already includes every input above.
+            if !observer.use_polling {
+                paths.extend(
+                    observer
+                        .files
+                        .character_devices()
+                        .iter()
+                        .filter(|path| scheduled.insert((*path).clone()))
+                        .cloned(),
+                );
+            }
+            last_device_poll = Instant::now();
+        }
+
         // main print loop
+        read_devices_again = false;
         for path in &paths {
-            _read_some = observer.files.tail_file(path, settings.verbose)?;
+            observer.check_device_name(path, settings)?;
+            read_devices_again |= observer.files.tail_file(path, settings.verbose)?;
         }
 
         if timeout_counter == settings.max_unchanged_stats {
@@ -717,4 +852,77 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
     }
 
     Ok(())
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use notify::event::{ModifyKind, RenameMode};
+    use rstest::rstest;
+    use std::io::{Seek, SeekFrom};
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Default)]
+    struct RecordingWatcher(Arc<Mutex<Vec<PathBuf>>>);
+
+    impl Watcher for RecordingWatcher {
+        fn new<F: notify::EventHandler>(_: F, _: notify::Config) -> notify::Result<Self> {
+            Ok(Self::default())
+        }
+
+        fn watch(&mut self, path: &Path, _: RecursiveMode) -> notify::Result<()> {
+            self.0.lock().unwrap().push(path.to_owned());
+            Ok(())
+        }
+
+        fn unwatch(&mut self, _: &Path) -> notify::Result<()> {
+            Ok(())
+        }
+
+        fn kind() -> WatcherKind {
+            WatcherKind::NullWatcher
+        }
+    }
+
+    #[rstest]
+    #[case(false, "/dev")]
+    #[case(true, "/dev/null")]
+    fn device_watch_does_not_open_device_or_poll_siblings(
+        #[case] use_polling: bool,
+        #[case] expected: &str,
+    ) {
+        let watcher = RecordingWatcher::default();
+        let watched = Arc::clone(&watcher.0);
+        let (_, receiver) = channel();
+        let mut watcher_rx = WatcherRx::new(Box::new(watcher), receiver);
+
+        watcher_rx
+            .watch_with_parent(Path::new("/dev/null"), use_polling)
+            .unwrap();
+
+        // A native backend may open every registered path in blocking mode.
+        // PollWatcher must not read siblings by registering the directory.
+        assert_eq!(*watched.lock().unwrap(), [PathBuf::from(expected)]);
+    }
+
+    #[test]
+    fn duplicate_rename_event_preserves_reader_position() {
+        let path = std::env::current_exe().unwrap();
+        let mut reader = BufReader::new(File::open(&path).unwrap());
+        reader.seek(SeekFrom::Start(1)).unwrap();
+        let settings = Settings {
+            follow: Some(FollowMode::Name),
+            ..Settings::default()
+        };
+        let mut observer = Observer::from(&settings);
+        observer
+            .add_path(&path, "input", Some(reader), false)
+            .unwrap();
+        let event = notify::Event::new(notify::EventKind::Modify(ModifyKind::Name(RenameMode::To)))
+            .add_path(path.clone());
+
+        observer.handle_event(&event, &settings).unwrap();
+        let reader = observer.files.get_mut(&path).reader.as_mut().unwrap();
+        assert_eq!(reader.stream_position().unwrap(), 1);
+    }
 }
