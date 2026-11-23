@@ -2243,6 +2243,32 @@ fn verify_relative_symlink_in_cwd(source: &Path, dest: &Path, options: &Options)
     }
 }
 
+/// With `--update=older`, whether to keep `dest` because it is not older than
+/// `source`. As in GNU, a `dest` that is the same file is reported or backed
+/// up instead, and so is a dangling symlink that the copy would write through.
+fn update_keeps_dest(
+    source: &Path,
+    dest: &Path,
+    source_metadata: &Metadata,
+    dest_metadata: Option<&Metadata>,
+    writes_through_dangling_symlink: bool,
+    options: &Options,
+) -> CopyResult<bool> {
+    if options.update != UpdateMode::IfOlder {
+        return Ok(false);
+    }
+    let Some(dest_metadata) = dest_metadata else {
+        return Ok(false);
+    };
+    // `cp -s` never writes through `dest`, so a dangling symlink is kept by age.
+    if (writes_through_dangling_symlink && options.copy_mode != CopyMode::SymLink)
+        || paths_refer_to_same_file(source, dest, true)
+    {
+        return Ok(false);
+    }
+    Ok(source_metadata.modified()? <= dest_metadata.modified()?)
+}
+
 /// Back up, remove, or leave intact the destination file, depending on the options.
 fn handle_existing_dest(
     source: &Path,
@@ -2250,6 +2276,7 @@ fn handle_existing_dest(
     options: &Options,
     source_in_command_line: bool,
     copied_files: &HashMap<FileInformation, PathBuf>,
+    links_to_copy: bool,
 ) -> CopyResult<()> {
     // Disallow copying a file to itself, unless `--force` and
     // `--backup` are both specified.
@@ -2267,7 +2294,8 @@ fn handle_existing_dest(
         return Err(CpError::Skipped(false));
     }
 
-    if options.update != UpdateMode::IfOlder {
+    // With `--update=older`, GNU does not ask before linking `dest` to an earlier copy.
+    if !links_to_copy {
         options.overwrite.verify(dest, options.debug)?;
     }
 
@@ -2615,7 +2643,8 @@ fn handle_copy_mode(
         CopyMode::Update => {
             if dest.exists() {
                 match options.update {
-                    UpdateMode::All => {
+                    // `copy_file` has already skipped a destination that is not older.
+                    UpdateMode::All | UpdateMode::IfOlder => {
                         copy_helper(
                             source,
                             dest,
@@ -2638,28 +2667,6 @@ fn handle_copy_mode(
                         return Err(CpError::Error(
                             translate!("cp-error-not-replacing", "file" => dest.quote()),
                         ));
-                    }
-                    UpdateMode::IfOlder => {
-                        let dest_metadata = fs::symlink_metadata(dest)?;
-
-                        let src_time = source_metadata.modified()?;
-                        let dest_time = dest_metadata.modified()?;
-                        if src_time <= dest_time {
-                            return Ok(PerformedAction::Skipped);
-                        }
-
-                        options.overwrite.verify(dest, options.debug)?;
-
-                        copy_helper(
-                            source,
-                            dest,
-                            options,
-                            context,
-                            source_metadata,
-                            symlinked_files,
-                            source_in_command_line,
-                            created_parent_dirs,
-                        )?;
                     }
                 }
             } else {
@@ -2779,15 +2786,78 @@ fn copy_file(
     created_parent_dirs: &mut HashSet<PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
-    // Must run before anything below can remove or back up `dest`.
-    verify_relative_symlink_in_cwd(source, dest, options)?;
-
     let source_is_symlink = source.is_symlink();
+    let source_metadata = if options.dereference(source_in_command_line) {
+        fs::metadata(source)
+    } else {
+        fs::symlink_metadata(source)
+    }
+    .map_err(|e| {
+        CpError::IoErrContext(
+            e,
+            translate!("cp-error-cannot-stat-context", "source" => source.quote()),
+        )
+    })?;
     let initial_dest_metadata = dest.symlink_metadata().ok();
+    let remove_destination = matches!(
+        options.overwrite,
+        OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+    );
+    // `--attributes-only` changes an existing `dest` in place.
+    let attributes_only_in_place = options.attributes_only && !remove_destination;
+
+    // Identifies `source` in `copied_files`, which is read only to preserve hard
+    // links. `--link` preserves them anyway, since every name links to its source.
+    let source_info = if options.preserve_hard_links() && options.copy_mode != CopyMode::Link {
+        Some(
+            FileInformation::from_path(source, options.dereference(source_in_command_line))
+                .map_err(|e| {
+                    CpError::IoErrContext(
+                        e,
+                        translate!("cp-error-cannot-stat-context", "source" => source.quote()),
+                    )
+                })?,
+        )
+    } else {
+        None
+    };
+    // The copy of an earlier hard link to `source`, which `dest` is linked to below.
+    let linked_copy = source_info
+        .as_ref()
+        .and_then(|info| copied_files.get(info))
+        .cloned();
+    // With `--update=older`, a hard link to a source already copied elsewhere
+    // is linked to that copy below, whatever its age.
+    let links_to_copy = options.update == UpdateMode::IfOlder
+        && linked_copy.as_ref().is_some_and(|linked| linked != dest);
+
     let dest_is_symlink = initial_dest_metadata
         .as_ref()
         .is_some_and(|md| md.file_type().is_symlink());
-    let dest_target_exists = dest.try_exists().unwrap_or(false);
+    let writes_through_dangling_symlink = dest_is_symlink
+        && !dest.try_exists().unwrap_or(false)
+        && (options.dereference(source_in_command_line) || !source_is_symlink)
+        && !remove_destination;
+
+    // Must run before anything below can remove, back up or prompt for `dest`.
+    if !links_to_copy
+        && update_keeps_dest(
+            source,
+            dest,
+            &source_metadata,
+            initial_dest_metadata.as_ref(),
+            writes_through_dangling_symlink,
+            options,
+        )?
+    {
+        // Later hard links to `source` are linked to the kept `dest`.
+        if let Some(info) = source_info {
+            copied_files.insert(info, dest.to_path_buf());
+        }
+        return Err(CpError::Skipped(false));
+    }
+    verify_relative_symlink_in_cwd(source, dest, options)?;
+
     // Fail if dest is a dangling symlink or a symlink this program created previously
     if dest_is_symlink {
         if FileInformation::from_path(dest, false).is_ok_and(|info| symlinked_files.contains(&info))
@@ -2805,13 +2875,7 @@ fn copy_file(
             ));
         }
 
-        let copy_contents = options.dereference(source_in_command_line) || !source_is_symlink;
-        if copy_contents
-            && !dest_target_exists
-            && !matches!(
-                options.overwrite,
-                OverwriteMode::Clobber(ClobberMode::RemoveDestination)
-            )
+        if writes_through_dangling_symlink
             && !is_symlink_loop(dest)
             && std::env::var_os("POSIXLY_CORRECT").is_none()
         {
@@ -2820,10 +2884,7 @@ fn copy_file(
             ));
         }
         if paths_refer_to_same_file(source, dest, true)
-            && matches!(
-                options.overwrite,
-                OverwriteMode::Clobber(ClobberMode::RemoveDestination)
-            )
+            && remove_destination
             && options.backup == BackupMode::None
         {
             fs::remove_file(dest)?;
@@ -2833,22 +2894,13 @@ fn copy_file(
     // Path resolution is the last condition checked, only reached in the rare
     // hardlink `--remove-destination` case rather than on every file `cp` touches.
     if are_hardlinks_to_same_file(source, dest)
-        && matches!(
-            options.overwrite,
-            OverwriteMode::Clobber(ClobberMode::RemoveDestination)
-        )
+        && remove_destination
         && !paths_are_same_entry(source, dest)
     {
         fs::remove_file(dest)?;
     }
 
-    if initial_dest_metadata.is_some()
-        && (!options.attributes_only
-            || matches!(
-                options.overwrite,
-                OverwriteMode::Clobber(ClobberMode::RemoveDestination)
-            ))
-    {
+    if initial_dest_metadata.is_some() && !attributes_only_in_place {
         if paths_refer_to_same_file(source, dest, true) && options.copy_mode == CopyMode::Link {
             if source_is_symlink {
                 if !dest_is_symlink {
@@ -2867,7 +2919,14 @@ fn copy_file(
                 }
             }
         }
-        handle_existing_dest(source, dest, options, source_in_command_line, copied_files)?;
+        handle_existing_dest(
+            source,
+            dest,
+            options,
+            source_in_command_line,
+            copied_files,
+            links_to_copy,
+        )?;
         if are_hardlinks_to_same_file(source, dest) {
             if options.copy_mode == CopyMode::Copy {
                 return Ok(());
@@ -2882,11 +2941,7 @@ fn copy_file(
     // same-file check never runs; GNU cp refuses self-copies in this
     // mode too.
     if initial_dest_metadata.is_some()
-        && options.attributes_only
-        && !matches!(
-            options.overwrite,
-            OverwriteMode::Clobber(ClobberMode::RemoveDestination)
-        )
+        && attributes_only_in_place
         && is_forbidden_to_copy_to_same_file(source, dest, options, source_in_command_line)
     {
         return Err(translate!("cp-error-same-file",
@@ -2895,58 +2950,34 @@ fn copy_file(
         .into());
     }
 
-    if options.attributes_only
-        && source_is_symlink
-        && !matches!(
-            options.overwrite,
-            OverwriteMode::Clobber(ClobberMode::RemoveDestination)
-        )
-    {
+    if attributes_only_in_place && source_is_symlink {
         return Err(translate!("cp-error-cannot-change-attribute", "dest" => dest.quote()).into());
     }
 
-    // When using --link mode, hard link structure is automatically preserved
-    // because we link to source files (which share inodes).
-    if options.preserve_hard_links() && options.copy_mode != CopyMode::Link {
-        // if we encounter a matching device/inode pair in the source tree
-        // we can arrange to create a hard link between the corresponding names
-        // in the destination tree.
-        if let Some(new_source) = copied_files.get(
-            &FileInformation::from_path(source, options.dereference(source_in_command_line))
-                .map_err(|e| {
-                    CpError::IoErrContext(
-                        e,
-                        translate!("cp-error-cannot-stat-context", "source" => source.quote()),
-                    )
-                })?,
-        ) {
-            fs::hard_link(new_source, dest)?;
+    // If we encounter a matching device/inode pair in the source tree, we can
+    // arrange to create a hard link between the corresponding names in the
+    // destination tree.
+    if let Some(new_source) = linked_copy {
+        fs::hard_link(new_source, dest)?;
 
-            if options.verbose {
-                print_verbose_output(options.parents, progress_bar, source, dest)?;
-            }
-
-            return Ok(());
+        if options.verbose {
+            print_verbose_output(options.parents, progress_bar, source, dest)?;
         }
+
+        return Ok(());
+    }
+
+    // `--attributes-only` skips the prompt in `handle_existing_dest` above.
+    if attributes_only_in_place
+        && options.update == UpdateMode::IfOlder
+        && initial_dest_metadata.is_some()
+    {
+        options.overwrite.verify(dest, options.debug)?;
     }
 
     // Calculate the context upfront before canonicalizing the path
     let context = context_for(source, dest);
     let context = context.as_str();
-
-    let source_metadata = {
-        let result = if options.dereference(source_in_command_line) {
-            fs::metadata(source)
-        } else {
-            fs::symlink_metadata(source)
-        };
-        result.map_err(|err| {
-            CpError::IoErrContext(
-                err,
-                translate!("cp-error-cannot-stat-context", "source" => source.quote()),
-            )
-        })?
-    };
 
     let dest_metadata = dest.symlink_metadata().ok();
 
@@ -2971,7 +3002,11 @@ fn copy_file(
         created_parent_dirs,
     )?;
 
-    if options.verbose && performed_action != PerformedAction::Skipped {
+    if performed_action == PerformedAction::Skipped {
+        return Err(CpError::Skipped(false));
+    }
+
+    if options.verbose {
         print_verbose_output(options.parents, progress_bar, source, dest)?;
     }
 
