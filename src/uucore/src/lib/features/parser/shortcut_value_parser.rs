@@ -12,6 +12,24 @@ use clap::builder::{PossibleValue, TypedValueParser};
 use clap::error::{ContextKind, ContextValue, ErrorKind};
 use std::fmt::Write as _;
 
+/// One canonical option value and the aliases accepted for it.
+pub struct ValueChoice {
+    pub name: &'static str,
+    pub aliases: &'static [&'static str],
+}
+
+impl ValueChoice {
+    /// Declare a value without aliases.
+    pub const fn new(name: &'static str) -> Self {
+        Self { name, aliases: &[] }
+    }
+
+    /// Expose the same spellings to Clap for help and completion.
+    pub fn possible_value(&self) -> PossibleValue {
+        PossibleValue::new(self.name).aliases(self.aliases.iter().copied())
+    }
+}
+
 /// A parser that accepts shortcuts for values.
 #[derive(Clone)]
 pub struct ShortcutValueParser(Vec<PossibleValue>);

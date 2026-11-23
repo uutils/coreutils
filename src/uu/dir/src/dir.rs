@@ -4,27 +4,11 @@
 // file that was distributed with this source code.
 
 use clap::Command;
-use std::ffi::OsString;
-use std::path::Path;
-use uu_ls::{Config, options};
 use uucore::{error::UResult, format_usage, translate};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let command = uu_app();
-
-    // The arguments are kept for the caret in SIZE diagnostics, which echoes
-    // the command line.
-    let (matches, diag_args) =
-        uucore::clap_localization::handle_clap_result_with_diagnostics(command, args.collect(), 2)?;
-
-    let config = Config::from_dir(&matches, diag_args.as_deref())?;
-
-    let locs = matches
-        .get_many::<OsString>(options::PATHS)
-        .map_or_else(|| vec![Path::new(".")], |v| v.map(Path::new).collect());
-
-    uu_ls::list(locs, &config)
+    uu_ls::run(args, uu_ls::ProgramMode::Dir, uu_app)
 }
 
 // To avoid code duplication, we reuse ls uu_app function which has the same

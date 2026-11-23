@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) nonprint nonblank nonprinting ELOOP BADF
+// spell-checker:ignore (ToDO) nonprint nonblank nonprinting ELOOP BADF uerror
 
 mod platform;
 
@@ -19,6 +19,7 @@ use std::os::fd::AsFd;
 use std::os::unix::fs::FileTypeExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
+use uucore::parser::gnu::{Event, OptionSpec, Parser, Policy};
 use uucore::translate;
 use uucore::{fast_inc::fast_inc_one, format_usage};
 
@@ -206,78 +207,166 @@ enum InputType {
 }
 
 mod options {
-    pub static FILE: &str = "file";
-    pub static SHOW_ALL: &str = "show-all";
-    pub static NUMBER_NONBLANK: &str = "number-nonblank";
-    pub static SHOW_NONPRINTING_ENDS: &str = "e";
-    pub static SHOW_ENDS: &str = "show-ends";
-    pub static NUMBER: &str = "number";
-    pub static SQUEEZE_BLANK: &str = "squeeze-blank";
-    pub static SHOW_NONPRINTING_TABS: &str = "t";
-    pub static SHOW_TABS: &str = "show-tabs";
-    pub static SHOW_NONPRINTING: &str = "show-nonprinting";
-    pub static IGNORED_U: &str = "ignored-u";
+    pub const FILE: &str = "file";
+    pub const SHOW_ALL: &str = "show-all";
+    pub const NUMBER_NONBLANK: &str = "number-nonblank";
+    pub const SHOW_NONPRINTING_ENDS: &str = "e";
+    pub const SHOW_ENDS: &str = "show-ends";
+    pub const NUMBER: &str = "number";
+    pub const SQUEEZE_BLANK: &str = "squeeze-blank";
+    pub const SHOW_NONPRINTING_TABS: &str = "t";
+    pub const SHOW_TABS: &str = "show-tabs";
+    pub const SHOW_NONPRINTING: &str = "show-nonprinting";
+    pub const IGNORED_U: &str = "ignored-u";
+    pub const HELP: &str = "help";
+    pub const VERSION: &str = "version";
+}
+
+/// These definitions are shared by runtime parsing and the help/tooling API.
+/// Help keys are translated only when `uu_app` projects the schema into Clap.
+const OPTIONS: &[OptionSpec] = &[
+    OptionSpec::flag(
+        options::SHOW_ALL,
+        &['A'],
+        &[options::SHOW_ALL],
+        "cat-help-show-all",
+    ),
+    OptionSpec::flag(
+        options::NUMBER_NONBLANK,
+        &['b'],
+        &[options::NUMBER_NONBLANK],
+        "cat-help-number-nonblank",
+    ),
+    OptionSpec::flag(
+        options::SHOW_NONPRINTING_ENDS,
+        &['e'],
+        &[],
+        "cat-help-show-nonprinting-ends",
+    ),
+    OptionSpec::flag(
+        options::SHOW_ENDS,
+        &['E'],
+        &[options::SHOW_ENDS],
+        "cat-help-show-ends",
+    ),
+    OptionSpec::flag(
+        options::NUMBER,
+        &['n'],
+        &[options::NUMBER],
+        "cat-help-number",
+    ),
+    OptionSpec::flag(
+        options::SQUEEZE_BLANK,
+        &['s'],
+        &[options::SQUEEZE_BLANK],
+        "cat-help-squeeze-blank",
+    ),
+    OptionSpec::flag(
+        options::SHOW_NONPRINTING_TABS,
+        &['t'],
+        &[],
+        "cat-help-show-nonprinting-tabs",
+    ),
+    OptionSpec::flag(
+        options::SHOW_TABS,
+        &['T'],
+        &[options::SHOW_TABS],
+        "cat-help-show-tabs",
+    ),
+    OptionSpec::flag(
+        options::SHOW_NONPRINTING,
+        &['v'],
+        &[options::SHOW_NONPRINTING],
+        "cat-help-show-nonprinting",
+    ),
+    OptionSpec::flag(options::IGNORED_U, &['u'], &[], "cat-help-ignored-u"),
+    OptionSpec::flag(options::HELP, &['h'], &[options::HELP], "").help_literal("Print help"),
+    OptionSpec::flag(options::VERSION, &['V'], &[options::VERSION], "")
+        .help_literal("Print version"),
+];
+
+impl OutputOptions {
+    fn apply(&mut self, option: &str) {
+        match option {
+            options::NUMBER_NONBLANK => self.number = NumberingMode::NonEmpty,
+            // -b overrides -n in either order, including within one cluster.
+            options::NUMBER if self.number != NumberingMode::NonEmpty => {
+                self.number = NumberingMode::All;
+            }
+            options::SHOW_ALL => {
+                self.show_nonprint = true;
+                self.show_ends = true;
+                self.show_tabs = true;
+            }
+            options::SHOW_NONPRINTING_ENDS => {
+                self.show_nonprint = true;
+                self.show_ends = true;
+            }
+            options::SHOW_NONPRINTING_TABS => {
+                self.show_nonprint = true;
+                self.show_tabs = true;
+            }
+            options::SHOW_ENDS => self.show_ends = true,
+            options::SHOW_TABS => self.show_tabs = true,
+            options::SHOW_NONPRINTING => self.show_nonprint = true,
+            options::SQUEEZE_BLANK => self.squeeze_blank = true,
+            // -u is accepted for compatibility and has no effect.
+            _ => {}
+        }
+    }
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-
-    let number_mode = if matches.get_flag(options::NUMBER_NONBLANK) {
-        NumberingMode::NonEmpty
-    } else if matches.get_flag(options::NUMBER) {
-        NumberingMode::All
+    let mut options = OutputOptions {
+        number: NumberingMode::None,
+        squeeze_blank: false,
+        show_tabs: false,
+        show_ends: false,
+        show_nonprint: false,
+    };
+    let mut files = Vec::new();
+    let args: Vec<_> = args.collect();
+    let diagnostic_args = uucore::diagnostics::capture(&args);
+    let policy = if std::env::var_os("POSIXLY_CORRECT").is_some() {
+        Policy::posix()
     } else {
-        NumberingMode::None
+        Policy::gnu()
     };
-
-    let show_nonprint = [
-        options::SHOW_ALL,
-        options::SHOW_NONPRINTING_ENDS,
-        options::SHOW_NONPRINTING_TABS,
-        options::SHOW_NONPRINTING,
-    ]
-    .iter()
-    .any(|v| matches.get_flag(v));
-
-    let show_ends = [
-        options::SHOW_ENDS,
-        options::SHOW_ALL,
-        options::SHOW_NONPRINTING_ENDS,
-    ]
-    .iter()
-    .any(|v| matches.get_flag(v));
-
-    let show_tabs = [
-        options::SHOW_ALL,
-        options::SHOW_TABS,
-        options::SHOW_NONPRINTING_TABS,
-    ]
-    .iter()
-    .any(|v| matches.get_flag(v));
-
-    let squeeze_blank = matches.get_flag(options::SQUEEZE_BLANK);
-    #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")]
-    let files = matches.get_many::<OsString>(options::FILE).unwrap();
-
-    let options = OutputOptions {
-        show_ends,
-        number: number_mode,
-        show_nonprint,
-        show_tabs,
-        squeeze_blank,
-    };
-    cat_files(files, &options)
+    for event in Parser::new(args.into_iter().skip(1), OPTIONS, policy) {
+        match event.map_err(|error| error.to_uerror_with_args(1, diagnostic_args.as_deref()))? {
+            Event::Option(option) => match option.id {
+                options::HELP => {
+                    uu_app().print_help()?;
+                    return Ok(());
+                }
+                options::VERSION => {
+                    io::stdout()
+                        .lock()
+                        .write_all(uu_app().render_version().as_bytes())?;
+                    return Ok(());
+                }
+                id => options.apply(id),
+            },
+            Event::Operand { value, .. } => files.push(value),
+        }
+    }
+    if files.is_empty() {
+        files.push(OsString::from("-"));
+    }
+    cat_files(&files, &options)
 }
 
 pub fn uu_app() -> Command {
-    Command::new("cat")
+    let mut command = Command::new("cat")
         .version(uucore::crate_version!())
         .override_usage(format_usage(&translate!("cat-usage")))
         .about(translate!("cat-about"))
         .help_template(uucore::localized_help_template("cat"))
         .infer_long_args(true)
         .args_override_self(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
@@ -285,76 +374,16 @@ pub fn uu_app() -> Command {
                 .value_parser(clap::value_parser!(OsString))
                 .default_value("-")
                 .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::SHOW_ALL)
-                .short('A')
-                .long(options::SHOW_ALL)
-                .help(translate!("cat-help-show-all"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::NUMBER_NONBLANK)
-                .short('b')
-                .long(options::NUMBER_NONBLANK)
-                .help(translate!("cat-help-number-nonblank"))
-                // Note: This MUST NOT .overrides_with(options::NUMBER)!
-                // In clap, overriding is symmetric, so "-b -n" counts as "-n", which is not what we want.
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SHOW_NONPRINTING_ENDS)
-                .short('e')
-                .help(translate!("cat-help-show-nonprinting-ends"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SHOW_ENDS)
-                .short('E')
-                .long(options::SHOW_ENDS)
-                .help(translate!("cat-help-show-ends"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::NUMBER)
-                .short('n')
-                .long(options::NUMBER)
-                .help(translate!("cat-help-number"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SQUEEZE_BLANK)
-                .short('s')
-                .long(options::SQUEEZE_BLANK)
-                .help(translate!("cat-help-squeeze-blank"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SHOW_NONPRINTING_TABS)
-                .short('t')
-                .help(translate!("cat-help-show-nonprinting-tabs"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SHOW_TABS)
-                .short('T')
-                .long(options::SHOW_TABS)
-                .help(translate!("cat-help-show-tabs"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SHOW_NONPRINTING)
-                .short('v')
-                .long(options::SHOW_NONPRINTING)
-                .help(translate!("cat-help-show-nonprinting"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::IGNORED_U)
-                .short('u')
-                .help(translate!("cat-help-ignored-u"))
-                .action(ArgAction::SetTrue),
-        )
+        );
+    for option in OPTIONS {
+        let action = match option.id {
+            options::HELP => ArgAction::Help,
+            options::VERSION => ArgAction::Version,
+            _ => ArgAction::SetTrue,
+        };
+        command = command.arg(option.arg().action(action));
+    }
+    command
 }
 
 fn cat_handle<R: FdReadable>(

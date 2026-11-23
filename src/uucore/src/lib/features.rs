@@ -50,7 +50,8 @@ pub mod numeric_str_cmp;
     feature = "parser",
     feature = "parser-num",
     feature = "parser-size",
-    feature = "parser-glob"
+    feature = "parser-glob",
+    feature = "parser-args"
 ))]
 pub mod parser;
 #[cfg(feature = "quoting-style")]

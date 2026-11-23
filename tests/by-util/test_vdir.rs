@@ -218,3 +218,26 @@ mod diagnostics {
             .stderr_is("vdir: invalid --block-size argument '1fb'\n");
     }
 }
+
+#[test]
+fn test_short_version() {
+    new_ucmd!()
+        .arg("-V")
+        .succeeds()
+        .stdout_only(format!("vdir {}\n", uucore::crate_version!()));
+}
+
+#[test]
+fn test_posix_option_looking_operand_after_required_value() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("file");
+    scene.fixtures.touch("--help");
+    for value in ["", "1"] {
+        scene
+            .ucmd()
+            .env("POSIXLY_CORRECT", value)
+            .args(&["--width", "80", "-d1", "file", "--help"])
+            .succeeds()
+            .stdout_only("--help\nfile\n");
+    }
+}
