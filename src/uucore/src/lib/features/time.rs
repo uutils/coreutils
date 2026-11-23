@@ -7,7 +7,7 @@
 
 //! Set of functions related to time handling
 
-use jiff::Zoned;
+use jiff::ZonedDateTime;
 use jiff::fmt::StdIoWrite;
 use jiff::fmt::strtime::{BrokenDownTime, Config};
 use std::io::Write;
@@ -17,7 +17,7 @@ use crate::error::{UResult, USimpleError};
 use crate::show_error;
 
 /// Format the given date according to this time format style.
-fn format_zoned<W: Write>(out: &mut W, zoned: Zoned, fmt: &str) -> UResult<()> {
+fn format_zoned<W: Write>(out: &mut W, zoned: ZonedDateTime, fmt: &str) -> UResult<()> {
     let tm = BrokenDownTime::from(&zoned);
     let mut out = StdIoWrite(out);
     let config = Config::new().lenient(true);
@@ -58,11 +58,11 @@ pub fn format_system_time<W: Write>(
     fmt: &str,
     mode: FormatSystemTimeFallback,
 ) -> UResult<()> {
-    let zoned: Result<Zoned, _> = time.try_into();
+    let zoned: Result<ZonedDateTime, _> = time.try_into();
     if let Ok(zoned) = zoned {
         format_zoned(out, zoned, fmt)
     } else {
-        // Assume that if we cannot build a Zoned element, the timestamp is
+        // Assume that if we cannot build a ZonedDateTime element, the timestamp is
         // out of reasonable range, just print it then.
         // TODO: The range allowed by jiff is different from what GNU accepts,
         // but it still far enough in the future/past to be unlikely to matter:

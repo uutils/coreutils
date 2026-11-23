@@ -36,7 +36,7 @@
 //! - `%^B`: Month name in uppercase (JUNE)
 //! - `%+4C`: Century with sign, padded to 4 characters (+019)
 
-use jiff::Zoned;
+use jiff::ZonedDateTime;
 use jiff::fmt::strtime::{BrokenDownTime, Config, PosixCustom};
 use std::fmt;
 use uucore::translate;
@@ -161,7 +161,7 @@ pub fn parse_format_spec(s: &str) -> Option<ParsedSpec<'_>> {
 /// caller should use standard formatting. If modifiers are found, returns
 /// the formatted string.
 pub fn format_with_modifiers_if_present(
-    date: &Zoned,
+    date: &ZonedDateTime,
     format_string: &str,
     config: &Config<PosixCustom>,
 ) -> Option<Result<String, FormatError>> {
@@ -215,7 +215,7 @@ fn has_gnu_modifiers(format_string: &str) -> bool {
 /// # Errors
 /// Returns `FormatError` if formatting fails
 fn format_with_modifiers(
-    date: &Zoned,
+    date: &ZonedDateTime,
     format_string: &str,
     config: &Config<PosixCustom>,
 ) -> Result<String, FormatError> {
@@ -759,10 +759,10 @@ mod tests {
     use super::*;
     use jiff::{civil, tz::TimeZone};
 
-    fn make_test_date(year: i16, month: i8, day: i8, hour: i8) -> Zoned {
+    fn make_test_date(year: i16, month: i8, day: i8, hour: i8) -> ZonedDateTime {
         civil::date(year, month, day)
             .at(hour, 0, 0, 0)
-            .to_zoned(TimeZone::UTC)
+            .to_zoned_datetime(TimeZone::UTC)
             .unwrap()
     }
 
@@ -956,7 +956,7 @@ mod tests {
         use jiff::Timestamp;
 
         let ts = Timestamp::from_second(-22).unwrap();
-        let date = ts.to_zoned(TimeZone::UTC);
+        let date = ts.to_zoned_datetime(TimeZone::UTC);
         let config = get_config();
 
         let result = format_with_modifiers(&date, "%_5s", &config).unwrap();

@@ -40,7 +40,7 @@ fn set_file_times(at: &AtPath, path: &str, atime: FileTime, mtime: FileTime) {
 fn str_to_filetime(format: &str, s: &str) -> FileTime {
     let tm = strtime::parse(format, s).unwrap();
     let dt = tm.to_datetime().unwrap();
-    let ts = dt.to_zoned(TimeZone::UTC).unwrap().timestamp();
+    let ts = dt.to_zoned_datetime(TimeZone::UTC).unwrap().timestamp();
     FileTime::from_unix_time(ts.as_second(), ts.subsec_nanosecond() as u32)
 }
 

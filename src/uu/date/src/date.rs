@@ -13,7 +13,7 @@ mod locale;
 use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime::{self, BrokenDownTime, Config, PosixCustom};
 use jiff::tz::{AmbiguousOffset, Offset, TimeZone, TimeZoneDatabase};
-use jiff::{Timestamp, Zoned};
+use jiff::{Timestamp, ZonedDateTime};
 use parse_datetime::{ExtendedDateTime, ParsedDateTime};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -468,15 +468,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Get the current time, either in the local time zone or UTC.
     let now = if utc {
-        Timestamp::now().to_zoned(TimeZone::UTC)
+        Timestamp::now().to_zoned_datetime(TimeZone::UTC)
     } else {
         #[cfg(target_env = "ohos")]
         {
-            Timestamp::now().to_zoned(ohos_system_zone())
+            Timestamp::now().to_zoned_datetime(ohos_system_zone())
         }
         #[cfg(not(target_env = "ohos"))]
         {
-            Zoned::now()
+            ZonedDateTime::now()
         }
     };
 
@@ -569,10 +569,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     // the same, moves to the previous day, or advances to the next day.
                     // Changing day can result in error, this closure will help handle these errors
                     // gracefully.
-                    let format_date_with_epoch_fallback = |date: Result<Zoned, _>| -> String {
-                        date.and_then(|d| strtime::format("%F", &d))
-                            .unwrap_or_else(|_| String::from("1970-01-01"))
-                    };
+                    let format_date_with_epoch_fallback =
+                        |date: Result<ZonedDateTime, _>| -> String {
+                            date.and_then(|d| strtime::format("%F", &d))
+                                .unwrap_or_else(|_| String::from("1970-01-01"))
+                        };
                     let date_part = match day_delta {
                         DayDelta::Same => format_date_with_epoch_fallback(Ok(now.clone())),
                         DayDelta::Next => format_date_with_epoch_fallback(now.tomorrow()),
@@ -641,18 +642,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 error: e.to_string(),
             })?;
             #[cfg(target_env = "ohos")]
-            let date = ts.to_zoned(ohos_system_zone());
+            let date = ts.to_zoned_datetime(ohos_system_zone());
             #[cfg(not(target_env = "ohos"))]
-            let date = ts.to_zoned(TimeZone::try_system().unwrap_or(TimeZone::UTC));
+            let date = ts.to_zoned_datetime(TimeZone::try_system().unwrap_or(TimeZone::UTC));
             let iter = std::iter::once(Ok(ParsedDateTime::InRange(date)));
             Box::new(iter)
         }
         DateSource::Resolution => {
             let resolution = get_clock_resolution();
             #[cfg(target_env = "ohos")]
-            let date = resolution.to_zoned(ohos_system_zone());
+            let date = resolution.to_zoned_datetime(ohos_system_zone());
             #[cfg(not(target_env = "ohos"))]
-            let date = resolution.to_zoned(TimeZone::system());
+            let date = resolution.to_zoned_datetime(TimeZone::system());
             let iter = std::iter::once(Ok(ParsedDateTime::InRange(date)));
             Box::new(iter)
         }
@@ -820,7 +821,7 @@ pub fn uu_app() -> Command {
 /// GNU `date` rounds `%s` toward negative infinity for negative fractional
 /// timestamps, whereas jiff's `%s` truncates toward zero. `%%` escapes are
 /// preserved and every other specifier is left untouched for jiff to render.
-fn substitute_epoch_seconds<'a>(fmt: &'a str, date: &Zoned) -> Cow<'a, str> {
+fn substitute_epoch_seconds<'a>(fmt: &'a str, date: &ZonedDateTime) -> Cow<'a, str> {
     if !fmt.contains('%') || !fmt.contains('s') {
         return Cow::Borrowed(fmt);
     }
@@ -1084,7 +1085,7 @@ impl<'a> OutputContext<'a> {
 /// formatting.
 fn write_formatted_date<W: Write>(
     writer: &mut W,
-    date: Zoned,
+    date: ZonedDateTime,
     output: &OutputContext,
     settings: &Settings,
 ) -> UResult<()> {
@@ -1129,7 +1130,7 @@ fn write_formatted_bytes<W: Write>(
 
 /// Set the clock, then echo the resulting date like GNU does (issue #14677).
 /// Report a set failure first, so it isn't lost when the echo write fails.
-fn set_and_echo(input: &str, now: &Zoned, settings: &Settings) -> UResult<()> {
+fn set_and_echo(input: &str, now: &ZonedDateTime, settings: &Settings) -> UResult<()> {
     match parse_date(input, now, DebugOptions::new(settings.debug, true)) {
         Ok(ParsedDateTime::InRange(date)) => {
             show_if_err!(set_system_datetime(convert_for_set(
@@ -1171,7 +1172,7 @@ fn format_extended_default(
         utc.nanosecond as i32,
     )
     .map_err(|e| e.to_string())?
-    .to_zoned(TimeZone::UTC)
+    .to_zoned_datetime(TimeZone::UTC)
     .map_err(|e| e.to_string())?
     .with_time_zone(output_time_zone.clone());
     let output = ExtendedDateTime::from_unix_seconds(
@@ -1310,7 +1311,7 @@ fn substitute_extended_year(format_string: &str, year: u32, iso_year: u32) -> St
 /// around `format`: a locale format may use one of them in turn (glibc's
 /// `en_US` `%X` is `%r`).
 fn expand_locale_formats<'a>(
-    date: &Zoned,
+    date: &ZonedDateTime,
     format: &'a str,
     config: &Config<PosixCustom>,
     skip_localization: bool,
@@ -1428,7 +1429,7 @@ fn format_extended_year_value(
 }
 
 fn format_date_with_locale_aware_months(
-    date: &Zoned,
+    date: &ZonedDateTime,
     format_string: &str,
     config: &Config<PosixCustom>,
     #[cfg(feature = "i18n-datetime")] skip_localization: bool,
@@ -1591,13 +1592,16 @@ fn resolve_tz_abbreviation(word: &str) -> Option<TimeZone> {
 /// (e.g. "10:30 EST").
 ///
 /// If a trailing abbreviation is found and the rest of the string is a parsable
-/// date that could still legally take a timezone, returns `Some(Zoned)`.
+/// date that could still legally take a timezone, returns `Some(ZonedDateTime)`.
 ///
 /// Returns `None` when no abbreviation is detected, when parsing fails, or when
 /// the remainder already carries zone information or cannot take a zone at all
 /// (GNU `date` rejects those). In every `None` case the caller should fall back
 /// to standard parsing, which reports the error.
-fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Option<Zoned> {
+fn try_parse_with_abbreviation<S: AsRef<str>>(
+    date_str: S,
+    now: &ZonedDateTime,
+) -> Option<ZonedDateTime> {
     let s = date_str.as_ref();
 
     // Look for a timezone abbreviation at the end of the string.
@@ -1645,12 +1649,12 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Optio
         tz
     };
 
-    let zoned = zoned.datetime().to_zoned(tz).ok()?;
+    let zoned = zoned.datetime().to_zoned_datetime(tz).ok()?;
 
     // The trailing abbreviation only describes the *input* timezone. For display,
     // re-zone to the system timezone (i.e. `now`'s zone, which is UTC under `-u`).
     // This matches GNU `date` and keeps this path consistent with the generic
-    // `parse_datetime` fallback, which already re-zones via `to_zoned(now.time_zone())`.
+    // `parse_datetime` fallback, which already re-zones via `to_zoned_datetime(now.time_zone())`.
     Some(zoned.with_time_zone(now.time_zone().clone()))
 }
 
@@ -1660,7 +1664,7 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Optio
 /// Returns a boxed iterator over the parse results.
 fn parse_dates_from_reader<R: Read + 'static>(
     reader: R,
-    now: &Zoned,
+    now: &ZonedDateTime,
     dbg_opts: DebugOptions,
 ) -> Box<
     dyn Iterator<Item = Result<ParsedDateTime, (String, parse_datetime::ParseDateTimeError)>> + '_,
@@ -1985,7 +1989,7 @@ fn is_clock_with_seconds(token: &str) -> bool {
 /// Parse the ambiguous `+N unit` form after an absolute time using the same
 /// parser for its timezone offset and relative item, rather than rewriting the
 /// input into unrelated syntax.
-fn parse_relative_plus(input: &str, now: &Zoned) -> Option<ParsedDateTime> {
+fn parse_relative_plus(input: &str, now: &ZonedDateTime) -> Option<ParsedDateTime> {
     if !input.contains('+') {
         return None;
     }
@@ -2126,7 +2130,7 @@ fn parse_local_datetime(input: &str) -> Option<jiff::civil::DateTime> {
     jiff::civil::DateTime::new(year, month, day, hour, minute, second, nanosecond).ok()
 }
 
-fn input_timezone(input: &str, now: &Zoned) -> TimeZone {
+fn input_timezone(input: &str, now: &ZonedDateTime) -> TimeZone {
     let trimmed = input.trim_start();
     if let Some(rest) = trimmed.strip_prefix("TZ=\"")
         && let Some(end) = rest.find('"')
@@ -2163,7 +2167,7 @@ fn is_numeric_timezone(offset: &str) -> bool {
 
 /// Detect a local wall-clock time that falls inside a timezone transition gap.
 /// Explicit numeric offsets are absolute instants and therefore cannot be gaps.
-fn is_nonexistent_local_time(input: &str, normalized: &str, now: &Zoned) -> bool {
+fn is_nonexistent_local_time(input: &str, normalized: &str, now: &ZonedDateTime) -> bool {
     if has_explicit_numeric_timezone(input) {
         return false;
     }
@@ -2172,16 +2176,16 @@ fn is_nonexistent_local_time(input: &str, normalized: &str, now: &Zoned) -> bool
     };
     matches!(
         input_timezone(input, now)
-            .to_ambiguous_zoned(local)
+            .to_ambiguous_zoned_datetime(local)
             .offset(),
         AmbiguousOffset::Gap { .. }
     )
 }
 
-/// Parse a string into either an in-range [`Zoned`] value or an extended date.
+/// Parse a string into either an in-range [`ZonedDateTime`] value or an extended date.
 fn parse_date<S: AsRef<str>>(
     s: S,
-    now: &Zoned,
+    now: &ZonedDateTime,
     dbg_opts: DebugOptions,
 ) -> Result<ParsedDateTime, (String, parse_datetime::ParseDateTimeError)> {
     let input_str = s.as_ref();
@@ -2230,7 +2234,7 @@ fn parse_date<S: AsRef<str>>(
                     parse_datetime::ParseDateTimeError::InvalidInput,
                 ));
             }
-            let result = date.timestamp().to_zoned(now.time_zone().clone());
+            let result = date.timestamp().to_zoned_datetime(now.time_zone().clone());
             if dbg_opts.debug {
                 // Show final parsed date and time
                 let mut err = stderr().lock();
@@ -2335,14 +2339,14 @@ fn get_clock_resolution() -> Timestamp {
 }
 
 #[cfg(not(any(unix, windows, target_os = "wasi")))]
-fn set_system_datetime(_date: Zoned) -> UResult<()> {
+fn set_system_datetime(_date: ZonedDateTime) -> UResult<()> {
     unimplemented!("setting date not implemented (unsupported target)");
 }
 
 /// Convert a parsed date for the system clock.
-fn convert_for_set(date: Zoned, utc: bool) -> Zoned {
+fn convert_for_set(date: ZonedDateTime, utc: bool) -> ZonedDateTime {
     if utc {
-        date.timestamp().to_zoned(TimeZone::UTC)
+        date.timestamp().to_zoned_datetime(TimeZone::UTC)
     } else {
         date
     }
@@ -2350,12 +2354,12 @@ fn convert_for_set(date: Zoned, utc: bool) -> Zoned {
 
 #[cfg(target_os = "wasi")]
 /// The WASI sandbox has no syscall for setting the wall clock.
-fn set_system_datetime(_date: Zoned) -> UResult<()> {
+fn set_system_datetime(_date: ZonedDateTime) -> UResult<()> {
     Err(Box::new(DateError::SettingDateNotSupportedWasi))
 }
 
 #[cfg(target_os = "redox")]
-fn set_system_datetime(_date: Zoned) -> UResult<()> {
+fn set_system_datetime(_date: ZonedDateTime) -> UResult<()> {
     Err(Box::new(DateError::SettingDateNotSupportedRedox))
 }
 
@@ -2365,7 +2369,7 @@ fn set_system_datetime(_date: Zoned) -> UResult<()> {
 /// `<https://linux.die.net/man/3/clock_settime>`
 /// `<https://www.gnu.org/software/libc/manual/html_node/Time-Types.html>`
 #[cfg(all(unix, not(target_os = "redox")))]
-fn set_system_datetime(date: Zoned) -> UResult<()> {
+fn set_system_datetime(date: ZonedDateTime) -> UResult<()> {
     use rustix::time::{ClockId, Timespec, clock_settime};
 
     let ts = date.timestamp();
@@ -2384,7 +2388,7 @@ fn set_system_datetime(date: Zoned) -> UResult<()> {
 /// * <https://docs.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-setsystemtime>
 /// * <https://docs.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-systemtime>
 #[cfg(windows)]
-fn set_system_datetime(date: Zoned) -> UResult<()> {
+fn set_system_datetime(date: ZonedDateTime) -> UResult<()> {
     let system_time = SYSTEMTIME {
         wYear: date.year() as u16,
         wMonth: date.month() as u16,
@@ -2445,16 +2449,19 @@ mod tests {
 
     #[test]
     fn test_abbreviation_resolves_relative_date_against_now() {
-        let now = "2025-03-15T20:00:00+00:00[UTC]".parse::<Zoned>().unwrap();
+        let now = "2025-03-15T20:00:00+00:00[UTC]"
+            .parse::<ZonedDateTime>()
+            .unwrap();
         let result = parse_date("yesterday 10:00 GMT", &now, DebugOptions::new(false, false))
             .unwrap()
-            .expect_in_range();
+            .into_zoned()
+            .unwrap();
         assert_eq!(result.date(), jiff::civil::date(2025, 3, 14));
     }
 
     #[test]
     fn test_utc_conversion_preserves_offset() {
-        let now = Zoned::now();
+        let now = ZonedDateTime::now();
 
         let date = parse_date(
             "Sat 20 Mar 2021 14:53:01 AWST",
@@ -2462,7 +2469,8 @@ mod tests {
             DebugOptions::new(false, false),
         )
         .unwrap()
-        .expect_in_range();
+        .into_zoned()
+        .unwrap();
         let utc = convert_for_set(date, true);
         assert_eq!((utc.hour(), utc.minute(), utc.second()), (6, 53, 1)); // AWST(+08:00) -> -8h
     }
@@ -2536,7 +2544,7 @@ mod tests {
 
     /// Run one date through the shared writer used by the display loop and
     /// the `-s` echo, returning what it produced.
-    fn write_date_with_settings(date: Zoned, settings: Settings) -> String {
+    fn write_date_with_settings(date: ZonedDateTime, settings: Settings) -> String {
         let output = OutputContext::new(&settings);
         let mut out = Vec::new();
         write_formatted_date(&mut out, date, &output, &settings).unwrap();
@@ -2546,7 +2554,7 @@ mod tests {
     #[test]
     fn test_write_formatted_date_custom_format() {
         // Specifiers that no locale rewrites, so the test is locale-independent.
-        let date: Zoned = "2020-03-12T05:30:00+00:00[UTC]".parse().unwrap();
+        let date: ZonedDateTime = "2020-03-12T05:30:00+00:00[UTC]".parse().unwrap();
         let settings = Settings {
             utc: false,
             format: Format::Custom(b"%F %T %Z".to_vec()),
@@ -2561,7 +2569,7 @@ mod tests {
 
     #[test]
     fn test_write_formatted_date_rfc5322_not_localized() {
-        let date: Zoned = "2020-03-12T05:30:00+00:00[UTC]".parse().unwrap();
+        let date: ZonedDateTime = "2020-03-12T05:30:00+00:00[UTC]".parse().unwrap();
         let settings = Settings {
             utc: false,
             format: Format::Rfc5322,
@@ -2577,7 +2585,7 @@ mod tests {
     #[test]
     fn test_write_formatted_date_utc_rezones_for_display() {
         // Parsed at +08:00; `-u` echoes the same instant in UTC.
-        let date: Zoned = "2020-03-12T13:30:00+08:00[+08:00]".parse().unwrap();
+        let date: ZonedDateTime = "2020-03-12T13:30:00+08:00[+08:00]".parse().unwrap();
         let settings = Settings {
             utc: true,
             format: Format::Custom(b"%F %T %:z".to_vec()),

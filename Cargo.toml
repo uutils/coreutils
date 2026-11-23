@@ -81,9 +81,9 @@ icu_provider = { version = "2.0.0", default-features = false }
 indicatif = "0.18.0"
 itertools = "0.15.0"
 itoa = "1.0.15"
-jiff = "0.2.18"
-jiff-icu = "0.2.2"
-jiff-tzdb = "0.1"
+jiff = "1.0"
+jiff-icu = "1.0"
+jiff-tzdb = "1.0"
 libc = "0.2.191"
 lscolors = { version = "0.21.0", default-features = false, features = [
   "gnu_legacy",
@@ -103,7 +103,7 @@ fancy-regex = { version = "0.20.0", default-features = false, features = [
   "leftmost_longest",
 ] }
 os_display = "0.1.3"
-parse_datetime = "0.17.0"
+parse_datetime = "0.18"
 phf = "0.14.0"
 phf_codegen = "0.14.0"
 platform-info = "2.0.3"

@@ -23,7 +23,7 @@ use fluent_syntax::{
     },
     parser,
 };
-use jiff::{Timestamp, Zoned, tz::TimeZone};
+use jiff::{Timestamp, ZonedDateTime, tz::TimeZone};
 use regex::Regex;
 use textwrap::{fill, indent, termwidth};
 use zip::ZipArchive;
@@ -174,7 +174,7 @@ fn gen_manpage<T: Args>(
         .ok()
         .and_then(|s| s.parse().ok())
         .and_then(|s| Timestamp::new(s, 0).ok())
-        .map_or_else(Zoned::now, |t| t.to_zoned(TimeZone::UTC));
+        .map_or_else(ZonedDateTime::now, |t| t.to_zoned_datetime(TimeZone::UTC));
 
     // Post-process the manpage to fix mandoc lint issues
     let date = now.strftime("%Y-%m-%d").to_string();
