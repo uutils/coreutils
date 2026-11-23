@@ -979,6 +979,50 @@ fn test_suffix_start_too_large_missing_input() {
     assert!(!at.file_exists("x100"));
 }
 
+#[rstest]
+#[case::plus(
+    "--numeric-suffixes=+5",
+    "'+5': invalid start value for numerical suffix"
+)]
+#[case::hex_plus(
+    "--hex-suffixes=+5",
+    "'+5': invalid start value for hexadecimal suffix"
+)]
+#[case::minus(
+    "--numeric-suffixes=-1",
+    "'-1': invalid start value for numerical suffix"
+)]
+#[case::blank(
+    "--numeric-suffixes= 5",
+    "' 5': invalid start value for numerical suffix"
+)]
+#[case::not_hex(
+    "--hex-suffixes=zz",
+    "'zz': invalid start value for hexadecimal suffix"
+)]
+#[case::overflow(
+    "--numeric-suffixes=99999999999999999999",
+    "numerical suffix start value is too large for the suffix length"
+)]
+#[case::hex_overflow(
+    "--hex-suffixes=ffffffffffffffffff",
+    "numerical suffix start value is too large for the suffix length"
+)]
+fn test_invalid_suffix_start(#[case] arg: &str, #[case] error: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(arg).fails().usage_error(error);
+    assert!(!at.file_exists("x05"));
+}
+
+#[rstest]
+#[case::numeric("--numeric-suffixes=")]
+#[case::hex("--hex-suffixes=")]
+fn test_empty_suffix_start_is_zero(#[case] arg: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(arg).pipe_in("a\n").succeeds().no_output();
+    assert_eq!(at.read("x00"), "a\n");
+}
+
 /// Test that a suffix start at or past the number of chunks is not checked
 /// against the auto-width suffix length, but against the default one
 #[test]
@@ -1064,6 +1108,26 @@ fn test_suffix_length_req() {
         .args(&["-n", "100", "-a", "1", "asciilowercase.txt"])
         .fails()
         .stderr_only("split: the suffix length needs to be at least 2\n");
+}
+
+#[test]
+fn test_suffix_length_req_huge_chunk_count() {
+    // The suffix start plus a chunk count near u64::MAX used to overflow.
+    for (suffixes, required) in [("--numeric-suffixes=5", 20), ("--hex-suffixes=5", 16)] {
+        new_ucmd!()
+            .args(&[
+                "-n",
+                "18446744073709551615",
+                suffixes,
+                "-a",
+                "2",
+                "asciilowercase.txt",
+            ])
+            .fails()
+            .stderr_only(format!(
+                "split: the suffix length needs to be at least {required}\n"
+            ));
+    }
 }
 
 #[test]

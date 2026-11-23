@@ -101,6 +101,27 @@ fn test_buffer_size_limits_both_chunks() {
 }
 
 #[test]
+fn test_buffer_size_trailing_whitespace_is_rejected() {
+    for size in [" 1 ", "1 ", "1M ", "50% "] {
+        new_ucmd!()
+            .arg(format!("--buffer-size={size}"))
+            .fails_with_code(2)
+            .stderr_only(format!(
+                "sort: invalid suffix in --buffer-size argument '{size}'\n"
+            ));
+    }
+
+    // Leading whitespace is still skipped.
+    for size in [" 1M", "\t1M"] {
+        new_ucmd!()
+            .arg(format!("--buffer-size={size}"))
+            .pipe_in("b\na\n")
+            .succeeds()
+            .stdout_only("a\nb\n");
+    }
+}
+
+#[test]
 fn test_invalid_buffer_size() {
     new_ucmd!()
         .arg("-S")
@@ -3035,6 +3056,20 @@ fn test_g_misc() {
 }
 
 #[test]
+fn test_g_signed_inf_and_nan() {
+    new_ucmd!()
+        .arg("-g")
+        .pipe_in("+inf\n1\n-inf\n+INFx\n2\n")
+        .succeeds()
+        .stdout_is("-inf\n1\n2\n+INFx\n+inf\n");
+    new_ucmd!()
+        .arg("-g")
+        .pipe_in("+nan\n1\nnan\n-nan\nx\n-inf\n")
+        .succeeds()
+        .stdout_is("x\n-nan\n+nan\nnan\n-inf\n1\n");
+}
+
+#[test]
 // Test numbers with a large number of digits, where only the last digit is different.
 // We use scientific notation to make sure string sorting does not correctly order them.
 fn test_g_arbitrary() {
@@ -4435,4 +4470,22 @@ fn test_debug_incompatible_with_output() {
         .fails_with_code(2)
         .stderr_only("sort: options '-o --debug' are incompatible\n");
     assert!(!at.file_exists("out"));
+}
+
+#[test]
+fn test_debug_incompatible_with_check() {
+    for (args, opt) in [
+        (&["-c", "--debug"][..], "c"),
+        (&["--debug", "--check=diagnose-first"], "c"),
+        (&["-C", "--debug"], "C"),
+        (&["--check=quiet", "--debug"], "C"),
+        // reported before the other problems with -c
+        (&["-c", "--debug", "-o", "out"], "c"),
+        (&["-c", "--debug", "a", "b"], "c"),
+    ] {
+        new_ucmd!()
+            .args(args)
+            .fails_with_code(2)
+            .stderr_only(format!("sort: options '-{opt} --debug' are incompatible\n"));
+    }
 }

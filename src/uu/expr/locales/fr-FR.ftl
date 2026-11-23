@@ -92,6 +92,7 @@ expr-help-help = afficher cette aide et quitter
 # Messages d'erreur
 expr-error-unexpected-argument = erreur de syntaxe : argument inattendu { $arg }
 expr-error-missing-argument = erreur de syntaxe : argument manquant après { $arg }
+expr-error-unexpected-closing-parenthesis = erreur de syntaxe : ')' inattendu
 expr-error-non-integer-argument = argument non entier
 expr-error-missing-operand = opérande manquant
 expr-error-division-by-zero = division par zéro

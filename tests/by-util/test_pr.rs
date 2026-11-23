@@ -7,6 +7,7 @@
 
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
+use rstest::rstest;
 use std::fs::metadata;
 use uutests::util::{TestScenario, UCommand};
 use uutests::{at_and_ucmd, new_ucmd, util_name};
@@ -156,6 +157,29 @@ fn test_with_double_space_option() {
 }
 
 #[test]
+fn test_double_space_keeps_one_line_on_a_short_page() {
+    // A page with room for a single line still prints it, followed by the
+    // blank line of -d.
+    for length in ["1", "3"] {
+        new_ucmd!()
+            .args(&["-d", "-l", length])
+            .pipe_in("a\nb\n")
+            .succeeds()
+            .stdout_only("a\n\nb\n\n");
+    }
+    // Header and trailer leave one line with -l 11 and three with -l 13;
+    // either way each page takes one input line.
+    for length in ["11", "13"] {
+        new_ucmd!()
+            .args(&["-d", "-l", length])
+            .pipe_in("a\nb\n")
+            .succeeds()
+            .stdout_contains("Page 1\n\n\na\n")
+            .stdout_contains("Page 2\n\n\nb\n");
+    }
+}
+
+#[test]
 fn test_with_first_line_number_option() {
     let test_file_path = "test_one_page.log";
     let expected_test_file_path = "test_one_page_first_line.log.expected";
@@ -242,7 +266,14 @@ fn test_with_page_range() {
     let test_file_path = "test.log";
     let expected_test_file_path = "test_page_range_1.log.expected";
     let expected_test_file_path1 = "test_page_range_2.log.expected";
-    for arg in ["--pages=15", "+15"] {
+    for arg in [
+        "--pages=15",
+        "+15",
+        "--pages=+15",
+        "--pages= 15",
+        "--pages=\x0B15",
+        "++15",
+    ] {
         let mut scenario = new_ucmd!();
         let value = file_last_modified_time(&scenario, test_file_path);
         scenario
@@ -253,7 +284,7 @@ fn test_with_page_range() {
                 &[("{last_modified_time}", &value)],
             );
     }
-    for arg in ["--pages=15:17", "+15:17"] {
+    for arg in ["--pages=15:17", "+15:17", "--pages=+15:+17", "+15: 17"] {
         let mut scenario = new_ucmd!();
         let value = file_last_modified_time(&scenario, test_file_path);
         scenario
@@ -450,6 +481,22 @@ fn test_with_offset_space_option() {
 }
 
 #[test]
+fn test_offset_indents_header() {
+    // The margin goes on the first blank line and the header line too.
+    let header = format!("   \n\n   STAMP{0}TITLE{0}Page 1\n\n\n", " ".repeat(28));
+    new_ucmd!()
+        .args(&["-h", "TITLE", "-D", "STAMP", "-l", "12", "-o", "3"])
+        .pipe_in("line\n")
+        .succeeds()
+        .stdout_only(format!("{header}   line\n\n\n\n\n\n\n"));
+    new_ucmd!()
+        .args(&["-F", "-h", "TITLE", "-D", "STAMP", "-l", "12", "-o", "3"])
+        .pipe_in("line\n")
+        .succeeds()
+        .stdout_only(format!("{header}   line\n\x0c"));
+}
+
+#[test]
 fn test_offset_too_large() {
     let arg = "2147483648";
     new_ucmd!()
@@ -569,6 +616,14 @@ fn test_offset_large_value_does_not_abort_under_memory_limit() {
         .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
         .set_stdout(Stdio::null())
         .args(&["-t", "-o", "999999999"])
+        .pipe_in("hi\n")
+        .succeeds();
+
+    // With the page header, which is also indented
+    new_ucmd!()
+        .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
+        .set_stdout(Stdio::null())
+        .args(&["-o", "999999999"])
         .pipe_in("hi\n")
         .succeeds();
 }
@@ -1469,6 +1524,7 @@ fn test_non_utf8_input_filename() {
     ucmd.arg("-t")
         .arg(name)
         .pipe_in("from stdin\n")
+        .ignore_stdin_write_error()
         .succeeds()
         .stdout_only("from file\n");
 }
@@ -1483,6 +1539,7 @@ fn test_missing_non_utf8_input_does_not_read_stdin() {
         .arg("-t")
         .arg(OsStr::from_bytes(b"missing-\xff"))
         .pipe_in("from stdin\n")
+        .ignore_stdin_write_error()
         .fails_with_code(1)
         .no_stdout()
         .stderr_contains("missing-")
@@ -1589,6 +1646,9 @@ fn test_numeric_option_diagnostics() {
         (&["--pages=1:x"], "pr: invalid --pages argument '1:x'\n"),
         (&["--pages=1:0"], "pr: invalid page range '1:0'\n"),
         (&["--pages=1x"], "pr: invalid page range '1x'\n"),
+        (&["--pages=+0"], "pr: invalid page range '+0'\n"),
+        (&["--pages=++1"], "pr: invalid --pages argument '++1'\n"),
+        (&["--pages=+ 1"], "pr: invalid --pages argument '+ 1'\n"),
         (
             &["--pages=99999999999999999999"],
             "pr: --pages argument '99999999999999999999' too large\n",
@@ -1710,4 +1770,67 @@ fn test_page_width_narrower_than_leading_tab() {
         .pipe_in("\tone\n\ttwo\n")
         .succeeds()
         .stdout_only("    1\t\n    2\t\n");
+}
+
+#[rstest]
+#[case::default_counts_skipped_lines(&["-l1", "+2", "-n:1"], "a\nb\n", "2:b\n")]
+#[case::explicit_one(&["-l1", "+2", "-n:1", "-N1"], "a\nb\n", "1:b\n")]
+#[case::explicit_eight(&["-l1", "+2", "-n:1", "-N8"], "a\nb\n", "8:b\n")]
+#[case::first_number_zero(&["-l2", "+2", "-n:1", "-N0"], "a\nb\nc\nd\ne\nf\ng\n", "0:c\n1:d\n2:e\n3:f\n4:g\n")]
+#[case::two_pages_skipped(&["-l2", "+3", "-n:1", "-N5"], "a\nb\nc\nd\ne\nf\ng\n", "5:e\n6:f\n7:g\n")]
+#[case::form_feed_pages(&["+3", "-n:1", "-N5"], "a\x0cb\nc\x0cd\n", "5:d\n")]
+#[case::with_end_page(&["-l1", "+2:3", "-n:1", "-N8"], "a\nb\nc\nd\n", "8:b\n9:c\n")]
+fn test_first_line_number_with_skipped_pages(
+    #[case] args: &[&str],
+    #[case] input: &str,
+    #[case] expected: &str,
+) {
+    new_ucmd!()
+        .arg("-t")
+        .args(args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
+fn test_bare_number_lines_after_first_line_number() {
+    // A trailing bare `-n` must keep the `-N` value given before it.
+    new_ucmd!()
+        .args(&["-t", "-l1", "+2", "-N8", "-n"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_only("    8\tb\n");
+}
+
+#[test]
+fn test_double_space_last_line_without_newline() {
+    for (input, expected) in [("a", "a\n"), ("a\nb", "a\n\nb\n"), ("a\nb\n", "a\n\nb\n\n")] {
+        new_ucmd!()
+            .args(&["-t", "-d"])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn test_offset_written_once_per_line() {
+    // Like GNU pr, the margin of -o is written before the first column only.
+    for (args, expected) in [
+        (
+            ["-t", "-2", "-o", "3", "-S|", "-w", "20"],
+            "   aaaaaaaaa|c\n   bbbbbbbbb\n",
+        ),
+        (
+            ["-t", "-3", "-o", "2", "-S|", "-w", "20"],
+            "  aaaaaa|bbbbbb|c\n",
+        ),
+    ] {
+        new_ucmd!()
+            .args(&args)
+            .pipe_in("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nc\n")
+            .succeeds()
+            .stdout_only(expected);
+    }
 }

@@ -63,9 +63,10 @@ fn locate(snapshot: &Snapshot, err: &ExprError, at: &FailurePoint) -> Option<Loc
         ExprError::MissingArgument(_) => {
             (previous(), None, Some("expr-diag-help-missing-argument"))
         }
-        ExprError::ExpectedClosingBraceAfter(_) | ExprError::ExpectedClosingBraceInsteadOf(_) => {
-            (previous(), None, None)
-        }
+        // The parser has just consumed the `)` it objects to.
+        ExprError::UnexpectedClosingParenthesis
+        | ExprError::ExpectedClosingBraceAfter(_)
+        | ExprError::ExpectedClosingBraceInsteadOf(_) => (previous(), None, None),
         // Raised while evaluating; the evaluator says which argument it
         // blames. An operand computed by a subexpression has no argument of
         // its own, and the error falls back to its plain form.

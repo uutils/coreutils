@@ -1395,8 +1395,13 @@ fn parse_time_style(s: Option<&String>) -> UResult<String> {
 fn parse_depth(max_depth_str: Option<&str>, summarize: bool) -> UResult<Option<usize>> {
     let max_depth = max_depth_str.as_ref().and_then(|s| s.parse::<usize>().ok());
     match (max_depth_str, max_depth) {
-        (Some(s), _) if summarize => Err(DuError::SummarizeDepthConflict(s.into()).into()),
         (Some(s), None) => Err(DuError::InvalidMaxDepthArg(s.into()).into()),
+        // Like GNU, -s with a depth of 0 only says they are the same thing.
+        (Some(_), Some(0)) if summarize => {
+            show_warning!("{}", translate!("du-warning-summarize-same-as-depth-zero"));
+            Ok(max_depth)
+        }
+        (Some(s), Some(_)) if summarize => Err(DuError::SummarizeDepthConflict(s.into()).into()),
         (Some(_), Some(_)) | (None, _) => Ok(max_depth),
     }
 }

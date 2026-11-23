@@ -1574,6 +1574,41 @@ fn test_sparse_notrunc_extends_file() {
     assert_eq!(at.metadata("outfile").len(), 1024);
 }
 
+/// With `conv=sparse,fsync` (or `fdatasync`), the trailing zero block extends
+/// the file before the sync, so the sync covers the final length.
+#[cfg(target_os = "linux")]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[rstest]
+#[case::fsync("fsync")]
+#[case::fdatasync("fdatasync")]
+fn test_sparse_extends_before_sync(#[case] sync: &str) {
+    let (at, _ucmd) = at_and_ucmd!();
+    at.write_bytes("infile", &[0; 4096]);
+    let trace = at.plus("trace");
+    let Ok(out) = Command::new("strace")
+        .arg("-o")
+        .arg(&trace)
+        .args(["-e", "trace=fsync,fdatasync,ftruncate"])
+        .arg(get_tests_binary())
+        .arg("dd")
+        .args(["if=infile", "of=outfile", "bs=4096", "status=none"])
+        .arg(format!("conv=sparse,{sync}"))
+        .current_dir(at.as_string())
+        .output()
+    else {
+        return; // missing strace
+    };
+    if String::from_utf8_lossy(&out.stderr).contains("ptrace") {
+        return; // tracing not permitted here
+    }
+    assert!(out.status.success());
+    assert_eq!(at.metadata("outfile").len(), 4096);
+    let trace = at.read("trace");
+    let extend = trace.find(", 4096)").expect("final ftruncate");
+    let synced = trace.find(&format!("{sync}(")).expect("sync call");
+    assert!(extend < synced, "{trace}");
+}
+
 /// `conv=notrunc,sparse` must not shrink an output file longer than the copy.
 #[test]
 fn test_sparse_notrunc_does_not_shrink() {
@@ -2338,7 +2373,7 @@ fn test_nocache_eof() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(not(wasi_runner))]
 fn test_nocache_eof_fadvise_zero_length() {
     use std::process::Command;

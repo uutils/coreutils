@@ -721,7 +721,7 @@ fn test_shred_socket() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(not(wasi_runner))]
 fn test_stat_failure_reports_open_error() {
     // Make stat and open fail with different errors on the same path: the
@@ -764,7 +764,7 @@ fn test_stat_failure_reports_open_error() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(not(wasi_runner))]
 fn test_remove_reports_truncate_failure() {
     // When the data cannot be deallocated, say so and keep the file.
