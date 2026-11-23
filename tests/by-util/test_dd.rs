@@ -2891,3 +2891,80 @@ fn test_ascii_ebcdic_without_cbs_still_convert() {
             .stdout_only_bytes(expected);
     }
 }
+
+// spell-checker:disable
+#[rstest]
+#[case::bs_count_b_suffix(
+    &["bs=4", "count=5B", "conv=sync", "status=noxfer"],
+    b"ABCDEFGH",
+    b"ABCDE\0\0\0",
+    "1+1 records in\n2+0 records out\n",
+)]
+#[case::bs_iflag_count_bytes(
+    &["bs=4", "count=5", "iflag=count_bytes", "conv=sync", "status=noxfer"],
+    b"ABCDEFGH",
+    b"ABCDE\0\0\0",
+    "1+1 records in\n2+0 records out\n",
+)]
+#[case::ibs_gt_obs(
+    &["ibs=6", "obs=4", "count=7B", "conv=sync", "status=noxfer"],
+    b"ABCDEFGHIJKL",
+    b"ABCDEFG\0\0\0\0\0",
+    "1+1 records in\n3+0 records out\n",
+)]
+#[case::obs_gt_ibs(
+    &["ibs=4", "obs=6", "count=5B", "conv=sync", "status=noxfer"],
+    b"ABCDEFGH",
+    b"ABCDE\0\0\0",
+    "1+1 records in\n1+1 records out\n",
+)]
+#[case::obs_gt_ibs_multi_iteration(
+    &["ibs=4", "obs=8", "count=13B", "conv=sync", "status=noxfer"],
+    b"ABCDEFGHIJKLMNOP",
+    b"ABCDEFGHIJKLM\0\0\0",
+    "3+1 records in\n2+0 records out\n",
+)]
+#[case::conv_sync_swab(
+    &["bs=4", "count=5B", "conv=sync,swab", "status=noxfer"],
+    b"ABCDEFGH",
+    b"BADC\0E\0\0",
+    "1+1 records in\n2+0 records out\n",
+)]
+#[case::conv_sync_block_spaces(
+    &["bs=4", "count=2B", "conv=sync,block", "cbs=4", "status=noxfer"],
+    b"ABCDEF",
+    b"AB  ",
+    "0+1 records in\n1+0 records out\n",
+)]
+#[case::conv_sync_block_multi_block(
+    &["bs=4", "count=5B", "conv=sync,block", "cbs=4", "status=noxfer"],
+    b"AB\nCDEFGH",
+    b"AB  CD  ",
+    "1+1 records in\n2+0 records out\n1 truncated record\n",
+)]
+#[case::eof_before_count_bytes(
+    &["bs=4", "count=3B", "conv=sync,block", "cbs=4", "status=noxfer"],
+    b"AB",
+    b"AB  ",
+    "0+1 records in\n1+0 records out\n",
+)]
+#[case::count_bytes_exact_multiple(
+    &["bs=4", "count=8B", "conv=sync", "status=noxfer"],
+    b"ABCDEFGHIJ",
+    b"ABCDEFGH",
+    "2+0 records in\n2+0 records out\n",
+)]
+// spell-checker:enable
+fn test_conv_sync_count_bytes_pads_partial_block(
+    #[case] args: &[&str],
+    #[case] input: &[u8],
+    #[case] expected_stdout: &[u8],
+    #[case] expected_stderr: &str,
+) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(expected_stdout)
+        .stderr_is(expected_stderr);
+}

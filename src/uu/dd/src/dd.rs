@@ -547,23 +547,39 @@ impl Input<'_> {
         })
     }
 
-    /// Fills a given buffer.
-    /// Reads in increments of 'self.ibs'.
-    /// The start of each ibs-sized read is aligned to multiples of ibs; remaining space is filled with the 'pad' byte.
+    /// Fills a given buffer with `ibs`-sized blocks, padding short reads with `pad`.
+    ///
+    /// `buf.len()` must be a multiple of `self.settings.ibs`. When `byte_limit` is
+    /// `Some(limit)`, at most `limit` input bytes are read across all blocks, and
+    /// any partial final block is still padded to a full `ibs` bytes.
     /// Returns the read statistics and the total filled length (reads + padding).
-    fn fill_blocks(&mut self, buf: &mut [u8], pad: u8) -> io::Result<(ReadStat, usize)> {
+    fn fill_blocks(
+        &mut self,
+        buf: &mut [u8],
+        byte_limit: Option<usize>,
+        pad: u8,
+    ) -> io::Result<(ReadStat, usize)> {
+        let ibs = self.settings.ibs;
+        debug_assert_eq!(buf.len() % ibs, 0);
+
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut base_idx = 0;
         let mut bytes_total = 0;
 
         while base_idx < buf.len() {
-            let next_blk = cmp::min(base_idx + self.settings.ibs, buf.len());
-            let target_len = next_blk - base_idx;
+            let target_len = match byte_limit {
+                Some(limit) => cmp::min(ibs, limit.saturating_sub(bytes_total)),
+                None => ibs,
+            };
+            if target_len == 0 {
+                break;
+            }
 
-            match self.read(&mut buf[base_idx..next_blk])? {
+            let next_blk = base_idx + ibs;
+            match self.read(&mut buf[base_idx..base_idx + target_len])? {
                 0 => break,
-                rlen if rlen < target_len => {
+                rlen if rlen < ibs => {
                     bytes_total += rlen;
                     reads_partial += 1;
                     buf[base_idx + rlen..next_blk].fill(pad);
@@ -574,7 +590,7 @@ impl Input<'_> {
                 }
             }
 
-            base_idx += self.settings.ibs;
+            base_idx = next_blk;
         }
 
         Ok((
@@ -1477,16 +1493,21 @@ fn read_helper<'a>(
     }
 
     let (rstat, data_len) = {
-        let scratch = &mut read_buf.as_mut_bytes()[..bsize];
+        let full_buf = read_buf.as_mut_bytes();
         let (rstat, data_len) = if let Some(ch) = i.settings.iconv.sync {
-            i.fill_blocks(scratch, ch)?
+            match i.settings.count {
+                // With byte-counted input, `bsize` caps input bytes while padded
+                // blocks may fill up to the full `ibs`-aligned buffer.
+                Some(Num::Bytes(_)) => i.fill_blocks(full_buf, Some(bsize), ch)?,
+                _ => i.fill_blocks(&mut full_buf[..bsize], None, ch)?,
+            }
         } else {
-            let s = i.fill_consecutive(scratch)?;
+            let s = i.fill_consecutive(&mut full_buf[..bsize])?;
             let n = s.bytes_total as usize;
             (s, n)
         };
         if !rstat.is_empty() && i.settings.iconv.swab {
-            perform_swab(&mut scratch[..data_len]);
+            perform_swab(&mut full_buf[..data_len]);
         }
         (rstat, data_len)
     };
@@ -1845,5 +1866,30 @@ mod tests {
 
         let buf = AlignedBuf::new(0).unwrap();
         assert!(buf.as_bytes().is_empty());
+    }
+
+    #[test]
+    fn test_fill_blocks_pads_stale_bytes_under_byte_limit() {
+        use std::io::{Seek, Write};
+
+        let settings = Parser::new()
+            .parse_with_diagnostics(["ibs=4", "obs=8", "count=5B", "conv=sync"], None)
+            .unwrap();
+        let mut file = tempfile::tempfile().unwrap();
+        file.write_all(b"12345678").unwrap();
+        file.rewind().unwrap();
+
+        let mut input = Input {
+            src: Source::File(file),
+            settings: &settings,
+        };
+        let mut buf = [b'X'; 8];
+        let (rstat, filled) = input.fill_blocks(&mut buf, Some(5), 0).unwrap();
+
+        assert_eq!(filled, 8);
+        assert_eq!(&buf, b"12345\0\0\0");
+        assert_eq!(rstat.reads_complete, 1);
+        assert_eq!(rstat.reads_partial, 1);
+        assert_eq!(rstat.bytes_total, 5);
     }
 }
