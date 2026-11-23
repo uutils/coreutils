@@ -130,7 +130,8 @@ impl NumInfo {
             }
             first_char = false;
 
-            if parse_settings.thousands_separator == Some(char) {
+            // Thousands separators are only valid in the integer part (before the decimal point).
+            if !had_decimal_pt && parse_settings.thousands_separator == Some(char) {
                 continue;
             }
 
@@ -558,5 +559,124 @@ mod tests {
                 0..0
             )
         );
+    }
+
+    #[test]
+    fn thousands_separator_after_decimal_pt_stops_parse() {
+        let us = NumInfoParseSettings {
+            thousands_separator: Some(b','),
+            ..Default::default()
+        };
+        assert_eq!(
+            NumInfo::parse(b"1.2,9", &us),
+            (
+                NumInfo {
+                    exponent: 0,
+                    sign: Sign::Positive,
+                },
+                0..3
+            )
+        );
+        assert_eq!(
+            NumInfo::parse(b"1.29,0", &us),
+            (
+                NumInfo {
+                    exponent: 0,
+                    sign: Sign::Positive,
+                },
+                0..4
+            )
+        );
+        assert_eq!(
+            NumInfo::parse(b"1,200.5,9", &us),
+            (
+                NumInfo {
+                    exponent: 3,
+                    sign: Sign::Positive,
+                },
+                0..7
+            )
+        );
+        assert_eq!(
+            NumInfo::parse(b"0.0,5", &us),
+            (
+                NumInfo {
+                    exponent: 0,
+                    sign: Sign::Positive,
+                },
+                3..3
+            )
+        );
+        assert_eq!(
+            NumInfo::parse(b".,5", &us),
+            (
+                NumInfo {
+                    exponent: 0,
+                    sign: Sign::Positive,
+                },
+                0..0
+            )
+        );
+
+        let us_si = NumInfoParseSettings {
+            accept_si_units: true,
+            thousands_separator: Some(b','),
+            ..Default::default()
+        };
+        assert_eq!(
+            NumInfo::parse(b"1.2,9K", &us_si),
+            (
+                NumInfo {
+                    exponent: 0,
+                    sign: Sign::Positive,
+                },
+                0..3
+            )
+        );
+
+        let de = NumInfoParseSettings {
+            decimal_pt: Some(b','),
+            thousands_separator: Some(b'.'),
+            ..Default::default()
+        };
+        assert_eq!(
+            NumInfo::parse(b"1,2.9", &de),
+            (
+                NumInfo {
+                    exponent: 0,
+                    sign: Sign::Positive,
+                },
+                0..3
+            )
+        );
+    }
+
+    #[test]
+    fn cmp_with_thousands_separator_after_decimal_pt() {
+        let us = NumInfoParseSettings {
+            thousands_separator: Some(b','),
+            ..Default::default()
+        };
+        for (a, b, expected) in [
+            (b"1.2,9".as_slice(), b"1.29,0".as_slice(), Ordering::Less),
+            (b"1.2,9", b"1.21,0", Ordering::Less),
+            (b"1,200.5", b"1200.50", Ordering::Equal),
+            (b"-1.2,9", b"-1.29,0", Ordering::Greater),
+            (b"0.0,5", b"0", Ordering::Equal),
+        ] {
+            let (a_info, a_range) = NumInfo::parse(a, &us);
+            let (b_info, b_range) = NumInfo::parse(b, &us);
+            assert_eq!(
+                numeric_str_cmp(
+                    (&a[a_range.clone()], &a_info),
+                    (&b[b_range.clone()], &b_info)
+                ),
+                expected
+            );
+            assert_eq!(
+                numeric_str_cmp((&b[b_range], &b_info), (&a[a_range], &a_info)),
+                expected.reverse()
+            );
+        }
     }
 }
