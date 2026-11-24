@@ -8,11 +8,11 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{ErrorKind, IsTerminal, Read, Write, stdin, stdout};
+use std::io::{ErrorKind, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::{OsWrite, Quotable};
 use uucore::error::{UResult, USimpleError, strip_errno};
-use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name, quoting_style_from_env};
+use uucore::quoting_style::{locale_aware_escape_name, terminal_filename_quoting_style};
 use uucore::translate;
 
 use uucore::{format_usage, show};
@@ -130,8 +130,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let print_names = files.len() > 1 || files[0] != "-";
     let width = if sysv { 1 } else { 5 };
     let stdout = stdout();
-    let quoting_style = (print_names && stdout.is_terminal())
-        .then(|| quoting_style_from_env().unwrap_or(QuotingStyle::SHELL_ESCAPE));
+    let quoting_style = print_names
+        .then(|| terminal_filename_quoting_style(&stdout))
+        .flatten();
 
     for file in &files {
         let reader = match open(file) {
