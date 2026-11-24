@@ -29,4 +29,3 @@ Index: gnu/tests/cksum/cksum-base64.pl
 +   grep { m{^\s*-\s*([[:alpha:]]\S+):} } split ('\n', `cksum --help`);
  my $test_algs = join ' ', map {$_->[0]} @pairs;
  $help_algs eq $test_algs or die "$help_algs not equal to\n$test_algs";
-
