@@ -1569,15 +1569,18 @@ fn stdout_canonicalized() -> OsString {
 /// ```
 ///
 /// then this function would return false.
+///
+/// The check is done on the inherited standard output descriptor itself
+/// rather than by reopening its pathname: reopening requires read
+/// permission on the file, which a write-only redirection target (e.g. a
+/// file with mode 200) does not grant even though the descriptor is
+/// perfectly valid and seekable.
 fn is_stdout_redirected_to_seekable_file() -> bool {
-    let s = stdout_canonicalized();
-    let p = Path::new(&s);
-    match File::open(p) {
-        Ok(mut f) => {
-            f.stream_position().is_ok() && f.seek(SeekFrom::End(0)).is_ok() && f.rewind().is_ok()
-        }
-        Err(_) => false,
-    }
+    let Ok(fx) = OwnedFileDescriptorOrHandle::from(io::stdout()) else {
+        return false;
+    };
+    let mut f = fx.into_file();
+    f.stream_position().is_ok()
 }
 
 /// Try to get the len if it is a block device
