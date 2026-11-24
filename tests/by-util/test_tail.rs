@@ -5778,6 +5778,162 @@ fn test_debug_flag_with_inotify() {
 
 #[uutests::wasi_ignore(TailFollowDisabled)]
 #[test]
+#[cfg(unix)]
+fn test_debug_follow_descriptor_device_uses_blocking_mode() {
+    let mut child = new_ucmd!()
+        .args(&["--debug", "-f", "/dev/null"])
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stderr_is("tail: using blocking mode\n");
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(unix)]
+fn test_debug_follow_name_device_uses_polling_mode() {
+    let mut child = new_ucmd!()
+        .args(&["--debug", "-F", "/dev/null"])
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stderr_is("tail: using polling mode\n");
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(unix)]
+fn test_debug_follow_piped_stdin_and_device_uses_blocking_mode() {
+    let mut child = new_ucmd!()
+        .args(&["--debug", "-f", "/dev/null", "-"])
+        .pipe_in("x\n")
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stderr_contains("tail: using blocking mode\n")
+        .stderr_does_not_contain("notification");
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+fn test_debug_follow_missing_file_prints_no_mode() {
+    new_ucmd!()
+        .args(&["--debug", "-f", "missing"])
+        .fails_with_code(1)
+        .stderr_does_not_contain("using");
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_debug_mode_printed_after_initial_output() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello\n");
+
+    let mut child = ucmd.args(&["--debug", "-F", "missing", "f"]).run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child.kill().make_assertion().with_all_output().stderr_is(
+        "tail: cannot open 'missing' for reading: No such file or directory\n\
+             tail: using notification mode\n",
+    );
+}
+
+/// Wait up to 5 seconds for the stderr of `child` to satisfy `done`.
+#[cfg(target_os = "linux")]
+fn wait_for_stderr(child: &mut uutests::util::UChild, done: impl Fn(&str) -> bool) {
+    for _ in 0..100 {
+        if done(&child.stderr_all()) {
+            break;
+        }
+        child.delay(50);
+    }
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_debug_reports_switch_to_polling() {
+    use text::BACKEND;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("dir");
+    at.write("dir/f", "hello\n");
+
+    let mut child = ts
+        .ucmd()
+        .args(&["--debug", "-F", "-s.1", "--max-unchanged-stats=1", "dir/f"])
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    // Move the directory away before removing the file, so the parent is
+    // already gone whenever tail handles the removal.
+    at.rename("dir", "dir.gone");
+    at.remove("dir.gone/f");
+    wait_for_stderr(&mut child, |e| e.contains("using polling mode"));
+    at.mkdir("dir");
+    at.touch("dir/f");
+    wait_for_stderr(&mut child, |e| e.contains("has appeared"));
+
+    child.make_assertion().is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_is("hello\n")
+        .stderr_is(format!(
+            "tail: using notification mode\n\
+             tail: 'dir/f' has become inaccessible: No such file or directory\n\
+             tail: directory containing watched file was removed\n\
+             tail: {BACKEND} cannot be used, reverting to polling\n\
+             tail: using polling mode\n\
+             tail: 'dir/f' has appeared;  following new file\n"
+        ));
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_debug_reports_switch_to_polling_once() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("dir");
+    at.write("dir/a", "a\n");
+    at.write("dir/b", "b\n");
+
+    let mut child = ts
+        .ucmd()
+        .args(&["--debug", "-F", "-s.1", "dir/a", "dir/b"])
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    // Move the directory away first, so both removals see it gone.
+    at.rename("dir", "dir.gone");
+    at.remove("dir.gone/a");
+    at.remove("dir.gone/b");
+    wait_for_stderr(&mut child, |e| {
+        e.matches("reverting to polling").count() == 2
+    });
+
+    let stderr = child.kill().stderr_all();
+    assert_eq!(stderr.matches("using polling mode").count(), 1, "{stderr}");
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
 #[cfg(target_os = "linux")]
 fn test_follow_dangling_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
