@@ -2162,6 +2162,31 @@ fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyRe
     Ok(())
 }
 
+/// Restore a created backup over `dest` on a best-effort basis.
+///
+/// This restores the original destination's timestamps for non-symlink destinations,
+/// clears a read-only attribute on Windows, then renames the backup over `dest`.
+/// All operations ignore errors; the caller reports the original copy failure.
+/// Whether to call this is decided separately by the caller.
+fn restore_backup(dest: &Path, backup_path: &Path, metadata: Option<&Metadata>) {
+    if let Some(metadata) = metadata
+        && !metadata.file_type().is_symlink()
+        && let (Ok(atime), Ok(mtime)) = (metadata.accessed(), metadata.modified())
+    {
+        let _ = filetime::set_file_times(backup_path, FileTime::from(atime), FileTime::from(mtime));
+    }
+    #[cfg(windows)]
+    if let Ok(metadata) = fs::symlink_metadata(dest) {
+        let mut permissions = metadata.permissions();
+        if permissions.readonly() {
+            #[allow(clippy::permissions_set_readonly_false)]
+            permissions.set_readonly(false);
+            let _ = fs::set_permissions(dest, permissions);
+        }
+    }
+    let _ = fs::rename(backup_path, dest);
+}
+
 /// Only allow a backup or unlink of a hard link if the paths resolve to
 /// distinct entries. A failed lookup cannot establish that it is safe.
 fn paths_are_distinct_entries(source: &Path, dest: &Path) -> bool {
@@ -2262,7 +2287,7 @@ fn handle_existing_dest(
     options: &Options,
     source_in_command_line: bool,
     copied_files: &HashMap<FileInformation, PathBuf>,
-) -> CopyResult<()> {
+) -> CopyResult<Option<PathBuf>> {
     // Disallow copying a file to itself, unless `--force` and
     // `--backup` are both specified.
     if is_forbidden_to_copy_to_same_file(source, dest, options, source_in_command_line) {
@@ -2285,13 +2310,13 @@ fn handle_existing_dest(
 
     let mut is_dest_removed = false;
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
-    if let Some(backup_path) = backup_path {
+    if let Some(backup_path) = &backup_path {
         if backup_would_destroy_source(source, dest, &options.backup_suffix, options.backup, true) {
             return Err(translate!("cp-error-backing-up-destroy-source", "dest" => dest.quote(), "source" => source.quote())
             .into());
         }
         is_dest_removed = dest.is_symlink();
-        backup_dest(dest, &backup_path, is_dest_removed)?;
+        backup_dest(dest, backup_path, is_dest_removed)?;
     }
     if !is_dest_removed {
         delete_dest_if_needed_and_allowed(
@@ -2303,7 +2328,7 @@ fn handle_existing_dest(
         )?;
     }
 
-    Ok(())
+    Ok(backup_path)
 }
 
 /// Checks if:
@@ -2854,6 +2879,7 @@ fn copy_file(
         fs::remove_file(dest)?;
     }
 
+    let mut created_backup = None;
     if initial_dest_metadata.is_some()
         && (!options.attributes_only
             || matches!(
@@ -2879,7 +2905,8 @@ fn copy_file(
                 }
             }
         }
-        handle_existing_dest(source, dest, options, source_in_command_line, copied_files)?;
+        created_backup =
+            handle_existing_dest(source, dest, options, source_in_command_line, copied_files)?;
         if are_hardlinks_to_same_file(source, dest) {
             if options.copy_mode == CopyMode::Copy {
                 return Ok(());
@@ -2917,6 +2944,26 @@ fn copy_file(
         return Err(translate!("cp-error-cannot-change-attribute", "dest" => dest.quote()).into());
     }
 
+    // GNU cp puts the backup back over `dest` when the copy failed after
+    // changing it. `dest` counts as changed when it is now missing or when
+    // its entry no longer matches the snapshot taken before it was touched;
+    // an untouched `dest` keeps its backup file instead.
+    let restore_created_backup = || {
+        if let Some(backup_path) = &created_backup {
+            let changed = match (&initial_dest_metadata, &dest.symlink_metadata().ok()) {
+                (Some(before), Some(after)) => {
+                    before.file_type() != after.file_type()
+                        || before.len() != after.len()
+                        || before.modified().ok() != after.modified().ok()
+                }
+                (before, after) => before.is_some() != after.is_some(),
+            };
+            if changed {
+                restore_backup(dest, backup_path, initial_dest_metadata.as_ref());
+            }
+        }
+    };
+
     // When using --link mode, hard link structure is automatically preserved
     // because we link to source files (which share inodes).
     if options.preserve_hard_links() && options.copy_mode != CopyMode::Link {
@@ -2930,9 +2977,10 @@ fn copy_file(
                         e,
                         translate!("cp-error-cannot-stat-context", "source" => source.quote()),
                     )
-                })?,
+                })
+                .inspect_err(|_| restore_created_backup())?,
         ) {
-            fs::hard_link(new_source, dest)?;
+            fs::hard_link(new_source, dest).inspect_err(|_| restore_created_backup())?;
 
             if options.verbose {
                 print_verbose_output(options.parents, progress_bar, source, dest)?;
@@ -2952,12 +3000,14 @@ fn copy_file(
         } else {
             fs::symlink_metadata(source)
         };
-        result.map_err(|err| {
-            CpError::IoErrContext(
-                err,
-                translate!("cp-error-cannot-stat-context", "source" => source.quote()),
-            )
-        })?
+        result
+            .inspect_err(|_| restore_created_backup())
+            .map_err(|err| {
+                CpError::IoErrContext(
+                    err,
+                    translate!("cp-error-cannot-stat-context", "source" => source.quote()),
+                )
+            })?
     };
 
     let dest_metadata = dest.symlink_metadata().ok();
@@ -2981,7 +3031,12 @@ fn copy_file(
         symlinked_files,
         source_in_command_line,
         created_parent_dirs,
-    )?;
+    )
+    .inspect_err(|err| {
+        if !matches!(err, CpError::Skipped(_)) {
+            restore_created_backup();
+        }
+    })?;
 
     if options.verbose && performed_action != PerformedAction::Skipped {
         print_verbose_output(options.parents, progress_bar, source, dest)?;

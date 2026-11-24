@@ -9756,3 +9756,208 @@ fn test_cp_source_in_unsearchable_dir() {
     at.set_mode("d", 0o755);
     assert!(!at.file_exists("dest"));
 }
+
+#[uutests::wasi_ignore(NoPermissionBits)]
+#[test]
+#[cfg(unix)]
+fn test_cp_backup_restored_when_copy_fails() {
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    for (mode, backup, numbered_exists) in [
+        ("simple", "dest~", false),
+        ("numbered", "dest.~1~", false),
+        ("existing", "dest~", false),
+        ("existing", "dest.~2~", true),
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("dest", "old");
+        if numbered_exists {
+            at.write("dest.~1~", "earlier backup");
+        }
+        at.write("secret", "secret");
+        at.set_mode("secret", 0);
+        let flag = format!("--backup={mode}");
+        let result = ucmd
+            .args(&[
+                flag.as_str(),
+                "--remove-destination",
+                "--reflink=never",
+                "secret",
+                "dest",
+            ])
+            .run();
+        at.set_mode("secret", 0o644);
+        result
+            .failure()
+            .code_is(1)
+            .stderr_contains("Permission denied");
+        assert_eq!(at.read("dest"), "old");
+        assert!(!at.file_exists(backup));
+        if numbered_exists {
+            assert_eq!(at.read("dest.~1~"), "earlier backup");
+        }
+    }
+}
+
+#[uutests::wasi_ignore(NoPermissionBits)]
+#[test]
+#[cfg(unix)]
+fn test_cp_failed_copy_does_not_restore_stale_backup() {
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("dest~", "stale");
+    at.write("secret", "secret");
+    at.set_mode("secret", 0);
+    let result = ucmd
+        .args(&["--backup=simple", "--force", "secret", "dest"])
+        .run();
+    at.set_mode("secret", 0o644);
+    result
+        .failure()
+        .code_is(1)
+        .stderr_contains("Permission denied");
+    assert!(!at.file_exists("dest"));
+    assert_eq!(at.read("dest~"), "stale");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_backup_restored_when_source_cannot_be_statted() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("dest", "old");
+    at.symlink_file("nonexistent-target", "src");
+    ucmd.args(&[
+        "--backup=numbered",
+        "--dereference",
+        "--remove-destination",
+        "src",
+        "dest",
+    ])
+    .fails_with_code(1)
+    .stderr_contains("cannot stat");
+    assert_eq!(at.read("dest"), "old");
+    assert!(!at.file_exists("dest.~1~"));
+}
+
+#[uutests::wasi_ignore(NoPermissionBits)]
+#[test]
+#[cfg(unix)]
+fn test_cp_backup_restore_preserves_metadata() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("dest", "private-old");
+    at.set_mode("dest", 0o600);
+    let mtime = filetime::FileTime::from_unix_time(1_700_000_000, 0);
+    filetime::set_file_mtime(at.plus("dest"), mtime).unwrap();
+    at.symlink_file("nonexistent-target", "src");
+    ucmd.args(&[
+        "--backup=numbered",
+        "--dereference",
+        "--remove-destination",
+        "src",
+        "dest",
+    ])
+    .fails_with_code(1);
+    let metadata = std::fs::symlink_metadata(at.plus("dest")).unwrap();
+    assert_eq!(at.read("dest"), "private-old");
+    assert_eq!(metadata.permissions().mode() & 0o777, 0o600);
+    assert_eq!(
+        filetime::FileTime::from_last_modification_time(&metadata),
+        mtime
+    );
+    assert!(!at.file_exists("dest.~1~"));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_backup_restore_preserves_destination_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("target", "old target");
+    at.relative_symlink_file("target", "dest");
+    let link_target = std::fs::read_link(at.plus("dest")).unwrap();
+    at.relative_symlink_file("nonexistent-target", "src");
+    ucmd.args(&["--backup=simple", "--dereference", "src", "dest"])
+        .fails_with_code(1)
+        .stderr_contains("cannot stat");
+    assert!(at.is_symlink("dest"));
+    assert_eq!(std::fs::read_link(at.plus("dest")).unwrap(), link_target);
+    assert_eq!(at.read("target"), "old target");
+    assert!(!at.is_symlink("dest~"));
+    assert!(!at.file_exists("dest~"));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_early_stat_failure_keeps_untouched_destination_inode() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("dest", "old");
+    at.symlink_file("nonexistent-target", "src");
+    let inode = std::fs::symlink_metadata(at.plus("dest")).unwrap().ino();
+    ucmd.args(&["--backup=simple", "--dereference", "src", "dest"])
+        .fails_with_code(1)
+        .stderr_contains("cannot stat");
+    assert_eq!(
+        std::fs::symlink_metadata(at.plus("dest")).unwrap().ino(),
+        inode
+    );
+    assert_eq!(at.read("dest"), "old");
+    assert_eq!(at.read("dest~"), "old");
+}
+
+#[uutests::wasi_ignore(NoPermissionBits)]
+#[test]
+// Android SELinux denies hard links in the test directory (PermissionDenied).
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_cp_unreadable_source_keeps_destination_inode_and_hard_links() {
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    for (mode, backup, numbered_exists) in [
+        ("simple", "dest~", false),
+        ("numbered", "dest.~2~", true),
+        ("existing", "dest~", false),
+        ("existing", "dest.~2~", true),
+    ] {
+        for force in [false, true] {
+            let (at, mut ucmd) = at_and_ucmd!();
+            at.write("dest", "original destination");
+            std::fs::hard_link(at.plus("dest"), at.plus("link")).unwrap();
+            let inode = std::fs::metadata(at.plus("dest")).unwrap().ino();
+            at.write("dest~", "stale backup");
+            if numbered_exists {
+                at.write("dest.~1~", "earlier backup");
+            }
+            at.write("secret", "unreadable source");
+            at.set_mode("secret", 0);
+
+            ucmd.arg(format!("--backup={mode}")).arg("--reflink=never");
+            if force {
+                ucmd.arg("--force");
+            }
+            let result = ucmd.args(&["secret", "dest"]).run();
+            at.set_mode("secret", 0o644);
+            result
+                .failure()
+                .code_is(1)
+                .stderr_contains("Permission denied");
+
+            let dest_metadata = std::fs::metadata(at.plus("dest")).unwrap();
+            let link_metadata = std::fs::metadata(at.plus("link")).unwrap();
+            assert_eq!(dest_metadata.ino(), inode);
+            assert_eq!(link_metadata.ino(), inode);
+            assert_eq!(dest_metadata.dev(), link_metadata.dev());
+            assert_eq!(dest_metadata.nlink(), 2);
+            assert_eq!(at.read("dest"), "original destination");
+            assert_eq!(at.read("link"), "original destination");
+            assert_eq!(at.read(backup), "original destination");
+            if numbered_exists {
+                assert_eq!(at.read("dest.~1~"), "earlier backup");
+                assert_eq!(at.read("dest~"), "stale backup");
+            }
+        }
+    }
+}
