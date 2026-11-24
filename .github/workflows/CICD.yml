@@ -115,9 +115,12 @@ jobs:
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
+      shell: bash
       run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        if sccache rustc -V;then
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        fi
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -176,9 +179,12 @@ jobs:
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
+      shell: bash
       run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        if sccache rustc -V;then
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        fi
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -298,9 +304,12 @@ jobs:
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
+      shell: bash
       run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        if sccache rustc -V;then
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        fi
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
@@ -341,9 +350,12 @@ jobs:
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
+      shell: bash
       run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        if sccache rustc -V;then
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        fi
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
@@ -430,9 +442,12 @@ jobs:
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
+      shell: bash
       run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        if sccache rustc -V;then
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        fi
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -758,9 +773,12 @@ jobs:
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
+      shell: bash
       run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        if sccache rustc -V;then
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        fi
 
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
     #   run: git checkout ${{ github.head_ref }}
@@ -881,9 +899,12 @@ jobs:
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
+      shell: bash
       run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        if sccache rustc -V;then
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        fi
     - name: Test checksum utilities with OpenSSL (system / dynamic)
       shell: bash
       env:
@@ -910,9 +931,12 @@ jobs:
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
+      shell: bash
       run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        if sccache rustc -V;then
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        fi
     # The caret diagnostics (`feat_diagnostics`) are on by default; packagers
     # who want the smaller dependency tree build with them off, so that build
     # must stay green. The caret snapshot tests are gated on the feature and

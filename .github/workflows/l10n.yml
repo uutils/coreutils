@@ -45,9 +45,12 @@ jobs:
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
+      shell: bash
       run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        if sccache rustc -V;then
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        fi
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -141,9 +144,12 @@ jobs:
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
+      shell: bash
       run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        if sccache rustc -V;then
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        fi
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -304,9 +310,12 @@ jobs:
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
+      shell: bash
       run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        if sccache rustc -V;then
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        fi
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -415,9 +424,12 @@ jobs:
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
+      shell: bash
       run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        if sccache rustc -V;then
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        fi
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -569,9 +581,12 @@ jobs:
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
+      shell: bash
       run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        if sccache rustc -V;then
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        fi
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -900,9 +915,12 @@ jobs:
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
+      shell: bash
       run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        if sccache rustc -V;then
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        fi
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -1132,9 +1150,12 @@ jobs:
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
+      shell: bash
       run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        if sccache rustc -V;then
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        fi
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -1255,9 +1276,12 @@ jobs:
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
+      shell: bash
       run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        if sccache rustc -V;then
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        fi
     - name: Install prerequisites
       run: |
         sudo apt-get -y update

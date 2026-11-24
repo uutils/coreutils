@@ -41,8 +41,10 @@ jobs:
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
       run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        if sccache rustc -V;then
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        fi
     - uses: mlugg/setup-zig@v2.2.1
     - uses: taiki-e/install-action@cargo-zigbuild
     - name: cargo clippy

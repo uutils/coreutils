@@ -92,8 +92,10 @@ jobs:
       - name: Export sccache
         if: steps.sccache-setup.outcome == 'success'
         run: |
-          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+          if sccache rustc -V;then
+            echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+            echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+          fi
 
       - name: Install locales
         shell: bash
