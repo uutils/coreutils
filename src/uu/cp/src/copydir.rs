@@ -125,10 +125,9 @@ struct Context<'a> {
 fn ends_with_dot_component(path: &Path) -> bool {
     let is_separator = |b: &u8| std::path::is_separator(char::from(*b));
     let mut bytes = path.as_os_str().as_encoded_bytes();
-    while let [rest @ .., last] = bytes {
-        if !is_separator(last) {
-            break;
-        }
+    while let [rest @ .., last] = bytes
+        && is_separator(last)
+    {
         bytes = rest;
     }
     let last = bytes.rsplit(is_separator).next();
