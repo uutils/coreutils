@@ -343,6 +343,9 @@ fn test_translate_and_squeeze_multiple_lines() {
 #[case::chars_to_upper(&["abc", "[:upper:]"])]
 #[case::shifted_classes(&["a[:lower:]", "[:upper:]b"])]
 #[case::extra_class_in_set2(&["[:lower:]", "[:upper:][:lower:]"])]
+// A class that starts right where SET1 ends is still checked.
+#[case::class_at_end_of_set1(&["a", "b[:lower:]"])]
+#[case::class_at_end_of_longer_set1(&["ab", "xy[:lower:]"])]
 // -s alone still translates, so the alignment rule still applies.
 #[case::squeeze(&["-s", "[:alpha:]", "[:upper:]"])]
 fn test_misaligned_upper_lower_construct(#[case] args: &[&str]) {
@@ -354,6 +357,21 @@ fn test_misaligned_upper_lower_construct(#[case] args: &[&str]) {
         .fails_with_code(1)
         .no_stdout()
         .stderr_contains("tr: misaligned [:upper:] and/or [:lower:] construct\n");
+}
+
+/// An 'upper'/'lower' that starts past the end of SET1 is never used, so GNU
+/// accepts it without a partner in SET1 and translates as if it were absent.
+#[rstest]
+#[case::past_a_one_char_set1(&["a", "ab[:lower:]"], "xaAbB\n")]
+#[case::two_past_set1(&["a", "bc[:lower:]"], "xbAbB\n")]
+#[case::past_a_range(&["a-c", "xyzw[:lower:]"], "xxAyB\n")]
+#[case::followed_by_a_char(&["a", "bc[:upper:]x"], "xbAbB\n")]
+fn test_unused_upper_lower_past_set1_is_accepted(#[case] args: &[&str], #[case] out: &str) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in("xaAbB\n")
+        .succeeds()
+        .stdout_is(out);
 }
 
 /// A class in SET2 that is rejected for another reason keeps that reason's

@@ -426,6 +426,11 @@ impl Sequence {
             for (set2_pos, set2_item) in set2.iter().enumerate() {
                 if matches!(set2_item, Self::Class(_)) {
                     let set2_part_solved_len = Self::expanded_len_of(&set2[..set2_pos]);
+                    // Like GNU, a class that starts past the end of set1 is never
+                    // used, so it needs no partner there.
+                    if set2_part_solved_len > set1_len {
+                        continue;
+                    }
 
                     let mut class_matches = false;
                     for (set1_pos, set1_item) in set1.iter().enumerate() {
