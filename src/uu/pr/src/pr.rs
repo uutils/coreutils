@@ -1688,6 +1688,7 @@ fn get_line_for_printing(
 
     // The content is kept as raw bytes, so input that is not valid UTF-8 is
     // written out unchanged.
+    let number_len = formatted_line_number.len();
     let mut complete_line = formatted_line_number.into_bytes();
     complete_line.extend_from_slice(&file_line.line_content);
 
@@ -1709,7 +1710,7 @@ fn get_line_for_printing(
         if display_length < min_width && !is_last_cell {
             complete_line.resize(complete_line.len() + (min_width - display_length), b' ');
         }
-        complete_line.truncate(char_prefix_len(&complete_line, min_width));
+        complete_line.truncate(char_prefix_len(&complete_line, number_len, min_width));
     }
 
     if !is_last_cell {
@@ -1718,19 +1719,24 @@ fn get_line_for_printing(
     complete_line
 }
 
-/// Returns the length in bytes of the first `n` characters of `bytes`. A byte
-/// that is not part of a valid UTF-8 sequence takes no width, so it is kept
-/// unless a character before it is already cut off.
-fn char_prefix_len(bytes: &[u8], n: usize) -> usize {
+/// Returns the length in bytes of the first `n` characters of `bytes`. The
+/// first `keep` bytes (the line number) are always kept. Like GNU pr, a tab
+/// that alone is wider than `n` columns is dropped along with everything after
+/// it. A byte that is not part of a valid UTF-8 sequence takes no width, so it
+/// is kept unless a character before it is already cut off.
+fn char_prefix_len(bytes: &[u8], keep: usize, n: usize) -> usize {
     let mut len = 0;
     let mut count = 0;
+    let mut column = 0;
     for chunk in bytes.utf8_chunks() {
         for c in chunk.valid().chars() {
-            if count == n {
+            let width = if c == TAB { 8 - column % 8 } else { 1 };
+            if len >= keep && (count >= n || width > n) {
                 return len;
             }
             len += c.len_utf8();
             count += 1;
+            column += width;
         }
         len += chunk.invalid().len();
     }
