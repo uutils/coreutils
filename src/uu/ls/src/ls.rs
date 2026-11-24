@@ -1579,7 +1579,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
         Sort::None => {}
     }
 
-    if config.reverse {
+    if config.reverse && config.sort != Sort::None {
         entries.reverse();
     }
 

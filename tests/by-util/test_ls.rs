@@ -2155,6 +2155,26 @@ fn test_ls_sort_none() {
 }
 
 #[test]
+fn test_ls_sort_none_ignores_reverse() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("b");
+    at.touch("a");
+    at.touch("c");
+
+    for args in [["-U", "-r"], ["-r", "--sort=none"], ["-f", "-r"]] {
+        scene
+            .ucmd()
+            .arg("-1")
+            .args(&args)
+            .args(&["b", "a", "c"])
+            .succeeds()
+            .stdout_only("b\na\nc\n");
+    }
+}
+
+#[test]
 fn test_ls_sort_name() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
