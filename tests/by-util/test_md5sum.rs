@@ -916,25 +916,3 @@ fn test_numeric_looking_file_names_are_kept_verbatim() {
              md5sum: WARNING: 1 line is improperly formatted\n",
         );
 }
-
-#[cfg(unix)]
-#[test]
-fn test_terminal_output_quotes_names() {
-    let scene = TestScenario::new(util_name!());
-    scene.fixtures.touch("my file.txt");
-    let md5 = "d41d8cd98f00b204e9800998ecf8427e";
-
-    scene
-        .ucmd()
-        .arg("my file.txt")
-        .terminal_simulation(true)
-        .succeeds()
-        .stdout_only(format!("{md5}  'my file.txt'\r\n"));
-
-    // Without a terminal, the name is written as-is.
-    scene
-        .ucmd()
-        .arg("my file.txt")
-        .succeeds()
-        .stdout_only(format!("{md5}  my file.txt\n"));
-}

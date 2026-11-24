@@ -55,7 +55,9 @@ fn format_filename(options: &ChecksumComputeOptions, filename: &OsStr) -> (Strin
 
     if let Some(style) = options.quoting_style {
         #[cfg(windows)]
-        let filename = &std::ffi::OsString::from(filename.to_string_lossy().replace('\\', "/"));
+        let normalized = super::normalize_windows_path_separators(&filename.to_string_lossy());
+        #[cfg(windows)]
+        let filename = OsStr::new(&normalized);
 
         let quoted = locale_aware_escape_name(filename, style);
         (quoted.to_string_lossy().into_owned(), "")
