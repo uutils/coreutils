@@ -35,6 +35,7 @@ ln-prompt-replace = replace {$file}?
 ln-cannot-backup = cannot backup {$file}
 ln-failed-to-access = failed to access {$file}
 ln-failed-to-create-hard-link = failed to create hard link {$dest} => {$source}
+ln-failed-to-create-hard-link-exists = failed to create hard link {$dest}
 ln-failed-to-create-symbolic-link = failed to create symbolic link {$dest}
 ln-failed-to-create-hard-link-dir = {$source}: hard link not allowed for directory
 ln-backup = backup: {$backup}

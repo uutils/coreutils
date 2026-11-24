@@ -7,6 +7,7 @@
 
 #![allow(clippy::similar_names)]
 
+use rstest::rstest;
 use std::path::{MAIN_SEPARATOR_STR, PathBuf};
 #[cfg(all(unix, not(target_os = "android")))]
 use std::time::Duration;
@@ -1515,6 +1516,22 @@ fn test_hard_link_force_failed_link_keeps_destination() {
 
     assert!(at.file_exists("dst"));
     assert_eq!(at.read("dst"), "keep\n");
+}
+
+#[rstest]
+#[case::existing_file(&["a", "b"], "ln: failed to create hard link 'b': File exists\n")]
+#[case::existing_directory(&["-T", "a", "d"], "ln: failed to create hard link 'd': File exists\n")]
+#[case::missing_parent(
+    &["a", "nodir/b"],
+    "ln: failed to create hard link 'nodir/b' => 'a': No such file or directory\n"
+)]
+fn test_hard_link_creation_error(#[case] args: &[&str], #[case] stderr: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    at.mkdir("d");
+
+    ucmd.args(args).fails_with_code(1).stderr_only(stderr);
 }
 
 #[test]
