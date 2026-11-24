@@ -377,6 +377,7 @@ jobs:
 
   test_busybox:
     name: Tests/BusyBox test suite
+    if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -461,6 +462,7 @@ jobs:
 
   test_toybox:
     name: Tests/Toybox test suite
+    if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
