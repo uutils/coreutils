@@ -18,7 +18,7 @@ use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::io::InputReader;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
-use uucore::posix::{OBSOLETE, posix_version};
+use uucore::posix::allows_traditional_usage;
 use uucore::translate;
 
 pub mod options {
@@ -178,8 +178,8 @@ impl Uniq {
 
     fn key_bounds(&self, line: &[u8]) -> (usize, usize) {
         let mut start = self.skip_fields_offset(line);
-        if let Some(skip_bytes) = self.slice_start {
-            start = start.saturating_add(skip_bytes).min(line.len());
+        if let Some(skip_chars) = self.slice_start {
+            start = self.char_offset(line, start, skip_chars);
         }
 
         let end = self.key_end_index(line, start);
@@ -220,26 +220,21 @@ impl Uniq {
     }
 
     fn key_end_index(&self, line: &[u8], key_start: usize) -> usize {
-        let remainder = &line[key_start..];
         match self.slice_stop {
             None => line.len(),
-            Some(limit) => {
-                if remainder.is_empty() {
-                    return key_start;
-                }
-                if self.is_c_locale {
-                    // for C or POSIX we count bytes
-                    key_start + remainder.len().min(limit)
-                } else if let Ok(valid) = std::str::from_utf8(remainder) {
-                    // for UTF-8 we count characters
-                    let prefix_len = Self::char_prefix_len(valid, limit);
-                    key_start + prefix_len
-                } else {
-                    // for invalid UTF-8 we count bytes
-                    key_start + remainder.len().min(limit)
-                }
-            }
+            Some(limit) => self.char_offset(line, key_start, limit),
         }
+    }
+
+    /// The index `count` characters after `start`: bytes in the C locale or
+    /// for invalid UTF-8, characters otherwise, as for `-w`.
+    fn char_offset(&self, line: &[u8], start: usize, count: usize) -> usize {
+        if !self.is_c_locale
+            && let Ok(valid) = std::str::from_utf8(&line[start..])
+        {
+            return start + Self::char_prefix_len(valid, count);
+        }
+        start.saturating_add(count).min(line.len())
     }
 
     fn char_prefix_len(text: &str, limit: usize) -> usize {
@@ -504,7 +499,7 @@ fn should_extract_obs_skip_chars(
     preceding_short_opt_req_value: bool,
 ) -> bool {
     slice.starts_with('+')
-        && posix_version().is_some_and(|v| v <= OBSOLETE)
+        && allows_traditional_usage()
         && !preceding_long_opt_req_value
         && !preceding_short_opt_req_value
         && slice.chars().nth(1).is_some_and(|c| c.is_ascii_digit())

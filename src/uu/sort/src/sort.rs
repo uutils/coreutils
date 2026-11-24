@@ -23,7 +23,7 @@ use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use custom_str_cmp::custom_str_cmp;
+use custom_str_cmp::{custom_str_cmp, custom_str_key};
 use ext_sort::ext_sort;
 use foldhash::fast::FoldHasher;
 use foldhash::{HashMap, SharedSeed};
@@ -58,7 +58,7 @@ use uucore::numeric_str_cmp::{
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
-use uucore::posix::{MODERN, TRADITIONAL};
+use uucore::posix::allows_traditional_usage;
 use uucore::show_error;
 use uucore::translate;
 use uucore::translate_text;
@@ -352,7 +352,7 @@ impl GlobalSettings {
             ])
             .with_default_unit("K")
             .with_b_byte_count(true)
-            .parse(input.trim())?;
+            .parse(input.trim_start())?;
 
         usize::try_from(size).map_err(|_| {
             ParseSizeError::SizeTooBig(translate!("sort-error-buffer-size-too-big", "size" => size))
@@ -1573,12 +1573,6 @@ pub(crate) fn current_open_fd_count() -> Option<usize> {
 
 const STDIN_FILE: &str = "-";
 
-/// Legacy `+POS1 [-POS2]` syntax is permitted unless `_POSIX2_VERSION` is in
-/// the [TRADITIONAL, MODERN) range (matches GNU behaviour).
-fn allows_traditional_usage() -> bool {
-    !matches!(uucore::posix::posix_version(), Some(ver) if (TRADITIONAL..MODERN).contains(&ver))
-}
-
 #[derive(Debug, Clone)]
 struct LegacyKeyPart {
     field: usize,
@@ -2278,9 +2272,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         PathBuf::from,
     ));
 
-    settings.compress_prog = matches
-        .get_one::<String>(options::COMPRESS_PROG)
-        .map(String::from);
+    settings.compress_prog = matches.get_one::<String>(options::COMPRESS_PROG).cloned();
 
     if let Some(n_merge) = matches.get_one::<String>(options::BATCH_SIZE) {
         // `None` means the value does not even fit in a `usize`, which is always too large.
@@ -2347,6 +2339,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
     settings.check = check_silent || check_diagnose;
     settings.check_silent = check_silent;
+
+    if settings.check && settings.debug {
+        let opts = if settings.check_silent {
+            "C --debug"
+        } else {
+            "c --debug"
+        };
+        return Err(incompatible_options_error(opts));
+    }
 
     if matches.contains_id(options::OUTPUT) && settings.check {
         let opts = if settings.check_silent { "Co" } else { "co" };
@@ -2885,19 +2886,29 @@ fn compare_by<'a>(
 
         let cmp: Ordering = match settings.mode {
             SortMode::Random => {
-                // check if the two strings are equal
-                if custom_str_cmp(
-                    a_str,
-                    b_str,
+                let (ignore_non_printing, dictionary_order, ignore_case) = (
                     settings.ignore_non_printing,
                     settings.dictionary_order,
                     settings.ignore_case,
+                );
+                let salt = &global_settings.salt.unwrap();
+                if custom_str_cmp(
+                    a_str,
+                    b_str,
+                    ignore_non_printing,
+                    dictionary_order,
+                    ignore_case,
                 ) == Ordering::Equal
                 {
                     Ordering::Equal
+                } else if ignore_non_printing || dictionary_order || ignore_case {
+                    // Hash the bytes custom_str_cmp compares, so that keys it
+                    // treats as equal also hash equal and stay adjacent.
+                    let hash =
+                        |s| key_hash(s, salt, ignore_non_printing, dictionary_order, ignore_case);
+                    hash(a_str).cmp(&hash(b_str))
                 } else {
-                    // Only if they are not equal compare by the hash
-                    random_shuffle(a_str, b_str, &global_settings.salt.unwrap())
+                    random_shuffle(a_str, b_str, salt)
                 }
             }
             SortMode::Numeric => {
@@ -3005,17 +3016,17 @@ fn ascii_case_insensitive_cmp(a: &[u8], b: &[u8]) -> Ordering {
 // For example, 5e10KFD would be 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
 #[allow(clippy::cognitive_complexity)]
 fn get_leading_gen(inp: &[u8], decimal_pt: u8) -> Range<usize> {
-    // check for inf, -inf and nan
-    const ALLOWED_PREFIXES: &[&[u8]] = &[b"inf", b"-inf", b"nan"];
+    // check for inf and nan, with an optional sign
+    const ALLOWED_PREFIXES: &[&[u8]] = &[b"inf", b"nan"];
 
     let trimmed = inp.trim_ascii_start();
     let leading_whitespace_len = inp.len() - trimmed.len();
+    let sign_len = usize::from(matches!(trimmed.first(), Some(NEGATIVE | POSITIVE)));
 
     for &allowed_prefix in ALLOWED_PREFIXES {
-        if trimmed.len() >= allowed_prefix.len()
-            && trimmed[..allowed_prefix.len()].eq_ignore_ascii_case(allowed_prefix)
-        {
-            return leading_whitespace_len..(leading_whitespace_len + allowed_prefix.len());
+        let end = sign_len + allowed_prefix.len();
+        if trimmed.len() >= end && trimmed[sign_len..end].eq_ignore_ascii_case(allowed_prefix) {
+            return leading_whitespace_len..(leading_whitespace_len + end);
         }
     }
     // Make this iter peekable to see if next char is numeric
@@ -3077,6 +3088,7 @@ fn get_leading_gen(inp: &[u8], decimal_pt: u8) -> Range<usize> {
 #[derive(Clone, PartialEq, PartialOrd, Debug)]
 pub enum GeneralBigDecimalParseResult {
     Invalid,
+    MinusNan,
     Nan,
     MinusInfinity,
     Number(BigDecimal),
@@ -3116,7 +3128,8 @@ fn general_bd_parse(a: &[u8], decimal_pt: u8) -> GeneralBigDecimalParseResult {
         ExtendedBigDecimal::MinusInfinity => GeneralBigDecimalParseResult::MinusInfinity,
         // Minus zero and zero are equal
         ExtendedBigDecimal::MinusZero => GeneralBigDecimalParseResult::Number(0.into()),
-        ExtendedBigDecimal::Nan | ExtendedBigDecimal::MinusNan => GeneralBigDecimalParseResult::Nan,
+        ExtendedBigDecimal::MinusNan => GeneralBigDecimalParseResult::MinusNan,
+        ExtendedBigDecimal::Nan => GeneralBigDecimalParseResult::Nan,
     }
 }
 
@@ -3166,6 +3179,48 @@ fn get_hash<T: Hash>(t: &T) -> u64 {
     let mut s = FoldHasher::with_seed(0, SharedSeed::global_fixed());
     t.hash(&mut s);
     s.finish()
+}
+
+/// Hash the bytes of `s` that [`custom_str_cmp()`] compares, without allocating.
+fn key_hash(
+    s: &[u8],
+    salt: &[u8],
+    ignore_non_printing: bool,
+    ignore_non_dictionary: bool,
+    ignore_case: bool,
+) -> u64 {
+    let mut h = FoldHasher::with_seed(0, SharedSeed::global_fixed());
+    // Feed the hasher in chunks, a byte at a time is slow.
+    let mut buf = [0; 64];
+    // `write` does not mix in the length, so `a` and `aa` could collide.
+    let total = if ignore_non_printing || ignore_non_dictionary {
+        let mut total = 0;
+        let mut len = 0;
+        for c in custom_str_key(s, ignore_non_printing, ignore_non_dictionary, ignore_case) {
+            buf[len] = c;
+            len += 1;
+            if len == buf.len() {
+                h.write(&buf);
+                total += len;
+                len = 0;
+            }
+        }
+        h.write(&buf[..len]);
+        total + len
+    } else {
+        for chunk in s.chunks(buf.len()) {
+            let chunk_buf = &mut buf[..chunk.len()];
+            chunk_buf.copy_from_slice(chunk);
+            if ignore_case {
+                chunk_buf.make_ascii_uppercase();
+            }
+            h.write(chunk_buf);
+        }
+        s.len()
+    };
+    h.write_usize(total);
+    salt.hash(&mut h);
+    h.finish()
 }
 
 fn random_shuffle(a: &[u8], b: &[u8], salt: &[u8]) -> Ordering {

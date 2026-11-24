@@ -499,6 +499,18 @@ fn test_extreme_exponent_does_not_overflow() {
             .fails_with_code(1)
             .stderr_contains("Numerical result out of range")
             .stdout_is(zero);
+
+        // Same for hexadecimal floats whose binary exponent fits in an i64.
+        new_ucmd!()
+            .args(&[spec, "0x1p9223372036854775807"])
+            .fails_with_code(1)
+            .stderr_contains("Numerical result out of range")
+            .stdout_contains("inf");
+        new_ucmd!()
+            .args(&[spec, "0x1p-9223372036854775808"])
+            .fails_with_code(1)
+            .stderr_contains("Numerical result out of range")
+            .stdout_is(zero);
     }
 }
 
@@ -749,6 +761,28 @@ fn float_non_finite_zero_padding() {
         .args(&["%05.2f|%05.2f|%05.2f|%05.2f", "inf", "-inf", "nan", "-nan"])
         .succeeds()
         .stdout_only("  inf| -inf|  nan| -nan");
+}
+
+#[test]
+fn float_nan_with_payload() {
+    new_ucmd!()
+        .args(&["%f|%f|%g|%a", "nan(1)", "-nan(0x1)", "NAN()", "nan(abc_1)"])
+        .succeeds()
+        .stdout_only("nan|-nan|nan|nan");
+}
+
+#[rstest]
+#[case::unclosed("nan(")]
+#[case::unclosed_payload("nan(1")]
+#[case::sign_in_payload("nan(-1)")]
+#[case::trailing_garbage("nan(1)x")]
+#[case::no_open_paren("nan)")]
+fn float_nan_with_invalid_payload(#[case] arg: &str) {
+    new_ucmd!()
+        .args(&["%f", arg])
+        .fails_with_code(1)
+        .stdout_is("nan")
+        .stderr_is(format!("printf: '{arg}': value not completely converted\n"));
 }
 
 #[test]
@@ -1453,7 +1487,6 @@ fn test_zero_precision_above_formatter_limit() {
 }
 
 #[test]
-#[ignore = "the ignored characters must be quoted in the warning"]
 fn test_ignored_chars_warning_is_quoted() {
     let warning = "character(s) following character constant have been ignored";
     new_ucmd!()
