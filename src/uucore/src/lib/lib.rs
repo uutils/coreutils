@@ -445,7 +445,7 @@ pub fn stdout_writer() -> Box<dyn std::io::Write> {
 
         impl std::io::Write for ClosedStdout {
             fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
-                Err(Errno::EBADF.into())
+                Err(std::io::Error::from_raw_os_error(libc::EBADF))
             }
 
             // With no output, a closed stdout is not an error.
