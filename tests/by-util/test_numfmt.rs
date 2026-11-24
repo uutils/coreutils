@@ -921,6 +921,35 @@ fn test_format_with_too_many_percentage_directives() {
         ));
 }
 
+// A format made only of literal text and `%%` escapes has no `%f` conversion,
+// so it must report "has no % directive" (like GNU), not "ends in %". The
+// former `prefix == s` discriminator was fooled by the `%%` collapsing.
+#[test]
+fn test_format_escaped_percent_without_directive() {
+    let invalid_formats = ["100%%", "%%", "%%%%", "abc%%", "a%%b", "%%f"];
+
+    for invalid_format in invalid_formats {
+        new_ucmd!()
+            .arg(format!("--format={invalid_format}"))
+            .fails_with_code(1)
+            .stderr_contains(format!("format '{invalid_format}' has no % directive"));
+    }
+}
+
+// A lone trailing `%` that never becomes a directive must still report
+// "ends in %", even when the prefix also contains `%%` escapes.
+#[test]
+fn test_format_escaped_percent_then_trailing_percent() {
+    let invalid_formats = ["100%%%", "%% %", "abc%%%"];
+
+    for invalid_format in invalid_formats {
+        new_ucmd!()
+            .arg(format!("--format={invalid_format}"))
+            .fails_with_code(1)
+            .stderr_contains(format!("format '{invalid_format}' ends in %"));
+    }
+}
+
 #[test]
 fn test_format_with_invalid_format() {
     let invalid_formats = vec!["%d", "% -43 f"];
