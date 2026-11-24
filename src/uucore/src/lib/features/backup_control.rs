@@ -413,8 +413,42 @@ fn simple_backup_path<S: AsRef<OsStr>>(path: &Path, suffix: S) -> PathBuf {
     path.with_file_name(file_name)
 }
 
+/// Returns the highest version `N` among the `<name>.~N~` backups next to
+/// `path`, or `None` when there is none or the directory cannot be read.
+///
+/// Like GNU, only versions written without a leading zero count, so
+/// `name.~02~` and `name.~0~` are not numbered backups.
+fn highest_numbered_backup(path: &Path) -> Option<u64> {
+    let name = path.file_name()?;
+    let dir = match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    };
+    let mut prefix = name.as_encoded_bytes().to_vec();
+    prefix.extend_from_slice(b".~");
+    fs::read_dir(dir)
+        .ok()?
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let file_name = entry.file_name();
+            let version = file_name
+                .as_encoded_bytes()
+                .strip_prefix(prefix.as_slice())?
+                .strip_suffix(b"~")?;
+            if !matches!(version.first(), Some(b'1'..=b'9'))
+                || !version.iter().all(u8::is_ascii_digit)
+            {
+                return None;
+            }
+            std::str::from_utf8(version).ok()?.parse::<u64>().ok()
+        })
+        .max()
+}
+
 fn numbered_backup_path(path: &Path) -> PathBuf {
-    let mut i: u64 = 1;
+    // Continue after the highest existing version, as GNU does: when `.~1~`
+    // has been pruned but `.~2~` is still there, the next backup is `.~3~`.
+    let mut i = highest_numbered_backup(path).map_or(1, |n| n.saturating_add(1));
     loop {
         let new_path = simple_backup_path(path, OsString::from(format!(".~{i}~")));
         // Use `symlink_metadata` rather than `exists()` so that a dangling
@@ -429,8 +463,10 @@ fn numbered_backup_path(path: &Path) -> PathBuf {
 }
 
 fn existing_backup_path<S: AsRef<OsStr>>(path: &Path, suffix: S) -> PathBuf {
+    // Any numbered backup makes this mode numbered, not just `.~1~`. The
+    // direct check on `.~1~` still covers a directory that cannot be listed.
     let test_path = simple_backup_path(path, OsString::from(".~1~"));
-    if fs::symlink_metadata(&test_path).is_ok() {
+    if highest_numbered_backup(path).is_some() || fs::symlink_metadata(&test_path).is_ok() {
         return numbered_backup_path(path);
     }
     simple_backup_path(path, suffix.as_ref())
@@ -710,6 +746,59 @@ mod tests {
         assert_eq!(
             numbered_backup_path(Path::new("/hello/world/")),
             PathBuf::from("/hello/world.~1~")
+        );
+    }
+
+    /// Creates `names` in a temporary directory and returns it with the path
+    /// of `report` inside it.
+    fn backup_dir(names: &[&str]) -> (tempfile::TempDir, PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        for name in names {
+            fs::write(dir.path().join(name), "").unwrap();
+        }
+        let target = dir.path().join("report");
+        (dir, target)
+    }
+
+    #[test]
+    fn test_numbered_backup_path_continues_after_highest_version() {
+        // `.~1~` was pruned: GNU continues at `.~3~` instead of refilling the gap.
+        let (dir, target) = backup_dir(&["report", "report.~2~"]);
+        assert_eq!(numbered_backup_path(&target), dir.path().join("report.~3~"));
+
+        let (dir, target) = backup_dir(&["report", "report.~3~", "report.~10~"]);
+        assert_eq!(
+            numbered_backup_path(&target),
+            dir.path().join("report.~11~")
+        );
+
+        // Not numbered backups of `report`: a leading zero, version zero, no
+        // digits, or another file's backups.
+        let (dir, target) = backup_dir(&[
+            "report",
+            "report.~02~",
+            "report.~0~",
+            "report.~~",
+            "report.~5x~",
+            "reports.~7~",
+        ]);
+        assert_eq!(numbered_backup_path(&target), dir.path().join("report.~1~"));
+    }
+
+    #[test]
+    fn test_existing_backup_path_is_numbered_when_any_version_exists() {
+        // #16772: with only `.~2~` left, `existing` must not fall back to the
+        // simple backup and overwrite `report~`.
+        let (dir, target) = backup_dir(&["report", "report~", "report.~2~"]);
+        assert_eq!(
+            existing_backup_path(&target, "~"),
+            dir.path().join("report.~3~")
+        );
+
+        let (dir, target) = backup_dir(&["report", "report.~02~"]);
+        assert_eq!(
+            existing_backup_path(&target, "~"),
+            dir.path().join("report~")
         );
     }
 
