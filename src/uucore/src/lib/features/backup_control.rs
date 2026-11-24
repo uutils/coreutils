@@ -414,11 +414,13 @@ fn simple_backup_path<S: AsRef<OsStr>>(path: &Path, suffix: S) -> PathBuf {
 }
 
 /// Returns the highest version `N` among the `<name>.~N~` backups next to
-/// `path`, or `None` when there is none or the directory cannot be read.
+/// `path`, as its decimal digits, or `None` when there is none or the
+/// directory cannot be read.
 ///
 /// Like GNU, only versions written without a leading zero count, so
-/// `name.~02~` and `name.~0~` are not numbered backups.
-fn highest_numbered_backup(path: &Path) -> Option<u64> {
+/// `name.~02~` and `name.~0~` are not numbered backups. Versions are kept as
+/// digits, not parsed into an integer, so any length works, as in GNU.
+fn highest_numbered_backup(path: &Path) -> Option<Vec<u8>> {
     let name = path.file_name()?;
     let dir = match path.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent,
@@ -440,17 +442,40 @@ fn highest_numbered_backup(path: &Path) -> Option<u64> {
             {
                 return None;
             }
-            std::str::from_utf8(version).ok()?.parse::<u64>().ok()
+            Some(version.to_vec())
         })
-        .max()
+        // Without leading zeros, a longer number is larger, and equal lengths
+        // compare digit by digit.
+        .max_by(|a, b| a.len().cmp(&b.len()).then_with(|| a.cmp(b)))
+}
+
+/// Adds one to a decimal number written as ASCII digits (`b"199"` becomes
+/// `b"200"`), with no upper limit.
+fn increment_decimal(digits: &mut Vec<u8>) {
+    for digit in digits.iter_mut().rev() {
+        if *digit == b'9' {
+            *digit = b'0';
+        } else {
+            *digit += 1;
+            return;
+        }
+    }
+    digits.insert(0, b'1');
 }
 
 fn numbered_backup_path(path: &Path) -> PathBuf {
+    numbered_backup_path_after(path, highest_numbered_backup(path))
+}
+
+/// The first free `<name>.~N~` after `highest`, the highest existing version.
+fn numbered_backup_path_after(path: &Path, highest: Option<Vec<u8>>) -> PathBuf {
     // Continue after the highest existing version, as GNU does: when `.~1~`
     // has been pruned but `.~2~` is still there, the next backup is `.~3~`.
-    let mut i = highest_numbered_backup(path).map_or(1, |n| n.saturating_add(1));
+    let mut version = highest.unwrap_or_else(|| b"0".to_vec());
     loop {
-        let new_path = simple_backup_path(path, OsString::from(format!(".~{i}~")));
+        increment_decimal(&mut version);
+        let digits = String::from_utf8_lossy(&version);
+        let new_path = simple_backup_path(path, OsString::from(format!(".~{digits}~")));
         // Use `symlink_metadata` rather than `exists()` so that a dangling
         // symlink still counts as an existing backup (avoiding a silent
         // overwrite), and so we do not report a live symlink as missing when
@@ -458,7 +483,6 @@ fn numbered_backup_path(path: &Path) -> PathBuf {
         if fs::symlink_metadata(&new_path).is_err() {
             return new_path;
         }
-        i += 1;
     }
 }
 
@@ -466,8 +490,9 @@ fn existing_backup_path<S: AsRef<OsStr>>(path: &Path, suffix: S) -> PathBuf {
     // Any numbered backup makes this mode numbered, not just `.~1~`. The
     // direct check on `.~1~` still covers a directory that cannot be listed.
     let test_path = simple_backup_path(path, OsString::from(".~1~"));
-    if highest_numbered_backup(path).is_some() || fs::symlink_metadata(&test_path).is_ok() {
-        return numbered_backup_path(path);
+    let highest = highest_numbered_backup(path);
+    if highest.is_some() || fs::symlink_metadata(&test_path).is_ok() {
+        return numbered_backup_path_after(path, highest);
     }
     simple_backup_path(path, suffix.as_ref())
 }
@@ -783,6 +808,36 @@ mod tests {
             "reports.~7~",
         ]);
         assert_eq!(numbered_backup_path(&target), dir.path().join("report.~1~"));
+    }
+
+    #[test]
+    fn test_numbered_backup_path_past_u64_max() {
+        // GNU keeps counting past u64::MAX; an integer counter would overflow.
+        let (dir, target) = backup_dir(&["report", "report.~18446744073709551615~"]);
+        assert_eq!(
+            numbered_backup_path(&target),
+            dir.path().join("report.~18446744073709551616~")
+        );
+        let (dir, target) = backup_dir(&["report", "report.~99~", "report.~100~"]);
+        assert_eq!(
+            numbered_backup_path(&target),
+            dir.path().join("report.~101~")
+        );
+    }
+
+    #[test]
+    fn test_increment_decimal() {
+        for (from, to) in [
+            ("0", "1"),
+            ("8", "9"),
+            ("9", "10"),
+            ("199", "200"),
+            ("999", "1000"),
+        ] {
+            let mut digits = from.as_bytes().to_vec();
+            increment_decimal(&mut digits);
+            assert_eq!(digits, to.as_bytes(), "{from}");
+        }
     }
 
     #[test]
