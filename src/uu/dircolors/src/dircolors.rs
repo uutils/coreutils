@@ -29,7 +29,7 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum OutputFmt {
     Shell,
     CShell,
@@ -52,7 +52,7 @@ fn guess_syntax<T: AsRef<Path>>(path: T) -> Option<OutputFmt> {
     }
 }
 
-fn get_colors_format_strings(fmt: &OutputFmt) -> (String, String) {
+fn get_colors_format_strings(fmt: OutputFmt) -> (String, String) {
     let prefix = match fmt {
         OutputFmt::Shell => "LS_COLORS='".to_string(),
         OutputFmt::CShell => "setenv LS_COLORS '".to_string(),
@@ -68,7 +68,7 @@ fn get_colors_format_strings(fmt: &OutputFmt) -> (String, String) {
     (prefix, suffix)
 }
 
-fn generate_type_output(fmt: &OutputFmt) -> String {
+fn generate_type_output(fmt: OutputFmt) -> String {
     match fmt {
         OutputFmt::Display => FILE_TYPES
             .iter()
@@ -101,7 +101,7 @@ fn term_and_colorterm() -> (String, String) {
     (term, colorterm)
 }
 
-fn generate_ls_colors(fmt: &OutputFmt, sep: &str) -> String {
+fn generate_ls_colors(fmt: OutputFmt, sep: &str) -> String {
     if !builtin_database_applies() {
         let (prefix, suffix) = get_colors_format_strings(fmt);
         return format!("{prefix}{suffix}");
@@ -184,7 +184,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match files.as_slice() {
         [] => {
-            let colors = generate_ls_colors(&out_format, ":");
+            let colors = generate_ls_colors(out_format, ":");
             // GNU prints nothing at all when TERM matches no entry
             if !(colors.is_empty() && out_format == OutputFmt::Display) {
                 writeln!(stdout(), "{colors}")?;
@@ -199,7 +199,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let result = if *file_arg == "-" {
                 let fin = BufReader::new(std::io::stdin());
                 // For example, for echo "owt 40;33"|dircolors -b -
-                parse(fin.lines().map_while(Result::ok), &out_format, "-")
+                parse(fin.lines().map_while(Result::ok), out_format, "-")
             } else {
                 let path = Path::new(&file_arg);
                 if path.is_dir() {
@@ -213,7 +213,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let fin = BufReader::new(file);
                 parse(
                     fin.lines().map_while(Result::ok),
-                    &out_format,
+                    out_format,
                     &path.to_string_lossy(),
                 )
             };
@@ -336,7 +336,7 @@ enum ParseState {
     Pass,
 }
 
-fn parse<T>(user_input: T, fmt: &OutputFmt, fp: &str) -> Result<String, String>
+fn parse<T>(user_input: T, fmt: OutputFmt, fp: &str) -> Result<String, String>
 where
     T: IntoIterator,
     T::Item: Borrow<str>,
@@ -403,7 +403,7 @@ where
         }
     }
 
-    if fmt == &OutputFmt::Display {
+    if fmt == OutputFmt::Display {
         // remove latest "\n"
         result.pop();
     }
@@ -414,7 +414,7 @@ where
 
 fn append_entry(
     result: &mut String,
-    fmt: &OutputFmt,
+    fmt: OutputFmt,
     key: &str,
     lower: &str,
     val: &str,
@@ -425,7 +425,7 @@ fn append_entry(
         } else {
             key.to_string()
         };
-        let disp = if *fmt == OutputFmt::Display {
+        let disp = if fmt == OutputFmt::Display {
             format!("\x1b[{val}m{entry}\t{val}\x1b[0m\n")
         } else {
             format!("{entry}={val}:")
@@ -438,7 +438,7 @@ fn append_entry(
         "options" | "color" | "eightbit" => Ok(()), // Slackware only, ignore
         _ => {
             if let Some((_, s)) = FILE_ATTRIBUTE_CODES.iter().find(|&&(key, _)| key == lower) {
-                let disp = if *fmt == OutputFmt::Display {
+                let disp = if fmt == OutputFmt::Display {
                     format!("\x1b[{val}m{s}\t{val}\x1b[0m\n")
                 } else {
                     format!("{s}={val}:")
@@ -460,7 +460,7 @@ fn append_entry(
 ///
 /// For csh, "!" is escaped as well, because csh performs history substitution
 /// even inside single quotes.
-fn escape(s: &str, fmt: &OutputFmt) -> String {
+fn escape(s: &str, fmt: OutputFmt) -> String {
     let mut result = String::new();
     let mut previous = ' ';
 
@@ -468,7 +468,7 @@ fn escape(s: &str, fmt: &OutputFmt) -> String {
         match c {
             '\'' => result.push_str("'\\''"),
             ':' if previous != '\\' => result.push_str("\\:"),
-            '!' if *fmt == OutputFmt::CShell => result.push_str("\\!"),
+            '!' if fmt == OutputFmt::CShell => result.push_str("\\!"),
             _ => result.push(c),
         }
         previous = c;
@@ -539,12 +539,12 @@ mod tests {
     #[test]
     fn test_escape() {
         let sh = OutputFmt::Shell;
-        assert_eq!("", escape("", &sh));
-        assert_eq!("'\\''", escape("'", &sh));
-        assert_eq!("\\:", escape(":", &sh));
-        assert_eq!("\\:", escape("\\:", &sh));
-        assert_eq!("!", escape("!", &sh));
-        assert_eq!("\\!", escape("!", &OutputFmt::CShell));
+        assert_eq!("", escape("", sh));
+        assert_eq!("'\\''", escape("'", sh));
+        assert_eq!("\\:", escape(":", sh));
+        assert_eq!("\\:", escape("\\:", sh));
+        assert_eq!("!", escape("!", sh));
+        assert_eq!("\\!", escape("!", OutputFmt::CShell));
     }
 
     #[test]
