@@ -839,6 +839,8 @@ struct OutFile {
     filename: OsString,
     maybe_writer: Option<Writer>,
     is_new: bool,
+    // Keep the writer after EPIPE so cleanup can wait for the filter's exit status.
+    filter_stdin_closed: bool,
 }
 
 /// A set of output files
@@ -901,6 +903,7 @@ impl ManageOutFiles for OutFiles {
                 filename,
                 maybe_writer,
                 is_new: true,
+                filter_stdin_closed: false,
             });
         }
         Ok(out_files)
@@ -1316,17 +1319,19 @@ fn n_chunks_by_line_round_robin(
                 stdout_writer.write_all(bytes)?;
             }
         } else {
-            let writer = out_files.get_writer((i % num_chunks) as usize, settings)?;
-            let writer_stdin_open = custom_write_all(bytes, writer, settings)?;
-            if !writer_stdin_open {
-                closed_writers += 1;
+            let idx = (i % num_chunks) as usize;
+            if !out_files[idx].filter_stdin_closed {
+                let writer = out_files.get_writer(idx, settings)?;
+                if !custom_write_all(bytes, writer, settings)? {
+                    out_files[idx].filter_stdin_closed = true;
+                    closed_writers += 1;
+                    if closed_writers == num_chunks {
+                        break;
+                    }
+                }
             }
         }
         i += 1;
-        if closed_writers == num_chunks {
-            // all writers are closed - stop reading
-            break;
-        }
     }
     Ok(())
 }
