@@ -278,6 +278,17 @@ fn test_repeated_zero() {
         .stdout_is("bar\0");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_is_reported() {
+    new_ucmd!()
+        .args(&["-a", "a/b", "c/d"])
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("basename: No space left on device\n");
+}
+
 #[test]
 fn test_zero_does_not_imply_multiple() {
     new_ucmd!()
