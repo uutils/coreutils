@@ -4061,6 +4061,18 @@ fn test_check_xxh3_unsupported_length_is_improperly_formatted() {
 }
 
 #[test]
+fn test_help() {
+    let result = new_ucmd!().env("LC_ALL", "C").arg("--help").succeeds();
+    result
+        .stdout_contains("multiple of 8 for blake2b")
+        .stdout_contains("384, or 512 for sha2")
+        .stdout_contains("64 or 128 for xxh3");
+    for algo in ["crc32b", "sha3", "sm3", "xxh3"] {
+        result.stdout_contains(format!("- {algo}: only available through cksum"));
+    }
+}
+
+#[test]
 fn test_locale_aware_error_filename_escaping() {
     // 'Ã' is valid UTF-8, invalid ASCII.
     let filename = "file_Ã";
