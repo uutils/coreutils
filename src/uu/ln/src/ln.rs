@@ -393,6 +393,32 @@ fn is_same_entry(src: &Path, dst: &Path) -> bool {
     }
 }
 
+/// Validate and resolve a hard-link source before modifying the destination.
+fn resolve_hard_link_source(source: &Path, logical: bool) -> LnResult<PathBuf> {
+    let metadata = fs::symlink_metadata(source).map_err(|e| {
+        LnError::IoContext(
+            UIoError::from(e),
+            translate!("ln-failed-to-access", "file" => source.quote()),
+        )
+    })?;
+    if logical && metadata.file_type().is_symlink() {
+        let resolved = fs::canonicalize(source).map_err(|e| {
+            LnError::IoContext(
+                UIoError::from(e),
+                translate!("ln-failed-to-access", "file" => source.quote()),
+            )
+        })?;
+        if resolved.is_dir() {
+            return Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf()));
+        }
+        Ok(resolved)
+    } else if metadata.is_dir() {
+        Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf()))
+    } else {
+        Ok(source.to_path_buf())
+    }
+}
+
 /// Create symlink to src at dst with the given settings
 ///
 /// This is made public to allow other apps to use `ln` as a library.
@@ -405,6 +431,15 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
         relative_path(src, dst)
     } else {
         src.into()
+    };
+
+    // Validate hard-link sources before prompting or backing up the
+    // destination, so a missing or directory source cannot clobber an
+    // existing backup file.
+    let hard_link_src = if settings.symbolic {
+        None
+    } else {
+        Some(resolve_hard_link_source(&source, settings.logical)?)
     };
 
     if dst.is_symlink() || dst.exists() {
@@ -455,20 +490,6 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
         }
     }
 
-    // Resolved once: this can fail independently of the destination.
-    let hard_link_src = if settings.symbolic {
-        None
-    } else if settings.logical && source.is_symlink() {
-        Some(fs::canonicalize(&source).map_err(|e| {
-            LnError::IoContext(
-                UIoError::from(e),
-                translate!("ln-failed-to-access", "file" => source.quote()),
-            )
-        })?)
-    } else {
-        Some(source.to_path_buf())
-    };
-
     // Link first, matching GNU. Replacing uses a temp name + `renameat`, so
     // `dst` is never briefly free for another user to claim.
     let link_target = hard_link_src.as_deref().unwrap_or(&source);
@@ -489,23 +510,27 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
                     "dest" => dst.quote()
                 ),
             )
-        } else if hard_link_src.as_ref().is_some_and(|p| p.is_dir()) {
-            LnError::FailedToCreateHardLinkDir(source.to_path_buf())
-        } else if let Err(stat_err) = fs::symlink_metadata(link_target) {
-            // The source itself can't be accessed: name it, not the link
-            LnError::IoContext(
-                UIoError::from(stat_err),
-                translate!("ln-failed-to-access", "file" => source.quote()),
-            )
         } else {
-            LnError::IoContext(
-                UIoError::from(e),
-                translate!(
-                    "ln-failed-to-create-hard-link",
-                    "source" => source.quote(),
-                    "dest" => dst.quote()
+            match fs::symlink_metadata(link_target) {
+                Ok(meta) if meta.is_dir() => {
+                    LnError::FailedToCreateHardLinkDir(source.to_path_buf())
+                }
+                Err(stat_err) => {
+                    // The source itself can't be accessed: name it, not the link
+                    LnError::IoContext(
+                        UIoError::from(stat_err),
+                        translate!("ln-failed-to-access", "file" => source.quote()),
+                    )
+                }
+                Ok(_) => LnError::IoContext(
+                    UIoError::from(e),
+                    translate!(
+                        "ln-failed-to-create-hard-link",
+                        "source" => source.quote(),
+                        "dest" => dst.quote()
+                    ),
                 ),
-            )
+            }
         }
     });
 
