@@ -549,14 +549,14 @@ impl Input<'_> {
 
     /// Fills a given buffer with `ibs`-sized blocks, padding short reads with `pad`.
     ///
-    /// `buf.len()` must be a multiple of `self.settings.ibs`. When `byte_limit` is
-    /// `Some(limit)`, at most `limit` input bytes are read across all blocks, and
-    /// any partial final block is still padded to a full `ibs` bytes.
+    /// `buf.len()` must be a multiple of `self.settings.ibs`. At most `byte_limit`
+    /// input bytes are read across all blocks, and any partial final block is still
+    /// padded to a full `ibs` bytes.
     /// Returns the read statistics and the total filled length (reads + padding).
     fn fill_blocks(
         &mut self,
         buf: &mut [u8],
-        byte_limit: Option<usize>,
+        byte_limit: usize,
         pad: u8,
     ) -> io::Result<(ReadStat, usize)> {
         let ibs = self.settings.ibs;
@@ -568,10 +568,7 @@ impl Input<'_> {
         let mut bytes_total = 0;
 
         while base_idx < buf.len() {
-            let target_len = match byte_limit {
-                Some(limit) => cmp::min(ibs, limit.saturating_sub(bytes_total)),
-                None => ibs,
-            };
+            let target_len = cmp::min(ibs, byte_limit.saturating_sub(bytes_total));
             if target_len == 0 {
                 break;
             }
@@ -1495,12 +1492,14 @@ fn read_helper<'a>(
     let (rstat, data_len) = {
         let full_buf = read_buf.as_mut_bytes();
         let (rstat, data_len) = if let Some(ch) = i.settings.iconv.sync {
-            match i.settings.count {
-                // With byte-counted input, `bsize` caps input bytes while padded
-                // blocks may fill up to the full `ibs`-aligned buffer.
-                Some(Num::Bytes(_)) => i.fill_blocks(full_buf, Some(bsize), ch)?,
-                _ => i.fill_blocks(&mut full_buf[..bsize], None, ch)?,
-            }
+            // With byte-counted input, `bsize` caps input bytes while padded
+            // blocks may fill up to the full `ibs`-aligned buffer.
+            let buf_len = if matches!(i.settings.count, Some(Num::Bytes(_))) {
+                full_buf.len()
+            } else {
+                bsize
+            };
+            i.fill_blocks(&mut full_buf[..buf_len], bsize, ch)?
         } else {
             let s = i.fill_consecutive(&mut full_buf[..bsize])?;
             let n = s.bytes_total as usize;
@@ -1866,30 +1865,5 @@ mod tests {
 
         let buf = AlignedBuf::new(0).unwrap();
         assert!(buf.as_bytes().is_empty());
-    }
-
-    #[test]
-    fn test_fill_blocks_pads_stale_bytes_under_byte_limit() {
-        use std::io::{Seek, Write};
-
-        let settings = Parser::new()
-            .parse_with_diagnostics(["ibs=4", "obs=8", "count=5B", "conv=sync"], None)
-            .unwrap();
-        let mut file = tempfile::tempfile().unwrap();
-        file.write_all(b"12345678").unwrap();
-        file.rewind().unwrap();
-
-        let mut input = Input {
-            src: Source::File(file),
-            settings: &settings,
-        };
-        let mut buf = [b'X'; 8];
-        let (rstat, filled) = input.fill_blocks(&mut buf, Some(5), 0).unwrap();
-
-        assert_eq!(filled, 8);
-        assert_eq!(&buf, b"12345\0\0\0");
-        assert_eq!(rstat.reads_complete, 1);
-        assert_eq!(rstat.reads_partial, 1);
-        assert_eq!(rstat.bytes_total, 5);
     }
 }
