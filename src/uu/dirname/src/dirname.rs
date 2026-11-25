@@ -5,9 +5,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
-use std::io::{Write as _, stdout};
-#[cfg(unix)]
-use uucore::display::print_verbatim;
+use std::io::{BufWriter, Write as _};
 use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;
@@ -163,28 +161,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .cloned()
         .collect();
 
+    let mut out = BufWriter::new(uucore::io::stdout());
     for path in &dirnames {
         let result = dirname_string_manipulation(path.as_os_str());
 
         #[cfg(unix)]
-        {
-            use std::os::unix::ffi::OsStrExt;
-            let result_os = OsStr::from_bytes(result);
-            print_verbatim(result_os)?;
-        }
+        out.write_all(result)?;
         #[cfg(not(unix))]
         {
             // On non-Unix, fall back to lossy conversion
             if let Ok(s) = std::str::from_utf8(result) {
-                write!(stdout(), "{s}")?;
+                write!(out, "{s}")?;
             } else {
                 // Fallback for non-UTF-8 paths on non-Unix systems
-                write!(stdout(), ".")?;
+                write!(out, ".")?;
             }
         }
 
-        write!(stdout(), "{line_ending}")?;
+        write!(out, "{line_ending}")?;
     }
+    out.flush()?;
 
     Ok(())
 }
