@@ -785,14 +785,19 @@ impl Chmoder {
             let meta = match dir_fd.metadata_at(&entry_name, should_follow_symlink.into()) {
                 Ok(meta) => meta,
                 Err(err) => {
-                    let error =
-                        if err.kind() == std::io::ErrorKind::NotFound && entry_path.is_symlink() {
+                    let error = if err.kind() == std::io::ErrorKind::NotFound {
+                        if entry_path.is_symlink() {
                             ChmodError::DanglingSymlink(entry_path.clone())
-                        } else if err.kind() == std::io::ErrorKind::PermissionDenied {
-                            ChmodError::PermissionDenied(entry_path.clone())
                         } else {
-                            ChmodError::CannotStat(entry_path.clone(), err)
-                        };
+                            // this entry was listed just a moment ago (removed during walk).
+                            // it skips silently as GNU does.
+                            continue;
+                        }
+                    } else if err.kind() == std::io::ErrorKind::PermissionDenied {
+                        ChmodError::PermissionDenied(entry_path.clone())
+                    } else {
+                        ChmodError::CannotStat(entry_path.clone(), err)
+                    };
                     self.report_failure(error.into());
                     self.report_not_accessed(&entry_path);
                     continue;
@@ -906,6 +911,12 @@ impl Chmoder {
 
         // Use safe traversal to change the mode
         if let Err(e) = dir_fd.chmod_at(entry_name, new_mode, symlink_behavior) {
+            // Entry was vanished after the stat above, skip it
+            // dangling symlink case taken care by the safe_traverse_dir func.
+            if e.kind() == std::io::ErrorKind::NotFound {
+                return Ok(());
+            }
+
             self.report_failed_change(file_path, e, current_mode, new_mode);
             return Ok(());
         }
