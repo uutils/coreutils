@@ -118,7 +118,6 @@ time = { workspace = true, optional = true, features = [
   "local-offset",
   "macros",
 ] }
-walkdir = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true, optional = true }
@@ -151,6 +150,9 @@ openssl = { workspace = true, features = ["aws-lc"], optional = true }
 
 [target.'cfg(target_os = "openbsd")'.dependencies]
 utmp-classic = { workspace = true, optional = true }
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+walkdir = { workspace = true, optional = true }
 
 [features]
 default = ["signals"]
@@ -205,7 +207,6 @@ parser-glob = ["glob"]
 parser = ["parser-num", "parser-size", "parser-glob"]
 pipes = ["fs", "rustix/pipe"]
 process = ["libc", "nix/user", "rustix/process", "windows-sys"]
-proc-info = ["rustix/process", "rustix/thread", "tty", "walkdir"]
 quoting-style = ["i18n-common"]
 ranges = []
 ringbuffer = []
