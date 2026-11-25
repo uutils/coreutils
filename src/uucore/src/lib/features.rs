@@ -88,8 +88,6 @@ pub mod process;
 pub mod safe_copy;
 #[cfg(all(feature = "safe-traversal", unix, not(target_os = "redox")))]
 pub mod safe_traversal;
-#[cfg(all(target_os = "linux", feature = "tty"))]
-pub mod tty;
 
 #[cfg(all(
     feature = "fsxattr",
