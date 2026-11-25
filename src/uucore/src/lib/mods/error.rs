@@ -95,10 +95,15 @@ pub fn set_exit_code(code: i32) {
 /// Print `<util>: <prefix><msg>` to stderr, used by [`crate::show!`] and friends.
 ///
 /// stderr is unbuffered, so the line is formatted first and written at once.
+///
+/// If the line can't be written, the exit code is set to 1 (unless a non-zero
+/// exit code was already set), like GNU coreutils does.
 #[doc(hidden)]
 pub fn print_diagnostic(prefix: &str, msg: std::fmt::Arguments<'_>) {
     let line = format!("{}: {prefix}{msg}\n", crate::util_name());
-    let _ = std::io::stderr().write_all(line.as_bytes());
+    if std::io::stderr().write_all(line.as_bytes()).is_err() && get_exit_code() == 0 {
+        set_exit_code(1);
+    }
 }
 
 /// Result type that should be returned by all utils.
