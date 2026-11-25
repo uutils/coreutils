@@ -389,8 +389,7 @@ dependencies = [
 [[package]]
 name = "codspeed"
 version = "6.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4a421b41e765c0882236030e4431c948bb77f95e7b1c3252a95e03ac996f94e"
+source = "git+https://github.com/xtqqczze/CodSpeedHQ-codspeed-rust.git?branch=deps-itertools#e8827d329b011203cedf01a177ef2e041a505f10"
 dependencies = [
  "anyhow",
  "cc",
@@ -406,8 +405,7 @@ dependencies = [
 [[package]]
 name = "codspeed-divan-compat"
 version = "6.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b0e00145ddda5104c5fd05e7616decaf37d0cc20a95ed35807425a1527b0e0c"
+source = "git+https://github.com/xtqqczze/CodSpeedHQ-codspeed-rust.git?branch=deps-itertools#e8827d329b011203cedf01a177ef2e041a505f10"
 dependencies = [
  "clap",
  "codspeed",
@@ -419,11 +417,10 @@ dependencies = [
 [[package]]
 name = "codspeed-divan-compat-macros"
 version = "6.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "104efbfd20145b66daa4b47308e3fc6ee65bfbcb9ce1295cf80e150903190067"
+source = "git+https://github.com/xtqqczze/CodSpeedHQ-codspeed-rust.git?branch=deps-itertools#e8827d329b011203cedf01a177ef2e041a505f10"
 dependencies = [
  "divan-macros",
- "itertools 0.14.0",
+ "itertools",
  "proc-macro-crate",
  "proc-macro2",
  "quote",
@@ -433,8 +430,7 @@ dependencies = [
 [[package]]
 name = "codspeed-divan-compat-walltime"
 version = "6.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c56485a01ff5540bf409b6d42650df8facb9b19653a9fd424f9be7be55fb3dd"
+source = "git+https://github.com/xtqqczze/CodSpeedHQ-codspeed-rust.git?branch=deps-itertools#e8827d329b011203cedf01a177ef2e041a505f10"
 dependencies = [
  "cfg-if",
  "clap",
@@ -515,7 +511,7 @@ dependencies = [
  "fluent-syntax",
  "glob",
  "hex-literal",
- "itertools 0.15.0",
+ "itertools",
  "jiff",
  "libc",
  "nix",
@@ -1554,15 +1550,6 @@ name = "is_terminal_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
-
-[[package]]
-name = "itertools"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
-dependencies = [
- "either",
-]
 
 [[package]]
 name = "itertools"
@@ -3790,7 +3777,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "itertools 0.15.0",
+ "itertools",
  "memchr",
  "regex",
  "thiserror 2.0.21",
@@ -4000,7 +3987,7 @@ dependencies = [
  "ctrlc",
  "fluent",
  "foldhash",
- "itertools 0.15.0",
+ "itertools",
  "libc",
  "memchr",
  "rand 0.10.4",
@@ -4352,7 +4339,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "itertools 0.15.0",
+ "itertools",
  "rustix",
  "uucore",
 ]
@@ -4385,7 +4372,7 @@ dependencies = [
  "icu_decimal",
  "icu_locale",
  "icu_provider",
- "itertools 0.15.0",
+ "itertools",
  "jiff",
  "jiff-icu",
  "libc",

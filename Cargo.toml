@@ -755,4 +755,5 @@ panic = "unwind"
 debug = true
 
 [patch.crates-io]
+codspeed-divan-compat = { git = "https://github.com/xtqqczze/CodSpeedHQ-codspeed-rust.git", branch = "deps-itertools" }
 openssl = { git = "https://github.com/rust-openssl/rust-openssl.git", branch = "master" }
