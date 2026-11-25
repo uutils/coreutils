@@ -30,7 +30,7 @@ use uucore::fsext::{MetadataTimeField, metadata_get_time};
 use uucore::i18n::decimal::locale_grouping_separator;
 use uucore::i18n::{UEncoding, get_numeric_locale};
 use uucore::line_ending::LineEnding;
-use uucore::quoting_style::quote_name_for_tty;
+use uucore::quoting_style::{QuotingStyle, quote_name_for_tty, tty_quoting_style};
 #[cfg(all(unix, not(target_os = "redox")))]
 use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 use uucore::translate;
@@ -103,6 +103,7 @@ struct StatPrinter {
     line_ending: LineEnding,
     summarize: bool,
     total_text: String,
+    quoting_style: Option<QuotingStyle>,
 }
 
 #[derive(PartialEq, Clone)]
@@ -1013,7 +1014,10 @@ impl StatPrinter {
             }
         }
 
-        print_verbatim(quote_name_for_tty(stat.path.as_os_str()))?;
+        print_verbatim(quote_name_for_tty(
+            stat.path.as_os_str(),
+            self.quoting_style,
+        ))?;
         write!(stdout(), "{}", self.line_ending)?;
 
         Ok(())
@@ -1231,6 +1235,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         time_format,
         line_ending: LineEnding::from_zero_flag(matches.get_flag(options::NULL)),
         total_text: translate!("du-total"),
+        quoting_style: tty_quoting_style(),
     };
 
     if stat_printer.inodes

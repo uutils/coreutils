@@ -3134,3 +3134,25 @@ fn test_quoting_on_terminal() {
         .succeeds()
         .stdout_contains("\tmy file\n");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_invalid_quoting_style_reported_once() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("my dir");
+    at.touch("my dir/one file");
+    at.touch("my dir/two file");
+    let result = ucmd
+        .args(&["-a", "my dir"])
+        .env("QUOTING_STYLE", "bogus")
+        .terminal_simulation(true)
+        .succeeds();
+    result.stdout_contains("'my dir/one file'");
+    assert_eq!(
+        result
+            .stderr_str()
+            .matches("invalid value of environment variable QUOTING_STYLE")
+            .count(),
+        1
+    );
+}

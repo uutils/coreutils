@@ -16,7 +16,7 @@ use uucore::error::{FromIo, UResult};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::libc::{EINVAL, ENOENT};
 use uucore::line_ending::LineEnding;
-use uucore::quoting_style::quote_name_for_tty;
+use uucore::quoting_style::{QuotingStyle, quote_name_for_tty, tty_quoting_style};
 use uucore::translate;
 use uucore::{format_usage, show_error};
 
@@ -80,6 +80,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // An operand that cannot be resolved does not stop the ones after it; the
     // failure only decides the exit status once every operand has been tried.
     let mut failed = false;
+    let style = tty_quoting_style();
     for p in &files {
         let path_result = if res_mode == ResolveMode::None {
             fs::read_link(p)
@@ -93,7 +94,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         match path_result {
             Ok(path) => {
-                show(&path, line_ending).map_err_context(String::new)?;
+                show(&path, line_ending, style).map_err_context(String::new)?;
             }
             Err(err) => {
                 failed = true;
@@ -187,8 +188,12 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn show(path: &Path, line_ending: Option<LineEnding>) -> std::io::Result<()> {
-    uucore::display::print_verbatim(quote_name_for_tty(path.as_os_str()))?;
+fn show(
+    path: &Path,
+    line_ending: Option<LineEnding>,
+    style: Option<QuotingStyle>,
+) -> std::io::Result<()> {
+    uucore::display::print_verbatim(quote_name_for_tty(path.as_os_str(), style))?;
     if let Some(line_ending) = line_ending {
         write!(stdout(), "{line_ending}")?;
     }

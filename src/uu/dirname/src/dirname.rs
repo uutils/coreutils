@@ -6,13 +6,11 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
 use std::io::{Write as _, stdout};
-#[cfg(unix)]
 use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;
-#[cfg(unix)]
-use uucore::quoting_style::quote_name_for_tty;
+use uucore::quoting_style::{quote_name_for_tty, tty_quoting_style};
 
 use uucore::translate;
 
@@ -165,6 +163,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .cloned()
         .collect();
 
+    let style = tty_quoting_style();
+
     for path in &dirnames {
         let result = dirname_string_manipulation(path.as_os_str());
 
@@ -172,13 +172,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         {
             use std::os::unix::ffi::OsStrExt;
             let result_os = OsStr::from_bytes(result);
-            print_verbatim(quote_name_for_tty(result_os))?;
+            print_verbatim(quote_name_for_tty(result_os, style))?;
         }
         #[cfg(not(unix))]
         {
             // On non-Unix, fall back to lossy conversion
             if let Ok(s) = std::str::from_utf8(result) {
-                write!(stdout(), "{s}")?;
+                print_verbatim(quote_name_for_tty(OsStr::new(s), style))?;
             } else {
                 // Fallback for non-UTF-8 paths on non-Unix systems
                 write!(stdout(), ".")?;
