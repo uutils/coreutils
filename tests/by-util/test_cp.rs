@@ -1201,6 +1201,25 @@ fn test_cp_arg_link_keeps_source_mode() {
     assert_eq!(at.metadata("dest").permissions().mode() & 0o777, 0o600);
 }
 
+// Android's app-private filesystem refuses hard links.
+#[cfg(all(unix, not(target_os = "android")))]
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
+#[rstest]
+#[case::hard_link("-l", "hard link")]
+#[case::symlink("-s", "symlink")]
+fn test_cp_link_error_names_full_paths(#[case] option: &str, #[case] kind: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("s");
+    at.mkdir("d");
+    at.write("s/n", "a");
+    at.write("d/n", "b");
+    // -s only accepts a relative source when the destination is in the cwd.
+    let source = at.plus_as_string("s/n");
+    ucmd.args(&[option, &source, "d"])
+        .fails_with_code(1)
+        .stderr_contains(format!("cp: cannot create {kind} 'd/n' to '{source}'"));
+}
+
 #[test]
 #[cfg(target_os = "linux")]
 fn test_cp_verbose_preserved_link_to_dir() {
