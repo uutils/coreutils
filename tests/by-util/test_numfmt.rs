@@ -2151,6 +2151,24 @@ fn test_write_error_is_reported_and_fatal() {
     }
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_warning_write_error_sets_exit_code() {
+    // A warning that can't be written to stderr makes numfmt fail, like GNU,
+    // but the output is still produced.
+    new_ucmd!()
+        .args(&["--debug", "42"])
+        .set_stderr(std::fs::File::create("/dev/full").unwrap())
+        .fails_with_code(1)
+        .stdout_is("42\n");
+    new_ucmd!()
+        .args(&["--invalid=warn", "--field=2"])
+        .pipe_in("1 x 3\n")
+        .set_stderr(std::fs::File::create("/dev/full").unwrap())
+        .fails_with_code(1)
+        .stdout_is("1 x 3\n");
+}
+
 #[test]
 fn test_repeated_option_last_one_wins() {
     new_ucmd!()

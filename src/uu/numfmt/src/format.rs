@@ -6,11 +6,10 @@
 // spell-checker:ignore powf seps replacen
 
 use std::fmt::Write as _;
-use std::io::Write as _;
 
 use uucore::display::Quotable;
 use uucore::i18n::decimal::{locale_decimal_separator, locale_grouping_separator};
-use uucore::{show, translate};
+use uucore::{show, show_error, translate};
 
 use crate::errors::NumfmtError;
 use crate::numeric::ParsedNumber;
@@ -930,7 +929,7 @@ fn report_invalid_field(
         InvalidModes::Abort => return Err(WriteError::Invalid(message)),
         InvalidModes::Fail => show!(NumfmtError::FormattingError(message)),
         InvalidModes::Warn => {
-            let _ = writeln!(std::io::stderr(), "numfmt: {message}");
+            show_error!("{message}");
         }
         InvalidModes::Ignore => {}
     }
