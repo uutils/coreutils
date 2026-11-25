@@ -241,6 +241,17 @@ pub fn path_is_tailable(path: &Path) -> bool {
     path.is_file() || path.exists() && path.metadata().is_ok_and(|meta| meta.is_tailable())
 }
 
+/// Whether stdin refers to a regular file.
+#[cfg(unix)]
+pub fn stdin_is_regular() -> bool {
+    rustix::fs::fstat(io::stdin()).is_ok_and(|stat| stat.st_mode & libc::S_IFMT == libc::S_IFREG)
+}
+
+#[cfg(not(unix))]
+pub fn stdin_is_regular() -> bool {
+    true
+}
+
 #[inline]
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 pub fn stdin_is_bad_fd() -> bool {

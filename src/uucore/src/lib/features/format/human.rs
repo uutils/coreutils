@@ -77,7 +77,11 @@ fn test_human_readable() {
         (8500, SizeFormat::Binary, "8.4K"),
     ];
 
+    // The separator comes from the locale the test process runs under.
     for &(size, sfmt, expected_str) in &test_cases {
-        assert_eq!(human_readable(size, sfmt), expected_str);
+        assert_eq!(
+            human_readable(size, sfmt),
+            localize_decimal(expected_str.to_string())
+        );
     }
 }

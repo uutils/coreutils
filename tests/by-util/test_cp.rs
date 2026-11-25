@@ -581,7 +581,9 @@ fn test_cp_arg_no_target_directory() {
         .arg("-T")
         .arg(TEST_COPY_TO_FOLDER)
         .fails()
-        .stderr_contains("cannot overwrite directory");
+        .stderr_is(format!(
+            "cp: cannot overwrite directory '{TEST_COPY_TO_FOLDER}' with non-directory '{TEST_HELLO_WORLD_SOURCE}'\n"
+        ));
 }
 
 #[test]
@@ -1690,6 +1692,30 @@ fn test_cp_backup_simple_protect_source() {
 
     assert_eq!(at.read(TEST_HELLO_WORLD_SOURCE), "Hello, World!\n");
     assert_eq!(at.read(&source), "");
+}
+
+#[rstest]
+#[case::backup(&["-b"])]
+#[case::remove_destination(&["-b", "--remove-destination"])]
+fn test_cp_backup_into_source_directory(#[case] flags: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let files = [("a.txt", "A2", "A1"), ("b.txt", "B2", "B1")];
+    for (name, current, previous) in files {
+        at.write(name, current);
+        at.write(format!("{name}~"), previous);
+    }
+
+    let result = ucmd
+        .args(flags)
+        .args(&["a.txt", "b.txt", "."])
+        .fails_with_code(1);
+
+    for (name, current, previous) in files {
+        let dest = path!(".", name);
+        result.stderr_contains(format!("'{name}' and {} are the same file", dest.quote()));
+        assert_eq!(at.read(name), current);
+        assert_eq!(at.read(format!("{name}~")), previous);
+    }
 }
 
 #[test]
@@ -4377,6 +4403,59 @@ fn test_dir_recursive_copy() {
         .arg("parent2/child1/child2/child3")
         .fails()
         .stderr_contains("cannot copy a directory");
+}
+
+#[test]
+#[cfg(windows)]
+fn test_cp_recursive_drive_root() {
+    use std::process::Command;
+
+    struct SubstDrive(String);
+
+    impl Drop for SubstDrive {
+        fn drop(&mut self) {
+            let _ = Command::new("subst").arg(&self.0).arg("/D").status();
+        }
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("src/sub");
+    at.write("src/id.dat", "root file");
+    at.write("src/sub/x.txt", "nested file");
+
+    let Some(drive) = (b'A'..=b'Z')
+        .rev()
+        .map(char::from)
+        .find(|letter| !Path::new(&format!("{letter}:\\")).exists())
+    else {
+        println!("No free drive letter available for subst; skipping test");
+        return;
+    };
+    let drive = format!("{drive}:");
+    match Command::new("subst")
+        .arg(&drive)
+        .arg(at.plus("src"))
+        .status()
+    {
+        Ok(status) if status.success() => {}
+        result => {
+            println!("subst {drive} failed ({result:?}); skipping test");
+            return;
+        }
+    }
+    let _subst_drive = SubstDrive(drive.clone());
+
+    for (source, dest) in [
+        (format!("{drive}/"), "dest_slash"),
+        (format!("{drive}\\"), "dest_backslash"),
+    ] {
+        // The bug only shows when the destination directory already exists.
+        at.mkdir(dest);
+        scene.ucmd().args(&["-r", &source, dest]).succeeds();
+        assert_eq!(at.read(format!("{dest}/id.dat")), "root file");
+        assert_eq!(at.read(format!("{dest}/sub/x.txt")), "nested file");
+    }
 }
 
 #[test]
@@ -9388,6 +9467,25 @@ fn test_cp_preserve_setuid_when_chown_succeeds() {
         0o4000,
         "setuid bit should be preserved when chown succeeds (got mode {mode:o})"
     );
+}
+
+// A non-root user cannot give the copy root's ownership. Like GNU, that
+// permission failure is not reported.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
+#[cfg(unix)]
+fn test_cp_preserve_root_owned_file_as_non_root_is_silent() {
+    // Android has no /etc/passwd, so use /etc/hosts. Skip where it is missing
+    // or not owned by root, since then there is nothing to preserve.
+    let path = "/etc/hosts";
+    let root_owned = Path::new(path).metadata().is_ok_and(|m| m.uid() == 0);
+    if rustix::process::geteuid().is_root() || !root_owned {
+        println!("Skipping test as root or without a root-owned system file");
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-p", path, "dst"]).succeeds().no_stderr();
+    assert!(at.file_exists("dst"));
 }
 
 // The setuid/setgid bits are only applied once the ownership has been set

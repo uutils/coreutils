@@ -51,6 +51,8 @@ use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, show_error, show_warning};
 
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
+const DEFAULT_MISSING_WIDTH: &str = "32";
+const DEFAULT_MISSING_STRING_LENGTH: &str = "3";
 
 pub(crate) mod options {
     pub const HELP: &str = "help";
@@ -265,19 +267,18 @@ impl OdOptions {
 /// opens the input and calls `odfunc` to process the input.
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let raw_args: Vec<OsString> = args.collect();
+    let mut raw_args: Vec<OsString> = args.collect();
     // Keep a text view for option scanning, but parse filenames from the raw arguments.
     let args: Vec<String> = raw_args
         .iter()
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect();
 
-    let clap_opts = uu_app();
-
-    let clap_matches = uucore::clap_localization::handle_clap_result(clap_opts, &raw_args)?;
-
-    // Kept for the caret in SIZE diagnostics, which echoes the command line.
+    // Keep the original arguments for diagnostics before attaching optional values.
     let diag_args = uucore::diagnostics::capture(&raw_args);
+    let clap_opts = uu_app();
+    attach_optional_values(&mut raw_args, &clap_opts);
+    let clap_matches = uucore::clap_localization::handle_clap_result(clap_opts, raw_args)?;
     let od_options = OdOptions::new(&clap_matches, &args, diag_args.as_deref())?;
     let mut out = std::io::stdout().lock();
 
@@ -319,6 +320,69 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             &output_info,
             &mut out,
         )
+    }
+}
+
+/// Resolve a bare long option or the value-taking flag at the end of a short cluster.
+fn bare_option<'a>(command: &'a Command, token: &str) -> Option<&'a Arg> {
+    if let Some(name) = token.strip_prefix("--") {
+        fn names(arg: &Arg) -> impl Iterator<Item = &str> {
+            arg.get_long()
+                .into_iter()
+                .chain(arg.get_all_aliases().into_iter().flatten())
+        }
+
+        // Clap prefers an exact spelling over any other options sharing its prefix.
+        if let Some(exact) = command
+            .get_arguments()
+            .find(|arg| names(arg).any(|long| long == name))
+        {
+            return Some(exact);
+        }
+        let mut candidates = command
+            .get_arguments()
+            .filter(|arg| names(arg).any(|long| long.starts_with(name)));
+        return candidates.next().filter(|_| candidates.next().is_none());
+    }
+
+    let mut flags = token.strip_prefix('-')?.chars();
+    while let Some(flag) = flags.next() {
+        let arg = command.get_arguments().find(|arg| {
+            arg.get_short() == Some(flag)
+                || arg
+                    .get_all_short_aliases()
+                    .unwrap_or_default()
+                    .contains(&flag)
+        })?;
+        if arg.get_action().takes_values() {
+            return flags.as_str().is_empty().then_some(arg);
+        }
+    }
+    None
+}
+
+fn attach_optional_values(args: &mut [OsString], command: &Command) {
+    let mut args = args.iter_mut().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--" {
+            break;
+        }
+        let Some(token) = arg.to_str() else { continue };
+        let Some(option) = bare_option(command, token) else {
+            continue;
+        };
+        if option.is_allow_hyphen_values_set() {
+            // -j and -N consume the next token even if it looks like an option.
+            args.next();
+            continue;
+        }
+        let default = match option.get_id().as_str() {
+            options::WIDTH => DEFAULT_MISSING_WIDTH,
+            options::STRINGS if token.starts_with("--") => DEFAULT_MISSING_STRING_LENGTH,
+            _ => continue,
+        };
+        arg.push("=");
+        arg.push(default);
     }
 }
 
@@ -375,7 +439,7 @@ pub fn uu_app() -> Command {
                 .long(options::STRINGS)
                 .help(translate!("od-help-strings"))
                 .num_args(0..=1)
-                .default_missing_value("3")
+                .default_missing_value(DEFAULT_MISSING_STRING_LENGTH)
                 .value_name("BYTES"),
         )
         .arg(
@@ -516,7 +580,7 @@ pub fn uu_app() -> Command {
                 .short('w')
                 .long(options::WIDTH)
                 .help(translate!("od-help-width"))
-                .default_missing_value("32")
+                .default_missing_value(DEFAULT_MISSING_WIDTH)
                 .value_name("BYTES")
                 .num_args(..=1),
         )
@@ -878,5 +942,21 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
         ParseSizeError::SizeTooBig(_) => {
             translate!("od-error-argument-too-large", "option" => option, "value" => s.quote())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn optional_values_respect_other_long_options() {
+        let command = uu_app().arg(Arg::new("widths").long("widths").action(ArgAction::SetTrue));
+        let mut args = ["od", "--wid", "--widths", "--width", "--s", "--st"].map(OsString::from);
+        attach_optional_values(&mut args, &command);
+        assert_eq!(
+            args,
+            ["od", "--wid", "--widths", "--width=32", "--s", "--st=3"].map(OsString::from)
+        );
     }
 }

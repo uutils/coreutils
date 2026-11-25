@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use crate::platform::Writer;
+use crate::platform::{Writer, open_file_error};
 use std::ffi::OsStr;
 use uucore::{display::Quotable, translate};
 
@@ -34,11 +34,13 @@ pub fn instantiate_current_writer(
             .write(true)
             .create(true)
             .truncate(true)
-            .open(std::path::Path::new(filename))?
+            .open(std::path::Path::new(filename))
+            .map_err(|e| open_file_error(filename, e))?
     } else {
         std::fs::OpenOptions::new()
             .append(true)
-            .open(std::path::Path::new(filename))?
+            .open(std::path::Path::new(filename))
+            .map_err(|e| open_file_error(filename, e))?
     };
     Ok(Writer::File(file))
 }

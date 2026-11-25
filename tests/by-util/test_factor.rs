@@ -1744,6 +1744,21 @@ fn invalid_cmdline_arg_continues() {
         .stderr_is("factor: 'a' is not a valid positive integer\n");
 }
 
+#[test]
+fn invalid_number_error_keeps_its_place_in_the_output() {
+    let expected = "4: 2 2\nfactor: 'a' is not a valid positive integer\n6: 2 3\n";
+    new_ucmd!()
+        .args(&["4", "a", "6"])
+        .stderr_to_stdout()
+        .fails_with_code(1)
+        .stdout_is(expected);
+    new_ucmd!()
+        .pipe_in("4 a 6\n")
+        .stderr_to_stdout()
+        .fails_with_code(1)
+        .stdout_is(expected);
+}
+
 #[cfg(unix)]
 #[test]
 fn test_stdin_clean_error_message() {

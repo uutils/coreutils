@@ -811,13 +811,13 @@ fn wipe_file(
     }
 
     if remove_method != RemoveMethod::None {
-        if is_stdout {
-            // Deallocate stdout's data for -u/--remove without renaming or
-            // unlinking the file that the descriptor refers to.
-            file.set_len(0).map_err_context(
-                || translate_text!("shred-failed-to-remove-file", "file" => display_path.maybe_quote()),
-            )?;
-        } else {
+        // Deallocate the data first, so that it is gone even when the
+        // unlink below fails (e.g. in a read-only directory). For stdout,
+        // this is all we do: the descriptor's file is never renamed or unlinked.
+        file.set_len(0).map_err_context(
+            || translate_text!("shred-error-truncating", "file" => display_path.maybe_quote()),
+        )?;
+        if !is_stdout {
             do_remove(path, verbose, remove_method).map_err_context(
                 || translate_text!("shred-failed-to-remove-file", "file" => display_path.maybe_quote()),
             )?;

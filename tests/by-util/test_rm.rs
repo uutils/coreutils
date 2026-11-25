@@ -1723,7 +1723,7 @@ fn test_preserve_root_literal_root() {
 
 /// `rm -rf / --no-preserve-root` must get past the failsafe. `strace` fakes the
 /// removals and sends SIGINT on the first one, so nothing is deleted.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_no_preserve_root_literal_root() {
     use std::os::unix::process::ExitStatusExt;

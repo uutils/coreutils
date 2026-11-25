@@ -219,7 +219,7 @@ fn test_shred_fail_no_perm() {
     let binding = Path::new("dir").join(file);
     let path = binding.to_str().unwrap();
     at.mkdir(dir);
-    at.touch(path);
+    at.write(path, "top secret payload\n");
     at.touch(other);
     scene.ccmd("chmod").arg("a-w").arg(dir).succeeds();
 
@@ -231,7 +231,9 @@ fn test_shred_fail_no_perm() {
         .fails()
         .stderr_contains(format!("{path}: failed to remove: Permission denied\n"));
 
+    // The unlink failed, but the data must still have been deallocated.
     assert!(at.file_exists(path));
+    assert_eq!(at.metadata(path).len(), 0);
     assert!(!at.file_exists(other));
 }
 
@@ -610,6 +612,7 @@ fn test_numeric_looking_file_name_verbose_remove() {
 #[uutests::wasi_ignore(StdioHandlesOpaque)]
 #[test]
 #[cfg(unix)]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_shred_dash_wipes_stdout_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "secret.txt";
@@ -636,6 +639,7 @@ fn test_shred_dash_wipes_stdout_file() {
 #[uutests::wasi_ignore(StdioHandlesOpaque)]
 #[test]
 #[cfg(unix)]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_shred_dash_remove_truncates_but_does_not_unlink_stdout() {
     for remove_arg in [
         "-u",
@@ -717,7 +721,7 @@ fn test_shred_socket() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(not(wasi_runner))]
 fn test_stat_failure_reports_open_error() {
     // Make stat and open fail with different errors on the same path: the
@@ -757,4 +761,37 @@ fn test_stat_failure_reports_open_error() {
         stderr.ends_with("failed to open for writing: Text file busy\n"),
         "{stderr}"
     );
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(not(wasi_runner))]
+fn test_remove_reports_truncate_failure() {
+    // When the data cannot be deallocated, say so and keep the file.
+    use std::process::Command;
+
+    let (at, _ucmd) = at_and_ucmd!();
+    at.write("notes.txt", "keep me around\n");
+
+    let Ok(out) = Command::new("strace")
+        .current_dir(at.as_string())
+        .args(["-o", "/dev/null", "-e", "inject=ftruncate:error=EROFS"])
+        .arg(uutests::util::get_tests_binary())
+        .args(["shred", "-u", "notes.txt"])
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .output()
+    else {
+        return; // missing strace
+    };
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    if stderr.contains("ptrace") {
+        return; // tracing not permitted here
+    }
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(
+        stderr,
+        "shred: notes.txt: error truncating: Read-only file system\n"
+    );
+    assert!(at.file_exists("notes.txt"));
 }

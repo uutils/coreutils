@@ -54,9 +54,9 @@ impl RawSuffix {
 }
 
 impl TryFrom<&char> for RawSuffix {
-    type Error = String;
+    type Error = ();
 
-    fn try_from(value: &char) -> Result<Self> {
+    fn try_from(value: &char) -> std::result::Result<Self, Self::Error> {
         match value {
             'K' | 'k' => Ok(Self::K),
             'M' => Ok(Self::M),
@@ -68,7 +68,7 @@ impl TryFrom<&char> for RawSuffix {
             'Y' => Ok(Self::Y),
             'R' => Ok(Self::R),
             'Q' => Ok(Self::Q),
-            _ => Err(format!("Invalid suffix: {value}")),
+            _ => Err(()),
         }
     }
 }

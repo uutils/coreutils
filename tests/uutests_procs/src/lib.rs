@@ -33,12 +33,18 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
         "ClosedStdoutGenericIoError" => {
             "WASI: closed stdout reports a generic I/O error rather than BrokenPipe"
         }
+        "CompressProgramBypassed" => {
+            "WASI: ext_sort bypasses --compress-program entirely (single-threaded in-memory path)"
+        }
         "DebugReportsUnsupported" => {
             "WASI: --debug reports 'unsupported' instead of 'unknown' for this platform"
         }
         "DevNullNotSeekable" => "WASI sandbox: /dev/null is not a seekable device",
         "DirectoryModesUmaskNotFaithful" => {
             "WASI: directory modes/umask are not faithfully reproduced"
+        }
+        "DirectorySizeFromMetadata" => {
+            "WASI: the guest is not Unix, so a directory's size comes from its metadata rather than from a seek to its end"
         }
         "DotDotCanonicalizationDiffers" => {
             "WASI sandbox: relative '..' path canonicalization differs, causing a false self-copy detection"
@@ -77,6 +83,9 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
         "NoRlimitSetrlimitSupport" => "WASI: rlimit/setrlimit not supported",
         "NoStdoutFileRedirection" => "WASI: no stdout-to-file redirection",
         "NoSubprocessSpawning" => "WASI: no subprocess spawning",
+        "NoThreadSpawning" => {
+            "WASI: sort -m spawns real OS threads for multi-file merge, unsupported under wasmtime's default config"
+        }
         "NoTzdb" => {
             "WASI: no tzdb; TZ env var is not honoured, so timezone-dependent behaviour (DST validation, timestamps) differs from the host"
         }
@@ -108,9 +117,6 @@ fn wasi_reason(key: &str) -> Option<&'static str> {
         "SymlinkHardlinkCaps" => {
             "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
         }
-        "SymlinkLoopNoEloop" => {
-            "WASI: symlink loop traversal does not surface ELOOP ('Too many levels of symbolic links')"
-        }
         "TailFollowDisabled" => "WASI: tail follow mode disabled",
         "UnsupportedStdApi" => {
             "WASI: the std or libc API is unsupported (File::try_clone, setlocale LC_* constants)"
@@ -126,6 +132,9 @@ fn wasip2_reason(key: &str) -> Option<&'static str> {
         // FIXME: wasi-sdk-35 fixes this (wasi-libc #887); remove the ignore once Rust bundles it.
         "StreamWriteGenericIoError" => {
             "WASI P2: stream write errors report a generic I/O error instead of their errno, for example ENOSPC on a full device"
+        }
+        "OsErrorMessageDiffers" => {
+            "WASI P2: the error message text for this OS error differs from native Unix"
         }
         "OsStringRequiresUtf8" => "WASI P2: OsString requires valid UTF-8, unlike unix and WASI P1",
         _ => return None,

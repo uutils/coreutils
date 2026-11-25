@@ -288,6 +288,16 @@ fn comm(
                     .read_line(rb)
                     .map_err_context(|| filename2.maybe_quote().to_string())?;
                 total_col_3 += 1;
+
+                // Both files moved on. With --check-order, look at file 1
+                // first, so it is the one reported when both new lines are
+                // out of order.
+                if mode == CheckOrder::Always
+                    && ((na != 0 && !checker1.verify_order(ra, files_differ))
+                        || (nb != 0 && !checker2.verify_order(rb, files_differ)))
+                {
+                    break;
+                }
             }
         }
 
@@ -298,7 +308,11 @@ fn comm(
         }
     }
 
-    if opts.get_flag(options::TOTAL) {
+    // With --check-order the comparison stops at the first unsorted line, so
+    // there is no total to report.
+    let stopped_early = mode == CheckOrder::Always && (checker1.has_error || checker2.has_error);
+
+    if opts.get_flag(options::TOTAL) && !stopped_early {
         let line_ending = LineEnding::from_zero_flag(opts.get_flag(options::ZERO_TERMINATED));
         write!(
             writer,
@@ -358,7 +372,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let all_delimiters = matches
         .get_many::<String>(options::DELIMITER)
         .unwrap()
-        .map(String::from)
+        .cloned()
         .collect::<Vec<_>>();
     for delim in &all_delimiters[1..] {
         // Note that this check is very different from ".conflicts_with_self(true).action(ArgAction::Set)",

@@ -17,6 +17,7 @@ split-after-help = Output fixed-size pieces of INPUT to PREFIXaa, PREFIXab, ...;
 
 # messages
 split-creating-file = creating file { $file }
+split-executing-with-file = executing with FILE={ $file }
 # Error messages
 split-error-suffix-not-parsable = invalid suffix length: { $value }
 split-error-suffix-contains-separator = invalid suffix { $value }, contains directory separator
@@ -34,6 +35,8 @@ split-error-cannot-split-more-than-one-way = cannot split in more than one way
 split-error-overflow = Overflow
 split-error-output-file-suffixes-exhausted = output file suffixes exhausted
 split-error-numerical-suffix-start-too-large = numerical suffix start value is too large for the suffix length
+split-error-invalid-numeric-suffix-start = { $value }: invalid start value for numerical suffix
+split-error-invalid-hex-suffix-start = { $value }: invalid start value for hexadecimal suffix
 split-error-cannot-open-for-reading = cannot open { $file } for reading
 split-error-would-overwrite-input = { $file } would overwrite input; aborting
 split-error-cannot-determine-file-size = { $input }: cannot determine file size

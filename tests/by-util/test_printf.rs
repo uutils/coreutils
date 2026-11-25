@@ -22,7 +22,11 @@ use uutests::new_ucmd;
 #[case::sub_q_string_empty(&["%q", ""], "''")]
 #[case::sub_q_string_lone_open_brace(&["%q", "{"], "'{'")]
 #[case::sub_q_string_lone_close_brace(&["%q", "}"], "'}'")]
-#[case::sub_q_string_brace_group(&["%q", "{a,b}"], "{a,b}")]
+#[case::sub_q_string_brace_group(&["%q", "{a,b}"], "'{a,b}'")]
+#[case::sub_q_string_brace_range(&["%q", "{1..3}"], "'{1..3}'")]
+#[case::sub_q_string_brace_with_space(&["%q", "{a b}"], "'{a b}'")]
+#[case::sub_q_string_brace_with_quote(&["%q", "{a'b}"], "\"{a'b}\"")]
+#[case::sub_q_string_comma(&["%q", "a,b"], "a,b")]
 #[case::sub_char(&["the letter %c", "A"], "the letter A")]
 #[case::sub_char_from_string(&["%c%c%c", "five", "%", "oval"], "f%o")]
 #[case::sub_num_int(&["twenty is %i", "20"], "twenty is 20")]
@@ -218,7 +222,7 @@ fn char_constant_warning_preserves_prior_failure() {
         .args(&["%d\n", "bad", "'ab"])
         .fails_with_code(1)
         .stdout_is("0\n97\n")
-        .stderr_is("printf: 'bad': expected a numeric value\nprintf: warning: b: character(s) following character constant have been ignored\n");
+        .stderr_is("printf: 'bad': expected a numeric value\nprintf: warning: 'b': character(s) following character constant have been ignored\n");
 
     new_ucmd!()
         .args(&["%d\n", "bad", "'ab"])
@@ -495,6 +499,18 @@ fn test_extreme_exponent_does_not_overflow() {
             .fails_with_code(1)
             .stderr_contains("Numerical result out of range")
             .stdout_is(zero);
+
+        // Same for hexadecimal floats whose binary exponent fits in an i64.
+        new_ucmd!()
+            .args(&[spec, "0x1p9223372036854775807"])
+            .fails_with_code(1)
+            .stderr_contains("Numerical result out of range")
+            .stdout_contains("inf");
+        new_ucmd!()
+            .args(&[spec, "0x1p-9223372036854775808"])
+            .fails_with_code(1)
+            .stderr_contains("Numerical result out of range")
+            .stdout_is(zero);
     }
 }
 
@@ -505,7 +521,15 @@ fn partial_char() {
         .succeeds()
         .stdout_is("97")
         .stderr_is(
-            "printf: warning: bc: character(s) following character constant have been ignored\n",
+            "printf: warning: 'bc': character(s) following character constant have been ignored\n",
+        );
+
+    new_ucmd!()
+        .args(&["%d", "'Z\tW"])
+        .succeeds()
+        .stdout_is("90")
+        .stderr_is(
+            "printf: warning: '\\tW': character(s) following character constant have been ignored\n",
         );
 }
 
@@ -527,7 +551,7 @@ fn partial_char_posixly_correct() {
     // Without POSIXLY_CORRECT the warning is still emitted.
     for (arg, rest) in [("'AB", "B"), ("'ABC", "BC"), ("\"AB", "B"), ("'-1", "1")] {
         new_ucmd!().args(&["%d", arg]).succeeds().stderr_is(format!(
-            "printf: warning: {rest}: character(s) following character constant have been ignored\n"
+            "printf: warning: '{rest}': character(s) following character constant have been ignored\n"
         ));
     }
 }
@@ -740,6 +764,28 @@ fn float_non_finite_zero_padding() {
 }
 
 #[test]
+fn float_nan_with_payload() {
+    new_ucmd!()
+        .args(&["%f|%f|%g|%a", "nan(1)", "-nan(0x1)", "NAN()", "nan(abc_1)"])
+        .succeeds()
+        .stdout_only("nan|-nan|nan|nan");
+}
+
+#[rstest]
+#[case::unclosed("nan(")]
+#[case::unclosed_payload("nan(1")]
+#[case::sign_in_payload("nan(-1)")]
+#[case::trailing_garbage("nan(1)x")]
+#[case::no_open_paren("nan)")]
+fn float_nan_with_invalid_payload(#[case] arg: &str) {
+    new_ucmd!()
+        .args(&["%f", arg])
+        .fails_with_code(1)
+        .stdout_is("nan")
+        .stderr_is(format!("printf: '{arg}': value not completely converted\n"));
+}
+
+#[test]
 fn float_abs_value_less_than_one() {
     new_ucmd!()
         .args(&["%g", "0.1171875"])
@@ -905,13 +951,22 @@ fn mb_input() {
     }
 
     let cases = vec![
-        ("%04x\n", "\"á=", "00e1\n", "="),
-        ("%04x\n", "'á-", "00e1\n", "-"),
-        ("%04x\n", "'á=-==", "00e1\n", "=-=="),
-        ("%04x\n", "'á'", "00e1\n", "'"),
-        ("%04x\n", "'\u{e1}++", "00e1\n", "++"),
-        ("%04x\n", "''á'", "0027\n", "á'"),
-        ("%i\n", "\"á=", "225\n", "="),
+        ("%04x\n", "\"á=", "00e1\n", "'='"),
+        ("%04x\n", "'á-", "00e1\n", "'-'"),
+        ("%04x\n", "'á=-==", "00e1\n", "'=-=='"),
+        ("%04x\n", "'á'", "00e1\n", "\"'\""),
+        ("%04x\n", "'\u{e1}++", "00e1\n", "'++'"),
+        (
+            "%04x\n",
+            "''á'",
+            "0027\n",
+            if cfg!(windows) {
+                "\"\\303\\241'\""
+            } else {
+                "'\\303\\241'\\'"
+            },
+        ),
+        ("%i\n", "\"á=", "225\n", "'='"),
     ];
     for (format, arg, stdout, stderr) in cases {
         new_ucmd!()
@@ -952,10 +1007,10 @@ fn mb_invalid_unicode() {
     }
 
     let cases = vec![
-        (b"\"\xe1=".as_slice(), "="),
-        (b"'\xe1-".as_slice(), "-"),
-        (b"'\xe1=-==".as_slice(), "=-=="),
-        (b"'\xe1'".as_slice(), "'"),
+        (b"\"\xe1=".as_slice(), "'='"),
+        (b"'\xe1-".as_slice(), "'-'"),
+        (b"'\xe1=-==".as_slice(), "'=-=='"),
+        (b"'\xe1'".as_slice(), "\"'\""),
         // unclear if original or replacement character is better in stderr
         //(b"''\xe1'".as_slice(), "'�'"),
     ];
@@ -1369,6 +1424,25 @@ fn help_and_version_past_the_format_are_arguments() {
         .stdout_only("--help");
 }
 
+#[rstest]
+#[case::version_then_operand(&["--version", "x"], "--version", "x")]
+#[case::help_then_operand(&["--help", "x"], "--help", "x")]
+#[case::help_then_double_dash(&["--help", "--"], "--help", "--")]
+#[case::version_then_help(&["--version", "--help"], "--version", "--help")]
+fn help_and_version_with_more_arguments_are_the_format(
+    #[case] args: &[&str],
+    #[case] stdout: &str,
+    #[case] excess: &str,
+) {
+    new_ucmd!()
+        .args(args)
+        .succeeds()
+        .stdout_is(stdout)
+        .stderr_is(format!(
+            "printf: warning: ignoring excess arguments, starting with '{excess}'\n"
+        ));
+}
+
 #[test]
 fn test_precision_above_formatter_limit() {
     // A precision larger than u16::MAX must still be honoured in full.
@@ -1410,4 +1484,19 @@ fn test_zero_precision_above_formatter_limit() {
         .args(&["%#.70000g", "0"])
         .succeeds()
         .stdout_only(format!("0.{}", &zeros[1..]));
+}
+
+#[test]
+fn test_ignored_chars_warning_is_quoted() {
+    let warning = "character(s) following character constant have been ignored";
+    new_ucmd!()
+        .args(&["%x\n", "'ABC"])
+        .succeeds()
+        .stdout_is("41\n")
+        .stderr_is(format!("printf: warning: 'BC': {warning}\n"));
+    new_ucmd!()
+        .args(&["%d\n", "'Z\tW"])
+        .succeeds()
+        .stdout_is("90\n")
+        .stderr_is(format!("printf: warning: '\\tW': {warning}\n"));
 }

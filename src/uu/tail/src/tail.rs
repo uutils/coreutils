@@ -19,6 +19,7 @@ mod follow;
 mod parse;
 mod paths;
 mod platform;
+mod read;
 pub mod text;
 
 pub use args::uu_app;
@@ -27,12 +28,14 @@ use chunks::ReverseChunks;
 use follow::Observer;
 use memchr::{memchr_iter, memrchr_iter};
 use paths::{FileExtTail, HeaderPrinter, Input, InputKind};
+use read::ReadAvailable;
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin, stdout};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
+use uucore::fs::FileInformation;
 use uucore::{translate, translate_text};
 
 use uucore::{show, show_error};
@@ -64,15 +67,6 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
     let mut observer = Observer::from(settings);
 
     observer.start(settings)?;
-
-    // Print debug info about the follow implementation being used
-    if settings.debug && settings.follow.is_some() {
-        if observer.use_polling {
-            show_error!("{}", translate!("tail-debug-using-polling-mode"));
-        } else {
-            show_error!("{}", translate!("tail-debug-using-notification-mode"));
-        }
-    }
 
     // Do an initial tail print of each path's content.
     // Add `path` and `reader` to `files` map if `--follow` is selected.
@@ -170,27 +164,34 @@ fn tail_file(
             use std::os::fd::AsFd;
             stdin().as_fd().try_clone_to_owned().map(File::from)
         } else {
-            open_file(path, settings.pid.is_some_and(|pid| pid != 0))
+            open_file(path, settings.use_nonblocking())
         };
         #[cfg(not(unix))]
-        let open_result = File::open(path);
+        let open_result = open_file(path, settings.use_nonblocking());
 
         match open_result {
             Ok(mut file) => {
                 let st = file.metadata()?;
                 let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
+                // When our output goes to this very file (`tail f >> f`), it
+                // ends where it ended when we opened it. Reading on to the
+                // moving end of file would copy our own output back, forever.
+                let end = (st.is_file() && is_stdout(&file)).then_some(st.len());
                 header_printer.print_input(input)?;
-                let mut reader;
                 if !settings.presume_input_pipe
                     && file.is_seekable(if input.is_stdin() { offset } else { 0 })
                     && (!st.is_file() || st.len() > blksize_limit)
                 {
-                    bounded_tail(&mut file, settings)?;
-                    reader = BufReader::new(file);
+                    bounded_tail(&mut file, settings, end)?;
                 } else {
-                    reader = BufReader::new(file);
-                    unbounded_tail(&mut reader, settings)?;
+                    let remaining = match end {
+                        Some(end) => end.saturating_sub(file.stream_position()?),
+                        None => u64::MAX,
+                    };
+                    // Dropping this reader loses nothing: unbounded_tail reads to EOF or not at all.
+                    unbounded_tail(&mut BufReader::new((&file).take(remaining)), settings)?;
                 }
+                let reader = BufReader::new(file);
                 if input.is_tailable() {
                     observer.add_path(
                         path,
@@ -220,37 +221,65 @@ fn tail_file(
     Ok(())
 }
 
-/// Opens a file, using non-blocking mode for FIFOs when `use_nonblock_for_fifo` is true.
-///
-/// When opening a FIFO with `--pid`, we need to use `O_NONBLOCK` so that:
-/// 1. The `open()` call doesn't block waiting for a writer
-/// 2. We can periodically check if the monitored process is still alive
-///
-/// After opening, we clear `O_NONBLOCK` so subsequent reads block normally.
-/// Without `--pid`, FIFOs block on `open()` until a writer connects (GNU behavior).
+/// Keep opens and reads nonblocking with --pid so the follow loop can check
+/// whether the monitored process is still alive, even while a writer is idle.
 #[cfg(unix)]
-fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
-    use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
+fn open_file(path: &Path, nonblocking: bool) -> io::Result<File> {
     use std::fs::OpenOptions;
-    use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
+    use std::os::unix::fs::OpenOptionsExt;
 
-    let is_fifo = path.metadata().is_ok_and(|m| m.file_type().is_fifo());
+    OpenOptions::new()
+        .read(true)
+        .custom_flags(if nonblocking { libc::O_NONBLOCK } else { 0 })
+        .open(path)
+}
 
-    if is_fifo && use_nonblock_for_fifo {
-        let file = OpenOptions::new()
-            .read(true)
-            .custom_flags(libc::O_NONBLOCK)
-            .open(path)?;
+#[cfg(not(unix))]
+fn open_file(path: &Path, _nonblocking: bool) -> io::Result<File> {
+    File::open(path)
+}
 
-        // Clear O_NONBLOCK so reads block normally
-        let flags = fcntl_getfl(&file)?;
-        let new_flags = flags & !OFlags::NONBLOCK;
-        fcntl_setfl(&file, new_flags)?;
+/// Whether `file` is the file that standard output writes to.
+fn is_stdout<
+    #[cfg(any(unix, target_os = "wasi"))] F: std::os::fd::AsFd,
+    #[cfg(windows)] F: std::os::windows::io::AsRawHandle,
+>(
+    file: &F,
+) -> bool {
+    matches!(
+        (FileInformation::from_file(file), FileInformation::from_file(&stdout())),
+        (Ok(input), Ok(output)) if input == output
+    )
+}
 
-        Ok(file)
-    } else {
-        File::open(path)
+/// How much of standard input to read: all of it, unless it is the regular
+/// file that standard output writes to (`tail < f >> f`), which ends where
+/// it ended when we started. On macOS and Windows, such a file is not resolved
+/// to a path, so it is read here rather than by `tail_file`.
+fn stdin_limit() -> u64 {
+    #[cfg(windows)]
+    use std::os::windows::io::AsHandle;
+
+    #[cfg(unix)]
+    if let Ok(st) = rustix::fs::fstat(stdin())
+        && rustix::fs::FileType::from_raw_mode(st.st_mode).is_file()
+        && is_stdout(&stdin())
+        && let Ok(pos) = rustix::fs::tell(stdin())
+    {
+        return u64::try_from(st.st_size).unwrap_or(0).saturating_sub(pos);
     }
+    // A duplicate of the handle shares its file position, and closing it
+    // leaves standard input open.
+    #[cfg(windows)]
+    if let Ok(file) = stdin().as_handle().try_clone_to_owned().map(File::from)
+        && let Ok(st) = file.metadata()
+        && st.is_file()
+        && is_stdout(&file)
+        && let Ok(pos) = (&file).stream_position()
+    {
+        return st.len().saturating_sub(pos);
+    }
+    u64::MAX
 }
 
 fn tail_stdin(
@@ -303,6 +332,8 @@ fn tail_stdin(
         )?;
     } else {
         // pipe
+        // Taken before the header, which may be appended to standard input.
+        let limit = stdin_limit();
         header_printer.print_input(input)?;
         if paths::stdin_is_bad_fd() {
             set_exit_code(1);
@@ -317,7 +348,7 @@ fn tail_stdin(
                 );
             }
         } else {
-            let mut reader = BufReader::new(stdin());
+            let mut reader = BufReader::new(stdin().take(limit));
             unbounded_tail(&mut reader, settings)?;
         }
     }
@@ -411,18 +442,23 @@ fn forwards_thru_file(
 }
 
 /// Iterate over bytes in the file, in reverse, until we find the
-/// `num_delimiters` instance of `delimiter`. The `file` is left seek'd to the
-/// position just after that delimiter.
-fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
+/// `num_delimiters` instance of `delimiter`, starting from `end`. The `file` is
+/// left seek'd to the position just after that delimiter.
+fn backwards_thru_file(
+    file: &mut File,
+    num_delimiters: u64,
+    delimiter: u8,
+    end: SeekFrom,
+) -> io::Result<()> {
     if num_delimiters == 0 {
-        file.seek(SeekFrom::End(0)).unwrap();
-        return;
+        file.seek(end)?;
+        return Ok(());
     }
     // This variable counts the number of delimiters found in the file
     // so far (reading from the end of the file toward the beginning).
     let mut counter = 0;
     let mut first_slice = true;
-    for slice in ReverseChunks::new(file) {
+    for slice in ReverseChunks::new(file, end)? {
         // Iterate over each byte in the slice in reverse order.
         let mut iter = memrchr_iter(delimiter, &slice);
 
@@ -447,11 +483,12 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
                 // cursor in the file is at the *beginning* of the
                 // block, so seeking forward by `i + 1` bytes puts
                 // us right after the found delimiter.
-                file.seek(SeekFrom::Current((i + 1) as i64)).unwrap();
-                return;
+                file.seek(SeekFrom::Current((i + 1) as i64))?;
+                return Ok(());
             }
         }
     }
+    Ok(())
 }
 
 /// When tail'ing a file, we do not need to read the whole file from start to
@@ -459,31 +496,32 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
 /// end of the file, and then read the file "backwards" in blocks of size
 /// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
 /// being a nice performance win for very large files.
-fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
+///
+/// If `end` is given, nothing at or beyond that offset is printed.
+fn bounded_tail(file: &mut File, settings: &Settings, end: Option<u64>) -> UResult<()> {
     debug_assert!(!settings.presume_input_pipe);
+    let start = file.stream_position()?;
     let mut limit = None;
+    // Counting from the end starts at `end`: our own output, such as the
+    // header, may already have been appended beyond it.
+    let eof = end.map_or(SeekFrom::End(0), SeekFrom::Start);
 
     // Find the position in the file to start printing from.
     match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), delimiter) => {
-            backwards_thru_file(file, *count, *delimiter);
+            backwards_thru_file(file, *count, *delimiter, eof)?;
         }
         FilterMode::Lines(Signum::Positive(count), delimiter) if count > &1 => {
-            let i = forwards_thru_file(file, *count - 1, *delimiter).unwrap();
-            file.seek(SeekFrom::Start(i as u64)).unwrap();
+            let i = forwards_thru_file(file, *count - 1, *delimiter)?;
+            file.seek(SeekFrom::Start(start + i as u64))?;
         }
         FilterMode::Lines(Signum::MinusZero, _) | FilterMode::Bytes(Signum::MinusZero) => {
-            file.seek(SeekFrom::End(0)).unwrap();
+            file.seek(eof)?;
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
-            // A count that does not fit into an `i64` cannot be negated for
-            // the seek; like a seek before the start, it means the whole file.
-            match i64::try_from(*count) {
-                Ok(count) if file.seek(SeekFrom::End(-count)).is_ok() => {}
-                _ => {
-                    file.seek(SeekFrom::Start(0)).unwrap();
-                }
-            }
+            // Never include bytes preceding the current input position.
+            let end = file.seek(eof)?;
+            file.seek(SeekFrom::Start(end.saturating_sub(*count).max(start)))?;
             limit = Some(*count);
         }
         FilterMode::Bytes(Signum::Positive(count)) if count > &1 => {
@@ -492,11 +530,15 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
             // A start offset past the largest seekable position makes the
             // underlying `lseek` fail with `EINVAL`; treat that like a start
             // beyond the end of the file and produce no output.
-            file.seek(SeekFrom::Start(*count - 1))
-                .or_else(|_| file.seek(SeekFrom::End(0)))
-                .unwrap();
+            file.seek(SeekFrom::Start(start.saturating_add(*count - 1)))
+                .or_else(|_| file.seek(SeekFrom::End(0)))?;
         }
         _ => {}
+    }
+
+    if let Some(end) = end {
+        let remaining = end.saturating_sub(file.stream_position()?);
+        limit = Some(limit.map_or(remaining, |limit| limit.min(remaining)));
     }
 
     print_target_section(file, limit)?;
@@ -505,20 +547,21 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
 
 fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
     let mut writer = BufWriter::new(stdout().lock());
+    let mut reader = ReadAvailable::new(reader);
     match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), sep) => {
             let mut chunks = chunks::LinesChunkBuffer::new(*sep, *count);
-            chunks.fill(reader)?;
+            chunks.fill(&mut reader)?;
             chunks.write(&mut writer)?;
         }
         FilterMode::Lines(Signum::PlusZero | Signum::Positive(1), _)
         | FilterMode::Bytes(Signum::PlusZero | Signum::Positive(1)) => {
-            io::copy(reader, &mut writer)?;
+            io::copy(&mut reader, &mut writer)?;
         }
         FilterMode::Lines(Signum::Positive(count), sep) => {
             let mut num_skip = *count - 1;
             let mut chunk = chunks::LinesChunk::new(*sep);
-            while chunk.fill(reader)?.is_some() {
+            while chunk.fill(&mut reader)?.is_some() {
                 let lines = chunk.get_lines() as u64;
                 if lines < num_skip {
                     num_skip -= lines;
@@ -528,24 +571,24 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
             }
             if chunk.has_data() {
                 chunk.write_lines(&mut writer, num_skip as usize)?;
-                io::copy(reader, &mut writer)?;
+                io::copy(&mut reader, &mut writer)?;
             }
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
             let mut chunks = chunks::BytesChunkBuffer::new(*count);
-            chunks.fill(reader)?;
+            chunks.fill(&mut reader)?;
             chunks.write(&mut writer)?;
         }
         FilterMode::Lines(Signum::MinusZero, sep) => {
             let mut chunks = chunks::LinesChunkBuffer::new(*sep, 0);
-            chunks.fill(reader)?;
+            chunks.fill(&mut reader)?;
             chunks.write(&mut writer)?;
         }
         FilterMode::Bytes(Signum::Positive(count)) => {
             let mut num_skip = *count - 1;
             let mut chunk = chunks::BytesChunk::new();
             loop {
-                let Some(bytes) = chunk.fill(reader)? else {
+                let Some(bytes) = chunk.fill(&mut reader)? else {
                     return Ok(());
                 };
                 let bytes: u64 = bytes as u64;
@@ -561,7 +604,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
                 }
             }
 
-            io::copy(reader, &mut writer)?;
+            io::copy(&mut reader, &mut writer)?;
         }
         _ => {}
     }

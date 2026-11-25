@@ -1405,11 +1405,12 @@ fn finalize<T>(
     // not yet written.
     let wstat_update = output.flush()?;
 
+    // With `conv=sparse`, trailing zero blocks were skipped, not written.
+    // Set the final length first so that `fsync`/`fdatasync` covers it.
+    output.extend_sparse()?;
+
     // Sync the output, if configured to do so.
     output.sync()?;
-
-    // With `conv=sparse`, trailing zero blocks were skipped, not written.
-    output.extend_sparse()?;
 
     // Print the final read/write statistics.
     let wstat = wstat + wstat_update;

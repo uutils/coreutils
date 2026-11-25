@@ -208,6 +208,50 @@ fn test_fold_preserves_invalid_utf8_sequences() {
         .stdout_is_bytes(bad_input);
 }
 
+/// An invalid byte must not make fold split the valid multibyte characters
+/// around it in the same read buffer.
+#[rstest]
+#[case::wide_before_invalid(b"\xe7\x95\x8c\n\xff\n")]
+#[case::wide_after_invalid(b"\xff\n\xe7\x95\x8c\n")]
+#[case::wide_around_invalid(b"\xe7\x95\x8c\n\xff\n\xe7\x95\x8c\n")]
+#[case::narrow_before_invalid(b"\xc3\xa9\xc3\xa9\n\xff\n")]
+fn test_fold_keeps_utf8_characters_next_to_invalid_bytes(#[case] input: &[u8]) {
+    for extra in [None, Some("-s"), Some("-c")] {
+        let mut cmd = new_ucmd!();
+        cmd.arg("-w2");
+        if let Some(option) = extra {
+            cmd.arg(option);
+        }
+        cmd.pipe_in(input.to_vec())
+            .succeeds()
+            .stdout_is_bytes(input);
+    }
+}
+
+/// A line that wraps next to an invalid byte: like GNU, the invalid byte
+/// takes one column and the wide character after or before it moves to its
+/// own line. With `-c`, both fit in two characters and nothing wraps.
+#[rstest]
+#[case::wide_after_invalid(b"\xff\xe7\x95\x8c\n", b"\xff\n\xe7\x95\x8c\n")]
+#[case::wide_before_invalid(b"\xe7\x95\x8c\xff\n", b"\xe7\x95\x8c\n\xff\n")]
+fn test_fold_wraps_next_to_invalid_byte(#[case] input: &[u8], #[case] expected: &[u8]) {
+    for extra in [None, Some("-s")] {
+        let mut cmd = new_ucmd!();
+        cmd.arg("-w2");
+        if let Some(option) = extra {
+            cmd.arg(option);
+        }
+        cmd.pipe_in(input.to_vec())
+            .succeeds()
+            .stdout_is_bytes(expected);
+    }
+    new_ucmd!()
+        .args(&["-w2", "-c"])
+        .pipe_in(input.to_vec())
+        .succeeds()
+        .stdout_is_bytes(input);
+}
+
 #[rstest]
 #[case::utf8_crlf(b"abc\r\n\xc3\xa9\n")]
 #[case::utf8_backspace(b"abc\x08X\n\xc3\xa9\n")]
@@ -821,6 +865,33 @@ fn test_width_invalid() {
             .fails_with_code(1)
             .stderr_is(format!("fold: invalid number of columns: '{width}'\n"));
     }
+}
+
+#[rstest]
+#[case::space(" 3")]
+#[case::space_and_plus(" +3")]
+#[case::all_blanks("\t\n\x0B\x0C\r 3")]
+fn test_width_leading_blanks(#[case] width: &str) {
+    new_ucmd!()
+        .args(&["-w", width])
+        .pipe_in("abcdef\n")
+        .succeeds()
+        .stdout_only("abc\ndef\n");
+}
+
+#[rstest]
+#[case::trailing_space("3 ", "fold: invalid number of columns: '3 '\n")]
+#[case::space_and_minus(" -3", "fold: invalid number of columns: ' -3'\n")]
+#[case::space_and_letter(" 3x", "fold: invalid number of columns: ' 3x'\n")]
+#[case::space_and_zero(
+    " 0",
+    "fold: invalid number of columns: ' 0': Numerical result out of range\n"
+)]
+fn test_width_blanks_rejected(#[case] width: &str, #[case] expected: &str) {
+    new_ucmd!()
+        .args(&["-w", width])
+        .fails_with_code(1)
+        .stderr_only(expected);
 }
 
 #[test]

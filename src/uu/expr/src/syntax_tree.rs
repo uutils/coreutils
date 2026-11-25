@@ -572,21 +572,32 @@ impl From<MaybeNonUtf8String> for NumOrStr {
     }
 }
 
+/// Parse an integer operand: an optional `-` followed by decimal digits.
+///
+/// `BigInt`'s own parser also takes a leading `+` and `_` separators, which
+/// `expr` treats as plain strings.
+fn parse_integer(bytes: &[u8]) -> Option<BigInt> {
+    let digits = bytes.strip_prefix(b"-").unwrap_or(bytes);
+    if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    std::str::from_utf8(bytes).ok()?.parse().ok()
+}
+
 impl NumOrStr {
     pub fn to_bigint(&self) -> Option<BigInt> {
         match self {
             Self::Num(num) => Some(num.clone()),
-            Self::Str(str) => std::str::from_utf8(str).ok()?.parse::<BigInt>().ok(),
+            Self::Str(str) => parse_integer(str),
         }
     }
 
     pub fn eval_as_bigint(self) -> ExprResult<BigInt> {
         match self {
             Self::Num(num) => Ok(num),
-            Self::Str(str) => std::str::from_utf8(&str)
-                .ok()
-                .and_then(|s| s.parse::<BigInt>().ok())
-                .ok_or_else(|| ExprError::NonIntegerArgument(str.clone())),
+            Self::Str(str) => {
+                parse_integer(&str).ok_or_else(|| ExprError::NonIntegerArgument(str.clone()))
+            }
         }
     }
 
@@ -1027,6 +1038,8 @@ impl<'a, S: AsRef<MaybeNonUtf8Str>> Parser<'a, S> {
                         stack.push(ParseFrame::CloseParen);
                         ParseState::Expression { min_prec: 0 }
                     }
+                    // Only `+ )` makes a value out of it.
+                    b")" => return Err(ExprError::UnexpectedClosingParenthesis),
                     s => ParseState::Value(AstNode::new(AstNodeInner::Leaf {
                         value: s.into(),
                         position: self.index - 1,

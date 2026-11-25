@@ -7,6 +7,7 @@
 
 #![allow(clippy::cast_possible_wrap)]
 
+use rstest::rstest;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -298,4 +299,16 @@ fn test_invalid_utf8_input() {
     ucmd.arg("a")
         .succeeds()
         .stdout_only_bytes(b"apple\nhrllo\n\xff\niphone\nawuyues\na\n");
+}
+
+#[rstest]
+#[case::once(&["-w"])]
+#[case::twice(&["-w", "-w"])]
+#[case::clustered(&["-ww"])]
+fn test_repeated_w(#[case] args: &[&str]) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in("a b\n")
+        .succeeds()
+        .stdout_only("a\nb\n");
 }

@@ -31,9 +31,25 @@ Our `coreutils` calls utility by `coreutils utility-name` and has `--list` to ru
 Our `coreutils` is called as `utility-name` if its binary name ends with `utility-name` to support prefixed names.
 Longer name is prioritized e.g. `sum` with the prefix `ck` is called as `cksum`.
 
+On Linux with glibc, a symlink alias such as
+`dummy -> true -> coreutils` selects `true` from the alias's immediate target.
+
 ## `base32/base64/basenc`
 
 Just like on macOS, `base32/base64/basenc` provides `-D` to decode data.
+
+## `cksum`
+
+`cksum -a` accepts a few algorithms that GNU does not provide:
+
+- `blake3`: BLAKE3, 256 bits by default. `-l` selects any multiple of 8 bits.
+- `shake128` and `shake256`: the SHA-3 extendable-output functions. `-l` selects
+  the output size in bits.
+- `xxh3`: the non-cryptographic XXH3 hash, meant for fast detection of accidental
+  corruption. It is 64 bits by default, and `-l 128` selects XXH3-128.
+
+These algorithms also work with `--check`, using tags such as `BLAKE3-256` or
+`XXH3-64`.
 
 ## `cp`
 
@@ -64,6 +80,7 @@ number of spaces representing a tab when determining the line length.
 ## `id`
 
 `id` has three additional flags:
+
 * `-P` displays the id as a password file entry
 * `-p` makes the output human-readable
 * `-A` displays the process audit user ID
