@@ -557,6 +557,10 @@ fn handle_extract_obs_skip_fields(
                 // but the skip_fields_old should be set to None instead of Some(String) later on
                 obs_overwritten_by_new = true;
             }
+            // Digits after -f, -s or -w are that option's value, as in `-cf2`
+            if matches!(*c, 'f' | 's' | 'w') {
+                obs_end_reached = true;
+            }
             // To correctly process scenario like '-u20s4' or '-D1w3', etc
             // we need to stop extracting digits once alphabetic character is encountered
             // after we already have something in obs_extracted
