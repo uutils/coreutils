@@ -358,7 +358,7 @@ where
             continue;
         }
 
-        let line = escape(line);
+        let line = escape(line, fmt);
 
         let (key, val) = line.split_two();
         if val.is_empty() {
@@ -457,7 +457,10 @@ fn append_entry(
 ///
 /// We also escape ":" to make the "quote" test pass in the GNU test suite:
 /// <https://github.com/coreutils/coreutils/blob/master/tests/misc/dircolors.pl>
-fn escape(s: &str) -> String {
+///
+/// For csh, "!" is escaped as well, because csh performs history substitution
+/// even inside single quotes.
+fn escape(s: &str, fmt: &OutputFmt) -> String {
     let mut result = String::new();
     let mut previous = ' ';
 
@@ -465,6 +468,7 @@ fn escape(s: &str) -> String {
         match c {
             '\'' => result.push_str("'\\''"),
             ':' if previous != '\\' => result.push_str("\\:"),
+            '!' if *fmt == OutputFmt::CShell => result.push_str("\\!"),
             _ => result.push(c),
         }
         previous = c;
@@ -534,10 +538,13 @@ mod tests {
 
     #[test]
     fn test_escape() {
-        assert_eq!("", escape(""));
-        assert_eq!("'\\''", escape("'"));
-        assert_eq!("\\:", escape(":"));
-        assert_eq!("\\:", escape("\\:"));
+        let sh = OutputFmt::Shell;
+        assert_eq!("", escape("", &sh));
+        assert_eq!("'\\''", escape("'", &sh));
+        assert_eq!("\\:", escape(":", &sh));
+        assert_eq!("\\:", escape("\\:", &sh));
+        assert_eq!("!", escape("!", &sh));
+        assert_eq!("\\!", escape("!", &OutputFmt::CShell));
     }
 
     #[test]
