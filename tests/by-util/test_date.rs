@@ -3709,6 +3709,19 @@ fn test_date_debug_basic() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_date_debug_write_error_sets_exit_code() {
+    // A --debug line that can't be written makes date fail, like GNU,
+    // but the date is still printed.
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .args(&["--debug", "-d", "2005-01-01", "+%Y"])
+        .set_stderr(std::fs::File::create("/dev/full").unwrap())
+        .fails_with_code(1)
+        .stdout_is("2005\n");
+}
+
+#[test]
 fn test_date_debug_various_formats() {
     // Test debug mode with various date formats and expected output
     let test_cases = [

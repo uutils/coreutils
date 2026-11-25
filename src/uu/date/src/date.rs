@@ -31,7 +31,7 @@ use uucore::i18n::get_ctype_encoding;
 use uucore::quoting_style::{QuotingStyle, escape_bytes};
 use uucore::translate;
 use uucore::translate_text;
-use uucore::{format_usage, show, show_if_err};
+use uucore::{error::set_exit_code, format_usage, show, show_if_err};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
@@ -554,10 +554,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         format!("{date_part} 00:00 {offset}")
                     };
                     if settings.debug {
-                        let _ = writeln!(
-                            stderr(),
-                            "date: warning: using midnight as starting time: 00:00:00"
-                        );
+                        debug_line(format_args!(
+                            "warning: using midnight as starting time: 00:00:00"
+                        ));
                     }
                     parse(&composed, false)
                 } else if let Some((total_hours, day_delta)) = military_tz_with_offset {
@@ -2157,6 +2156,14 @@ fn is_nonexistent_local_time(input: &str, normalized: &str, now: &Zoned) -> bool
     )
 }
 
+/// Print a `--debug` line to stderr. Like GNU, a line that can't be written
+/// makes `date` exit 1, but doesn't stop it.
+fn debug_line(args: std::fmt::Arguments<'_>) {
+    if writeln!(stderr(), "date: {args}").is_err() {
+        set_exit_code(1);
+    }
+}
+
 /// Parse a string into either an in-range [`Zoned`] value or an extended date.
 fn parse_date<S: AsRef<str>>(
     s: S,
@@ -2165,7 +2172,7 @@ fn parse_date<S: AsRef<str>>(
 ) -> Result<ParsedDateTime, (String, parse_datetime::ParseDateTimeError)> {
     let input_str = s.as_ref();
     if dbg_opts.debug {
-        let _ = writeln!(stderr(), "date: input string: {input_str}");
+        debug_line(format_args!("input string: {input_str}"));
     }
 
     // Normalize parser-specific compatibility forms before parsing.
@@ -2175,19 +2182,16 @@ fn parse_date<S: AsRef<str>>(
     // First, try to parse any timezone abbreviations
     if let Some(zoned) = try_parse_with_abbreviation(parse_input, now) {
         if dbg_opts.debug {
-            let mut err = stderr().lock();
-            let _ = writeln!(
-                err,
-                "date: parsed date part: (Y-M-D) {}",
+            debug_line(format_args!(
+                "parsed date part: (Y-M-D) {}",
                 strtime::format("%Y-%m-%d", &zoned).unwrap_or_default()
-            );
-            let _ = writeln!(
-                err,
-                "date: parsed time part: {}",
+            ));
+            debug_line(format_args!(
+                "parsed time part: {}",
                 strtime::format("%H:%M:%S", &zoned).unwrap_or_default()
-            );
+            ));
             let tz_display = zoned.time_zone().iana_name().unwrap_or("system default");
-            let _ = writeln!(err, "date: input timezone: {tz_display}");
+            debug_line(format_args!("input timezone: {tz_display}"));
         }
         return Ok(ParsedDateTime::InRange(zoned));
     }
@@ -2212,20 +2216,17 @@ fn parse_date<S: AsRef<str>>(
             let result = date.timestamp().to_zoned(now.time_zone().clone());
             if dbg_opts.debug {
                 // Show final parsed date and time
-                let mut err = stderr().lock();
-                let _ = writeln!(
-                    err,
-                    "date: parsed date part: (Y-M-D) {}",
+                debug_line(format_args!(
+                    "parsed date part: (Y-M-D) {}",
                     strtime::format("%Y-%m-%d", &result).unwrap_or_default()
-                );
-                let _ = writeln!(
-                    err,
-                    "date: parsed time part: {}",
+                ));
+                debug_line(format_args!(
+                    "parsed time part: {}",
                     strtime::format("%H:%M:%S", &result).unwrap_or_default()
-                );
+                ));
 
                 // Show timezone information
-                let _ = writeln!(err, "date: input timezone: system default");
+                debug_line(format_args!("input timezone: system default"));
 
                 // Check if time component was specified, if not warn about midnight usage
                 // Only warn for date-only inputs (no time specified), but not for epoch formats (@N)
@@ -2234,10 +2235,9 @@ fn parse_date<S: AsRef<str>>(
                     // Input likely didn't specify a time, so midnight was assumed
                     let time_str = strtime::format("%H:%M:%S", &result).unwrap_or_default();
                     if time_str == "00:00:00" {
-                        let _ = writeln!(
-                            err,
-                            "date: warning: using midnight as starting time: 00:00:00"
-                        );
+                        debug_line(format_args!(
+                            "warning: using midnight as starting time: 00:00:00"
+                        ));
                     }
                 }
             }

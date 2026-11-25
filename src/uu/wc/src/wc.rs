@@ -28,7 +28,7 @@ use utf8::{BufReadDecoder, BufReadDecoderError};
 use uucore::{display::Quotable, quoting_style::locale_aware_shell_escape, translate};
 
 use uucore::{
-    error::{FromIo, UError, UResult},
+    error::{FromIo, UError, UResult, set_exit_code},
     format_usage,
     hardware::{HardwareFeature, HasHardwareFeatures as _, SimdPolicy},
     i18n::charmap::{Encoding, locale_encoding},
@@ -965,6 +965,14 @@ pub(crate) fn wc_simd_allowed(policy: &SimdPolicy) -> bool {
     policy.iter_features().any(is_simd_runtime_feature)
 }
 
+/// Print a `--debug` line to stderr. Like GNU, a line that can't be written
+/// makes `wc` exit 1, but doesn't stop it.
+fn debug_line(msg: &str) {
+    if writeln!(stderr(), "{msg}").is_err() {
+        set_exit_code(1);
+    }
+}
+
 fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
     let mut total_word_count = WordCount::default();
     let mut num_inputs: usize = 0;
@@ -996,29 +1004,19 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
         let runtime_disabled = !features.disabled_runtime.is_empty();
 
         if enabled_empty && !runtime_disabled {
-            let _ = writeln!(stderr(), "{}", translate!("wc-debug-hw-unavailable"));
+            debug_line(&translate!("wc-debug-hw-unavailable"));
         } else if runtime_disabled {
-            let _ = writeln!(
-                stderr(),
-                "{}",
-                translate!("wc-debug-hw-disabled-glibc", "features" => disabled.join(", "))
+            debug_line(
+                &translate!("wc-debug-hw-disabled-glibc", "features" => disabled.join(", ")),
             );
         } else if !enabled_empty && disabled_empty {
-            let _ = writeln!(
-                stderr(),
-                "{}",
-                translate!("wc-debug-hw-using", "features" => enabled.join(", "))
-            );
+            debug_line(&translate!("wc-debug-hw-using", "features" => enabled.join(", ")));
         } else {
-            let _ = writeln!(
-                stderr(),
-                "{}",
-                translate!(
-                    "wc-debug-hw-limited-glibc",
-                    "disabled" => disabled.join(", "),
-                    "enabled" => enabled.join(", ")
-                )
-            );
+            debug_line(&translate!(
+                "wc-debug-hw-limited-glibc",
+                "disabled" => disabled.join(", "),
+                "enabled" => enabled.join(", ")
+            ));
         }
     }
 
