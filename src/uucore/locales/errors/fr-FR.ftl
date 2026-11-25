@@ -31,6 +31,7 @@ checksum-error-invalid-length = longueur invalide : { $length }
 checksum-error-length-too-big-for-blake = la longueur maximale d'empreinte pour { $algorithm } est de 512 bits
 checksum-error-length-not-multiple-of-8 = la longueur n'est pas un multiple de 8
 checksum-error-invalid-length-for-sha = la longueur d'empreinte pour { $algorithm } doit être 224, 256, 384 ou 512
+checksum-error-invalid-length-for-xxh3 = la longueur d'empreinte pour 'XXH3' doit être 64 ou 128
 checksum-error-length-required-for-sha = --algorithm={ $algorithm } nécessite de préciser --length 224, 256, 384 ou 512
 checksum-error-length-only-for-blake2b-sha2-sha3 = --length n'est pris en charge qu'avec --algorithm blake2b, sha2 ou sha3
 checksum-error-binary-text-conflict = les options --binary et --text n'ont pas de sens lors de la vérification de sommes de contrôle

@@ -31,6 +31,7 @@ checksum-error-invalid-length = invalid length: { $length }
 checksum-error-length-too-big-for-blake = maximum digest length for { $algorithm } is 512 bits
 checksum-error-length-not-multiple-of-8 = length is not a multiple of 8
 checksum-error-invalid-length-for-sha = digest length for { $algorithm } must be 224, 256, 384, or 512
+checksum-error-invalid-length-for-xxh3 = digest length for 'XXH3' must be 64 or 128
 checksum-error-length-required-for-sha = --algorithm={ $algorithm } requires specifying --length 224, 256, 384, or 512
 checksum-error-length-only-for-blake2b-sha2-sha3 = --length is only supported with --algorithm blake2b, sha2, or sha3
 checksum-error-binary-text-conflict = the --binary and --text options are meaningless when verifying checksums

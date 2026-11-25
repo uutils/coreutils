@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore kqueue libcrypto libselinux startswith unnested logind cfgs
+# spell-checker:ignore kqueue libcrypto libselinux startswith unnested logind cfgs xxhash
 
 [package]
 name = "coreutils"
@@ -115,8 +115,8 @@ rand_chacha = { version = "0.10.0" }
 rayon = "1.10"
 regex = "1.10.4"
 rlimit = "0.11.0"
-rstest = "0.28.0"
-rstest_reuse = "0.7.0"
+rstest = "0.29.0"
+rstest_reuse = "0.7.2"
 rustc-hash = "2.1.1"
 rustix = { version = "1.1.4", default-features = false }
 self_cell = "1.0.4"
@@ -152,6 +152,7 @@ shake = "0.1.0"
 blake2b_simd = "1.0.2"
 blake3 = "1.5.1"
 sm3 = { version = "0.5.0", default-features = false, features = ["alloc"] }
+xxhash-rust = { version = "0.8.21", features = ["xxh3"] }
 crc-fast = { version = "1.5.0", default-features = false }
 digest = "0.11.0"
 openssl = { version = "0.10" }
