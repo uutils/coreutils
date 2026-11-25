@@ -5168,17 +5168,17 @@ fn test_ls_sort_extension() {
         "file.debug",
         "anotherFile.ext",
         "anotherFile.debug",
+        "file-1.ext",
     ] {
         at.touch(filename);
     }
 
     let expected = vec![
-        ".",
-        "..",
-        ".hidden",
         "anotherFile",
         "file1",
         "file2",
+        ".",
+        "..",
         ".file.1",
         "anotherFile.1",
         "file.1",
@@ -5188,7 +5188,9 @@ fn test_ls_sort_extension() {
         "anotherFile.debug",
         "file.debug",
         "anotherFile.ext",
+        "file-1.ext",
         "file.ext",
+        ".hidden",
         "", // because of '\n' at the end of the output
     ];
 
