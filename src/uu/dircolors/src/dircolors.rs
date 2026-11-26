@@ -10,13 +10,13 @@ use std::env;
 use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write, stdout};
+use std::io::{BufRead, BufReader, ErrorKind, Write, stdout};
 use std::path::Path;
 
 use clap::{Arg, ArgAction, Command};
 use uucore::colors::{FILE_ATTRIBUTE_CODES, FILE_COLORS, FILE_TYPES, TERMS};
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::error::{UResult, USimpleError, UUsageError, strip_errno};
 use uucore::translate;
 
 use uucore::{format_usage, parser::parse_glob};
@@ -202,20 +202,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 parse(fin.lines().map_while(Result::ok), &out_format, "-")
             } else {
                 let path = Path::new(&file_arg);
-                if path.is_dir() {
-                    return Err(USimpleError::new(
-                        2,
-                        translate!("dircolors-error-expected-file-got-directory", "path" => path.quote()),
-                    ));
+                let read_error = |e: &std::io::Error| {
+                    USimpleError::new(
+                        1,
+                        translate!("dircolors-error-read", "path" => path.maybe_quote(), "error" => strip_errno(e)),
+                    )
+                };
+                // Windows detects a directory as error of open instead of read
+                let file = File::open(path).map_err(|e| {
+                    if cfg!(windows) && path.is_dir() {
+                        USimpleError::new(
+                            1,
+                            translate!("dircolors-error-read-directory", "path" => path.maybe_quote()),
+                        )
+                    } else {
+                        USimpleError::new(1, format!("{}: {e}", path.maybe_quote()))
+                    }
+                })?;
+                let mut lines = Vec::new();
+                for line in BufReader::new(file).lines() {
+                    match line {
+                        Ok(line) => lines.push(line),
+                        Err(e) if e.kind() == ErrorKind::InvalidData => break,
+                        Err(e) => return Err(read_error(&e)),
+                    }
                 }
-                let file = File::open(path)
-                    .map_err(|e| USimpleError::new(1, format!("{}: {e}", path.maybe_quote())))?;
-                let fin = BufReader::new(file);
-                parse(
-                    fin.lines().map_while(Result::ok),
-                    &out_format,
-                    &path.to_string_lossy(),
-                )
+                parse(lines.into_iter(), &out_format, &path.to_string_lossy())
             };
 
             let string = result.map_err(|s| USimpleError::new(1, s))?;
