@@ -1745,7 +1745,10 @@ fn test_seek_count_zero_does_not_rewind_nonzero_stdout_offset() {
     )
     .unwrap();
     let raw = stdout.as_raw();
-    assert_eq!(nix::unistd::lseek(raw, 4, nix::unistd::Whence::SeekSet), Ok(4));
+    assert_eq!(
+        nix::unistd::lseek(raw, 4, nix::unistd::Whence::SeekSet),
+        Ok(4)
+    );
 
     ts.ucmd()
         .args(&["bs=1", "count=2", "conv=notrunc", "status=none"])

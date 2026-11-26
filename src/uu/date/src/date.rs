@@ -1056,7 +1056,7 @@ fn is_unsupported_spec(s: &str) -> bool {
     while bytes.get(pos) == Some(&b':') {
         pos += 1;
     }
-    matches!(bytes.get(pos), Some(b'f') | Some(b'Q'))
+    matches!(bytes.get(pos), Some(b'f' | b'Q'))
 }
 
 /// A piece of a format string.
