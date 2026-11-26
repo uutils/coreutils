@@ -9,7 +9,7 @@ use std::{cell::Cell, collections::BTreeMap};
 
 use fancy_regex::{Regex, RegexBuilder};
 use num_bigint::BigInt;
-use num_traits::ToPrimitive;
+use num_traits::{Signed, ToPrimitive};
 
 use crate::{
     ExprError, ExprResult,
@@ -745,11 +745,12 @@ impl AstNode {
                         .ok()
                         .and_then(|n| n.to_usize())
                         .unwrap_or(0);
-                    let length = length?
-                        .eval_as_bigint()
-                        .ok()
-                        .and_then(|n| n.to_usize())
-                        .unwrap_or(0);
+                    // A length too large for `usize` still selects the rest
+                    // of the string.
+                    let length = length?.eval_as_bigint().ok().map_or(0, |n| {
+                        n.to_usize()
+                            .unwrap_or(if n.is_positive() { usize::MAX } else { 0 })
+                    });
 
                     if let (Some(pos), Some(_)) = (pos.checked_sub(1), length.checked_sub(1)) {
                         let result = locale_aware_substr(string, pos, length);
