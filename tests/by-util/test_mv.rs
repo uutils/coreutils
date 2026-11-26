@@ -1297,6 +1297,27 @@ fn test_mv_arg_update_short_no_overwrite() {
     assert_eq!(at.read(new), new_content);
 }
 
+#[rstest]
+#[case::none(&["--update=none", "-u"])]
+#[case::none_fail(&["--update=none-fail", "-u"])]
+#[case::none_with_backup(&["--update=none", "-u", "-b"])]
+#[case::short_twice(&["--update=none", "-u", "-u"])]
+fn test_mv_arg_update_short_after_long(#[case] args: &[&str]) {
+    // the last of -u and --update decides
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("src", "src\n");
+    at.make_file("dest")
+        .set_modified(std::time::UNIX_EPOCH)
+        .unwrap();
+
+    ucmd.args(args)
+        .args(&["src", "dest"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("dest"), "src\n");
+}
+
 #[test]
 fn test_mv_target_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
