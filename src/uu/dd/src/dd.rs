@@ -27,7 +27,6 @@ use uucore::translate;
 
 use std::cmp;
 use std::env;
-use std::ffi::OsString;
 #[cfg(unix)]
 use std::fs::Metadata;
 use std::fs::{File, OpenOptions};
@@ -1536,20 +1535,6 @@ fn below_count_limit(count: Option<Num>, rstat: &ReadStat) -> bool {
         Some(Num::Blocks(n)) => rstat.reads_complete + rstat.reads_partial < n,
         Some(Num::Bytes(n)) => rstat.bytes_total < n,
         None => true,
-    }
-}
-
-/// Canonicalized file name of `/dev/stdout`.
-///
-/// For example, if this process were invoked from the command line as
-/// `dd`, then this function returns the [`OsString`] form of
-/// `"/dev/stdout"`. However, if this process were invoked as `dd >
-/// outfile`, then this function returns the canonicalized path to
-/// `outfile`, something like `"/path/to/outfile"`.
-fn stdout_canonicalized() -> OsString {
-    match Path::new("/dev/stdout").canonicalize() {
-        Ok(p) => p.into_os_string(),
-        Err(_) => OsString::from("/dev/stdout"),
     }
 }
 
