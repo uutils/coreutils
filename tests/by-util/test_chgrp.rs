@@ -374,6 +374,28 @@ fn test_subdir_permission_denied() {
 
 #[test]
 #[cfg(not(target_vendor = "apple"))]
+fn test_chgrp_unreadable_dir_operand() {
+    use std::os::unix::fs::MetadataExt;
+    let groups = getgroups().unwrap();
+    let Some(other_group) = groups.iter().find(|g| **g != getegid()) else {
+        return;
+    };
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("locked");
+    at.set_mode("locked", 0);
+
+    ucmd.arg(other_group.as_raw().to_string())
+        .arg("locked")
+        .succeeds()
+        .no_output();
+
+    let meta = at.plus("locked").metadata().unwrap();
+    at.set_mode("locked", 0o700);
+    assert_eq!(meta.gid(), other_group.as_raw());
+}
+
+#[test]
+#[cfg(not(target_vendor = "apple"))]
 fn test_traverse_symlinks() {
     use std::os::unix::prelude::MetadataExt;
     let groups = getgroups().unwrap();

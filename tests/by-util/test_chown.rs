@@ -1115,7 +1115,7 @@ fn test_chown_symlink_cycles() {
 
     let result = scene.ucmd().arg("-vRL").arg(&user_name).arg("a").run();
 
-    if cfg!(target_vendor = "apple") || cfg!(target_os = "openbsd") || cfg!(target_os = "android") {
+    if cfg!(target_vendor = "apple") || cfg!(target_os = "openbsd") {
         result
             .stdout_contains(format!("ownership of 'a' retained as {user_name}"))
             .stdout_contains(format!("ownership of 'a/b' retained as {user_name}"))
@@ -1166,9 +1166,9 @@ fn test_chown_symlink_two_links_same_dir() {
 
     let result = scene.ucmd().arg("-vRL").arg(&user_name).arg("base").run();
 
-    // Only linux uses the safe-traversal cycle detection that this test exercises;
+    // Only linux and android use the safe-traversal cycle detection that this test exercises;
     // other platforms fall back to walkdir with its own loop handling.
-    if cfg!(target_os = "linux") {
+    if cfg!(any(target_os = "linux", target_os = "android")) {
         result
             .success()
             .stdout_contains(format!(
