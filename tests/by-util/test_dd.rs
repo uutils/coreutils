@@ -1701,10 +1701,7 @@ fn test_failed_truncate_is_reported_and_copy_goes_on() {
         .stderr_contains("1+0 records in\n1+0 records out\n");
 }
 
-/// A write-only stdout redirection target is still seekable, so `seek=` must
-/// not overwrite the file prefix with zeros. Reopening the path to probe
-/// seekability fails without read permission; the inherited descriptor must
-/// be used instead. See issue #16550.
+/// A write-only stdout redirection target is still seekable, so `seek=` must not zero-fill the prefix (#16550).
 #[test]
 #[cfg(all(unix, not(target_os = "redox")))]
 fn test_seek_count_zero_on_write_only_stdout() {
@@ -1714,8 +1711,7 @@ fn test_seek_count_zero_on_write_only_stdout() {
     let at = &ts.fixtures;
     at.write("out", "KEEPtail");
 
-    // Open read/write before dropping read permission so the descriptor stays
-    // valid and seekable while the path can no longer be reopened for reading.
+    // Open read/write before dropping read permission so the descriptor stays valid and seekable.
     let stdout = OwnedFileDescriptorOrHandle::open_file(
         OpenOptions::new().read(true).write(true),
         at.plus("out").as_path(),
@@ -1731,6 +1727,35 @@ fn test_seek_count_zero_on_write_only_stdout() {
 
     std::fs::set_permissions(at.plus("out"), std::fs::Permissions::from_mode(0o600)).unwrap();
     assert_eq!(at.read("out"), "KEEPtail");
+}
+
+/// A stdout already at a non-zero offset must not be rewound by the seekability probe (#16550).
+#[test]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_seek_count_zero_does_not_rewind_nonzero_stdout_offset() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("out", "KEEP");
+
+    // Start the descriptor at offset 4 (end of the prefix) so a rewind() in the
+    // probe would be observable: dd must append after the prefix, not overwrite it.
+    let stdout = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().read(true).write(true),
+        at.plus("out").as_path(),
+    )
+    .unwrap();
+    let raw = stdout.as_raw();
+    assert_eq!(nix::unistd::lseek(raw, 4, nix::unistd::Whence::SeekSet), Ok(4));
+
+    ts.ucmd()
+        .args(&["bs=1", "count=2", "conv=notrunc", "status=none"])
+        .pipe_in(b"XY")
+        .set_stdout(Stdio::from(stdout))
+        .succeeds()
+        .no_output();
+
+    // The probe must not have moved stdout back to 0; the prefix is intact.
+    assert_eq!(at.read("out"), "KEEPXY");
 }
 
 /// Test that a seek on an output FIFO results in a read.

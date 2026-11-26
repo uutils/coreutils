@@ -1554,27 +1554,6 @@ fn stdout_canonicalized() -> OsString {
 }
 
 /// Decide whether stdout is being redirected to a seekable file.
-///
-/// For example, if this process were invoked from the command line as
-///
-/// ```sh
-/// dd if=/dev/zero bs=1 count=10 seek=5 > /dev/sda1
-/// ```
-///
-/// where `/dev/sda1` is a seekable block device then this function
-/// would return true. If invoked as
-///
-/// ```sh
-/// dd if=/dev/zero bs=1 count=10 seek=5
-/// ```
-///
-/// then this function would return false.
-///
-/// The check is done on the inherited standard output descriptor itself
-/// rather than by reopening its pathname: reopening requires read
-/// permission on the file, which a write-only redirection target (e.g. a
-/// file with mode 200) does not grant even though the descriptor is
-/// perfectly valid and seekable.
 fn is_stdout_redirected_to_seekable_file() -> bool {
     let Ok(fx) = OwnedFileDescriptorOrHandle::from(io::stdout()) else {
         return false;
