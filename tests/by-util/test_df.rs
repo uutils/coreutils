@@ -14,7 +14,7 @@
 
 use std::collections::HashSet;
 
-#[cfg(not(any(target_os = "freebsd", windows)))]
+#[cfg(unix)]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 #[cfg(target_os = "linux")]
@@ -1232,4 +1232,17 @@ df: invalid suffix in --block-size argument '1fb'
             .fails_with_code(1)
             .stderr_is("df: invalid suffix in --block-size argument '1fb'\n");
     }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_file_column_replaces_control_chars() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let filename = "a\nb 100%\n\x1b[2Jc";
+    at.touch(filename);
+
+    ucmd.arg("--output=file")
+        .arg(filename)
+        .succeeds()
+        .stdout_is("File\na?b 100%??[2Jc\n");
 }
