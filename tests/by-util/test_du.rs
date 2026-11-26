@@ -1875,6 +1875,19 @@ fn test_du_exclude_from_nonexistent_file() {
         .stderr_contains("du: No such file or directory");
 }
 
+#[test]
+#[cfg(not(windows))]
+fn test_du_exclude_from_stdin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("d/skip");
+    at.write("d/a", "x");
+    at.write("d/skip/b", "y");
+    ucmd.args(&["--inodes", "-X", "-", "d"])
+        .pipe_in("skip\n")
+        .succeeds()
+        .stdout_only("2\td\n");
+}
+
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
 #[test]
 fn test_du_exclude_from_read_error() {
