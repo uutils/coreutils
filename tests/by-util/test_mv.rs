@@ -2079,6 +2079,63 @@ mod inter_partition_copying {
         assert!(at.dir_exists("private/sub"), "the source must be kept");
     }
 
+    // A symlink copied before the cross-device directory copy fails must
+    // stay in the source tree, so that retrying the move doesn't lose it.
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
+    #[test]
+    pub(crate) fn test_mv_inter_partition_failed_copy_keeps_source_symlinks() {
+        use std::path::Path;
+
+        if rustix::process::geteuid().is_root() {
+            println!("test skipped: root can read the unreadable file");
+            return;
+        }
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        // The source is on tmpfs, which lists the newest entries first, so the
+        // links are copied before the copy of the unreadable file fails.
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        let tree = other_fs_tempdir.path().join("tree");
+        fs::create_dir(&tree).unwrap();
+        write(tree.join("blocked"), "x").unwrap();
+        set_permissions(tree.join("blocked"), PermissionsExt::from_mode(0o000)).unwrap();
+        write(tree.join("draft"), "current").unwrap();
+        let links = ["link1", "link2", "link3"];
+        for link in links {
+            symlink("draft", tree.join(link)).unwrap();
+        }
+
+        scene.ucmd().arg(&tree).arg(at.plus("first")).fails();
+
+        for link in links {
+            assert_eq!(
+                fs::read_link(tree.join(link)).ok().as_deref(),
+                Some(Path::new("draft")),
+                "{link} must be kept in the source after the failed move"
+            );
+        }
+
+        set_permissions(tree.join("blocked"), PermissionsExt::from_mode(0o600)).unwrap();
+        scene
+            .ucmd()
+            .arg(&tree)
+            .arg(at.plus("retry"))
+            .succeeds()
+            .no_stderr();
+
+        for link in links {
+            assert_eq!(
+                fs::read_link(at.plus("retry").join(link)).ok().as_deref(),
+                Some(Path::new("draft")),
+                "{link} must be moved by the retry"
+            );
+        }
+        assert!(!tree.exists(), "the source must be gone after the retry");
+    }
+
     // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
     #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]

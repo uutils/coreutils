@@ -1052,6 +1052,13 @@ fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
 /// symlinks return an error.
 #[cfg(unix)]
 fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
+    copy_symlink(from, to)?;
+    fs::remove_file(from)
+}
+
+/// Recreate the symlink `from` at `to`, leaving `from` in place.
+#[cfg(unix)]
+fn copy_symlink(from: &Path, to: &Path) -> io::Result<()> {
     let path_symlink_points_to = fs::read_link(from)?;
 
     // On AlreadyExists, fall through to atomic temp-and-rename so the
@@ -1082,7 +1089,7 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
         }
     }
     let _ = preserve_ownership(from, to);
-    fs::remove_file(from)
+    Ok(())
 }
 #[cfg(windows)]
 fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
@@ -1458,9 +1465,10 @@ fn copy_file_with_hardlinks_helper(
     }
 
     if from.is_symlink() {
-        // Copy a symlink file (no-follow).
-        // rename_symlink_fallback already preserves ownership and removes the source.
-        rename_symlink_fallback(from, to)?;
+        // Copy a symlink file (no-follow), preserving ownership. The source
+        // link is left in place: it goes with the rest of the source tree once
+        // the whole copy has succeeded, so a failed move doesn't lose it.
+        copy_symlink(from, to)?;
     } else if is_fifo(from.symlink_metadata()?.file_type()) {
         // rustix::fs::mkfifoat is linux only
         nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666))?;
