@@ -6,7 +6,7 @@
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
 // spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot EOVERFLOW chowned chmoded
-// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat
+// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat FDCWD
 
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
@@ -324,6 +324,16 @@ impl DirFd {
             }
         })?;
         Ok(Self { fd })
+    }
+
+    /// Hold the file `name` relative to this directory, see [`PinnedFile`]
+    #[cfg(target_os = "linux")]
+    pub fn pin_at(
+        &self,
+        name: &OsStr,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<PinnedFile> {
+        PinnedFile::open_at(&self.fd, name, symlink_behavior)
     }
 
     /// Get raw stat data for a file relative to this directory
@@ -798,6 +808,49 @@ pub fn open_path_at<P: ?Sized + nix::NixPath>(
         flags |= OFlag::O_NOFOLLOW;
     }
     openat(dir, name, flags, Mode::empty()).map_err(|e| io::Error::from_raw_os_error(e as i32))
+}
+
+/// A file of any type held without opening it (`O_PATH`), so that what is learned
+/// about it and done to it concern the same file, whatever its name points to.
+#[cfg(target_os = "linux")]
+pub struct PinnedFile {
+    fd: OwnedFd,
+}
+
+#[cfg(target_os = "linux")]
+impl PinnedFile {
+    /// Hold the file at `path`
+    pub fn open(path: &Path, symlink_behavior: SymlinkBehavior) -> io::Result<Self> {
+        Self::open_at(nix::fcntl::AT_FDCWD, path, symlink_behavior)
+    }
+
+    fn open_at<P: ?Sized + nix::NixPath>(
+        dir: impl AsFd,
+        path: &P,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<Self> {
+        open_path_at(dir, path, symlink_behavior).map(|fd| Self { fd })
+    }
+
+    /// Get metadata for the held file
+    pub fn metadata(&self) -> io::Result<Metadata> {
+        fstat_fd(&self.fd).map(Metadata::from_stat)
+    }
+
+    /// Change ownership of the held file
+    /// Use uid/gid of None to keep the current value
+    pub fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> io::Result<()> {
+        // fchown refuses an O_PATH descriptor; an empty path names the
+        // descriptor itself.
+        fchownat(
+            &self.fd,
+            c"",
+            uid.map(Uid::from_raw),
+            gid.map(Gid::from_raw),
+            nix::fcntl::AtFlags::AT_EMPTY_PATH,
+        )
+        .map_err(|e| io::Error::from_raw_os_error(e as i32))
+    }
 }
 
 /// A path naming the object behind `fd`, for calls that only take a path.
