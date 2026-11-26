@@ -12,6 +12,7 @@ use uutests::{at_and_ucmd, util_name};
 
 #[cfg(windows)]
 use regex::Regex;
+use rstest::rstest;
 use std::path::{MAIN_SEPARATOR, Path};
 
 static GIBBERISH: &str = "supercalifragilisticexpialidocious";
@@ -165,6 +166,22 @@ fn test_realpath_logical_mode() {
         .arg("dir1/foo/..")
         .succeeds()
         .stdout_contains("dir1\n");
+}
+
+#[uutests::wasi_ignore(AbsoluteSymlinkTargetsUnfollowable)]
+#[rstest]
+#[case::strip_then_logical(&["-s", "-L"], "foo\n")]
+#[case::no_symlinks_then_logical(&["--no-symlinks", "--logical"], "foo\n")]
+#[case::logical_then_strip(&["-L", "-s"], "bar\n")]
+fn test_realpath_last_of_strip_and_logical_wins(#[case] args: &[&str], #[case] expected: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("foo");
+    at.symlink_file("foo", "bar");
+
+    ucmd.args(args)
+        .arg("bar")
+        .succeeds()
+        .stdout_contains(expected);
 }
 
 #[uutests::wasi_ignore(HostPathsNotVisible)]
