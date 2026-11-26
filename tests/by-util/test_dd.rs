@@ -1758,6 +1758,40 @@ fn test_seek_count_zero_does_not_rewind_nonzero_stdout_offset() {
     assert_eq!(at.read("out"), "KEEPXY");
 }
 
+/// A non-zero stdout offset combined with `seek=` must be honoured relative to
+/// the current position, not from zero: the non-destructive probe must leave the
+/// offset where it was, so `seek=` advances from there (#16550).
+#[test]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_seek_count_zero_does_not_rewind_nonzero_stdout_offset_with_seek() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("out", "KEEP");
+
+    // Start the descriptor at offset 4 (end of the prefix).
+    let stdout = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().read(true).write(true),
+        at.plus("out").as_path(),
+    )
+    .unwrap();
+    let raw = stdout.as_raw();
+    assert_eq!(
+        nix::unistd::lseek(raw, 4, nix::unistd::Whence::SeekSet),
+        Ok(4)
+    );
+
+    // `seek=2` must advance from offset 4 to offset 6, leaving a two-byte gap.
+    // A rewinding probe would instead write at offset 2 and clobber the prefix.
+    ts.ucmd()
+        .args(&["bs=1", "seek=2", "count=1", "conv=notrunc", "status=none"])
+        .pipe_in(b"Z")
+        .set_stdout(Stdio::from(stdout))
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read_bytes("out"), b"KEEP\x00\x00Z");
+}
+
 /// Test that a seek on an output FIFO results in a read.
 #[test]
 #[cfg(unix)]
