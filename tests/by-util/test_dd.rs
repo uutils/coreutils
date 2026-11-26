@@ -1735,8 +1735,7 @@ fn test_seek_count_zero_does_not_rewind_nonzero_stdout_offset() {
     let at = &ts.fixtures;
     at.write("out", "KEEP");
 
-    // Start the descriptor at offset 4 (end of the prefix) so a rewind() in the
-    // probe would be observable: dd must append after the prefix, not overwrite it.
+    // Start at offset 4 so a rewind() in the probe would be observable.
     let stdout = OwnedFileDescriptorOrHandle::open_file(
         OpenOptions::new().read(true).write(true),
         at.plus("out").as_path(),
