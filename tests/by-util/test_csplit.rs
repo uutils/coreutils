@@ -2021,9 +2021,11 @@ fn test_c_locale_matches_bytes() {
     assert_eq!(at.read_bytes("xx01"), b"a\n");
 
     // A byte that is not valid UTF-8 is still a character that `[^a]` matches.
+    // (The `^` anchor keeps Windows from expanding `/[^a]/` as a glob that
+    // matches a directory such as `C:\a`.)
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.env("LC_ALL", "C")
-        .args(&["-", "/[^a]/"])
+        .args(&["-", "/^[^a]/"])
         .pipe_in(b"\xff\na\n".as_slice())
         .succeeds()
         .stdout_only("0\n4\n");
