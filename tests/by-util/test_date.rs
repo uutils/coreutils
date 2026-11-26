@@ -3736,6 +3736,31 @@ fn test_date_strftime_o_modifier_fallback() {
     }
 }
 
+/// `%n` and `%t` are single control characters, padded like text where a
+/// numeric field would be zero-filled: `%5On` is four spaces and the newline.
+#[test]
+fn test_date_strftime_o_newline_and_tab_padding() {
+    for (format, expected) in [
+        ("%n", "\n\n"),
+        ("%t", "\t\n"),
+        ("%5On", "    \n\n"),
+        ("%_5On", "    \n\n"),
+        ("%-5On", "\n\n"),
+        ("%05On", "0000\n\n"),
+        ("%5Ot", "    \t\n"),
+        ("%_5Ot", "    \t\n"),
+        ("%-5Ot", "\t\n"),
+        ("%05Ot", "0000\t\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .env("LC_ALL", "C")
+            .args(&["-d", "2024-06-01 12:34:56", &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
 #[test]
 fn test_date_strftime_o_invalid_and_dangling_literal() {
     // An invalid pair or a dangling modifier is not a conversion: GNU keeps

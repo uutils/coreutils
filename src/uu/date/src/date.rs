@@ -1637,6 +1637,27 @@ fn resolve_o_modifiers<'a>(
                     i = spec_end;
                     continue;
                 }
+                // `%n` and `%t` are single control characters that GNU pads
+                // like text, so they are rendered here instead of going through
+                // the ordinary pass, which would zero-pad them.
+                if matches!(spec, "n" | "t")
+                    && (field.width.is_some() || !field.flags.is_empty())
+                {
+                    let raw = render_base_field(date, config, spec, skip_localization)?;
+                    let padded = format_modifiers::apply_composite_modifiers(
+                        &raw,
+                        &format_modifiers::ParsedSpec {
+                            flags: field.flags,
+                            width: field.width,
+                            spec,
+                            len: spec_end - i,
+                        },
+                    )
+                    .map_err(|e| e.to_string())?;
+                    o_resolved.push_str(&padded.replace('%', "%%"));
+                    i = spec_end;
+                    continue;
+                }
                 // GNU is transparent on an accepted pair: keep the flags and
                 // width so the ordinary modifier pass pads like the base spec.
                 o_resolved.push('%');

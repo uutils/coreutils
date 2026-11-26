@@ -428,7 +428,7 @@ fn is_text_specifier(specifier: &str) -> bool {
 fn is_space_padded_specifier(specifier: &str) -> bool {
     matches!(
         specifier.chars().last(),
-        Some('A' | 'a' | 'B' | 'b' | 'h' | 'Z' | 'p' | 'P' | 'e' | 'k' | 'l' | 'n' | 't')
+        Some('A' | 'a' | 'B' | 'b' | 'h' | 'Z' | 'p' | 'P' | 'e' | 'k' | 'l')
     )
 }
 
