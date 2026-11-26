@@ -4186,34 +4186,21 @@ fn test_ls_version_sort() {
         "b20",
         "b20a",
         "b20b",
-        "", // because of '\n' at the end of the output
     ];
 
     let result = scene.ucmd().arg("-1v").succeeds();
-    assert_eq!(
-        result.stdout_str().split('\n').collect::<Vec<_>>(),
-        expected
-    );
+    assert_eq!(result.stdout_str().lines().collect::<Vec<_>>(), expected);
 
     let result = scene.ucmd().arg("-1").arg("--sort=version").succeeds();
-    assert_eq!(
-        result.stdout_str().split('\n').collect::<Vec<_>>(),
-        expected
-    );
+    assert_eq!(result.stdout_str().lines().collect::<Vec<_>>(), expected);
 
     let result = scene.ucmd().arg("-1").arg("--sort=v").succeeds();
-    assert_eq!(
-        result.stdout_str().split('\n').collect::<Vec<_>>(),
-        expected
-    );
+    assert_eq!(result.stdout_str().lines().collect::<Vec<_>>(), expected);
 
     let result = scene.ucmd().arg("-a1v").succeeds();
     expected.insert(0, "..");
     expected.insert(0, ".");
-    assert_eq!(
-        result.stdout_str().split('\n').collect::<Vec<_>>(),
-        expected,
-    );
+    assert_eq!(result.stdout_str().lines().collect::<Vec<_>>(), expected);
 }
 
 #[test]
@@ -5211,20 +5198,13 @@ fn test_ls_sort_extension() {
         "file-1.ext",
         "file.ext",
         ".hidden",
-        "", // because of '\n' at the end of the output
     ];
 
     let result = scene.ucmd().arg("-1aX").succeeds();
-    assert_eq!(
-        result.stdout_str().split('\n').collect::<Vec<_>>(),
-        expected,
-    );
+    assert_eq!(result.stdout_str().lines().collect::<Vec<_>>(), expected);
 
     let result = scene.ucmd().arg("-1a").arg("--sort=extension").succeeds();
-    assert_eq!(
-        result.stdout_str().split('\n').collect::<Vec<_>>(),
-        expected,
-    );
+    assert_eq!(result.stdout_str().lines().collect::<Vec<_>>(), expected);
 }
 
 #[uutests::wasi_ignore(HostPathsNotVisible)]
