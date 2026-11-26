@@ -910,6 +910,26 @@ fn test_cp_arg_update_short_overwrite() {
     assert_eq!(at.read(old), "new content\n");
 }
 
+#[rstest]
+#[case::all(&["--update=all", "-u"])]
+#[case::none_with_backup(&["--update=none", "-u", "-b"])]
+#[case::all_between_short(&["-u", "--update=all", "-u"])]
+fn test_cp_arg_update_short_after_long(#[case] args: &[&str]) {
+    // the last of -u and --update decides
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.make_file("src")
+        .set_modified(std::time::UNIX_EPOCH)
+        .unwrap();
+    at.write("dest", "dest\n");
+
+    ucmd.args(args)
+        .args(&["src", "dest"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("dest"), "dest\n");
+}
+
 #[test]
 fn test_cp_arg_update_none_then_all() {
     // take last if multiple update args are supplied,
