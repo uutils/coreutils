@@ -10,7 +10,7 @@ use uu_checksum_common::{ChecksumCommand, checksum_main, default_checksum_app, o
 
 use uucore::checksum::compute::{DigestFormat, OutputFormat};
 use uucore::checksum::{
-    AlgoKind, BlakeLength, ChecksumError, HashLength, ReadingMode, parse_blake_length,
+    AlgoKind, BlakeLength, ChecksumError, HashLength, ReadingMode, Xxh3Length, parse_blake_length,
     sanitize_sha2_sha3_length_str,
 };
 use uucore::error::UResult;
@@ -65,6 +65,13 @@ fn maybe_sanitize_length(
         (Some(AlgoKind::Shake128 | AlgoKind::Shake256), Some(len)) => match len.parse::<usize>() {
             Ok(0) => Ok(None),
             Ok(l) => Ok(Some(HashLength::from_bits(l))),
+            Err(_) => Err(ChecksumError::InvalidLength(len.into()).into()),
+        },
+
+        // XXH3 only exists in 64 and 128 bit variants; 0 means the default.
+        (Some(AlgoKind::Xxh3), Some(len)) => match len.parse::<usize>() {
+            Ok(0) => Ok(None),
+            Ok(bits) => Ok(Some(Xxh3Length::try_from(bits)?.into())),
             Err(_) => Err(ChecksumError::InvalidLength(len.into()).into()),
         },
 

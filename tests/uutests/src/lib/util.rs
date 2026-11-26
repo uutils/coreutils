@@ -24,7 +24,7 @@ use nix::sys;
 #[cfg(not(windows))]
 use nix::sys::stat::{self, SFlag};
 use pretty_assertions::assert_eq;
-#[cfg(all(unix, not(target_os = "fuchsia")))]
+#[cfg(unix)]
 use rlimit::{Resource, setrlimit};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, VecDeque};
@@ -1594,7 +1594,7 @@ pub struct UCommand {
     stdout: Option<Stdio>,
     stderr: Option<Stdio>,
     bytes_into_stdin: Option<Vec<u8>>,
-    #[cfg(all(unix, not(target_os = "fuchsia")))]
+    #[cfg(unix)]
     limits: Vec<(Resource, u64, u64)>,
     #[cfg(unix)]
     ignore_sigxfsz: bool,
@@ -1759,7 +1759,7 @@ impl UCommand {
         self
     }
 
-    #[cfg(all(unix, not(target_os = "fuchsia")))]
+    #[cfg(unix)]
     pub fn limit(&mut self, resource: Resource, soft_limit: u64, hard_limit: u64) -> &mut Self {
         self.limits.push((resource, soft_limit, hard_limit));
         self
@@ -2114,7 +2114,7 @@ impl UCommand {
             }
         }
 
-        #[cfg(all(unix, not(target_os = "fuchsia")))]
+        #[cfg(unix)]
         if !self.limits.is_empty() {
             // just to be safe: move a copy of the limits list into the closure.
             // this way the closure is fully self-contained.
@@ -3857,7 +3857,7 @@ mod tests {
             .stdout_is("unlimited\nunlimited\n");
     }
 
-    #[cfg(all(unix, not(target_os = "fuchsia")))]
+    #[cfg(unix)]
     #[test]
     fn test_application_of_process_resource_limits_limited_file_size() {
         let unit_size_bytes = if cfg!(target_vendor = "apple") {
