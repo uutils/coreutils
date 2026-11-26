@@ -4571,4 +4571,3 @@ fn test_invalid_date_escaping_depends_on_locale() {
             .stderr_is(expected);
     }
 }
-
