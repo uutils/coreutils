@@ -942,6 +942,11 @@ impl<'a> PathData<'a> {
     }
 
     fn file_type(&self) -> Option<&FileType> {
+        // A dangling link keeps its read_dir type, but the failed lookup
+        // of its target must still be reported.
+        if self.must_dereference {
+            self.metadata();
+        }
         self.ft
             .get_or_init(|| self.metadata().map(Metadata::file_type))
             .as_ref()

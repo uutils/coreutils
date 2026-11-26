@@ -5274,6 +5274,15 @@ fn test_ls_dangling_symlinks() {
         .succeeds()
         .stdout_contains("dangle");
 
+    // Non-unix targets look up every entry, so the dangling link is reported there.
+    #[cfg(unix)]
+    scene
+        .ucmd()
+        .arg("-L")
+        .arg("temp_dir")
+        .succeeds()
+        .stdout_only("dangle\n");
+
     scene
         .ucmd()
         .arg("-Li")
@@ -5328,6 +5337,26 @@ fn test_ls_dangling_symlinks() {
 
         assert_eq!(real_file_stdout_len, dangle_stdout_len);
     }
+}
+
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
+#[rstest::rstest]
+#[case::recursive(&["-LR"], "temp_dir:\ndangle\nfile\n")]
+#[case::group_directories_first(&["-L", "--group-directories-first"], "dangle\nfile\n")]
+#[case::classify(&["-LF"], "dangle@\nfile\n")]
+#[case::file_type(&["-L", "--file-type"], "dangle@\nfile\n")]
+#[case::slash(&["-Lp"], "dangle\nfile\n")]
+fn test_ls_dereference_dangling_entry_type(#[case] args: &[&str], #[case] stdout: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("temp_dir");
+    at.symlink_file("does_not_exist", "temp_dir/dangle");
+    at.touch("temp_dir/file");
+
+    ucmd.args(args)
+        .arg("temp_dir")
+        .fails_with_code(1)
+        .stdout_is(stdout)
+        .stderr_contains("cannot access");
 }
 
 #[uutests::wasi_ignore(SymlinkHardlinkCaps)]
