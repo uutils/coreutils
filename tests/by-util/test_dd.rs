@@ -1792,6 +1792,43 @@ fn test_seek_count_zero_does_not_rewind_nonzero_stdout_offset_with_seek() {
     assert_eq!(at.read_bytes("out"), b"KEEP\x00\x00Z");
 }
 
+/// A write-only seekable stdout (as produced by a `> file` redirection) combined
+/// with `seek=` and a non-zero `count=` must create a hole and write the data at
+/// the sought offset. The non-destructive `stream_position` probe must leave the
+/// offset usable for the subsequent seek+write; a rewinding probe would clobber
+/// the prefix. The existing write-only test uses `count=0`, so it never exercises
+/// the actual data-write path on a write-only descriptor (#16550).
+#[test]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_seek_write_only_stdout_writes_data_at_offset() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("out", "0123456789");
+
+    // Open read/write first, then drop read permission so the descriptor is
+    // write-only yet still seekable, matching a `> file` redirection target.
+    let stdout = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().read(true).write(true),
+        at.plus("out").as_path(),
+    )
+    .unwrap();
+    std::fs::set_permissions(at.plus("out"), std::fs::Permissions::from_mode(0o200)).unwrap();
+
+    // `seek=4` must write "XY" at offset 4..6, leaving the "0123" prefix and the
+    // "6789" tail intact (conv=notrunc). A rewinding probe would write at 0.
+    ts.ucmd()
+        .args(&["bs=1", "seek=4", "count=2", "conv=notrunc", "status=none"])
+        .pipe_in(b"XY")
+        .set_stdout(Stdio::from(stdout))
+        .succeeds()
+        .no_output();
+
+    std::fs::set_permissions(at.plus("out"), std::fs::Permissions::from_mode(0o600)).unwrap();
+    assert_eq!(at.read("out"), "0123XY6789");
+}
+
 /// Test that a seek on an output FIFO results in a read.
 #[test]
 #[cfg(unix)]
