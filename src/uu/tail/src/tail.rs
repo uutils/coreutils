@@ -12,6 +12,7 @@
 // spell-checker:ignore (names)
 // spell-checker:ignore (shell/tools)
 // spell-checker:ignore (misc)
+// spell-checker:ignore nonblocking
 
 pub mod args;
 pub mod chunks;
@@ -191,14 +192,28 @@ fn tail_file(
                     // Dropping this reader loses nothing: unbounded_tail reads to EOF or not at all.
                     unbounded_tail(&mut BufReader::new((&file).take(remaining)), settings)?;
                 }
+                #[cfg(unix)]
+                if settings.follow.is_some() && !input.is_stdin() {
+                    use std::os::unix::fs::FileTypeExt;
+
+                    if st.file_type().is_char_device()
+                        && !matches!(
+                            (FileInformation::from_file(&file), FileInformation::from_file(&stdin())),
+                            (Ok(file), Ok(stdin)) if file == stdin
+                        )
+                    {
+                        use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
+
+                        // Another reader can consume data after our readiness
+                        // check. Keep stdin's flags, including named aliases:
+                        // opening /dev/fd/0 can duplicate stdin on BSD.
+                        let flags = fcntl_getfl(&file).map_err(io::Error::from)?;
+                        fcntl_setfl(&file, flags | OFlags::NONBLOCK).map_err(io::Error::from)?;
+                    }
+                }
                 let reader = BufReader::new(file);
                 if input.is_tailable() {
-                    observer.add_path(
-                        path,
-                        input.display_name.as_str(),
-                        Some(Box::new(reader)),
-                        true,
-                    )?;
+                    observer.add_path(path, input.display_name.as_str(), Some(reader), true)?;
                 } else {
                     observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 }
