@@ -523,7 +523,7 @@ fn test_cp_recurse_source_name_ends_with_backslash_dot() {
     let (at, mut ucmd) = at_and_ucmd!();
     let source = "draft\\.";
     at.mkdir(source);
-    at.write(&format!("{source}/notes"), "incoming\n");
+    at.write(format!("{source}/notes"), "incoming\n");
     at.mkdir("archive");
     at.write("archive/notes", "original\n");
 
@@ -534,7 +534,7 @@ fn test_cp_recurse_source_name_ends_with_backslash_dot() {
         .no_output();
 
     assert_eq!(at.read("archive/notes"), "original\n");
-    assert_eq!(at.read(&format!("archive/{source}/notes")), "incoming\n");
+    assert_eq!(at.read(format!("archive/{source}/notes")), "incoming\n");
 }
 
 #[rstest]
