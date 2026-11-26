@@ -24,6 +24,7 @@ uucore = { workspace = true, features = [
   "fsxattr",
   "mode",
   "quoting-style",
+  "safe-traversal",
 ] }
 
 [features]

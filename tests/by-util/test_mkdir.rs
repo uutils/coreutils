@@ -1353,3 +1353,36 @@ fn test_mkdir_concurrent_non_recursive() {
         );
     }
 }
+
+#[test]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_mkdir_p_follows_existing_symlink_after_created_component() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("real");
+    at.symlink_dir("real", "b");
+    ucmd.args(&["-p", "a/../b/c"]).succeeds();
+    assert!(at.dir_exists("real/c"));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_mkdir_p_existing_component_not_reported_created() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("b");
+    let out = ucmd.args(&["-p", "-v", "a/../b/c"]).succeeds();
+    let stdout = out.stdout_str();
+    assert!(stdout.contains("created directory 'a'"), "{stdout}");
+    assert!(stdout.contains("created directory 'a/../b/c'"), "{stdout}");
+    assert!(!stdout.contains("created directory 'a/../b'\n"), "{stdout}");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_mkdir_p_parents_without_owner_read() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.umask(0o477).args(&["-p", "p/q/r"]).succeeds();
+    // Restore permissions so the temp directory can be cleaned up.
+    at.set_mode("p", 0o700);
+    at.set_mode("p/q", 0o700);
+    assert!(at.dir_exists("p/q/r"));
+}

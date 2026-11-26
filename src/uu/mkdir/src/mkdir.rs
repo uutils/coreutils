@@ -8,8 +8,9 @@
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use std::ffi::OsStr;
 use std::ffi::OsString;
-use std::io::{Write, stdout};
+use std::io::{self, Write, stdout};
 use std::path::{Path, PathBuf};
 #[cfg(not(windows))]
 use uucore::error::ExitCode;
@@ -17,6 +18,8 @@ use uucore::error::{FromIo, UResult, USimpleError};
 #[cfg(not(windows))]
 use uucore::mode;
 use uucore::quoting_style::locale_aware_c_single_escape;
+#[cfg(all(unix, not(target_os = "redox")))]
+use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
 use uucore::{format_usage, show_if_err};
 use uucore::{translate, translate_text};
@@ -211,8 +214,63 @@ pub fn mkdir(path: &Path, config: &Config) -> UResult<()> {
     create_dir(path, false, config)
 }
 
+#[cfg(all(unix, not(target_os = "redox")))]
+fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
+    if path.as_os_str().is_empty() {
+        return Ok(());
+    }
+    if !config.recursive {
+        return create_single_dir(path, is_parent, config);
+    }
+
+    // Everything to handle, root to leaf: the parents, then the target itself.
+    let mut todo: Vec<(&Path, bool)> = path
+        .ancestors()
+        .skip(1)
+        .take_while(|p| !p.as_os_str().is_empty())
+        .map(|p| (p, true))
+        .collect();
+    todo.reverse();
+    todo.push((path, is_parent));
+
+    let last = todo.len() - 1;
+    let mut anchor: Option<DirFd> = None;
+    for (i, (p, parent_flag)) in todo.into_iter().enumerate() {
+        let is_last = i == last;
+        let next = match anchor.as_ref() {
+            // Chain not started: components that already exist are resolved
+            // by path and followed, as before.
+            None => {
+                if is_last {
+                    // Nothing comes after the target, so no anchor is needed;
+                    // the existing path-based logic handles "already exists".
+                    return create_single_dir(p, parent_flag, config);
+                }
+                if p.exists() {
+                    continue;
+                }
+                create_single_dir(p, parent_flag, config)?;
+                DirFd::open_anchor_with(p, SymlinkBehavior::NoFollow).map_err_context(|| {
+                    translate_text!("mkdir-error-cannot-create-directory",
+                        "path" => locale_aware_c_single_escape(p))
+                })?
+            }
+            // Chain started: every later component goes through the parent's fd.
+            Some(dir) => {
+                let Some(comp) = p.components().next_back() else {
+                    continue;
+                };
+                create_component(dir, comp.as_os_str(), p, parent_flag, config)?
+            }
+        };
+        anchor = Some(next);
+    }
+    Ok(())
+}
+
 // Create a directory at the given path.
 // Uses iterative approach instead of recursion to avoid stack overflow with deep nesting.
+#[cfg(not(all(unix, not(target_os = "redox"))))]
 fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
     if path.as_os_str().is_empty() {
         return Ok(());
@@ -251,7 +309,7 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
 /// This avoids a race condition where the directory briefly exists with
 /// umask-based permissions.
 #[cfg(unix)]
-fn create_dir_with_mode(path: &Path, mode: u32, shaped_umask: u32) -> std::io::Result<()> {
+fn create_dir_with_mode(path: &Path, mode: u32, shaped_umask: u32) -> io::Result<()> {
     use std::os::unix::fs::DirBuilderExt;
 
     mode::with_umask(shaped_umask, || {
@@ -264,30 +322,25 @@ fn create_dir_with_mode(path: &Path, _mode: u32, _shaped_umask: u32) -> std::io:
     std::fs::create_dir(path)
 }
 
+#[cfg(unix)]
+fn component_mode(is_parent: bool, config: &Config) -> (u32, u32) {
+    let umask = mode::get_umask();
+    if is_parent {
+        (DEFAULT_PERM, umask & !0o300)
+    } else {
+        match config.mode {
+            Some(m) => (m, umask & !m),
+            None => (DEFAULT_PERM, umask),
+        }
+    }
+}
+
 // Helper function to create a single directory with appropriate permissions
 // `is_parent` argument is not used on windows
 #[cfg_attr(not(unix), allow(unused_variables))]
 fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
     #[cfg(unix)]
-    let (mkdir_mode, shaped_umask) = {
-        let umask = mode::get_umask();
-        if is_parent {
-            // Parent directories are never affected by -m (matches GNU behavior).
-            // We pass 0o777 as the mode and shape the umask so it cannot block
-            // owner write or execute (u+wx), ensuring the owner can traverse and
-            // write into the parent to create children. All other umask bits are
-            // preserved so the kernel applies them — and any default ACL on the
-            // grandparent — through the normal mkdir(2) path.
-            (DEFAULT_PERM, umask & !0o300)
-        } else {
-            match config.mode {
-                // Explicit -m: shape umask so it cannot block explicitly requested bits.
-                Some(m) => (m, umask & !m),
-                // No -m: leave umask fully intact; kernel applies umask + ACL naturally.
-                None => (DEFAULT_PERM, umask),
-            }
-        }
-    };
+    let (mkdir_mode, shaped_umask) = component_mode(is_parent, config);
     #[cfg(not(unix))]
     let (mkdir_mode, shaped_umask) = (config.mode.unwrap_or(DEFAULT_PERM), 0u32);
 
@@ -345,5 +398,81 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
         Err(e) => Err(e.map_err_context(|| {
             translate_text!("mkdir-error-cannot-create-directory", "path" => locale_aware_c_single_escape(path))
         })),
+    }
+}
+
+/// mkdirat on the parent's fd, under the same umask shaping as `create_dir_with_mode`.
+#[cfg(all(unix, not(target_os = "redox")))]
+fn mkdir_at_with_mode(
+    parent: &DirFd,
+    name: &OsStr,
+    perm: u32,
+    shaped_umask: u32,
+) -> io::Result<()> {
+    mode::with_umask(shaped_umask, || parent.mkdir_at(name, perm))
+}
+
+/// Create one component relative to `parent` and return an fd for it.
+/// A directory we created is opened with `O_NOFOLLOW`; one that already
+/// existed is followed, and no -v line is printed for it.
+#[cfg(all(unix, not(target_os = "redox")))]
+fn create_component(
+    parent: &DirFd,
+    name: &OsStr,
+    path: &Path,
+    is_parent: bool,
+    config: &Config,
+) -> UResult<DirFd> {
+    let (mkdir_mode, shaped_umask) = component_mode(is_parent, config);
+    let ctx = || {
+        translate_text!("mkdir-error-cannot-create-directory",
+            "path" => locale_aware_c_single_escape(path))
+    };
+
+    // Label the directory at creation, as GNU does; relabelling after leaves a window.
+    #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
+    let _selinux_guard = if config.set_security_context && uucore::selinux::is_selinux_enabled() {
+        let mode = uucore::libc::S_IFDIR | mkdir_mode as uucore::libc::mode_t;
+        match uucore::selinux::FsCreateContext::new(path, Some(mode), config.context) {
+            Ok(guard) => Some(guard),
+            Err(e) => return Err(USimpleError::new(1, e.to_string())),
+        }
+    } else {
+        None
+    };
+
+    match mkdir_at_with_mode(parent, name, mkdir_mode, shaped_umask) {
+        Ok(()) => {
+            // Created by us: refuse symlinks from here on.
+            let dir = parent
+                .open_subdir_anchor(name, SymlinkBehavior::NoFollow)
+                .map_err_context(ctx)?;
+
+            if config.verbose {
+                writeln!(
+                    stdout(),
+                    "{}",
+                    translate!("mkdir-verbose-created-directory", "util_name" => "mkdir", "path" => path.quote())
+                )?;
+            }
+
+            // Apply SMACK context if requested
+            #[cfg(all(feature = "smack", target_os = "linux"))]
+            if config.set_security_context {
+                uucore::smack::set_smack_label_and_cleanup(path, config.context, |p| {
+                    std::fs::remove_dir(p)
+                })?;
+            }
+            Ok(dir)
+        }
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+            // Not created by us: follow symlinks, print no -v line.
+            // If it exists but isn't a directory, report the original error.
+            parent
+                .open_subdir_anchor(name, SymlinkBehavior::Follow)
+                .map_err(|_| e)
+                .map_err_context(ctx)
+        }
+        Err(e) => Err(e.map_err_context(ctx)),
     }
 }
