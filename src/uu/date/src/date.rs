@@ -2066,6 +2066,10 @@ fn parse_local_datetime(input: &str) -> Option<jiff::civil::DateTime> {
             day.parse::<i8>().ok()?,
         ))
     })?;
+    // A bare date names its local midnight, which can itself fall in a gap.
+    if tokens().filter(|token| !token.is_empty()).count() == 1 {
+        return jiff::civil::DateTime::new(year, month, day, 0, 0, 0, 0).ok();
+    }
     let (hour, minute, second, nanosecond) = tokens().find_map(|token| {
         let token = token
             .char_indices()
