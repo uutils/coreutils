@@ -1590,6 +1590,53 @@ fn resolve_o_modifiers<'a>(
                     i = spec_end;
                     continue;
                 }
+                // The stand-alone month name goes through the locale layer
+                // before the width is applied, so `%5OB` keeps the locale's
+                // name (` juin`) instead of the C fallback, and the case flags
+                // apply to that name first.
+                if spec == "B" && (field.width.is_some() || !field.flags.is_empty()) {
+                    let raw = render_base_field(date, config, spec, skip_localization)?;
+                    // The case flags apply to the locale-rendered name first,
+                    // and the padding pass then only pads, so it cannot undo a
+                    // `#`/`^` that already ran.
+                    let case_flags: String = field
+                        .flags
+                        .chars()
+                        .filter(|c| *c == '#' || *c == '^')
+                        .collect();
+                    let cased = if case_flags.is_empty() {
+                        raw
+                    } else {
+                        format_modifiers::apply_modifiers(
+                            &raw,
+                            &format_modifiers::ParsedSpec {
+                                flags: &case_flags,
+                                width: None,
+                                spec,
+                                len: spec_end - i,
+                            },
+                        )
+                        .map_err(|e| e.to_string())?
+                    };
+                    let pad_flags: String = field
+                        .flags
+                        .chars()
+                        .filter(|c| *c != '#' && *c != '^')
+                        .collect();
+                    let padded = format_modifiers::apply_composite_modifiers(
+                        &cased,
+                        &format_modifiers::ParsedSpec {
+                            flags: pad_flags.as_str(),
+                            width: field.width,
+                            spec,
+                            len: spec_end - i,
+                        },
+                    )
+                    .map_err(|e| e.to_string())?;
+                    o_resolved.push_str(&padded.replace('%', "%%"));
+                    i = spec_end;
+                    continue;
+                }
                 // GNU is transparent on an accepted pair: keep the flags and
                 // width so the ordinary modifier pass pads like the base spec.
                 o_resolved.push('%');
@@ -2829,3 +2876,4 @@ mod tests {
         );
     }
 }
+
