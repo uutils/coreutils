@@ -18,6 +18,7 @@
 #![cfg(feature = "uudoc")]
 
 use std::env;
+use std::sync::LazyLock;
 
 // Use the ctor attribute to run this function before any tests
 #[ctor::ctor(unsafe)]
@@ -53,6 +54,9 @@ fn run_write_doc() -> Vec<String> {
         .collect::<Vec<String>>()
 }
 
+/// Shared output from a single `uudoc` run to avoid concurrent writes.
+static DOC_PAGES: LazyLock<Vec<String>> = LazyLock::new(run_write_doc);
+
 fn get_doc_file_from_output(output: &str) -> (String, String) {
     let correct_path_test = output
         .strip_prefix("Wrote to '")
@@ -75,9 +79,11 @@ fn get_doc_file_from_output(output: &str) -> (String, String) {
 
 #[test]
 fn uudoc_check_test() {
-    let pages = run_write_doc();
     // assert wrote to the correct file
-    let path_test = pages.iter().find(|line| line.contains("test.md")).unwrap();
+    let path_test = DOC_PAGES
+        .iter()
+        .find(|line| line.contains("test.md"))
+        .unwrap();
     let (correct_path, content) = get_doc_file_from_output(path_test);
 
     // open the file
@@ -98,7 +104,6 @@ test
 
 #[test]
 fn uudoc_check_sums() {
-    let pages = run_write_doc();
     let sums = [
         "md5sum",
         "sha1sum",
@@ -109,7 +114,7 @@ fn uudoc_check_sums() {
         "b2sum",
     ];
     for one_sum in sums {
-        let output_path = pages
+        let output_path = DOC_PAGES
             .iter()
             .find(|one_line| one_line.contains(one_sum))
             .unwrap();
