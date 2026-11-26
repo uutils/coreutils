@@ -1000,9 +1000,38 @@ fn escape_unsupported_specifiers(fmt: &str) -> Cow<'_, str> {
         return Cow::Borrowed(fmt);
     }
 
+    // Fast path: if the format has no `%f`/`%Q` specifier at all (the common
+    // case, e.g. the default `%a %b %e %X %Z %Y`), return the input borrowed.
+    // This avoids allocating a new `String` for every formatted line, which is
+    // the hot path when formatting a large `-f` file.
+    let bytes = fmt.as_bytes();
+    let mut i = 0;
+    let mut needs_escape = false;
+    while i < bytes.len() {
+        if bytes[i] != b'%' {
+            i += 1;
+            continue;
+        }
+        // Skip an escaped `%%`.
+        if bytes.get(i + 1) == Some(&b'%') {
+            i += 2;
+            continue;
+        }
+        if is_unsupported_spec(&fmt[i..]) {
+            needs_escape = true;
+            break;
+        }
+        i += 1;
+    }
+    if !needs_escape {
+        return Cow::Borrowed(fmt);
+    }
+
+    // Slow path: at least one unsupported specifier is present, so build the
+    // escaped copy, doubling the `%` of each `%f`/`%Q` so jiff emits it
+    // literally like GNU. `%%` (an escaped percent) is left intact.
     let mut out = String::with_capacity(fmt.len());
     let mut i = 0;
-    let bytes = fmt.as_bytes();
     while i < bytes.len() {
         if bytes[i] != b'%' {
             let ch_len = fmt[i..].chars().next().map_or(1, char::len_utf8);
