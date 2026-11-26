@@ -75,6 +75,7 @@ cp-error-with-parents-dest-must-be-dir = with --parents, the destination must be
 cp-error-not-replacing = not replacing { $file }
 cp-error-failed-get-current-dir = failed to get current directory { $error }
 cp-error-failed-set-permissions = cannot set permissions { $path }
+cp-error-failed-to-preserve-ownership = failed to preserve ownership for { $path }
 cp-error-backup-mutually-exclusive = options --backup and --no-clobber are mutually exclusive
 cp-error-invalid-argument = invalid argument { $arg } for '{ $option }'
 cp-error-option-not-implemented = Option '{ $option }' not yet implemented.

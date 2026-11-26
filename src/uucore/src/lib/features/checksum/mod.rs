@@ -15,6 +15,7 @@ use crate::error::{UError, UResult, strip_errno};
 use crate::sum::{
     Blake2b, Blake3, Bsd, CRC32B, Crc, Digest, DigestOutput, DigestWriter, Md5, Sha1, Sha3_224,
     Sha3_256, Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3, SysV,
+    Xxh3,
 };
 use crate::{show_error, translate, translate_text};
 
@@ -39,8 +40,9 @@ pub const ALGORITHM_OPTIONS_BLAKE3: &str = "blake3";
 pub const ALGORITHM_OPTIONS_SM3: &str = "sm3";
 pub const ALGORITHM_OPTIONS_SHAKE128: &str = "shake128";
 pub const ALGORITHM_OPTIONS_SHAKE256: &str = "shake256";
+pub const ALGORITHM_OPTIONS_XXH3: &str = "xxh3";
 
-pub const SUPPORTED_ALGORITHMS: [&str; 17] = [
+pub const SUPPORTED_ALGORITHMS: [&str; 18] = [
     ALGORITHM_OPTIONS_SYSV,
     ALGORITHM_OPTIONS_BSD,
     ALGORITHM_OPTIONS_CRC,
@@ -61,6 +63,7 @@ pub const SUPPORTED_ALGORITHMS: [&str; 17] = [
     ALGORITHM_OPTIONS_BLAKE3,
     ALGORITHM_OPTIONS_SHAKE128,
     ALGORITHM_OPTIONS_SHAKE256,
+    ALGORITHM_OPTIONS_XXH3,
 ];
 
 /// Represents an algorithm kind. In some cases, it is not sufficient by itself
@@ -89,6 +92,7 @@ pub enum AlgoKind {
     Shake128,
     Shake256,
     Blake3,
+    Xxh3,
 }
 
 impl AlgoKind {
@@ -97,7 +101,7 @@ impl AlgoKind {
     pub fn from_cksum(algo: impl AsRef<str>) -> UResult<Self> {
         use AlgoKind::{
             Blake2b, Blake3, Bsd, Crc, Crc32b, Md5, Sha1, Sha2, Sha3, Sha224, Sha256, Sha384,
-            Sha512, Shake128, Shake256, Sm3, Sysv,
+            Sha512, Shake128, Shake256, Sm3, Sysv, Xxh3,
         };
         Ok(match algo.as_ref() {
             ALGORITHM_OPTIONS_SYSV => Sysv,
@@ -121,6 +125,7 @@ impl AlgoKind {
             ALGORITHM_OPTIONS_BLAKE3 => Blake3,
             ALGORITHM_OPTIONS_SHAKE128 => Shake128,
             ALGORITHM_OPTIONS_SHAKE256 => Shake256,
+            ALGORITHM_OPTIONS_XXH3 => Xxh3,
             _ => return Err(ChecksumError::UnknownAlgorithm(algo.as_ref().to_string()).into()),
         })
     }
@@ -146,7 +151,7 @@ impl AlgoKind {
     pub fn to_uppercase(self) -> &'static str {
         use AlgoKind::{
             Blake2b, Blake3, Bsd, Crc, Crc32b, Md5, Sha1, Sha2, Sha3, Sha224, Sha256, Sha384,
-            Sha512, Shake128, Shake256, Sm3, Sysv,
+            Sha512, Shake128, Shake256, Sm3, Sysv, Xxh3,
         };
         match self {
             // Legacy algorithms
@@ -171,6 +176,7 @@ impl AlgoKind {
             Shake128 => "SHAKE128",
             Shake256 => "SHAKE256",
             Blake3 => "BLAKE3",
+            Xxh3 => "XXH3",
         }
     }
 
@@ -178,7 +184,7 @@ impl AlgoKind {
     pub fn to_lowercase(self) -> &'static str {
         use AlgoKind::{
             Blake2b, Blake3, Bsd, Crc, Crc32b, Md5, Sha1, Sha2, Sha3, Sha224, Sha256, Sha384,
-            Sha512, Shake128, Shake256, Sm3, Sysv,
+            Sha512, Shake128, Shake256, Sm3, Sysv, Xxh3,
         };
         match self {
             Sysv => "sysv",
@@ -201,6 +207,7 @@ impl AlgoKind {
             Shake128 => "shake128",
             Shake256 => "shake256",
             Blake3 => "blake3",
+            Xxh3 => "xxh3",
         }
     }
 
@@ -264,6 +271,34 @@ impl TryFrom<usize> for ShaLength {
     }
 }
 
+/// Holds a length for the XXH3 algorithm kind.
+#[derive(Debug, Clone, Copy)]
+pub enum Xxh3Length {
+    Len64,
+    Len128,
+}
+
+impl Xxh3Length {
+    pub fn as_usize(self) -> usize {
+        match self {
+            Self::Len64 => Xxh3::BIT_SIZE_64,
+            Self::Len128 => Xxh3::BIT_SIZE_128,
+        }
+    }
+}
+
+impl TryFrom<usize> for Xxh3Length {
+    type Error = ChecksumError;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            Xxh3::BIT_SIZE_64 => Ok(Self::Len64),
+            Xxh3::BIT_SIZE_128 => Ok(Self::Len128),
+            _ => Err(ChecksumError::InvalidLengthForXxh3),
+        }
+    }
+}
+
 /// Stores a hash length in bits.
 #[derive(Debug, Clone, Copy)]
 pub struct HashLength {
@@ -287,6 +322,12 @@ impl HashLength {
     #[inline]
     pub(crate) fn as_bytes(self) -> usize {
         self.bit_len.div_ceil(8)
+    }
+}
+
+impl From<Xxh3Length> for HashLength {
+    fn from(value: Xxh3Length) -> Self {
+        Self::from_bits(value.as_usize())
     }
 }
 
@@ -314,6 +355,7 @@ pub enum SizedAlgoKind {
     Blake3(HashLength),
     Shake128(Option<HashLength>),
     Shake256(Option<HashLength>),
+    Xxh3(Xxh3Length),
 }
 
 impl SizedAlgoKind {
@@ -351,6 +393,8 @@ impl SizedAlgoKind {
             )),
             (ak::Shake128, l) => Ok(Self::Shake128(l)),
             (ak::Shake256, l) => Ok(Self::Shake256(l)),
+            (ak::Xxh3, None) => Ok(Self::Xxh3(Xxh3Length::Len64)),
+            (ak::Xxh3, Some(l)) => Ok(Self::Xxh3(Xxh3Length::try_from(l.as_bits())?)),
             (ak::Sha2, Some(l)) => Ok(Self::Sha2(ShaLength::try_from(l.as_bits())?)),
             (ak::Sha3, Some(l)) => Ok(Self::Sha3(ShaLength::try_from(l.as_bits())?)),
             (algo @ (ak::Sha2 | ak::Sha3), None) => {
@@ -373,6 +417,7 @@ impl SizedAlgoKind {
             Self::Blake2b(len) if len.as_bits() == Blake2b::DEFAULT_BIT_SIZE => "BLAKE2b".into(),
             Self::Blake2b(len) => format!("BLAKE2b-{}", len.as_bits()),
             Self::Blake3(len) => format!("BLAKE3-{}", len.as_bits()),
+            Self::Xxh3(len) => format!("XXH3-{}", len.as_usize()),
             Self::Shake128(opt_len) => format!(
                 "SHAKE128-{}",
                 opt_len.map_or(Shake128::DEFAULT_BIT_SIZE, HashLength::as_bits)
@@ -407,6 +452,8 @@ impl SizedAlgoKind {
             Self::Sha3(Len512) => Box::new(Sha3_512::default()),
             Self::Blake2b(len) => Box::new(Blake2b::with_output_bytes(len.as_bytes())),
             Self::Blake3(len) => Box::new(Blake3::with_output_bytes(len.as_bytes())),
+            Self::Xxh3(Xxh3Length::Len64) => Box::new(Xxh3::new_64()),
+            Self::Xxh3(Xxh3Length::Len128) => Box::new(Xxh3::new_128()),
             Self::Shake128(len_opt) => Box::new(
                 len_opt
                     .map(HashLength::as_bits)
@@ -431,6 +478,7 @@ impl SizedAlgoKind {
             Self::Md5 => 128,
             Self::Sha1 => 160,
             Self::Sha2(len) | Self::Sha3(len) => len.as_usize(),
+            Self::Xxh3(len) => len.as_usize(),
             Self::Blake2b(len) | Self::Blake3(len) => len.as_bits(),
             Self::Shake128(len) => len.map_or(Shake128::DEFAULT_BIT_SIZE, HashLength::as_bits),
             Self::Shake256(len) => len.map_or(Shake256::DEFAULT_BIT_SIZE, HashLength::as_bits),
@@ -463,6 +511,8 @@ pub enum ChecksumError {
     InvalidLengthForSha(String),
     #[error("{}", translate_text!("checksum-error-length-required-for-sha", "algorithm" => _0))]
     LengthRequiredForSha(String),
+    #[error("{}", translate!("checksum-error-invalid-length-for-xxh3"))]
+    InvalidLengthForXxh3,
     #[error("{}", translate!("checksum-error-length-only-for-blake2b-sha2-sha3"))]
     LengthOnlyForBlake2bSha2Sha3,
 
