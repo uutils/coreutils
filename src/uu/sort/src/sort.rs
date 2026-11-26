@@ -3480,8 +3480,11 @@ mod tests {
     #[test]
     fn tmp_file_enospc_names_the_file_and_exits_2() {
         uucore::locale::setup_localization("sort").unwrap();
-        // 28 is ENOSPC on Linux and macOS.
-        let error = std::io::Error::from_raw_os_error(28);
+        // A raw errno is not portable: 28 is ENOSPC on Unix and
+        // ERROR_OUT_OF_PAPER on Windows. The message test checks the
+        // `close failed: <path>: <error>` shape with a disk-full error.
+        let error = std::io::Error::new(std::io::ErrorKind::StorageFull, "No space left on device");
+        let expected = strip_errno(&error);
         let err = SortError::TmpFileCloseFailed {
             path: PathBuf::from("t/chunk"),
             error,
@@ -3493,10 +3496,7 @@ mod tests {
             "unexpected message: {message}"
         );
         assert!(message.contains("t/chunk"), "unexpected message: {message}");
-        assert!(
-            message.contains("No space left on device"),
-            "unexpected message: {message}"
-        );
+        assert!(message.contains(&expected), "unexpected message: {message}");
     }
 
     fn tokenize_helper(line: &[u8], separator: Option<u8>) -> Vec<Field> {
