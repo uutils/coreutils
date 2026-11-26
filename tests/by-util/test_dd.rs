@@ -1270,14 +1270,12 @@ fn test_bytes_oseek_bytes_oflag() {
 #[test]
 #[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_bytes_oseek_bytes_trunc_oflag() {
-    // The test harness hands stdout over as a regular file. Where dd detects
-    // that (Linux, OpenBSD), it seeks in the file and, like GNU, writes
-    // nothing. Elsewhere the seek on stdout is emulated by writing zeros.
-    let expected: &[u8] = if cfg!(any(target_os = "linux", target_os = "openbsd")) {
-        b""
-    } else {
-        &[0; 8]
-    };
+    // The test harness hands stdout over as a regular file, which is seekable
+    // on every platform. dd detects that and seeks in the file, so — like GNU
+    // with a seekable stdout — it writes nothing and the captured stdout is
+    // empty. (Only a non-seekable stdout, e.g. a pipe, would have the seek
+    // emulated by writing zero bytes.)
+    let expected: &[u8] = b"";
     new_ucmd!()
         .args(&["oseek=8", "oflag=seek_bytes", "bs=2", "count=0"])
         .pipe_in("abcdefghijklm")
