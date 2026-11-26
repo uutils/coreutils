@@ -26,7 +26,7 @@ uucore = { workspace = true, features = [
 ] }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["process", "signal"] }
+libc = { workspace = true }
 
 [features]
 diagnostics = ["uucore/diagnostics"]

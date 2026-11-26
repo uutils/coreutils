@@ -3,22 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf pgrp GETFD pfds revents POLLRDBAND POLLERR unblockable
+// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf pgrp GETFD pfds revents POLLRDBAND POLLERR unblockable RDBAND sighandler
 // spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGDANGER SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL KILLTHR SIGMIGRATE SIGMSG SIGPIPE SIGPRE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTALRM SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVIRT SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VIRT VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX TALRM AIOCANCEL XRES RTMIN RTMAX LTOSTOP SIGSIGTERM SIGSIGKILL
 
 //! This module provides a way to handle signals in a platform-independent way.
 //! It provides a way to convert signal names to their corresponding values and vice versa.
 //! It also provides a way to ignore the SIGINT signal and enable pipe errors.
-
-#[cfg(unix)]
-use nix::errno::Errno;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::libc;
-#[cfg(unix)]
-use nix::sys::signal::{
-    SaFlags, SigAction, SigHandler, SigHandler::SigDfl, SigHandler::SigIgn, SigSet, Signal,
-    Signal::SIGINT, Signal::SIGPIPE, sigaction, signal,
-};
 
 /// The default signal value.
 pub static DEFAULT_SIGNAL: usize = 15;
@@ -675,29 +665,44 @@ pub fn signal_list_value_by_name_or_number(spec: &str) -> Option<usize> {
     })
 }
 
+/// Validates a raw signal number: a named signal, or a real-time one
+/// (`SIGRTMIN..=SIGRTMAX`), which rustix does not name. Gaps such as glibc's
+/// reserved 32/33 are rejected, like GNU does.
+#[cfg(unix)]
+pub fn signal_from_raw(signal: usize) -> Option<i32> {
+    let raw = i32::try_from(signal).ok().filter(|&s| s > 0)?;
+    if rustix::process::Signal::from_named_raw(raw).is_some() {
+        return Some(raw);
+    }
+    realtime_signal_bounds()
+        .and_then(|(rtmin, rtmax)| (rtmin..=rtmax).contains(&signal).then_some(raw))
+}
+
+/// Set a signal's disposition to `SIG_DFL` or `SIG_IGN`. Works for real-time
+/// signals too.
+#[cfg(unix)]
+pub fn set_disposition(sig: libc::c_int, disposition: libc::sighandler_t) -> std::io::Result<()> {
+    crate::set_sigaction(sig, disposition, 0).map(drop)
+}
+
 /// Restores SIGPIPE to default behavior (process terminates on broken pipe).
 #[cfg(unix)]
-pub fn enable_pipe_errors() -> Result<(), Errno> {
-    // We pass the error as is, the return value would just be Ok(SigDfl), so we can safely ignore it.
-    // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
-    unsafe { signal(SIGPIPE, SigDfl) }.map(|_| ())
+pub fn enable_pipe_errors() -> std::io::Result<()> {
+    set_disposition(libc::SIGPIPE, libc::SIG_DFL)
 }
 
 /// Ignores SIGPIPE signal (broken pipe errors are returned instead of terminating).
 /// Use this to override the default SIGPIPE handling when you need to handle
 /// broken pipe errors gracefully (e.g., tee with --output-error).
 #[cfg(unix)]
-pub fn disable_pipe_errors() -> Result<(), Errno> {
-    // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
-    unsafe { signal(SIGPIPE, SigIgn) }.map(|_| ())
+pub fn disable_pipe_errors() -> std::io::Result<()> {
+    set_disposition(libc::SIGPIPE, libc::SIG_IGN)
 }
 
 /// Ignores the SIGINT signal.
 #[cfg(unix)]
-pub fn ignore_interrupts() -> Result<(), Errno> {
-    // We pass the error as is, the return value would just be Ok(SigIgn), so we can safely ignore it.
-    // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
-    unsafe { signal(SIGINT, SigIgn) }.map(|_| ())
+pub fn ignore_interrupts() -> std::io::Result<()> {
+    set_disposition(libc::SIGINT, libc::SIG_IGN)
 }
 
 /// Installs a signal handler. The handler must be async-signal-safe.
@@ -705,15 +710,9 @@ pub fn ignore_interrupts() -> Result<(), Errno> {
 pub fn install_signal_handler(
     sig: i32,
     handler: extern "C" fn(core::ffi::c_int),
-) -> Result<(), Errno> {
-    let signal = Signal::try_from(sig).map_err(|_| Errno::EINVAL)?;
-    let action = SigAction::new(
-        SigHandler::Handler(handler),
-        SaFlags::SA_RESTART,
-        SigSet::empty(),
-    );
-    unsafe { sigaction(signal, &action) }?;
-    Ok(())
+) -> std::io::Result<()> {
+    // libc rather than rustix's `Signal`, so real-time signals work too.
+    crate::set_sigaction(sig, handler as libc::sighandler_t, libc::SA_RESTART).map(drop)
 }
 
 // Detect closed stdin/stdout before Rust reopens them as /dev/null (see issue #2873)
@@ -741,7 +740,6 @@ static STARTUP_STATE_WAS_CAPTURED: AtomicBool = AtomicBool::new(false);
 #[cfg(unix)]
 #[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn capture_startup_state() {
-    use nix::libc;
     use std::mem::MaybeUninit;
     use std::ptr;
 
@@ -844,41 +842,36 @@ pub const fn sigpipe_was_ignored() -> bool {
 
 #[cfg(target_os = "linux")]
 pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
-    use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
-    use nix::sys::stat::{SFlag, fstat};
+    use rustix::event::{PollFd, PollFlags, Timespec, poll};
+    use rustix::fs::{FileType, fstat};
     use std::io::stdout;
     use std::os::fd::AsFd;
 
     let out = stdout();
 
     // First, check that stdout is a fifo and return true if it's not the case
-    let stat = fstat(&out)?;
-    if !SFlag::from_bits_truncate(stat.st_mode).contains(SFlag::S_IFIFO) {
+    let stat = fstat(out.as_fd())?;
+    if FileType::from_raw_mode(stat.st_mode) != FileType::Fifo {
         return Ok(true);
     }
 
     // POLLRDBAND is the flag used by GNU tee.
-    let mut pfds = [PollFd::new(out.as_fd(), PollFlags::POLLRDBAND)];
+    let mut pfds = [PollFd::new(&out, PollFlags::RDBAND)];
 
     // Then, ensure that the pipe is not broken.
-    // Use ZERO timeout to return immediately - we just want to check the current state.
-    let res = poll(&mut pfds, PollTimeout::ZERO)?;
+    // Use a zero timeout to return immediately - we just want to check the current state.
+    let res = poll(&mut pfds, Some(&Timespec::default()))?;
 
     if res > 0 {
         // poll returned with events ready - check if POLLERR is set (pipe broken)
-        let error = pfds.iter().any(|pfd| {
-            if let Some(revents) = pfd.revents() {
-                revents.contains(PollFlags::POLLERR)
-            } else {
-                true
-            }
-        });
+        let error = pfds
+            .iter()
+            .any(|pfd| pfd.revents().contains(PollFlags::ERR));
         return Ok(!error);
     }
 
-    // res == 0 means no events ready (timeout reached immediately with ZERO timeout).
-    // This means the pipe is healthy (not broken).
-    // res < 0 would be an error, but nix returns Err in that case.
+    // res == 0 means no events ready (zero timeout reached immediately).
+    // This means the pipe is healthy (not broken). An error returns Err above.
     Ok(true)
 }
 

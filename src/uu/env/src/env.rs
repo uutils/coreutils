@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable sigset sigaddset sigemptyset sigismember
+// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable sigset sigaddset sigemptyset sigismember sighandler ptrs
 
 pub mod diagnostics;
 pub mod native_int_str;
@@ -18,12 +18,6 @@ use native_int_str::{
     Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation,
     from_native_int_representation_owned, get_single_native_int_value,
 };
-#[cfg(all(unix, not(target_os = "fuchsia")))]
-use nix::libc;
-#[cfg(all(unix, not(target_os = "fuchsia")))]
-use nix::sys::signal::{SigSet, SigmaskHow, Signal, sigprocmask};
-#[cfg(unix)]
-use nix::unistd::execvp;
 use std::borrow::Cow;
 #[cfg(unix)]
 use std::collections::BTreeSet;
@@ -36,8 +30,6 @@ use std::io;
 use std::io::Read as _;
 use std::io::Write as _;
 use std::io::stderr;
-#[cfg(all(unix, not(target_os = "fuchsia")))]
-use std::mem::zeroed;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 
@@ -49,10 +41,7 @@ use uucore::i18n::get_ctype_encoding;
 use uucore::line_ending::LineEnding;
 use uucore::quoting_style::{QuotingStyle, parser as qs_parser, quoting_style_or_tty_env};
 #[cfg(all(unix, not(target_os = "fuchsia")))]
-use uucore::signals::{
-    realtime_signal_bounds, signal_by_name_or_value, signal_name_by_value,
-    signal_number_upper_bound,
-};
+use uucore::signals::{signal_by_name_or_value, signal_name_by_value, signal_number_upper_bound};
 use uucore::translate;
 use uucore::{format_usage, show_warning};
 
@@ -280,21 +269,6 @@ fn build_signal_actions(
         .into_iter()
         .map(|(_, action_kind, request)| (action_kind, request))
         .collect())
-}
-
-#[cfg(all(unix, not(target_os = "fuchsia")))]
-fn signal_is_valid(sig: usize) -> bool {
-    if Signal::try_from(sig as i32).is_err() {
-        // nix::sys::signal does not know about real-time signals, so check that
-        // ourselves.
-        if let Some((rtmin, rtmax)) = realtime_signal_bounds() {
-            return sig >= rtmin && sig <= rtmax;
-        }
-
-        return false;
-    }
-
-    true
 }
 
 fn validate_unset_arg(name: &OsStr) -> UResult<()> {
@@ -1235,11 +1209,19 @@ impl EnvAppData {
                 p
             });
 
-            // Execute the program using execvp. this replaces the current
-            // process. The execvp function takes care of appending a NULL
-            // argument to the argument list so that we don't have to.
-            // unwrap_err since execvp should never return on success
-            let exec_error = execvp(&prog_cstring, &argv).unwrap_err();
+            // Execute the program using execvp(3). This replaces the current
+            // process and only returns on error. Build the NULL-terminated argv
+            // array of pointers that libc expects.
+            let mut argv_ptrs: Vec<*const libc::c_char> =
+                argv.iter().map(|arg| arg.as_ptr()).collect();
+            argv_ptrs.push(std::ptr::null());
+
+            // SAFETY: `prog_cstring` and every `argv` entry are valid NUL-terminated
+            // C strings that outlive the call, and `argv_ptrs` is NULL-terminated.
+            unsafe { libc::execvp(prog_cstring.as_ptr(), argv_ptrs.as_ptr()) };
+
+            // execvp only returns on failure; errno tells us why.
+            let err = io::Error::last_os_error();
 
             if let Some(orig) = orig {
                 // SAFETY: restores the pointer saved above.
@@ -1248,13 +1230,11 @@ impl EnvAppData {
                 }
             }
 
-            match exec_error {
-                nix::errno::Errno::ENOENT => Err(self.make_error_no_such_file_or_dir(&prog)),
-                e => {
-                    uucore::show_error!("{}: {}", prog.quote(), strip_errno(&e.into()));
-                    Err(126.into())
-                }
+            if err.raw_os_error() == Some(libc::ENOENT) {
+                return Err(self.make_error_no_such_file_or_dir(&prog));
             }
+            uucore::show_error!("{}: {}", prog.quote(), strip_errno(&err));
+            Err(126.into())
         }
 
         #[cfg(not(unix))]
@@ -1455,17 +1435,17 @@ fn apply_signal_action(
     request.for_each_signal(|sig_value| {
         // On some platforms ALL_SIGNALS may contain values that are not valid in libc.
         // Skip those invalid ones and continue (GNU env also ignores undefined signals).
-        if !signal_is_valid(sig_value) {
+        let Some(sig) = uucore::signals::signal_from_raw(sig_value) else {
             return Ok(());
-        }
+        };
 
         match action_kind {
-            SignalActionKind::Default => reset_signal(sig_value)?,
-            SignalActionKind::Ignore => ignore_signal(sig_value)?,
-            SignalActionKind::Block => block_signal(sig_value)?,
+            SignalActionKind::Default => set_signal_disposition(sig, libc::SIG_DFL)?,
+            SignalActionKind::Ignore => set_signal_disposition(sig, libc::SIG_IGN)?,
+            SignalActionKind::Block => block_signal(sig)?,
         }
 
-        if sig_value == libc::SIGPIPE as usize {
+        if sig == libc::SIGPIPE {
             sigpipe_action = Some(action_kind);
             // Set environment variable to communicate to Rust child processes
             // that SIGPIPE should be default (not ignored)
@@ -1482,112 +1462,64 @@ fn apply_signal_action(
 }
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
-fn ignore_signal(sig: usize) -> UResult<()> {
-    // SAFETY: This is safe because we write the handler for each signal only once, and therefore "the current handler is the default", as the documentation requires it.
-    // nix::sys::signal::Signal does not cover real-time signals, so we need to call
-    // libc::signal directly.
-    let result = unsafe {
-        let res = libc::signal(sig as core::ffi::c_int, libc::SIG_IGN);
-        nix::errno::Errno::result(res)
+fn set_signal_disposition(sig: i32, handler: libc::sighandler_t) -> UResult<()> {
+    uucore::signals::set_disposition(sig, handler).map_err(|e| signal_action_error(sig, &e))
+}
+
+#[cfg(all(unix, not(target_os = "fuchsia")))]
+fn block_signal(sig: i32) -> UResult<()> {
+    // SAFETY: `set` is initialized by sigemptyset before use.
+    let res = unsafe {
+        let mut set: libc::sigset_t = std::mem::zeroed();
+        libc::sigemptyset(&raw mut set);
+        libc::sigaddset(&raw mut set, sig);
+        libc::sigprocmask(libc::SIG_BLOCK, &raw const set, std::ptr::null_mut())
     };
-    if let Err(err) = result {
-        return Err(USimpleError::new(
-            125,
-            translate!("env-error-failed-set-signal-action", "signal" => (sig as i32), "error" => err.desc()),
-        ));
+    if res == -1 {
+        return Err(signal_action_error(sig, &io::Error::last_os_error()));
     }
     Ok(())
 }
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
-fn reset_signal(sig: usize) -> UResult<()> {
-    // nix::sys::signal::Signal does not cover real-time signals, so we need to call
-    // libc::signal directly.
-    let result = unsafe {
-        let res = libc::signal(sig as core::ffi::c_int, libc::SIG_DFL);
-        nix::errno::Errno::result(res)
-    };
-    if let Err(err) = result {
-        return Err(USimpleError::new(
-            125,
-            translate!("env-error-failed-set-signal-action", "signal" => (sig as i32), "error" => err.desc()),
-        ));
-    }
-    Ok(())
-}
-
-#[cfg(all(unix, not(target_os = "fuchsia")))]
-fn sigset_from_signal_value(sig: usize) -> UResult<SigSet> {
-    // nix::sys::signal::Signal does not cover real time signals, so we need to build
-    // sigset_t manually using libc.
-    let mut sigset: libc::sigset_t = unsafe { zeroed() };
-
-    if let Err(err) = unsafe { nix::errno::Errno::result(libc::sigemptyset(&raw mut sigset)) } {
-        return Err(USimpleError::new(
-            125,
-            translate!(
-                "env-error-failed-set-signal-action",
-                "signal" => (sig as i32),
-                "error" => err.desc()
-            ),
-        ));
-    }
-
-    if let Err(err) = unsafe {
-        nix::errno::Errno::result(libc::sigaddset(&raw mut sigset, sig as core::ffi::c_int))
-    } {
-        return Err(USimpleError::new(
-            125,
-            translate!(
-                "env-error-failed-set-signal-action",
-                "signal" => (sig as i32),
-                "error" => err.desc()
-            ),
-        ));
-    }
-
-    Ok(unsafe { SigSet::from_sigset_t_unchecked(sigset) })
-}
-
-#[cfg(all(unix, not(target_os = "fuchsia")))]
-fn block_signal(sig: usize) -> UResult<()> {
-    let set = sigset_from_signal_value(sig)?;
-
-    if let Err(err) = sigprocmask(SigmaskHow::SIG_BLOCK, Some(&set), None) {
-        return Err(USimpleError::new(
-            125,
-            translate!(
-                "env-error-failed-set-signal-action",
-                "signal" => (sig as i32),
-                "error" => err.desc()
-            ),
-        ));
-    }
-    Ok(())
+fn signal_action_error(sig: i32, err: &io::Error) -> Box<dyn UError> {
+    USimpleError::new(
+        125,
+        translate!(
+            "env-error-failed-set-signal-action",
+            "signal" => sig,
+            "error" => strip_errno(err)
+        ),
+    )
 }
 
 /// List the signals that are not at their default, blocked or ignored,
 /// whether env was asked for that or inherited it, as GNU does.
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 fn list_signal_handling() {
-    let mask = SigSet::thread_get_mask().unwrap_or_else(|_| SigSet::empty());
+    // SAFETY: a null new mask only queries the current one into `mask`.
+    let mask = unsafe {
+        let mut mask: libc::sigset_t = std::mem::zeroed();
+        libc::sigemptyset(&raw mut mask);
+        libc::sigprocmask(libc::SIG_BLOCK, std::ptr::null(), &raw mut mask);
+        mask
+    };
     for sig_value in 1..=signal_number_upper_bound() {
         let Some(signal_name) = signal_name_by_value(sig_value) else {
             continue;
         };
-        if !signal_is_valid(sig_value) {
+        let Some(sig) = uucore::signals::signal_from_raw(sig_value) else {
             continue;
-        }
-        let sig = sig_value as libc::c_int;
+        };
         // SAFETY: a null new action only queries the current one, into a
         // zeroed `sigaction` that `sigaction(2)` fills in entirely.
         let ignored = unsafe {
-            let mut current: libc::sigaction = zeroed();
+            let mut current: libc::sigaction = std::mem::zeroed();
             libc::sigaction(sig, std::ptr::null(), &raw mut current) == 0
                 && current.sa_sigaction == libc::SIG_IGN
         };
         // SAFETY: `sigismember` only reads the set it is given.
-        let blocked = unsafe { libc::sigismember(mask.as_ref(), sig) == 1 };
+        let blocked = unsafe { libc::sigismember(&raw const mask, sig) == 1 };
         let state = match (blocked, ignored) {
             (true, true) => "BLOCK,IGNORE",
             (true, false) => "BLOCK",
