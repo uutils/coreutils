@@ -1149,13 +1149,11 @@ fn format_extended_default(
         // Expand %x, %X and %r first, so that a %Y they hold is replaced too.
         let fmt = expand_locale_formats(&surrogate, fmt, config, false, 0)?;
         let fmt = expand_extended_composites(fmt.as_ref(), output.year, plus_extended_year);
-        let fmt = substitute_extended_year(&fmt, output.year, iso_year);
-        // Resolve `%O` after the year substitution, so an `%Og`/`%OC`/`%OG`
-        // it leaves behind is rendered from the surrogate the way main
-        // renders the base letter, and before `%s` is expanded: `%Os` must
-        // take the real epoch seconds, not the surrogate date's.
+        // Resolve `%O` before the year substitution, so `%OC`/`%OG`/`%OY` take
+        // the real year; `%Os` still takes the real epoch seconds below.
         let resolved = resolve_o_modifiers(&fmt, &surrogate, config, false)?;
         let fmt = resolved.as_deref().unwrap_or(fmt.as_str()).to_string();
+        let fmt = substitute_extended_year(&fmt, output.year, iso_year);
         let fmt = substitute_epoch_seconds_value(&fmt, date.unix_seconds());
         format_date_with_locale_aware_months(&surrogate, &fmt, config, false)
     })?;
@@ -1416,6 +1414,8 @@ fn accepts_o_modifier(spec: char) -> bool {
             | 'w'
             | 'W'
             | 'y'
+            | 'Y'
+            | 'q'
             | 'B'
             | 'j'
             | 'z'
@@ -1439,16 +1439,13 @@ fn accepts_o_modifier(spec: char) -> bool {
     )
 }
 
-/// Render one base conversion (`%spec`) the way the rest of the pipeline
-/// would, so that an `%O` conversion's width can be applied to the rendered
-/// text: GNU pads those like strings (`%5Od` is `   05` where `%5d` is
-/// `00005`, and `%2Oj` keeps the three-digit day of year).
+/// Render one base conversion (`%spec`) through the pipeline; used for the
+/// `%-ON`/`%_ON` fraction, whose width counts digits rather than columns.
 fn render_base_field(
     date: &Zoned,
     config: &Config<PosixCustom>,
     spec: &str,
-    #[cfg(feature = "i18n-datetime")] skip_localization: bool,
-    #[cfg(not(feature = "i18n-datetime"))] _skip_localization: bool,
+    skip_localization: bool,
 ) -> Result<String, String> {
     let pattern = format!("%{spec}");
     #[cfg(feature = "i18n-datetime")]
@@ -1485,17 +1482,14 @@ fn resolve_o_modifiers<'a>(
     format_string: &'a str,
     date: &Zoned,
     config: &Config<PosixCustom>,
-    #[cfg(feature = "i18n-datetime")] skip_localization: bool,
-    #[cfg(not(feature = "i18n-datetime"))] _skip_localization: bool,
+    skip_localization: bool,
 ) -> Result<Option<Cow<'a, str>>, String> {
     // Runs once per date for every format, so it stays a plain scan: when the
     // modifier byte does not occur the caller keeps borrowing the original.
-    if memchr::memchr(b'O', format_string.as_bytes()).is_none() {
+    if !format_string.contains('O') {
         return Ok(None);
     }
-    // The `%O` padding path needs the flag named in both configurations.
-    #[cfg(not(feature = "i18n-datetime"))]
-    let skip_localization = _skip_localization;
+    let _ = skip_localization;
 
     let mut o_resolved = String::with_capacity(format_string.len());
     let bytes = format_string.as_bytes();
@@ -1545,6 +1539,17 @@ fn resolve_o_modifiers<'a>(
             let spec_end = spec_start + 1;
             let spec = &format_string[letter_start..spec_end];
             if spec_start != letter_start {
+                // `%O:z` is `%:z` in GNU 9.12; other colon forms stay literal.
+                if spec_char == Some(b'z') {
+                    o_resolved.push('%');
+                    o_resolved.push_str(field.flags);
+                    if let Some(width) = field.width {
+                        o_resolved.push_str(&width.to_string());
+                    }
+                    o_resolved.push_str(spec);
+                    i = spec_end;
+                    continue;
+                }
                 // GNU renders every `%O` colon form as the literal `%O:`
                 // (`%O:z`, `%O::z` and `%O:::z` all give `%O:`). Pad it with
                 // the shared composite formatter: the last flag wins (`-`,
@@ -1560,78 +1565,15 @@ fn resolve_o_modifiers<'a>(
                     .map_err(|e| e.to_string())?;
                 o_resolved.push_str(&padded.replace('%', "%%"));
                 i = spec_end;
-            } else if (!field.flags.is_empty() || field.width.is_some())
-                && !matches!(spec, "s" | "N")
-            {
-                // GNU pads an `%O` conversion like text around the field's own
-                // rendering (`%5Od` is `   05` where `%5d` is `00005`), so the
-                // field is rendered here and the width applied to that text.
-                // `%Os` and `%ON` are numeric in GNU too - their width counts
-                // digits - so they keep the base conversion below.
-                let raw = render_base_field(date, config, spec, skip_localization)?;
-                // GNU case flags (`#` swap-cases names and lowercases `%p`/`%Z`
-                // winning over `^`; `^` never upper-cases `%P`) live in
-                // `apply_modifiers`, not `apply_composite_modifiers`. Run the
-                // case flags through `apply_modifiers` once with no width, then
-                // let the composite pass pad the already-cased text; the case
-                // flags are removed from the padding pass so it cannot
-                // uppercase `%P` or undo a `#` on `%p`/`%Z`.
-                let case_flags: String = field
-                    .flags
-                    .chars()
-                    .filter(|c| *c == '#' || *c == '^')
-                    .collect();
-                let cased = if case_flags.is_empty() {
-                    raw
-                } else {
-                    format_modifiers::apply_modifiers(
-                        &raw,
-                        &format_modifiers::ParsedSpec {
-                            flags: case_flags.as_str(),
-                            width: None,
-                            spec,
-                            len: spec_end - i,
-                        },
-                    )
-                    .map_err(|e| e.to_string())?
-                };
-                let pad_flags: String = field
-                    .flags
-                    .chars()
-                    .filter(|c| *c != '#' && *c != '^')
-                    .collect();
-                let parsed = format_modifiers::ParsedSpec {
-                    flags: pad_flags.as_str(),
-                    width: field.width,
-                    spec,
-                    len: spec_end - i,
-                };
-                let padded = format_modifiers::apply_composite_modifiers(&cased, &parsed)
-                    .map_err(|e| e.to_string())?;
-                o_resolved.push_str(&padded.replace('%', "%%"));
-                i = spec_end;
             } else {
-                // No substitution: the locale has no alternative numerals, so
-                // the conversion carries on as its base field and the locale
-                // layer the callers run after this pass expands it (`%Op` is
-                // the locale's marker, `%Or` the locale's time format). A `-`
-                // flag drops the whole field spec (`%-10Om` renders as `%m`),
-                // and a `_` flag without a width is dropped too, because it
-                // would only pad to the natural width and strip the leading
-                // zero; otherwise flags and width are kept, so `%_10Om` still
-                // pads to ten columns.
+                // No substitution: the conversion carries on as its base
+                // field, which the locale layer expands (`%Op`, `%Or`).
                 let last_pad = field
                     .flags
                     .chars()
                     .rfind(|c| matches!(*c, '-' | '_' | '0' | '+'));
-                // GNU trims the `O` fraction when the pair carries `-` or `_`:
-                // measured `%-ON` on a zero fraction is `0`, on `.05` it is
-                // `05`, on `.000000001` it is `000000001` (trailing zeros only),
-                // and `%_ON` space-pads the trimmed value to the width (9
-                // without one). The bare `%-N` conversion is not trimmed, so
-                // this stays on the `O` path. Routing through `apply_modifiers`
-                // with the pair's own flags reuses its `%N` fraction handling
-                // (width truncation, trailing-zero trim, `-`/`_` semantics).
+                // GNU trims the `O` fraction for the `-`/`_` flags; the bare
+                // `%-N` conversion is not trimmed, so this stays on the `O` path.
                 if spec == "N" && matches!(last_pad, Some('-' | '_')) {
                     let raw = render_base_field(date, config, spec, skip_localization)?;
                     let padded = format_modifiers::apply_modifiers(
@@ -1648,17 +1590,12 @@ fn resolve_o_modifiers<'a>(
                     i = spec_end;
                     continue;
                 }
+                // GNU is transparent on an accepted pair: keep the flags and
+                // width so the ordinary modifier pass pads like the base spec.
                 o_resolved.push('%');
-                let drop_field = match last_pad {
-                    Some('-') => true,
-                    Some('_') if field.width.is_none() => true,
-                    _ => false,
-                };
-                if !drop_field {
-                    o_resolved.push_str(field.flags);
-                    if let Some(width) = field.width {
-                        o_resolved.push_str(&width.to_string());
-                    }
+                o_resolved.push_str(field.flags);
+                if let Some(width) = field.width {
+                    o_resolved.push_str(&width.to_string());
                 }
                 o_resolved.push_str(spec);
                 i = spec_end;
@@ -1733,8 +1670,7 @@ fn format_date_with_locale_aware_months(
     date: &Zoned,
     format_string: &str,
     config: &Config<PosixCustom>,
-    #[cfg(feature = "i18n-datetime")] skip_localization: bool,
-    #[cfg(not(feature = "i18n-datetime"))] _skip_localization: bool,
+    skip_localization: bool,
 ) -> Result<String, String> {
     // Resolve `%O` before GNU modifier processing and jiff: the top-level
     // callers resolve it around the locale expansion, and a locale's own

@@ -3291,7 +3291,6 @@ dependencies = [
  "jiff-icu",
  "jiff-tzdb",
  "libc",
- "memchr",
  "parse_datetime",
  "rustix",
  "tempfile",

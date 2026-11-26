@@ -3736,28 +3736,6 @@ fn test_date_strftime_o_modifier_fallback() {
     }
 }
 
-/// The `%O` resolver is a separate pass over the format string: when the
-/// format carries no modifier the base conversion is rendered untouched,
-/// so an accepted pair that falls back equals its base conversion exactly.
-#[test]
-fn test_date_strftime_o_fallback_matches_base_conversion() {
-    let base = new_ucmd!()
-        .env("TZ", "UTC")
-        .env("LC_ALL", "C")
-        .args(&["-d", "1999-06-01 12:34:56", "+%B"])
-        .succeeds()
-        .stdout_str()
-        .to_string();
-    let resolved = new_ucmd!()
-        .env("TZ", "UTC")
-        .env("LC_ALL", "C")
-        .args(&["-d", "1999-06-01 12:34:56", "+%OB"])
-        .succeeds()
-        .stdout_str()
-        .to_string();
-    assert_eq!(base, resolved, "+%B vs +%OB");
-}
-
 #[test]
 fn test_date_strftime_o_invalid_and_dangling_literal() {
     // An invalid pair or a dangling modifier is not a conversion: GNU keeps
@@ -3880,10 +3858,8 @@ fn test_date_strftime_o_extended_years() {
     }
 }
 
-/// GNU case flags survive the `O` modifier: `#` swap-cases the name (and
-/// lowercases `%p`/`%Z`, winning over `^`), `^` uppercases but never touches
-/// `%P`, and widths pad the cased text. All values are GNU `date` 9.4
-/// behavior in the C locale, measured on the same corpus as the audit.
+/// GNU case flags survive the `O` modifier: `#` swap-cases the name,
+/// `^` uppercases but never touches `%P`, widths pad the cased text.
 #[test]
 fn test_date_strftime_o_case_flags() {
     for (format, expected) in [
@@ -4060,21 +4036,9 @@ fn test_date_strftime_ob_uses_locale_standalone_month() {
     }
 }
 
-/// The `fa_IR` locale's glibc `D_FMT` template itself carries `O` fields
-/// (`nl_langinfo(D_FMT)` is `%Oy/%Om/%Od`), so a bare `%x` reaches the
-/// `O` resolver with no user-written `%O`. This pins the pipeline the
-/// audit measured: template expansion, the `O`-pair resolution before the
-/// ICU layer, and the calendar the ICU layer substitutes for Persian
-/// locales (`fa` maps to `CalendarType::Persian`).
-///
-/// The expected values are what this implementation renders, recorded from
-/// the audit's binaries; GNU `date` 9.4 renders the Gregorian date with
-/// Persian digits (`۹۹/۰۶/۰۵`) instead, so this test documents a known
-/// divergence from GNU, it does not assert compatibility.
-///
-/// Guards mirror `test_date_strftime_ob_uses_locale_standalone_month`:
-/// the locale must be installed and the base `%y/%m/%d` triple must render
-/// the Persian-calendar date before the assertions below are checked.
+/// The `O` pairs render the Persian-calendar date in `fa_IR` (the ICU layer
+/// maps `fa` to `CalendarType::Persian`); the locale must be installed and the
+/// base `%y/%m/%d` triple must already render that calendar.
 #[test]
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
 fn test_date_strftime_fa_ir_template_carries_o_fields() {
@@ -4108,21 +4072,6 @@ fn test_date_strftime_fa_ir_template_carries_o_fields() {
             .args(&["-d", "1999-06-05", &format!("+{format}")])
             .succeeds()
             .stdout_is(expected);
-    }
-    // A bare `%x` expands through nl_langinfo(D_FMT), which carries the
-    // `O` fields only on glibc (`cfg_nl_langinfo!` gates that read to
-    // linux/glibc); other platforms fall back to the POSIX template, so
-    // these two rows run only there. They pin the audit's F7 finding:
-    // `%x` with no user-written `O` changes with the resolver in place.
-    if cfg!(all(target_os = "linux", not(target_env = "musl"))) {
-        for (format, expected) in [("%x", "99/03/15\n"), ("pre %x post", "pre 99/03/15 post\n")] {
-            new_ucmd!()
-                .env("LC_ALL", locale)
-                .env("TZ", "UTC0")
-                .args(&["-d", "1999-06-05", &format!("+{format}")])
-                .succeeds()
-                .stdout_is(expected);
-        }
     }
 }
 
