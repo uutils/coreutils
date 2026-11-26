@@ -14,7 +14,7 @@ use std::sync::mpsc::{Receiver, SyncSender};
 use std::thread;
 
 use itertools::Itertools;
-use uucore::error::{UResult, strip_errno};
+use uucore::error::{UError, UResult, strip_errno};
 
 use crate::Output;
 use crate::chunks::RecycledChunk;
@@ -23,7 +23,7 @@ use crate::merge::WriteablePlainTmpFile;
 use crate::merge::WriteableTmpFile;
 use crate::tmp_dir::{TmpDirWrapper, TmpPath};
 use crate::{
-    GlobalSettings, Line,
+    GlobalSettings, Line, SortError,
     chunks::{self, Chunk},
     compare_by, merge, print_sorted, sort_by,
 };
@@ -293,8 +293,13 @@ fn write<I: WriteableTmpFile>(
     compress_prog: Option<&str>,
     separator: u8,
 ) -> UResult<I::Closed> {
+    let path = file.1.path().to_owned();
     let mut tmp_file = I::create(file, compress_prog)?;
-    write_lines(chunk.lines(), tmp_file.as_write(), separator)?;
+    // GNU reports a full temporary file when it closes it (`close failed`),
+    // including when the write that filled the buffer is what failed.
+    write_lines(chunk.lines(), tmp_file.as_write(), separator).map_err(|error| {
+        Box::new(SortError::TmpFileCloseFailed { path, error }) as Box<dyn UError>
+    })?;
     tmp_file.finished_writing()
 }
 
@@ -308,9 +313,12 @@ fn write_lines<T: Write>(lines: &[Line], writer: &mut T, separator: u8) -> std::
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
     use std::io;
+    use std::path::Path;
 
     use super::*;
+    use crate::chunks::{ChunkContents, LineData};
 
     struct FailingWriter(io::ErrorKind);
 
@@ -338,5 +346,64 @@ mod tests {
         );
 
         assert_eq!(result.unwrap_err().kind(), io::ErrorKind::StorageFull);
+    }
+
+    fn one_line_chunk(payload: &[u8]) -> Chunk {
+        let mut data = payload.to_vec();
+        data.push(b'\n');
+        Chunk::try_new(data, |buffer| {
+            let line = &buffer[..buffer.len() - 1];
+            Ok::<_, std::convert::Infallible>(ChunkContents {
+                lines: vec![Line { line, index: 0 }],
+                line_data: LineData::default(),
+                token_buffer: Vec::new(),
+                line_count_hint: 1,
+            })
+        })
+        .unwrap()
+    }
+
+    fn assert_close_failed(err: &(dyn UError + 'static), expected: &Path) {
+        assert_eq!(err.code(), 2, "{err}");
+        match (err as &(dyn Error + 'static))
+            .downcast_ref::<SortError>()
+            .unwrap_or_else(|| panic!("expected SortError, got {err}"))
+        {
+            SortError::TmpFileCloseFailed { path, .. } => assert_eq!(path, expected),
+            other => panic!("expected a temporary-file close failure, got {other:?}"),
+        }
+    }
+
+    /// A read-only temporary file fails when the buffered chunk is flushed.
+    #[test]
+    fn buffered_temp_write_reports_close_failure_with_the_file_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut tmp_dir = TmpDirWrapper::new(dir.path().to_owned());
+        let (file, tmp_path) = tmp_dir.next_file().unwrap();
+        let expected = tmp_path.path().to_owned();
+        drop(file);
+        let ro = File::open(&expected).unwrap();
+        let chunk = one_line_chunk(b"line");
+        let Err(err) = write::<WriteablePlainTmpFile>(&chunk, (ro, tmp_path), None, b'\n') else {
+            panic!("expected the temporary file write to fail");
+        };
+        assert_close_failed(err.as_ref(), &expected);
+    }
+
+    /// A payload larger than the buffer fails during the write itself.
+    #[test]
+    fn large_temp_write_reports_close_failure_with_the_file_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut tmp_dir = TmpDirWrapper::new(dir.path().to_owned());
+        let (file, tmp_path) = tmp_dir.next_file().unwrap();
+        let expected = tmp_path.path().to_owned();
+        drop(file);
+        let ro = File::open(&expected).unwrap();
+        let payload = vec![b'x'; 20 * 1024];
+        let chunk = one_line_chunk(&payload);
+        let Err(err) = write::<WriteablePlainTmpFile>(&chunk, (ro, tmp_path), None, b'\n') else {
+            panic!("expected the temporary file write to fail");
+        };
+        assert_close_failed(err.as_ref(), &expected);
     }
 }

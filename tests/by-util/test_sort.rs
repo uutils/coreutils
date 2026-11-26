@@ -1550,8 +1550,8 @@ fn test_merge_write_error_does_not_panic() {
     }
 }
 
-// Regression test: a full temporary filesystem must make external sort fail
-// cleanly instead of panicking while spilling a sorted chunk.
+// Regression test: a full temporary filesystem must name the temporary file,
+// exit 2, and must not panic while spilling a sorted chunk (#16851).
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 fn test_spill_write_error_does_not_panic() {
@@ -1574,13 +1574,17 @@ fn test_spill_write_error_does_not_panic() {
     scene
         .ucmd()
         .args(&[
-            "--buffer-size=1",
+            // Larger than the 8 KiB temporary-file buffer, so ENOSPC is hit
+            // while writing the chunk and not only on the final flush.
+            "--buffer-size=64K",
             "--temporary-directory",
             tmp_dir,
             "input.txt",
         ])
-        .fails_with_code(1)
+        .fails_with_code(2)
+        .stderr_contains("close failed:")
         .stderr_contains("No space left on device")
+        .stderr_contains(tmp_dir)
         .stderr_does_not_contain("panicked");
 }
 
