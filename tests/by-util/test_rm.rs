@@ -353,6 +353,7 @@ fn test_verbose() {
 
 // Regression test for issue #10551: `rm -v` must report a verbose output
 // write failure on stderr and exit 1 instead of panicking.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_verbose_write_error_does_not_panic() {
@@ -377,6 +378,7 @@ fn test_verbose_write_error_does_not_panic() {
 }
 
 // Directory variant of the #10551 regression test.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_verbose_write_error_does_not_panic_dir() {
@@ -996,6 +998,17 @@ fn test_current_or_parent_dir_rm4() {
 }
 
 #[test]
+#[cfg(not(windows))]
+fn test_current_or_parent_dir_missing_parent() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .arg("missing/..")
+        .fails()
+        .stderr_only("rm: refusing to remove '.' or '..' directory: skipping 'missing/..'\n");
+}
+
+#[test]
 #[cfg(windows)]
 fn test_current_or_parent_dir_rm4_windows() {
     let ts = TestScenario::new(util_name!());
@@ -1257,6 +1270,7 @@ fn test_inaccessible_dir_recursive() {
     assert!(!at.dir_exists("a"));
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_non_utf8_paths() {
@@ -1324,7 +1338,7 @@ fn test_rm_recursive_long_path_safe_traversal() {
 /// fail, tearing the tree down again falls to `fs::remove_dir_all`, whose own
 /// recursion then overflows the test harness's stack.
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
 fn test_rm_recursive_very_deep_hierarchy() {
     const DEPTH: u32 = 32 * 1024;
 
@@ -1564,8 +1578,9 @@ fn test_symlink_to_readonly_no_prompt() {
 }
 
 /// Test that --preserve-root properly detects symlinks pointing to root.
-#[cfg(unix)]
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
+#[cfg(unix)]
 fn test_preserve_root_symlink_to_root() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1586,6 +1601,7 @@ fn test_preserve_root_symlink_to_root() {
 }
 
 /// Test that the "same as '/'" error escapes control characters in the name.
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[cfg(unix)]
 #[test]
 fn test_preserve_root_symlink_to_root_escapes_name() {
@@ -1602,8 +1618,9 @@ fn test_preserve_root_symlink_to_root_escapes_name() {
 }
 
 /// Test that --preserve-root properly detects nested symlinks pointing to root.
-#[cfg(unix)]
+#[uutests::wasi_ignore(GuestRootPathResolution)]
 #[test]
+#[cfg(unix)]
 fn test_preserve_root_nested_symlink_to_root() {
     let (at, mut ucmd) = at_and_ucmd!();
 
