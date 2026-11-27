@@ -1527,8 +1527,8 @@ fn locale_test_env(
 
 #[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
-// macOS ships no single-byte locale, so this test has nothing to run against there.
-#[cfg(not(target_os = "macos"))]
+// macOS and Android ship no single-byte locale, so this test has nothing to run against there.
+#[cfg(not(any(target_os = "macos", target_os = "android")))]
 #[test]
 fn test_classes_follow_single_byte_locale() {
     let (at, _ucmd) = at_and_ucmd!();
