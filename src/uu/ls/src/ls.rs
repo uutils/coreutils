@@ -34,7 +34,7 @@ use uucore::{
     display::Quotable,
     error::{UError, UResult, set_exit_code, strip_errno},
     format_usage,
-    fs::FileInformation,
+    fs::{FileInformation, get_metadata},
     fsext::metadata_get_time,
     os_str_as_bytes_lossy,
     parser::shortcut_value_parser::ShortcutValueParser,
@@ -909,7 +909,7 @@ impl<'a> PathData<'a> {
                 {
                     dir_entry.metadata()
                 } else {
-                    get_metadata_with_deref_opt(self.path(), self.must_dereference)
+                    get_metadata(self.path(), self.must_dereference)
                 };
 
                 match md {
@@ -1600,20 +1600,11 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             !match ft {
                 None => {
                     // If it metadata cannot be determined, treat as a file.
-                    get_metadata_with_deref_opt(&p.p_buf, true)
-                        .map_or_else(|_| false, |m| m.is_dir())
+                    get_metadata(&p.p_buf, true).map_or_else(|_| false, |m| m.is_dir())
                 }
                 Some(ft) => ft.is_dir(),
             }
         });
-    }
-}
-
-fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
-    if dereference {
-        p_buf.metadata()
-    } else {
-        p_buf.symlink_metadata()
     }
 }
 
