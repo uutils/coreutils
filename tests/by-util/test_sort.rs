@@ -346,9 +346,13 @@ fn test_ignore_case_orders_punctuation_after_letters() {
 #[test]
 #[cfg(all(target_os = "linux", target_pointer_width = "32"))]
 fn test_unique_sort_under_address_space_limit() {
+    // On i686, 36 MiB of these short records fits for an ordinary sort
+    // under a 96 MiB address-space limit. The former stable sorter aborted
+    // here trying to allocate about 24 MiB of scratch space.
     const MEMORY_LIMIT: u64 = 96 * 1024 * 1024;
-    const PAIRS: usize = 36 * 32 * 1024;
-    let input = b"zzzzzzzzzzzzzzz\naaaaaaaaaaaaaaa\n".repeat(PAIRS);
+    const INPUT_SIZE: usize = 36 * 1024 * 1024;
+    const RECORD_PAIR: &[u8] = b"zzzzzzzzzzzzzzz\naaaaaaaaaaaaaaa\n";
+    let input = RECORD_PAIR.repeat(INPUT_SIZE / RECORD_PAIR.len());
     new_ucmd!()
         .args(&["--parallel=1", "--buffer-size=64M", "--unique"])
         .env("LC_ALL", "C")
