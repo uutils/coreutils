@@ -625,9 +625,8 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
 
     // English is embedded at build time, so there is no need to look for
     // the locales directory (a readlink and several stats) or read files
-    if locale == DEFAULT_LOCALE
-        && get_embedded_locale(&format!("{p}/{DEFAULT_LOCALE}.ftl")).is_some()
-    {
+    let has_embedded_strings = get_embedded_locale(&format!("{p}/{DEFAULT_LOCALE}.ftl")).is_some();
+    if locale == DEFAULT_LOCALE && has_embedded_strings {
         set_localizer(Localizer::new(create_english_bundle_from_embedded(
             &locale, p,
         )?));
@@ -639,9 +638,7 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     // Callers such as the help template pass the invoked name (`dir`, `[`,
     // a prefixed binary name...), which has no strings of its own: keep the
     // utility that is already set up instead of switching to nothing
-    if LOCALIZED_UTIL.with_borrow(Option::is_some)
-        && locales_dir.is_err()
-        && get_embedded_locale(&format!("{p}/{DEFAULT_LOCALE}.ftl")).is_none()
+    if LOCALIZED_UTIL.with_borrow(Option::is_some) && locales_dir.is_err() && !has_embedded_strings
     {
         return Ok(());
     }
