@@ -1876,7 +1876,6 @@ fn test_du_exclude_from_nonexistent_file() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_du_exclude_from_stdin() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir_all("d/skip");
