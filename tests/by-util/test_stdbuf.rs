@@ -18,7 +18,11 @@ fn invalid_input() {
 
 // linux-gated to match the `at_and_ucmd` import above; the check itself is not
 // platform-specific.
-#[cfg(all(target_os = "linux", not(feature = "feat_external_libstdbuf")))]
+#[cfg(all(
+    target_os = "linux",
+    not(feature = "feat_external_libstdbuf"),
+    not(target_env = "musl")
+))]
 #[test]
 fn test_tmpdir_with_colon_is_rejected() {
     // The preload variable is a colon-separated list with no escaping, so a
@@ -35,7 +39,11 @@ fn test_tmpdir_with_colon_is_rejected() {
         .stderr_contains("contains ':'");
 }
 
-#[cfg(all(unix, not(feature = "feat_external_libstdbuf")))]
+#[cfg(all(
+    unix,
+    not(feature = "feat_external_libstdbuf"),
+    not(target_env = "musl")
+))]
 #[test]
 fn test_permission() {
     new_ucmd!()
@@ -141,7 +149,11 @@ fn test_stdbuf_search_order_exe_dir_first() {
     );
 }
 
-#[cfg(all(unix, not(feature = "feat_external_libstdbuf")))]
+#[cfg(all(
+    unix,
+    not(feature = "feat_external_libstdbuf"),
+    not(target_env = "musl")
+))]
 #[test]
 fn test_no_such() {
     new_ucmd!()
@@ -151,14 +163,11 @@ fn test_no_such() {
         .stderr_contains("No such file or directory");
 }
 
-// Disabled on x86_64-unknown-linux-musl because the cross-rs Docker image for this target
-// does not provide musl-compiled system utilities (like head), leading to dynamic linker errors
-// when preloading musl-compiled libstdbuf.so into glibc-compiled binaries. Same thing for FreeBSD.
 #[cfg(all(
     unix,
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
-    not(all(target_arch = "x86_64", target_env = "musl"))
+    not(target_env = "musl"),
 ))]
 #[test]
 fn test_stdbuf_unbuffered_stdout() {
@@ -173,14 +182,11 @@ fn test_stdbuf_unbuffered_stdout() {
         .stdout_is("The quick brown fox jumps over the lazy dog.");
 }
 
-// Disabled on x86_64-unknown-linux-musl because the cross-rs Docker image for this target
-// does not provide musl-compiled system utilities (like head), leading to dynamic linker errors
-// when preloading musl-compiled libstdbuf.so into glibc-compiled binaries. Same thing for FreeBSD.
 #[cfg(all(
     unix,
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
-    not(all(target_arch = "x86_64", target_env = "musl"))
+    not(target_env = "musl"),
 ))]
 #[test]
 fn test_stdbuf_line_buffered_stdout() {
@@ -216,14 +222,11 @@ fn test_stdbuf_no_command_fails_with_125() {
         .stderr_contains("the following required arguments were not provided:");
 }
 
-// Disabled on x86_64-unknown-linux-musl because the cross-rs Docker image for this target
-// does not provide musl-compiled system utilities (like tail), leading to dynamic linker errors
-// when preloading musl-compiled libstdbuf.so into glibc-compiled binaries. Same thing for FreeBSD.
 #[cfg(all(
     unix,
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
-    not(all(target_arch = "x86_64", target_env = "musl"))
+    not(target_env = "musl"),
 ))]
 #[test]
 fn test_stdbuf_trailing_var_arg() {
@@ -372,7 +375,7 @@ fn test_stdbuf_non_utf8_paths() {
 // immediately execs the requested command.
 // See: https://github.com/uutils/coreutils/issues/13939
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
 fn test_stdbuf_child_execs_command() {
     use std::process::{Command, Stdio};
     use std::thread;
@@ -485,7 +488,11 @@ fn test_stdbuf_no_tmpdir_leak() {
 /// and the embedded library file is owner read/write only (0600).
 /// Regression test for <https://github.com/uutils/coreutils/issues/13939>
 #[test]
-#[cfg(all(target_os = "linux", not(feature = "feat_external_libstdbuf")))]
+#[cfg(all(
+    target_os = "linux",
+    not(feature = "feat_external_libstdbuf"),
+    not(target_env = "musl")
+))]
 fn test_stdbuf_tmpdir_is_private() {
     use std::os::unix::fs::PermissionsExt;
 
@@ -548,7 +555,7 @@ fn test_stdbuf_tmpdir_is_private() {
 /// the child's fate back into its own exit status: a command killed by a
 /// signal must still be reported as `128 + signal`, not as a clean 0.
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_env = "musl")))]
 #[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_stdbuf_reports_signalled_command() {
     // SIGKILL (9 on every Unix) because no process can ignore or catch it, so

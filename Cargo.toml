@@ -605,14 +605,6 @@ feat_os_unix = [
   "feat_require_unix",
   "feat_require_unix_utmpx",
 ]
-# "feat_os_unix_musl" == set of utilities which can be built/run on targets binding to the "musl" library (ref: <https://musl.libc.org/about.html>)
-# It excludes stdbuf due to cdylib limitations (https://github.com/rust-lang/rust/issues/82193)
-feat_os_unix_musl = [
-  "feat_Tier1",
-  #
-  "feat_require_unix_musl",
-  "feat_require_unix_utmpx",
-]
 # "feat_os_windows" == set of utilities which can be built/run on modern windows platforms
 feat_os_windows = ["feat_Tier1", "stdbuf"]
 ## (secondary platforms) feature sets
