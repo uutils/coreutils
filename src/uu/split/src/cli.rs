@@ -26,6 +26,7 @@ pub mod options {
     pub const VERBOSE: &str = "verbose";
     pub const SEPARATOR: &str = "separator";
     pub const ELIDE_EMPTY_FILES: &str = "elide-empty-files";
+    pub const UNBUFFERED: &str = "unbuffered";
     pub const IO_BLKSIZE: &str = "-io-blksize";
 }
 
@@ -94,6 +95,13 @@ pub fn uu_app() -> Command {
                 .long(options::ELIDE_EMPTY_FILES)
                 .short('e')
                 .help(translate!("split-help-elide-empty-files"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::UNBUFFERED)
+                .long(options::UNBUFFERED)
+                .short('u')
+                .help(translate!("split-help-unbuffered"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

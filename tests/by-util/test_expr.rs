@@ -8,6 +8,7 @@
 // spell-checker:ignore abbccd abcabc abcac acabc andand bigcmp bignum emptysub
 // spell-checker:ignore orempty oror bcdef fedcb GHSA xjfw pqfw
 
+use rstest::rstest;
 use uutests::new_ucmd;
 
 #[test]
@@ -620,6 +621,29 @@ fn test_substr_large_length_capacity_overflow() {
         .args(&["substr", "abc", "1", &usize::MAX.to_string()])
         .succeeds()
         .stdout_only("abc\n");
+}
+
+#[rstest]
+#[case::from_first("1", "abc\n")]
+#[case::from_second("2", "bc\n")]
+#[case::from_last("3", "c\n")]
+fn test_substr_length_beyond_usize_takes_the_rest(#[case] pos: &str, #[case] expected: &str) {
+    let huge = usize::MAX.to_string() + "0";
+    new_ucmd!()
+        .args(&["substr", "abc", pos, &huge])
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[rstest]
+#[case::position_past_the_end("4", "")]
+#[case::negative_length("1", "-")]
+fn test_substr_length_beyond_usize_is_empty(#[case] pos: &str, #[case] sign: &str) {
+    let huge = usize::MAX.to_string() + "0";
+    new_ucmd!()
+        .args(&["substr", "abc", pos, &format!("{sign}{huge}")])
+        .fails_with_code(1)
+        .stdout_only("\n");
 }
 
 #[test]

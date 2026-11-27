@@ -119,7 +119,7 @@ pub fn uu_app() -> Command {
                 .long(options::CHARACTERS)
                 .short('c')
                 .help(translate!("fold-characters-help"))
-                .conflicts_with(options::BYTES)
+                .overrides_with(options::BYTES)
                 .action(ArgAction::SetTrue),
         )
         .arg(

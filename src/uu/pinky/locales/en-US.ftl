@@ -37,6 +37,3 @@ pinky-directory-label = Directory:
 pinky-shell-label = Shell:
 pinky-project-label = Project:
 pinky-plan-label = Plan
-
-# Status messages
-pinky-unsupported-openbsd = unsupported command on OpenBSD

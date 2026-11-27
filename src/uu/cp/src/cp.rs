@@ -39,8 +39,8 @@ use uucore::display::Quotable;
 use uucore::error::{UError, UResult, UUsageError, set_exit_code, strip_errno};
 use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, are_hardlinks_to_same_file, canonicalize,
-    get_filename, is_symlink_loop, normalize_path, path_ends_with_terminator,
-    paths_refer_to_same_file, replace_link,
+    is_symlink_loop, normalize_path, path_ends_with_terminator, paths_refer_to_same_file,
+    replace_link,
 };
 use uucore::{backup_control, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
@@ -1883,6 +1883,24 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
     Ok(())
 }
 
+/// Whether a failure to preserve ownership must be reported. Permission-style
+/// errors are expected for unprivileged users (EPERM/EACCES), for IDs that are
+/// not mapped in a user namespace (EINVAL) and on filesystems without
+/// ownership support (ENOTSUP/EOPNOTSUPP), so those stay silent.
+#[cfg(unix)]
+fn is_chown_error_fatal(error: &CpError) -> bool {
+    // `is_enotsup_error` covers EOPNOTSUPP; ENOTSUP differs from it on some
+    // platforms (e.g. macOS), so it is listed here too.
+    let expected = |e: &io::Error| {
+        matches!(
+            e.raw_os_error(),
+            Some(libc::EPERM | libc::EACCES | libc::EINVAL | libc::ENOTSUP)
+        )
+    };
+    !is_enotsup_error(error)
+        && !matches!(error, CpError::IoErr(e) | CpError::IoErrContext(e, _) if expected(e))
+}
+
 /// Copy the specified attributes from one path to another.
 /// If `skip_selinux_xattr` is true, the security.selinux xattr will not be copied
 /// (used when -Z is specified to set the default context instead).
@@ -1921,42 +1939,33 @@ pub(crate) fn copy_attributes(
     let ownership_preserved = std::cell::Cell::new(true);
 
     // Ownership must be changed first to avoid interfering with mode change.
+    // A failure is reported only after the mode is applied, so the destination
+    // never keeps looser permissions than the source.
     #[cfg(unix)]
-    handle_preserve(attributes.ownership, || -> CopyResult<()> {
+    let ownership_result = handle_preserve(attributes.ownership, || -> CopyResult<()> {
+        use std::os::unix::fs::lchown;
         use std::os::unix::prelude::MetadataExt;
-        use uucore::perms::Verbosity;
-        use uucore::perms::VerbosityLevel;
-        use uucore::perms::wrap_chown;
 
         let dest_uid = source_metadata.uid();
         let dest_gid = source_metadata.gid();
-        let meta = &dest
-            .symlink_metadata()
-            .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
-        let try_chown = {
-            |uid| {
-                wrap_chown(
-                    dest,
-                    meta,
-                    uid,
-                    Some(dest_gid),
-                    false,
-                    Verbosity {
-                        groups_only: false,
-                        level: VerbosityLevel::Silent,
-                    },
-                )
-            }
+        let Err(e) = lchown(dest, Some(dest_uid), Some(dest_gid)) else {
+            return Ok(());
         };
-        // gnu compatibility: cp doesn't report an error if it fails to set the ownership,
-        // and will fall back to changing only the gid if possible.
-        if try_chown(Some(dest_uid)).is_err() {
-            ownership_preserved.set(false);
-            let _ = try_chown(None);
+        ownership_preserved.set(false);
+        let error = CpError::IoErrContext(
+            e,
+            translate!("cp-error-failed-to-preserve-ownership", "path" => dest.quote()),
+        );
+        // gnu compatibility: other errors (e.g. EIO) are reported, but a
+        // permission-style failure is not, and cp then tries to preserve only
+        // the group, ignoring the result.
+        if is_chown_error_fatal(&error) {
+            return Err(error);
         }
+        let _ = lchown(dest, None, Some(dest_gid));
         Ok(())
-    })?;
+    });
 
     handle_preserve(mode, || -> CopyResult<()> {
         // The `chmod()` system call that underlies the
@@ -2008,6 +2017,9 @@ pub(crate) fn copy_attributes(
 
         Ok(())
     })?;
+
+    #[cfg(unix)]
+    ownership_result?;
 
     handle_preserve(attributes.timestamps, || -> CopyResult<()> {
         let (atime, mtime) = source_times(&source_metadata, context)?;
@@ -2119,8 +2131,8 @@ fn symlink_file(
         CpError::IoErrContext(
             e,
             translate!("cp-error-cannot-create-symlink",
-                           "dest" => get_filename(dest).unwrap_or("?").quote(),
-                           "source" => get_filename(source).unwrap_or("?").quote()),
+                           "dest" => dest.quote(),
+                           "source" => source.quote()),
         )
     })?;
     if let Ok(file_info) = FileInformation::from_path(dest, false) {
@@ -2587,7 +2599,7 @@ fn handle_copy_mode(
             .map_err(|e| {
                 CpError::IoErrContext(
                     e,
-                    translate!("cp-error-cannot-create-hard-link", "dest" => get_filename(dest).unwrap_or("?").quote(), "source" => get_filename(source).unwrap_or("?").quote())
+                    translate!("cp-error-cannot-create-hard-link", "dest" => dest.quote(), "source" => source.quote())
                 )
             })?;
         }
@@ -3355,6 +3367,26 @@ mod tests {
         ];
         assert_eq!(actual, expected);
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_is_chown_error_fatal() {
+        use crate::{CpError, is_chown_error_fatal};
+        use std::io::Error;
+        let fatal = |errno| is_chown_error_fatal(&CpError::IoErr(Error::from_raw_os_error(errno)));
+        assert!(fatal(libc::EIO));
+        assert!(fatal(libc::EROFS));
+        for errno in [
+            libc::EPERM,
+            libc::EACCES,
+            libc::EINVAL,
+            libc::ENOTSUP,
+            libc::EOPNOTSUPP,
+        ] {
+            assert!(!fatal(errno));
+        }
+    }
+
     #[test]
     fn test_diff_attrs() {
         assert_eq!(

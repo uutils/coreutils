@@ -8,6 +8,8 @@
 use crate::text;
 use std::ffi::OsStr;
 use std::fs::{File, Metadata};
+#[cfg(any(windows, target_os = "wasi"))]
+use std::io::ErrorKind;
 use std::io::{self, Seek, SeekFrom, Write, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
@@ -16,6 +18,67 @@ use std::path::{Path, PathBuf};
 use uucore::error::UResult;
 use uucore::quoting_style::locale_aware_shell_escape;
 use uucore::translate;
+
+/// Writer that ends the process silently once the reader of stdout has gone away.
+///
+/// Unix signals this case with SIGPIPE. Windows and WASI have no signals, so the
+/// process exits with the status that a SIGPIPE death reports.
+#[cfg(any(windows, target_os = "wasi"))]
+pub struct ExitOnClosedPipe<W>(pub W);
+
+#[cfg(any(windows, target_os = "wasi"))]
+impl<W: Write> ExitOnClosedPipe<W> {
+    // Preview 1 reports a closed pipe as a generic EIO instead of BrokenPipe, so a
+    // genuine EIO on stdout (e.g. a disk error on a redirected file) is indistinguishable
+    // from one and also exits silently; this is a known limitation until wasi-libc fixes
+    // https://github.com/WebAssembly/wasi-libc/pull/887.
+    #[cfg(target_env = "p1")]
+    fn is_closed_pipe(err: &io::Error) -> bool {
+        err.kind() == ErrorKind::BrokenPipe || err.raw_os_error() == Some(libc::EIO)
+    }
+
+    #[cfg(not(target_env = "p1"))]
+    fn is_closed_pipe(err: &io::Error) -> bool {
+        err.kind() == ErrorKind::BrokenPipe
+    }
+
+    fn check<T>(result: io::Result<T>) -> io::Result<T> {
+        if let Err(err) = &result
+            && Self::is_closed_pipe(err)
+        {
+            std::process::exit(13);
+        }
+        result
+    }
+}
+
+#[cfg(any(windows, target_os = "wasi"))]
+impl<W: Write> Write for ExitOnClosedPipe<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        Self::check(self.0.write(buf))
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Self::check(self.0.flush())
+    }
+}
+
+#[cfg(any(windows, target_os = "wasi"))]
+pub type StdoutWriter = ExitOnClosedPipe<io::StdoutLock<'static>>;
+#[cfg(not(any(windows, target_os = "wasi")))]
+pub type StdoutWriter = io::StdoutLock<'static>;
+
+/// Lock stdout, wrapped so a closed reader on Windows or WASI exits the process silently.
+pub fn stdout_writer() -> StdoutWriter {
+    #[cfg(any(windows, target_os = "wasi"))]
+    {
+        ExitOnClosedPipe(stdout().lock())
+    }
+    #[cfg(not(any(windows, target_os = "wasi")))]
+    {
+        stdout().lock()
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum InputKind {
@@ -134,8 +197,10 @@ impl HeaderPrinter {
 
     pub fn print(&mut self, string: &str) -> io::Result<()> {
         if self.verbose {
+            let mut stdout = stdout_writer();
+
             writeln!(
-                stdout().lock(),
+                stdout,
                 "{}==> {} <==",
                 if self.first_header { "" } else { "\n" },
                 // GNU quotes the name shown in the header when it needs it.
@@ -239,6 +304,17 @@ impl PathExtTail for Path {
 
 pub fn path_is_tailable(path: &Path) -> bool {
     path.is_file() || path.exists() && path.metadata().is_ok_and(|meta| meta.is_tailable())
+}
+
+/// Whether stdin refers to a regular file.
+#[cfg(unix)]
+pub fn stdin_is_regular() -> bool {
+    rustix::fs::fstat(io::stdin()).is_ok_and(|stat| stat.st_mode & libc::S_IFMT == libc::S_IFREG)
+}
+
+#[cfg(not(unix))]
+pub fn stdin_is_regular() -> bool {
+    true
 }
 
 #[inline]

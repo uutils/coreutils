@@ -413,15 +413,7 @@ pub(crate) fn copy_directory(
                     .next_back()
                     .is_some_and(|component| matches!(component, Component::ParentDir))
                 {
-                    build_dir(parents_dest, false, options, Some(root)).map_err(
-                        |err| match err {
-                            CpError::IoErr(io_err) => CpError::IoErrContext(
-                                io_err,
-                                format!("cannot create directory {}", parents_dest.quote()),
-                            ),
-                            err => err,
-                        },
-                    )?;
+                    build_dir(parents_dest, false, options, Some(root))?;
                 }
                 if options.verbose {
                     // For example, if copying file `a/b/c` and its parents
@@ -632,7 +624,8 @@ pub(crate) fn copy_directory(
 /// assert!(!path_has_prefix(Path::new("/usr/bin"), Path::new("/var/log")))
 /// ```
 pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {
-    let pathbuf1 = canonicalize(p1, MissingHandling::Normal, ResolveMode::Logical)?;
+    // The target is often not created yet, and its parents may be missing too.
+    let pathbuf1 = canonicalize(p1, MissingHandling::Missing, ResolveMode::Logical)?;
     let pathbuf2 = canonicalize(p2, MissingHandling::Normal, ResolveMode::Logical)?;
 
     Ok(pathbuf1.starts_with(pathbuf2))
@@ -693,7 +686,12 @@ fn build_dir(
         std::os::unix::fs::DirBuilderExt::mode(&mut builder, mode);
     }
 
-    builder.create(path)?;
+    builder.create(path).map_err(|e| {
+        CpError::IoErrContext(
+            e,
+            translate!("cp-error-cannot-create-directory", "path" => path.quote()),
+        )
+    })?;
     Ok(())
 }
 

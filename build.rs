@@ -41,6 +41,7 @@ pub fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
 
     let target_os = env::var_os("CARGO_CFG_TARGET_OS").unwrap();
+    let target_vendor = env::var_os("CARGO_CFG_TARGET_VENDOR").unwrap();
     for (key, val) in env::vars() {
         if val == "1" && key.starts_with(ENV_FEATURE_PREFIX) {
             let krate = key[ENV_FEATURE_PREFIX.len()..].to_lowercase();
@@ -48,6 +49,15 @@ pub fn main() {
             #[allow(clippy::match_same_arms)]
             match krate.as_ref() {
                 "chcon" | "runcon" if !(target_os == "linux" || target_os == "android") => {
+                    continue;
+                }
+                "pinky" | "who"
+                    if !(target_vendor == "apple"
+                        || target_os == "cygwin"
+                        || target_os == "freebsd"
+                        || target_os == "linux"
+                        || target_os == "netbsd") =>
+                {
                     continue;
                 }
                 "default" | "macos" | "unix" | "windows" | "selinux" | "zip" | "clap_complete"

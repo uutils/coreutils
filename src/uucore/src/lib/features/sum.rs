@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore memmem algo PCLMULQDQ refin xorout Hdlc libcrypto SSSE FIPS
+// spell-checker:ignore memmem algo PCLMULQDQ refin xorout Hdlc libcrypto SSSE FIPS xxhsum
 
 //! Implementations of digest functions, like md5 and sha1.
 //!
@@ -68,21 +68,10 @@ pub trait Digest {
     }
 
     fn result(&mut self) -> io::Result<DigestOutput> {
-        let mut buf: Vec<u8> = Vec::new();
-        try_reserve_zeroed(&mut buf, self.output_bytes())?;
+        let mut buf = crate::zeroed_alloc::try_new_vec(self.output_bytes())?;
         self.hash_finalize(&mut buf);
         Ok(DigestOutput::Vec(buf))
     }
-}
-
-/// Grows `buf` to `len` zero bytes, returning an [`io::Error`] with
-/// [`io::ErrorKind::OutOfMemory`] instead of aborting the process if the
-/// allocation can't be satisfied (e.g. an absurdly large `--length`, #12869).
-fn try_reserve_zeroed(buf: &mut Vec<u8>, len: usize) -> io::Result<()> {
-    buf.try_reserve_exact(len)
-        .map_err(|e| io::Error::new(io::ErrorKind::OutOfMemory, e))?;
-    buf.resize(len, 0);
-    Ok(())
 }
 
 /// first element of the tuple is the blake2b state
@@ -207,6 +196,56 @@ impl Digest for Sm3 {
 
     fn output_bits(&self) -> usize {
         Self::BIT_SIZE
+    }
+}
+
+/// XXH3, in its 64 or 128-bit variant. Not a cryptographic hash: it is meant
+/// to detect accidental corruption quickly.
+pub struct Xxh3 {
+    state: xxhash_rust::xxh3::Xxh3Default,
+    bits: usize,
+}
+
+impl Xxh3 {
+    pub const BIT_SIZE_64: usize = 64;
+    pub const BIT_SIZE_128: usize = 128;
+
+    pub fn new_64() -> Self {
+        Self::with_bits(Self::BIT_SIZE_64)
+    }
+
+    pub fn new_128() -> Self {
+        Self::with_bits(Self::BIT_SIZE_128)
+    }
+
+    fn with_bits(bits: usize) -> Self {
+        Self {
+            state: xxhash_rust::xxh3::Xxh3Default::new(),
+            bits,
+        }
+    }
+}
+
+impl Digest for Xxh3 {
+    fn hash_update(&mut self, input: &[u8]) {
+        self.state.update(input);
+    }
+
+    fn hash_finalize(&mut self, out: &mut [u8]) {
+        // Big endian, the canonical byte order used by xxhsum.
+        if self.bits == Self::BIT_SIZE_128 {
+            out.copy_from_slice(&self.state.digest128().to_be_bytes());
+        } else {
+            out.copy_from_slice(&self.state.digest().to_be_bytes());
+        }
+    }
+
+    fn reset(&mut self) {
+        self.state.reset();
+    }
+
+    fn output_bits(&self) -> usize {
+        self.bits
     }
 }
 
@@ -454,8 +493,7 @@ macro_rules! impl_digest_shake {
             }
 
             fn result(&mut self) -> io::Result<DigestOutput> {
-                let mut bytes = Vec::new();
-                try_reserve_zeroed(&mut bytes, self.output_bits().div_ceil(8))?;
+                let mut bytes = crate::zeroed_alloc::try_new_vec(self.output_bits().div_ceil(8))?;
                 self.hash_finalize(&mut bytes);
                 Ok(DigestOutput::Vec(bytes))
             }

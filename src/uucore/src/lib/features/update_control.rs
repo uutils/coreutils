@@ -83,7 +83,7 @@ pub mod arguments {
             .num_args(0..=1)
             .default_missing_value("older")
             .require_equals(true)
-            .overrides_with("update")
+            .overrides_with_all([OPT_UPDATE, OPT_UPDATE_NO_ARG])
             .action(ArgAction::Set)
     }
 
@@ -92,6 +92,7 @@ pub mod arguments {
         clap::Arg::new(OPT_UPDATE_NO_ARG)
             .short('u')
             .help("like --update but does not accept an argument")
+            .overrides_with_all([OPT_UPDATE, OPT_UPDATE_NO_ARG])
             .action(ArgAction::SetTrue)
     }
 }

@@ -69,6 +69,8 @@ pub mod update_control;
 pub mod uptime;
 #[cfg(feature = "version-cmp")]
 pub mod version_cmp;
+#[cfg(feature = "zeroed-alloc")]
+pub mod zeroed_alloc;
 
 // * (platform-specific) feature-gated modules
 // ** non-windows (i.e. Unix + Fuchsia)
@@ -82,16 +84,12 @@ pub mod entries;
 pub mod perms;
 #[cfg(all(feature = "pipes", any(target_os = "linux", target_os = "android")))]
 pub mod pipes;
-#[cfg(all(target_os = "linux", feature = "proc-info"))]
-pub mod proc_info;
 #[cfg(all(any(unix, windows), feature = "process"))]
 pub mod process;
 #[cfg(all(unix, feature = "safe-copy"))]
 pub mod safe_copy;
 #[cfg(all(feature = "safe-traversal", unix, not(target_os = "redox")))]
 pub mod safe_traversal;
-#[cfg(all(target_os = "linux", feature = "tty"))]
-pub mod tty;
 
 #[cfg(all(
     feature = "fsxattr",
@@ -109,25 +107,7 @@ pub mod fsxattr;
 pub mod hardware;
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 pub mod selinux;
-#[cfg(all(
-    feature = "signals",
-    any(
-        windows,
-        target_vendor = "apple",
-        target_os = "aix",
-        target_os = "android",
-        target_os = "cygwin",
-        target_os = "freebsd",
-        target_os = "haiku",
-        target_os = "hurd",
-        target_os = "illumos",
-        target_os = "linux",
-        target_os = "netbsd",
-        target_os = "openbsd",
-        target_os = "redox",
-        target_os = "solaris"
-    )
-))]
+#[cfg(has_signals)]
 pub mod signals;
 #[cfg(all(feature = "smack", target_os = "linux"))]
 pub mod smack;
