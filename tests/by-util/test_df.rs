@@ -1233,3 +1233,9 @@ df: invalid suffix in --block-size argument '1fb'
             .stderr_is("df: invalid suffix in --block-size argument '1fb'\n");
     }
 }
+
+#[test]
+fn test_v_flag_ignored() {
+    // -v flag is ignored and should succeed
+    new_ucmd!().arg("-v").succeeds();
+}

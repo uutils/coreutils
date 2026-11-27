@@ -27,7 +27,7 @@ use args::{FilterMode, Settings, Signum, parse_args};
 use chunks::ReverseChunks;
 use follow::Observer;
 use memchr::{memchr_iter, memrchr_iter};
-use paths::{FileExtTail, HeaderPrinter, Input, InputKind};
+use paths::{FileExtTail, HeaderPrinter, Input, InputKind, stdout_writer};
 use read::ReadAvailable;
 use std::cmp::Ordering;
 use std::fs::File;
@@ -67,15 +67,6 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
     let mut observer = Observer::from(settings);
 
     observer.start(settings)?;
-
-    // Print debug info about the follow implementation being used
-    if settings.debug && settings.follow.is_some() {
-        if observer.use_polling {
-            show_error!("{}", translate!("tail-debug-using-polling-mode"));
-        } else {
-            show_error!("{}", translate!("tail-debug-using-notification-mode"));
-        }
-    }
 
     // Do an initial tail print of each path's content.
     // Add `path` and `reader` to `files` map if `--follow` is selected.
@@ -555,7 +546,7 @@ fn bounded_tail(file: &mut File, settings: &Settings, end: Option<u64>) -> UResu
 }
 
 fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
-    let mut writer = BufWriter::new(stdout().lock());
+    let mut writer = BufWriter::new(stdout_writer());
     let mut reader = ReadAvailable::new(reader);
     match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), sep) => {
@@ -617,16 +608,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         }
         _ => {}
     }
-    #[cfg(not(windows))]
     writer.flush()?;
-
-    // SIGPIPE is not available on Windows.
-    #[cfg(windows)]
-    writer.flush().inspect_err(|err| {
-        if err.kind() == ErrorKind::BrokenPipe {
-            std::process::exit(13);
-        }
-    })?;
     Ok(())
 }
 
@@ -639,8 +621,7 @@ fn print_target_section<
     file: &mut R,
     limit: Option<u64>,
 ) -> UResult<()> {
-    let stdout = stdout();
-    let mut stdout = stdout.lock();
+    let mut stdout = stdout_writer();
     if let Some(limit) = limit {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         uucore::pipes::send_n_bytes(file, &mut stdout, limit)?;

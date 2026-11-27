@@ -104,6 +104,7 @@ bench_algorithm!(cksum_sha256, "sha256");
 bench_algorithm!(cksum_sha384, "sha384");
 bench_algorithm!(cksum_sha512, "sha512");
 bench_algorithm!(cksum_blake3, "blake3");
+bench_algorithm!(cksum_xxh3, "xxh3");
 bench_shake_algorithm!(cksum_shake128, "shake128", Shake128);
 bench_shake_algorithm!(cksum_shake256, "shake256", Shake256);
 

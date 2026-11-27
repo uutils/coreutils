@@ -1565,10 +1565,12 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             .then(a.path().cmp(b.path()))
         }),
         Sort::Extension => entries.sort_unstable_by(|a, b| {
-            a.path()
-                .extension()
-                .cmp(&b.path().extension())
-                .then(a.path().file_stem().cmp(&b.path().file_stem()))
+            // The extension runs from the last dot, so ".", ".." and dotfiles have one too.
+            let [ext_a, ext_b] = [a, b].map(|p| {
+                let name = p.display_name().as_encoded_bytes();
+                &name[name.iter().rposition(|&c| c == b'.').unwrap_or(name.len())..]
+            });
+            ext_a.cmp(ext_b).then_with(|| name_cmp(a, b))
         }),
         Sort::Width => entries.sort_unstable_by(|a, b| {
             a.display_name()
@@ -1579,7 +1581,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
         Sort::None => {}
     }
 
-    if config.reverse {
+    if config.reverse && config.sort != Sort::None {
         entries.reverse();
     }
 

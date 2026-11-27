@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST MESZ KST uueuu ueuu vasárnap június január distros Wednes Ihours uppercases xffx
+// spell-checker:ignore AEDT AEST EEST NZDT NZST Kolkata Iseconds Shanghai Taipei Dublin Havana févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST MESZ KST uueuu ueuu vasárnap június január distros Wednes Ihours uppercases xffx
 
 use std::cmp::Ordering;
 
@@ -182,6 +182,34 @@ fn test_date_accepts_gnu_timezone_abbreviations() {
             .succeeds()
             .stdout_is(expected);
     }
+}
+
+/// A zone abbreviation names several zones: `CST` is US Central, China and
+/// Cuba, `IST` is India, Israel and Ireland. GNU reads a trailing one as the
+/// current zone whenever the current zone goes by it, and only otherwise from
+/// its own table.
+#[rstest]
+// The current zone goes by the abbreviation, so it wins.
+#[case::shanghai_cst("Asia/Shanghai", "2024-06-01 12:00:00 CST", "1717214400\n")]
+#[case::taipei_cst("Asia/Taipei", "2024-06-01 12:00:00 CST", "1717214400\n")]
+#[case::dublin_ist("Europe/Dublin", "2024-06-01 05:00:00 IST", "1717214400\n")]
+#[case::havana_cdt("America/Havana", "2024-06-01 08:00:00 CDT", "1717243200\n")]
+// It does not, so the table decides: CST is US Central (UTC-6), IST is India
+// (UTC+5:30).
+#[case::utc_cst("UTC0", "2024-06-01 12:00:00 CST", "1717264800\n")]
+#[case::dublin_cst("Europe/Dublin", "2024-06-01 12:00:00 CST", "1717264800\n")]
+#[case::utc_ist("UTC0", "2024-01-15 12:00:00 IST", "1705300200\n")]
+fn test_date_trailing_abbreviation_resolved_against_current_zone(
+    #[case] tz: &str,
+    #[case] input: &str,
+    #[case] expected: &str,
+) {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", tz)
+        .args(&["-d", input, "+%s"])
+        .succeeds()
+        .stdout_is(expected);
 }
 
 #[test]
