@@ -1492,26 +1492,54 @@ fn test_stdin_is_socket() {
         .stdout_is(";;");
 }
 
-#[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
-#[test]
-fn test_classes_follow_single_byte_locale() {
-    // Compile a Latin-1 locale into the scenario's tmp dir.
-    let (at, _ucmd) = at_and_ucmd!();
+// Returns (`LC_ALL`, optional `LOCPATH`): on Linux the locale is compiled
+// with localedef into the scenario tmp dir, while FreeBSD and macOS use the
+// installed system locale, as their localedef needs locale sources that are
+// not installed there.
+#[cfg(all(unix, target_os = "linux"))]
+fn locale_test_env(
+    at: &uutests::util::AtPath,
+    charmap: &str,
+    glibc_name: &str,
+    _system_name: &str,
+) -> (String, Option<String>) {
     let compiled = std::process::Command::new("localedef")
-        .args(["-i", "en_US", "-f", "ISO-8859-1"])
-        .arg(at.plus("en_US.ISO-8859-1"))
+        .args(["-i", "en_US", "-f", charmap])
+        .arg(at.plus(glibc_name))
         .output()
         .is_ok_and(|output| output.status.success());
     assert!(
         compiled,
-        "localedef failed to compile the Latin-1 test locale"
+        "localedef failed to compile the {glibc_name} test locale"
     );
-    let locpath = at.as_string();
+    (glibc_name.to_string(), Some(at.as_string()))
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn locale_test_env(
+    _at: &uutests::util::AtPath,
+    _charmap: &str,
+    _glibc_name: &str,
+    system_name: &str,
+) -> (String, Option<String>) {
+    (system_name.to_string(), None)
+}
+
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+// macOS ships no single-byte locale, so this test has nothing to run against there.
+#[cfg(not(target_os = "macos"))]
+#[test]
+fn test_classes_follow_single_byte_locale() {
+    let (at, _ucmd) = at_and_ucmd!();
+    let (locale, locpath) =
+        locale_test_env(&at, "ISO-8859-1", "en_US.ISO-8859-1", "en_US.ISO8859-1");
+    let mut cmd = new_ucmd!();
+    if let Some(locpath) = locpath {
+        cmd.env("LOCPATH", locpath);
+    }
     // In Latin-1, 0x9b is a control character, so -d [:cntrl:] removes it.
-    new_ucmd!()
-        .env("LOCPATH", &locpath)
-        .env("LC_ALL", "en_US.ISO-8859-1")
+    cmd.env("LC_ALL", locale)
         .args(&["-d", "[:cntrl:]"])
         .pipe_in([b'h', b'e', b'l', b'l', b'o', 0x9b, b'3', b'1', b'm'])
         .succeeds()
@@ -1522,22 +1550,14 @@ fn test_classes_follow_single_byte_locale() {
 #[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
 #[test]
 fn test_classes_ignore_high_bytes_in_utf8_locale() {
-    // Compile a UTF-8 locale into the scenario's tmp dir.
     let (at, _ucmd) = at_and_ucmd!();
-    let compiled = std::process::Command::new("localedef")
-        .args(["-i", "en_US", "-f", "UTF-8"])
-        .arg(at.plus("en_US.UTF-8"))
-        .output()
-        .is_ok_and(|output| output.status.success());
-    assert!(
-        compiled,
-        "localedef failed to compile the UTF-8 test locale"
-    );
-    let locpath = at.as_string();
+    let (locale, locpath) = locale_test_env(&at, "UTF-8", "en_US.UTF-8", "en_US.UTF-8");
+    let mut cmd = new_ucmd!();
+    if let Some(locpath) = locpath {
+        cmd.env("LOCPATH", locpath);
+    }
     // In UTF-8, high bytes are never class members, so -d [:alpha:] must not split é.
-    new_ucmd!()
-        .env("LOCPATH", &locpath)
-        .env("LC_ALL", "en_US.UTF-8")
+    cmd.env("LC_ALL", locale)
         .args(&["-d", "[:alpha:]"])
         .pipe_in([b'a', 0xc3, 0xa9, b'b'])
         .succeeds()
