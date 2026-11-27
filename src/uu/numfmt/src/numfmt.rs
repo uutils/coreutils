@@ -248,16 +248,23 @@ fn parse_unit(s: &str, opt: &'static str) -> std::result::Result<Unit, ParseErro
 /// Parses a unit size. Suffixes are turned into their integer representations. For example, 'K'
 /// will return `Ok(1000)`, and '2K' will return `Ok(2000)`.
 fn parse_unit_size(s: &str, opt: &'static str) -> std::result::Result<usize, ParseError> {
-    let split = s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len());
-    let (number, suffix) = s.split_at(split);
+    // Leading blanks and one '+' may come before the digits.
+    let unsigned = s.trim_start_matches([' ', '\t', '\n', '\r', '\x0B', '\x0C']);
+    let unsigned = unsigned.strip_prefix('+').unwrap_or(unsigned);
+    let split = unsigned
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(unsigned.len());
+    let (number, suffix) = unsigned.split_at(split);
 
     // Reject all-zero numeric parts like "0" or "00K".
     let all_zero = !number.is_empty() && number.bytes().all(|b| b == b'0');
     if !all_zero && let Some(multiplier) = parse_unit_size_suffix(suffix) {
         if number.is_empty() {
-            return Ok(multiplier);
-        }
-        if let Some(size) = number
+            // A bare suffix like "K" is a size, but "", " K" and "+K" are not.
+            if !s.is_empty() && suffix == s {
+                return Ok(multiplier);
+            }
+        } else if let Some(size) = number
             .parse::<usize>()
             .ok()
             .and_then(|n| n.checked_mul(multiplier))
@@ -292,7 +299,7 @@ fn parse_unit_size_suffix(s: &str) -> Option<usize> {
 
     let i = ['K', 'M', 'G', 'T', 'P', 'E']
         .iter()
-        .position(|&ch| s.starts_with(ch))?;
+        .position(|&ch| s.starts_with(ch) || (ch == 'K' && s.starts_with('k')))?;
 
     match s.len() {
         1 => Some(SI_BASES[i + 1] as usize),
