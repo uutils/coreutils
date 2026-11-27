@@ -305,3 +305,31 @@ fn test_french_colored_error_messages() {
         }
     }
 }
+
+/// English strings are embedded, so an English run must not look for or read
+/// locale files (see #16862)
+#[cfg(target_os = "linux")]
+#[test]
+fn test_english_does_not_touch_locales_dir() {
+    for utility in ["echo", "ls", "cksum"] {
+        let Ok(output) = Command::new("strace")
+            .args(["-qq", "-f", "-e", "trace=file"])
+            .arg(uutests::util::get_tests_binary())
+            .args([utility, "--help"])
+            .env("LANG", "en_US.UTF-8")
+            .output()
+        else {
+            return;
+        };
+        let trace = String::from_utf8_lossy(&output.stderr);
+        if !trace.contains('(') {
+            return; // strace unavailable, e.g. restricted ptrace in a container
+        }
+        let lookups: Vec<_> = trace.lines().filter(|l| l.contains("locales")).collect();
+        assert!(
+            lookups.is_empty(),
+            "{utility} accessed locale files:\n{}",
+            lookups.join("\n")
+        );
+    }
+}
