@@ -32,7 +32,11 @@ fn utility_from_symlink<T>(
     binary: &std::path::Path,
     utils: &UtilityMap<T>,
 ) -> Option<&'static str> {
-    let target = std::fs::read_link(binary).ok()?;
+    use std::fs::read_link;
+    let target = read_link(binary)
+        .ok()
+        // symlink chain breaks AppArmor's path-based profile
+        .filter(|b| read_link(b).is_err())?;
     let name = validation::name(&target)?;
     matched_utility(name, utils)
 }

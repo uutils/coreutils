@@ -32,7 +32,7 @@ Our `coreutils` is called as `utility-name` if its binary name ends with `utilit
 Longer name is prioritized e.g. `sum` with the prefix `ck` is called as `cksum`.
 
 On Linux with glibc, a symlink alias such as
-`dummy -> true -> coreutils` selects `true` from the alias's immediate target.
+`dummy -> true` selects `true` if `true` is hardlink or copy of `coreutils`.
 
 ## `base32/base64/basenc`
 
