@@ -2144,6 +2144,49 @@ fn test_retry9() {
         .stdout_is(expected_stdout);
 }
 
+/// The removal of the followed file can be handled while its directory still
+/// exists; the later removal of the directory must still switch to polling,
+/// so the file is picked up again once the directory is recreated.
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_follow_name_dir_removed_after_file_event() {
+    use text::BACKEND;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir");
+    at.write("dir/file", "foo\n");
+    let mut p = ts
+        .ucmd()
+        .args(&["-F", "-s.1", "--max-unchanged-stats=1", "dir/file"])
+        .run_no_wait();
+    p.make_assertion_with_delay(500).is_alive();
+
+    at.remove("dir/file");
+    // Leave tail time to handle the file removal before the directory goes.
+    p.delay(500);
+    at.rmdir("dir");
+    p.delay(500);
+
+    at.mkdir("dir");
+    at.write("dir/file", "bar\n");
+    p.delay(1000);
+
+    p.make_assertion().is_alive();
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .stderr_is(format!(
+            "tail: 'dir/file' has become inaccessible: No such file or directory\n\
+             tail: directory containing watched file was removed\n\
+             tail: {BACKEND} cannot be used, reverting to polling\n\
+             tail: 'dir/file' has appeared;  following new file\n"
+        ))
+        .stdout_is("foo\nbar\n");
+}
+
 #[uutests::wasi_ignore(TailFollowDisabled)]
 #[test]
 #[cfg(all(
