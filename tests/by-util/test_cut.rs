@@ -5,6 +5,7 @@
 
 // spell-checker:ignore defg naïve nave närd nøys ntøys nfjärd undelimited xbfw nbbbb
 
+use rstest::rstest;
 use uutests::{at_and_ucmd, new_ucmd};
 
 static INPUT: &str = "lists.txt";
@@ -391,6 +392,49 @@ fn test_equal_delimiter_file_operand_after_double_dash() {
     ucmd.args(&["-d:", "-f2", "--", "-d="])
         .succeeds()
         .stdout_only("b\n");
+}
+
+#[rstest]
+#[case::bytes("-b=1", "invalid byte/character position '=1'")]
+#[case::chars("-c=1", "invalid byte/character position '=1'")]
+#[case::clustered_bytes("-zb=1", "invalid byte/character position '=1'")]
+#[case::clustered_chars("-zc=1", "invalid byte/character position '=1'")]
+#[case::fields("-f=1", "invalid field value '=1'")]
+#[case::fields_merged("-F=1", "invalid field value '=1'")]
+#[case::clustered_fields("-sf=1", "invalid field value '=1'")]
+fn test_short_option_list_preserves_leading_equals(#[case] arg: &str, #[case] expected_err: &str) {
+    new_ucmd!()
+        .arg(arg)
+        .fails_with_code(1)
+        .stderr_contains(expected_err);
+}
+
+#[rstest]
+#[case::delim(&["-d=x", "-f1"])]
+#[case::clustered_delim(&["-sd=x", "-f1"])]
+fn test_short_delimiter_preserves_leading_equals_error(#[case] args: &[&str]) {
+    new_ucmd!()
+        .args(args)
+        .fails_with_code(1)
+        .stderr_contains("the delimiter must be a single character");
+}
+
+#[rstest]
+#[case::clustered_delim_eq(&["-sd=", "-f2"], "a=b,c\n", "b,c\n")]
+#[case::out_delim_eq_x(&["-d,", "-f1,2", "-O=x"], "a,b\n", "a=xb\n")]
+#[case::out_delim_eq(&["-d,", "-f1,2", "-O="], "a,b\n", "a=b\n")]
+#[case::clustered_out_delim_eq_x(&["-d,", "-f1,2", "-sO=x"], "a,b\nc\n", "a=xb\n")]
+#[case::detached_hyphen_value(&["-d,", "-f1,2", "-O", "-b=1"], "a,b\n", "a-b=1b\n")]
+fn test_short_option_preserves_leading_equals_output(
+    #[case] args: &[&str],
+    #[case] input: &str,
+    #[case] expected_out: &str,
+) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected_out);
 }
 
 #[test]
