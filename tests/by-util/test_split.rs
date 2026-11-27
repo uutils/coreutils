@@ -394,6 +394,28 @@ fn test_filter_broken_pipe() {
         .succeeds();
 }
 
+#[cfg(unix)]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[test]
+fn test_round_robin_filter_exiting_early_keeps_other_records() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // The first record exceeds the pipe capacity, so split observes the filter closing.
+    let mut input = "x".repeat(2 * 1024 * 1024);
+    input.push_str("\n2\n3\n4\n5\n6\n");
+    at.write("input", &input);
+
+    ucmd.args(&[
+        "-n",
+        "r/2",
+        r#"--filter=if [ "$FILE" = xab ]; then cat > "$FILE"; fi"#,
+        "input",
+    ])
+    .succeeds()
+    .no_output();
+
+    assert_eq!(at.read("xab"), "2\n4\n6\n");
+}
+
 #[test]
 #[cfg(unix)]
 fn test_filter_with_kth_chunk() {
