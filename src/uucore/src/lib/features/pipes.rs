@@ -9,7 +9,7 @@ use crate::io::{RawReader, RawWriter, ReadWriteError};
 use rustix::pipe::{SpliceFlags, fcntl_setpipe_size};
 use std::cell::Cell;
 use std::io::{PipeReader, PipeWriter, Read, Write};
-use std::os::fd::AsFd;
+use std::os::fd::{AsFd, AsRawFd, RawFd};
 pub const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
 const KERNEL_DEFAULT_PIPE_SIZE: usize = 64 * 1024;
 
@@ -18,6 +18,9 @@ type PipeRes = std::io::Result<Result<(), ()>>;
 thread_local! {
     /// Cache empty pipe pair to avoid calling `pipe2` at each copy.
     static PIPE_CACHE: Cell<Option<(PipeReader, PipeWriter)>> = const { Cell::new(None) };
+    /// Cache the last destination's resize attempt, including failures.
+    /// Reused descriptor numbers may skip resizing, which is only an optimization.
+    static LAST_RESIZE_FD: Cell<Option<RawFd>> = const { Cell::new(None) };
 }
 
 /// A type allows to
@@ -52,7 +55,7 @@ pub fn pipe<const SIZE_REQUIRED: bool>() -> std::io::Result<(PipeReader, PipeWri
 /// of successfully moved bytes.
 ///
 /// splice fails if both of `source` and `target` are not pipe. Consider using
-/// `splice_unbounded_broker` or `splice_unbounded_auto` in the case.
+/// `splice_unbounded_auto` in the case.
 #[inline]
 pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io::Result<usize> {
     rustix::pipe::splice(source, None, target, None, len, SpliceFlags::empty())
@@ -95,7 +98,11 @@ pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> Splice
     // fcntl for input would not improve throughput since
     // - sender with splice probably increased size already
     // - sender without splice is bottleneck
-    let _ = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
+    let dest_fd = dest.as_fd().as_raw_fd();
+    if LAST_RESIZE_FD.replace(Some(dest_fd)) != Some(dest_fd) {
+        let _ = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
+    }
+
     // pre-generate page caches for splice
     let _ = rustix::fs::fadvise(source, 0, None, rustix::fs::Advice::Sequential);
     // 1st error is used to detect missing support for splice
