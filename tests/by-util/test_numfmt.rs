@@ -32,6 +32,7 @@ fn test_invalid_arg() {
 #[case::from_unit(&["--from-unit=512", "4"], "2048\n")]
 #[case::to_unit(&["--to-unit=512", "2048"], "4\n")]
 #[case::from_unit_with_plus_and_lowercase_k(&["--from-unit=+2k", "4"], "8000\n")]
+#[case::from_unit_with_lowercase_ki(&["--from-unit=2ki", "4"], "8192\n")]
 #[case::to_unit_with_leading_blanks(&["--to-unit= \t\x0B512", "2048"], "4\n")]
 #[case::format(&["--format=--%f--", "50"], "--50--\n")]
 #[case::format_with_separate_value(&["--format", "--%f--", "50"], "--50--\n")]
