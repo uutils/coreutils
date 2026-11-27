@@ -655,6 +655,25 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                         paths.push(p);
                     }
                 }
+            } else if observer.follow_name_retry()
+                && event.kind == notify::EventKind::Remove(notify::event::RemoveKind::Folder)
+            {
+                // The file removal may have been handled while its directory
+                // still existed: handle it again now that the directory is gone.
+                let dir = event.paths.first();
+                let lost: Vec<PathBuf> = observer
+                    .files
+                    .keys()
+                    .filter(|p| p.parent() == dir.map(PathBuf::as_path))
+                    .cloned()
+                    .collect();
+                for path in lost {
+                    let event = notify::Event::new(notify::EventKind::Remove(
+                        notify::event::RemoveKind::File,
+                    ))
+                    .add_path(path);
+                    observer.handle_event(&event, settings)?;
+                }
             }
             Ok(())
         };
