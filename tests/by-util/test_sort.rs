@@ -352,15 +352,18 @@ fn test_unique_sort_under_address_space_limit() {
     const MEMORY_LIMIT: u64 = 96 * 1024 * 1024;
     const INPUT_SIZE: usize = 36 * 1024 * 1024;
     const RECORD_PAIR: &[u8] = b"zzzzzzzzzzzzzzz\naaaaaaaaaaaaaaa\n";
-    let input = RECORD_PAIR.repeat(INPUT_SIZE / RECORD_PAIR.len());
-    new_ucmd!()
-        .args(&["--parallel=1", "--buffer-size=64M", "--unique"])
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("input", &RECORD_PAIR.repeat(INPUT_SIZE / RECORD_PAIR.len()));
+
+    // A file-backed stdin lets the test report sort's exit status and stderr
+    // even if sort exits before consuming all of the input.
+    ucmd.args(&["--parallel=1", "--buffer-size=64M", "--unique"])
+        .set_stdin(at.open("input"))
         .env("LC_ALL", "C")
         .env("MALLOC_ARENA_MAX", "1")
         .limit(Resource::AS, MEMORY_LIMIT, MEMORY_LIMIT)
         .limit(Resource::CORE, 0, 0)
         .timeout(Duration::from_secs(120))
-        .pipe_in(input)
         .succeeds()
         .stdout_only("aaaaaaaaaaaaaaa\nzzzzzzzzzzzzzzz\n");
 }
