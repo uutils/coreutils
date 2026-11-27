@@ -653,12 +653,52 @@ impl<'a> Pager<'a> {
 
     /// Process user input events until exit
     fn process_events(&mut self, options: &Options) -> UResult<()> {
+        // Set after `:` so the next key is read as a colon command
+        let mut pending_colon = false;
         loop {
             if !event::poll(Duration::from_millis(100))? {
                 continue;
             }
+            let event = event::read()?;
+            // Skip key release events
+            if let Event::Key(KeyEvent {
+                kind: KeyEventKind::Release,
+                ..
+            }) = event
+            {
+                continue;
+            }
+            // Only a key press ends a pending colon command, not e.g. a resize
+            let after_colon = matches!(event, Event::Key(_)) && std::mem::take(&mut pending_colon);
             let mut wrong_key = None;
-            match event::read()? {
+            match event {
+                // --- Colon commands ---
+                // `:n` skips to the next file, or exits after the last one
+                Event::Key(KeyEvent {
+                    code: KeyCode::Char('n'),
+                    modifiers: KeyModifiers::NONE,
+                    ..
+                }) if after_colon => {
+                    if self.next_file.is_none() {
+                        reset_term()?;
+                        std::process::exit(0);
+                    }
+                    return Ok(());
+                }
+                // Like util-linux, drop any other key after `:`, except Ctrl+C
+                Event::Key(KeyEvent { modifiers, .. })
+                    if after_colon && !modifiers.contains(KeyModifiers::CONTROL) =>
+                {
+                    continue;
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Char(':'),
+                    ..
+                }) => {
+                    pending_colon = true;
+                    continue;
+                }
+
                 // --- Quit commands ---
                 Event::Key(
                     KeyEvent {
@@ -684,10 +724,7 @@ impl<'a> Pager<'a> {
                     modifiers: KeyModifiers::NONE,
                     ..
                 }) => {
-                    // util-linux stays on the file here when exit_on_eof is off and
-                    // uses `:n` to move on. `:n` is not implemented yet, so still go
-                    // to the next file to avoid getting stuck.
-                    if self.eof_reached && (self.exit_on_eof || self.next_file.is_some()) {
+                    if self.eof_reached && self.exit_on_eof {
                         return Ok(());
                     }
                     self.page_down();
@@ -697,10 +734,7 @@ impl<'a> Pager<'a> {
                     modifiers: KeyModifiers::NONE,
                     ..
                 }) => {
-                    // util-linux stays on the file here when exit_on_eof is off and
-                    // uses `:n` to move on. `:n` is not implemented yet, so still go
-                    // to the next file to avoid getting stuck.
-                    if self.eof_reached && (self.exit_on_eof || self.next_file.is_some()) {
+                    if self.eof_reached && self.exit_on_eof {
                         return Ok(());
                     }
                     self.next_line();
@@ -726,12 +760,6 @@ impl<'a> Pager<'a> {
                 Event::Resize(col, row) => {
                     self.resize_page(col, row, options.lines);
                 }
-
-                // --- Skip key release events ---
-                Event::Key(KeyEvent {
-                    kind: KeyEventKind::Release,
-                    ..
-                }) => continue,
 
                 // --- Handle unknown keys ---
                 Event::Key(KeyEvent {

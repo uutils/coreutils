@@ -348,7 +348,7 @@ fn test_exit_on_eof_flag_overrides_posixly_correct() {
 
 #[test]
 #[cfg(unix)]
-fn test_space_at_eof_moves_to_next_file_without_exit_on_eof() {
+fn test_space_at_eof_stays_on_file_without_exit_on_eof() {
     let (mut child, mut controller, _replica) = spawn_more_with_pty(
         true,
         &["-n", "10"],
@@ -360,12 +360,68 @@ fn test_space_at_eof_moves_to_next_file_without_exit_on_eof() {
     assert!(String::from_utf8_lossy(&output[..n]).contains("content_a"));
     controller.write_all(b" ").unwrap();
     child.delay(200);
+    assert!(child.is_alive(), "more should stay on the file at EOF");
     let n = controller.read(&mut output).unwrap();
     assert!(
-        String::from_utf8_lossy(&output[..n]).contains("content_b"),
-        "space at EOF should move to the next file"
+        !String::from_utf8_lossy(&output[..n]).contains("content_b"),
+        "space at EOF should not move to the next file without exit_on_eof"
     );
-    assert!(child.is_alive(), "more should stay on the last file at EOF");
+    // `:n` is the way to the next file
+    controller.write_all(b":n").unwrap();
+    child.delay(200);
+    let n = controller.read(&mut output).unwrap();
+    assert!(String::from_utf8_lossy(&output[..n]).contains("content_b"));
+    quit_more(&mut controller, child);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_colon_n_skips_to_next_file() {
+    let content_a = (1..=50)
+        .map(|i| format!("a{i}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let (mut child, mut controller, _replica) = spawn_more_with_pty(
+        true,
+        &["-n", "10"],
+        &[("a.txt", &content_a), ("b.txt", "content_b\n")],
+    );
+    child.delay(200);
+    let mut output = vec![0u8; 4096];
+    assert!(controller.read(&mut output).unwrap() > 0);
+    controller.write_all(b":n").unwrap();
+    child.delay(200);
+    let n = controller.read(&mut output).unwrap();
+    let output_str = String::from_utf8_lossy(&output[..n]);
+    assert!(
+        output_str.contains("content_b"),
+        "`:n` should skip the rest of a.txt"
+    );
+    assert!(!output_str.contains("a50"));
+    // `:n` on the last file exits
+    controller.write_all(b":n").unwrap();
+    child.delay(200);
+    assert!(!child.is_alive(), "`:n` on the last file should exit");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_colon_then_other_key_is_dropped() {
+    let (mut child, mut controller, _replica) = spawn_more_with_pty(
+        true,
+        &["-n", "10"],
+        &[("a.txt", "content_a\n"), ("b.txt", "content_b\n")],
+    );
+    child.delay(200);
+    let mut output = vec![0u8; 4096];
+    assert!(controller.read(&mut output).unwrap() > 0);
+    // `n` alone is not `:n`, a key between `:` and `n` cancels the colon command,
+    // and keys after `:` are dropped like in util-linux, so `:q` does not quit
+    controller.write_all(b"n:xn:q").unwrap();
+    child.delay(200);
+    let n = controller.read(&mut output).unwrap();
+    assert!(!String::from_utf8_lossy(&output[..n]).contains("content_b"));
+    assert!(child.is_alive());
     quit_more(&mut controller, child);
 }
 
