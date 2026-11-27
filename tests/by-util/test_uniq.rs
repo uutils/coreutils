@@ -142,11 +142,11 @@ fn test_stdin_skip_invalid_fields_obsolete() {
 #[rstest]
 #[case::skip_fields("-cf2", "      3 a x 1\n      1 d z 2\n")]
 #[case::skip_chars("-us4", "d z 2\n")]
-#[case::check_chars("-cw1", "      1 a x 1\n      1 b y 1\n      1 c y 1\n      1 d z 2\n")]
+#[case::check_chars("-cw1", "      2 a x 1\n      1 c y 1\n      1 d z 2\n")]
 fn test_clustered_option_value_is_not_obsolete(#[case] arg: &str, #[case] expected: &str) {
     new_ucmd!()
         .arg(arg)
-        .pipe_in("a x 1\nb y 1\nc y 1\nd z 2\n")
+        .pipe_in("a x 1\na y 1\nc y 1\nd z 2\n")
         .succeeds()
         .stdout_only(expected);
 }
