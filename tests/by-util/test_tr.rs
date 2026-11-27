@@ -1527,8 +1527,9 @@ fn locale_test_env(
 
 #[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
-// macOS and Android ship no single-byte locale, so this test has nothing to run against there.
-#[cfg(not(any(target_os = "macos", target_os = "android")))]
+// macOS, Android and OpenBSD ship no single-byte locale, so this test has
+// nothing to run against there.
+#[cfg(not(any(target_os = "macos", target_os = "android", target_os = "openbsd")))]
 #[test]
 fn test_classes_follow_single_byte_locale() {
     let (at, _ucmd) = at_and_ucmd!();
@@ -1550,8 +1551,9 @@ fn test_classes_follow_single_byte_locale() {
 
 #[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
-// Android and macOS ship no single-byte locale, so this test has nothing to run against there.
-#[cfg(not(any(target_os = "macos", target_os = "android")))]
+// macOS, Android and OpenBSD ship no single-byte locale, so this test has
+// nothing to run against there.
+#[cfg(not(any(target_os = "macos", target_os = "android", target_os = "openbsd")))]
 #[test]
 fn test_case_folding_follows_single_byte_locale() {
     let (at, _ucmd) = at_and_ucmd!();
