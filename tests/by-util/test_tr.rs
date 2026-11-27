@@ -1538,12 +1538,14 @@ fn test_classes_follow_single_byte_locale() {
     if let Some(locpath) = locpath {
         cmd.env("LOCPATH", locpath);
     }
-    // In Latin-1, 0x9b is a control character, so -d [:cntrl:] removes it.
+    // 0xe9 is alpha in Latin-1 but not in the C locale, so a failed locale
+    // load fails this test instead of passing silently. FreeBSD's Latin-1
+    // [:cntrl:] holds no C1 controls, so 0x9b cannot be used here.
     cmd.env("LC_ALL", locale)
-        .args(&["-d", "[:cntrl:]"])
-        .pipe_in([b'h', b'e', b'l', b'l', b'o', 0x9b, b'3', b'1', b'm'])
+        .args(&["-d", "[:alpha:]"])
+        .pipe_in([b'h', b'e', b'l', b'l', b'o', 0xe9, b'3', b'1', b'm'])
         .succeeds()
-        .stdout_is_bytes(b"hello31m");
+        .stdout_is_bytes(b"31");
 }
 
 #[cfg(unix)]
