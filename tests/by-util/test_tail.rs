@@ -959,8 +959,11 @@ fn test_follow_with_pid() {
         .unwrap();
     let pid = dummy.id();
 
+    // A short sleep interval makes tail check the pid well within the delay
+    // below, so it is gone before the last append arrives.
     let mut child = ucmd
         .arg("-f")
+        .arg("-s.1")
         .arg(format!("--pid={pid}"))
         .arg(FOOBAR_TXT)
         .arg(FOOBAR_2_TXT)
