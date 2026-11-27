@@ -13,3 +13,4 @@ cksum-after-help = DIGEST determines the digest algorithm and default output
     - sha3: only available through cksum
     - blake2b: equivalent to b2sum
     - sm3: only available through cksum
+    - xxh3: only available through cksum

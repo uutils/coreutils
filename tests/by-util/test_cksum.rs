@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont checkfile unopenable
+// spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont checkfile unopenable ZEZTN
 
 use rstest::rstest;
 use rstest_reuse::{apply, template};
@@ -55,7 +55,8 @@ fn test_openssl_link() {
     let dynamic = String::from_utf8_lossy(&out.stdout).contains("crypto"); // covering MSYS/MinGW too
     assert_eq!(
         std::env::var("OPENSSL_NO_VENDOR") == Ok("1".to_string()),
-        dynamic
+        dynamic,
+        "unexpected linkage of static/dynamic OpenSSL. Set OPENSSL_STATIC=0 too!"
     );
 }
 
@@ -817,6 +818,21 @@ fn test_check_tagged_legacy_algo_keeps_warning_algo() {
         );
 }
 
+#[test]
+fn test_check_warn_names_stdin() {
+    // A warning about a line of a list read from stdin names it
+    // 'standard input', as the other messages for a stdin list do.
+    new_ucmd!()
+        .args(&["-a", "md5", "--warn", "--check"])
+        .pipe_in("x\n")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is(
+            "cksum: 'standard input': 1: improperly formatted MD5 checksum line\n\
+             cksum: 'standard input': no properly formatted checksum lines found\n",
+        );
+}
+
 #[rstest]
 #[case::md5("md5", "d41d8cd98f00b204e9800998ecf8427e")]
 #[case::sha1("sha1", "da39a3ee5e6b4b0d3255bfef95601890afd80709")]
@@ -1456,6 +1472,46 @@ fn test_check_pipe() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_contains("cksum: 'standard input': no properly formatted checksum lines found");
+}
+
+// When the checksum list is read from stdin, a line naming '-' is improperly
+// formatted, yet it still sets the line format. From a file, '-' reads stdin.
+#[rstest]
+// The algorithm in the warning comes from the line.
+#[case::tagged(
+    &["--warn", "--check", "-"],
+    "MD5 (-) = {d}\nMD5 (a) = {d}\n",
+    "a: OK\n",
+    "cksum: 'standard input': 1: improperly formatted MD5 checksum line\n\
+    cksum: WARNING: 1 line is improperly formatted\n",
+    0
+)]
+// The first line sets the two-space format, so the single-space line is improper.
+#[case::keeps_line_format(
+    &["-a", "md5", "--check"],
+    "{d}  -\n{d} a\n",
+    "",
+    "cksum: 'standard input': no properly formatted checksum lines found\n",
+    1
+)]
+#[case::list_from_file(&["-a", "md5", "--check", "list"], "a\n", "-: OK\n", "", 0)]
+fn test_check_line_naming_stdin(
+    #[case] args: &[&str],
+    #[case] stdin: &str,
+    #[case] stdout: &str,
+    #[case] stderr: &str,
+    #[case] code: i32,
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let digest = "60b725f10c9c85c70d97880dfe8191b3";
+    at.write("a", "a\n");
+    at.write("list", &format!("{digest}  -\n"));
+    ucmd.args(args)
+        .pipe_in(stdin.replace("{d}", digest))
+        .run()
+        .code_is(code)
+        .stdout_is(stdout)
+        .stderr_is(stderr);
 }
 
 #[test]
@@ -3911,6 +3967,109 @@ fn test_check_blake3_untagged(
         .pipe_in(untagged)
         .succeeds()
         .stdout_only("FILE: OK\n");
+}
+
+#[template]
+#[rstest]
+// Empty input values are the reference vectors published with xxHash.
+#[case(b"", "2d06800538d394c2", None)]
+#[case(b"", "2d06800538d394c2", Some(64))]
+#[case(b"", "99aa06d3014798d86001c324468d497f", Some(128))]
+#[case(b"uutils", "d74cd76b0cd5897d", Some(0))]
+#[case(b"uutils", "fec64465337c13d347ff579db36c6c4f", Some(128))]
+fn test_xxh3(#[case] input: &[u8], #[case] expected: &str, #[case] length: Option<usize>) {}
+
+fn xxh3_tag(length: Option<usize>) -> &'static str {
+    match length {
+        Some(128) => "XXH3-128",
+        _ => "XXH3-64",
+    }
+}
+
+#[apply(test_xxh3)]
+fn test_compute_xxh3(#[case] input: &[u8], #[case] expected: &str, #[case] length: Option<usize>) {
+    let length_args: Vec<String> = length.map_or(vec![], |len| vec!["-l".into(), len.to_string()]);
+
+    new_ucmd!()
+        .args(&["-a", "xxh3"])
+        .args(&length_args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(format!("{} (-) = {expected}\n", xxh3_tag(length)));
+
+    new_ucmd!()
+        .args(&["-a", "xxh3", "--untagged"])
+        .args(&length_args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(format!("{expected}  -\n"));
+}
+
+#[apply(test_xxh3)]
+fn test_check_xxh3(#[case] input: &[u8], #[case] digest: &str, #[case] length: Option<usize>) {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write_bytes("in.bin", input);
+
+    // The tagged line carries the algorithm, so no -a is needed.
+    scene
+        .ucmd()
+        .arg("--check")
+        .pipe_in(format!("{} (in.bin) = {digest}\n", xxh3_tag(length)))
+        .succeeds()
+        .stdout_only("in.bin: OK\n");
+
+    // An untagged line gets its length from the digest size.
+    scene
+        .ucmd()
+        .args(&["--check", "-a", "xxh3"])
+        .pipe_in(format!("{digest}  in.bin\n"))
+        .succeeds()
+        .stdout_only("in.bin: OK\n");
+}
+
+#[test]
+fn test_xxh3_base64_roundtrip() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("data", "uutils");
+    at.write("sums", "XXH3-128 (data) = /sZEZTN8E9NH/1eds2xsTw==\n");
+    ucmd.args(&["--check", "sums"])
+        .succeeds()
+        .stdout_only("data: OK\n");
+}
+
+#[rstest]
+#[case("32")]
+#[case("256")]
+fn test_xxh3_invalid_length(#[case] length: &str) {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["-a", "xxh3", "-l", length])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("cksum: digest length for 'XXH3' must be 64 or 128\n");
+}
+
+#[test]
+fn test_check_xxh3_unsupported_length_is_improperly_formatted() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("data", "uutils");
+    ucmd.arg("--check")
+        .pipe_in("XXH3-96 (data) = 000000000000000000000000\n")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("no properly formatted checksum lines found");
+}
+
+#[test]
+fn test_help() {
+    let result = new_ucmd!().env("LC_ALL", "C").arg("--help").succeeds();
+    result
+        .stdout_contains("multiple of 8 for blake2b")
+        .stdout_contains("384, or 512 for sha2")
+        .stdout_contains("64 or 128 for xxh3");
+    for algo in ["crc32b", "sha3", "sm3", "xxh3"] {
+        result.stdout_contains(format!("- {algo}: only available through cksum"));
+    }
 }
 
 #[test]

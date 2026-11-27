@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit NOFILE
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit NOFILE xdigit FSIZE sigxfsz
 
 use rand::{RngExt as _, SeedableRng, rng};
 use regex::Regex;
@@ -979,6 +979,50 @@ fn test_suffix_start_too_large_missing_input() {
     assert!(!at.file_exists("x100"));
 }
 
+#[rstest]
+#[case::plus(
+    "--numeric-suffixes=+5",
+    "'+5': invalid start value for numerical suffix"
+)]
+#[case::hex_plus(
+    "--hex-suffixes=+5",
+    "'+5': invalid start value for hexadecimal suffix"
+)]
+#[case::minus(
+    "--numeric-suffixes=-1",
+    "'-1': invalid start value for numerical suffix"
+)]
+#[case::blank(
+    "--numeric-suffixes= 5",
+    "' 5': invalid start value for numerical suffix"
+)]
+#[case::not_hex(
+    "--hex-suffixes=zz",
+    "'zz': invalid start value for hexadecimal suffix"
+)]
+#[case::overflow(
+    "--numeric-suffixes=99999999999999999999",
+    "numerical suffix start value is too large for the suffix length"
+)]
+#[case::hex_overflow(
+    "--hex-suffixes=ffffffffffffffffff",
+    "numerical suffix start value is too large for the suffix length"
+)]
+fn test_invalid_suffix_start(#[case] arg: &str, #[case] error: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(arg).fails().usage_error(error);
+    assert!(!at.file_exists("x05"));
+}
+
+#[rstest]
+#[case::numeric("--numeric-suffixes=")]
+#[case::hex("--hex-suffixes=")]
+fn test_empty_suffix_start_is_zero(#[case] arg: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(arg).pipe_in("a\n").succeeds().no_output();
+    assert_eq!(at.read("x00"), "a\n");
+}
+
 /// Test that a suffix start at or past the number of chunks is not checked
 /// against the auto-width suffix length, but against the default one
 #[test]
@@ -1067,6 +1111,26 @@ fn test_suffix_length_req() {
 }
 
 #[test]
+fn test_suffix_length_req_huge_chunk_count() {
+    // The suffix start plus a chunk count near u64::MAX used to overflow.
+    for (suffixes, required) in [("--numeric-suffixes=5", 20), ("--hex-suffixes=5", 16)] {
+        new_ucmd!()
+            .args(&[
+                "-n",
+                "18446744073709551615",
+                suffixes,
+                "-a",
+                "2",
+                "asciilowercase.txt",
+            ])
+            .fails()
+            .stderr_only(format!(
+                "split: the suffix length needs to be at least {required}\n"
+            ));
+    }
+}
+
+#[test]
 fn test_large_suffix_length_is_rejected() {
     new_ucmd!()
         .args(&["-a", "66542562175252"])
@@ -1125,7 +1189,6 @@ fn test_number_kth_of_n() {
         .args(&["--number=3/10", "/dev/null"])
         .succeeds()
         .stdout_only("");
-    #[cfg(target_pointer_width = "64")]
     new_ucmd!()
         .args(&[
             "--number=r/9223372036854775807/18446744073709551615",
@@ -1141,7 +1204,6 @@ fn test_number_kth_of_n() {
         .args(&["--number=10/5", "asciilowercase.txt"])
         .fails()
         .stderr_contains("split: invalid chunk number: '10'");
-    #[cfg(target_pointer_width = "64")]
     new_ucmd!()
         .args(&[
             "--number=9223372036854775807/18446744073709551616",
@@ -1165,7 +1227,10 @@ fn test_number_kth_of_n_round_robin() {
         .args(&["-e", "--number", "r/7/7", "fivelines.txt"])
         .succeeds()
         .stdout_only("");
-    #[cfg(target_pointer_width = "64")]
+    new_ucmd!()
+        .args(&["--number", "r/1/4294967296", "fivelines.txt"])
+        .succeeds()
+        .stdout_only("1\n");
     new_ucmd!()
         .args(&[
             "--number",
@@ -1174,7 +1239,6 @@ fn test_number_kth_of_n_round_robin() {
         ])
         .succeeds()
         .stdout_only("");
-    #[cfg(target_pointer_width = "64")]
     new_ucmd!()
         .args(&[
             "--number",
@@ -2607,8 +2671,14 @@ fn test_number_filter_exiting_early_keeps_other_chunks() {
     data.extend(vec![b'm'; 200_000]);
     data.extend(vec![b'n'; 200_000]);
     at.write_bytes("three", &data);
-    ucmd.args(&["-n", "3", "--filter=head -c1 > $FILE", "three"])
-        .succeeds()
-        .no_output();
+    // `head -c` is not POSIX and OpenBSD's head lacks it; dd also stops after one byte.
+    ucmd.args(&[
+        "-n",
+        "3",
+        "--filter=dd bs=1 count=1 2>/dev/null > $FILE",
+        "three",
+    ])
+    .succeeds()
+    .no_output();
     assert_eq!(at.read("xaa") + &at.read("xab") + &at.read("xac"), "kmn");
 }

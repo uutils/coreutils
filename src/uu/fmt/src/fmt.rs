@@ -112,10 +112,8 @@ impl FmtOptions {
         let xprefix = matches.get_flag(options::EXACT_PREFIX);
         let xanti_prefix = matches.get_flag(options::EXACT_SKIP_PREFIX);
 
-        let prefix = matches.get_one::<String>(options::PREFIX).map(String::from);
-        let anti_prefix = matches
-            .get_one::<String>(options::SKIP_PREFIX)
-            .map(String::from);
+        let prefix = matches.get_one::<String>(options::PREFIX).cloned();
+        let anti_prefix = matches.get_one::<String>(options::SKIP_PREFIX).cloned();
 
         let width_opt = extract_width(matches)?;
         let goal_opt_str = matches.get_one::<String>(options::GOAL);
@@ -242,7 +240,13 @@ fn process_file(
     let p_stream = ParagraphStream::new(fmt_opts, &mut fp);
     for para_result in p_stream {
         match para_result {
-            Err(nfl) => {
+            Err(parasplit::ParagraphStreamError::IoError(e)) => {
+                show!(e.map_err_context(
+                    || translate!("fmt-error-read", "file" => Path::new(file_name).quote())
+                ));
+                break;
+            }
+            Err(parasplit::ParagraphStreamError::NoFormatLine(nfl)) => {
                 ostream
                     .write_all(&nfl.line)
                     .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?;
@@ -275,7 +279,7 @@ fn extract_files(matches: &ArgMatches) -> UResult<Vec<OsString>> {
     let in_first_pos = matches
         .index_of(options::FILES_OR_WIDTH)
         .is_some_and(|x| x == 1);
-    let is_neg = |s: &str| s.parse::<isize>().is_ok_and(|w| w < 0);
+    let is_width = |s: &str| s.starts_with('-') && s.parse::<isize>().is_ok_and(|w| w <= 0);
 
     let files: UResult<Vec<OsString>> = matches
         .get_many::<OsString>(options::FILES_OR_WIDTH)
@@ -284,7 +288,7 @@ fn extract_files(matches: &ArgMatches) -> UResult<Vec<OsString>> {
         .enumerate()
         .filter_map(|(i, x)| {
             let x_str = x.to_string_lossy();
-            if is_neg(&x_str) {
+            if is_width(&x_str) {
                 if in_first_pos && i == 0 {
                     None
                 } else {

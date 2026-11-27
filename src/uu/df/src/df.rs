@@ -681,6 +681,12 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new("v")
+                .short('v')
+                .hide(true)
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new(OPT_EXCLUDE_TYPE)
                 .short('x')
                 .long("exclude-type")

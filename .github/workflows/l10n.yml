@@ -1275,7 +1275,7 @@ jobs:
         cargo build --package uu_yes --release
 
         # Find the generated embedded_locales.rs
-        locale_file=$(find target/release/build -path "*/uu_yes-*/out/embedded_locales.rs" -o -path "*/uucore-*/out/embedded_locales.rs" | head -1)
+        locale_file=$(find target/release/build -path "*/uucore*/out/embedded_locales.rs" | head -1)
         if [ -z "$locale_file" ]; then
           echo "ERROR: Could not find embedded_locales.rs"
           exit 1
@@ -1315,7 +1315,7 @@ jobs:
         cargo build --package uu_yes --release
 
         # Find the generated embedded_locales.rs
-        locale_file=$(find target/release/build -path "*/uu_yes-*/out/embedded_locales.rs" -o -path "*/uucore-*/out/embedded_locales.rs" | head -1)
+        locale_file=$(find target/release/build -path "*/uucore*/out/embedded_locales.rs" | head -1)
         if [ -z "$locale_file" ]; then
           echo "ERROR: Could not find embedded_locales.rs"
           exit 1
@@ -1348,7 +1348,7 @@ jobs:
         cargo clean -p uu_yes
         cargo build --package uu_yes --release
 
-        locale_file=$(find target/release/build -path "*/uucore-*/out/embedded_locales.rs" | head -1)
+        locale_file=$(find target/release/build -path "*/uucore*/out/embedded_locales.rs" | head -1)
         if [ -z "$locale_file" ]; then
           echo "ERROR: Could not find uucore embedded_locales.rs"
           exit 1

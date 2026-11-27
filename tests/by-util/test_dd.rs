@@ -1258,6 +1258,7 @@ fn test_bytes_iseek_skip_not_additive() {
 }
 
 #[test]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_bytes_oseek_bytes_oflag() {
     new_ucmd!()
         .args(&["oseek=8", "oflag=seek_bytes", "bs=2"])
@@ -1267,6 +1268,7 @@ fn test_bytes_oseek_bytes_oflag() {
 }
 
 #[test]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_bytes_oseek_bytes_trunc_oflag() {
     // The test harness hands stdout over as a regular file. Where dd detects
     // that (Linux, OpenBSD), it seeks in the file and, like GNU, writes
@@ -1570,6 +1572,41 @@ fn test_sparse_notrunc_extends_file() {
     ucmd.args(&["bs=512", "if=infile", "of=outfile", "conv=notrunc,sparse"])
         .succeeds();
     assert_eq!(at.metadata("outfile").len(), 1024);
+}
+
+/// With `conv=sparse,fsync` (or `fdatasync`), the trailing zero block extends
+/// the file before the sync, so the sync covers the final length.
+#[cfg(target_os = "linux")]
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
+#[rstest]
+#[case::fsync("fsync")]
+#[case::fdatasync("fdatasync")]
+fn test_sparse_extends_before_sync(#[case] sync: &str) {
+    let (at, _ucmd) = at_and_ucmd!();
+    at.write_bytes("infile", &[0; 4096]);
+    let trace = at.plus("trace");
+    let Ok(out) = Command::new("strace")
+        .arg("-o")
+        .arg(&trace)
+        .args(["-e", "trace=fsync,fdatasync,ftruncate"])
+        .arg(get_tests_binary())
+        .arg("dd")
+        .args(["if=infile", "of=outfile", "bs=4096", "status=none"])
+        .arg(format!("conv=sparse,{sync}"))
+        .current_dir(at.as_string())
+        .output()
+    else {
+        return; // missing strace
+    };
+    if String::from_utf8_lossy(&out.stderr).contains("ptrace") {
+        return; // tracing not permitted here
+    }
+    assert!(out.status.success());
+    assert_eq!(at.metadata("outfile").len(), 4096);
+    let trace = at.read("trace");
+    let extend = trace.find(", 4096)").expect("final ftruncate");
+    let synced = trace.find(&format!("{sync}(")).expect("sync call");
+    assert!(extend < synced, "{trace}");
 }
 
 /// `conv=notrunc,sparse` must not shrink an output file longer than the copy.
@@ -2336,7 +2373,7 @@ fn test_nocache_eof() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(not(wasi_runner))]
 fn test_nocache_eof_fadvise_zero_length() {
     use std::process::Command;
@@ -2371,6 +2408,7 @@ fn test_nocache_eof_fadvise_zero_length() {
 
 #[test]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_iso8859_1_case_conversion() {
     use std::process::Command;
     // Test ISO-8859-1 case conversion for accented characters

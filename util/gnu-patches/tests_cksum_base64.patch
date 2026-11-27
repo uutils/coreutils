@@ -2,7 +2,24 @@ Index: gnu/tests/cksum/cksum-base64.pl
 ===================================================================
 --- gnu.orig/tests/cksum/cksum-base64.pl
 +++ gnu/tests/cksum/cksum-base64.pl
-@@ -92,8 +92,8 @@ my $prog = 'cksum';
+@@ -36,6 +36,7 @@
+    ['sha3', "pp9zzKI6msXItWfcGFp1bpfJghZP4lhZ4NHcwUdcgKYVshI68fX5TBHj6UAsOsVY9QAZnZW20+MBdYWGKB3NJg=="],
+    ['blake2b', "eGoC90IBWQPGxv2FJVLScpEvR0DhWEdhiobiF/cfVBnSXhAxr+5YUxOJZESTTrBLkDpoWxRIt1XVb3Aa/pvizg=="],
+    ['sm3', "GrIdg1XPoX+OYRlIMegajyK+yMco/vt0ftA161CCqis="],
++   ['xxh3', "LQaABTjTlMI="],
+   );
+
+ # Return the formatted output for a given hash name/value pair.
+@@ -48,6 +49,8 @@
+   # Our tests use 'cksum -a sha{2,3} --length=512'.
+   $v =~ s/^SHA3\b/SHA3-512/;
+   $v =~ s/^SHA2\b/SHA512/;
++  # cksum -a xxh3 defaults to the 64-bit variant.
++  $v =~ s/^XXH3\b/XXH3-64/;
+   return "$v"
+ }
+
+@@ -95,8 +98,8 @@
  my $fail = run_tests ($program_name, $prog, \@Tests, $save_temps, $verbose);
 
  # Ensure hash names from cksum --help match those in @pairs above.

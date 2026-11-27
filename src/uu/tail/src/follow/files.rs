@@ -7,36 +7,40 @@
 
 use crate::args::Settings;
 use crate::chunks::BytesChunkBuffer;
-use crate::paths::{HeaderPrinter, PathExtTail};
+use crate::open_file;
+use crate::paths::{HeaderPrinter, PathExtTail, stdout_writer};
+use crate::read::ReadAvailable;
 use crate::text;
-use std::collections::HashMap;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::collections::hash_map::Keys;
-use std::fs::{File, Metadata};
-use std::io::{BufRead, BufReader, BufWriter, Write, stdout};
+use std::fs::Metadata;
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
 
 /// Data structure to keep a handle on files to follow.
 /// `last` always holds the path/key of the last file that was printed from.
-/// The keys of the [`HashMap`] can point to an existing file path (normal case),
+/// The keys of the [`FxHashMap`] can point to an existing file path (normal case),
 /// or stdin ("-"), or to a non-existing path (--retry).
-/// For existing files, all keys in the [`HashMap`] are absolute Paths.
+/// For existing files, all keys in the [`FxHashMap`] are absolute Paths.
 pub struct FileHandling {
-    map: HashMap<PathBuf, PathData>,
+    map: FxHashMap<PathBuf, PathData>,
     last: Option<PathBuf>,
     header_printer: HeaderPrinter,
+    pub(super) nonblocking: bool,
 }
 
 impl FileHandling {
     pub fn from(settings: &Settings) -> Self {
         Self {
-            map: HashMap::with_capacity(settings.inputs.len()),
+            map: FxHashMap::with_capacity_and_hasher(settings.inputs.len(), FxBuildHasher),
             last: None,
             header_printer: HeaderPrinter::new(settings.verbose, false),
+            nonblocking: settings.use_nonblocking(),
         }
     }
 
-    /// Wrapper for [`HashMap::insert`] using [`Path::canonicalize`]
+    /// Wrapper for [`FxHashMap::insert`] using [`Path::canonicalize`]
     pub fn insert(&mut self, k: &Path, v: PathData, update_last: bool) {
         let k = Self::canonicalize_path(k);
         if update_last {
@@ -45,17 +49,17 @@ impl FileHandling {
         let _ = self.map.insert(k, v);
     }
 
-    /// Wrapper for [`HashMap::remove`] using [`Path::canonicalize`]
+    /// Wrapper for [`FxHashMap::remove`] using [`Path::canonicalize`]
     pub fn remove(&mut self, k: &Path) -> PathData {
         self.map.remove(&Self::canonicalize_path(k)).unwrap()
     }
 
-    /// Wrapper for [`HashMap::get`] using [`Path::canonicalize`]
+    /// Wrapper for [`FxHashMap::get`] using [`Path::canonicalize`]
     pub fn get(&self, k: &Path) -> &PathData {
         self.map.get(&Self::canonicalize_path(k)).unwrap()
     }
 
-    /// Wrapper for [`HashMap::get_mut`] using [`Path::canonicalize`]
+    /// Wrapper for [`FxHashMap::get_mut`] using [`Path::canonicalize`]
     pub fn get_mut(&mut self, k: &Path) -> &mut PathData {
         self.map.get_mut(&Self::canonicalize_path(k)).unwrap()
     }
@@ -120,12 +124,16 @@ impl FileHandling {
         As a workaround, we always reopen the file even though this might not always
         be necessary.
         */
-        // A FIFO without a writer blocks `open`, and this runs on the thread that
-        // serves every followed file. Open FIFOs without waiting for a writer.
+        // A FIFO without a writer must not block the thread serving all files.
+        let file = open_file(path, true)?;
         #[cfg(unix)]
-        let file = crate::open_file(path, true)?;
-        #[cfg(not(unix))]
-        let file = File::open(path)?;
+        if !self.nonblocking {
+            use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
+
+            // Without --pid, preserve blocking reads after the nonblocking open.
+            let flags = fcntl_getfl(&file).map_err(std::io::Error::from)?;
+            fcntl_setfl(&file, flags & !OFlags::NONBLOCK).map_err(std::io::Error::from)?;
+        }
         let data = self.get_mut(path);
         data.reader.replace(Box::new(BufReader::new(file)));
         data.symlink = path.is_symlink();
@@ -145,7 +153,7 @@ impl FileHandling {
     pub fn tail_file(&mut self, path: &Path, verbose: bool) -> UResult<bool> {
         let mut chunks = BytesChunkBuffer::new(u64::MAX);
         if let Some(reader) = self.get_mut(path).reader.as_mut() {
-            chunks.fill(reader)?;
+            chunks.fill(&mut ReadAvailable::new(reader))?;
         }
         if chunks.has_data() {
             if self.needs_header(path, verbose) {
@@ -153,7 +161,7 @@ impl FileHandling {
                 self.header_printer.print(display_name.as_str())?;
             }
 
-            let mut writer = BufWriter::new(stdout().lock());
+            let mut writer = BufWriter::new(stdout_writer());
             chunks.write(&mut writer)?;
             writer.flush()?;
 
@@ -206,13 +214,13 @@ impl PathData {
             symlink,
         }
     }
-    pub fn from_other_with_path(data: Self, path: &Path) -> Self {
+    pub fn from_other_with_path(data: Self, path: &Path, nonblocking: bool) -> Self {
         // Remove old reader
         let old_reader = data.reader;
         let reader = if old_reader.is_some() {
             // Use old reader with the same file descriptor if there is one
             old_reader
-        } else if let Ok(file) = File::open(path) {
+        } else if let Ok(file) = open_file(path, nonblocking) {
             // Open new file tail from start
             Some(Box::new(BufReader::new(file)) as Box<dyn BufRead>)
         } else {

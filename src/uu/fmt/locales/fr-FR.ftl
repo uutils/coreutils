@@ -30,3 +30,4 @@ fmt-error-invalid-width-malformed = largeur invalide : {$width}
 fmt-error-cannot-open-for-reading = impossible d'ouvrir {$file} en lecture
 fmt-error-cannot-get-metadata = impossible d'obtenir les métadonnées pour {$file}
 fmt-error-failed-to-write-output = échec de l'écriture de sortie
+fmt-error-read = erreur de lecture de {$file}

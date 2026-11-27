@@ -82,6 +82,29 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
+fn test_tail_getrandom_eagain() {
+    use std::process::Command;
+    // `getrandom(2)` returns `EAGAIN` when the OS cannot provide random data immediately
+    let Ok(out) = Command::new("strace")
+        .args([
+            "-o",
+            "/dev/null",
+            "-e",
+            "inject=getrandom:error=EAGAIN",
+            uutests::util::get_tests_binary(),
+            "tail",
+            "/dev/null",
+        ])
+        .output()
+    else {
+        return; // missing strace
+    };
+    assert!(out.status.success());
+}
+
+#[test]
 fn test_stdin_default() {
     new_ucmd!()
         .pipe_in_fixture(FOOBAR_TXT)
@@ -2313,65 +2336,94 @@ fn test_follow_name_shows_headers_on_creation() {
     }
 }
 
+/// Run `tail --follow=name FILE`, with `--retry` and `--use-polling` if asked,
+/// let `change` act on `file` once tail is running, then check how tail ends:
+/// with `--retry` it keeps running and is killed, without it it exits with failure.
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd"),
+    not(windows)
+))] // FIXME: for currently not working platforms
+fn follow_name_after(
+    ts: &TestScenario,
+    file: &str,
+    polling: bool,
+    retry: bool,
+    change: impl FnOnce(&mut uutests::util::UChild, u64),
+) -> uutests::util::CmdResult {
+    let mut cmd = ts.ucmd();
+    cmd.args(&["--follow=name", file]);
+    if retry {
+        cmd.arg("--retry");
+    }
+    if polling {
+        cmd.arg("--use-polling");
+    }
+    let delay = if polling { 1500 } else { 500 };
+
+    let mut p = cmd.run_no_wait();
+    p.make_assertion_with_delay(delay).is_alive();
+
+    change(&mut p, delay);
+
+    if retry {
+        p.make_assertion().is_alive();
+        p.kill().make_assertion().with_all_output()
+    } else {
+        let result = p.make_assertion().is_not_alive().with_all_output();
+        result.failure();
+        result
+    }
+}
+
+/// What tail prints when the file it follows by name goes away.
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd"),
+    not(windows)
+))] // FIXME: for currently not working platforms
+fn follow_name_gone_stderr(util_name: &str, file: &str, retry: bool) -> String {
+    if retry {
+        format!("{util_name}: '{file}' has become inaccessible: No such file or directory\n")
+    } else {
+        format!("{util_name}: {file}: No such file or directory\n{util_name}: no files remaining\n")
+    }
+}
+
 #[uutests::wasi_ignore(TailFollowDisabled)]
-#[test]
-#[cfg(all(not(windows), not(target_os = "android")))] // FIXME: for currently not working platforms
-fn test_follow_name_remove() {
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd"),
+    not(windows)
+))] // FIXME: for currently not working platforms
+#[rstest]
+fn test_follow_name_remove(
+    #[values(false, true)] polling: bool,
+    #[values(false, true)] retry: bool,
+) {
     // This test triggers a remove event while `tail --follow=name file` is running.
     // ((sleep 2 && rm file &)>/dev/null 2>&1 &) ; tail --follow=name file
+    // Without --retry, tail exits when the file is removed and no files remain.
+    // With --retry, it reports the file as inaccessible and keeps running.
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    let source = FOLLOW_NAME_TXT;
-    let source_copy = "source_copy";
-    at.copy(source, source_copy);
+    let file = "source_copy";
+    at.copy(FOLLOW_NAME_TXT, file);
 
-    let expected_stdout = at.read(FOLLOW_NAME_SHORT_EXP);
-    let expected_stderr = [
-        format!(
-            "{}: {source_copy}: No such file or directory\n{0}: no files remaining\n",
-            ts.util_name,
-        ),
-        format!(
-            "{}: {source_copy}: No such file or directory\n",
-            ts.util_name,
-        ),
-    ];
-
-    let mut args = vec!["--follow=name", source_copy, "--use-polling"];
-
-    let mut delay = 1500;
-    #[allow(clippy::needless_range_loop)]
-    for i in 0..2 {
-        at.copy(source, source_copy);
-
-        let mut p = ts.ucmd().args(&args).run_no_wait();
-
-        p.make_assertion_with_delay(delay).is_alive();
-
-        at.remove(source_copy);
+    follow_name_after(&ts, file, polling, retry, |p, delay| {
+        at.remove(file);
         p.delay(delay);
-
-        if i == 0 {
-            p.make_assertion()
-                .is_not_alive()
-                .with_all_output()
-                .stdout_is(&expected_stdout)
-                .stderr_is(&expected_stderr[i])
-                .failure();
-        } else {
-            p.make_assertion().is_alive();
-            p.kill()
-                .make_assertion()
-                .with_all_output()
-                .stdout_is(&expected_stdout)
-                .stderr_is(&expected_stderr[i]);
-        }
-
-        args.pop();
-        delay /= 3;
-    }
+    })
+    .stdout_is(at.read(FOLLOW_NAME_SHORT_EXP))
+    .stderr_is(follow_name_gone_stderr(&ts.util_name, file, retry));
 }
 
 #[uutests::wasi_ignore(TailFollowDisabled)]
@@ -2618,7 +2670,6 @@ fn test_follow_detects_file_truncation() {
 }
 
 #[uutests::wasi_ignore(TailFollowDisabled)]
-#[test]
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "android"),
@@ -2626,52 +2677,46 @@ fn test_follow_detects_file_truncation() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
-fn test_follow_name_move_create1() {
+#[rstest]
+fn test_follow_name_move_create1(
+    #[values(false, true)] polling: bool,
+    #[values(false, true)] retry: bool,
+) {
     // This test triggers a move/create event while `tail --follow=name file` is running.
     // ((sleep 2 && mv file backup && sleep 2 && cp backup file &)>/dev/null 2>&1 &) ; tail --follow=name file
+    // Without --retry, tail exits on the move because no files remain.
+    // With --retry, it reports the file as inaccessible, keeps running and
+    // follows the file once it is recreated.
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    let source = FOLLOW_NAME_TXT;
+    let file = FOLLOW_NAME_TXT;
     let backup = "backup";
 
-    #[cfg(target_os = "linux")]
-    let expected_stdout = at.read(FOLLOW_NAME_EXP);
+    let gone = follow_name_gone_stderr(&ts.util_name, file, retry);
+    let (expected_stdout, expected_stderr) = if retry {
+        (
+            at.read(FOLLOW_NAME_EXP),
+            format!(
+                "{gone}{}: '{file}' has appeared;  following new file\n",
+                ts.util_name
+            ),
+        )
+    } else {
+        (at.read(FOLLOW_NAME_SHORT_EXP), gone)
+    };
 
-    #[cfg(target_os = "linux")]
-    let expected_stderr = format!(
-        "{}: {source}: No such file or directory\n{0}: '{source}' has appeared;  following new file\n",
-        ts.util_name,
-    );
-
-    // NOTE: We are less strict if not on Linux (inotify backend).
-
-    #[cfg(not(target_os = "linux"))]
-    let expected_stdout = at.read(FOLLOW_NAME_SHORT_EXP);
-
-    #[cfg(not(target_os = "linux"))]
-    let expected_stderr = format!("{}: {source}: No such file or directory\n", ts.util_name);
-
-    let delay = 500;
-    let args = ["--follow=name", source];
-
-    let mut p = ts.ucmd().args(&args).run_no_wait();
-
-    p.make_assertion_with_delay(delay).is_alive();
-
-    at.rename(source, backup);
-    p.delay(delay);
-
-    at.copy(backup, source);
-    p.delay(delay);
-
-    p.make_assertion().is_alive();
-    p.kill()
-        .make_assertion()
-        .with_all_output()
-        .stderr_is(expected_stderr)
-        .stdout_is(expected_stdout);
+    follow_name_after(&ts, file, polling, retry, |p, delay| {
+        at.rename(file, backup);
+        p.delay(delay);
+        if retry {
+            at.copy(backup, file);
+            p.delay(delay);
+        }
+    })
+    .stdout_is(expected_stdout)
+    .stderr_is(expected_stderr);
 }
 
 #[uutests::wasi_ignore(TailFollowDisabled)]
@@ -2764,71 +2809,8 @@ fn test_follow_name_hash_table_stress() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
-fn test_follow_name_move1() {
-    // This test triggers a move event while `tail --follow=name file` is running.
-    // ((sleep 2 && mv file backup &)>/dev/null 2>&1 &) ; tail --follow=name file
-    // NOTE: For `---disable-inotify` tail exits with "no file remaining", it stays open w/o it.
-
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
-
-    let source = FOLLOW_NAME_TXT;
-    let backup = "backup";
-
-    let expected_stdout = at.read(FOLLOW_NAME_SHORT_EXP);
-    let expected_stderr = [
-        format!("{}: {source}: No such file or directory\n", ts.util_name),
-        format!(
-            "{}: {source}: No such file or directory\n{0}: no files remaining\n",
-            ts.util_name,
-        ),
-    ];
-
-    let mut args = vec!["--follow=name", source];
-
-    let mut delay = 500;
-    #[allow(clippy::needless_range_loop)]
-    for i in 0..2 {
-        let mut p = ts.ucmd().args(&args).run_no_wait();
-
-        p.make_assertion_with_delay(delay).is_alive();
-
-        at.rename(source, backup);
-        p.delay(delay);
-
-        if i == 0 {
-            p.make_assertion().is_alive();
-            p.kill()
-                .make_assertion()
-                .with_all_output()
-                .stderr_is(&expected_stderr[i])
-                .stdout_is(&expected_stdout);
-        } else {
-            p.make_assertion()
-                .is_not_alive()
-                .with_all_output()
-                .stderr_is(&expected_stderr[i])
-                .stdout_is(&expected_stdout)
-                .failure();
-        }
-
-        at.rename(backup, source);
-        args.push("--use-polling");
-        delay *= 3;
-    }
-}
-
-#[uutests::wasi_ignore(TailFollowDisabled)]
-#[test]
-#[cfg(all(
-    not(target_vendor = "apple"),
-    not(target_os = "android"),
-    not(target_os = "freebsd"),
-    not(target_os = "openbsd"),
-    not(windows)
-))] // FIXME: for currently not working platforms
 fn test_follow_name_move2() {
-    // Like test_follow_name_move1, but move to a name that's already monitored.
+    // Like test_follow_name_move_create1, but move to a name that's already monitored.
 
     // $ echo file1_content > file1; echo file2_content > file2; \
     // ((sleep 2 ; mv file1 file2 ; sleep 1 ; echo "more_file2_content" >> file2 ; sleep 1 ; \
@@ -2917,7 +2899,7 @@ fn test_follow_name_move2() {
     not(windows)
 ))] // FIXME: for currently not working platforms
 fn test_follow_name_move_retry1() {
-    // Similar to test_follow_name_move1 but with `--retry` (`-F`)
+    // Similar to test_follow_name_move_create1 but with `--retry` (`-F`)
     // This test triggers two move/rename events while `tail --follow=name --retry file` is running.
 
     let ts = TestScenario::new(util_name!());
@@ -3216,6 +3198,138 @@ fn test_fifo_with_pid() {
         .with_all_output()
         .no_output()
         .success();
+}
+
+#[uutests::wasi_ignore(NoFifo)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_pid_without_follow_waits_for_fifo_eof() {
+    use std::fs::OpenOptions;
+    use std::os::unix::fs::OpenOptionsExt;
+    let (at, mut command) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    let mut writer = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(libc::O_NONBLOCK)
+        .open(at.plus("fifo"))
+        .unwrap();
+    writer.write_all(b"first\n").unwrap();
+    let mut child = command
+        .arg("--pid=0")
+        .args(&["-n1", "fifo"])
+        .timeout(std::time::Duration::from_secs(5))
+        .run_no_wait();
+    child
+        .make_assertion_with_delay(500)
+        .is_alive()
+        .with_all_output()
+        .no_stdout();
+    writer.write_all(b"last\n").unwrap();
+    drop(writer);
+    child.wait().unwrap().success().stdout_is("last\n");
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_fifo_with_pid_reads_while_writer_stays_open() {
+    use std::fs::OpenOptions;
+    use std::os::unix::fs::OpenOptionsExt;
+    use std::process::Command;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    let mut writer = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(libc::O_NONBLOCK)
+        .open(at.plus("fifo"))
+        .unwrap();
+    writer.write_all(b"skip\nfirst\n").unwrap();
+    let mut monitored = Command::new("sh")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let mut child = ucmd
+        .args(&["-f", "-s.05", "-n1", "fifo"])
+        .arg(format!("--pid={}", monitored.id()))
+        .timeout(std::time::Duration::from_secs(5))
+        .run_no_wait();
+    child
+        .make_assertion_with_delay(500)
+        .is_alive()
+        .with_all_output()
+        .stdout_is("first\n");
+    writer.write_all(b"second\n").unwrap();
+    child
+        .make_assertion_with_delay(500)
+        .is_alive()
+        .with_all_output()
+        .stdout_is("first\nsecond\n");
+    monitored.stdin.take();
+    monitored.wait().unwrap();
+    // Keep the FIFO writer open: only the process-exit check can stop tail.
+    child.wait().unwrap().success().no_stderr();
+}
+
+#[cfg(target_os = "linux")]
+fn tail_input_flags(pid: u32, target: &Path) -> std::io::Result<Option<u32>> {
+    let read_flags = || -> std::io::Result<Option<u32>> {
+        for descriptor in std::fs::read_dir(format!("/proc/{pid}/fd"))? {
+            let descriptor = descriptor?;
+            if descriptor
+                .file_name()
+                .to_string_lossy()
+                .parse::<u32>()
+                .is_ok_and(|fd| fd > 2)
+                && std::fs::read_link(descriptor.path()).is_ok_and(|path| path == target)
+            {
+                let info = std::fs::read_to_string(format!(
+                    "/proc/{pid}/fdinfo/{}",
+                    descriptor.file_name().to_string_lossy()
+                ))?;
+                return Ok(info
+                    .lines()
+                    .find_map(|line| line.strip_prefix("flags:\t"))
+                    .and_then(|flags| u32::from_str_radix(flags, 8).ok()));
+            }
+        }
+        Ok(None)
+    };
+    match read_flags() {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        result => result,
+    }
+}
+
+#[rstest]
+#[case::without_pid(false)]
+#[case::pid_zero(true)]
+#[cfg(target_os = "linux")]
+#[uutests::wasi_ignore(TailFollowDisabled)]
+fn test_pid_controls_nonblocking_mode(#[case] with_pid: bool) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("regular");
+    let target = at.plus("regular");
+    ucmd.args(&["-f", "-s.05"]).arg(&target);
+    if with_pid {
+        ucmd.arg("--pid=0");
+    }
+    let mut child = ucmd.run_no_wait();
+    let mut flags = None;
+    for _ in 0..500 {
+        flags = tail_input_flags(child.id(), &target).unwrap();
+        if flags.is_some() || !child.is_alive() {
+            break;
+        }
+        child.delay(10);
+    }
+    child.kill();
+    let flags = flags.expect("tail did not open the input");
+    assert_eq!(flags & libc::O_NONBLOCK as u32 != 0, with_pid);
 }
 
 #[test]
@@ -5502,7 +5616,6 @@ fn test_when_piped_input_then_no_broken_pipe() {
     }
 }
 
-#[uutests::wasi_ignore(ClosedStdoutGenericIoError)]
 #[test]
 #[cfg(unix)]
 fn test_when_output_closed_then_no_broken_pipe() {
@@ -5516,6 +5629,38 @@ fn test_when_output_closed_then_no_broken_pipe() {
     // Dropping the stdout should not lead to an error.
     // The "Broken pipe" error should be silently ignored.
     child.close_stdout();
+    child.wait().unwrap().fails_silently();
+}
+
+#[test]
+fn test_when_output_closed_then_no_broken_pipe_with_verbose_header() {
+    let (at, mut cmd) = at_and_ucmd!();
+    at.make_file("input").set_len(10_000_000).unwrap();
+
+    let mut child = cmd
+        .args(&["-v", "-c", "10000000", "input"])
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+    // Dropping the stdout should not lead to an error, even when the first
+    // write is the "==> input <==" header rather than file content.
+    child.close_stdout();
+    child.wait().unwrap().fails_silently();
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+fn test_when_output_closed_then_no_broken_pipe_while_following() {
+    let (at, mut cmd) = at_and_ucmd!();
+    at.write("input", "line1\n");
+
+    let mut child = cmd
+        .args(&["-f", "input"])
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+    // Dropping the stdout should not lead to an error once new data
+    // arrives for the followed file to write out.
+    child.close_stdout();
+    at.append("input", "line2\n");
     child.wait().unwrap().fails_silently();
 }
 
@@ -5537,6 +5682,7 @@ fn test_child_when_run_with_stderr_to_stdout() {
 }
 
 #[cfg(target_os = "linux")]
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 fn test_failed_write_is_reported() {
     new_ucmd!()
@@ -5547,6 +5693,7 @@ fn test_failed_write_is_reported() {
 }
 
 #[cfg(target_os = "linux")]
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 fn test_multiple_input_files_failed_write_is_reported() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -5571,6 +5718,7 @@ fn test_failed_warning_write_is_reported() {
 }
 
 #[cfg(target_os = "linux")]
+#[uutests::wasip2_ignore(StreamWriteGenericIoError)]
 #[test]
 fn test_failed_write_is_reported_on_seekable_input() {
     let ts = TestScenario::new("tail");
@@ -5683,6 +5831,162 @@ fn test_debug_flag_with_inotify() {
         .make_assertion()
         .with_all_output()
         .stderr_contains("tail: using notification mode");
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(unix)]
+fn test_debug_follow_descriptor_device_uses_blocking_mode() {
+    let mut child = new_ucmd!()
+        .args(&["--debug", "-f", "/dev/null"])
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stderr_is("tail: using blocking mode\n");
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(unix)]
+fn test_debug_follow_name_device_uses_polling_mode() {
+    let mut child = new_ucmd!()
+        .args(&["--debug", "-F", "/dev/null"])
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stderr_is("tail: using polling mode\n");
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(unix)]
+fn test_debug_follow_piped_stdin_and_device_uses_blocking_mode() {
+    let mut child = new_ucmd!()
+        .args(&["--debug", "-f", "/dev/null", "-"])
+        .pipe_in("x\n")
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stderr_contains("tail: using blocking mode\n")
+        .stderr_does_not_contain("notification");
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+fn test_debug_follow_missing_file_prints_no_mode() {
+    new_ucmd!()
+        .args(&["--debug", "-f", "missing"])
+        .fails_with_code(1)
+        .stderr_does_not_contain("using");
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_debug_mode_printed_after_initial_output() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello\n");
+
+    let mut child = ucmd.args(&["--debug", "-F", "missing", "f"]).run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child.kill().make_assertion().with_all_output().stderr_is(
+        "tail: cannot open 'missing' for reading: No such file or directory\n\
+             tail: using notification mode\n",
+    );
+}
+
+/// Wait up to 5 seconds for the stderr of `child` to satisfy `done`.
+#[cfg(target_os = "linux")]
+fn wait_for_stderr(child: &mut uutests::util::UChild, done: impl Fn(&str) -> bool) {
+    for _ in 0..100 {
+        if done(&child.stderr_all()) {
+            break;
+        }
+        child.delay(50);
+    }
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_debug_reports_switch_to_polling() {
+    use text::BACKEND;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("dir");
+    at.write("dir/f", "hello\n");
+
+    let mut child = ts
+        .ucmd()
+        .args(&["--debug", "-F", "-s.1", "--max-unchanged-stats=1", "dir/f"])
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    // Move the directory away before removing the file, so the parent is
+    // already gone whenever tail handles the removal.
+    at.rename("dir", "dir.gone");
+    at.remove("dir.gone/f");
+    wait_for_stderr(&mut child, |e| e.contains("using polling mode"));
+    at.mkdir("dir");
+    at.touch("dir/f");
+    wait_for_stderr(&mut child, |e| e.contains("has appeared"));
+
+    child.make_assertion().is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_is("hello\n")
+        .stderr_is(format!(
+            "tail: using notification mode\n\
+             tail: 'dir/f' has become inaccessible: No such file or directory\n\
+             tail: directory containing watched file was removed\n\
+             tail: {BACKEND} cannot be used, reverting to polling\n\
+             tail: using polling mode\n\
+             tail: 'dir/f' has appeared;  following new file\n"
+        ));
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_debug_reports_switch_to_polling_once() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("dir");
+    at.write("dir/a", "a\n");
+    at.write("dir/b", "b\n");
+
+    let mut child = ts
+        .ucmd()
+        .args(&["--debug", "-F", "-s.1", "dir/a", "dir/b"])
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    // Move the directory away first, so both removals see it gone.
+    at.rename("dir", "dir.gone");
+    at.remove("dir.gone/a");
+    at.remove("dir.gone/b");
+    wait_for_stderr(&mut child, |e| {
+        e.matches("reverting to polling").count() == 2
+    });
+
+    let stderr = child.kill().stderr_all();
+    assert_eq!(stderr.matches("using polling mode").count(), 1, "{stderr}");
 }
 
 #[uutests::wasi_ignore(TailFollowDisabled)]
@@ -5951,5 +6255,52 @@ fn test_invalid_max_unchanged_stats_is_rejected() {
             .fails_with_code(1)
             .stderr_contains("invalid maximum number of unchanged stats between opens: '")
             .stderr_contains(value);
+    }
+}
+
+#[uutests::wasi_ignore(StdinPositionNotPreserved)]
+#[rstest]
+#[case::lines(4, &["-n10"], "two\n")]
+#[case::last_line(1, &["-n1"], "two\n")]
+#[case::bytes(4, &["-c10"], "two\n")]
+#[case::last_bytes(1, &["-c2"], "o\n")]
+#[case::from_line(1, &["-n+2"], "two\n")]
+#[case::from_byte(4, &["-c+2"], "wo\n")]
+#[case::at_eof(8, &["-n10"], "")]
+#[case::past_eof_lines(9, &["-n10"], "")]
+#[case::past_eof_bytes(9, &["-c10"], "")]
+#[cfg(any(unix, windows))]
+fn test_stdin_redirect_large_offset(
+    #[case] offset: u64,
+    #[case] args: &[&str],
+    #[case] expected: &str,
+    #[values(false, true)] presume_input_pipe: bool,
+    #[values(false, true)] append_output: bool,
+) {
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    // Keep the file large enough for seeking, with a short unread suffix.
+    // Neither path may read before stdin's offset or include our appended output.
+    let prefix = "prefix\n".repeat(100_000);
+    let content = format!("{prefix}one\ntwo\n");
+    at.write("f", &content);
+    let mut input = File::open(at.plus("f")).unwrap();
+    input
+        .seek(SeekFrom::Start(prefix.len() as u64 + offset))
+        .unwrap();
+    if presume_input_pipe {
+        ucmd.arg("---presume-input-pipe");
+    }
+    ucmd.args(args).set_stdin(input);
+    if append_output {
+        let output = OpenOptions::new().append(true).open(at.plus("f")).unwrap();
+        run_appending_to_input(&at, ucmd.arg("-v").set_stdout(output));
+        assert_eq!(
+            at.read("f"),
+            format!("{content}==> 'standard input' <==\n{expected}")
+        );
+    } else {
+        ucmd.succeeds().stdout_only(expected);
     }
 }

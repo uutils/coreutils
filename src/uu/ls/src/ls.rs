@@ -1446,10 +1446,6 @@ fn enter_directory<O: LsOutput>(
             false,
         );
 
-        if !entry.is_first {
-            output.write_dir_header(&path_data, config, false)?;
-        }
-
         let mut current_read_dir = if entry.is_first {
             initial_read_dir
                 .take()
@@ -1469,6 +1465,10 @@ fn enter_directory<O: LsOutput>(
             }
         };
 
+        if !entry.is_first {
+            output.write_dir_header(&path_data, config, false)?;
+        }
+
         collect_directory_entries(entries, &path_data, config, output, &mut current_read_dir)?;
         write_directory_entries(entries, config, output)?;
 
@@ -1481,17 +1481,6 @@ fn enter_directory<O: LsOutput>(
                 let child_path = child.path().to_path_buf();
                 let child_must_dereference = child.must_dereference;
                 let child_command_line = child.command_line;
-
-                // Try to read_dir now to eagerly report errors, matching GNU.
-                if let Err(err) = fs::read_dir(&child_path) {
-                    output.flush()?;
-                    show!(LsError::IOErrorContext(
-                        child_path.clone(),
-                        err,
-                        child_command_line,
-                    ));
-                    continue;
-                }
 
                 let info = match FileInformation::from_path(&child_path, child_must_dereference) {
                     Ok(info) => info,
@@ -1576,10 +1565,12 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             .then(a.path().cmp(b.path()))
         }),
         Sort::Extension => entries.sort_unstable_by(|a, b| {
-            a.path()
-                .extension()
-                .cmp(&b.path().extension())
-                .then(a.path().file_stem().cmp(&b.path().file_stem()))
+            // The extension runs from the last dot, so ".", ".." and dotfiles have one too.
+            let [ext_a, ext_b] = [a, b].map(|p| {
+                let name = p.display_name().as_encoded_bytes();
+                &name[name.iter().rposition(|&c| c == b'.').unwrap_or(name.len())..]
+            });
+            ext_a.cmp(ext_b).then_with(|| name_cmp(a, b))
         }),
         Sort::Width => entries.sort_unstable_by(|a, b| {
             a.display_name()
@@ -1590,7 +1581,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
         Sort::None => {}
     }
 
-    if config.reverse {
+    if config.reverse && config.sort != Sort::None {
         entries.reverse();
     }
 

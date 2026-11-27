@@ -101,6 +101,27 @@ fn test_buffer_size_limits_both_chunks() {
 }
 
 #[test]
+fn test_buffer_size_trailing_whitespace_is_rejected() {
+    for size in [" 1 ", "1 ", "1M ", "50% "] {
+        new_ucmd!()
+            .arg(format!("--buffer-size={size}"))
+            .fails_with_code(2)
+            .stderr_only(format!(
+                "sort: invalid suffix in --buffer-size argument '{size}'\n"
+            ));
+    }
+
+    // Leading whitespace is still skipped.
+    for size in [" 1M", "\t1M"] {
+        new_ucmd!()
+            .arg(format!("--buffer-size={size}"))
+            .pipe_in("b\na\n")
+            .succeeds()
+            .stdout_only("a\nb\n");
+    }
+}
+
+#[test]
 fn test_invalid_buffer_size() {
     new_ucmd!()
         .arg("-S")
@@ -617,12 +638,56 @@ fn test_random_source_is_not_read_without_random_sort() {
 
 #[test]
 fn test_random_ignore_case() {
+    use uutests::util_name;
+
     let input = "ABC\nABc\nAbC\nAbc\naBC\naBc\nabC\nabc\n";
     new_ucmd!()
         .args(&["-fR"])
         .pipe_in(input)
         .succeeds()
         .stdout_is(input);
+
+    // Keys equal under -f must also hash equal, or a second key can split
+    // them and -u keeps both.
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.write_bytes("source", &[0; 16]);
+    ts.ucmd()
+        .args(&["-Rfu", "-k1,1", "--random-source=source"])
+        .pipe_in("Alice ticket-1\nalice ticket-2\nXena ticket-3\n")
+        .succeeds()
+        .stdout_str_check(|out| out.lines().count() == 2);
+}
+
+#[test]
+fn test_random_dictionary_order_unique() {
+    use uutests::util_name;
+
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.write_bytes("source", &[0; 16]);
+    ts.ucmd()
+        .args(&["-Rdu", "--random-source=source"])
+        .pipe_in("Alice\nalice\nXena\n a\na\nb.\nb\n")
+        .succeeds()
+        .stdout_str_check(|out| out.lines().count() == 6);
+}
+
+#[test]
+fn test_random_unique_keys_of_different_lengths() {
+    use uutests::util_name;
+
+    // Keys that only differ in length must not hash equal, or -u drops one.
+    // The noise byte is one each option ignores.
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.write_bytes("source", &[0; 16]);
+    let keys = ["a", "aa", "aaa", "aaaa", "ab", "abb", "XZ", "XZZ"];
+    for (option, noise) in [("-Rfu", ""), ("-Rdu", "."), ("-Riu", "\x01")] {
+        let input = keys.join(&format!("{noise}\n")) + noise + "\n";
+        ts.ucmd()
+            .args(&[option, "--random-source=source"])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_str_check(|out| out.lines().count() == keys.len());
+    }
 }
 
 #[test]
@@ -3035,6 +3100,20 @@ fn test_g_misc() {
 }
 
 #[test]
+fn test_g_signed_inf_and_nan() {
+    new_ucmd!()
+        .arg("-g")
+        .pipe_in("+inf\n1\n-inf\n+INFx\n2\n")
+        .succeeds()
+        .stdout_is("-inf\n1\n2\n+INFx\n+inf\n");
+    new_ucmd!()
+        .arg("-g")
+        .pipe_in("+nan\n1\nnan\n-nan\nx\n-inf\n")
+        .succeeds()
+        .stdout_is("x\n-nan\n+nan\nnan\n-inf\n1\n");
+}
+
+#[test]
 // Test numbers with a large number of digits, where only the last digit is different.
 // We use scientific notation to make sure string sorting does not correctly order them.
 fn test_g_arbitrary() {
@@ -4432,8 +4511,25 @@ fn test_numeric_looking_file_names_are_kept_verbatim(
 fn test_debug_incompatible_with_output() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-o", "out", "--debug"])
-        .pipe_in("b\na\n")
         .fails_with_code(2)
         .stderr_only("sort: options '-o --debug' are incompatible\n");
     assert!(!at.file_exists("out"));
+}
+
+#[test]
+fn test_debug_incompatible_with_check() {
+    for (args, opt) in [
+        (&["-c", "--debug"][..], "c"),
+        (&["--debug", "--check=diagnose-first"], "c"),
+        (&["-C", "--debug"], "C"),
+        (&["--check=quiet", "--debug"], "C"),
+        // reported before the other problems with -c
+        (&["-c", "--debug", "-o", "out"], "c"),
+        (&["-c", "--debug", "a", "b"], "c"),
+    ] {
+        new_ucmd!()
+            .args(args)
+            .fails_with_code(2)
+            .stderr_only(format!("sort: options '-{opt} --debug' are incompatible\n"));
+    }
 }

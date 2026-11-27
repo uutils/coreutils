@@ -316,6 +316,39 @@ fn test_obsolete_extras() {
 }
 
 #[test]
+fn test_obsolete_lines_suffix() {
+    // `l` selects lines and keeps the multiplier of an earlier suffix.
+    for (arg, expected) in [
+        ("-2l", "a\nb\n"),
+        ("-2cl", "a\nb\n"),
+        ("-2lc", "a\n"),
+        ("-3lq", "a\nb\nc\n"),
+    ] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\nb\nc\nd\n")
+            .succeeds()
+            .stdout_only(expected);
+    }
+    new_ucmd!()
+        .args(&["-0l", "lorem_ipsum.txt"])
+        .succeeds()
+        .no_output();
+
+    let input = "x\n".repeat(600);
+    new_ucmd!()
+        .arg("-1bl")
+        .pipe_in(input.as_str())
+        .succeeds()
+        .stdout_only("x\n".repeat(512));
+    new_ucmd!()
+        .arg("-1lb")
+        .pipe_in(input.as_str())
+        .succeeds()
+        .stdout_only("x\n".repeat(256));
+}
+
+#[test]
 fn test_multiple_files() {
     new_ucmd!()
         .args(&["emptyfile.txt", "emptyfile.txt"])
@@ -1029,6 +1062,21 @@ fn test_write_to_dev_full() {
     }
 }
 
+/// The output of several files is written at the end, and its error must still be reported.
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[test]
+fn test_write_to_dev_full_multiple_files() {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.write("a", "a\n");
+    ts.fixtures.write("b", "b\n");
+    let dev_full = std::fs::File::create("/dev/full").unwrap();
+    ts.ucmd()
+        .args(&["a", "b"])
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_is("head: error writing 'standard output': No space left on device\n");
+}
+
 #[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
@@ -1091,6 +1139,28 @@ fn test_directory_header_with_multiple_files() {
         .fails_with_code(1)
         .stdout_is("==> d <==\n\n==> f <==\nhello")
         .stderr_contains("Is a directory");
+}
+
+/// Errors come after the output of the files before them, as with GNU.
+#[cfg(not(windows))]
+#[test]
+fn test_errors_after_earlier_output() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("a", "a1\na2\n");
+    at.mkdir("d");
+    at.write("b", "b1\n");
+    ts.ucmd()
+        .args(&["-n1", "a", "missing", "d", "b"])
+        .stderr_to_stdout()
+        .fails_with_code(1)
+        .stdout_is(
+            "==> a <==\na1\n\
+             head: cannot open 'missing' for reading: No such file or directory\n\
+             \n==> d <==\n\
+             head: error reading 'd': Is a directory\n\
+             \n==> b <==\nb1\n",
+        );
 }
 
 /// With `-c 0` (zero output), the directory header is still printed but no

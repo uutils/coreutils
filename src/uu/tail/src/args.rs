@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) kqueue Signum underflows
 
-use crate::paths::Input;
+use crate::paths::{Input, stdin_is_regular};
 use crate::{Quotable, parse, platform};
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use std::ffi::OsString;
@@ -178,6 +178,11 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// Named inputs must not block the follow loop's process-exit checks.
+    pub fn use_nonblocking(&self) -> bool {
+        self.follow.is_some() && self.pid.is_some()
+    }
+
     pub fn from_obsolete_args(args: &parse::ObsoleteArgs, name: Option<&OsString>) -> Self {
         let mut settings = Self::default();
         if args.follow {
@@ -350,15 +355,10 @@ impl Settings {
         // as `tty` (but no otherwise blocking stdin), then we print a warning that `--follow`
         // cannot be applied under these circumstances and is therefore ineffective.
         if self.follow.is_some() && self.has_stdin() {
-            #[cfg(unix)]
-            let stdin_is_regular = rustix::fs::fstat(std::io::stdin())
-                .is_ok_and(|stat| stat.st_mode & libc::S_IFMT == libc::S_IFREG);
-            #[cfg(not(unix))]
-            let stdin_is_regular = true;
             let blocking_stdin = self.pid.unwrap_or_default() == 0
                 && self.follow == Some(FollowMode::Descriptor)
                 && self.num_inputs() == 1
-                && !stdin_is_regular;
+                && !stdin_is_regular();
 
             if !blocking_stdin && std::io::stdin().is_terminal() {
                 show_warning!("{}", translate!("tail-warning-following-stdin-ineffective"));

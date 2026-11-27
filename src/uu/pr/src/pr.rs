@@ -90,8 +90,11 @@ struct OutputOptions {
 struct FileLine {
     file_id: usize,
     page_number: usize,
-    line_number: usize,
+    /// `None` for the blank filler cells of merged output.
+    line_number: Option<usize>,
     line_content: Vec<u8>,
+    /// The last line of the input, which has no newline.
+    unterminated: bool,
 }
 
 impl FileLine {
@@ -128,8 +131,9 @@ impl FileLine {
         Ok(Self {
             file_id,
             page_number,
-            line_number,
+            line_number: Some(line_number),
             line_content,
+            unterminated: false,
         })
     }
 }
@@ -145,7 +149,7 @@ struct ColumnModeOptions {
 struct NumberingMode {
     width: usize,
     separator: String,
-    first_number: usize,
+    first_number: Option<usize>,
 }
 
 impl Default for NumberingMode {
@@ -153,7 +157,7 @@ impl Default for NumberingMode {
         Self {
             width: 5,
             separator: TAB.to_string(),
-            first_number: 1,
+            first_number: None,
         }
     }
 }
@@ -607,6 +611,9 @@ enum PageSpecError {
 fn parse_page_spec(spec: &str) -> Result<(usize, Option<usize>), PageSpecError> {
     use PageSpecError::{InvalidSuffix, NotANumber, NotARange, TooLarge};
     fn number(part: &str) -> Result<(usize, &str), PageSpecError> {
+        // Blanks and one `+` may come before the digits.
+        let part = part.trim_start_matches([' ', '\t', '\n', '\r', '\x0B', '\x0C']);
+        let part = part.strip_prefix('+').unwrap_or(part);
         let digits_end = part
             .bytes()
             .position(|b| !b.is_ascii_digit())
@@ -793,13 +800,12 @@ fn build_options(
         OsString::from,
     );
 
-    let default_first_number = NumberingMode::default().first_number;
     let first_number = parse_usize(
         matches,
         options::FIRST_LINE_NUMBER,
         &translate!("pr-error-invalid-first-line-number"),
     )
-    .unwrap_or(Ok(default_first_number))?;
+    .transpose()?;
 
     let number = matches
         .get_one::<String>(options::NUMBER_LINES)
@@ -865,11 +871,12 @@ fn build_options(
         })
         .transpose()?
         .or_else(|| {
-            if matches.contains_id(options::NUMBER_LINES) {
-                Some(NumberingMode::default())
-            } else {
-                None
-            }
+            matches
+                .contains_id(options::NUMBER_LINES)
+                .then(|| NumberingMode {
+                    first_number,
+                    ..NumberingMode::default()
+                })
         });
 
     let expand_tabs = matches
@@ -1212,6 +1219,9 @@ fn get_pages(
     // Keep a running total of the number of lines read, starting with
     // 0 or another specified number.
     let mut line_num = get_start_line_number(options);
+    // An explicit `-N` numbers from the first printed page, so lines on
+    // skipped pages must not count towards it.
+    let explicit_first_number = options.number.as_ref().and_then(|n| n.first_number);
 
     // We will collect each page into a list of pages, along with
     // its page number.
@@ -1226,6 +1236,19 @@ fn get_pages(
     // Remember the index of the end of the last line to use as the
     // beginning of the next line.
     let mut prev = 0;
+
+    // Keep a finished page if it is printed and start the next one. With an
+    // explicit `-N`, a skipped page restarts the line numbering (pages past
+    // `end_page` are never printed, so resetting there is harmless).
+    let mut finish_page = |page_num: &mut usize, page: &mut Vec<FileLine>, line_num: &mut usize| {
+        if start_page <= *page_num + 1 && end_page.is_none_or(|e| *page_num < e) {
+            pages.push((*page_num, std::mem::take(page)));
+        } else if let Some(n) = explicit_first_number {
+            *line_num = n;
+        }
+        *page_num += 1;
+        page.clear();
+    };
 
     // Search for either the form feed character `\f` or the newline
     // character `\n`. The newline character marks the end of a line,
@@ -1254,11 +1277,7 @@ fn get_pages(
             //
             // TODO Optimization opportunity: don't bother pushing
             // lines and pages if we aren't going to display it.
-            if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-                pages.push((page_num, std::mem::take(&mut page)));
-            }
-            page_num += 1;
-            page.clear();
+            finish_page(&mut page_num, &mut page, &mut line_num);
         } else {
             // Add everything up to (but not including) the newline
             // character as one line of the page.
@@ -1278,18 +1297,15 @@ fn get_pages(
             // If the page is finished, add it to the list of pages
             // and clear the `page` buffer for the next iteration.
             if page.len() >= lines_needed_per_page {
-                if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-                    pages.push((page_num, std::mem::take(&mut page)));
-                }
-                page_num += 1;
-                page.clear();
+                finish_page(&mut page_num, &mut page, &mut line_num);
             }
         }
     }
 
     // Consider all trailing bytes as the last line.
     if prev < buf.len() {
-        let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..], options)?;
+        let mut file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..], options)?;
+        file_line.unterminated = true;
         page.push(file_line);
     }
 
@@ -1403,11 +1419,19 @@ fn write_page(
     let line_separator = options.line_separator.as_bytes();
     let page_separator = options.page_separator_char.as_bytes();
 
-    let header = header_content(options, page);
     let trailer_content = trailer_content(options);
 
-    for x in header {
-        writer.write_all(&x)?;
+    if let Some(header_line) = header_content(options, page) {
+        // The header is a blank line, another blank line, the header text and
+        // two more blank lines. The left margin goes on the first blank line
+        // and on the header text line, and is streamed rather than allocated.
+        write_offset_spaces(writer, options.offset_spaces)?;
+        writer.write_all(line_separator)?;
+        writer.write_all(line_separator)?;
+        write_offset_spaces(writer, options.offset_spaces)?;
+        writer.write_all(&header_line)?;
+        writer.write_all(line_separator)?;
+        writer.write_all(line_separator)?;
         writer.write_all(line_separator)?;
     }
 
@@ -1537,11 +1561,7 @@ fn write_columns(
 ) -> io::Result<()> {
     let line_separator = options.content_line_separator.as_bytes();
 
-    let content_lines_per_page = if options.double_space {
-        options.content_lines_per_page / 2
-    } else {
-        options.content_lines_per_page
-    };
+    let content_lines_per_page = text_lines_per_page(options);
 
     let columns = options
         .merge_files_print
@@ -1593,10 +1613,16 @@ fn write_columns(
     // Without a page trailer there is nothing to pad the page out to.
     let no_trailer = feed_line_present || !options.display_header_and_trailer;
     for row in table {
-        // Merged files are padded with empty cells to fill the page; once
-        // every file has run out there is nothing left to print.
-        if merge && no_trailer && row.iter().all(Option::is_none) {
-            break;
+        // Merged files are padded with empty cells to fill the page. Once every
+        // file has run out, the rest of the page is filled with empty lines like
+        // GNU pr, unless there is no trailer, in which case nothing is left to
+        // print.
+        if merge && row.iter().all(Option::is_none) {
+            if no_trailer {
+                break;
+            }
+            writer.write_all(line_separator)?;
+            continue;
         }
         // On a page that is not completely filled the last row stops part way
         // through, and its final cell must not be followed by a column
@@ -1618,7 +1644,11 @@ fn write_columns(
                 Some(file_line) => file_line,
             };
 
-            write_offset_spaces(writer, options.offset_spaces)?;
+            // Like GNU pr, the margin is written once per line, before the
+            // first column.
+            if i == 0 {
+                write_offset_spaces(writer, options.offset_spaces)?;
+            }
             writer.write_all(&get_line_for_printing(
                 options,
                 line_to_print,
@@ -1635,7 +1665,18 @@ fn write_columns(
         if cells_written == 0 && not_found_break && no_trailer {
             break;
         }
-        writer.write_all(line_separator)?;
+        // Like GNU pr, -d adds its blank line only after a line that ended
+        // with a newline, so an input whose last line lacks one ends there.
+        // With a header and trailer the page is padded to its length anyway.
+        let single_unterminated = !options.display_header_and_trailer
+            && !merge
+            && columns == 1
+            && matches!(row.first(), Some(Some(line)) if line.unterminated);
+        if single_unterminated {
+            writer.write_all(b"\n")?;
+        } else {
+            writer.write_all(line_separator)?;
+        }
     }
 
     Ok(())
@@ -1702,10 +1743,14 @@ fn char_prefix_len(bytes: &[u8], n: usize) -> usize {
     len
 }
 
-fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: usize) -> String {
+fn get_formatted_line_number(
+    opts: &OutputOptions,
+    line_number: Option<usize>,
+    index: usize,
+) -> String {
     let should_show_line_number =
         opts.number.is_some() && (opts.merge_files_print.is_none() || index == 0);
-    if should_show_line_number && line_number != 0 {
+    if let Some(line_number) = line_number.filter(|_| should_show_line_number) {
         let line_str = line_number.to_string();
         let num_opt = opts.number.as_ref().unwrap();
         let width = num_opt.width;
@@ -1720,11 +1765,11 @@ fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: us
     }
 }
 
-/// Returns a five line header content if displaying header is not disabled by
-/// using `NO_HEADER_TRAILER_OPTION` option.
-fn header_content(options: &OutputOptions, page: usize) -> Vec<Vec<u8>> {
+/// Returns the header text line (date, file name and page number) if displaying
+/// the header is not disabled by using `NO_HEADER_TRAILER_OPTION` option.
+fn header_content(options: &OutputOptions, page: usize) -> Option<Vec<u8>> {
     if !options.display_header_and_trailer {
-        return Vec::new();
+        return None;
     }
 
     // The header should be formatted with proper spacing:
@@ -1767,7 +1812,7 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<Vec<u8>> {
         .concat()
     };
 
-    vec![Vec::new(), Vec::new(), header_line, Vec::new(), Vec::new()]
+    Some(header_line)
 }
 
 /// Returns five empty lines as trailer content if displaying trailer
@@ -1790,19 +1835,26 @@ fn trailer_content(options: &OutputOptions) -> Vec<String> {
 /// If -N is specified the first line number changes otherwise
 /// default is 1.
 fn get_start_line_number(opts: &OutputOptions) -> usize {
-    opts.number.as_ref().map_or(1, |i| i.first_number)
+    opts.number
+        .as_ref()
+        .and_then(|i| i.first_number)
+        .unwrap_or(1)
 }
 
 /// Returns number of lines to read from input for constructing one page of pr output.
 /// If double space -d is used lines are halved.
 /// If columns --columns is used the lines are multiplied by the value.
 fn lines_to_read_for_page(opts: &OutputOptions) -> usize {
-    let content_lines_per_page = opts.content_lines_per_page;
-    let columns = get_columns(opts);
+    text_lines_per_page(opts) * get_columns(opts)
+}
+
+/// Returns how many lines of text fit on a page. With -d every other line is
+/// blank, but a page always holds at least one line of text.
+fn text_lines_per_page(opts: &OutputOptions) -> usize {
     if opts.double_space {
-        (content_lines_per_page / 2) * columns
+        (opts.content_lines_per_page / 2).max(1)
     } else {
-        content_lines_per_page * columns
+        opts.content_lines_per_page
     }
 }
 

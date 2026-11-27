@@ -1,4 +1,4 @@
-# spell-checker:ignore (features) extendedbigdecimal tzdb zoneinfo logind libcrypto
+# spell-checker:ignore (features) extendedbigdecimal tzdb zoneinfo logind libcrypto xxhash
 
 [package]
 name = "uucore"
@@ -57,6 +57,7 @@ shake = { workspace = true, optional = true }
 blake2b_simd = { workspace = true, optional = true }
 blake3 = { workspace = true, optional = true }
 sm3 = { workspace = true, optional = true }
+xxhash-rust = { workspace = true, optional = true }
 crc-fast = { workspace = true, optional = true, features = ["std"] }
 bigdecimal = { workspace = true, optional = true }
 num-bigint = { workspace = true, optional = true }
@@ -117,7 +118,6 @@ time = { workspace = true, optional = true, features = [
   "local-offset",
   "macros",
 ] }
-walkdir = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true, optional = true }
@@ -150,6 +150,9 @@ openssl = { workspace = true, features = ["aws-lc"], optional = true }
 
 [target.'cfg(target_os = "openbsd")'.dependencies]
 utmp-classic = { workspace = true, optional = true }
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+walkdir = { workspace = true, optional = true }
 
 [features]
 default = ["signals"]
@@ -204,7 +207,6 @@ parser-glob = ["glob"]
 parser = ["parser-num", "parser-size", "parser-glob"]
 pipes = ["fs", "rustix/pipe"]
 process = ["libc", "nix/user", "rustix/process", "windows-sys"]
-proc-info = ["rustix/process", "rustix/thread", "tty", "walkdir"]
 quoting-style = ["i18n-common"]
 ranges = []
 ringbuffer = []
@@ -225,6 +227,7 @@ sum = [
   "blake2b_simd",
   "blake3",
   "sm3",
+  "xxhash-rust",
   "crc-fast",
   "data-encoding",
 ]
@@ -238,7 +241,6 @@ utf8 = []
 utmpx = ["time", "time/macros", "libc", "dns-lookup"]
 version-cmp = []
 wide = []
-tty = []
 time = ["jiff"]
 uptime = ["jiff", "libc", "rustix/time", "utmp-classic", "utmpx", "windows-sys"]
 benchmark = ["itertools", "tempfile"]

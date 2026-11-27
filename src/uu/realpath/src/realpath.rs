@@ -161,6 +161,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_LOGICAL)
                 .short('L')
                 .long(OPT_LOGICAL)
+                .overrides_with(OPT_STRIP)
                 .help(translate!("realpath-help-logical"))
                 .action(ArgAction::SetTrue),
         )

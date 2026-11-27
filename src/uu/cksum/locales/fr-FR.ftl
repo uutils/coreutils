@@ -13,3 +13,4 @@ cksum-after-help = DIGEST détermine l'algorithme de condensé et le format de s
     - sha3 : disponible uniquement via cksum
     - blake2b : équivalent à b2sum
     - sm3 : disponible uniquement via cksum
+    - xxh3 : disponible uniquement via cksum

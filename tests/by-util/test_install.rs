@@ -8,7 +8,6 @@
 
 use rstest::rstest;
 use rustix::process::{getegid, geteuid};
-use std::env::current_exe;
 use std::fs;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
@@ -36,10 +35,10 @@ fn test_install_basic_try_reflink() {
     at.touch(file1);
     at.touch(file2);
     at.mkdir(dir);
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     ucmd.arg(file1).arg(file2).arg(dir).succeeds().no_stderr();
     // mkfs.btrfs needs root. use strace instead.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     if std::process::Command::new("strace")
         .args(["-qqq", "-o", "strace.out", "-e", "trace=ioctl"])
         .arg(uutests::util::get_tests_binary())
@@ -881,7 +880,7 @@ fn test_install_and_strip_with_ancestor_directories() {
 
 #[test]
 fn test_install_no_strip_with_program() {
-    let source = current_exe().unwrap();
+    let source = uutests::util::get_tests_binary();
     TestScenario::new(util_name!())
         .ucmd()
         .arg("--strip-program")
@@ -1007,7 +1006,7 @@ fn test_install_on_invalid_link_at_destination_and_dev_null_at_source() {
 fn test_install_and_strip_with_invalid_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    let source = current_exe().unwrap();
+    let source = uutests::util::get_tests_binary();
 
     scene
         .ucmd()
@@ -1044,7 +1043,7 @@ fn test_install_and_strip_with_signal_terminated_program() {
 fn test_install_and_strip_with_non_existent_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    let source = current_exe().unwrap();
+    let source = uutests::util::get_tests_binary();
 
     scene
         .ucmd()
@@ -3379,7 +3378,7 @@ fn test_install_d_parallel_mkdir_race() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_install_target_without_splice_support() {
     // Does eCryptfs not support splice on some kernel?
     use std::process::Command;
@@ -3433,5 +3432,11 @@ fn test_install_strip_program_sees_caller_umask() {
         .umask(0o027)
         .args(&["-s", "--strip-program=./recorder", "src", "dest"])
         .succeeds();
-    assert_eq!(at.read("seen"), "0027\n");
+    let reported = at.read("seen");
+    let reported = reported.trim();
+    assert_eq!(
+        u32::from_str_radix(reported, 8).unwrap(),
+        0o027,
+        "strip program saw umask {reported}"
+    );
 }

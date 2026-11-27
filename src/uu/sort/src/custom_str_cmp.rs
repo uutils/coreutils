@@ -25,6 +25,25 @@ fn cmp_chars(a: u8, b: u8, ignore_case: bool) -> Ordering {
     }
 }
 
+/// The bytes that [`custom_str_cmp`] compares, so that two strings it treats
+/// as equal yield the same bytes.
+pub fn custom_str_key(
+    s: &[u8],
+    ignore_non_printing: bool,
+    ignore_non_dictionary: bool,
+    ignore_case: bool,
+) -> impl Iterator<Item = u8> + '_ {
+    s.iter()
+        .filter(move |&&c| filter_char(c, ignore_non_printing, ignore_non_dictionary))
+        .map(move |&c| {
+            if ignore_case {
+                c.to_ascii_uppercase()
+            } else {
+                c
+            }
+        })
+}
+
 pub fn custom_str_cmp(
     a: &[u8],
     b: &[u8],

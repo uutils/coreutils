@@ -6,7 +6,6 @@
 // spell-checker:ignore nabcd badoption schar nosuchfile
 
 use rstest::rstest;
-use uucore::posix::OBSOLETE;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -1163,10 +1162,6 @@ fn uniq_basic_dedup_cases() {
 
         // first - run a version of tests with regular file as input
         eprintln!("Test {}", case.name);
-        // set environment variable for obsolete skip char option tests
-        if case.name.starts_with("obs-plus") {
-            ucmd.env("_POSIX2_VERSION", OBSOLETE.to_string());
-        }
         let result = ucmd.args(case.args).arg("input-file").run();
         if let Some(stdout) = case.stdout {
             result.stdout_is(stdout);
@@ -1184,12 +1179,7 @@ fn uniq_basic_dedup_cases() {
         // For now we treat it as equivalent of piped in stdin variant
         // as in `cat input-file | uniq`
         eprintln!("Test {}.stdin", case.name);
-        // set environment variable for obsolete skip char option tests
-        let mut ucmd = new_ucmd!();
-        if case.name.starts_with("obs-plus") {
-            ucmd.env("_POSIX2_VERSION", OBSOLETE.to_string());
-        }
-        let result = ucmd.args(case.args).run_piped_stdin(case.input);
+        let result = new_ucmd!().args(case.args).run_piped_stdin(case.input);
         if let Some(stdout) = case.stdout {
             result.stdout_is(stdout);
         }
@@ -1212,6 +1202,62 @@ fn test_stdin_w1_multibyte() {
         .pipe_in(input)
         .succeeds()
         .stdout_is("à\ná\n");
+}
+
+#[uutests::wasi_ignore(NoLocaleData)]
+#[test]
+fn test_skip_chars_multibyte() {
+    // Skipping two characters leaves "y" and "xy", which differ.
+    new_ucmd!()
+        .args(&["-s", "2", "-c"])
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in("éxy\nABxy\n")
+        .succeeds()
+        .stdout_is("      1 éxy\n      1 ABxy\n");
+    // In the C locale, two bytes are skipped and both keys are "xy".
+    new_ucmd!()
+        .args(&["-s", "2", "-c"])
+        .env("LC_ALL", "C")
+        .pipe_in("éxy\nABxy\n")
+        .succeeds()
+        .stdout_is("      2 éxy\n");
+}
+
+#[uutests::wasi_ignore(NoLocaleData)]
+#[test]
+fn test_skip_chars_with_check_chars_multibyte() {
+    // Skip one character, then compare one: é, é and è.
+    new_ucmd!()
+        .args(&["-s", "1", "-w", "1", "-c"])
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in("xé1\nyé2\nzè3\n")
+        .succeeds()
+        .stdout_is("      2 xé1\n      1 zè3\n");
+    // In the C locale both count bytes: the first byte of é and è is the same.
+    new_ucmd!()
+        .args(&["-s", "1", "-w", "1", "-c"])
+        .env("LC_ALL", "C")
+        .pipe_in("xé1\nyé2\nzè3\n")
+        .succeeds()
+        .stdout_is("      3 xé1\n");
+}
+
+#[uutests::wasi_ignore(NoLocaleData)]
+#[test]
+fn test_skip_chars_invalid_utf8_counts_bytes() {
+    // Invalid UTF-8 falls back to bytes, as for -w.
+    new_ucmd!()
+        .args(&["-s", "3", "-c"])
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(&b"a\xff\xfeX\nb\xff\xfeY\n"[..])
+        .succeeds()
+        .stdout_is_bytes(&b"      1 a\xff\xfeX\n      1 b\xff\xfeY\n"[..]);
+    new_ucmd!()
+        .args(&["-s", "1", "-w", "2", "-c"])
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(&b"a\xff\xfeX\nb\xff\xfeY\n"[..])
+        .succeeds()
+        .stdout_is_bytes(&b"      2 a\xff\xfeX\n"[..]);
 }
 
 #[test]
@@ -1363,4 +1409,33 @@ fn test_obsolete_skip_fields_not_read_after_double_dash() {
         .args(&["--", "-1"])
         .fails()
         .stderr_contains("-1");
+}
+
+#[rstest]
+#[case::one(&["+1"], "xa\nzb\n")]
+#[case::two(&["+1", "+2"], "xa\n")]
+fn test_obsolete_skip_chars_by_default(
+    #[case] args: &[&str],
+    #[case] expected: &str,
+    #[values(None, Some(""), Some("200111"), Some("200809"))] posix: Option<&str>,
+) {
+    let mut ucmd = new_ucmd!();
+    if let Some(version) = posix {
+        ucmd.env("_POSIX2_VERSION", version);
+    }
+    ucmd.args(args)
+        .pipe_in("xa\nya\nzb\n")
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[rstest]
+#[case::from_2001("200112")]
+#[case::until_2008("200808")]
+fn test_obsolete_skip_chars_disabled(#[case] posix: &str) {
+    new_ucmd!()
+        .env("_POSIX2_VERSION", posix)
+        .arg("+1")
+        .fails_with_code(1)
+        .stderr_is("uniq: +1: No such file or directory\n");
 }
