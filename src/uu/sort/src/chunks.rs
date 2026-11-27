@@ -202,11 +202,10 @@ pub enum ReadStatus {
 ///
 /// # Arguments
 ///
-/// (see also `read_to_chunk` for a more detailed documentation)
+/// (see also `read_to_buffer` for a more detailed documentation)
 ///
 /// * `sender`: The sender to send the lines to the sorter.
 /// * `recycled_chunk`: The recycled chunk, as returned by `Chunk::recycle`.
-///   (i.e. `buffer.len()` should be equal to `buffer.capacity()`)
 /// * `max_buffer_size`: How big `buffer` can be.
 /// * `carry_over`: The bytes that must be carried over in between invocations.
 /// * `file`: The current file.
@@ -227,8 +226,6 @@ pub fn read<T: Read>(
     let mut headroom = Vec::<u8>::new();
     let mut buffer = std::mem::take(&mut recycled_chunk.buffer);
     let limit = max_buffer_size.unwrap_or(buffer.len());
-    // Reusing an allocation should not skip the capacity checks while filling it.
-    buffer.truncate(ALLOC_CHUNK_SIZE.max(carry_over.len()));
     if let Some(additional) = carry_over
         .len()
         .checked_sub(buffer.len())
@@ -242,33 +239,32 @@ pub fn read<T: Read>(
     }
     buffer[..carry_over.len()].copy_from_slice(carry_over);
     let start_offset = carry_over.len();
-    let (mut read, mut status) = read_to_buffer(
+    let BufferRead {
+        mut read,
+        filled,
+        mut status,
+    } = read_to_buffer(
         file,
         next_files,
         &mut buffer,
-        |count, bytes| {
-            // Avoid reserving spill space for small in-memory sorts.
-            if bytes >= SPILL_HEADROOM_BYTES && headroom.capacity() == 0 {
-                let read_ahead = ALLOC_CHUNK_SIZE.saturating_sub(carry_over.len());
-                if carry_over.try_reserve_exact(read_ahead).is_err()
-                    || headroom.try_reserve_exact(SPILL_HEADROOM_BYTES).is_err()
-                {
-                    return false;
+        ReadBudget {
+            limit,
+            reserve: |count, bytes| {
+                // Avoid reserving spill space for small in-memory sorts.
+                if bytes >= SPILL_HEADROOM_BYTES && headroom.capacity() == 0 {
+                    let read_ahead = ALLOC_CHUNK_SIZE.saturating_sub(carry_over.len());
+                    if carry_over.try_reserve_exact(read_ahead).is_err()
+                        || headroom.try_reserve_exact(SPILL_HEADROOM_BYTES).is_err()
+                    {
+                        return false;
+                    }
                 }
-            }
-            recycled_chunk.try_reserve_lines(count, settings)
+                recycled_chunk.try_reserve_lines(count, settings)
+            },
         },
-        limit,
         start_offset,
         separator,
     )?;
-    // At EOF, bytes after `read` are unused buffer space. Otherwise they
-    // include the partial record that must be carried into the next read.
-    let filled = if status == ReadStatus::End {
-        read
-    } else {
-        buffer.len()
-    };
     if read != 0 {
         let (fitted, line_count) = fit_line_capacity(&buffer[..read], separator, |count| {
             recycled_chunk.try_reserve_lines(count, settings)
@@ -372,11 +368,15 @@ fn try_reserve<T>(buffer: &mut Vec<T>, additional: usize) -> bool {
     buffer.try_reserve(additional).is_ok() || buffer.try_reserve_exact(additional).is_ok()
 }
 
-fn spillable_prefix(end: usize) -> UResult<(usize, ReadStatus)> {
-    if end == 0 {
+fn spillable_prefix(read: usize, filled: usize) -> UResult<BufferRead> {
+    if read == 0 {
         return Err(out_of_memory().into());
     }
-    Ok((end, ReadStatus::Spill))
+    Ok(BufferRead {
+        read,
+        filled,
+        status: ReadStatus::Spill,
+    })
 }
 
 fn out_of_memory() -> SortError {
@@ -453,43 +453,35 @@ fn parse_lines<'a>(
     *line_count_hint = exact_line_count.unwrap_or(index + 1);
 }
 
-/// Read from `file` into `buffer`.
-///
-/// This function makes sure that at least two lines are read (unless we reach EOF and there's no next file),
-/// growing the buffer if necessary.
-/// The last line is likely to not have been fully read into the buffer. Its bytes must be copied to
-/// the front of the buffer for the next invocation so that it can be continued to be read
-/// (see the return values and `start_offset`).
-///
-/// # Arguments
-///
-/// * `file`: The file to start reading from.
-/// * `next_files`: When `file` reaches EOF, it is updated to `next_files.next()` if that is `Some`,
-///   and this function continues reading.
-/// * `buffer`: The buffer that is filled with bytes. Its contents will mostly be overwritten (see `start_offset`
-///   as well). It will be grown up to `max_buffer_size` if necessary, but it will always grow to read at least two lines.
-/// * `max_buffer_size`: Target length of the byte buffer. It can grow past this limit to read at least two lines.
-/// * `start_offset`: The amount of bytes at the start of `buffer` that were carried over
-///   from the previous read and should not be overwritten.
-/// * `separator`: The byte that separates lines.
-///
-/// # Returns
-///
-/// * The amount of bytes in `buffer` that can now be interpreted as lines.
-///   The remaining bytes must be copied to the start of the buffer for the next invocation,
-///   if another invocation is necessary, which is determined by the other return value.
-/// * Whether this function should be called again.
-#[allow(clippy::too_many_arguments)]
+struct ReadBudget<F> {
+    limit: usize,
+    reserve: F,
+}
+
+struct BufferRead {
+    // Bytes forming complete records and ready to sort.
+    read: usize,
+    // End of the input actually read. Bytes between read and filled
+    // must be carried over, while bytes after filled may be stale.
+    filled: usize,
+    status: ReadStatus,
+}
+
+/// Fill the initialized buffer in stages so each stage can check its memory
+/// budget. The read window can grow past the budget to complete long records.
 fn read_to_buffer<T: Read>(
     file: &mut T,
     next_files: &mut impl Iterator<Item = UResult<T>>,
     buffer: &mut Vec<u8>,
-    mut reserve: impl FnMut(usize, usize) -> bool,
-    max_buffer_size: usize,
+    budget: ReadBudget<impl FnMut(usize, usize) -> bool>,
     start_offset: usize,
     separator: u8,
-) -> UResult<(usize, ReadStatus)> {
-    let mut read_target = &mut buffer[start_offset..];
+) -> UResult<BufferRead> {
+    let ReadBudget { limit, mut reserve } = budget;
+    // Keep the initialized bytes of recycled buffers. Advance a separate
+    // read window so that reusing them does not zero-fill the same bytes again.
+    let mut end = buffer.len().min(ALLOC_CHUNK_SIZE.max(start_offset));
+    let mut read_target = &mut buffer[start_offset..end];
     let mut newline_search_offset = 0;
     let mut found_newline = false;
     let mut scanned = 0;
@@ -501,58 +493,66 @@ fn read_to_buffer<T: Read>(
                 if read_target.is_empty() {
                     // Reserve metadata before growing again so the last fitting
                     // prefix can be spilled without allocating a large read-ahead.
-                    let len = buffer.len();
-                    let scanned_bytes = &buffer[scanned..];
+                    let scanned_bytes = &buffer[scanned..end];
                     line_count += memchr_iter(separator, scanned_bytes).count();
-                    if !reserve(line_count, len) {
-                        return spillable_prefix(reserved_end);
+                    if !reserve(line_count, end) {
+                        return spillable_prefix(reserved_end, end);
                     }
                     if let Some(pos) = memrchr(separator, scanned_bytes) {
                         reserved_end = scanned + pos + 1;
                     }
-                    scanned = len;
+                    scanned = end;
 
-                    if len >= max_buffer_size {
+                    if end >= limit {
                         let mut separators =
-                            memchr_iter(separator, &buffer[newline_search_offset..]).rev();
+                            memchr_iter(separator, &buffer[newline_search_offset..end]).rev();
                         if let Some(last_line_end) = separators.next() {
                             if found_newline || separators.next().is_some() {
-                                return Ok((
-                                    newline_search_offset + last_line_end + 1,
-                                    ReadStatus::More,
-                                ));
+                                return Ok(BufferRead {
+                                    read: newline_search_offset + last_line_end + 1,
+                                    filled: end,
+                                    status: ReadStatus::More,
+                                });
                             }
                             found_newline = true;
                         }
-                        newline_search_offset = len;
+                        newline_search_offset = end;
                     }
 
-                    if !try_reserve(buffer, ALLOC_CHUNK_SIZE) {
-                        return spillable_prefix(reserved_end);
+                    let next_end = end + ALLOC_CHUNK_SIZE;
+                    if next_end > buffer.len() {
+                        if !try_reserve(buffer, next_end - buffer.len()) {
+                            return spillable_prefix(reserved_end, end);
+                        }
+                        buffer.resize(next_end, 0);
                     }
-                    buffer.resize(len + ALLOC_CHUNK_SIZE, 0);
-                    read_target = &mut buffer[len..];
+                    read_target = &mut buffer[end..next_end];
+                    end = next_end;
                 } else {
                     // This file has been fully read.
                     let mut leftover_len = read_target.len();
                     // Decide from buffered bytes: a file may span calls, so a 0-byte read can
                     // still leave an unterminated tail that must be separated from the next file.
-                    let read_len = buffer.len() - leftover_len;
+                    let read_len = end - leftover_len;
                     if read_len > 0 && buffer[read_len - 1] != separator {
                         // The data so far does not end with a separator. We have to insert one.
                         // `read_target` is non-empty here, so `buffer[read_len]` is in bounds.
                         buffer[read_len] = separator;
                         leftover_len -= 1;
                     }
-                    let read_len = buffer.len() - leftover_len;
-                    read_target = &mut buffer[read_len..];
+                    let read_len = end - leftover_len;
+                    read_target = &mut buffer[read_len..end];
                     if let Some(next_file) = next_files.next() {
                         // There is another file.
                         *file = next_file?;
                     } else {
                         // This was the last file.
-                        let read_len = buffer.len() - leftover_len;
-                        return Ok((read_len, ReadStatus::End));
+                        let read_len = end - leftover_len;
+                        return Ok(BufferRead {
+                            read: read_len,
+                            filled: read_len,
+                            status: ReadStatus::End,
+                        });
                     }
                 }
             }
@@ -601,6 +601,30 @@ pub fn parse_into_chunk<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recycled_buffer_leaves_unused_initialized_bytes_untouched() {
+        let mut buffer = vec![0xff; 2 * ALLOC_CHUNK_SIZE];
+        let input = b"x\n".repeat(3 * ALLOC_CHUNK_SIZE / 4);
+        let result = read_to_buffer(
+            &mut input.as_slice(),
+            &mut std::iter::empty(),
+            &mut buffer,
+            ReadBudget {
+                limit: 2 * ALLOC_CHUNK_SIZE,
+                reserve: |_, _| true,
+            },
+            0,
+            b'\n',
+        )
+        .unwrap();
+
+        assert!(result.status == ReadStatus::End);
+        assert_eq!(result.read, input.len());
+        assert_eq!(result.filled, input.len());
+        assert_eq!(&buffer[..result.read], input.as_slice());
+        assert!(buffer[result.filled..].iter().all(|&byte| byte == 0xff));
+    }
 
     #[test]
     fn retry_uses_fewer_complete_records() {
