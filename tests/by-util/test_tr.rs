@@ -1548,20 +1548,89 @@ fn test_classes_follow_single_byte_locale() {
 
 #[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+// Android and macOS ship no single-byte locale, so this test has nothing to run against there.
+#[cfg(not(any(target_os = "macos", target_os = "android")))]
+#[test]
+fn test_case_folding_follows_single_byte_locale() {
+    let (at, _ucmd) = at_and_ucmd!();
+    let (locale, locpath) =
+        locale_test_env(&at, "ISO-8859-1", "en_US.ISO-8859-1", "en_US.ISO8859-1");
+    // In Latin-1, 0xE9 folds to 0xC9 and 0xC7 folds to 0xE7.
+    let mut cmd = new_ucmd!();
+    if let Some(locpath) = &locpath {
+        cmd.env("LOCPATH", locpath);
+    }
+    cmd.env("LC_ALL", &locale)
+        .args(&["[:lower:]", "[:upper:]"])
+        .pipe_in([b'a', 0xe9, b'b'])
+        .succeeds()
+        .stdout_is_bytes([b'A', 0xc9, b'B']);
+    let mut cmd = new_ucmd!();
+    if let Some(locpath) = &locpath {
+        cmd.env("LOCPATH", locpath);
+    }
+    cmd.env("LC_ALL", &locale)
+        .args(&["[:upper:]", "[:lower:]"])
+        .pipe_in([b'A', 0xc7, b'B'])
+        .succeeds()
+        .stdout_is_bytes([b'a', 0xe7, b'b']);
+    // Paired case classes must align by case, not by position: in Latin-1
+    // [:lower:] has more members than [:upper:].
+    let mut cmd = new_ucmd!();
+    if let Some(locpath) = &locpath {
+        cmd.env("LOCPATH", locpath);
+    }
+    cmd.env("LC_ALL", &locale)
+        .args(&["ab[:lower:]", "0-1[:upper:]"])
+        .pipe_in(b"abc.xyz")
+        .succeeds()
+        .stdout_is("ABC.XYZ");
+    let mut cmd = new_ucmd!();
+    if let Some(locpath) = &locpath {
+        cmd.env("LOCPATH", locpath);
+    }
+    cmd.env("LC_ALL", &locale)
+        .args(&["[:upper:]- ", "[:lower:]_"])
+        .pipe_in(b"ABC- XYZ")
+        .succeeds()
+        .stdout_is("abc__xyz");
+    let mut cmd = new_ucmd!();
+    if let Some(locpath) = &locpath {
+        cmd.env("LOCPATH", locpath);
+    }
+    cmd.env("LC_ALL", &locale)
+        .args(&["-t", "[:lower:]a", "[:upper:]0"])
+        .pipe_in(b"a")
+        .succeeds()
+        .stdout_is("0");
+}
+
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
 #[test]
 fn test_classes_ignore_high_bytes_in_utf8_locale() {
     let (at, _ucmd) = at_and_ucmd!();
     let (locale, locpath) = locale_test_env(&at, "UTF-8", "en_US.UTF-8", "en_US.UTF-8");
     let mut cmd = new_ucmd!();
-    if let Some(locpath) = locpath {
+    if let Some(locpath) = &locpath {
         cmd.env("LOCPATH", locpath);
     }
     // In UTF-8, high bytes are never class members, so -d [:alpha:] must not split é.
-    cmd.env("LC_ALL", locale)
+    cmd.env("LC_ALL", &locale)
         .args(&["-d", "[:alpha:]"])
         .pipe_in([b'a', 0xc3, 0xa9, b'b'])
         .succeeds()
         .stdout_is_bytes([0xc3, 0xa9]);
+    // In UTF-8, case conversion only touches ASCII, so é is left alone.
+    let mut cmd = new_ucmd!();
+    if let Some(locpath) = &locpath {
+        cmd.env("LOCPATH", locpath);
+    }
+    cmd.env("LC_ALL", &locale)
+        .args(&["[:lower:]", "[:upper:]"])
+        .pipe_in([b'a', 0xc3, 0xa9, b'b'])
+        .succeeds()
+        .stdout_is_bytes([b'A', 0xc3, 0xa9, b'B']);
 }
 
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]

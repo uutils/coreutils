@@ -200,7 +200,7 @@ impl Error for SequenceError {}
 
 impl UError for SequenceError {}
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Class {
     Alnum,
     Alpha,
@@ -216,6 +216,16 @@ pub enum Class {
     Xdigit,
 }
 
+impl Class {
+    fn opposite_case(self) -> Self {
+        if self == Self::Upper {
+            Self::Lower
+        } else {
+            Self::Upper
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Sequence {
     Char(u8),
@@ -225,6 +235,8 @@ pub enum Sequence {
     CharStar(u8),
     CharRepeat(u8, usize),
     Class(Class),
+    /// The opposite class converted to this case, for a paired case class.
+    CaseConverted(Class),
 }
 
 /// Initialise the process locale from the environment, as `dd` does.
@@ -269,6 +281,28 @@ fn locale_is_member(_class: Class, _byte: u8) -> bool {
     false
 }
 
+/// Convert one byte to the given case in the current locale.
+#[cfg(not(target_os = "wasi"))]
+fn convert_case(c: u8, to: Class) -> u8 {
+    // SAFETY: tolower/toupper take a byte value or EOF.
+    let converted = unsafe {
+        match to {
+            Class::Upper => libc::toupper(i32::from(c)),
+            _ => libc::tolower(i32::from(c)),
+        }
+    };
+    converted as u8
+}
+
+/// ASCII-only case conversion, for targets without a C library locale.
+#[cfg(target_os = "wasi")]
+fn convert_case(c: u8, to: Class) -> u8 {
+    match to {
+        Class::Upper => c.to_ascii_uppercase(),
+        _ => c.to_ascii_lowercase(),
+    }
+}
+
 /// All classes, in enum declaration order, so `Class as usize` indexes [`LocaleTables::members`].
 const ALL_CLASSES: [Class; 12] = [
     Class::Alnum,
@@ -289,6 +323,9 @@ const ALL_CLASSES: [Class; 12] = [
 pub(crate) struct LocaleTables {
     /// Full members (ASCII, then locale high bytes) for each class.
     members: [Vec<u8>; 12],
+    /// Each byte converted to upper/lower case in the current locale.
+    lower_to_upper: [u8; 256],
+    upper_to_lower: [u8; 256],
 }
 
 impl LocaleTables {
@@ -307,11 +344,30 @@ impl LocaleTables {
             }
             members
         });
-        Self { members }
+        let mut lower_to_upper = [0; 256];
+        let mut upper_to_lower = [0; 256];
+        for byte in 0..=255u8 {
+            lower_to_upper[byte as usize] = convert_case(byte, Class::Upper);
+            upper_to_lower[byte as usize] = convert_case(byte, Class::Lower);
+        }
+        Self {
+            members,
+            lower_to_upper,
+            upper_to_lower,
+        }
     }
 
     fn members(&self, class: Class) -> &[u8] {
         &self.members[class as usize]
+    }
+
+    /// Converts `c` to the target case of a `CaseConverted` sequence.
+    fn converted(&self, c: u8, to: Class) -> u8 {
+        if to == Class::Upper {
+            self.lower_to_upper[c as usize]
+        } else {
+            self.upper_to_lower[c as usize]
+        }
     }
 }
 
@@ -366,6 +422,13 @@ impl Sequence {
             Self::CharStar(c) => Box::new(std::iter::repeat(*c)),
             Self::CharRepeat(c, n) => Box::new(std::iter::repeat_n(*c, *n)),
             Self::Class(class) => Box::new(tables.members(*class).iter().copied()),
+            Self::CaseConverted(to) => Box::new(
+                tables
+                    .members(to.opposite_case())
+                    .iter()
+                    .copied()
+                    .map(move |c| tables.converted(c, *to)),
+            ),
         }
     }
 
@@ -379,6 +442,7 @@ impl Sequence {
             Self::CharStar(_) => 0,
             Self::CharRepeat(_, n) => *n,
             Self::Class(_) => self.flatten(tables).count(),
+            Self::CaseConverted(to) => Self::Class(to.opposite_case()).expanded_len(tables),
         }
     }
 
@@ -386,6 +450,16 @@ impl Sequence {
     /// `usize::MAX` still add up exactly and positions keep their order.
     fn expanded_len_of(set: &[Self], tables: &LocaleTables) -> u128 {
         set.iter().map(|s| s.expanded_len(tables) as u128).sum()
+    }
+
+    /// The class in `set` starting at `prefix_len`, if any.
+    fn class_at(set: &[Self], prefix_len: u128, tables: &LocaleTables) -> Option<Class> {
+        set.iter().enumerate().find_map(|(pos, item)| match item {
+            Self::Class(class) if Self::expanded_len_of(&set[..pos], tables) == prefix_len => {
+                Some(*class)
+            }
+            _ => None,
+        })
     }
 
     /// The characters of a set, in order, as runs of a repeated character.
@@ -531,6 +605,29 @@ impl Sequence {
             })
             .collect();
 
+        // A set2 case class paired with the opposite class in set1 becomes its case conversion.
+        if translating {
+            let mut converted_set2 = Vec::with_capacity(set2.len());
+            let mut set2_prefix_len: u128 = 0;
+            for set2_item in set2 {
+                let mut replacement = None;
+                if let Self::Class(to) = set2_item
+                    && matches!(to, Class::Upper | Class::Lower)
+                    && Self::class_at(&set1, set2_prefix_len, &tables) == Some(to.opposite_case())
+                {
+                    replacement = Some(Self::CaseConverted(to));
+                }
+                if let Some(converted) = replacement {
+                    set2_prefix_len += converted.expanded_len(&tables) as u128;
+                    converted_set2.push(converted);
+                } else {
+                    set2_prefix_len += set2_item.expanded_len(&tables) as u128;
+                    converted_set2.push(set2_item);
+                }
+            }
+            set2 = converted_set2;
+        }
+
         // For every upper/lower in set2, there must be an upper/lower in set1 at the same position. The position is calculated by expanding everything before the upper/lower in both sets
         // This only applies when translating. With `-d -s`, set2 is only the set to squeeze.
         if translating {
@@ -543,19 +640,11 @@ impl Sequence {
                         continue;
                     }
 
-                    let mut class_matches = false;
-                    for (set1_pos, set1_item) in set1.iter().enumerate() {
-                        // only upper/lower can pair with upper/lower
-                        if matches!(set1_item, Self::Class(Class::Upper | Class::Lower))
-                            && Self::expanded_len_of(&set1[..set1_pos], &tables)
-                                == set2_part_solved_len
-                        {
-                            class_matches = true;
-                            break;
-                        }
-                    }
-
-                    if !class_matches {
+                    // only upper/lower can pair with upper/lower
+                    if !matches!(
+                        Self::class_at(&set1, set2_part_solved_len, &tables),
+                        Some(Class::Upper | Class::Lower)
+                    ) {
                         return Err(SequenceError::whole_set(
                             BadSequence::ClassInSet2NotMatchedBySet1,
                             2,
@@ -608,7 +697,7 @@ impl Sequence {
             } else if translating
                 && matches!(
                     set2.last().copied(),
-                    Some(Self::Class(Class::Upper | Class::Lower))
+                    Some(Self::Class(Class::Upper | Class::Lower) | Self::CaseConverted(_))
                 )
             {
                 return Err(SequenceError::whole_set(
