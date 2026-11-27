@@ -8,7 +8,7 @@
 
 use rstest::rstest;
 use uucore::display::Quotable;
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 use uucore::selinux::get_getfattr_output;
 use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, new_ucmd, path, util_name};
@@ -7909,7 +7909,7 @@ fn test_cp_from_stream_permission() {
 
 #[test]
 fn test_cp_context_without_selinux() {
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    #[cfg(selinux)]
     if uucore::selinux::is_selinux_enabled() {
         println!("Test skipped: SELinux is enabled");
         return;
@@ -7944,7 +7944,7 @@ fn test_cp_context_without_selinux() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_cp_selinux() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -7969,7 +7969,7 @@ fn test_cp_selinux() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_cp_selinux_default_context_relative_dest() {
     // -Z labels the destination with the context the policy has for its path,
     // and the policy only lists absolute paths: a relative destination used to
@@ -8009,7 +8009,7 @@ fn test_cp_selinux_default_context_relative_dest() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_cp_selinux_invalid() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -8033,7 +8033,7 @@ fn test_cp_selinux_invalid() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_cp_preserve_selinux() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -8071,7 +8071,7 @@ fn test_cp_preserve_selinux() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_cp_preserve_selinux_admin_context() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -8130,7 +8130,7 @@ fn test_cp_preserve_selinux_admin_context() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_cp_selinux_context_priority() {
     // This test verifies that -Z takes priority over --context
 
@@ -8210,7 +8210,7 @@ fn test_cp_selinux_context_priority() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_cp_selinux_empty_context() {
     // This test verifies that --context without a value works like -Z
 
@@ -8256,7 +8256,7 @@ fn test_cp_selinux_empty_context() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_cp_selinux_recursive() {
     // Test SELinux context preservation in recursive directory copies
 
@@ -8310,7 +8310,7 @@ fn test_cp_selinux_recursive() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_cp_preserve_context_root() {
     use uutests::util::run_ucmd_as_root;
     let scene = TestScenario::new(util_name!());
@@ -9411,7 +9411,7 @@ fn test_cp_gnu_preserve_mode() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_cp_a_z_overrides_context() {
     // Verifies -aZ succeeds (-Z overrides implicit --preserve=context from -a)
     use uucore::selinux::set_selinux_security_context;
@@ -9428,7 +9428,7 @@ fn test_cp_a_z_overrides_context() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_cp_a_preserves_context() {
     use uucore::selinux::{get_selinux_security_context, set_selinux_security_context};
 
@@ -9448,7 +9448,7 @@ fn test_cp_a_preserves_context() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_cp_preserve_context_with_z_fails() {
     for arg in ["-Z", "--context"] {
         let (at, mut ucmd) = at_and_ucmd!();

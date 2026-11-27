@@ -7,7 +7,7 @@
 
 use std::os::unix::fs::PermissionsExt;
 
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 use uucore::selinux::get_getfattr_output;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -286,7 +286,7 @@ fn test_mknod_fifo_with_umask() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_mknod_selinux() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("Test skipped: SELinux is not enabled");
@@ -322,7 +322,7 @@ fn test_mknod_selinux() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_mknod_selinux_invalid() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("Test skipped: SELinux is not enabled");
@@ -354,7 +354,7 @@ fn test_mknod_selinux_invalid() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_mknod_selinux_invalid_cleanup() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("Test skipped: SELinux is not enabled");
