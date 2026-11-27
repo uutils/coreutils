@@ -1492,6 +1492,58 @@ fn test_stdin_is_socket() {
         .stdout_is(";;");
 }
 
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+#[test]
+fn test_classes_follow_single_byte_locale() {
+    // Compile a Latin-1 locale into the scenario's tmp dir.
+    let (at, _ucmd) = at_and_ucmd!();
+    let compiled = std::process::Command::new("localedef")
+        .args(["-i", "en_US", "-f", "ISO-8859-1"])
+        .arg(at.plus("en_US.ISO-8859-1"))
+        .output()
+        .is_ok_and(|output| output.status.success());
+    assert!(
+        compiled,
+        "localedef failed to compile the Latin-1 test locale"
+    );
+    let locpath = at.as_string();
+    // In Latin-1, 0x9b is a control character, so -d [:cntrl:] removes it.
+    new_ucmd!()
+        .env("LOCPATH", &locpath)
+        .env("LC_ALL", "en_US.ISO-8859-1")
+        .args(&["-d", "[:cntrl:]"])
+        .pipe_in([b'h', b'e', b'l', b'l', b'o', 0x9b, b'3', b'1', b'm'])
+        .succeeds()
+        .stdout_is_bytes(b"hello31m");
+}
+
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+#[test]
+fn test_classes_ignore_high_bytes_in_utf8_locale() {
+    // Compile a UTF-8 locale into the scenario's tmp dir.
+    let (at, _ucmd) = at_and_ucmd!();
+    let compiled = std::process::Command::new("localedef")
+        .args(["-i", "en_US", "-f", "UTF-8"])
+        .arg(at.plus("en_US.UTF-8"))
+        .output()
+        .is_ok_and(|output| output.status.success());
+    assert!(
+        compiled,
+        "localedef failed to compile the UTF-8 test locale"
+    );
+    let locpath = at.as_string();
+    // In UTF-8, high bytes are never class members, so -d [:alpha:] must not split é.
+    new_ucmd!()
+        .env("LOCPATH", &locpath)
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["-d", "[:alpha:]"])
+        .pipe_in([b'a', 0xc3, 0xa9, b'b'])
+        .succeeds()
+        .stdout_is_bytes([0xc3, 0xa9]);
+}
+
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     use super::*;

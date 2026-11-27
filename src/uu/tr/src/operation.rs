@@ -23,6 +23,7 @@ use std::{
     ops::Range,
 };
 use uucore::error::{FromIo, UError, UResult};
+use uucore::i18n::charmap::{Encoding, locale_encoding};
 use uucore::translate;
 
 use uucore::show_warning;
@@ -226,66 +227,165 @@ pub enum Sequence {
     Class(Class),
 }
 
+/// Initialise the process locale from the environment, as `dd` does.
+/// Windows is excluded: setlocale selects the ANSI code page, classifying high bytes.
+#[cfg(not(any(target_os = "wasi", target_os = "windows")))]
+fn init_locale() {
+    // SAFETY: setlocale is called with a valid C string, as in `dd`.
+    unsafe {
+        libc::setlocale(libc::LC_CTYPE, c"".as_ptr());
+    }
+}
+
+#[cfg(any(target_os = "wasi", target_os = "windows"))]
+fn init_locale() {}
+
+/// Whether a high byte belongs to a class in the current locale.
+/// Only asked about bytes 128 and above; ASCII is handled separately.
+#[cfg(not(target_os = "wasi"))]
+fn locale_is_member(class: Class, byte: u8) -> bool {
+    // SAFETY: the is* functions take a byte in range and only read locale state.
+    let result = unsafe {
+        match class {
+            Class::Alnum => libc::isalnum(i32::from(byte)),
+            Class::Alpha => libc::isalpha(i32::from(byte)),
+            Class::Blank => libc::isblank(i32::from(byte)),
+            Class::Control => libc::iscntrl(i32::from(byte)),
+            Class::Digit => libc::isdigit(i32::from(byte)),
+            Class::Graph => libc::isgraph(i32::from(byte)),
+            Class::Lower => libc::islower(i32::from(byte)),
+            Class::Print => libc::isprint(i32::from(byte)),
+            Class::Punct => libc::ispunct(i32::from(byte)),
+            Class::Space => libc::isspace(i32::from(byte)),
+            Class::Upper => libc::isupper(i32::from(byte)),
+            Class::Xdigit => libc::isxdigit(i32::from(byte)),
+        }
+    };
+    result != 0
+}
+
+#[cfg(target_os = "wasi")]
+fn locale_is_member(_class: Class, _byte: u8) -> bool {
+    false
+}
+
+/// All classes, in enum declaration order, so `Class as usize` indexes [`LocaleTables::members`].
+const ALL_CLASSES: [Class; 12] = [
+    Class::Alnum,
+    Class::Alpha,
+    Class::Blank,
+    Class::Control,
+    Class::Digit,
+    Class::Graph,
+    Class::Lower,
+    Class::Print,
+    Class::Punct,
+    Class::Space,
+    Class::Upper,
+    Class::Xdigit,
+];
+
+/// The locale class tables, computed once per `solve_set_characters` call from the current locale.
+pub(crate) struct LocaleTables {
+    /// Full members (ASCII, then locale high bytes) for each class.
+    members: [Vec<u8>; 12],
+}
+
+impl LocaleTables {
+    fn build() -> Self {
+        // Only trust the C library classification in a single-byte locale: in a
+        // multibyte locale it also matches high bytes, cutting characters in half.
+        let single_byte = locale_encoding() == Encoding::SingleByte;
+        Self::build_for(single_byte)
+    }
+
+    fn build_for(single_byte: bool) -> Self {
+        let members: [Vec<u8>; 12] = ALL_CLASSES.map(|class| {
+            let mut members: Vec<u8> = class.ascii_members().collect();
+            if single_byte {
+                members.extend(class.locale_members());
+            }
+            members
+        });
+        Self { members }
+    }
+
+    fn members(&self, class: Class) -> &[u8] {
+        &self.members[class as usize]
+    }
+}
+
+impl Class {
+    /// The class members that do not depend on the locale.
+    fn ascii_members(self) -> Box<dyn Iterator<Item = u8>> {
+        match self {
+            Self::Alnum => Box::new((b'0'..=b'9').chain(b'A'..=b'Z').chain(b'a'..=b'z')),
+            Self::Alpha => Box::new((b'A'..=b'Z').chain(b'a'..=b'z')),
+            Self::Blank => Box::new(unicode_table::BLANK.iter().copied()),
+            Self::Control => Box::new((0..=31).chain(std::iter::once(127))),
+            Self::Digit => Box::new(b'0'..=b'9'),
+            Self::Graph => Box::new(
+                (48..=57)
+                    .chain(65..=90)
+                    .chain(97..=122)
+                    .chain(33..=47)
+                    .chain(58..=64)
+                    .chain(91..=96)
+                    .chain(123..=126),
+            ),
+            Self::Print => Box::new(
+                (48..=57)
+                    .chain(65..=90)
+                    .chain(97..=122)
+                    .chain(33..=47)
+                    .chain(58..=64)
+                    .chain(91..=96)
+                    .chain(123..=126)
+                    .chain(std::iter::once(b' ')),
+            ),
+            Self::Punct => Box::new((33..=47).chain(58..=64).chain(91..=96).chain(123..=126)),
+            Self::Space => Box::new(unicode_table::SPACES.iter().copied()),
+            Self::Xdigit => Box::new((b'0'..=b'9').chain(b'A'..=b'F').chain(b'a'..=b'f')),
+            Self::Lower => Box::new(b'a'..=b'z'),
+            Self::Upper => Box::new(b'A'..=b'Z'),
+        }
+    }
+
+    /// The class members above ASCII in the current locale, in byte order.
+    fn locale_members(self) -> Box<dyn Iterator<Item = u8>> {
+        let class = self;
+        Box::new((128..=u8::MAX).filter(move |byte| locale_is_member(class, *byte)))
+    }
+}
+
 impl Sequence {
-    pub fn flatten(&self) -> Box<dyn Iterator<Item = u8>> {
+    pub fn flatten<'a>(&'a self, tables: &'a LocaleTables) -> Box<dyn Iterator<Item = u8> + 'a> {
         match self {
             Self::Char(c) | Self::Equivalence(c) => Box::new(std::iter::once(*c)),
             Self::CharRange(l, r) => Box::new(*l..=*r),
             Self::CharStar(c) => Box::new(std::iter::repeat(*c)),
             Self::CharRepeat(c, n) => Box::new(std::iter::repeat_n(*c, *n)),
-            Self::Class(class) => match class {
-                Class::Alnum => Box::new((b'0'..=b'9').chain(b'A'..=b'Z').chain(b'a'..=b'z')),
-                Class::Alpha => Box::new((b'A'..=b'Z').chain(b'a'..=b'z')),
-                Class::Blank => Box::new(unicode_table::BLANK.iter().copied()),
-                Class::Control => Box::new((0..=31).chain(std::iter::once(127))),
-                Class::Digit => Box::new(b'0'..=b'9'),
-                Class::Graph => Box::new(
-                    (48..=57) // digit
-                        .chain(65..=90) // uppercase
-                        .chain(97..=122) // lowercase
-                        // punctuations
-                        .chain(33..=47)
-                        .chain(58..=64)
-                        .chain(91..=96)
-                        .chain(123..=126),
-                ),
-                Class::Print => Box::new(
-                    (48..=57) // digit
-                        .chain(65..=90) // uppercase
-                        .chain(97..=122) // lowercase
-                        // punctuations
-                        .chain(33..=47)
-                        .chain(58..=64)
-                        .chain(91..=96)
-                        .chain(123..=126)
-                        .chain(std::iter::once(32)), // space
-                ),
-                Class::Punct => Box::new((33..=47).chain(58..=64).chain(91..=96).chain(123..=126)),
-                Class::Space => Box::new(unicode_table::SPACES.iter().copied()),
-                Class::Xdigit => Box::new((b'0'..=b'9').chain(b'A'..=b'F').chain(b'a'..=b'f')),
-                Class::Lower => Box::new(b'a'..=b'z'),
-                Class::Upper => Box::new(b'A'..=b'Z'),
-            },
+            Self::Class(class) => Box::new(tables.members(*class).iter().copied()),
         }
     }
 
     /// How many characters the sequence expands to, without expanding it:
     /// the count of a `[c*n]` repeat can be far too large to materialize.
-    fn expanded_len(&self) -> usize {
+    fn expanded_len(&self, tables: &LocaleTables) -> usize {
         match self {
             Self::Char(_) | Self::Equivalence(_) => 1,
             Self::CharRange(l, r) => usize::from(*r) - usize::from(*l) + 1,
             // A star is only sized once it has been turned into a repeat.
             Self::CharStar(_) => 0,
             Self::CharRepeat(_, n) => *n,
-            Self::Class(_) => self.flatten().count(),
+            Self::Class(_) => self.flatten(tables).count(),
         }
     }
 
     /// The expanded length of a set. Widened so that repeat counts close to
     /// `usize::MAX` still add up exactly and positions keep their order.
-    fn expanded_len_of(set: &[Self]) -> u128 {
-        set.iter().map(|s| s.expanded_len() as u128).sum()
+    fn expanded_len_of(set: &[Self], tables: &LocaleTables) -> u128 {
+        set.iter().map(|s| s.expanded_len(tables) as u128).sum()
     }
 
     /// The characters of a set, in order, as runs of a repeated character.
@@ -293,13 +393,16 @@ impl Sequence {
     /// A `[c*n]` repeat is a single run however large `n` is; everything else
     /// expands to runs of one character. Empty runs are left out, and a star
     /// must have been turned into a repeat first.
-    fn runs(set: &[Self]) -> impl Iterator<Item = (u8, usize)> + '_ {
+    fn runs<'a>(
+        set: &'a [Self],
+        tables: &'a LocaleTables,
+    ) -> impl Iterator<Item = (u8, usize)> + 'a {
         set.iter()
             .flat_map(|s| -> Box<dyn Iterator<Item = (u8, usize)>> {
                 match s {
                     Self::CharRepeat(c, n) => Box::new(std::iter::once((*c, *n))),
                     Self::CharStar(_) => Box::new(std::iter::empty()),
-                    _ => Box::new(s.flatten().map(|c| (c, 1))),
+                    _ => Box::new(s.flatten(tables).map(|c| (c, 1))),
                 }
             })
             .filter(|(_, n)| *n > 0)
@@ -320,10 +423,14 @@ impl Sequence {
 
     /// The complement of the characters that a set holds, or that its first
     /// `len` positions hold, one run per character.
-    fn complement_of_prefix(set: &[Self], len: Option<u128>) -> Vec<(u8, usize)> {
+    fn complement_of_prefix(
+        set: &[Self],
+        len: Option<u128>,
+        tables: &LocaleTables,
+    ) -> Vec<(u8, usize)> {
         let mut present = [false; 256];
         let mut remaining = len;
-        for (c, n) in Self::runs(set) {
+        for (c, n) in Self::runs(set, tables) {
             if remaining == Some(0) {
                 break;
             }
@@ -344,6 +451,10 @@ impl Sequence {
         truncate_set1_flag: bool,
         translating: bool,
     ) -> Result<(Vec<u8>, Vec<u8>), SequenceError> {
+        // The class tables are built once here, after the locale is initialised.
+        init_locale();
+        let tables = LocaleTables::build();
+
         let is_char_star = |s: &&Self| -> bool { matches!(s, Self::CharStar(_)) };
 
         let set1 = Self::parse_set(set1_str).map_err(|(error, span)| SequenceError {
@@ -398,15 +509,15 @@ impl Sequence {
         // be far too large for that. Both are handled as runs of one character
         // instead, and only the lengths are ever computed in full.
         let mut set1_runs: Vec<(u8, usize)> = if complement_flag {
-            Self::complement_of_prefix(&set1, None)
+            Self::complement_of_prefix(&set1, None, &tables)
         } else {
-            Self::runs(&set1).collect()
+            Self::runs(&set1, &tables).collect()
         };
         let set1_len = Self::runs_len(&set1_runs);
 
         // A star has no length of its own until it is turned into a repeat,
         // so this is the length of everything else in set2.
-        let set2_fixed_len = Self::expanded_len_of(&set2);
+        let set2_fixed_len = Self::expanded_len_of(&set2, &tables);
 
         let star_compensate_len =
             usize::try_from(set1_len.saturating_sub(set2_fixed_len)).unwrap_or(usize::MAX);
@@ -425,7 +536,7 @@ impl Sequence {
         if translating {
             for (set2_pos, set2_item) in set2.iter().enumerate() {
                 if matches!(set2_item, Self::Class(_)) {
-                    let set2_part_solved_len = Self::expanded_len_of(&set2[..set2_pos]);
+                    let set2_part_solved_len = Self::expanded_len_of(&set2[..set2_pos], &tables);
                     // Like GNU, a class that starts past the end of set1 is never
                     // used, so it needs no partner there.
                     if set2_part_solved_len > set1_len {
@@ -436,7 +547,8 @@ impl Sequence {
                     for (set1_pos, set1_item) in set1.iter().enumerate() {
                         // only upper/lower can pair with upper/lower
                         if matches!(set1_item, Self::Class(Class::Upper | Class::Lower))
-                            && Self::expanded_len_of(&set1[..set1_pos]) == set2_part_solved_len
+                            && Self::expanded_len_of(&set1[..set1_pos], &tables)
+                                == set2_part_solved_len
                         {
                             class_matches = true;
                             break;
@@ -453,7 +565,7 @@ impl Sequence {
             }
         }
 
-        let set2_runs: Vec<(u8, usize)> = Self::runs(&set2).collect();
+        let set2_runs: Vec<(u8, usize)> = Self::runs(&set2, &tables).collect();
         let set2_len = Self::runs_len(&set2_runs);
 
         // Calculate the set of unique characters in set2
@@ -482,7 +594,7 @@ impl Sequence {
                     // That means we must first truncate the expanded, non-complemented
                     // source set, then complement the truncated prefix to recover the
                     // final translation domain.
-                    set1_runs = Self::complement_of_prefix(&set1, Some(set2_len));
+                    set1_runs = Self::complement_of_prefix(&set1, Some(set2_len), &tables);
                     // After expansion the complemented domain may be larger than set2.
                     // Re-check the complement validity constraint.
                     if set2_uniques.len() > 1 || set1_runs.len() as u128 > set2_len {

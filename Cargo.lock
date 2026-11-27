@@ -4198,6 +4198,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "libc",
  "memchr",
  "nom 8.0.0",
  "rustix",
