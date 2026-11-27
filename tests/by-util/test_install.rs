@@ -554,7 +554,6 @@ fn test_install_target_file_dev_null() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_install_replaces_special_target() {
     let (at, mut ucmd) = at_and_ucmd!();
     let source = "source_file";
@@ -821,10 +820,9 @@ fn write_strip_program(scene: &TestScenario, name: &str, script: &str) {
         .cmd("sh")
         .env("STRIP_SCRIPT", script)
         .arg("-c")
-        .arg(format!(
-            "printf '%s' \"$STRIP_SCRIPT\" > {name} && chmod 755 {name}"
-        ))
+        .arg(format!("printf '%s' \"$STRIP_SCRIPT\" > {name}"))
         .succeeds();
+    fs::set_permissions(scene.fixtures.plus(name), fs::Permissions::from_mode(0o755)).unwrap();
 }
 
 #[test]
@@ -914,19 +912,19 @@ fn test_install_and_strip_with_program() {
     assert_eq!(at.metadata(STRIP_TARGET_FILE).len(), 0);
 }
 
-#[cfg(all(unix, feature = "chmod"))]
 #[test]
 fn test_install_and_strip_with_program_hyphen() {
     let scene = TestScenario::new(util_name!());
 
-    let at = &scene.fixtures;
     let content = r#"#!/bin/sh
-    printf -- '%s\n' "$1" | grep '^[^-]'
+    case "$1" in
+        "" | -*) exit 1 ;;
+        *) printf -- '%s\n' "$1" ;;
+    esac
     "#;
-    at.write("no-hyphen", content);
-    scene.ccmd("chmod").arg("+x").arg("no-hyphen").succeeds();
+    write_strip_program(&scene, "no-hyphen", content);
 
-    at.touch("src");
+    scene.fixtures.touch("src");
     scene
         .ucmd()
         .arg("-s")
@@ -952,7 +950,6 @@ fn test_install_and_strip_with_program_hyphen() {
         .stdout_is("./-dest\n");
 }
 
-#[cfg(all(unix, feature = "chmod"))]
 #[test]
 fn test_install_on_invalid_link_at_destination() {
     let scene = TestScenario::new(util_name!());
@@ -965,7 +962,7 @@ fn test_install_on_invalid_link_at_destination() {
 
     at.touch("test.sh");
     at.symlink_file("/opt/FakeDestination", dst_dir.join("test.sh"));
-    scene.ccmd("chmod").arg("+x").arg("test.sh").succeeds();
+    fs::set_permissions(at.plus("test.sh"), fs::Permissions::from_mode(0o755)).unwrap();
     at.symlink_file("test.sh", src_dir.join("test.sh"));
 
     scene
@@ -977,7 +974,6 @@ fn test_install_on_invalid_link_at_destination() {
         .no_output();
 }
 
-#[cfg(all(unix, feature = "chmod"))]
 #[test]
 fn test_install_on_invalid_link_at_destination_and_dev_null_at_source() {
     let scene = TestScenario::new(util_name!());
@@ -990,7 +986,7 @@ fn test_install_on_invalid_link_at_destination_and_dev_null_at_source() {
 
     at.touch("test.sh");
     at.symlink_file("/opt/FakeDestination", dst_dir.join("test.sh"));
-    scene.ccmd("chmod").arg("+x").arg("test.sh").succeeds();
+    fs::set_permissions(at.plus("test.sh"), fs::Permissions::from_mode(0o755)).unwrap();
     at.symlink_file("test.sh", src_dir.join("test.sh"));
 
     scene
@@ -1299,7 +1295,6 @@ fn test_install_backup_file_to_dir(#[case] backup_arg: &str) {
 #[rstest]
 #[case::simple("-b", "~")]
 #[case::numbered("--backup=numbered", ".~1~")]
-#[cfg(unix)]
 fn test_install_backup_dangling_symlink(#[case] backup_arg: &str, #[case] suffix: &str) {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("source", "new");
@@ -2073,7 +2068,6 @@ fn test_install_root_combined() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_install_from_fifo() {
     use std::fs::OpenOptions;
     use std::io::Write;
@@ -2106,7 +2100,6 @@ fn test_install_from_fifo() {
     assert_eq!(s.fixtures.read(target_name), test_string);
 }
 
-#[cfg(unix)]
 #[rstest::rstest]
 #[case::fd("/dev/fd/0")]
 #[cfg_attr(
@@ -2944,7 +2937,6 @@ fn test_install_normal_file_replaces_symlink() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_install_d_symlink_in_path_is_followed() {
     // Test that pre-existing symlinks in the path are followed (GNU coreutils behavior).
     // install -D should traverse symlink components rather than replacing them.
@@ -2985,7 +2977,6 @@ fn test_install_d_symlink_in_path_is_followed() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_install_d_follows_symlink_prefix() {
     // Regression test for: install -D replaces symlink components instead of following them.
     // Reproduces the exact scenario from the bug report: a symlinked install prefix
@@ -3025,7 +3016,6 @@ fn test_install_d_follows_symlink_prefix() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_install_d_dangling_symlink_in_path_errors() {
     // A dangling symlink as a path component must not be silently replaced with a
     // real directory. GNU coreutils errors out in this case; we should too.
@@ -3310,7 +3300,6 @@ fn test_install_backup_custom_suffix_refuses() {
 }
 
 // The mode is only parsed where a mode means something.
-#[cfg(unix)]
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     use super::*;
@@ -3347,7 +3336,6 @@ mod diagnostics {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_install_d_parallel_mkdir_race() {
     // Regression test for issue #12355: concurrent `install -D` invocations
     // that share parent directories must all succeed instead of one losing
