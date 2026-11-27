@@ -23,7 +23,12 @@ clap = { workspace = true }
 fluent = { workspace = true }
 indicatif = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["fs", "parser", "quoting-style"] }
+uucore = { workspace = true, features = [
+  "fs",
+  "parser",
+  "parser-args",
+  "quoting-style",
+] }
 
 [target.'cfg(any(unix, windows, target_os = "wasi"))'.dev-dependencies]
 divan = { workspace = true }

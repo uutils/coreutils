@@ -19,3 +19,6 @@ pub mod parse_size;
 pub mod parse_time;
 #[cfg(any(feature = "parser", feature = "parser-num"))]
 pub mod shortcut_value_parser;
+
+#[cfg(feature = "parser-args")]
+pub mod gnu;

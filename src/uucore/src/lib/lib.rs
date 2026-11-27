@@ -76,7 +76,8 @@ pub use crate::features::numeric_str_cmp;
     feature = "parser",
     feature = "parser-num",
     feature = "parser-size",
-    feature = "parser-glob"
+    feature = "parser-glob",
+    feature = "parser-args"
 ))]
 pub use crate::features::parser;
 #[cfg(feature = "quoting-style")]
