@@ -930,6 +930,26 @@ fn test_cp_arg_update_short_after_long(#[case] args: &[&str]) {
     assert_eq!(at.read("dest"), "dest\n");
 }
 
+#[rstest]
+#[case::all(&["-u", "--update=all"])]
+#[case::all_after_two_short(&["-u", "-u", "--update=all"])]
+#[case::all_with_backup(&["-u", "--update=all", "-b"])]
+fn test_cp_arg_update_long_after_short(#[case] args: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut src = at.make_file("src");
+    src.write_all(b"src\n").unwrap();
+    src.set_modified(std::time::UNIX_EPOCH).unwrap();
+    at.write("dest", "dest\n");
+
+    ucmd.args(args)
+        .args(&["src", "dest"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("dest"), "src\n");
+    assert_eq!(at.file_exists("dest~"), args.contains(&"-b"));
+}
+
 #[test]
 fn test_cp_arg_update_none_then_all() {
     // take last if multiple update args are supplied,
