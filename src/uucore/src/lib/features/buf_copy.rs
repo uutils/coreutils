@@ -19,7 +19,7 @@ pub fn copy_fast(
         // fall back on writing "without buffering", or order of output would be wrong
         // unrelated for cp /dev/stdin since cp does not have multiple input? <https://github.com/uutils/coreutils/issues/5186>
         // RawWriter also removes io::copy's specialization e.g. copy_file_range which might use reflink
-        std::io::copy(src, &mut crate::io::RawWriter(dest))?;
+        std::io::copy(src, &mut crate::io::RawWriter::new(dest))?;
     }
     Ok(())
 }
