@@ -1624,13 +1624,8 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Optio
         parse_datetime::parse_datetime_at_date(now.clone(), format!("{date_part} EST")).ok()?;
     }
 
-    // An abbreviation can name several zones: "CST" is US Central, China and
-    // Cuba; "IST" is India, Israel and Ireland. GNU resolves it against the
-    // current zone before consulting its own table, so "CST" is +0800 under
-    // `TZ=Asia/Shanghai` and "IST" is +0100 under `TZ=Europe/Dublin`. Only when
-    // the current zone does not go by that abbreviation at this instant does
-    // the table decide. `zoned` is `date_part` read in `now`'s zone, so its
-    // timestamp is the instant to ask about.
+    // Like GNU, resolve an ambiguous abbreviation against the current zone
+    // first, and fall back to the table only when that zone does not use it.
     let local = now.time_zone();
     let tz = if local.to_offset_info(zoned.timestamp()).abbreviation() == last_word {
         local.clone()
