@@ -219,8 +219,7 @@ fn read_write_loop<I: WriteableTmpFile>(
 ) -> UResult<ReadResult<I>> {
     let mut file = files.next().unwrap()?;
 
-    // Reserve space for one read-ahead block before the chunks compete for memory.
-    let mut carry_over = Vec::with_capacity(chunks::ALLOC_CHUNK_SIZE);
+    let mut carry_over = Vec::new();
     // A 32-bit process spills the first full chunk before filling another so
     // their byte buffers and line metadata do not compete for address space.
     let in_memory_chunks = if cfg!(target_pointer_width = "32") {

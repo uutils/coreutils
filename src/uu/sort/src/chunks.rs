@@ -23,7 +23,7 @@ use uucore::numeric_str_cmp::NumInfo;
 
 use crate::{GeneralBigDecimalParseResult, GlobalSettings, Line, SortError};
 
-pub(crate) const ALLOC_CHUNK_SIZE: usize = 64 * 1024;
+const ALLOC_CHUNK_SIZE: usize = 64 * 1024;
 const MAX_TOKEN_BUFFER_BYTES: usize = 4 * 1024 * 1024;
 const MAX_TOKEN_BUFFER_ELEMS: usize = MAX_TOKEN_BUFFER_BYTES / size_of::<Range<usize>>();
 
@@ -217,6 +217,10 @@ pub fn read<T: Read>(
     // Leave room for bookkeeping and temporary-file I/O while sizing this chunk.
     let mut headroom = Vec::<u8>::new();
     if cfg!(target_pointer_width = "32") {
+        // Make space for a read-ahead block before sizing the input chunk.
+        carry_over
+            .try_reserve_exact(ALLOC_CHUNK_SIZE.saturating_sub(carry_over.len()))
+            .map_err(|_| out_of_memory())?;
         headroom
             .try_reserve_exact(1024 * 1024)
             .map_err(|_| out_of_memory())?;
@@ -265,9 +269,11 @@ pub fn read<T: Read>(
     }
     carry_over.clear();
     if should_continue {
-        carry_over
-            .try_reserve_exact(filled - read)
-            .map_err(|_| out_of_memory())?;
+        if cfg!(target_pointer_width = "32") {
+            carry_over
+                .try_reserve_exact(filled - read)
+                .map_err(|_| out_of_memory())?;
+        }
         carry_over.extend_from_slice(&buffer[read..filled]);
     }
 
@@ -610,7 +616,7 @@ mod tests {
 
     #[test]
     fn retry_uses_fewer_complete_records() {
-        for separator in [b'\n', b'\0'] {
+        for &separator in b"\n\0" {
             let input = [b'b', separator, b'a', separator, b'c', separator, b'd'];
             let mut attempts = Vec::new();
             let fitted = fit_line_capacity(&input, separator, |count| {
