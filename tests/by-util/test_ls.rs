@@ -5356,7 +5356,10 @@ fn test_ls_dereference_dangling_entry_type(#[case] args: &[&str], #[case] stdout
         .arg("temp_dir")
         .fails_with_code(1)
         .stdout_is(stdout)
-        .stderr_contains("cannot access");
+        .stderr_is(format!(
+            "ls: cannot access 'temp_dir{}dangle': No such file or directory\n",
+            std::path::MAIN_SEPARATOR
+        ));
 }
 
 #[uutests::wasi_ignore(SymlinkHardlinkCaps)]
