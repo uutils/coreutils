@@ -1316,6 +1316,7 @@ fn test_mv_arg_update_short_after_long(#[case] args: &[&str]) {
         .no_output();
 
     assert_eq!(at.read("dest"), "src\n");
+    assert_eq!(at.file_exists("dest~"), args.contains(&"-b"));
 }
 
 #[test]
