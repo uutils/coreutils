@@ -64,6 +64,7 @@ jobs:
         cargo-zigbuild clippy --target x86_64-unknown-openbsd --features ${{ env.FEATURES }} -p coreutils ${UTILS} --all-targets --tests --benches -- -D warnings
     - name: prepare testing
       run: |
+        set -euo pipefail
         cargo-zigbuild test --target x86_64-unknown-openbsd --no-run --features ${{ env.FEATURES }} --message-format=json \
           | jq -rs '
             [ .[] | select(.executable != null) | .executable | select(test("/coreutils$") | not) ]
@@ -113,7 +114,7 @@ jobs:
           cp -v target/x86_64-unknown-openbsd/debug/coreutils /tmp/coreutils
           export UUTESTS_BINARY_PATH=/tmp/coreutils
           while IFS= read -r bin;do
-            "\${bin}" || FAULT=1 # todo: retry tests (should we nextest on the VM if it failed?)
+            "\${bin}" || FAULT=1
           done < ./tests.sh
           if (test -n "\$FAULT"); then exit 1 ; fi
           EOF
