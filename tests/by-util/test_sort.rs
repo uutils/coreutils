@@ -101,6 +101,29 @@ fn test_buffer_size_limits_both_chunks() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_sort_retries_smaller_chunks_under_address_space_limit() {
+    const PAIRS: usize = 6 * 1024 * 1024;
+    let memory_limit = if env::var_os("LLVM_PROFILE_FILE").is_some() {
+        128 * 1024 * 1024
+    } else {
+        96 * 1024 * 1024
+    };
+    let mut expected = b"a\n".repeat(PAIRS);
+    expected.extend(b"z\n".repeat(PAIRS));
+
+    new_ucmd!()
+        .args(&["--parallel=1", "--buffer-size=512M"])
+        .env("MALLOC_ARENA_MAX", "1")
+        .limit(Resource::AS, memory_limit, memory_limit)
+        .limit(Resource::CORE, 0, 0)
+        .timeout(Duration::from_secs(120))
+        .pipe_in(b"z\na\n".repeat(PAIRS))
+        .succeeds()
+        .stdout_only_bytes(expected);
+}
+
+#[test]
 fn test_buffer_size_trailing_whitespace_is_rejected() {
     for size in [" 1 ", "1 ", "1M ", "50% "] {
         new_ucmd!()

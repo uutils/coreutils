@@ -17,7 +17,7 @@ use itertools::Itertools;
 use uucore::error::{UResult, strip_errno};
 
 use crate::Output;
-use crate::chunks::RecycledChunk;
+use crate::chunks::{ReadStatus, RecycledChunk};
 use crate::merge::WriteableCompressedTmpFile;
 use crate::merge::WriteablePlainTmpFile;
 use crate::merge::WriteableTmpFile;
@@ -220,15 +220,8 @@ fn read_write_loop<I: WriteableTmpFile>(
     let mut file = files.next().unwrap()?;
 
     let mut carry_over = Vec::new();
-    // A 32-bit process spills the first full chunk before filling another so
-    // their byte buffers and line metadata do not compete for address space.
-    let in_memory_chunks = if cfg!(target_pointer_width = "32") {
-        1
-    } else {
-        2
-    };
-    for _ in 0..in_memory_chunks {
-        let should_continue = chunks::read(
+    for _ in 0..2 {
+        let status = chunks::read(
             &sender,
             RecycledChunk::new(buffer_size.min(DEFAULT_BUF_SIZE)),
             Some(buffer_size),
@@ -239,7 +232,10 @@ fn read_write_loop<I: WriteableTmpFile>(
             settings,
         )?;
 
-        if !should_continue {
+        if status == ReadStatus::Spill {
+            break;
+        }
+        if status == ReadStatus::End {
             drop(sender);
             // The entire input fit into the initial chunks. Output it without
             // writing temporary runs.
@@ -273,7 +269,7 @@ fn read_write_loop<I: WriteableTmpFile>(
         let recycled_chunk = chunk.recycle();
 
         if let Some(sender) = &sender_option {
-            let should_continue = chunks::read(
+            let status = chunks::read(
                 sender,
                 recycled_chunk,
                 None,
@@ -283,7 +279,7 @@ fn read_write_loop<I: WriteableTmpFile>(
                 separator,
                 settings,
             )?;
-            if !should_continue {
+            if status == ReadStatus::End {
                 sender_option = None;
             }
         }

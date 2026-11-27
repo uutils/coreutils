@@ -7,7 +7,7 @@
 
 use crate::{
     GlobalSettings, SortError,
-    chunks::{self, Chunk, RecycledChunk},
+    chunks::{self, Chunk, ReadStatus, RecycledChunk},
     compare_by, open,
 };
 use itertools::Itertools;
@@ -168,7 +168,7 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
     let mut line_idx = 0;
     loop {
         let recycled = RecycledChunk::new(buffer_size(settings));
-        let should_continue = chunks::read(
+        let status = chunks::read(
             &sender,
             recycled,
             None,
@@ -189,7 +189,7 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
             )?;
             prev_chunk = Some(chunk);
         }
-        if !should_continue {
+        if status == ReadStatus::End {
             break;
         }
     }
@@ -206,7 +206,7 @@ fn reader(
 ) -> UResult<()> {
     let mut carry_over = vec![];
     for recycled_chunk in receiver {
-        let should_continue = chunks::read(
+        let status = chunks::read(
             sender,
             recycled_chunk,
             None,
@@ -216,7 +216,7 @@ fn reader(
             settings.line_ending.into(),
             settings,
         )?;
-        if !should_continue {
+        if status == ReadStatus::End {
             break;
         }
     }

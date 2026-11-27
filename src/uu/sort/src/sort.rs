@@ -124,12 +124,6 @@ const POSITIVE: &u8 = &b'+';
 // reasonably large chunks for typical workloads.
 const MIN_AUTOMATIC_BUF_SIZE: usize = 512 * 1024; // 512 KiB
 const FALLBACK_AUTOMATIC_BUF_SIZE: usize = 32 * 1024 * 1024; // 32 MiB
-// The byte buffers share the process address space with per-line metadata and
-// sorting scratch space. Leave more headroom on 32-bit targets, even when the
-// machine reports plenty of physical memory.
-#[cfg(target_pointer_width = "32")]
-const MAX_AUTOMATIC_BUF_SIZE: usize = 32 * 1024 * 1024; // 32 MiB
-#[cfg(not(target_pointer_width = "32"))]
 const MAX_AUTOMATIC_BUF_SIZE: usize = 1024 * 1024 * 1024; // 1 GiB
 
 #[derive(Debug, thiserror::Error)]
@@ -2754,10 +2748,7 @@ fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_dat
     // WASI does not support threads, so use non-parallel sort to avoid
     // rayon's thread pool which triggers an unreachable trap.
     if settings.stable || settings.unique {
-        #[cfg(all(not(target_os = "wasi"), target_pointer_width = "32"))]
-        // Retain stable ordering without a second allocation proportional to the chunk.
-        unsorted.par_sort_unstable_by(|a, b| cmp(a, b).then(a.index.cmp(&b.index)));
-        #[cfg(all(not(target_os = "wasi"), not(target_pointer_width = "32")))]
+        #[cfg(not(target_os = "wasi"))]
         unsorted.par_sort_by(cmp);
         #[cfg(target_os = "wasi")]
         unsorted.sort_by(cmp);
