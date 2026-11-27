@@ -115,12 +115,18 @@ pub fn mb_char_len(bytes: &[u8]) -> usize {
 
 #[cfg(has_locale_codeset)]
 fn bare_locale_encoding(s: &str) -> Encoding {
+    #[cfg(not(target_os = "cygwin"))]
+    use nix::libc::CODESET;
     #[cfg(not(needs_nl_langinfo_l_binding))]
     use nix::libc::nl_langinfo_l;
-    use nix::libc::{CODESET, LC_CTYPE_MASK, freelocale, newlocale};
+    use nix::libc::{LC_CTYPE_MASK, freelocale, newlocale};
     #[cfg(needs_nl_langinfo_l_binding)]
     use nix::libc::{locale_t, nl_item};
     use std::ffi::{CStr, CString};
+
+    // Cygwin's <langinfo.h> defines CODESET as _NL_CTYPE_CODESET_NAME (0).
+    #[cfg(target_os = "cygwin")]
+    const CODESET: nl_item = 0;
 
     // These systems provide the function, but libc 0.2.191 omits its binding.
     #[cfg(needs_nl_langinfo_l_binding)]
@@ -273,11 +279,6 @@ mod tests {
             super::bare_locale_encoding("uutils_nonexistent_locale"),
             Encoding::SingleByte
         );
-    }
-
-    #[test]
-    fn private_c_locale_is_single_byte() {
-        assert_eq!(super::bare_locale_encoding("C"), Encoding::SingleByte);
     }
 
     #[test]

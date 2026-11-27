@@ -15,10 +15,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     cfg_aliases! {
         has_locale_codeset: { all(unix, not(any(
             target_os = "android",
-            target_os = "redox",
-            target_os = "cygwin"
+            target_os = "redox"
         ))) },
         needs_nl_langinfo_l_binding: { any(
+            target_os = "cygwin",
             target_os = "macos",
             target_os = "openbsd",
             target_os = "netbsd"

@@ -955,6 +955,28 @@ fn test_unset_locale_is_byte_oriented() {
         .stdout_only_bytes(b"\xb6\n");
 }
 
+#[cfg(any(all(target_os = "linux", target_env = "gnu"), target_os = "cygwin"))]
+#[uutests::wasi_ignore(NoLocaleData)]
+#[test]
+fn test_bare_utf8_locale_name() {
+    // These locales default to UTF-8 on their respective platforms.
+    #[cfg(target_os = "cygwin")]
+    let locale = "te_IN";
+    #[cfg(not(target_os = "cygwin"))]
+    let locale = "eo";
+    if !uutests::util::is_locale_available(locale) {
+        eprintln!("skipping test because {locale} is unavailable");
+        return;
+    }
+
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-c2")
+        .pipe_in(&b"\xc3\xa4x\n"[..])
+        .succeeds()
+        .stdout_only("x\n");
+}
+
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 #[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
@@ -962,10 +984,9 @@ fn test_bare_locale_name_is_not_assumed_utf8() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
 
-    // These bare glibc locale names use single-byte encodings when installed.
-    // If either locale is unavailable, setlocale fails and libc remains in C,
-    // which is byte-oriented as well.
-    for locale in ["de_DE", "de_DE@euro"] {
+    // The German locales use single-byte encodings when installed. The
+    // deliberately missing locale exercises the single-byte fallback.
+    for locale in ["de_DE", "de_DE@euro", "uutils_missing_locale"] {
         // The UTF-8-looking C3 A4 pair consists of two characters here.
         new_ucmd!()
             .env("LC_ALL", locale)
@@ -1001,19 +1022,6 @@ fn test_bare_locale_name_is_not_assumed_utf8() {
             .succeeds()
             .stdout_only("user\n");
     }
-}
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-#[test]
-fn test_unavailable_bare_locale_falls_back_to_single_byte() {
-    // A locale that libc cannot activate leaves it in C, so byte 2 is a
-    // character even when the input bytes resemble a UTF-8 sequence.
-    new_ucmd!()
-        .env("LC_ALL", "uutils_missing_locale")
-        .arg("-c2")
-        .pipe_in(&b"\xc3\xa4x\n"[..])
-        .succeeds()
-        .stdout_only_bytes(b"\xa4\n");
 }
 
 #[test]
