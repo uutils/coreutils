@@ -245,7 +245,8 @@ pub fn uu_app() -> Command {
                 .short('m')
                 .long("mode")
                 .value_name("MODE")
-                .help(translate!("mknod-help-mode")),
+                .help(translate!("mknod-help-mode"))
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new("name")
