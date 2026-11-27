@@ -16,14 +16,14 @@ use std::{
     sync::mpsc::SyncSender,
 };
 
-use memchr::memchr_iter;
+use memchr::{memchr, memchr_iter, memrchr};
 use self_cell::self_cell;
 use uucore::error::UResult;
 use uucore::numeric_str_cmp::NumInfo;
 
 use crate::{GeneralBigDecimalParseResult, GlobalSettings, Line, SortError};
 
-const ALLOC_CHUNK_SIZE: usize = 64 * 1024;
+pub(crate) const ALLOC_CHUNK_SIZE: usize = 64 * 1024;
 const MAX_TOKEN_BUFFER_BYTES: usize = 4 * 1024 * 1024;
 const MAX_TOKEN_BUFFER_ELEMS: usize = MAX_TOKEN_BUFFER_BYTES / size_of::<Range<usize>>();
 
@@ -155,6 +155,31 @@ impl RecycledChunk {
             buffer: vec![0; capacity],
         }
     }
+
+    fn try_reserve_lines(&mut self, count: usize, settings: &GlobalSettings) -> bool {
+        let precomputed = &settings.precomputed;
+        try_reserve(&mut self.lines, count)
+            && try_reserve(
+                &mut self.selections,
+                count.saturating_mul(precomputed.selections_per_line),
+            )
+            && try_reserve(
+                &mut self.num_infos,
+                count.saturating_mul(precomputed.num_infos_per_line),
+            )
+            && try_reserve(
+                &mut self.parsed_floats,
+                count.saturating_mul(precomputed.floats_per_line),
+            )
+            && (!precomputed.whole_line_numeric || try_reserve(&mut self.line_num_floats, count))
+            && {
+                #[cfg(feature = "i18n-collator")]
+                if precomputed.fast_locale_collation {
+                    return try_reserve(&mut self.collation_key_ends, count);
+                }
+                true
+            }
+    }
 }
 
 /// Read a chunk, parse lines and send them.
@@ -181,7 +206,7 @@ impl RecycledChunk {
 #[allow(clippy::too_many_arguments)]
 pub fn read<T: Read>(
     sender: &SyncSender<Chunk>,
-    recycled_chunk: RecycledChunk,
+    mut recycled_chunk: RecycledChunk,
     max_buffer_size: Option<usize>,
     carry_over: &mut Vec<u8>,
     file: &mut T,
@@ -189,35 +214,79 @@ pub fn read<T: Read>(
     separator: u8,
     settings: &GlobalSettings,
 ) -> UResult<bool> {
-    let RecycledChunk {
-        lines,
-        selections,
-        num_infos,
-        parsed_floats,
-        line_num_floats,
-        collation_key_buffer,
-        collation_key_ends,
-        mut token_buffer,
-        mut line_count_hint,
-        mut buffer,
-    } = recycled_chunk;
-    if buffer.len() < carry_over.len() {
+    // Leave room for bookkeeping and temporary-file I/O while sizing this chunk.
+    let mut headroom = Vec::<u8>::new();
+    if cfg!(target_pointer_width = "32") {
+        headroom
+            .try_reserve_exact(1024 * 1024)
+            .map_err(|_| out_of_memory())?;
+    }
+
+    let mut buffer = std::mem::take(&mut recycled_chunk.buffer);
+    let max_buffer_size = if cfg!(target_pointer_width = "32") {
+        let limit = max_buffer_size.unwrap_or(buffer.len());
+        // Reusing an allocation should not skip the capacity checks while filling it.
+        buffer.truncate(ALLOC_CHUNK_SIZE.max(carry_over.len()));
+        Some(limit)
+    } else {
+        max_buffer_size
+    };
+    if let Some(additional) = carry_over
+        .len()
+        .checked_sub(buffer.len())
+        .filter(|&size| size > 0)
+    {
+        if cfg!(target_pointer_width = "32") && !try_reserve(&mut buffer, additional) {
+            return Err(out_of_memory().into());
+        }
         // Separate carry_over and copy them to avoid cost of 0 fill buffer
         buffer.extend_from_slice(&carry_over[buffer.len()..]);
     }
     buffer[..carry_over.len()].copy_from_slice(carry_over);
-    let (read, should_continue) = read_to_buffer(
+    let (mut read, mut should_continue) = read_to_buffer(
         file,
         next_files,
         &mut buffer,
+        |count| recycled_chunk.try_reserve_lines(count, settings),
         max_buffer_size,
         carry_over.len(),
         separator,
     )?;
+    // At EOF, bytes after `read` are unused buffer space. Otherwise they
+    // include the partial record that must be carried into the next read.
+    let filled = if should_continue { buffer.len() } else { read };
+    if read != 0 && cfg!(target_pointer_width = "32") {
+        let (fitted, line_count) = fit_line_capacity(&buffer[..read], separator, |count| {
+            recycled_chunk.try_reserve_lines(count, settings)
+        })?;
+        should_continue |= fitted < read;
+        read = fitted;
+        recycled_chunk.line_count_hint = line_count;
+    }
     carry_over.clear();
-    carry_over.extend_from_slice(&buffer[read..]);
+    if should_continue {
+        carry_over
+            .try_reserve_exact(filled - read)
+            .map_err(|_| out_of_memory())?;
+        carry_over.extend_from_slice(&buffer[read..filled]);
+    }
+
+    drop(headroom);
 
     if read != 0 {
+        let RecycledChunk {
+            lines,
+            selections,
+            num_infos,
+            parsed_floats,
+            line_num_floats,
+            collation_key_buffer,
+            collation_key_ends,
+            mut token_buffer,
+            line_count_hint,
+            ..
+        } = recycled_chunk;
+        let mut line_count_hint = line_count_hint;
         let payload: UResult<Chunk> = Chunk::try_new(buffer, |buffer| {
             let selections = unsafe {
                 // SAFETY: It is safe to transmute to an empty vector of selections with shorter lifetime.
@@ -257,6 +326,40 @@ pub fn read<T: Read>(
         sender.send(payload?).unwrap();
     }
     Ok(should_continue)
+}
+
+/// Find a prefix whose line descriptors fit, leaving whole records for the next read.
+fn fit_line_capacity(
+    input: &[u8],
+    separator: u8,
+    mut reserve: impl FnMut(usize) -> bool,
+) -> UResult<(usize, usize)> {
+    let mut end = input.len();
+    loop {
+        let chunk = &input[..end];
+        let contents = chunk.strip_suffix(&[separator]).unwrap_or(chunk);
+        let count = memchr_iter(separator, contents).count() + 1;
+        if reserve(count) {
+            return Ok((end, count));
+        }
+
+        // The last byte is excluded so each retry makes progress and the
+        // suffix can always begin at a record boundary.
+        let (before, after) = chunk[..end - 1].split_at((end - 1) / 2);
+        let split = memrchr(separator, before)
+            .or_else(|| memchr(separator, after).map(|index| before.len() + index));
+        end = split.ok_or_else(out_of_memory)? + 1;
+    }
+}
+
+fn try_reserve<T>(buffer: &mut Vec<T>, additional: usize) -> bool {
+    buffer.try_reserve(additional).is_ok() || buffer.try_reserve_exact(additional).is_ok()
+}
+
+fn out_of_memory() -> SortError {
+    SortError::ChunkReadFailed {
+        error: ErrorKind::OutOfMemory.into(),
+    }
 }
 
 /// Split `read` into `Line`s, and add them to `lines`.
@@ -353,10 +456,12 @@ fn parse_lines<'a>(
 ///   The remaining bytes must be copied to the start of the buffer for the next invocation,
 ///   if another invocation is necessary, which is determined by the other return value.
 /// * Whether this function should be called again.
+#[allow(clippy::too_many_arguments)]
 fn read_to_buffer<T: Read>(
     file: &mut T,
     next_files: &mut impl Iterator<Item = UResult<T>>,
     buffer: &mut Vec<u8>,
+    mut reserve: impl FnMut(usize) -> bool,
     max_buffer_size: Option<usize>,
     start_offset: usize,
     separator: u8,
@@ -364,14 +469,46 @@ fn read_to_buffer<T: Read>(
     let mut read_target = &mut buffer[start_offset..];
     let mut newline_search_offset = 0;
     let mut found_newline = false;
+    let mut scanned = 0;
+    let mut line_count = 0;
+    let mut reserved_end = 0;
     loop {
         match file.read(read_target) {
             Ok(0) => {
                 if read_target.is_empty() {
+                    // Reserve line descriptors before growing the byte buffer again.
+                    // Under pressure, spill the prefix we already reserved rather
+                    // than buffering a large suffix that would need another allocation.
+                    if cfg!(target_pointer_width = "32") {
+                        let scanned_bytes = &buffer[scanned..];
+                        let count = memchr_iter(separator, scanned_bytes).count();
+                        line_count += count;
+                        if !reserve(line_count) {
+                            return if reserved_end == 0 {
+                                Err(out_of_memory().into())
+                            } else {
+                                Ok((reserved_end, true))
+                            };
+                        }
+                        if count != 0 {
+                            reserved_end = scanned + memrchr(separator, scanned_bytes).unwrap() + 1;
+                        }
+                        scanned = buffer.len();
+                    }
+
                     // chunk is full
                     if max_buffer_size.is_some_and(|max_buf_size| max_buf_size > buffer.len()) {
                         // we can grow the buffer
                         let prev_len = buffer.len();
+                        if cfg!(target_pointer_width = "32")
+                            && !try_reserve(buffer, ALLOC_CHUNK_SIZE)
+                        {
+                            return if reserved_end == 0 {
+                                Err(out_of_memory().into())
+                            } else {
+                                Ok((reserved_end, true))
+                            };
+                        }
                         buffer.resize(prev_len + ALLOC_CHUNK_SIZE, 0);
                         read_target = &mut buffer[prev_len..];
                         continue;
@@ -390,8 +527,15 @@ fn read_to_buffer<T: Read>(
                         found_newline = true;
                     }
 
-                    // We need to read more lines
+                    // We need to read more lines.
                     let len = buffer.len();
+                    if cfg!(target_pointer_width = "32") && !try_reserve(buffer, ALLOC_CHUNK_SIZE) {
+                        return if reserved_end == 0 {
+                            Err(out_of_memory().into())
+                        } else {
+                            Ok((reserved_end, true))
+                        };
+                    }
                     buffer.resize(len + ALLOC_CHUNK_SIZE, 0);
                     read_target = &mut buffer[len..];
                 } else {
@@ -457,5 +601,35 @@ pub fn parse_into_chunk<'a>(
         line_data,
         token_buffer,
         line_count_hint,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retry_uses_fewer_complete_records() {
+        for separator in [b'\n', b'\0'] {
+            let input = [b'b', separator, b'a', separator, b'c', separator, b'd'];
+            let mut attempts = Vec::new();
+            let fitted = fit_line_capacity(&input, separator, |count| {
+                attempts.push(count);
+                count <= 2
+            })
+            .unwrap();
+
+            assert_eq!(attempts, [4, 1]);
+            assert_eq!(fitted, (2, 1));
+            assert_eq!(
+                &input[fitted.0..],
+                &[b'a', separator, b'c', separator, b'd']
+            );
+        }
+    }
+
+    #[test]
+    fn retry_keeps_an_indivisible_record_intact() {
+        assert!(fit_line_capacity(b"one record\n", b'\n', |_| false).is_err());
     }
 }

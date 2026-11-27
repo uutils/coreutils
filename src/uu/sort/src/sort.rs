@@ -2754,7 +2754,10 @@ fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_dat
     // WASI does not support threads, so use non-parallel sort to avoid
     // rayon's thread pool which triggers an unreachable trap.
     if settings.stable || settings.unique {
-        #[cfg(not(target_os = "wasi"))]
+        #[cfg(all(not(target_os = "wasi"), target_pointer_width = "32"))]
+        // Retain stable ordering without a second allocation proportional to the chunk.
+        unsorted.par_sort_unstable_by(|a, b| cmp(a, b).then(a.index.cmp(&b.index)));
+        #[cfg(all(not(target_os = "wasi"), not(target_pointer_width = "32")))]
         unsorted.par_sort_by(cmp);
         #[cfg(target_os = "wasi")]
         unsorted.sort_by(cmp);

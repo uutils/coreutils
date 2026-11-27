@@ -219,9 +219,20 @@ fn read_write_loop<I: WriteableTmpFile>(
 ) -> UResult<ReadResult<I>> {
     let mut file = files.next().unwrap()?;
 
-    let mut carry_over = vec![];
-    // kick things off with two reads
-    for _ in 0..2 {
+    // Reserve space for one read-ahead block before the chunks compete for memory.
+    let mut carry_over = if cfg!(target_pointer_width = "32") {
+        Vec::with_capacity(chunks::ALLOC_CHUNK_SIZE)
+    } else {
+        Vec::new()
+    };
+    // A 32-bit process spills the first full chunk before filling another so
+    // their byte buffers and line metadata do not compete for address space.
+    let in_memory_chunks = if cfg!(target_pointer_width = "32") {
+        1
+    } else {
+        2
+    };
+    for _ in 0..in_memory_chunks {
         let should_continue = chunks::read(
             &sender,
             RecycledChunk::new(buffer_size.min(DEFAULT_BUF_SIZE)),
@@ -235,9 +246,8 @@ fn read_write_loop<I: WriteableTmpFile>(
 
         if !should_continue {
             drop(sender);
-            // We have already read the whole input. Since we are in our first two reads,
-            // this means that we can fit the whole input into memory. Bypass writing below and
-            // handle this case in a more straightforward way.
+            // The entire input fit into the initial chunks. Output it without
+            // writing temporary runs.
             return Ok(if let Ok(first_chunk) = receiver.recv() {
                 if let Ok(second_chunk) = receiver.recv() {
                     ReadResult::SortedTwoChunks([first_chunk, second_chunk])
