@@ -101,6 +101,24 @@ fn test_buffer_size_limits_both_chunks() {
 }
 
 #[test]
+#[cfg(all(target_os = "linux", target_pointer_width = "32"))]
+fn test_unique_sort_under_address_space_limit() {
+    const MEMORY_LIMIT: u64 = 96 * 1024 * 1024;
+    const PAIRS: usize = 36 * 32 * 1024;
+    let input = b"zzzzzzzzzzzzzzz\naaaaaaaaaaaaaaa\n".repeat(PAIRS);
+    new_ucmd!()
+        .args(&["--parallel=1", "--buffer-size=64M", "--unique"])
+        .env("LC_ALL", "C")
+        .env("MALLOC_ARENA_MAX", "1")
+        .limit(Resource::AS, MEMORY_LIMIT, MEMORY_LIMIT)
+        .limit(Resource::CORE, 0, 0)
+        .timeout(Duration::from_secs(120))
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("aaaaaaaaaaaaaaa\nzzzzzzzzzzzzzzz\n");
+}
+
+#[test]
 fn test_buffer_size_trailing_whitespace_is_rejected() {
     for size in [" 1 ", "1 ", "1M ", "50% "] {
         new_ucmd!()
