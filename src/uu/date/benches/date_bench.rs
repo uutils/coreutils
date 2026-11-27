@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
+use std::ffi::OsStr;
 use std::io::Write;
 use tempfile::NamedTempFile;
 use uu_date::uumain;
@@ -26,7 +27,7 @@ fn file_iso_dates(bencher: Bencher) {
     let path = file.path();
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-f", &path]).into_iter())
+        .with_inputs(|| get_bench_args([OsStr::new("-f"), path.as_os_str()]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -39,7 +40,7 @@ fn file_tz_abbreviations(bencher: Bencher) {
     let path = file.path();
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-f", &path]).into_iter())
+        .with_inputs(|| get_bench_args([OsStr::new("-f"), path.as_os_str()]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -51,7 +52,14 @@ fn file_custom_format(bencher: Bencher) {
     let path = file.path();
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-f", &path, &"+%A %d %B %Y"]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([
+                OsStr::new("-f"),
+                path.as_os_str(),
+                OsStr::new("+%A %d %B %Y"),
+            ])
+            .into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -59,7 +67,7 @@ fn file_custom_format(bencher: Bencher) {
 #[divan::bench]
 fn single_date_now(bencher: Bencher) {
     bencher
-        .with_inputs(|| get_bench_args(&[]).into_iter())
+        .with_inputs(|| get_bench_args([] as [&str; 0]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -67,7 +75,7 @@ fn single_date_now(bencher: Bencher) {
 #[divan::bench]
 fn complex_relative_date(bencher: Bencher) {
     bencher
-        .with_inputs(|| get_bench_args(&[&"--date=last friday 12:00 + 2 days"]).into_iter())
+        .with_inputs(|| get_bench_args(["--date=last friday 12:00 + 2 days"]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 

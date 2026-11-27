@@ -17,11 +17,7 @@ fn numfmt_to_si(bencher: Bencher, count: usize) {
             let numbers: Vec<String> = (1..=count).map(|n| n.to_string()).collect();
             let mut raw_args: Vec<String> = vec!["--to=si".to_string()];
             raw_args.extend(numbers);
-            let args = raw_args
-                .iter()
-                .map(|arg| arg as &dyn AsRef<std::ffi::OsStr>)
-                .collect::<Vec<_>>();
-            get_bench_args(&args).into_iter()
+            get_bench_args(raw_args).into_iter()
         })
         .bench_values(|args| black_box(uumain(args)));
 }
@@ -35,11 +31,7 @@ fn numfmt_to_si_precision(bencher: Bencher, count: usize) {
             let mut raw_args: Vec<String> =
                 vec!["--to=si".to_string(), "--format=%.6f".to_string()];
             raw_args.extend(numbers);
-            let args = raw_args
-                .iter()
-                .map(|arg| arg as &dyn AsRef<std::ffi::OsStr>)
-                .collect::<Vec<_>>();
-            get_bench_args(&args).into_iter()
+            get_bench_args(raw_args).into_iter()
         })
         .bench_values(|args| black_box(uumain(args)));
 }
@@ -52,11 +44,7 @@ fn numfmt_to_iec(bencher: Bencher, count: usize) {
             let numbers: Vec<String> = (1..=count).map(|n| n.to_string()).collect();
             let mut raw_args: Vec<String> = vec!["--to=iec".to_string()];
             raw_args.extend(numbers);
-            let args = raw_args
-                .iter()
-                .map(|arg| arg as &dyn AsRef<std::ffi::OsStr>)
-                .collect::<Vec<_>>();
-            get_bench_args(&args).into_iter()
+            get_bench_args(raw_args).into_iter()
         })
         .bench_values(|args| black_box(uumain(args)));
 }
@@ -70,11 +58,7 @@ fn numfmt_from_si(bencher: Bencher, count: usize) {
             let numbers: Vec<String> = (1..=count).map(|n| format!("{n}K")).collect();
             let mut raw_args: Vec<String> = vec!["--from=si".to_string()];
             raw_args.extend(numbers);
-            let args = raw_args
-                .iter()
-                .map(|arg| arg as &dyn AsRef<std::ffi::OsStr>)
-                .collect::<Vec<_>>();
-            get_bench_args(&args).into_iter()
+            get_bench_args(raw_args).into_iter()
         })
         .bench_values(|args| black_box(uumain(args)));
 }
@@ -92,11 +76,7 @@ fn numfmt_large_numbers_si(bencher: Bencher, count: usize) {
                 .collect();
             let mut raw_args: Vec<String> = vec!["--to=si".to_string()];
             raw_args.extend(numbers);
-            let args = raw_args
-                .iter()
-                .map(|arg| arg as &dyn AsRef<std::ffi::OsStr>)
-                .collect::<Vec<_>>();
-            get_bench_args(&args).into_iter()
+            get_bench_args(raw_args).into_iter()
         })
         .bench_values(|args| black_box(uumain(args)));
 }
@@ -110,11 +90,7 @@ fn numfmt_padding(bencher: Bencher, (count, padding): (usize, usize)) {
             let mut raw_args: Vec<String> =
                 vec!["--to=si".to_string(), format!("--padding={padding}")];
             raw_args.extend(numbers);
-            let args = raw_args
-                .iter()
-                .map(|arg| arg as &dyn AsRef<std::ffi::OsStr>)
-                .collect::<Vec<_>>();
-            get_bench_args(&args).into_iter()
+            get_bench_args(raw_args).into_iter()
         })
         .bench_values(|args| black_box(uumain(args)));
 }
@@ -128,11 +104,7 @@ fn numfmt_round_modes(bencher: Bencher, (round_mode, count): (&str, usize)) {
             let mut raw_args: Vec<String> =
                 vec!["--to=si".to_string(), format!("--round={round_mode}")];
             raw_args.extend(numbers);
-            let args = raw_args
-                .iter()
-                .map(|arg| arg as &dyn AsRef<std::ffi::OsStr>)
-                .collect::<Vec<_>>();
-            get_bench_args(&args).into_iter()
+            get_bench_args(raw_args).into_iter()
         })
         .bench_values(|args| black_box(uumain(args)));
 }
@@ -153,11 +125,11 @@ fn bench_with_stdin(bencher: Bencher, data: &[u8], args: Vec<std::ffi::OsString>
     dup2_stdout(&devnull).unwrap();
 
     bencher
-        .with_inputs(|| {
+        .with_inputs(|| args.clone().into_iter())
+        .bench_local_values(|args| {
             rustix::fs::seek(&file, rustix::fs::SeekFrom::Start(0)).unwrap();
-            args.clone().into_iter()
-        })
-        .bench_local_values(|args| black_box(uumain(args)));
+            black_box(uumain(args))
+        });
 
     dup2_stdin(&stdin_bak).unwrap();
     dup2_stdout(&stdout_bak).unwrap();
@@ -170,7 +142,7 @@ fn numfmt_stream_to_si(bencher: Bencher) {
     let data: Vec<u8> = (1..=100_000u64)
         .flat_map(|n| format!("{}\n", n * 7919).into_bytes())
         .collect();
-    bench_with_stdin(bencher, &data, get_bench_args(&[&"--to=si"]));
+    bench_with_stdin(bencher, &data, get_bench_args(["--to=si"]));
 }
 
 /// The same, with a precision: formats through the exact float path
@@ -180,17 +152,9 @@ fn numfmt_stream_to_si_precision(bencher: Bencher) {
     let data: Vec<u8> = (1..=100_000u64)
         .flat_map(|n| format!("{}\n", n * 7919).into_bytes())
         .collect();
-    bench_with_stdin(
-        bencher,
-        &data,
-        get_bench_args(&[&"--to=si", &"--format=%.2f"]),
-    );
+    bench_with_stdin(bencher, &data, get_bench_args(["--to=si", "--format=%.2f"]));
 }
 
 fn main() {
-    // Rewind happens before each sample; force one iteration after CLI/env overrides.
-    #[cfg(not(codspeed))]
-    divan::Divan::from_args().sample_size(1).main();
-    #[cfg(codspeed)]
     divan::main();
 }

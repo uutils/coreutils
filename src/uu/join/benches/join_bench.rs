@@ -65,7 +65,7 @@ fn join_full_match(bencher: Bencher) {
     let num_lines = 10000;
     let temp_dir = TempDir::new().unwrap();
     let (file1, file2) = create_join_files(&temp_dir, num_lines);
-    let args = get_bench_args(&[&file1, &file2]);
+    let args = get_bench_args([&file1, &file2]);
 
     bencher
         .with_inputs(|| args.clone().into_iter())
@@ -78,7 +78,7 @@ fn join_partial_overlap(bencher: Bencher) {
     let num_lines = 10000;
     let temp_dir = TempDir::new().unwrap();
     let (file1, file2) = create_partial_overlap_files(&temp_dir, num_lines, 0.5);
-    let args = get_bench_args(&[&file1, &file2]);
+    let args = get_bench_args([&file1, &file2]);
 
     bencher
         .with_inputs(|| args.clone().into_iter())
@@ -103,7 +103,7 @@ fn join_custom_separator(bencher: Bencher) {
 
     let file1_str = file1_path.to_str().unwrap();
     let file2_str = file2_path.to_str().unwrap();
-    let args = get_bench_args(&[&"-t", &"\t", &file1_str, &file2_str]);
+    let args = get_bench_args(["-t", "\t", file1_str, file2_str]);
 
     bencher
         .with_inputs(|| args.clone().into_iter())
@@ -116,7 +116,7 @@ fn join_french_locale(bencher: Bencher) {
     let num_lines = 10000;
     let temp_dir = TempDir::new().unwrap();
     let (file1, file2) = create_join_files(&temp_dir, num_lines);
-    let args = get_bench_args(&[&file1, &file2]);
+    let args = get_bench_args([&file1, &file2]);
 
     bencher
         .with_inputs(|| unsafe {
@@ -157,7 +157,7 @@ fn join_unicode_locale(bencher: Bencher) {
     let num_lines = 1000; // Smaller due to complexity
     let temp_dir = TempDir::new().unwrap();
     let (file1, file2) = create_unicode_join_files(&temp_dir, num_lines);
-    let args = get_bench_args(&[&file1, &file2]);
+    let args = get_bench_args([&file1, &file2]);
 
     bencher
         .with_inputs(|| unsafe {

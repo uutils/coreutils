@@ -13,7 +13,7 @@ fn echo_consecutive_calls(bencher: Bencher) {
     bencher
         .with_inputs(|| {
             (0..100)
-                .map(|_| get_bench_args(&[&"Hello World"]).into_iter())
+                .map(|_| get_bench_args(["Hello World"]).into_iter())
                 .collect::<Vec<_>>()
         })
         // Borrow the iterators so their vector storage is freed after timing.

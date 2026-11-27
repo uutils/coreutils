@@ -31,11 +31,11 @@ mod benches {
         rustix::stdio::dup2_stdout(&devnull).unwrap();
 
         bencher
-            .with_inputs(|| {
+            .with_inputs(|| args.clone().into_iter())
+            .bench_local_values(|args| {
                 rustix::fs::seek(&file, rustix::fs::SeekFrom::Start(0)).unwrap();
-                args.clone().into_iter()
-            })
-            .bench_local_values(|args| black_box(uumain(args)));
+                black_box(uumain(args))
+            });
 
         rustix::stdio::dup2_stdin(&stdin_bak).unwrap();
         rustix::stdio::dup2_stdout(&stdout_bak).unwrap();
@@ -49,7 +49,7 @@ mod benches {
     #[divan::bench]
     fn tr_ascii_range_lower_to_upper(bencher: Bencher) {
         let data = text_data::generate_by_size(SIZE_MB, 80);
-        bench_tr_with_stdin(bencher, &data, get_bench_args(&[&"a-z", &"A-Z"]));
+        bench_tr_with_stdin(bencher, &data, get_bench_args(["a-z", "A-Z"]));
     }
 
     /// Single-character replacement. Exercises the existing
@@ -58,7 +58,7 @@ mod benches {
     #[divan::bench]
     fn tr_single_char_replace(bencher: Bencher) {
         let data = text_data::generate_by_size(SIZE_MB, 80);
-        bench_tr_with_stdin(bencher, &data, get_bench_args(&[&"a", &"b"]));
+        bench_tr_with_stdin(bencher, &data, get_bench_args(["a", "b"]));
     }
 
     /// Multi-character set translation. Falls through to the
@@ -66,28 +66,24 @@ mod benches {
     #[divan::bench]
     fn tr_multi_char_translate(bencher: Bencher) {
         let data = text_data::generate_by_size(SIZE_MB, 80);
-        bench_tr_with_stdin(bencher, &data, get_bench_args(&[&"aeiou", &"AEIOU"]));
+        bench_tr_with_stdin(bencher, &data, get_bench_args(["aeiou", "AEIOU"]));
     }
 
     /// Delete an ASCII range — covers the deletion path.
     #[divan::bench]
     fn tr_delete_ascii_range(bencher: Bencher) {
         let data = text_data::generate_by_size(SIZE_MB, 80);
-        bench_tr_with_stdin(bencher, &data, get_bench_args(&[&"-d", &"a-z"]));
+        bench_tr_with_stdin(bencher, &data, get_bench_args(["-d", "a-z"]));
     }
 
     /// Delete a single character (the newlines).
     #[divan::bench]
     fn tr_delete_single_char(bencher: Bencher) {
         let data = text_data::generate_by_size(SIZE_MB, 80);
-        bench_tr_with_stdin(bencher, &data, get_bench_args(&[&"-d", &"\\n"]));
+        bench_tr_with_stdin(bencher, &data, get_bench_args(["-d", "\\n"]));
     }
 }
 
 fn main() {
-    // Rewind happens before each sample; force one iteration after CLI/env overrides.
-    #[cfg(not(codspeed))]
-    divan::Divan::from_args().sample_size(1).main();
-    #[cfg(codspeed)]
     divan::main();
 }

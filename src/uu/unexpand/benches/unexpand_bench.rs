@@ -27,7 +27,7 @@ fn unexpand_many_lines(bencher: Bencher, num_lines: usize) {
     let file_path = create_test_file(&data, temp_dir.path());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&file_path]).into_iter())
+        .with_inputs(|| get_bench_args([&file_path]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -43,7 +43,7 @@ fn unexpand_large_file(bencher: Bencher, size_mb: usize) {
     let file_path = create_test_file(&data, temp_dir.path());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&file_path]).into_iter())
+        .with_inputs(|| get_bench_args([&file_path]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 

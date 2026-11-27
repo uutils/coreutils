@@ -8,7 +8,7 @@ fn cat_default(bencher: Bencher, size_bytes: usize) {
 
     let file_path = setup_test_file(&data);
     let path_str = file_path.to_str().unwrap();
-    let args = get_bench_args(&[&path_str]);
+    let args = get_bench_args([&path_str]);
 
     bencher
         .with_inputs(|| args.clone().into_iter())

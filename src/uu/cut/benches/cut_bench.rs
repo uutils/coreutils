@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
+use std::ffi::OsStr;
 use uu_cut::uumain;
 use uucore::benchmark::{get_bench_args, setup_test_file, text_data};
 
@@ -14,7 +15,10 @@ fn cut_bytes(bencher: Bencher) {
     let file_path = setup_test_file(&data);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-b", &"1-20", &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([OsStr::new("-b"), OsStr::new("1-20"), file_path.as_os_str()])
+                .into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -25,7 +29,10 @@ fn cut_characters(bencher: Bencher) {
     let file_path = setup_test_file(&data);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-c", &"5-30", &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([OsStr::new("-c"), OsStr::new("5-30"), file_path.as_os_str()])
+                .into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -46,7 +53,10 @@ fn cut_characters_long_lines(bencher: Bencher) {
     let file_path = setup_test_file(&data);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-c", &"20-70", &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([OsStr::new("-c"), OsStr::new("20-70"), file_path.as_os_str()])
+                .into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -61,7 +71,9 @@ fn cut_fields_tab(bencher: Bencher) {
     let file_path = setup_test_file(&data);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-f", &"2,4", &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([OsStr::new("-f"), OsStr::new("2,4"), file_path.as_os_str()]).into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -76,7 +88,16 @@ fn cut_fields_custom_delim(bencher: Bencher) {
     let file_path = setup_test_file(&data);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-d", &",", &"-f", &"1,3,5", &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([
+                OsStr::new("-d"),
+                OsStr::new(","),
+                OsStr::new("-f"),
+                OsStr::new("1,3,5"),
+                file_path.as_os_str(),
+            ])
+            .into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -91,7 +112,16 @@ fn cut_fields_newline_delim(bencher: Bencher) {
     let file_path = setup_test_file(&data);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-d", &"\n", &"-f", &"1,3,5", &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([
+                OsStr::new("-d"),
+                OsStr::new("\n"),
+                OsStr::new("-f"),
+                OsStr::new("1,3,5"),
+                file_path.as_os_str(),
+            ])
+            .into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 

@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
+use std::ffi::OsStr;
 use uu_shuf::uumain;
 use uucore::benchmark::{get_bench_args, setup_test_file, text_data};
 
@@ -15,7 +16,7 @@ fn shuf_lines(bencher: Bencher, (num_lines, avg_line_length): (usize, usize)) {
     let file_path = setup_test_file(&data);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&file_path]).into_iter())
+        .with_inputs(|| get_bench_args([&file_path]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -26,7 +27,7 @@ fn shuf_input_range(bencher: Bencher, range_size: usize) {
     let range_arg = format!("1-{range_size}");
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-i", &range_arg]).into_iter())
+        .with_inputs(|| get_bench_args([OsStr::new("-i"), OsStr::new(&range_arg)]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -39,7 +40,15 @@ fn shuf_repeat_sampling(bencher: Bencher, (head_count, avg_line_length): (usize,
     let count = format!("{head_count}");
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-r", &"-n", &count, &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([
+                OsStr::new("-r"),
+                OsStr::new("-n"),
+                OsStr::new(&count),
+                file_path.as_os_str(),
+            ])
+            .into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 

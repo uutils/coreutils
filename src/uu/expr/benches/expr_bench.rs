@@ -14,7 +14,7 @@ use uucore::benchmark::get_bench_args;
 fn expr_index_no_match(bencher: Bencher) {
     let left = "A".repeat(100_000);
     let right = "B".repeat(100_000);
-    let args = get_bench_args(&[&"index", &left, &right]);
+    let args = get_bench_args(["index", left.as_str(), right.as_str()]);
 
     bencher
         .with_inputs(|| args.clone().into_iter())
@@ -27,7 +27,7 @@ fn expr_index_match_at_end(bencher: Bencher) {
     let mut left = "A".repeat(100_000);
     left.push('Z');
     let right = "Z".repeat(100_000);
-    let args = get_bench_args(&[&"index", &left, &right]);
+    let args = get_bench_args(["index", left.as_str(), right.as_str()]);
 
     bencher
         .with_inputs(|| args.clone().into_iter())

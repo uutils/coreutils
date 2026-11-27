@@ -89,7 +89,7 @@ fn bench_hostname_ip(bencher: Bencher, entries: usize) {
             std::env::set_var("NSS_WRAPPER_HOSTS", &hosts_file);
         }
     }
-    let args = get_bench_args(&[&"-i"]);
+    let args = get_bench_args(["-i"]);
 
     bencher
         .with_inputs(|| args.clone().into_iter())
@@ -108,7 +108,7 @@ fn bench_hostname_ip(bencher: Bencher, entries: usize) {
 /// Benchmark basic hostname display (baseline)
 #[divan::bench(name = "hostname_basic")]
 fn bench_hostname_basic(bencher: Bencher) {
-    let args = get_bench_args(&[]);
+    let args = get_bench_args([] as [&str; 0]);
     bencher
         .with_inputs(|| args.clone().into_iter())
         .bench_values(|args| {

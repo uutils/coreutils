@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
+use std::ffi::OsStr;
 use tempfile::TempDir;
 use uu_du::uumain;
 use uucore::benchmark::{fs_tree, get_bench_args};
@@ -20,7 +21,7 @@ fn du_balanced_tree(
     fs_tree::create_balanced_tree(temp_path, depth, dirs_per_level, files_per_dir);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&temp_path]))
+        .with_inputs(|| get_bench_args([temp_path]))
         .bench_values(|args| black_box(uumain(args)));
 }
 */
@@ -37,7 +38,7 @@ fn du_all_balanced_tree(
     fs_tree::create_balanced_tree(temp_path, depth, dirs_per_level, files_per_dir);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-a", &temp_path]))
+        .with_inputs(|| get_bench_args([OsStr::new("-a"), temp_path.as_os_str()]))
         .bench_values(|args| black_box(uumain(args)));
 }
 */
@@ -54,14 +55,14 @@ fn du_human_balanced_tree(
     fs_tree::create_balanced_tree(temp_path, depth, dirs_per_level, files_per_dir);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-h", &temp_path]))
+        .with_inputs(|| get_bench_args([OsStr::new("-h"), temp_path.as_os_str()]))
         .bench_values(|args| black_box(uumain(args)));
 }
 */
 
 /// Run a throwaway traversal to warm the OS page/inode cache before timing.
 fn warm_cache(path: &std::path::Path) {
-    let _ = black_box(uumain(get_bench_args(&[&path]).into_iter()));
+    let _ = black_box(uumain(get_bench_args([path]).into_iter()));
 }
 
 /// Benchmark du on wide directory structures (many files/dirs, shallow).
@@ -73,7 +74,7 @@ fn du_wide_tree(bencher: Bencher, (total_files, total_dirs): (usize, usize)) {
     warm_cache(temp_path);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&temp_path]).into_iter())
+        .with_inputs(|| get_bench_args([temp_path]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -86,7 +87,7 @@ fn du_all_wide_tree(bencher: Bencher, (total_files, total_dirs): (usize, usize))
     warm_cache(temp_path);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-a", &temp_path]).into_iter())
+        .with_inputs(|| get_bench_args([OsStr::new("-a"), temp_path.as_os_str()]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -99,7 +100,7 @@ fn du_deep_tree(bencher: Bencher, (depth, files_per_level): (usize, usize)) {
     warm_cache(temp_path);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&temp_path]).into_iter())
+        .with_inputs(|| get_bench_args([temp_path]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -115,7 +116,7 @@ fn du_summarize_balanced_tree(
     warm_cache(temp_path);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-s", &temp_path]).into_iter())
+        .with_inputs(|| get_bench_args([OsStr::new("-s"), temp_path.as_os_str()]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 

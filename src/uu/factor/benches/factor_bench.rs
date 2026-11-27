@@ -13,7 +13,7 @@ use uucore::benchmark::get_bench_args;
 #[divan::bench(args = [(2)])]
 fn factor_multiple_u64s(bencher: Bencher, start_num: u64) {
     let args = (start_num..=start_num + 2500)
-        .map(|number| get_bench_args(&[&number.to_string()]).into_iter())
+        .map(|number| get_bench_args([&number.to_string()]).into_iter())
         .collect::<Vec<_>>();
 
     bencher.with_inputs(|| args.clone()).bench_values(|args| {
@@ -26,7 +26,7 @@ fn factor_multiple_u64s(bencher: Bencher, start_num: u64) {
 /// Benchmark a large u64 prime.
 #[divan::bench]
 fn factor_large_u64_prime(bencher: Bencher) {
-    let args = get_bench_args(&[&"18446744073709551557"]);
+    let args = get_bench_args(["18446744073709551557"]);
     bencher
         .with_inputs(|| args.clone().into_iter())
         .bench_values(|args| black_box(uumain(args)));
@@ -35,7 +35,7 @@ fn factor_large_u64_prime(bencher: Bencher) {
 /// Benchmark a 64-bit semiprime made from two 32-bit primes.
 #[divan::bench]
 fn factor_64bit_semiprime(bencher: Bencher) {
-    let args = get_bench_args(&[&"18446743979220271189"]);
+    let args = get_bench_args(["18446743979220271189"]);
     bencher
         .with_inputs(|| args.clone().into_iter())
         .bench_values(|args| black_box(uumain(args)));
@@ -44,13 +44,13 @@ fn factor_64bit_semiprime(bencher: Bencher) {
 /// Many numbers in a single invocation, so that parsing, factoring and
 /// writing the results outweigh the startup cost.
 mod batch {
-    use super::{Bencher, black_box, uumain};
-    use uucore::benchmark::run_util_function;
+    use super::{Bencher, black_box, get_bench_args, uumain};
 
     fn factor_all<T: ToString>(bencher: Bencher, numbers: impl Iterator<Item = T>) {
-        let numbers: Vec<String> = numbers.map(|n| n.to_string()).collect();
-        let args: Vec<&str> = numbers.iter().map(String::as_str).collect();
-        bencher.bench(|| black_box(run_util_function(uumain, &args)));
+        let args = get_bench_args(numbers.map(|n| n.to_string()));
+        bencher
+            .with_inputs(|| args.clone().into_iter())
+            .bench_values(|args| black_box(uumain(args)));
     }
 
     /// Every number from 2 to 20001: trial division alone factors them.
@@ -111,7 +111,7 @@ mod hard {
     use super::{Bencher, black_box, get_bench_args, uumain};
 
     fn factor(bencher: Bencher, number: &str) {
-        let args = get_bench_args(&[&number]);
+        let args = get_bench_args([&number]);
         bencher
             .with_inputs(|| args.clone().into_iter())
             .bench_values(|args| black_box(uumain(args)));

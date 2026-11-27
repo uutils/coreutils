@@ -14,7 +14,7 @@ fn nl_many_lines(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_by_lines(num_lines, 80);
     let file_path = create_test_file(&data, temp_dir.path());
     let file_path_str = file_path.to_str().unwrap();
-    let args = get_bench_args(&[&file_path_str]);
+    let args = get_bench_args([file_path_str]);
 
     bencher
         .with_inputs(|| args.clone().into_iter())
@@ -28,7 +28,7 @@ fn nl_large_file(bencher: Bencher, size_mb: usize) {
     let data = text_data::generate_by_size(size_mb, 80);
     let file_path = create_test_file(&data, temp_dir.path());
     let file_path_str = file_path.to_str().unwrap();
-    let args = get_bench_args(&[&"-ba", &file_path_str]);
+    let args = get_bench_args(["-ba", file_path_str]);
 
     bencher
         .with_inputs(|| args.clone().into_iter())

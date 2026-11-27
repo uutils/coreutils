@@ -6,20 +6,13 @@
 //! Benchmarks for `ptx`.
 
 use divan::{Bencher, black_box};
+use std::ffi::OsStr;
 use uu_ptx::uumain;
 use uucore::benchmark::{get_bench_args, setup_test_file, text_data};
 
 fn bench_ptx(bencher: Bencher, data: &[u8], args: &[&str]) {
     let file_path = setup_test_file(data);
-    let file_path_str = file_path.to_str().unwrap();
-
-    let mut full_args: Vec<&str> = args.to_vec();
-    full_args.push(file_path_str);
-    let full_args = full_args
-        .iter()
-        .map(|arg| arg as &dyn AsRef<std::ffi::OsStr>)
-        .collect::<Vec<_>>();
-    let full_args = get_bench_args(&full_args);
+    let full_args = get_bench_args(args.iter().map(OsStr::new).chain([file_path.as_os_str()]));
 
     bencher
         .with_inputs(|| full_args.clone().into_iter())

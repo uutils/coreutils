@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
+use std::ffi::OsStr;
 use tempfile::TempDir;
 use uu_mv::uumain;
 use uucore::benchmark::{fs_tree, get_bench_args};
@@ -19,7 +20,7 @@ fn mv_single_file(bencher: Bencher) {
                 .map(|i| {
                     let src = temp_dir.path().join(format!("f{i}"));
                     let dst = temp_dir.path().join(format!("moved_{i}"));
-                    get_bench_args(&[&src, &dst]).into_iter()
+                    get_bench_args([&src, &dst]).into_iter()
                 })
                 .collect();
             (temp_dir, args)
@@ -42,22 +43,9 @@ fn mv_multiple_to_dir(bencher: Bencher) {
             let dest_dir = temp_dir.path().join("dest");
             std::fs::create_dir(&dest_dir).unwrap();
 
-            let mut args: Vec<String> = (0..1000)
-                .map(|i| {
-                    temp_dir
-                        .path()
-                        .join(format!("f{i}"))
-                        .to_str()
-                        .unwrap()
-                        .to_string()
-                })
-                .collect();
-            args.push(dest_dir.to_str().unwrap().to_string());
-            let arg_refs: Vec<&dyn AsRef<std::ffi::OsStr>> = args
-                .iter()
-                .map(|arg| arg as &dyn AsRef<std::ffi::OsStr>)
-                .collect();
-            (temp_dir, get_bench_args(&arg_refs).into_iter())
+            let sources = (0..1000).map(|i| temp_dir.path().join(format!("f{i}")));
+            let args = get_bench_args(sources.chain([dest_dir]));
+            (temp_dir, args.into_iter())
         })
         .bench_values(|(temp_dir, args)| {
             black_box(uumain(args));
@@ -76,7 +64,7 @@ fn mv_directory(bencher: Bencher) {
             // Increase tree size for longer benchmark
             fs_tree::create_balanced_tree(&src_dir, 5, 5, 10);
             let dst_dir = temp_dir.path().join("dest_tree");
-            let args = get_bench_args(&[&src_dir, &dst_dir]).into_iter();
+            let args = get_bench_args([&src_dir, &dst_dir]).into_iter();
             (temp_dir, args)
         })
         .bench_values(|(temp_dir, args)| {
@@ -96,7 +84,7 @@ fn mv_force_overwrite(bencher: Bencher) {
                 .map(|i| {
                     let src = temp_dir.path().join(format!("f{i}"));
                     let dst = temp_dir.path().join(format!("f{}", i + 1000));
-                    get_bench_args(&[&"-f", &src, &dst]).into_iter()
+                    get_bench_args([OsStr::new("-f"), src.as_os_str(), dst.as_os_str()]).into_iter()
                 })
                 .collect();
             (temp_dir, args)

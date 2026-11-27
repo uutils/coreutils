@@ -23,7 +23,7 @@ fn self_exe() -> String {
 #[cfg(unix)]
 #[divan::bench]
 fn timeout_quick_exit(bencher: Bencher) {
-    let args = get_bench_args(&[&"0.02", &"true"]);
+    let args = get_bench_args(["0.02", "true"]);
     bencher
         .with_inputs(|| args.clone().into_iter())
         .bench_values(|args| black_box(uumain(args)));
@@ -34,7 +34,7 @@ fn timeout_quick_exit(bencher: Bencher) {
 #[divan::bench]
 fn timeout_quick_exit(bencher: Bencher) {
     let exe = self_exe();
-    let args = get_bench_args(&[&"0.02", &exe, &CHILD_MARKER, &"0"]);
+    let args = get_bench_args(["0.02", exe.as_str(), CHILD_MARKER, "0"]);
     bencher
         .with_inputs(|| args.clone().into_iter())
         .bench_values(|args| black_box(uumain(args)));
@@ -44,7 +44,7 @@ fn timeout_quick_exit(bencher: Bencher) {
 #[cfg(unix)]
 #[divan::bench]
 fn timeout_enforced(bencher: Bencher) {
-    let args = get_bench_args(&[&"0.02", &"sleep", &"0.2"]);
+    let args = get_bench_args(["0.02", "sleep", "0.2"]);
     bencher
         .with_inputs(|| args.clone().into_iter())
         .bench_values(|args| black_box(uumain(args)));
@@ -56,7 +56,7 @@ fn timeout_enforced(bencher: Bencher) {
 #[divan::bench]
 fn timeout_enforced(bencher: Bencher) {
     let exe = self_exe();
-    let args = get_bench_args(&[&"0.02", &exe, &CHILD_MARKER, &"0.2"]);
+    let args = get_bench_args(["0.02", exe.as_str(), CHILD_MARKER, "0.2"]);
     bencher
         .with_inputs(|| args.clone().into_iter())
         .bench_values(|args| black_box(uumain(args)));
@@ -69,7 +69,7 @@ fn timeout_enforced(bencher: Bencher) {
 #[divan::bench(args = ["0.001", "0.005", "0.02"])]
 fn timer_expiry_latency(bencher: Bencher, duration: &str) {
     let exe = self_exe();
-    let args = get_bench_args(&[&duration, &exe, &CHILD_MARKER, &"5"]);
+    let args = get_bench_args([duration, exe.as_str(), CHILD_MARKER, "5"]);
     bencher
         .with_inputs(|| args.clone().into_iter())
         .bench_values(|args| black_box(uumain(args)));

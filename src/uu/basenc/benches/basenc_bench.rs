@@ -36,13 +36,12 @@ mod benches {
     #[divan::bench]
     fn base16_encode_to_dev_null(bencher: Bencher) {
         let input_path = input_file();
-        let input = input_path.to_str().unwrap();
         let dev_null = std::fs::OpenOptions::new()
             .write(true)
             .open("/dev/null")
             .unwrap();
         let stdout_backup = redirect_stdout(&dev_null);
-        let args = get_bench_args(&[&"--base16", &input]);
+        let args = get_bench_args([OsStr::new("--base16"), input_path.as_os_str()]);
 
         assert_eq!(uumain(args.clone().into_iter()), 0);
 
@@ -57,10 +56,9 @@ mod benches {
     #[divan::bench]
     fn base16_encode_to_file(bencher: Bencher) {
         let input_path = input_file();
-        let input = input_path.to_str().unwrap();
         let output = tempfile::tempfile().unwrap();
         let stdout_backup = redirect_stdout(&output);
-        let args = get_bench_args(&[&"--base16", &input]);
+        let args = get_bench_args([OsStr::new("--base16"), input_path.as_os_str()]);
 
         assert_eq!(uumain(args.clone().into_iter()), 0);
         assert_eq!(output.metadata().unwrap().len(), OUTPUT_SIZE);
@@ -81,7 +79,7 @@ mod benches {
     const BASE58_ENCODE_INPUT_SIZE: usize = 24 * 1024;
     const BASE58_DECODE_INPUT_SIZE: usize = 64 * 1024;
 
-    fn run_to_dev_null(bencher: Bencher, args: &[&dyn AsRef<OsStr>]) {
+    fn run_to_dev_null(bencher: Bencher, args: &[&OsStr]) {
         let dev_null = std::fs::OpenOptions::new()
             .write(true)
             .open("/dev/null")
@@ -105,7 +103,7 @@ mod benches {
             .map(|i| (i * 131 + 7) as u8)
             .collect();
         let input_path = setup_test_file(&data);
-        run_to_dev_null(bencher, &[&"--base58", &input_path]);
+        run_to_dev_null(bencher, &[OsStr::new("--base58"), input_path.as_os_str()]);
     }
 
     /// Decode Base58 to `/dev/null`.
@@ -117,7 +115,14 @@ mod benches {
             .map(|i| ALPHABET[(i * 37) % ALPHABET.len()])
             .collect();
         let input_path = setup_test_file(&data);
-        run_to_dev_null(bencher, &[&"-d", &"--base58", &input_path]);
+        run_to_dev_null(
+            bencher,
+            &[
+                OsStr::new("-d"),
+                OsStr::new("--base58"),
+                input_path.as_os_str(),
+            ],
+        );
     }
 }
 

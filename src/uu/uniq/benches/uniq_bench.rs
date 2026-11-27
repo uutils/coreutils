@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
+use std::ffi::OsStr;
 use uu_uniq::uumain;
 use uucore::benchmark::{get_bench_args, setup_test_file};
 
@@ -39,7 +40,7 @@ fn uniq_heavy_duplicates(bencher: Bencher, num_lines: usize) {
     let file_path = setup_test_file(&data);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&file_path]).into_iter())
+        .with_inputs(|| get_bench_args([&file_path]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -53,7 +54,7 @@ fn uniq_with_count(bencher: Bencher, num_lines: usize) {
     let file_path = setup_test_file(&data);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-c", &file_path]).into_iter())
+        .with_inputs(|| get_bench_args([OsStr::new("-c"), file_path.as_os_str()]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -101,7 +102,7 @@ fn uniq_case_insensitive(bencher: Bencher, num_lines: usize) {
     let file_path = setup_test_file(&data);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-i", &file_path]).into_iter())
+        .with_inputs(|| get_bench_args([OsStr::new("-i"), file_path.as_os_str()]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -118,9 +119,11 @@ fn uniq_check_chars(bencher: Bencher, (num_lines, check_chars): (usize, &str)) {
     let duplicates_per_group = num_lines / num_groups;
     let data = generate_duplicate_heavy_data(num_groups, duplicates_per_group);
     let file_path = setup_test_file(&data);
-    let file_path_str = file_path.to_str().unwrap();
-
-    let args = get_bench_args(&[&"-w", &check_chars, &file_path_str]);
+    let args = get_bench_args([
+        OsStr::new("-w"),
+        OsStr::new(check_chars),
+        file_path.as_os_str(),
+    ]);
     bencher
         .with_inputs(|| args.clone().into_iter())
         .bench_values(|args| black_box(uumain(args)));

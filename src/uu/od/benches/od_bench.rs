@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
+use std::ffi::OsStr;
 use uu_od::uumain;
 use uucore::benchmark::{get_bench_args, setup_test_file};
 
@@ -23,7 +24,7 @@ fn od_default(bencher: Bencher) {
     let file_path = setup_test_file(&binary_data());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&file_path]).into_iter())
+        .with_inputs(|| get_bench_args([&file_path]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -33,7 +34,9 @@ fn od_hex_bytes(bencher: Bencher) {
     let file_path = setup_test_file(&binary_data());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-t", &"x1", &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([OsStr::new("-t"), OsStr::new("x1"), file_path.as_os_str()]).into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -43,7 +46,7 @@ fn od_chars(bencher: Bencher) {
     let file_path = setup_test_file(&binary_data());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-c", &file_path]).into_iter())
+        .with_inputs(|| get_bench_args([OsStr::new("-c"), file_path.as_os_str()]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 

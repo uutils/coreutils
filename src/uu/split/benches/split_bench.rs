@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
+use std::ffi::OsStr;
 use tempfile::TempDir;
 use uu_split::uumain;
 use uucore::benchmark::{get_bench_args, setup_test_file, text_data};
@@ -18,7 +19,13 @@ fn split_lines(bencher: Bencher) {
         .with_inputs(|| {
             let output_dir = TempDir::new().unwrap();
             let prefix = output_dir.path().join("x");
-            let args = get_bench_args(&[&"-l", &"1000", &file_path, &prefix]).into_iter();
+            let args = get_bench_args([
+                OsStr::new("-l"),
+                OsStr::new("1000"),
+                file_path.as_os_str(),
+                prefix.as_os_str(),
+            ])
+            .into_iter();
             (output_dir, args)
         })
         .bench_values(|(output_dir, args)| {
@@ -37,7 +44,13 @@ fn split_bytes(bencher: Bencher) {
         .with_inputs(|| {
             let output_dir = TempDir::new().unwrap();
             let prefix = output_dir.path().join("x");
-            let args = get_bench_args(&[&"-b", &"100K", &file_path, &prefix]).into_iter();
+            let args = get_bench_args([
+                OsStr::new("-b"),
+                OsStr::new("100K"),
+                file_path.as_os_str(),
+                prefix.as_os_str(),
+            ])
+            .into_iter();
             (output_dir, args)
         })
         .bench_values(|(output_dir, args)| {
@@ -56,7 +69,13 @@ fn split_number_chunks(bencher: Bencher) {
         .with_inputs(|| {
             let output_dir = TempDir::new().unwrap();
             let prefix = output_dir.path().join("x");
-            let args = get_bench_args(&[&"-n", &"10", &file_path, &prefix]).into_iter();
+            let args = get_bench_args([
+                OsStr::new("-n"),
+                OsStr::new("10"),
+                file_path.as_os_str(),
+                prefix.as_os_str(),
+            ])
+            .into_iter();
             (output_dir, args)
         })
         .bench_values(|(output_dir, args)| {
@@ -75,7 +94,13 @@ fn split_number_chunks_round_robin(bencher: Bencher) {
         .with_inputs(|| {
             let output_dir = TempDir::new().unwrap();
             let prefix = output_dir.path().join("x");
-            let args = get_bench_args(&[&"-n", &"r/10", &file_path, &prefix]).into_iter();
+            let args = get_bench_args([
+                OsStr::new("-n"),
+                OsStr::new("r/10"),
+                file_path.as_os_str(),
+                prefix.as_os_str(),
+            ])
+            .into_iter();
             (output_dir, args)
         })
         .bench_values(|(output_dir, args)| {
@@ -94,7 +119,14 @@ fn split_numeric_suffix(bencher: Bencher) {
         .with_inputs(|| {
             let output_dir = TempDir::new().unwrap();
             let prefix = output_dir.path().join("x");
-            let args = get_bench_args(&[&"-d", &"-l", &"500", &file_path, &prefix]).into_iter();
+            let args = get_bench_args([
+                OsStr::new("-d"),
+                OsStr::new("-l"),
+                OsStr::new("500"),
+                file_path.as_os_str(),
+                prefix.as_os_str(),
+            ])
+            .into_iter();
             (output_dir, args)
         })
         .bench_values(|(output_dir, args)| {

@@ -120,7 +120,7 @@ fn tsort_linear_chain(bencher: Bencher, num_nodes: usize) {
     let file_path = setup_test_file(&data);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&file_path]).into_iter())
+        .with_inputs(|| get_bench_args([&file_path]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -131,7 +131,7 @@ fn tsort_tree_dag(bencher: Bencher, (depth, branching): (usize, usize)) {
     let file_path = setup_test_file(&data);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&file_path]).into_iter())
+        .with_inputs(|| get_bench_args([&file_path]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -142,7 +142,7 @@ fn tsort_complex_dag(bencher: Bencher, num_nodes: usize) {
     let file_path = setup_test_file(&data);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&file_path]).into_iter())
+        .with_inputs(|| get_bench_args([&file_path]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -154,7 +154,7 @@ fn tsort_wide_dag(bencher: Bencher, num_nodes: usize) {
     let file_path = setup_test_file(&data);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&file_path]).into_iter())
+        .with_inputs(|| get_bench_args([&file_path]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -187,7 +187,7 @@ fn tsort_input_parsing_heavy(bencher: Bencher, num_edges: usize) {
     let file_path = setup_test_file(&data);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&file_path]))
+        .with_inputs(|| get_bench_args([&file_path]))
         .bench_values(|args| black_box(uumain(args)));
 }
 */

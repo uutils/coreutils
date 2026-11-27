@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
+use std::ffi::OsStr;
 use std::fs;
 use tempfile::TempDir;
 use uu_ls::uumain;
@@ -11,15 +12,12 @@ use uucore::benchmark::{fs_tree, get_bench_args};
 
 /// Helper to run ls with given arguments on a directory
 fn bench_ls_with_args(bencher: Bencher, temp_dir: &TempDir, args: &[&str]) {
-    let temp_path_str = temp_dir.path().to_str().unwrap();
-    let mut full_args = vec!["-R"];
-    full_args.extend_from_slice(args);
-    full_args.push(temp_path_str);
-    let full_args = full_args
-        .iter()
-        .map(|arg| arg as &dyn AsRef<std::ffi::OsStr>)
-        .collect::<Vec<_>>();
-    let full_args = get_bench_args(&full_args);
+    let full_args = get_bench_args(
+        [OsStr::new("-R")]
+            .into_iter()
+            .chain(args.iter().map(OsStr::new))
+            .chain([temp_dir.path().as_os_str()]),
+    );
 
     bencher
         .with_inputs(|| full_args.clone().into_iter())

@@ -19,7 +19,7 @@ where
     fs::create_dir(&source).unwrap();
     setup_source(&source);
 
-    let mut base_args = get_bench_args(&[]);
+    let mut base_args = get_bench_args([] as [&str; 0]);
     base_args.extend(args.iter().map(|arg| (*arg).into()));
     base_args.push(source.into_os_string());
 
@@ -92,7 +92,7 @@ fn cp_large_file(bencher: Bencher, size_mb: usize) {
             let dest = temp_dir
                 .path()
                 .join(format!("dest_{}.bin", (&raw const temp_dir).addr()));
-            get_bench_args(&[&source, &dest]).into_iter()
+            get_bench_args([&source, &dest]).into_iter()
         })
         .counter(divan::counter::BytesCount::new(size_mb * 1024 * 1024))
         .bench_values(|args| black_box(uumain(args)));

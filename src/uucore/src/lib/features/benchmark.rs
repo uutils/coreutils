@@ -8,11 +8,10 @@
 //! This module provides shared functionality for benchmarking utilities,
 //! including test data generation and binary execution helpers.
 
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
-
-use itertools::Itertools as _;
 
 /// Create a temporary file with test data
 pub fn create_test_file(data: &[u8], temp_dir: &Path) -> PathBuf {
@@ -31,21 +30,17 @@ pub fn create_test_file(data: &[u8], temp_dir: &Path) -> PathBuf {
 /// This calls the uumain function that returns i32 (like the fuzzing approach)
 pub fn run_util_function<F>(util_func: F, args: &[&str]) -> i32
 where
-    F: FnOnce(std::vec::IntoIter<std::ffi::OsString>) -> i32,
+    F: FnOnce(std::vec::IntoIter<OsString>) -> i32,
 {
-    // Prepend a dummy program name as argv[0] since clap expects it
-    let os_args = std::iter::once("benchmark".into())
-        .chain(args.iter().map(Into::into))
-        .collect_vec();
-    util_func(os_args.into_iter())
+    util_func(get_bench_args(args).into_iter())
 }
 
 /// Prepare benchmark arguments for a utility function
-pub fn get_bench_args(args: &[&dyn AsRef<std::ffi::OsStr>]) -> Vec<std::ffi::OsString> {
+pub fn get_bench_args(args: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Vec<OsString> {
     // Prepend a dummy program name as argv[0] since clap expects it
     std::iter::once("benchmark".into())
-        .chain(args.iter().map(Into::into))
-        .collect_vec()
+        .chain(args.into_iter().map(|arg| arg.as_ref().to_os_string()))
+        .collect()
 }
 
 /// Helper function to set up a temporary test file and leak the temporary directory
@@ -315,28 +310,6 @@ pub mod binary_data {
         let mut file = File::create(path).unwrap();
         file.write_all(&buffer).unwrap();
         file.sync_all().unwrap();
-    }
-}
-
-/// Filesystem utilities for benchmarking
-pub mod fs_utils {
-    use std::fs;
-    use std::path::Path;
-
-    /// Remove a file or directory if it exists
-    ///
-    /// This is a convenience function for cleaning up between benchmark iterations.
-    /// It handles both files and directories, and is a no-op if the path doesn't exist.
-    pub fn remove_path(path: &Path) {
-        if !path.exists() {
-            return;
-        }
-
-        if path.is_dir() {
-            fs::remove_dir_all(path).unwrap();
-        } else {
-            fs::remove_file(path).unwrap();
-        }
     }
 }
 

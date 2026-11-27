@@ -25,7 +25,8 @@ fn dd_copy_default(bencher: Bencher) {
             let output = output_dir.path().join("output.bin");
             let if_arg = format!("if={input_str}");
             let of_arg = format!("of={}", output.display());
-            let args = get_bench_args(&[&if_arg, &of_arg, &"status=none"]).into_iter();
+            let args =
+                get_bench_args([if_arg.as_str(), of_arg.as_str(), "status=none"]).into_iter();
             (output_dir, args)
         })
         .bench_values(|(output_dir, args)| {
@@ -51,7 +52,8 @@ fn dd_copy_4k_blocks(bencher: Bencher) {
             let output = output_dir.path().join("output.bin");
             let if_arg = format!("if={input_str}");
             let of_arg = format!("of={}", output.display());
-            let args = get_bench_args(&[&if_arg, &of_arg, &"bs=4K", &"status=none"]).into_iter();
+            let args = get_bench_args([if_arg.as_str(), of_arg.as_str(), "bs=4K", "status=none"])
+                .into_iter();
             (output_dir, args)
         })
         .bench_values(|(output_dir, args)| {
@@ -77,7 +79,8 @@ fn dd_copy_64k_blocks(bencher: Bencher) {
             let output = output_dir.path().join("output.bin");
             let if_arg = format!("if={input_str}");
             let of_arg = format!("of={}", output.display());
-            let args = get_bench_args(&[&if_arg, &of_arg, &"bs=64K", &"status=none"]).into_iter();
+            let args = get_bench_args([if_arg.as_str(), of_arg.as_str(), "bs=64K", "status=none"])
+                .into_iter();
             (output_dir, args)
         })
         .bench_values(|(output_dir, args)| {
@@ -103,7 +106,8 @@ fn dd_copy_1m_blocks(bencher: Bencher) {
             let output = output_dir.path().join("output.bin");
             let if_arg = format!("if={input_str}");
             let of_arg = format!("of={}", output.display());
-            let args = get_bench_args(&[&if_arg, &of_arg, &"bs=1M", &"status=none"]).into_iter();
+            let args = get_bench_args([if_arg.as_str(), of_arg.as_str(), "bs=1M", "status=none"])
+                .into_iter();
             (output_dir, args)
         })
         .bench_values(|(output_dir, args)| {
@@ -129,8 +133,14 @@ fn dd_copy_separate_blocks(bencher: Bencher) {
             let output = output_dir.path().join("output.bin");
             let if_arg = format!("if={input_str}");
             let of_arg = format!("of={}", output.display());
-            let args = get_bench_args(&[&if_arg, &of_arg, &"ibs=8K", &"obs=16K", &"status=none"])
-                .into_iter();
+            let args = get_bench_args([
+                if_arg.as_str(),
+                of_arg.as_str(),
+                "ibs=8K",
+                "obs=16K",
+                "status=none",
+            ])
+            .into_iter();
             (output_dir, args)
         })
         .bench_values(|(output_dir, args)| {
@@ -156,8 +166,14 @@ fn dd_copy_partial(bencher: Bencher) {
             let output = output_dir.path().join("output.bin");
             let if_arg = format!("if={input_str}");
             let of_arg = format!("of={}", output.display());
-            let args = get_bench_args(&[&if_arg, &of_arg, &"bs=4K", &"count=1024", &"status=none"])
-                .into_iter();
+            let args = get_bench_args([
+                if_arg.as_str(),
+                of_arg.as_str(),
+                "bs=4K",
+                "count=1024",
+                "status=none",
+            ])
+            .into_iter();
             (output_dir, args)
         })
         .bench_values(|(output_dir, args)| {
@@ -183,8 +199,14 @@ fn dd_copy_with_skip(bencher: Bencher) {
             let output = output_dir.path().join("output.bin");
             let if_arg = format!("if={input_str}");
             let of_arg = format!("of={}", output.display());
-            let args = get_bench_args(&[&if_arg, &of_arg, &"bs=4K", &"skip=256", &"status=none"])
-                .into_iter();
+            let args = get_bench_args([
+                if_arg.as_str(),
+                of_arg.as_str(),
+                "bs=4K",
+                "skip=256",
+                "status=none",
+            ])
+            .into_iter();
             (output_dir, args)
         })
         .bench_values(|(output_dir, args)| {
@@ -210,8 +232,14 @@ fn dd_copy_with_seek(bencher: Bencher) {
             let output = output_dir.path().join("output.bin");
             let if_arg = format!("if={input_str}");
             let of_arg = format!("of={}", output.display());
-            let args = get_bench_args(&[&if_arg, &of_arg, &"bs=4K", &"seek=256", &"status=none"])
-                .into_iter();
+            let args = get_bench_args([
+                if_arg.as_str(),
+                of_arg.as_str(),
+                "bs=4K",
+                "seek=256",
+                "status=none",
+            ])
+            .into_iter();
             (output_dir, args)
         })
         .bench_values(|(output_dir, args)| {
@@ -237,7 +265,8 @@ fn dd_copy_8k_blocks(bencher: Bencher) {
             let output = output_dir.path().join("output.bin");
             let if_arg = format!("if={input_str}");
             let of_arg = format!("of={}", output.display());
-            let args = get_bench_args(&[&if_arg, &of_arg, &"bs=8K", &"status=none"]).into_iter();
+            let args = get_bench_args([if_arg.as_str(), of_arg.as_str(), "bs=8K", "status=none"])
+                .into_iter();
             (output_dir, args)
         })
         .bench_values(|(output_dir, args)| {

@@ -10,7 +10,7 @@ use uucore::benchmark::get_bench_args;
 #[divan::bench]
 fn true_single_call(bencher: Bencher) {
     bencher
-        .with_inputs(|| get_bench_args(&[]).into_iter())
+        .with_inputs(|| get_bench_args([] as [&str; 0]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
