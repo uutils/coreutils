@@ -124,6 +124,12 @@ const POSITIVE: &u8 = &b'+';
 // reasonably large chunks for typical workloads.
 const MIN_AUTOMATIC_BUF_SIZE: usize = 512 * 1024; // 512 KiB
 const FALLBACK_AUTOMATIC_BUF_SIZE: usize = 32 * 1024 * 1024; // 32 MiB
+// The byte buffers share the process address space with per-line metadata and
+// sorting scratch space. Leave more headroom on 32-bit targets, even when the
+// machine reports plenty of physical memory.
+#[cfg(target_pointer_width = "32")]
+const MAX_AUTOMATIC_BUF_SIZE: usize = 32 * 1024 * 1024; // 32 MiB
+#[cfg(not(target_pointer_width = "32"))]
 const MAX_AUTOMATIC_BUF_SIZE: usize = 1024 * 1024 * 1024; // 1 GiB
 
 #[derive(Debug, thiserror::Error)]

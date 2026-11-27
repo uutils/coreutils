@@ -105,6 +105,12 @@ fn physical_memory_bytes() -> Option<u128> {
 mod tests {
     use super::*;
 
+    #[cfg(target_pointer_width = "32")]
+    #[test]
+    fn automatic_memory_hint_leaves_room_for_line_metadata() {
+        assert_eq!(clamp_hint(u128::MAX), 32 * 1024 * 1024);
+    }
+
     #[test]
     fn desired_buffer_matches_total_when_small() {
         let six_mebibytes = 6 * 1024 * 1024;
@@ -114,11 +120,11 @@ mod tests {
     }
 
     #[test]
-    fn desired_buffer_caps_at_max_for_large_inputs() {
+    fn file_buffer_hint_caps_at_max_for_large_inputs() {
         let large = 256 * 1024 * 1024; // 256 MiB
         assert_eq!(
-            desired_file_buffer_bytes(large as u128),
-            crate::MAX_AUTOMATIC_BUF_SIZE as u128
+            clamp_hint(desired_file_buffer_bytes(large as u128)),
+            crate::MAX_AUTOMATIC_BUF_SIZE
         );
     }
 }
