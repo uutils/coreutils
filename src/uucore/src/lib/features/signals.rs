@@ -528,20 +528,15 @@ pub static ALL_SIGNALS: [&str; 32] = [
 
 /// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
 /// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
+///
+/// # Safety
+///
+/// Must be called from a single-threaded process before installing other signal handlers.
 #[cfg(unix)]
-pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
-    unsafe {
-        sigaction(
-            SIGSEGV,
-            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
-        )
-    }?;
-    unsafe {
-        sigaction(
-            SIGBUS,
-            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
-        )
-    }?;
+pub unsafe fn disable_rust_signal_handlers() -> Result<(), Errno> {
+    let default = &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all());
+    unsafe { sigaction(SIGSEGV, default) }?;
+    unsafe { sigaction(SIGBUS, default) }?;
     Ok(())
 }
 
