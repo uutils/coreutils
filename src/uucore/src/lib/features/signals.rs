@@ -754,7 +754,7 @@ static STARTUP_STATE_WAS_CAPTURED: AtomicBool = AtomicBool::new(false);
 /// Captures stdio and SIGPIPE state at process initialization, before `main()` runs.
 ///
 /// # Safety
-/// Called from `.init_array` before `main()`. Only reads current state.
+/// Called from `.init_array` before `main()`. Only reopening stdio.
 #[cfg(unix)]
 #[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn capture_startup_state() {
@@ -768,19 +768,24 @@ pub unsafe extern "C" fn capture_startup_state() {
     }
 
     // Capture stdio state
-    unsafe {
-        STDIN_WAS_CLOSED.store(
-            libc::fcntl(libc::STDIN_FILENO, libc::F_GETFD) == -1,
-            Ordering::Relaxed,
-        );
-        STDOUT_WAS_CLOSED.store(
-            libc::fcntl(libc::STDOUT_FILENO, libc::F_GETFD) == -1,
-            Ordering::Relaxed,
-        );
-        STDERR_WAS_CLOSED.store(
-            libc::fcntl(libc::STDERR_FILENO, libc::F_GETFD) == -1,
-            Ordering::Relaxed,
-        );
+    let is_closed = |i: libc::c_int| unsafe { libc::fcntl(i, libc::F_GETFD) == -1 };
+    let stdin_was_closed = is_closed(libc::STDIN_FILENO);
+    STDIN_WAS_CLOSED.store(stdin_was_closed, Ordering::Relaxed);
+    let stdout_was_closed = is_closed(libc::STDOUT_FILENO);
+    STDOUT_WAS_CLOSED.store(stdout_was_closed, Ordering::Relaxed);
+    let stderr_was_closed = is_closed(libc::STDERR_FILENO);
+    STDERR_WAS_CLOSED.store(stderr_was_closed, Ordering::Relaxed);
+    // open read-only stdout and stderr. Then `rustix::io::write` reports `EBADF`.
+    // std will support `EBADF` in the future <https://github.com/rust-lang/rust/pull/166117>
+    if (stdin_was_closed
+        && unsafe { libc::open(c"/dev/null".as_ptr(), libc::O_WRONLY) } != libc::STDIN_FILENO)
+        || (stdout_was_closed
+            && unsafe { libc::open(c"/dev/null".as_ptr(), libc::O_RDONLY) } != libc::STDOUT_FILENO)
+        || (stderr_was_closed
+            && unsafe { libc::open(c"/dev/null".as_ptr(), libc::O_RDONLY) } != libc::STDERR_FILENO)
+    {
+        // `std` crashes when `/dev` is not mounted and stdio was closed.
+        unsafe { libc::abort() }
     }
 
     // Capture SIGPIPE state
