@@ -3691,43 +3691,37 @@ fn test_ls_color() {
 #[cfg(not(feature = "selinux"))]
 // Disabled on the SELinux runner for now
 fn test_ls_inode() {
+    use std::os::unix::fs::MetadataExt;
+
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
     let file = "test_inode";
     at.touch(file);
+    let inode = at.metadata(file).ino();
 
-    let re_short = Regex::new(r" *(\d+) test_inode").unwrap();
-    let re_long =
-        Regex::new(r" *(\d+) [-bcdlpsDx]([r-][w-][xt-]){3}[.+]? +\d .+ test_inode").unwrap();
+    scene
+        .ucmd()
+        .arg(file)
+        .succeeds()
+        .stdout_only(format!("{file}\n"));
+    scene
+        .ucmd()
+        .args(&["-i", file])
+        .succeeds()
+        .stdout_only(format!("{inode} {file}\n"));
 
-    let result = scene.ucmd().arg("test_inode").arg("-i").succeeds();
-    assert!(re_short.is_match(result.stdout_str()));
-    let inode_short = re_short
-        .captures(result.stdout_str())
-        .unwrap()
-        .get(1)
-        .unwrap()
-        .as_str();
+    // Make the timestamp contain the inode digits even without -i.
+    let time_style = format!("--time-style=+{inode}");
+    let long = scene.ucmd().args(&["-l", &time_style, file]).succeeds();
+    long.stdout_matches(&Regex::new(r"^-([r-][w-][xt-]){3}").unwrap())
+        .stdout_contains(format!(" {inode} {file}\n"));
 
-    let result = scene.ucmd().arg("test_inode").succeeds();
-    assert!(!re_short.is_match(result.stdout_str()));
-    assert!(!result.stdout_str().contains(inode_short));
-
-    let result = scene.ucmd().arg("-li").arg("test_inode").succeeds();
-    assert!(re_long.is_match(result.stdout_str()));
-    let inode_long = re_long
-        .captures(result.stdout_str())
-        .unwrap()
-        .get(1)
-        .unwrap()
-        .as_str();
-
-    let result = scene.ucmd().arg("-l").arg("test_inode").succeeds();
-    assert!(!re_long.is_match(result.stdout_str()));
-    assert!(!result.stdout_str().contains(inode_long));
-
-    assert_eq!(inode_short, inode_long);
+    scene
+        .ucmd()
+        .args(&["-li", &time_style, file])
+        .succeeds()
+        .stdout_only(format!("{inode} {}", long.stdout_str()));
 }
 
 #[uutests::wasi_ignore(NoFifo)]
