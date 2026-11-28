@@ -843,8 +843,11 @@ impl UError for DuError {
 
 /// Read a file and return each line in a vector of String
 fn file_as_vec(filename: impl AsRef<Path>) -> UResult<Vec<String>> {
-    let file = File::open(filename)?;
-    let buf = BufReader::new(file);
+    let buf: Box<dyn BufRead> = if filename.as_ref() == Path::new("-") {
+        Box::new(io::stdin().lock())
+    } else {
+        Box::new(BufReader::new(File::open(filename)?))
+    };
     let lines = buf.lines().collect::<Result<Vec<String>, _>>()?;
     Ok(lines)
 }
