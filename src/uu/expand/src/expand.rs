@@ -520,6 +520,19 @@ fn expand_buf(
     Ok(())
 }
 
+/// Whether stdin is a regular file, i.e. reads from it never wait for a writer.
+fn stdin_is_regular_file() -> bool {
+    #[cfg(unix)]
+    {
+        rustix::fs::fstat(stdin())
+            .is_ok_and(|st| rustix::fs::FileType::from_raw_mode(st.st_mode).is_file())
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
+}
+
 fn expand_file(
     file: &OsString,
     output: &mut BufWriter<std::io::Stdout>,
@@ -527,6 +540,10 @@ fn expand_file(
     line: &mut LineState,
 ) -> UResult<()> {
     let mut input = open(file)?;
+    // Only input that can block between lines (a pipe or terminal on stdin)
+    // needs output flushed before the next read. Regular files keep the fully
+    // buffered path.
+    let flush_lines = file == "-" && !stdin_is_regular_file();
     let ts = options.tabstops.as_ref();
     loop {
         match input.fill_buf() {
@@ -536,6 +553,11 @@ fn expand_file(
                     .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
                 let len = buf.len();
                 input.consume(len);
+                if flush_lines {
+                    output
+                        .flush()
+                        .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+                }
             }
             Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
         }
