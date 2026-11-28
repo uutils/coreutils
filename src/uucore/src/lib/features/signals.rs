@@ -12,12 +12,10 @@
 
 #[cfg(unix)]
 use nix::errno::Errno;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::libc;
 #[cfg(unix)]
 use nix::sys::signal::{
     SaFlags, SigAction, SigHandler, SigHandler::SigDfl, SigHandler::SigIgn, SigSet, Signal,
-    Signal::SIGINT, Signal::SIGPIPE, sigaction, signal,
+    Signal::SIGBUS, Signal::SIGINT, Signal::SIGPIPE, Signal::SIGSEGV, sigaction, signal,
 };
 
 /// The default signal value.
@@ -527,6 +525,25 @@ pub static ALL_SIGNALS: [&str; 32] = [
     "USR2", "PIPE", "ALRM", "TERM", "STKFLT", "CHLD", "CONT", "STOP", "TSTP", "TTIN", "TTOU",
     "URG", "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "POLL", "PWR", "SYS",
 ];
+
+/// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
+/// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
+#[cfg(unix)]
+pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
+    unsafe {
+        sigaction(
+            SIGSEGV,
+            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
+        )
+    }?;
+    unsafe {
+        sigaction(
+            SIGBUS,
+            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
+        )
+    }?;
+    Ok(())
+}
 
 /// Returns the signal number for a given signal name or value.
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {

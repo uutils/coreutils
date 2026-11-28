@@ -740,6 +740,32 @@ fn test_check_write_error(#[case] after_ok: bool, #[case] stderr_before: &str) {
         ));
 }
 
+// Since Android 10, bionic opens /dev/null on a closed stdout before the program starts.
+#[rstest]
+#[cfg(all(unix, not(wasi_runner), not(target_os = "android")))]
+#[case::stops_before_next_file("lorem_ipsum.txt missing", "")]
+#[case::zero_flushes_at_exit(
+    "--zero lorem_ipsum.txt missing",
+    "cksum: missing: No such file or directory\n"
+)]
+#[case::check_report("-c sha256_single_file.expected", "")]
+#[case::check_cannot_open("-c missing.sums", "cksum: missing: No such file or directory\n")]
+fn test_closed_stdout(#[case] args: &str, #[case] stderr_before: &str) {
+    // Run through a shell so the process really starts with fd 1 closed.
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.write(
+        "missing.sums",
+        &format!("SHA256 (missing) = {}\n", "0".repeat(64)),
+    );
+    ts.cmd("sh")
+        .args(&["-c", &format!("\"$0\" {} {args} >&-", ts.util_name)])
+        .arg(&ts.bin_path)
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "{stderr_before}cksum: write error: Bad file descriptor\n"
+        ));
+}
+
 #[test]
 fn test_check_tagged_blanks_around_equal_sign() {
     // Like GNU, accept any blanks, or none, around the '=' of a tagged line,
@@ -3581,6 +3607,18 @@ mod debug_flag {
                     "glibc.cpu.hwcaps=-AVX2 ",
                     "cksum: using avx2 hardware support",
                 ), // trailing spaces invalidate AVX2 disabling
+                (
+                    "glibc.cpu.hwcaps= -AVX2",
+                    "cksum: using avx2 hardware support",
+                ), // leading spaces invalidate AVX2 disabling
+                (
+                    "glibc.cpu.hwcaps=-AVX2:x=y=z",
+                    "cksum: using avx2 hardware support",
+                ), // glibc ignores the whole variable
+                (
+                    "x:glibc.cpu.hwcaps=-AVX2",
+                    "cksum: avx2 support not detected",
+                ), // glibc skips a setting without '=' before the last one
             ] {
                 new_ucmd!()
                     .arg("--debug")

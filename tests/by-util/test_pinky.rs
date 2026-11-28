@@ -3,12 +3,17 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-#[cfg(not(target_os = "openbsd"))]
+#![cfg(any(
+    target_vendor = "apple",
+    target_os = "cygwin",
+    target_os = "freebsd",
+    target_os = "linux",
+    target_os = "netbsd",
+))]
+
 use uucore::entries::{Locate, Passwd};
 use uutests::new_ucmd;
-#[cfg(not(target_os = "openbsd"))]
 use uutests::util::{TestScenario, expected_result};
-#[cfg(not(target_os = "openbsd"))]
 use uutests::{unwrap_or_return, util_name};
 
 #[test]
@@ -17,7 +22,6 @@ fn test_invalid_arg() {
 }
 
 #[test]
-#[cfg(not(target_os = "openbsd"))]
 fn test_long_format() {
     use pinky::capitalize;
 
@@ -43,7 +47,6 @@ fn test_long_format() {
 
 #[cfg(unix)]
 #[test]
-#[cfg(not(target_os = "openbsd"))]
 fn test_long_format_multiple_users() {
     // multiple instances of one account we know exists,
     // the account of the test runner,
@@ -61,7 +64,6 @@ fn test_long_format_multiple_users() {
 }
 
 #[test]
-#[cfg(not(target_os = "openbsd"))]
 fn test_long_format_numeric_operand_is_not_a_uid() {
     // No account is named "+0", so it must not be looked up as uid 0.
     new_ucmd!()
@@ -78,7 +80,6 @@ fn test_long_format_wo_user() {
 
 #[cfg(unix)]
 #[test]
-#[cfg(not(target_os = "openbsd"))]
 fn test_short_format_i() {
     // allow whitespace variation
     // * minor whitespace differences occur between platform built-in outputs; specifically, the number of trailing TABs may be variant
@@ -98,7 +99,6 @@ fn test_short_format_i() {
 /// Remove the `Idle` header and every `HH:MM`-looking token so only the stable
 /// fields are compared.
 #[cfg(unix)]
-#[cfg(not(target_os = "openbsd"))]
 fn strip_volatile_fields(fields: &[&str]) -> Vec<String> {
     fn is_clock_value(s: &str) -> bool {
         let bytes = s.as_bytes();
@@ -116,7 +116,6 @@ fn strip_volatile_fields(fields: &[&str]) -> Vec<String> {
 
 #[cfg(unix)]
 #[test]
-#[cfg(not(target_os = "openbsd"))]
 fn test_lookup() {
     let args = ["--lookup"];
     let ts = TestScenario::new(util_name!());
@@ -132,7 +131,6 @@ fn test_lookup() {
 
 #[cfg(unix)]
 #[test]
-#[cfg(not(target_os = "openbsd"))]
 fn test_short_format_q() {
     // allow whitespace variation
     // * minor whitespace differences occur between platform built-in outputs; specifically, the number of trailing TABs may be variant
@@ -150,7 +148,6 @@ fn test_short_format_q() {
 
 #[cfg(unix)]
 #[test]
-#[cfg(not(target_os = "openbsd"))]
 fn test_no_flag() {
     let ts = TestScenario::new(util_name!());
     let actual = ts.ucmd().succeeds().stdout_move_str();

@@ -3,6 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+#![cfg(any(
+    target_vendor = "apple",
+    target_os = "cygwin",
+    target_os = "freebsd",
+    target_os = "linux",
+    target_os = "netbsd",
+))]
+
 use clap::{Arg, ArgAction, Command};
 use uucore::format_usage;
 use uucore::translate;

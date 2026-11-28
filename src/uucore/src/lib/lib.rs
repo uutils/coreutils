@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind
+// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind ohos
 
 //! library ~ (core/bundler file)
 
@@ -97,6 +97,8 @@ pub use crate::features::update_control;
 pub use crate::features::uptime;
 #[cfg(feature = "version-cmp")]
 pub use crate::features::version_cmp;
+#[cfg(feature = "zeroed-alloc")]
+pub use crate::features::zeroed_alloc;
 pub use crate::features::{char_width, diagnostics};
 
 // * (platform-specific) feature-gated modules
@@ -116,25 +118,7 @@ pub use crate::features::process;
 pub use crate::features::safe_copy;
 #[cfg(all(feature = "safe-traversal", unix, not(target_os = "redox")))]
 pub use crate::features::safe_traversal;
-#[cfg(all(
-    feature = "signals",
-    any(
-        windows,
-        target_vendor = "apple",
-        target_os = "aix",
-        target_os = "android",
-        target_os = "cygwin",
-        target_os = "freebsd",
-        target_os = "haiku",
-        target_os = "hurd",
-        target_os = "illumos",
-        target_os = "linux",
-        target_os = "netbsd",
-        target_os = "openbsd",
-        target_os = "redox",
-        target_os = "solaris"
-    )
-))]
+#[cfg(has_signals)]
 pub use crate::features::signals;
 #[cfg(all(
     feature = "utmpx",
@@ -175,12 +159,6 @@ pub use crate::features::smack;
 
 //## core functions
 
-#[cfg(unix)]
-use nix::errno::Errno;
-#[cfg(unix)]
-use nix::sys::signal::{
-    SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGSEGV, sigaction,
-};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader};
@@ -191,25 +169,6 @@ use std::os::wasi::ffi::{OsStrExt, OsStringExt};
 use std::str::Utf8Chunk;
 use std::sync::{LazyLock, OnceLock, atomic::Ordering};
 use std::{iter, str};
-
-/// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
-/// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
-#[cfg(unix)]
-pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
-    unsafe {
-        sigaction(
-            SIGSEGV,
-            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
-        )
-    }?;
-    unsafe {
-        sigaction(
-            SIGBUS,
-            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
-        )
-    }?;
-    Ok(())
-}
 
 pub fn get_canonical_util_name(util_name: &str) -> &str {
     // remove the "uu_" prefix
@@ -231,6 +190,7 @@ macro_rules! bin_inner {
             use uucore::locale;
 
             // Preserve inherited SIGPIPE settings (e.g., from env --default-signal=PIPE)
+            #[cfg(unix)]
             uucore::panic::preserve_inherited_sigpipe();
 
             // suppress extraneous error output for SIGPIPE failures/panics
@@ -472,6 +432,31 @@ pub fn args_os_filtered() -> impl Iterator<Item = OsString> {
 pub fn read_yes() -> bool {
     let mut s = String::new();
     std::io::stdin().read_line(&mut s).is_ok() && matches!(s.chars().next(), Some('y' | 'Y'))
+}
+
+/// Return `io::stdout()`, or, if stdout was closed at startup (Rust then
+/// reopens it as `/dev/null`), a line-buffered writer that fails with EBADF.
+/// Flush it at the end, or the error of a partial last line is lost.
+pub fn stdout_writer() -> Box<dyn std::io::Write> {
+    #[cfg(all(has_signals, unix))]
+    if signals::stdout_was_closed() {
+        /// A writer that fails like a closed file descriptor.
+        struct ClosedStdout;
+
+        impl std::io::Write for ClosedStdout {
+            fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::from_raw_os_error(libc::EBADF))
+            }
+
+            // With no output, a closed stdout is not an error.
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        return Box::new(std::io::LineWriter::new(ClosedStdout));
+    }
+    Box::new(std::io::stdout())
 }
 
 #[derive(Debug, thiserror::Error)]
