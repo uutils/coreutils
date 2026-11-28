@@ -8777,20 +8777,30 @@ fn test_ls_dereference_sibling_alias_not_already_listed() {
 }
 
 #[rstest::rstest]
-#[case(&["-lL", "."], "./entry")]
-#[case(&["-lLZ", "."], "./entry")]
-#[case(&["-lLd", "entry"], "entry")]
-#[case(&["--dereference-command-line-symlink-to-dir", "-d", "--color=always", "entry"], "entry")]
+#[case(&["-lL", "."], "./entry", None)]
+#[case(&["-lLZ", "."], "./entry", None)]
+#[case(&["-lLd", "entry"], "entry", None)]
+#[case(&["--dereference-command-line-symlink-to-dir", "-d", "--color=always", "entry"], "entry", None)]
+#[case::missing_color(&["-L", "--color=always", "."], "./entry", Some("mi=01;31"))]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(not(wasi_runner))]
-fn test_dereferenced_metadata_is_cached(#[case] args: &[&str], #[case] path: &str) {
+fn test_dereferenced_metadata_is_cached(
+    #[case] args: &[&str],
+    #[case] path: &str,
+    #[case] ls_colors: Option<&str>,
+) {
     use std::process::Command;
 
     let scene = TestScenario::new(util_name!());
     scene.fixtures.mkdir("target");
     scene.fixtures.symlink_dir("target", "entry");
 
-    let Ok(output) = Command::new("strace")
+    let mut strace = Command::new("strace");
+    match ls_colors {
+        Some(colors) => strace.env("LS_COLORS", colors),
+        None => strace.env_remove("LS_COLORS"),
+    };
+    let Ok(output) = strace
         .args(["-qq", "-e", "trace=stat,statx,lstat,newfstatat"])
         .arg(&scene.bin_path)
         .arg(scene.util_name.as_str())
