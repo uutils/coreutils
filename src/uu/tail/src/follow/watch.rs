@@ -155,7 +155,10 @@ impl Observer {
         update_last: bool,
     ) -> UResult<()> {
         if self.follow.is_some() {
-            let path = if path.is_relative() {
+            // `-` is the stdin key: `only_stdin_remaining()` matches it verbatim,
+            // so it must not be absolutized. Other relative paths are absolutized
+            // because inotify reports absolute paths.
+            let path = if path.is_relative() && path != Path::new(text::DASH) {
                 std::env::current_dir()?.join(path)
             } else {
                 path.to_owned()
