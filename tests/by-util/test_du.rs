@@ -3108,3 +3108,51 @@ fn test_dereference_args_after_dereference_wins() {
         .succeeds()
         .stdout_contains("dir/link");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_quoting_on_terminal() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("my file");
+    ucmd.arg("my file")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_contains("\t'my file'\r\n");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("my file");
+    ucmd.arg("my file")
+        .env("QUOTING_STYLE", "literal")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_contains("\tmy file\r\n");
+
+    // Not a terminal: no quoting.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("my file");
+    ucmd.arg("my file")
+        .succeeds()
+        .stdout_contains("\tmy file\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_invalid_quoting_style_reported_once() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("my dir");
+    at.touch("my dir/one file");
+    at.touch("my dir/two file");
+    let result = ucmd
+        .args(&["-a", "my dir"])
+        .env("QUOTING_STYLE", "bogus")
+        .terminal_simulation(true)
+        .succeeds();
+    result.stdout_contains("'my dir/one file'");
+    assert_eq!(
+        result
+            .stderr_str()
+            .matches("invalid value of environment variable QUOTING_STYLE")
+            .count(),
+        1
+    );
+}

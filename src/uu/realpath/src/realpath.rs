@@ -21,6 +21,7 @@ use uucore::{
     format_usage,
     fs::{MissingHandling, ResolveMode, canonicalize},
     line_ending::LineEnding,
+    quoting_style::{QuotingStyle, quote_name_for_tty, tty_quoting_style},
 };
 use uucore::{error::set_exit_code, fs::make_path_relative_to, show};
 
@@ -105,10 +106,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ResolveMode::Physical
     };
     let (relative_to, relative_base) = prepare_relative_options(&matches, can_mode, resolve_mode)?;
+    let style = tty_quoting_style();
     for path in &paths {
         let result = resolve_path(
             path,
             line_ending,
+            style,
             resolve_mode,
             can_mode,
             relative_to.as_deref(),
@@ -293,6 +296,7 @@ fn canonicalize_relative(
 fn resolve_path(
     p: &Path,
     line_ending: LineEnding,
+    style: Option<QuotingStyle>,
     resolve: ResolveMode,
     can_mode: MissingHandling,
     relative_to: Option<&Path>,
@@ -308,7 +312,7 @@ fn resolve_path(
 
     let abs = process_relative(abs, relative_base, relative_to);
 
-    print_verbatim(abs)?;
+    print_verbatim(quote_name_for_tty(abs.as_os_str(), style))?;
     stdout().write_all(&[line_ending.into()])?;
     Ok(())
 }

@@ -687,3 +687,29 @@ fn test_realpath_canonicalize_vs_existing() {
         }
     }
 }
+
+#[test]
+#[cfg(unix)]
+fn test_quoting_on_terminal() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("my file");
+    ucmd.args(&["--relative-to=.", "my file"])
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("'my file'\r\n");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("my file");
+    ucmd.args(&["--relative-to=.", "my file"])
+        .env("QUOTING_STYLE", "literal")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("my file\r\n");
+
+    // Not a terminal: no quoting.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("my file");
+    ucmd.args(&["--relative-to=.", "my file"])
+        .succeeds()
+        .stdout_only("my file\n");
+}

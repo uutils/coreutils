@@ -14,6 +14,7 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;
+use uucore::quoting_style::{quote_name_for_tty, tty_quoting_style};
 
 use uucore::translate;
 
@@ -65,9 +66,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Main Program Processing
     //
 
+    let style = tty_quoting_style();
+
     for path in name_args {
         let mut out = stdout();
-        out.write_all(&basename(path, &suffix)?)?;
+        let name = basename(path, &suffix)?;
+        if style.is_some() {
+            let name = uucore::os_string_from_vec(name)?;
+            out.write_all(uucore::os_str_as_bytes(&quote_name_for_tty(&name, style))?)?;
+        } else {
+            out.write_all(&name)?;
+        }
         write!(out, "{line_ending}")?;
     }
 

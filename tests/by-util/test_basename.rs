@@ -311,3 +311,44 @@ fn test_emoji_handling() {
         .succeeds()
         .stdout_only("file🎯\n");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_quoting_on_terminal() {
+    new_ucmd!()
+        .arg("dir/my file")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("'my file'\r\n");
+
+    new_ucmd!()
+        .arg("dir/my file")
+        .env("QUOTING_STYLE", "literal")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("my file\r\n");
+
+    // Not a terminal: no quoting.
+    new_ucmd!()
+        .arg("dir/my file")
+        .succeeds()
+        .stdout_only("my file\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_invalid_quoting_style_reported_once() {
+    let result = new_ucmd!()
+        .args(&["-a", "dir/my file", "dir/other file", "dir/third file"])
+        .env("QUOTING_STYLE", "bogus")
+        .terminal_simulation(true)
+        .succeeds();
+    result.stdout_is("'my file'\r\n'other file'\r\n'third file'\r\n");
+    assert_eq!(
+        result
+            .stderr_str()
+            .matches("invalid value of environment variable QUOTING_STYLE")
+            .count(),
+        1
+    );
+}

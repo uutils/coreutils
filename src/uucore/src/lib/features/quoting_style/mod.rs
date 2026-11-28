@@ -5,6 +5,7 @@
 
 //! Set of functions for escaping names according to different quoting styles.
 
+use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::io::IsTerminal;
@@ -229,6 +230,29 @@ pub fn quoting_style_or_tty_env(cli_style: Option<QuotingStyle>) -> Option<Quoti
             .then(quoting_style_from_env)
             .flatten()
     })
+}
+
+/// Return the style used to quote names the way `ls` does on a terminal, or
+/// `None` when standard output is not a terminal.
+///
+/// On a terminal the style from `QUOTING_STYLE` is used if it is set and
+/// valid, otherwise shell-escape. Call this once per run, before printing
+/// names, so an invalid `QUOTING_STYLE` is reported only once, then pass the
+/// result to [`quote_name_for_tty`].
+pub fn tty_quoting_style() -> Option<QuotingStyle> {
+    std::io::stdout()
+        .is_terminal()
+        .then(|| quoting_style_from_env().unwrap_or(QuotingStyle::SHELL_ESCAPE))
+}
+
+/// Quote `name` with the style returned by [`tty_quoting_style`]. With `None`
+/// the name is returned unchanged and borrowed, so printing to a pipe does not
+/// allocate per name.
+pub fn quote_name_for_tty(name: &OsStr, style: Option<QuotingStyle>) -> Cow<'_, OsStr> {
+    match style {
+        Some(style) => Cow::Owned(locale_aware_escape_name(name, style)),
+        None => Cow::Borrowed(name),
+    }
 }
 
 /// Common interface of quoting mechanisms.
