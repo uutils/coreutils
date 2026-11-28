@@ -2110,6 +2110,16 @@ mod inter_partition_copying {
 
         scene.ucmd().arg(&tree).arg(at.plus("first")).fails();
 
+        // The links were copied before the failure; otherwise the test would
+        // pass without exercising anything if the listing order changes.
+        for link in links {
+            assert_eq!(
+                fs::read_link(at.plus("first").join(link)).ok().as_deref(),
+                Some(Path::new("draft")),
+                "{link} must have been copied to the destination before the failure"
+            );
+        }
+
         for link in links {
             assert_eq!(
                 fs::read_link(tree.join(link)).ok().as_deref(),

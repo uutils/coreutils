@@ -1093,14 +1093,20 @@ fn copy_symlink(from: &Path, to: &Path) -> io::Result<()> {
 }
 #[cfg(windows)]
 fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
+    copy_symlink(from, to)?;
+    fs::remove_file(from)
+}
+
+/// Recreate the symlink `from` at `to`, leaving `from` in place.
+#[cfg(windows)]
+fn copy_symlink(from: &Path, to: &Path) -> io::Result<()> {
     let path_symlink_points_to = fs::read_link(from)?;
     if path_symlink_points_to.exists() {
         if path_symlink_points_to.is_dir() {
-            windows::fs::symlink_dir(&path_symlink_points_to, to)?;
+            windows::fs::symlink_dir(&path_symlink_points_to, to)
         } else {
-            windows::fs::symlink_file(&path_symlink_points_to, to)?;
+            windows::fs::symlink_file(&path_symlink_points_to, to)
         }
-        fs::remove_file(from)
     } else {
         Err(io::Error::new(
             io::ErrorKind::NotFound,
