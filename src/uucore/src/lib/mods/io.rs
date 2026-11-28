@@ -130,6 +130,20 @@ impl<T: AsFd> io::Write for RawWriter<T> {
     }
 }
 
+/// Standard output to wrap in a `BufWriter`, which then writes in blocks:
+/// `Stdout` itself is line buffered, which costs a `write` per line.
+#[cfg(any(unix, target_os = "wasi"))]
+pub fn stdout() -> RawWriter<io::Stdout> {
+    RawWriter(io::stdout())
+}
+
+/// Standard output to wrap in a `BufWriter`, which then writes in blocks:
+/// `Stdout` itself is line buffered, which costs a `write` per line.
+#[cfg(not(any(unix, target_os = "wasi")))]
+pub fn stdout() -> io::StdoutLock<'static> {
+    io::stdout().lock()
+}
+
 /// abstraction wrapper for native file handle / file descriptor
 // todo: remove clone introducing additional syscall dependency
 pub struct OwnedFileDescriptorOrHandle {

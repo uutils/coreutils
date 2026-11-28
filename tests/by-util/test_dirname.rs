@@ -344,3 +344,14 @@ fn test_win_non_unicode_path() {
     new_ucmd!().arg(&path).succeeds().stdout_is(".\n");
     new_ucmd!().arg("-z").arg(&path).succeeds().stdout_is(".\0");
 }
+
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_is_reported() {
+    new_ucmd!()
+        .args(&["a/b", "c/d"])
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("dirname: No space left on device\n");
+}
