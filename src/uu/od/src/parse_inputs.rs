@@ -61,11 +61,12 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
     // test if command line contains: [file] <offset>
     // fall-through if no (valid) offset is found
     if input_strings.len() == 1 || input_strings.len() == 2 {
-        // if any of the options -A, -j, -N, -t, -v or -w are present there is no offset
+        // if any of the options -A, -j, -N, -S, -t, -v or -w are present there is no offset
         if !matches.opts_present(&[
             options::ADDRESS_RADIX,
             options::READ_BYTES,
             options::SKIP_BYTES,
+            options::STRINGS,
             options::FORMAT,
             options::OUTPUT_DUPLICATES,
             options::WIDTH,
