@@ -1521,7 +1521,11 @@ pub(crate) fn fd_soft_limit() -> Option<usize> {
 
 #[cfg(not(unix))]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
-    None
+    // WASI has no `getrlimit`. 256 is the traditional POSIX soft `RLIMIT_NOFILE`
+    // default most systems used before raising it; assume it instead of treating
+    // `--batch-size`/merge as unbounded, since wasmtime's fd table tends to be small.
+    const WASI_FD_LIMIT_GUESS: usize = 256;
+    cfg!(target_os = "wasi").then_some(WASI_FD_LIMIT_GUESS)
 }
 
 /// The largest `--batch-size` argument that can be honoured with the current file
