@@ -585,6 +585,39 @@ fn test_date_rejects_nonexistent_dst_inputs() {
     }
 }
 
+// Local midnight does not exist on these days, so a date without a time is invalid.
+// Both zones have kept the same DST rules for decades, so older tzdata (Android) agrees.
+#[rstest]
+#[case::beirut_dst_start("Asia/Beirut", "2026-03-29")]
+#[case::azores_dst_start("Atlantic/Azores", "2026-03-29")]
+#[cfg(unix)]
+fn test_date_rejects_bare_date_with_midnight_in_dst_gap(#[case] tz: &str, #[case] input: &str) {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .env("TZ", tz)
+        .args(&["-d", input, "+%s"])
+        .fails_with_code(1)
+        .stderr_contains("invalid date");
+}
+
+#[rstest]
+#[case::day_after_gap("2026-03-30", "2026-03-30 00:00:00 EEST\n")]
+#[case::day_after_dst_end("2026-10-25", "2026-10-25 00:00:00 EET\n")]
+#[cfg(unix)]
+fn test_date_accepts_bare_date_around_midnight_dst_gap(
+    #[case] input: &str,
+    #[case] expected: &str,
+) {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .env("TZ", "Asia/Beirut")
+        .args(&["-d", input, "+%F %T %Z"])
+        .succeeds()
+        .stdout_is(expected);
+}
+
 #[test]
 fn test_date_relative_plus_after_today() {
     for (input, expected) in [
