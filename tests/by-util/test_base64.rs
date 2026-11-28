@@ -155,7 +155,8 @@ fn test_garbage() {
         .arg("-d")
         .pipe_in(input)
         .fails()
-        .stderr_only("base64: invalid input\n");
+        .stdout_is("hello, world!")
+        .stderr_is("base64: invalid input\n");
 }
 
 #[test]

@@ -274,10 +274,19 @@ sed -i -e "s|framework_failure_ 'no inotify_add_watch';|fail=1;|" tests/tail/ino
 # This prevents the test from overwhelming logs while still reporting failures
 sed -i '/^my $fail = run_tests/i no warnings "redefine"; *Coreutils::_compare_files = sub { my ($p, $t, $io, $a, $e) = @_; my $d = File::Compare::compare($a, $e); warn "$p: test $t: mismatch\\n" if $d; return $d; };' tests/pr/pr-tests.pl
 
-# When decoding an invalid base32/64 string, gnu writes everything it was able to decode until
-# it hit the decode error, while we don't write anything if the input is invalid.
-sed -i "s/\(baddecode.*OUT=>\"\).*\"/\1\"/g" tests/basenc/base64.pl
-sed -i "s/\(\(b2[ml]_[69]\|z85_8\|z85_35\).*OUT=>\)[^}]*\(.*\)/\1\"\"\3/g" tests/basenc/basenc.pl
+# Preserve the valid base64url prefix before an invalid alphabet character (#6008).
+sed -i '/^my $fail = run_tests/i\
+for my $test (@Tests) {\
+    next unless $test->[0] eq "b64u_7";\
+    my $has_output = 0;\
+    for my $spec (@$test) {\
+        if (ref($spec) eq "HASH" && exists $spec->{OUT}) {\
+            $spec->{OUT} = "T";\
+            $has_output = 1;\
+        }\
+    }\
+    push @$test, {OUT=>"T"} unless $has_output;\
+}' tests/basenc/basenc.pl
 
 # basenc: swap out error message for unexpected arg
 sed -i "s/  {ERR=>\"\$prog: foobar\\\\n\" \. \$try_help }/  {ERR=>\"error: unexpected argument '--foobar' found\n\n  tip: to pass '--foobar' as a value, use '-- --foobar'\n\nUsage: basenc [OPTION]... [FILE]\n\nFor more information, try '--help'.\n\"}]/" tests/basenc/basenc.pl
