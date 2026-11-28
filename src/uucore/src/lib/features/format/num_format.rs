@@ -85,7 +85,7 @@ impl Formatter<i64> for SignedInt {
         let abs = (x as i128).abs();
         let s = match (self.precision, abs) {
             (Some(0), 0) => String::new(),
-            (Some(precision), _) => zero_pad_to(&abs.to_string(), precision),
+            (Some(precision), _) => zero_pad_to(&abs.to_string(), precision)?,
             (None, _) => abs.to_string(),
         };
 
@@ -166,7 +166,7 @@ impl Formatter<u64> for UnsignedInt {
                 UnsignedIntVariant::Octal(Prefix::Yes) => String::from("0"),
                 _ => String::new(),
             },
-            (precision, _) => format!("{prefix}{}", zero_pad_to(&s, precision.unwrap_or(0))),
+            (precision, _) => format!("{prefix}{}", zero_pad_to(&s, precision.unwrap_or(0))?),
         };
         write_output(writer, String::new(), s, self.width, self.alignment)
     }
@@ -373,15 +373,24 @@ impl Formatter<&ExtendedBigDecimal> for Float {
 /// standard formatting machinery, which panics with "Formatting argument out
 /// of range" once the dynamic width exceeds `u16::MAX`. A large precision such
 /// as `%.100000d` is valid input for `printf`/`seq`, so it must not panic.
-fn zero_pad_to(s: &str, width: usize) -> String {
+/// Left-pads `s` with zeros to `width` characters.
+///
+/// The allocation is fallible, so a precision too large to allocate is
+/// reported as [`std::io::ErrorKind::OutOfMemory`] instead of panicking.
+fn zero_pad_to(s: &str, width: usize) -> std::io::Result<String> {
     if s.len() >= width {
-        s.to_string()
-    } else {
-        let mut padded = String::with_capacity(width);
-        padded.extend(std::iter::repeat_n('0', width - s.len()));
-        padded.push_str(s);
-        padded
+        return Ok(s.to_string());
     }
+    let mut padded = String::new();
+    padded.try_reserve_exact(width).map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::OutOfMemory,
+            "formatting precision too large",
+        )
+    })?;
+    padded.extend(std::iter::repeat_n('0', width - s.len()));
+    padded.push_str(s);
+    Ok(padded)
 }
 
 /// Like `format!("{:.precision$}", 0.0)`, which panics past `u16::MAX`.
