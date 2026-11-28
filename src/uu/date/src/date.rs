@@ -734,7 +734,7 @@ pub fn uu_app() -> Command {
                 .num_args(0..=1)
                 .require_equals(true)
                 .default_missing_value(OPT_DATE)
-                .overrides_with(OPT_ISO_8601)
+                .overrides_with_all([OPT_ISO_8601, OPT_RFC_EMAIL, OPT_RFC_3339])
                 .help(translate!("date-help-iso-8601")),
         )
         .arg(
@@ -751,7 +751,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_RFC_EMAIL)
                 .alias(OPT_RFC_2822)
                 .alias(OPT_RFC_822)
-                .overrides_with(OPT_RFC_EMAIL)
+                .overrides_with_all([OPT_ISO_8601, OPT_RFC_EMAIL, OPT_RFC_3339])
                 .help(translate!("date-help-rfc-email"))
                 .action(ArgAction::SetTrue),
         )
@@ -760,6 +760,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_RFC_3339)
                 .value_name("FMT")
                 .value_parser(ShortcutValueParser::new([DATE, SECONDS, NS]))
+                .overrides_with_all([OPT_ISO_8601, OPT_RFC_EMAIL, OPT_RFC_3339])
                 .help(translate!("date-help-rfc-3339")),
         )
         .arg(

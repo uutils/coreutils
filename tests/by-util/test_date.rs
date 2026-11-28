@@ -4198,3 +4198,73 @@ fn test_invalid_date_escaping_depends_on_locale() {
             .stderr_is(expected);
     }
 }
+
+#[test]
+fn test_date_multiple_output_formats() {
+    for option in ["--iso-8601=date", "-R", "--rfc-3339=ns"] {
+        for formats in [[option, "+%s"], ["+%s", option]] {
+            new_ucmd!()
+                .args(&["-u", "-d", "@0"])
+                .args(&formats)
+                .fails_with_code(1)
+                .no_stdout()
+                .stderr_contains("multiple output formats specified");
+        }
+    }
+}
+
+#[test]
+fn test_date_resolution_is_a_source_with_explicit_formats() {
+    // GNU 9.12 formats the clock resolution in either option order.
+    for (format, expected) in [
+        ("-R", "Thu, 01 Jan 1970 00:00:00 +0000\n"),
+        ("-I", "1970-01-01\n"),
+        ("--rfc-3339=seconds", "1970-01-01 00:00:00+00:00\n"),
+        ("+%s", "0\n"),
+    ] {
+        for args in [["--resolution", format], [format, "--resolution"]] {
+            new_ucmd!()
+                .arg("-u")
+                .args(&args)
+                .succeeds()
+                .stdout_only(expected);
+        }
+    }
+}
+
+#[test]
+fn test_date_standard_output_format_last_wins() {
+    let formats = [
+        ("-I", "1970-01-01\n"),
+        ("-R", "Thu, 01 Jan 1970 00:00:00 +0000\n"),
+        ("--rfc-3339=seconds", "1970-01-01 00:00:00+00:00\n"),
+    ];
+    for (first, _) in formats {
+        for (last, expected) in formats {
+            new_ucmd!()
+                .args(&["-u", "-d", "@0", first, last])
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
+
+    for (first, last, expected) in [
+        (
+            "--iso-8601=date",
+            "--iso-8601=seconds",
+            "1970-01-01T00:00:00+00:00\n",
+        ),
+        ("--iso-8601=seconds", "--iso-8601=date", "1970-01-01\n"),
+        (
+            "--rfc-3339=date",
+            "--rfc-3339=ns",
+            "1970-01-01 00:00:00.000000000+00:00\n",
+        ),
+        ("--rfc-3339=ns", "--rfc-3339=date", "1970-01-01\n"),
+    ] {
+        new_ucmd!()
+            .args(&["-u", "-d", "@0", first, last])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
