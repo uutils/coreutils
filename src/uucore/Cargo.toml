@@ -159,7 +159,7 @@ walkdir = { workspace = true, optional = true }
 default = ["signals"]
 # * non-default features
 backup-control = ["fs"]
-colors = []
+colors = ["parser-glob"]
 diagnostics = ["dep:ariadne"]
 checksum = ["base64-simd", "quoting-style", "rustix/fs", "signals", "sum"]
 encoding = [

@@ -274,3 +274,49 @@ pub static FILE_ATTRIBUTE_CODES: &[(&str, &str)] = &[
     ("multihardlink", "mh"),
     ("clrtoeol", "cl"),
 ];
+
+/// Matches `value` against a GNU-style glob `pattern`, as used for the
+/// `TERM` and `COLORTERM` entries. An invalid pattern never matches.
+pub fn fnmatch(value: &str, pattern: &str) -> bool {
+    crate::parser::parse_glob::from_str(pattern).is_ok_and(|glob| glob.matches(value))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{TERMS, fnmatch};
+
+    fn matches_any_term(term: &str) -> bool {
+        TERMS.iter().any(|pattern| fnmatch(term, pattern))
+    }
+
+    #[test]
+    fn test_fnmatch_wildcard() {
+        assert!(fnmatch("konsole-256color", "*color*"));
+        assert!(fnmatch("linux-256color", "*color*"));
+        assert!(fnmatch("konsole-direct", "*direct*"));
+    }
+
+    #[test]
+    fn test_fnmatch_bracket() {
+        assert!(fnmatch("con80x25", "con[0-9]*x[0-9]*"));
+        assert!(!fnmatch("con80y25", "con[0-9]*x[0-9]*"));
+    }
+
+    #[test]
+    fn test_fnmatch_no_match() {
+        assert!(!fnmatch("dumb", "*color*"));
+        assert!(!matches_any_term("dumb"));
+    }
+
+    #[test]
+    fn test_fnmatch_terms() {
+        assert!(matches_any_term("konsole-256color"));
+        assert!(matches_any_term("con80x25"));
+        assert!(matches_any_term("konsole-direct"));
+    }
+
+    #[test]
+    fn test_fnmatch_invalid_glob_never_matches() {
+        assert!(!fnmatch("[abc", "[abc"));
+    }
+}
