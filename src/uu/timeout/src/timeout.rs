@@ -195,14 +195,14 @@ fn report_if_verbose(signal: usize, cmd: &OsStr, verbose: bool) {
     }
 }
 
-/// Wait for a child process and send a kill signal if it does not terminate.
-///
 /// The `--kill-after` grace period, and the signal that started it.
 struct KillAfter {
     delay: Duration,
     sent_signal: usize,
 }
 
+/// Wait for a child process and send a kill signal if it does not terminate.
+///
 /// This function waits for the child `process` for the time period
 /// given by `kill_after.delay`. If the child process does not terminate
 /// within that time, we send the `SIGKILL` signal to it. If `verbose`
