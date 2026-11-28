@@ -54,6 +54,10 @@ pub fn main(args: TokenStream, stream: TokenStream) -> TokenStream {
             let result = uumain(args);
             match result {
                 Ok(()) => uucore::error::get_exit_code(),
+                // Windows has no SIGPIPE: when the reader of stdout is gone,
+                // exit quietly as a Unix build killed by the signal would.
+                #[cfg(windows)]
+                Err(e) if uucore::error::is_broken_pipe(&*e) => uucore::error::get_exit_code(),
                 Err(e) => {
                     let s = format!("{e}");
                     if s != "" {
