@@ -28,7 +28,7 @@ use std::io::{BufReader, Read};
 use crate::byteorder_io::ByteOrder;
 use crate::formatter_item_info::FormatWriter;
 use crate::input_decoder::{InputDecoder, MemoryDecoder};
-use crate::input_offset::{InputOffset, Radix};
+use crate::input_offset::{InputOffset, Radix, checked_offset_add};
 use crate::multifile_reader::{HasError, InputSource, MultifileReader};
 use crate::output_info::OutputInfo;
 use crate::parse_formats::{ParsedFormatterItemInfo, parse_format_flags};
@@ -662,7 +662,7 @@ where
                     )?;
                 }
 
-                input_offset.increase_position(length as u64);
+                input_offset.increase_position(length as u64)?;
             }
             Err(e) => {
                 show_error!("{e}");
@@ -751,7 +751,7 @@ fn extract_strings_from_input(
                     current_string.clear();
                 }
 
-                current_offset += 1;
+                current_offset = checked_offset_add(current_offset, 1)?;
             }
             Err(e) => {
                 // Note: GNU od does not output unterminated strings at EOF

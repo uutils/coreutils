@@ -6,6 +6,18 @@
 use std::fmt;
 use std::io::{self, Write};
 
+use uucore::error::{UResult, USimpleError};
+use uucore::translate;
+
+/// Returns `offset + n`, or an error if the sum does not fit in an `i64`
+/// (offsets are signed 64-bit file positions).
+pub fn checked_offset_add(offset: u64, n: u64) -> UResult<u64> {
+    let sum = offset.saturating_add(n);
+    i64::try_from(sum)
+        .map(|_| sum)
+        .map_err(|_| USimpleError::new(1, translate!("od-error-offset-overflow")))
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Radix {
     Decimal,
@@ -36,11 +48,13 @@ impl InputOffset {
     }
 
     /// Increase `byte_pos` and `label` if a label is used.
-    pub fn increase_position(&mut self, n: u64) {
-        self.byte_pos += n;
+    /// Fails if `byte_pos` would go past the largest offset.
+    pub fn increase_position(&mut self, n: u64) -> UResult<()> {
+        self.byte_pos = checked_offset_add(self.byte_pos, n)?;
         if let Some(l) = self.label {
             self.label = Some(l + n);
         }
+        Ok(())
     }
 
     #[cfg(test)]
@@ -83,7 +97,7 @@ impl fmt::Display for InputOffset {
 fn test_input_offset() {
     let mut sut = InputOffset::new(Radix::Hexadecimal, 10, None);
     assert_eq!("00000a", &sut.format_byte_offset());
-    sut.increase_position(10);
+    sut.increase_position(10).unwrap();
     assert_eq!("000014", &sut.format_byte_offset());
 
     // note normally the radix will not change after initialization
@@ -99,7 +113,7 @@ fn test_input_offset() {
     sut.set_radix(Radix::NoPrefix);
     assert_eq!("", &sut.format_byte_offset());
 
-    sut.increase_position(10);
+    sut.increase_position(10).unwrap();
     sut.set_radix(Radix::Octal);
     assert_eq!("0000036", &sut.format_byte_offset());
 }
@@ -108,7 +122,7 @@ fn test_input_offset() {
 fn test_input_offset_with_label() {
     let mut sut = InputOffset::new(Radix::Hexadecimal, 10, Some(20));
     assert_eq!("00000a (000014)", &sut.format_byte_offset());
-    sut.increase_position(10);
+    sut.increase_position(10).unwrap();
     assert_eq!("000014 (00001e)", &sut.format_byte_offset());
 
     // note normally the radix will not change after initialization
@@ -124,7 +138,17 @@ fn test_input_offset_with_label() {
     sut.set_radix(Radix::NoPrefix);
     assert_eq!("(0000036)", &sut.format_byte_offset());
 
-    sut.increase_position(10);
+    sut.increase_position(10).unwrap();
     sut.set_radix(Radix::Octal);
     assert_eq!("0000036 (0000050)", &sut.format_byte_offset());
+}
+
+#[test]
+fn test_increase_position_overflow() {
+    let max = i64::MAX as u64;
+    let mut sut = InputOffset::new(Radix::Decimal, max - 16, None);
+    assert!(sut.increase_position(16).is_ok());
+    assert_eq!(max.to_string(), sut.format_byte_offset());
+    assert!(sut.increase_position(1).is_err());
+    assert!(checked_offset_add(u64::MAX, 1).is_err());
 }
