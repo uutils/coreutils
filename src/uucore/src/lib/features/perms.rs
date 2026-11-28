@@ -568,6 +568,14 @@ impl ChownExecutor {
 
             let meta = match dir_fd.metadata_at(&entry_name, follow.into()) {
                 Ok(m) => m,
+                // Removed since the directory was listed: skip it, like GNU.
+                // Only a followed stat can also fail on a dangling symlink.
+                Err(e)
+                    if e.kind() == std::io::ErrorKind::NotFound
+                        && !(follow && dir_fd.is_symlink_at(&entry_name)) =>
+                {
+                    continue;
+                }
                 Err(e) => {
                     *ret = 1;
                     if self.verbosity.level != VerbosityLevel::Silent {
@@ -598,6 +606,10 @@ impl ChownExecutor {
                     *ret = 1;
                     self.report_failed_change(&entry_path, &meta);
                 } else if let Err(e) = changed {
+                    // Gone, unless it is a symlink (-H) that dangles.
+                    if e.kind() == std::io::ErrorKind::NotFound && !meta.file_type().is_symlink() {
+                        continue;
+                    }
                     *ret = 1;
                     if self.verbosity.level != VerbosityLevel::Silent {
                         let msg = format!(
@@ -636,6 +648,7 @@ impl ChownExecutor {
                     Ok(subdir_fd) => {
                         self.safe_traverse_dir(&subdir_fd, &entry_path, ret, ancestors);
                     }
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
                     Err(e) => {
                         *ret = 1;
                         if self.verbosity.level != VerbosityLevel::Silent {

@@ -3,8 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) dirfd subdirs openat FDCWD rwxr Nofile
+// spell-checker:ignore (words) dirfd subdirs openat FDCWD rwxr Nofile fchmodat fstatat newfstatat
 
+#[cfg(target_os = "linux")]
+use rstest::rstest;
 use std::fs::{OpenOptions, Permissions, metadata, set_permissions};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use uutests::at_and_ucmd;
@@ -2529,4 +2531,106 @@ fn test_recursive_dereference_changes_link_targets() {
         .succeeds()
         .no_output();
     assert_eq!(at.metadata("target").permissions().mode() & 0o777, 0o640);
+}
+
+/// `chmod -R` skips an entry removed after its directory was listed, like GNU.
+/// `strace` fakes the removal by failing one of the calls made for `gone` with
+/// ENOENT: the stat or change of a file, or the open of a subdirectory. Any
+/// other error on the same call is still reported, with the message the OS
+/// gives: a stat failing with EPERM is "Operation not permitted", like GNU,
+/// not "Permission denied".
+#[cfg(target_os = "linux")]
+#[rstest]
+#[case::stat(
+    "?newfstatat,?statx,?fstatat64",
+    false,
+    "EPERM",
+    "Operation not permitted"
+)]
+#[case::change("?chmod,fchmodat,?fchmodat2", false, "EIO", "Input/output error")]
+#[case::open_subdir("openat", true, "EIO", "Input/output error")]
+fn test_recursive_skips_entry_removed_during_traversal(
+    #[case] syscalls: &str,
+    #[case] is_dir: bool,
+    #[case] other_error: &str,
+    #[case] other_message: &str,
+) {
+    use uutests::util::run_ucmd_with_strace;
+
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkdir("tree");
+    if is_dir {
+        ts.fixtures.mkdir("tree/gone");
+    } else {
+        ts.fixtures.touch("tree/gone");
+    }
+    let run = |error: &str, args: &[&str]| {
+        let inject = format!("inject={syscalls}:error={error}");
+        run_ucmd_with_strace(
+            &ts,
+            "tree",
+            &["-qq", "-o", "/dev/null", "-P", "gone", "-e", &inject],
+            &[&["0750"], args].concat(),
+        )
+    };
+
+    // Probe: the injection must make chmod fail on the operand `gone` itself,
+    // else skip; the directory is opened with `-R`. A strace that cannot
+    // trace (blocked ptrace) also fails, so check the error.
+    let probe: &[&str] = if is_dir { &["-R", "gone"] } else { &["gone"] };
+    if run("EIO", probe)
+        .is_none_or(|(status, err)| status.success() || !err.contains("Input/output error"))
+    {
+        eprintln!("TEST SKIPPED: strace syscall injection is not available");
+        return;
+    }
+
+    let (status, stderr) = run("ENOENT", &["-R", "."]).unwrap();
+    assert!(status.success() && stderr.is_empty(), "{stderr}");
+
+    let (status, stderr) = run(other_error, &["-R", "."]).unwrap();
+    assert!(!status.success(), "{stderr}");
+    assert!(
+        stderr.contains("'./gone'") && stderr.contains(other_message),
+        "{stderr}"
+    );
+}
+
+/// A stat of an operand failing with EPERM is reported as "Operation not
+/// permitted", like GNU, not "Permission denied", which stays for EACCES.
+/// `strace` fakes the failure on the stat of `f`.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_operand_stat_error_reported_as_the_os_describes_it() {
+    use uutests::util::run_ucmd_with_strace;
+
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkdir("dir");
+    ts.fixtures.touch("dir/f");
+    let run = |error: &str| {
+        let inject = format!("inject=?newfstatat,?statx,?fstatat64:error={error}");
+        run_ucmd_with_strace(
+            &ts,
+            "dir",
+            &["-qq", "-o", "/dev/null", "-P", "f", "-e", &inject],
+            &["0750", "f"],
+        )
+    };
+
+    // Probe: the injection must make chmod fail on `f`, else skip. A strace
+    // that cannot trace (blocked ptrace) also fails, so check the error.
+    if run("EIO")
+        .is_none_or(|(status, err)| status.success() || !err.contains("Input/output error"))
+    {
+        eprintln!("TEST SKIPPED: strace syscall injection is not available");
+        return;
+    }
+
+    let (status, stderr) = run("EPERM").unwrap();
+    assert_eq!(status.code(), Some(1), "{stderr}");
+    assert_eq!(stderr, "chmod: cannot access 'f': Operation not permitted");
+
+    let (status, stderr) = run("EACCES").unwrap();
+    assert_eq!(status.code(), Some(1), "{stderr}");
+    assert_eq!(stderr, "chmod: cannot access 'f': Permission denied");
 }
