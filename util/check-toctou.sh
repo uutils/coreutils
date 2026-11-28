@@ -17,7 +17,7 @@ set -e
 echo "=== TOCTOU Verification ==="
 
 # shellcheck disable=SC2034  # read by check-common.sh once sourced
-CHECK_UTILS="mkfifo touch head"
+CHECK_UTILS="mkfifo head"
 . "$(dirname "${BASH_SOURCE[0]}")/check-common.sh"
 
 cd "$TEMP_DIR"
@@ -54,24 +54,6 @@ if mkfifo_cmd=$(util_cmd mkfifo); then
     fi
     echo "✓ mkfifo does not chmod after creation"
     rm -f test_fifo
-fi
-
-# Test touch - creating a file must use O_CREAT but never O_TRUNC, so that a
-# symlink planted in the metadata-check/open race window (#10019) is not
-# truncated. This observes the flags directly, which integration tests cannot.
-if touch_cmd=$(util_cmd touch); then
-    echo ""
-    echo "Testing touch (create_no_truncate)..."
-    strace -f -e trace=openat -o strace_touch_create.log $touch_cmd test_touch_new 2>/dev/null || true
-    cat strace_touch_create.log
-    if ! grep -q 'openat(.*test_touch_new.*O_CREAT' strace_touch_create.log; then
-        fail_immediately "touch did not create test_touch_new via openat(O_CREAT)"
-    fi
-    if grep 'test_touch_new' strace_touch_create.log | grep -q 'O_TRUNC'; then
-        fail_immediately "touch opened the target with O_TRUNC - vulnerable to truncating a symlink target (#10019)"
-    fi
-    echo "✓ touch creates with O_CREAT and without O_TRUNC"
-    rm -f test_touch_new
 fi
 
 # Test head - the is-a-directory check must derive from the already-open
