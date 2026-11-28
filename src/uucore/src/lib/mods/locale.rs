@@ -430,11 +430,12 @@ fn create_english_bundle_from_embedded(
     }
 }
 
-/// Create a bundle from embedded locale files for any locale on WASI.
+/// Create a bundle from embedded locale files for any locale on platforms
+/// to make publishing binaries easier.
 /// Resources are cached per key, so it can be called for multiple locales
 /// in the same process.
-#[cfg(target_os = "wasi")]
-fn create_wasi_bundle_from_embedded(
+#[cfg(any(target_os = "android", target_os = "wasi"))]
+fn create_bundle_from_embedded(
     locale: &LanguageIdentifier,
     util_name: &str,
 ) -> Result<FluentBundle<&'static FluentResource>, LocalizationError> {
@@ -652,19 +653,19 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
         let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
             .expect("Default locale should always be valid");
 
-        #[cfg(target_os = "wasi")]
+        #[cfg(any(target_os = "android", target_os = "wasi"))]
         let localizer = {
-            let english_bundle = create_wasi_bundle_from_embedded(&default_locale, p)?;
+            let english_bundle = create_bundle_from_embedded(&default_locale, p)?;
             if locale == default_locale {
                 Localizer::new(english_bundle)
-            } else if let Ok(localized) = create_wasi_bundle_from_embedded(&locale, p) {
+            } else if let Ok(localized) = create_bundle_from_embedded(&locale, p) {
                 Localizer::new(localized).with_fallback(english_bundle)
             } else {
                 Localizer::new(english_bundle)
             }
         };
 
-        #[cfg(not(target_os = "wasi"))]
+        #[cfg(not(any(target_os = "android", target_os = "wasi")))]
         let localizer = {
             let english_bundle = create_english_bundle_from_embedded(&default_locale, p)?;
             Localizer::new(english_bundle)

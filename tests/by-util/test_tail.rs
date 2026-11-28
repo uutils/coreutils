@@ -570,7 +570,12 @@ fn test_stdin_via_script_redirection_and_pipe() {
     at.write("file.txt", data);
 
     let mut script = at.make_file("test.sh");
-    writeln!(script, "#!/usr/bin/env sh").unwrap();
+    let sh = if cfg!(target_os = "android") {
+        "#!/system/bin/sh"
+    } else {
+        "#!/usr/bin/env sh"
+    };
+    writeln!(script, "{sh}").unwrap();
     writeln!(script, "tail").unwrap();
     script
         .set_permissions(PermissionsExt::from_mode(0o755))

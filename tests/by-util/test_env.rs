@@ -2348,6 +2348,7 @@ fn test_non_utf8_env_vars() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(target_os = "android", ignore = "failed with cross build on adb")]
 fn test_ignore_signal_pipe_broken_pipe_regression() {
     // Test that --ignore-signal=PIPE properly ignores SIGPIPE in child processes.
     // When SIGPIPE is ignored, processes should handle broken pipes gracefully
