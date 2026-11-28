@@ -3,8 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) araba newroot userspec chdir pwd's isroot
+// spell-checker:ignore (words) araba newroot userspec chdir pwd's isroot nosuchgrp
 
+use uucore::entries::{Group, gid2grp};
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 #[cfg(not(target_os = "android"))]
@@ -90,6 +91,37 @@ fn test_multiple_group_args() {
     } else {
         print!("Test skipped; requires root user");
     }
+}
+
+#[test]
+fn test_groups_unknown_group() {
+    // The group names are looked up before anything that needs root.
+    new_ucmd!()
+        .args(&["--groups=nosuchgrp1,nosuchgrp2", "/", "true"])
+        .fails_with_code(125)
+        .stderr_only("chroot: invalid group 'nosuchgrp1'\nchroot: invalid group 'nosuchgrp2'\n");
+}
+
+#[test]
+fn test_groups_known_and_unknown_group() {
+    let known_group = gid2grp(0).unwrap();
+    assert_eq!(Group::locate_name(&known_group).unwrap().gid, 0);
+
+    new_ucmd!()
+        .arg(format!("--groups={known_group},nosuchgrp1"))
+        .args(&["/", "true"])
+        .fails_with_code(125)
+        .stderr_only("chroot: invalid group 'nosuchgrp1'\n");
+}
+
+#[test]
+fn test_group_list_diagnostic_before_newroot() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("jail");
+
+    ucmd.args(&["--groups=,", "jail", "id"])
+        .fails_with_code(125)
+        .stderr_only("chroot: invalid group list: ','\n");
 }
 
 #[test]
