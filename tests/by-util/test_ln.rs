@@ -7,6 +7,7 @@
 
 #![allow(clippy::similar_names)]
 
+use rstest::rstest;
 use std::path::{MAIN_SEPARATOR_STR, PathBuf};
 #[cfg(all(unix, not(target_os = "android")))]
 use std::time::Duration;
@@ -1574,4 +1575,103 @@ fn test_hard_link_source_permission_denied() {
         .code_is(1)
         .stderr_only("ln: failed to access 'dir/x': Permission denied\n");
     assert!(!at.file_exists("link"));
+}
+
+#[rstest]
+#[case::short_backup(&["-b", "missing", "report"])]
+#[case::simple_backup(&["--backup=simple", "missing", "report"])]
+#[case::numbered_backup(&["--backup=numbered", "missing", "report"])]
+#[case::force_backup(&["-f", "-b", "missing", "report"])]
+#[case::interactive_backup(&["-i", "-b", "missing", "report"])]
+fn test_backup_missing_source_preserves_existing_backup(#[case] args: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("report", "current\n");
+    at.write("report~", "previous\n");
+
+    ucmd.args(args)
+        .fails_with_code(1)
+        .stderr_only("ln: failed to access 'missing': No such file or directory\n");
+
+    assert_eq!(at.read("report"), "current\n");
+    assert_eq!(at.read("report~"), "previous\n");
+    assert!(!at.file_exists("report.~1~"));
+}
+
+#[test]
+fn test_backup_directory_source_preserves_existing_backup() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("source_dir");
+    at.write("report", "current\n");
+    at.write("report~", "previous\n");
+
+    ucmd.args(&["-b", "source_dir", "report"])
+        .fails_with_code(1)
+        .stderr_only("ln: source_dir: hard link not allowed for directory\n");
+
+    assert_eq!(at.read("report"), "current\n");
+    assert_eq!(at.read("report~"), "previous\n");
+}
+
+#[test]
+fn test_backup_missing_source_symlink_still_replaces_backup() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("report", "current\n");
+    at.write("report~", "previous\n");
+
+    ucmd.args(&["-s", "-b", "missing", "report"])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.is_symlink("report"));
+    assert_eq!(at.resolve_link("report"), "missing");
+    assert_eq!(at.read("report~"), "current\n");
+}
+
+#[test]
+#[cfg(not(target_os = "android"))]
+fn test_backup_multiple_sources_missing_preserves_backup() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.write("good", "new\n");
+    at.write("dir/missing", "current\n");
+    at.write("dir/missing~", "previous\n");
+    at.write("dir/good", "old\n");
+
+    ucmd.args(&["-b", "missing", "good", "dir"])
+        .fails_with_code(1)
+        .stderr_only("ln: failed to access 'missing': No such file or directory\n");
+
+    assert_eq!(at.read("dir/missing"), "current\n");
+    assert_eq!(at.read("dir/missing~"), "previous\n");
+    assert_eq!(at.read("dir/good"), "new\n");
+    assert_eq!(at.read("dir/good~"), "old\n");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_backup_dangling_symlink_source_physical_vs_logical() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.relative_symlink_file("no_such_target", "dangle");
+    at.write("report", "current\n");
+    at.write("report~", "previous\n");
+
+    scene
+        .ucmd()
+        .args(&["-L", "-b", "dangle", "report"])
+        .fails_with_code(1)
+        .stderr_only("ln: failed to access 'dangle': No such file or directory\n");
+
+    assert_eq!(at.read("report"), "current\n");
+    assert_eq!(at.read("report~"), "previous\n");
+
+    scene
+        .ucmd()
+        .args(&["-b", "dangle", "report"])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.is_symlink("report"));
+    assert_eq!(at.resolve_link("report"), "no_such_target");
+    assert_eq!(at.read("report~"), "current\n");
 }
