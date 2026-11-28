@@ -1983,6 +1983,23 @@ fn test_date_military_timezone_with_offset_variations() {
 }
 
 #[test]
+fn test_date_military_timezone_hour_out_of_range() {
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .args(&["-d", "z23", "+%T"])
+        .succeeds()
+        .stdout_is("23:00:00\n");
+
+    for input in ["z24", "m24", "A25", "z99"] {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .args(&["-d", input])
+            .fails_with_code(1)
+            .stderr_is(format!("date: invalid date '{input}'\n"));
+    }
+}
+
+#[test]
 fn test_date_military_timezone_with_offset_and_date() {
     let test_cases = vec![
         ("m", -1), // M = UTC+12
