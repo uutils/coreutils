@@ -6728,6 +6728,30 @@ fn test_ls_invalid_block_size() {
         .fails_with_code(2)
         .no_stdout()
         .stderr_is("ls: invalid --block-size argument '0'\n");
+
+    // A later -h/--si must not skip validation of an invalid --block-size.
+    new_ucmd!()
+        .arg("--block-size=0")
+        .arg("--si")
+        .fails_with_code(2)
+        .no_stdout()
+        .stderr_is("ls: invalid --block-size argument '0'\n");
+
+    new_ucmd!()
+        .arg("--block-size=invalid")
+        .arg("--human-readable")
+        .fails_with_code(2)
+        .no_stdout()
+        .stderr_is("ls: invalid --block-size argument 'invalid'\n");
+
+    // --block-size and its value can be two separate arguments.
+    new_ucmd!()
+        .arg("--block-size")
+        .arg("0")
+        .arg("-h")
+        .fails_with_code(2)
+        .no_stdout()
+        .stderr_is("ls: invalid --block-size argument '0'\n");
 }
 
 #[cfg(all(unix, feature = "dd"))]
@@ -8661,6 +8685,17 @@ ls: invalid --block-size argument '1fb'
 
         assert_eq!(result.caret_column(), Some(17));
         assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_a_zero_block_size_next_to_human_readable() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--block-size", "0", "-h"])
+            .fails_with_code(2);
+
+        assert_eq!(result.caret_column(), Some(17));
     }
 
     #[test]
