@@ -1319,17 +1319,25 @@ fn test_saved_state_invalid_formats() {
     } else {
         String::new()
     };
+    let cc_with_plus_sign = if num_cc > 0 {
+        let mut parts = vec!["1c"; num_cc];
+        parts[0] = "+1"; // Plus prefix, allowed by `from_str_radix`
+        parts.join(":")
+    } else {
+        String::new()
+    };
 
     // Cannot test single value since it would be interpreted as baud rate
     let invalid_states = vec![
-        "500:5:4bf".to_string(),                        // fewer than expected parts
-        "500:5:4bf:8a3b".to_string(),                   // only 4 parts
-        format!("500:5:{}:8a3b:{}", cc_zeros, "extra"), // too many parts
-        format!("500::4bf:8a3b:{}", cc_zeros),          // empty hex value in flags
-        format!("500:5:4bf:8a3b:{}", cc_with_empty),    // empty hex value in cc
-        format!("500:5:4bf:8a3b:{}", cc_with_nonhex),   // non-hex characters
-        format!("500:5:4bf:8a3b:{}", cc_with_space),    // space in hex value
-        format!("500:5:4bf:8a3b:{}", cc_with_invalid),  // control char > 255
+        "500:5:4bf".to_string(),                         // fewer than expected parts
+        "500:5:4bf:8a3b".to_string(),                    // only 4 parts
+        format!("500:5:{}:8a3b:{}", cc_zeros, "extra"),  // too many parts
+        format!("500::4bf:8a3b:{}", cc_zeros),           // empty hex value in flags
+        format!("500:5:4bf:8a3b:{}", cc_with_empty),     // empty hex value in cc
+        format!("500:5:4bf:8a3b:{}", cc_with_nonhex),    // non-hex characters
+        format!("500:5:4bf:8a3b:{}", cc_with_space),     // space in hex value
+        format!("500:5:4bf:8a3b:{}", cc_with_invalid),   // control char > 255
+        format!("500:5:4bf:8a3b:{}", cc_with_plus_sign), // "+" prefix
     ];
 
     for state in &invalid_states {

@@ -466,12 +466,18 @@ fn parse_saved_state(arg: &str) -> Option<(CFlags, CCFlags)> {
     let mut c_flags = CFlags::default();
     for c_flag in &mut c_flags {
         let part = parts.next()?;
+        if part.starts_with('+') {
+            return None;
+        }
         *c_flag = u32::from_str_radix(part, 16).ok()?;
     }
 
     let mut cc_flags = CCFlags::default();
     for cc_flag in &mut cc_flags {
         let part = parts.next()?;
+        if part.starts_with('+') {
+            return None;
+        }
         *cc_flag = u8::from_str_radix(part, 16).ok()?;
     }
     // GNU requires exactly the right number of parts for this platform
@@ -1253,6 +1259,24 @@ mod tests {
     fn test_parse_rows_cols_overflow() {
         assert_eq!(parse_rows_cols("65536"), Some(0)); // wraps to 0
         assert_eq!(parse_rows_cols("65537"), Some(1)); // wraps to 1
+    }
+
+    #[test]
+    fn test_sane_parse_saved_state() {
+        let expected_parts = 4 + nix::libc::NCCS;
+        let mut parts: Vec<String> = ["00", "01", "ff", "7f"].map(str::to_string).into();
+        parts.resize(expected_parts, "00".to_string());
+        let input = parts.join(":");
+        assert!(parse_saved_state(&input).is_some());
+    }
+
+    #[test]
+    fn test_parse_saved_state_with_plus() {
+        let expected_parts = 4 + nix::libc::NCCS;
+        let mut parts: Vec<String> = ["+00", "00", "00", "00"].map(str::to_string).into();
+        parts.resize(expected_parts, "00".to_string());
+        let input = parts.join(":");
+        assert_eq!(parse_saved_state(&input), None);
     }
 
     // Sane control character defaults
