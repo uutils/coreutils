@@ -33,6 +33,25 @@ rm-help-progress = display a progress bar. Note: this feature is not supported b
 # Progress messages
 rm-progress-removing = Removing
 
+# Prompt messages
+rm-prompt-remove-arguments = remove { $count ->
+    [one] { $count } argument?
+   *[other] { $count } arguments?
+}
+rm-prompt-remove-arguments-recursive = remove { $count ->
+    [one] { $count } argument recursively?
+   *[other] { $count } arguments recursively?
+}
+rm-prompt-remove-symbolic-link = remove symbolic link { $file }?
+rm-prompt-remove-regular-empty-file = remove regular empty file { $file }?
+rm-prompt-remove-file = remove file { $file }?
+rm-prompt-remove-write-protected-regular-empty-file = remove write-protected regular empty file { $file }?
+rm-prompt-remove-write-protected-regular-file = remove write-protected regular file { $file }?
+rm-prompt-attempt-remove-inaccessible-directory = attempt removal of inaccessible directory { $path }?
+rm-prompt-remove-write-protected-directory = remove write-protected directory { $path }?
+rm-prompt-remove-directory = remove directory { $path }?
+rm-prompt-descend-into-directory = descend into directory { $path }?
+
 # Error messages
 rm-error-missing-operand = missing operand
   Try '{$util_name} --help' for more information.
