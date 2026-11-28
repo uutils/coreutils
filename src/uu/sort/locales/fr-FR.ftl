@@ -17,6 +17,7 @@ sort-parse-key-error = échec d'analyse de la clé {$key} : {$msg}
 sort-cannot-read = impossible de lire : {$path} : {$error}
 sort-read-failed = échec de lecture : {$error}
 sort-open-tmp-file-failed = échec d'ouverture du fichier temporaire : {$error}
+sort-write-tmp-file-failed = échec d'écriture du fichier temporaire : {$error}
 sort-compress-prog-execution-failed = impossible d'exécuter le programme de compression '{$prog}' : {$error}
 sort-compress-prog-terminated-abnormally = {$prog} s'est terminé anormalement
 sort-cannot-create-tmp-file = impossible de créer un fichier temporaire dans {$path} :
