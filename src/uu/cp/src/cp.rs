@@ -411,10 +411,11 @@ impl Default for Options {
     }
 }
 
-/// Enum representing if a file has been skipped.
+/// How the copy affected the destination entry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PerformedAction {
     Copied,
+    Replaced,
     Skipped,
 }
 
@@ -2604,7 +2605,7 @@ fn handle_copy_mode(
             })?;
         }
         CopyMode::Copy => {
-            copy_helper(
+            return copy_helper(
                 source,
                 dest,
                 options,
@@ -2613,7 +2614,7 @@ fn handle_copy_mode(
                 symlinked_files,
                 source_in_command_line,
                 created_parent_dirs,
-            )?;
+            );
         }
         CopyMode::SymLink => {
             // Atomic replace, for the same reason as CopyMode::Link above.
@@ -2627,18 +2628,7 @@ fn handle_copy_mode(
         CopyMode::Update => {
             if dest.exists() {
                 match options.update {
-                    UpdateMode::All => {
-                        copy_helper(
-                            source,
-                            dest,
-                            options,
-                            context,
-                            source_metadata,
-                            symlinked_files,
-                            source_in_command_line,
-                            created_parent_dirs,
-                        )?;
-                    }
+                    UpdateMode::All => {}
                     UpdateMode::None => {
                         if options.debug {
                             println!("skipped {}", dest.quote());
@@ -2661,31 +2651,19 @@ fn handle_copy_mode(
                         }
 
                         options.overwrite.verify(dest, options.debug)?;
-
-                        copy_helper(
-                            source,
-                            dest,
-                            options,
-                            context,
-                            source_metadata,
-                            symlinked_files,
-                            source_in_command_line,
-                            created_parent_dirs,
-                        )?;
                     }
                 }
-            } else {
-                copy_helper(
-                    source,
-                    dest,
-                    options,
-                    context,
-                    source_metadata,
-                    symlinked_files,
-                    source_in_command_line,
-                    created_parent_dirs,
-                )?;
             }
+            return copy_helper(
+                source,
+                dest,
+                options,
+                context,
+                source_metadata,
+                symlinked_files,
+                source_in_command_line,
+                created_parent_dirs,
+            );
         }
         CopyMode::AttrOnly => {
             // The destination must have the source's type. Creating a regular
@@ -2962,14 +2940,6 @@ fn copy_file(
 
     let dest_metadata = dest.symlink_metadata().ok();
 
-    let dest_permissions = calculate_dest_permissions(
-        dest_metadata.as_ref(),
-        dest,
-        &source_metadata,
-        options,
-        context,
-    );
-
     let source_is_stream = is_stream(&source_metadata);
 
     let performed_action = handle_copy_mode(
@@ -2982,6 +2952,16 @@ fn copy_file(
         source_in_command_line,
         created_parent_dirs,
     )?;
+
+    let dest_permissions = calculate_dest_permissions(
+        dest_metadata
+            .as_ref()
+            .filter(|_| performed_action != PerformedAction::Replaced),
+        dest,
+        &source_metadata,
+        options,
+        context,
+    );
 
     if options.verbose && performed_action != PerformedAction::Skipped {
         print_verbose_output(options.parents, progress_bar, source, dest)?;
@@ -3153,7 +3133,7 @@ fn copy_helper(
     symlinked_files: &mut HashSet<FileInformation>,
     #[cfg_attr(not(unix), allow(unused_variables))] source_in_command_line: bool,
     created_parent_dirs: &mut HashSet<PathBuf>,
-) -> CopyResult<()> {
+) -> CopyResult<PerformedAction> {
     if options.parents {
         let parent = dest.parent().unwrap_or(dest);
         if created_parent_dirs.insert(parent.to_path_buf()) {
@@ -3169,13 +3149,16 @@ fn copy_helper(
     if options.recursive && !options.copy_contents {
         let ft = source_metadata.file_type();
         if ft.is_socket() {
-            return copy_socket(dest, options.overwrite, options.debug);
+            return copy_socket(dest, options.overwrite, options.debug)
+                .map(|()| PerformedAction::Copied);
         }
         if ft.is_fifo() {
-            return copy_fifo(dest, options.overwrite, options.debug);
+            return copy_fifo(dest, options.overwrite, options.debug)
+                .map(|()| PerformedAction::Copied);
         }
         if ft.is_char_device() || ft.is_block_device() {
-            return copy_node(dest, source_metadata, options.overwrite, options.debug);
+            return copy_node(dest, source_metadata, options.overwrite, options.debug)
+                .map(|()| PerformedAction::Copied);
         }
     }
 
@@ -3190,9 +3173,24 @@ fn copy_helper(
         // applying O_NOFOLLOW here only with `-P`.
         #[cfg(unix)]
         let nofollow = !options.dereference(source_in_command_line);
+        // Check the link count of the file that would be overwritten. If dest
+        // is a symlink to a shared inode, GNU cp replaces the symlink itself.
+        let replacement = if options.preserve_hard_links()
+            && !options.attributes_only
+            && dest.is_file()
+            && FileInformation::from_path(dest, true)?.number_of_links() > 1
+        {
+            Some(
+                tempfile::NamedTempFile::new_in(dest.parent().unwrap_or(Path::new(".")))
+                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?
+                    .into_temp_path(),
+            )
+        } else {
+            None
+        };
         let copy_debug = copy_on_write(
             source,
-            dest,
+            replacement.as_deref().unwrap_or(dest),
             options.reflink_mode,
             options.sparse_mode,
             context,
@@ -3202,13 +3200,27 @@ fn copy_helper(
             nofollow,
         )?;
 
+        let action = if let Some(file) = replacement {
+            file.persist(dest)
+                .map_err(|e| CpError::IoErrContext(e.error, context.to_owned()))?;
+            if options.verbose {
+                println!(
+                    "{}",
+                    translate!("cp-verbose-removed", "path" => dest.quote())
+                );
+            }
+            PerformedAction::Replaced
+        } else {
+            PerformedAction::Copied
+        };
         if !options.attributes_only && options.debug {
             show_debug(&copy_debug)
                 .map_err(|e| CpError::IoErrContext(e, translate!("cp-error-write")))?;
         }
+        return Ok(action);
     }
 
-    Ok(())
+    Ok(PerformedAction::Copied)
 }
 
 // "Copies" a FIFO by creating a new one. This workaround is because Rust's
