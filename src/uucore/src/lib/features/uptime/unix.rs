@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore gettime BOOTTIME clockid boottime nusers loadavg getloadavg cfgs
+// spell-checker:ignore gettime BOOTTIME clockid boottime nusers loadavg getloadavg cfgs sysctl KERN timeval
 
 //! Unix implementation of the platform side of `uucore::uptime`: system
 //! uptime, user count and load average. The macOS/NetBSD/Cygwin and OpenBSD
@@ -13,46 +13,29 @@ use super::UptimeError;
 use crate::error::UResult;
 use std::time::Duration;
 
-/// Safely get macOS boot time using sysctl command
+/// Get the macOS boot time from `sysctl(CTL_KERN, KERN_BOOTTIME)`.
 ///
-/// This function uses the sysctl command-line tool to retrieve the kernel
-/// boot time on macOS, avoiding any unsafe code. It parses the output
-/// of the sysctl command to extract the boot time.
-///
-/// # Returns
-///
-/// Returns Some(i64) if successful, None if the call fails.
+/// Returns `None` if the call fails.
 #[cfg(target_vendor = "apple")]
 fn get_macos_boot_time_sysctl() -> Option<i64> {
-    use std::process::Command;
-
-    // Execute sysctl command to get boot time
-    let output = Command::new("sysctl")
-        .arg("-n")
-        .arg("kern.boottime")
-        .output();
-
-    if let Ok(output) = output
-        && output.status.success()
-    {
-        // Parse output format: { sec = 1729338352, usec = 0 } Wed Oct 19 08:25:52 2025
-        // We need to extract the seconds value from the structured output
-        let stdout = String::from_utf8_lossy(&output.stdout);
-
-        // Extract the seconds from the output
-        // Look for "sec = " pattern
-        if let Some(sec_start) = stdout.find("sec = ") {
-            let sec_part = &stdout[sec_start + 6..];
-            if let Some(sec_end) = sec_part.find(',') {
-                let sec_str = &sec_part[..sec_end];
-                if let Ok(boot_time) = sec_str.trim().parse::<i64>() {
-                    return Some(boot_time);
-                }
-            }
-        }
-    }
-
-    None
+    let mut mib = [libc::CTL_KERN, libc::KERN_BOOTTIME];
+    let mut boot_time = libc::timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
+    let mut size = size_of_val(&boot_time);
+    // SAFETY: the lengths passed match `mib` and `boot_time`, and no new value is set
+    let ret = unsafe {
+        libc::sysctl(
+            mib.as_mut_ptr(),
+            mib.len() as _,
+            (&raw mut boot_time).cast(),
+            &raw mut size,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    (ret == 0 && size == size_of_val(&boot_time)).then_some(boot_time.tv_sec)
 }
 
 /// Get the system uptime

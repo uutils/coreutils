@@ -419,3 +419,16 @@ fn test_uptime_macos_output_format() {
         "Output should contain load average: {stdout}"
     );
 }
+
+/// A `sysctl` earlier in `PATH` must not be used for the boot time (#16814).
+#[test]
+#[cfg(target_vendor = "apple")]
+fn test_uptime_macos_ignores_sysctl_in_path() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("bin");
+    at.symlink_file("/usr/bin/false", "bin/sysctl");
+
+    ucmd.env("PATH", at.plus("bin"))
+        .succeeds()
+        .stdout_contains(" up ");
+}
