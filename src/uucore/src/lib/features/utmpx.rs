@@ -259,36 +259,7 @@ impl Utmpx {
 
     /// Canonicalize host name using DNS
     pub fn canon_host(&self) -> IOResult<String> {
-        let host = self.host();
-
-        let (hostname, display) = host.split_once(':').unwrap_or((&host, ""));
-
-        if !hostname.is_empty() {
-            use dns_lookup::{AddrInfoHints, getaddrinfo};
-
-            const AI_CANONNAME: i32 = 0x2;
-            let hints = AddrInfoHints {
-                flags: AI_CANONNAME,
-                ..AddrInfoHints::default()
-            };
-            if let Ok(sockets) = getaddrinfo(Some(hostname), None, Some(hints)) {
-                let sockets = sockets.collect::<IOResult<Vec<_>>>()?;
-                for socket in sockets {
-                    if let Some(ai_canonname) = socket.canonname {
-                        return Ok(if display.is_empty() {
-                            ai_canonname
-                        } else {
-                            format!("{ai_canonname}:{display}")
-                        });
-                    }
-                }
-            } else {
-                // GNU coreutils has this behavior
-                return Ok(hostname.to_string());
-            }
-        }
-
-        Ok(host)
+        canonicalize_host(self.host())
     }
 
     /// Iterate through all the utmp records.
@@ -365,6 +336,49 @@ impl Utmpx {
         }
         iter
     }
+}
+
+pub(crate) fn canonicalize_host(host: String) -> IOResult<String> {
+    canonicalize_host_with_lookup(host, |hostname| {
+        use dns_lookup::{AddrInfoHints, getaddrinfo};
+
+        const AI_CANONNAME: i32 = 0x2;
+        let hints = AddrInfoHints {
+            flags: AI_CANONNAME,
+            ..AddrInfoHints::default()
+        };
+        getaddrinfo(Some(hostname), None, Some(hints))
+    })
+}
+
+fn canonicalize_host_with_lookup<I>(
+    host: String,
+    lookup: impl FnOnce(&str) -> Result<I, dns_lookup::LookupError>,
+) -> IOResult<String>
+where
+    I: Iterator<Item = IOResult<dns_lookup::AddrInfo>>,
+{
+    let (hostname, display) = host.split_once(':').unwrap_or((&host, ""));
+
+    if !hostname.is_empty() {
+        if let Ok(sockets) = lookup(hostname) {
+            let sockets = sockets.collect::<IOResult<Vec<_>>>()?;
+            for socket in sockets {
+                if let Some(ai_canonname) = socket.canonname {
+                    return Ok(if display.is_empty() {
+                        ai_canonname
+                    } else {
+                        format!("{ai_canonname}:{display}")
+                    });
+                }
+            }
+        } else {
+            // GNU coreutils has this behavior
+            return Ok(hostname.to_string());
+        }
+    }
+
+    Ok(host)
 }
 
 // On some systems these functions are not thread-safe. On others they're
@@ -519,7 +533,7 @@ impl UtmpxRecord {
         match self {
             Self::Traditional(utmpx) => utmpx.canon_host(),
             #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
-            Self::Systemd(systemd) => Ok(systemd.canon_host()),
+            Self::Systemd(systemd) => systemd.canon_host(),
         }
     }
 }
@@ -560,5 +574,53 @@ impl Drop for UtmpxIter {
             #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
             endutxent();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn canonical_host_preserves_display_suffix() {
+        let host = canonicalize_host_with_lookup("REMOTE:0.1".into(), |hostname| {
+            assert_eq!(hostname, "REMOTE");
+            Ok(std::iter::once(Ok(dns_lookup::AddrInfo {
+                flags: 0,
+                address: 0,
+                socktype: 0,
+                protocol: 0,
+                sockaddr: ([192, 0, 2, 1], 0).into(),
+                canonname: Some("remote.example".into()),
+            })))
+        })
+        .unwrap();
+
+        assert_eq!(host, "remote.example:0.1");
+    }
+
+    #[test]
+    fn canonical_host_lookup_failure_returns_hostname() {
+        let host = canonicalize_host_with_lookup("remote.invalid:0".into(), |_| {
+            Err::<std::iter::Empty<IOResult<dns_lookup::AddrInfo>>, _>(
+                std::io::Error::other("lookup failed").into(),
+            )
+        })
+        .unwrap();
+
+        assert_eq!(host, "remote.invalid");
+    }
+
+    #[test]
+    fn canonical_host_propagates_address_errors() {
+        let error = canonicalize_host_with_lookup("remote.example:0".into(), |_| {
+            Ok(std::iter::once(Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "invalid address",
+            ))))
+        })
+        .unwrap_err();
+
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
 }
