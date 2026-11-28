@@ -514,6 +514,29 @@ fn test_cp_recurse_source_path_ends_with_slash_dot() {
     assert!(at.file_exists(format!("{target_dir}/{file}")));
 }
 
+// On Unix, a source whose name ends in `\.` is a directory named that way,
+// not `dir/.`: it is copied into the target, and nothing in the target is
+// overwritten (#16808).
+#[test]
+#[cfg(unix)]
+fn test_cp_recurse_source_name_ends_with_backslash_dot() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "draft\\.";
+    at.mkdir(source);
+    at.write(format!("{source}/notes"), "incoming\n");
+    at.mkdir("archive");
+    at.write("archive/notes", "original\n");
+
+    ucmd.arg("-R")
+        .arg(source)
+        .arg("archive")
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("archive/notes"), "original\n");
+    assert_eq!(at.read(format!("archive/{source}/notes")), "incoming\n");
+}
+
 #[rstest]
 #[case::dotdot("src/sub/..")]
 #[case::dotdot_slash("src/sub/../")]

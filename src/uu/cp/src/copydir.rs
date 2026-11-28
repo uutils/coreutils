@@ -120,12 +120,17 @@ struct Context<'a> {
 }
 
 // True if the path ends with a "." or ".." component (e.g. ".", "dir/.", "..", "dir/../").
+// Only the platform's separators count: on Unix, `\` is part of a file name,
+// so `draft\.` is a directory named that way, not `draft/.`.
 fn ends_with_dot_component(path: &Path) -> bool {
+    let is_separator = |b: &u8| std::path::is_separator(char::from(*b));
     let mut bytes = path.as_os_str().as_encoded_bytes();
-    while let [rest @ .., b'/' | b'\\'] = bytes {
+    while let [rest @ .., last] = bytes
+        && is_separator(last)
+    {
         bytes = rest;
     }
-    let last = bytes.rsplit(|&b| b == b'/' || b == b'\\').next();
+    let last = bytes.rsplit(is_separator).next();
     matches!(last, Some(b"." | b".."))
 }
 
@@ -707,6 +712,24 @@ mod tests {
         let local = get_local_to_root_parent(Path::new("/a/b"), None).unwrap();
         assert_eq!(local, Path::new("a").join("b"));
         assert!(local.is_relative());
+    }
+
+    #[test]
+    fn test_ends_with_dot_component() {
+        for path in [".", "..", "dir/.", "dir/..", "dir/./", "dir/../", "a/b/.//"] {
+            assert!(ends_with_dot_component(Path::new(path)), "{path}");
+        }
+        for path in ["dir", "dir/", "dir.", "dir/.x", "x..", "dir/..x/"] {
+            assert!(!ends_with_dot_component(Path::new(path)), "{path}");
+        }
+        // `\` separates components only on Windows (#16808).
+        for path in ["draft\\.", "draft\\..", "draft\\.\\"] {
+            assert_eq!(
+                ends_with_dot_component(Path::new(path)),
+                cfg!(windows),
+                "{path}"
+            );
+        }
     }
 
     #[test]
