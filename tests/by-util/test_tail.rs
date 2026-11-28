@@ -7,6 +7,7 @@
 // spell-checker:ignore (libs) kqueue ELOOP EISDIR FSIZE setrlimit SIGXFSZ
 // spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
 // spell-checker:ignore (cmd) taskkill
+// spell-checker:ignore (proc) fdinfo
 
 #![allow(
     clippy::unicode_not_nfc,
@@ -6349,4 +6350,111 @@ fn test_stdin_redirect_large_offset(
     } else {
         ucmd.succeeds().stdout_only(expected);
     }
+}
+
+/// Inodes that the inotify instance of process `pid` currently watches.
+#[cfg(target_os = "linux")]
+fn inotify_watched_inodes(pid: u32) -> Vec<u64> {
+    let mut inodes = vec![];
+    let mut found = false;
+    for entry in std::fs::read_dir(format!("/proc/{pid}/fd")).unwrap() {
+        let entry = entry.unwrap();
+        let Ok(target) = std::fs::read_link(entry.path()) else {
+            continue;
+        };
+
+        if target.as_os_str() != "anon_inode:inotify" {
+            continue;
+        }
+        found = true;
+
+        let fdinfo = std::fs::read_to_string(format!(
+            "/proc/{pid}/fdinfo/{}",
+            entry.file_name().to_string_lossy()
+        ))
+        .unwrap();
+        for line in fdinfo.lines().filter(|l| l.starts_with("inotify")) {
+            let ino = line
+                .split_whitespace()
+                .find_map(|field| field.strip_prefix("ino:"))
+                .unwrap();
+            inodes.push(u64::from_str_radix(ino, 16).unwrap());
+        }
+    }
+
+    assert!(found, "tail has no inotify instance");
+
+    inodes
+}
+
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(target_os = "linux")] // inotify and `/proc` only exist on Linux.
+fn test_follow_name_watches_file_across_rotation() {
+    use std::os::unix::fs::MetadataExt;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let delay = 500; // milliseconds
+
+    at.touch("app.log");
+    let mut old_ino = at.metadata("app.log").ino();
+
+    let mut p = ts.ucmd().args(&["-F", "-s.1", "app.log"]).run_no_wait();
+    p.make_assertion_with_delay(delay).is_alive();
+
+    assert!(
+        inotify_watched_inodes(p.id()).contains(&old_ino),
+        "the followed file itself is not watched"
+    );
+
+    for i in 1..=3 {
+        at.rename("app.log", format!("app.log.{i}"));
+        p.delay(delay);
+
+        assert!(
+            !inotify_watched_inodes(p.id()).contains(&old_ino),
+            "the watch on the rotated file was not removed"
+        );
+
+        at.write("app.log", &format!("line{i}\n"));
+        p.delay(delay);
+        let new_ino = at.metadata("app.log").ino();
+
+        assert!(
+            inotify_watched_inodes(p.id()).contains(&new_ino),
+            "the new file is not watched"
+        );
+        old_ino = new_ino;
+    }
+
+    p.make_assertion().is_alive();
+    p.kill();
+}
+
+// Watching the file itself needs read permission; failing to do so must not abort tail.
+#[uutests::wasi_ignore(TailFollowDisabled)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_follow_name_unreadable_file() {
+    use std::os::unix::fs::PermissionsExt;
+
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.make_file("unreadable")
+        .set_permissions(PermissionsExt::from_mode(0o000))
+        .unwrap();
+
+    let mut p = ts.ucmd().args(&["-F", "unreadable"]).run_no_wait();
+
+    p.make_assertion_with_delay(500).is_alive();
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .stderr_only("tail: cannot open 'unreadable' for reading: Permission denied\n");
 }
