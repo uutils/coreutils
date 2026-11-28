@@ -84,7 +84,7 @@ fn split_short_args_with_value(args: impl uucore::Args) -> impl uucore::Args {
 /// digit or "." follows (a negative number); anything else in front of the
 /// first operand is an option, so `seq --foo` and `seq -inf 1` are rejected as
 /// options instead of being parsed as numbers.
-fn mark_first_operand(args: Vec<OsString>) -> Vec<OsString> {
+fn mark_first_operand(args: Vec<OsString>, decimal_separator: &str) -> Vec<OsString> {
     let mut out = Vec::with_capacity(args.len() + 1);
     let mut iter = args.into_iter();
     // the program name
@@ -101,10 +101,12 @@ fn mark_first_operand(args: Vec<OsString>) -> Vec<OsString> {
             out.push(arg);
             break;
         }
+        // `-,75` is a number too where `,` is the decimal point.
         let is_option = Some(&b'-') == bytes.first()
             && bytes
                 .get(1)
-                .is_some_and(|c| !(c.is_ascii_digit() || *c == b'.'));
+                .is_some_and(|c| !(c.is_ascii_digit() || *c == b'.'))
+            && !bytes[1..].starts_with(decimal_separator.as_bytes());
         if !is_option {
             out.push(OsString::from("--"));
             out.push(arg);
@@ -155,10 +157,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Captured before `-f%q` is split into two arguments, so that the caret
     // echoes the command line as it was typed.
     let diag_args = uucore::diagnostics::capture(&raw_args);
+    // Operands may use the locale's decimal point, and output uses it.
+    let decimal_separator = uucore::i18n::decimal::locale_decimal_separator();
     let matches = uucore::clap_localization::handle_clap_result(
         uu_app(),
-        mark_first_operand(split_short_args_with_value(raw_args.into_iter()).collect()),
+        mark_first_operand(
+            split_short_args_with_value(raw_args.into_iter()).collect(),
+            decimal_separator,
+        ),
     )?;
+    let parse = |operand: &str| -> Result<PreciseNumber, SeqError> {
+        let operand_in_c = if decimal_separator == "." {
+            operand.to_owned()
+        } else {
+            operand.replacen(decimal_separator, ".", 1)
+        };
+        operand_in_c
+            .parse()
+            .map_err(|e| SeqError::ParseError(operand.to_owned(), e))
+    };
 
     let numbers_option = matches.get_many::<String>(ARG_NUMBERS);
 
@@ -186,16 +203,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let first = if numbers.len() > 1 {
-        numbers[0]
-            .parse()
-            .map_err(|e| SeqError::ParseError(numbers[0].to_owned(), e))?
+        parse(numbers[0])?
     } else {
         PreciseNumber::one()
     };
     let increment = if numbers.len() > 2 {
-        numbers[1]
-            .parse()
-            .map_err(|e| SeqError::ParseError(numbers[1].to_owned(), e))?
+        parse(numbers[1])?
     } else {
         PreciseNumber::one()
     };
@@ -207,9 +220,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // and at most three because of the argument specification in
         // `uu_app()`.
         let n: usize = numbers.len();
-        numbers[n - 1]
-            .parse()
-            .map_err(|e| SeqError::ParseError(numbers[n - 1].to_owned(), e))?
+        parse(numbers[n - 1])?
     };
 
     // If a format was passed on the command line, use that.
@@ -276,6 +287,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         &format,
         fast_allowed,
         padding,
+        decimal_separator,
     );
 
     match result {
@@ -425,6 +437,7 @@ fn print_seq(
     format: &Format<num_format::Float, &ExtendedBigDecimal>,
     fast_allowed: bool,
     padding: usize, // Used by fast path only
+    decimal_separator: &str,
 ) -> std::io::Result<()> {
     let stdout = stdout().lock();
     let mut stdout = BufWriter::new(stdout);
@@ -456,11 +469,12 @@ fn print_seq(
     let mut value = first;
 
     let mut is_first_iteration = true;
+    let mut number = Vec::new();
     while !done_printing(&value, &increment, &last) {
         if !is_first_iteration {
             stdout.write_all(separator.as_encoded_bytes())?;
         }
-        format.fmt(&mut stdout, &value)?;
+        format.fmt_with_decimal_separator(&mut stdout, &value, decimal_separator, &mut number)?;
         // TODO Implement augmenting addition.
         value = value + increment.clone();
         is_first_iteration = false;
