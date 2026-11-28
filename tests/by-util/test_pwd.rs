@@ -194,3 +194,24 @@ pub mod untrustworthy_pwd_var {
             .stdout_is(env.subdir + "\n");
     }
 }
+
+/// `pwd -P` must not leak Windows' `\\?\` verbatim prefix that
+/// `std::fs::canonicalize` produces. The fixture root is already resolved, so
+/// running `pwd -P` inside a canonicalized subdirectory must print a plain
+/// drive path.
+#[cfg(windows)]
+#[test]
+fn test_physical_no_verbatim_prefix() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("subdir");
+
+    // canonicalize() yields a verbatim path (\\?\D:\...) on Windows; run the
+    // utility from inside it so `current_dir` reports the verbatim form.
+    let dir = at.plus("subdir").canonicalize().unwrap();
+
+    ucmd.arg("-P")
+        .current_dir(&dir)
+        .succeeds()
+        .stdout_does_not_contain(r"\\?\")
+        .stdout_is(format!("{}\n", dunce::simplified(&dir).display()));
+}
