@@ -21,6 +21,9 @@ fluent = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["fs", "mode", "perms"] }
 
+[dev-dependencies]
+tempfile.workspace = true
+
 [features]
 diagnostics = ["uucore/diagnostics"]
 
