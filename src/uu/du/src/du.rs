@@ -575,6 +575,15 @@ fn safe_du(
             }
         }
 
+        // A mount skipped here can still be a later command-line operand.
+        if options.one_file_system
+            && is_dir
+            && let (Some(this_inode), Some(my_inode)) = (this_stat.inode, my_stat.inode)
+            && this_inode.dev_id != my_inode.dev_id
+        {
+            continue;
+        }
+
         // Handle inodes
         if let Some(inode) = this_stat.inode
             && !seen_inodes.insert(inode)
@@ -585,13 +594,6 @@ fn safe_du(
 
         // Process directories recursively
         if is_dir {
-            if options.one_file_system
-                && let (Some(this_inode), Some(my_inode)) = (this_stat.inode, my_stat.inode)
-                && this_inode.dev_id != my_inode.dev_id
-            {
-                continue;
-            }
-
             // Reuse the stat we already computed for this entry instead of
             // re-stating it inside the recursive call.
             let sub_path = this_stat.path.clone();
@@ -740,6 +742,15 @@ fn du_regular(
                                 }
                             }
 
+                            if options.one_file_system
+                                && this_stat.metadata.is_dir()
+                                && let (Some(this_inode), Some(my_inode)) =
+                                    (this_stat.inode, my_stat.inode)
+                                && this_inode.dev_id != my_inode.dev_id
+                            {
+                                continue;
+                            }
+
                             if let Some(inode) = this_stat.inode
                                 && !seen_inodes.insert(inode)
                                 && !options.count_links
@@ -748,14 +759,6 @@ fn du_regular(
                             }
 
                             if this_stat.metadata.is_dir() {
-                                if options.one_file_system
-                                    && let (Some(this_inode), Some(my_inode)) =
-                                        (this_stat.inode, my_stat.inode)
-                                    && this_inode.dev_id != my_inode.dev_id
-                                {
-                                    continue;
-                                }
-
                                 let this_stat = du_regular(
                                     this_stat,
                                     options,
