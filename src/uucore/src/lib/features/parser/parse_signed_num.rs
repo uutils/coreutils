@@ -192,7 +192,8 @@ fn as_typed(error: ParseSizeError, size_string: &str) -> ParseSizeError {
 
 /// Strip the sign prefix from a string and return both the sign and remaining string.
 fn strip_sign_prefix(src: &str) -> (Option<SignPrefix>, &str) {
-    let trimmed = src.trim();
+    // Only leading whitespace is skipped; anything after the number is an error.
+    let trimmed = src.trim_start();
 
     if let Some(rest) = trimmed.strip_prefix('+') {
         (Some(SignPrefix::Plus), rest)
@@ -358,12 +359,19 @@ mod tests {
 
     #[test]
     fn test_whitespace() {
-        let result = parse_signed_num_max("  10  ").unwrap();
+        let result = parse_signed_num_max("  10").unwrap();
         assert_eq!(result.value, 10);
 
-        let result = parse_signed_num_max("  +10  ").unwrap();
+        let result = parse_signed_num_max("  +10").unwrap();
         assert_eq!(result.value, 10);
         assert!(result.has_plus());
+
+        // Whitespace after the number is not skipped
+        assert!(parse_signed_num_max("10 ").is_err());
+        assert!(parse_signed_num_max("+10 ").is_err());
+        assert!(parse_signed_num_max("10K\t").is_err());
+        assert!(parse_signed_num(" 10").is_ok());
+        assert!(parse_signed_num("10 ").is_err());
     }
 
     #[test]
