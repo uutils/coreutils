@@ -3724,6 +3724,371 @@ fn test_date_format_modifier_edge_cases() {
     }
 }
 
+// GNU accepts the POSIX `E` locale modifier on a fixed set of conversions.
+// In the C locale those have no alternative representation, so GNU renders the
+// base conversion; those are the reference values below.
+
+#[test]
+fn test_date_strftime_e_modifier_fallback() {
+    for (tz, date, format, expected) in [
+        ("UTC", "1999-06-01", "%EY", "1999\n"),
+        ("UTC", "1999-06-01", "%EC", "19\n"),
+        ("UTC", "1999-06-01", "%Ey", "99\n"),
+        // `-d 1999-06-01 12:34:56`, TZ=UTC: time fields and the composites.
+        ("UTC", "1999-06-01 12:34:56", "%Er", "12:34:56 PM\n"),
+        ("UTC", "1999-06-01 12:34:56", "%E:z", "+00:00\n"),
+        ("UTC", "1999-06-01 12:34:56", "%E::z", "+00:00:00\n"),
+        ("UTC", "1999-06-01 12:34:56", "%E:::z", "+00\n"),
+        (
+            "UTC",
+            "1999-06-01 12:34:56",
+            "%Ec",
+            "Tue Jun  1 12:34:56 1999\n",
+        ),
+        ("UTC", "1999-06-01 12:34:56", "%Ex", "06/01/99\n"),
+        ("UTC", "1999-06-01 12:34:56", "%EX", "12:34:56\n"),
+        // `-d 2024-06-01 12:34:56`, TZ=UTC0: GNU ignores the modifier on
+        // these pairs and renders the base conversion.
+        ("UTC0", "2024-06-01 12:34:56", "%Es", "1717245296\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%Eq", "2\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%En", "\n\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%Et", "\t\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%Eu", "6\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%Ep", "PM\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%EP", "pm\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%ER", "12:34\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%ET", "12:34:56\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%EZ", "UTC\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", tz)
+            .env("LC_ALL", "C")
+            .args(&["-d", date, &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+/// An accepted pair that falls back equals its base conversion byte for byte.
+#[test]
+fn test_date_strftime_e_fallback_matches_base_conversion() {
+    for (format, modified) in [("%Y", "%EY"), ("%c", "%Ec"), ("%x", "%Ex")] {
+        let base = new_ucmd!()
+            .env("TZ", "UTC")
+            .env("LC_ALL", "C")
+            .args(&["-d", "1999-06-01 12:34:56", &format!("+{format}")])
+            .succeeds()
+            .stdout_str()
+            .to_string();
+        let resolved = new_ucmd!()
+            .env("TZ", "UTC")
+            .env("LC_ALL", "C")
+            .args(&["-d", "1999-06-01 12:34:56", &format!("+{modified}")])
+            .succeeds()
+            .stdout_str()
+            .to_string();
+        assert_eq!(base, resolved, "+{format} vs +{modified}");
+    }
+}
+
+#[test]
+fn test_date_strftime_e_invalid_and_dangling_literal() {
+    // An invalid pair or a dangling modifier is not a conversion: GNU keeps
+    // it literal, and an explicit width pads that literal like a string.
+    for (tz, date, format, expected) in [
+        ("UTC", "1999-06-01", "%EB", "%EB\n"),
+        ("UTC", "1999-06-01", "%%EY", "%EY\n"),
+        ("UTC", "1999-06-01", "%E:p", "%E:p\n"),
+        ("UTC0", "2024-06-01 12:34:56", "%10EB", "     %10EB\n"),
+        // `-` suppresses the padding while the literal keeps its own text.
+        ("UTC0", "2024-06-01 12:34:56", "%-10EB", "%-10EB\n"),
+        ("UTC0", "2024-06-01", "%E", "%E\n"),
+        ("UTC0", "2024-06-01", "%E\u{e9}", "%E\u{e9}\n"),
+        ("UTC0", "1999-12-31 12:00:00", "%5E", "  %5E\n"),
+        ("UTC0", "1999-12-31 12:00:00", "%5E:", " %5E:\n"),
+        ("UTC0", "1999-12-31 12:00:00", "%10E:", "     %10E:\n"),
+        ("UTC0", "1999-12-31 12:00:00", "%_5E", " %_5E\n"),
+        ("UTC0", "1999-12-31 12:00:00", "%#5E", " %#5E\n"),
+        ("UTC0", "1999-12-31 12:00:00", "%5E1", " %5E1\n"),
+        ("UTC0", "1999-12-31 12:00:00", "%-5E", "%-5E\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", tz)
+            .env("LC_ALL", "C")
+            .args(&["-d", date, &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
+
+    // Absurd widths fail with an error instead of allocating: the shared
+    // composite formatter caps the width.
+    for format in ["+%999999999999999999EB", "+%70000EB"] {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .env("LC_ALL", "C")
+            .args(&["-d", "1999-06-01", format])
+            .fails()
+            .code_is(1);
+    }
+}
+
+#[test]
+fn test_date_strftime_e_width_and_flags() {
+    for (tz, date, format, expected) in [
+        // An `E`-modified year pads like text: `%_10EY` space-fills.
+        ("UTC", "1999-06-01", "%_10EY", "      1999\n"),
+        // `%4EY` at year 1 is three spaces then `1`; `%04EY` zero-fills,
+        // `%_4EY` space-fills and `-` suppresses the padding.
+        ("UTC0", "0001-06-01", "%4EY", "   1\n"),
+        ("UTC0", "0001-06-01", "%04EY", "0001\n"),
+        ("UTC0", "0001-06-01", "%_4EY", "   1\n"),
+        ("UTC0", "0001-06-01", "%-4EY", "1\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", tz)
+            .env("LC_ALL", "C")
+            .args(&["-d", date, &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+/// `%EY`/`%EC`/`%Ey` use the *real* year, never the surrogate year that
+/// jiff's calendar range substitutes for out-of-range dates.
+#[test]
+fn test_date_strftime_e_extended_years() {
+    for (date, format, expected) in [
+        // A 5-digit year must show the real year, not the 400-year surrogate
+        // that jiff's calendar range forces on out-of-range dates.
+        ("10000-06-01", "%EY", "10000\n"),
+        ("12000-06-01", "%EY", "12000\n"),
+        // `%EC` uses the real century: 100, not 96; and at year 1 it is a
+        // single `0` (GNU does not zero-pad the E-century to two digits).
+        ("10000-06-01", "%EC", "100\n"),
+        ("0001-06-01", "%EC", "0\n"),
+        ("0999-06-01", "%EC", "9\n"),
+        // `%Ey` is the two-digit year; the 400-year surrogate preserves
+        // `year % 100`, so these already match GNU and must not change.
+        ("0001-06-01", "%Ey", "01\n"),
+        ("10000-06-01", "%Ey", "00\n"),
+        // Plain `%Y`/`%C` keep their existing real-year values. `%C` at year 1
+        // renders as a single `0` here where GNU pads it to `00`; the test
+        // pins this implementation's value rather than GNU's.
+        ("10000-06-01", "%Y|%C", "10000|100\n"),
+        ("0001-06-01", "%Y", "0001\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .env("LC_ALL", "C")
+            .args(&["-d", date, &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
+
+    // `%s` and `%Es` report the real epoch seconds of an out-of-range date,
+    // not the epoch of the surrogate year.
+    for (date, expected) in [
+        ("10000-06-01 12:34:56", "253415478896\n"),
+        ("12000-06-01 12:34:56", "316529382896\n"),
+    ] {
+        for format in ["%s", "%Es"] {
+            new_ucmd!()
+                .env("TZ", "UTC0")
+                .env("LC_ALL", "C")
+                .args(&["-d", date, &format!("+{format}")])
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_date_strftime_e_year_ignored_in_gregorian_locale() {
+    // glibc applies the E year conversions only where the locale defines an
+    // era. `fa_IR` has none, so `%EY`/`%EC`/`%Ey` are the Gregorian fields
+    // even though plain `%Y` is the Solar Hijri year in that locale (this
+    // test covers only the E conversions, not plain `%Y`).
+    if !is_locale_available("fa_IR.UTF-8") {
+        println!("Skipping Iranian locale test - fa_IR.UTF-8 locale not available");
+        return;
+    }
+    for (date, format, expected) in [
+        ("1999-12-31 12:00:00", "%EY", "1999\n"),
+        ("1999-12-31 12:00:00", "%EC", "19\n"),
+        ("1999-12-31 12:00:00", "%Ey", "99\n"),
+        ("10000-06-01 12:00:00", "%EY", "10000\n"),
+        ("10000-06-01 12:00:00", "%EC", "100\n"),
+        ("10000-06-01 12:00:00", "%Ey", "00\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .env("LC_ALL", "fa_IR.UTF-8")
+            .args(&["-d", date, &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_date_strftime_e_year_fields_use_thai_era() {
+    // glibc's `th_TH` defines a Buddhist era: `%EY` is the era name and era
+    // year, `%EC` the era name and `%Ey` the era year (a four-digit field
+    // there, not a digit pair).
+    if !is_locale_available("th_TH.UTF-8") {
+        println!("Skipping Thai locale test - th_TH.UTF-8 locale not available");
+        return;
+    }
+    // Probe `%B` first: without ICU data the assertions below would pin
+    // nothing.
+    let probe = new_ucmd!()
+        .env("LC_ALL", "th_TH.UTF-8")
+        .env("TZ", "UTC0")
+        .args(&["-d", "1999-12-31", "+%B"])
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .to_string();
+    if probe == "December" {
+        println!("skipping Thai era check: i18n not available");
+        return;
+    }
+    // The 10000 rows also cover the 400-year surrogate path: the era year is
+    // the real Gregorian year plus 543, not the surrogate year plus 543.
+    for (date, format, expected) in [
+        ("1999-12-31 12:00:00", "%EY", "\u{0E1E}.\u{0E28}. 2542\n"),
+        ("1999-12-31 12:00:00", "%Ey", "2542\n"),
+        ("1999-12-31 12:00:00", "%EC", "\u{0E1E}.\u{0E28}.\n"),
+        ("1999-12-31 12:00:00", "%5Ey", " 2542\n"),
+        ("1999-12-31 12:00:00", "%5EC", "\u{0E1E}.\u{0E28}.\n"),
+        ("10000-06-01 12:00:00", "%EY", "\u{0E1E}.\u{0E28}. 10543\n"),
+        ("10000-06-01 12:00:00", "%Ey", "10543\n"),
+        ("10000-06-01 12:00:00", "%EC", "\u{0E1E}.\u{0E28}.\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .env("LC_ALL", "th_TH.UTF-8")
+            .args(&["-d", date, &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+fn test_date_strftime_e_rejected_pair_uppercase_flag() {
+    // GNU applies `^` to the trailing conversion letter of a rejected pair,
+    // with or without a width, and `#` alone does not change its case. The
+    // flag must not leak into the text around the pair.
+    for (format, expected) in [
+        ("%^Ej", "%^EJ\n"),
+        ("%^Eo", "%^EO\n"),
+        ("%^#Ej", "%^#EJ\n"),
+        ("%^5Ej", "%^5EJ\n"),
+        ("%^Ejx", "%^EJx\n"),
+        ("%^Ej%Ej", "%^EJ%Ej\n"),
+        ("%#Ej", "%#Ej\n"),
+        ("%^EY", "1999\n"),
+        ("%^EB", "%^EB\n"),
+        ("%^E2", "%^E2\n"),
+        ("%^E:", "%^E:\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .env("LC_ALL", "C")
+            .args(&["-d", "1999-06-01", &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+#[uutests::wasi_ignore(NoLocaleData)]
+#[cfg(unix)]
+fn test_date_strftime_e_era_year_is_two_digit_padded() {
+    // glibc pads an era year to two digits: Buddhist era year 8 is `พ.ศ. 08`,
+    // and the `%Ey` field the Thai `d_fmt` template carries pads the same way.
+    // An era year of three or more digits is unaffected.
+    if !is_locale_available("th_TH.UTF-8") {
+        println!("Skipping Thai locale test - th_TH.UTF-8 locale not available");
+        return;
+    }
+    // Probe `%B` first: without ICU data the fallback renders English month
+    // names, and the era rows below would pin nothing.
+    let probe = new_ucmd!()
+        .env("LC_ALL", "th_TH.UTF-8")
+        .env("TZ", "UTC0")
+        .args(&["-d", "1999-12-31", "+%B"])
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .to_string();
+    if probe == "December" {
+        println!("skipping Thai era check: i18n not available");
+        return;
+    }
+    for (ts, format, expected) in [
+        // Era year 1 and 8, the first values a two-digit field changes.
+        ("-79258089600", "%EY", "\u{0E1E}.\u{0E28}. 01\n"),
+        ("-79037164800", "%EY", "\u{0E1E}.\u{0E28}. 08\n"),
+        ("-79037164800", "%Ey", "08\n"),
+        // Thai %x requires the glibc LC_TIME date template.
+        #[cfg(all(target_os = "linux", not(target_env = "musl")))]
+        ("-79037164800", "%x", "31/05/08\n"),
+        ("-79005628800", "%EY", "\u{0E1E}.\u{0E28}. 09\n"),
+        // Three-digit era years keep their own width.
+        ("-61996320000", "%EY", "\u{0E1E}.\u{0E28}. 548\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .env("LC_ALL", "th_TH.UTF-8")
+            .args(&["-d", &format!("@{ts}"), &format!("+{format}")])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+#[uutests::wasi_ignore(NoLocaleData)]
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+fn test_date_strftime_e_era_time_composite() {
+    // The era time format only exists where the accessor reads it from the
+    // locale (glibc `nl_langinfo` on linux/glibc), so the expectations below
+    // hold only there. A locale that defines `ERA_T_FMT` (glibc's Thai
+    // locale) is what GNU renders `%EX` through. The era *date* composites
+    // stay on the base composite: their templates interpolate names that ICU
+    // spells with the same `วัน` the templates add themselves.
+    if !is_locale_available("th_TH.UTF-8") {
+        println!("Skipping Thai locale test - th_TH.UTF-8 locale not available");
+        return;
+    }
+    // Probe `%B` first, so a build without ICU data does not pin nothing.
+    let probe = new_ucmd!()
+        .env("LC_ALL", "th_TH.UTF-8")
+        .env("TZ", "UTC0")
+        .args(&["-d", "1999-12-31", "+%B"])
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .to_string();
+    if probe == "December" {
+        println!("skipping Thai era check: i18n not available");
+        return;
+    }
+    for (ts, expected) in [
+        ("928555200", "04.00.00 น.\n"),
+        ("1736924096", "06.54.56 น.\n"),
+        ("1736900000", "00.13.20 น.\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .env("LC_ALL", "th_TH.UTF-8")
+            .args(&["-d", &format!("@{ts}"), "+%EX"])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
 // Tests for --debug flag
 #[test]
 fn test_date_debug_basic() {
