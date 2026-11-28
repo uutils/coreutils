@@ -65,7 +65,9 @@ data-encoding-macro = "0.1.15"
 divan = { package = "codspeed-divan-compat", version = "6.1" }
 dns-lookup = { version = "4.0.0" }
 dunce = "1.0.4"
-filetime = "0.2.29"
+# TODO(MSRV>=1.99): filetime deprecates functionality in 0.2.30 in favor of std functionality
+# available in Rust 1.99
+filetime = "=0.2.29"
 foldhash = "0.2.0"
 glob = "0.3.1"
 half = "2.4.1"
