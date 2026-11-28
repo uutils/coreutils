@@ -43,6 +43,11 @@ pub struct ReverseChunks<'a> {
 
     /// The index of the next block to read.
     block_idx: usize,
+
+    /// The position the iteration started from, which is where the rewind has to
+    /// stop. It is not always the beginning of the file: the caller may already
+    /// have consumed its first bytes, as `(head -c 10; tail) < file` does.
+    start: u64,
 }
 
 impl<'a> ReverseChunks<'a> {
@@ -60,6 +65,7 @@ impl<'a> ReverseChunks<'a> {
             size,
             max_blocks_to_read,
             block_idx,
+            start: current,
         })
     }
 
@@ -88,9 +94,11 @@ impl<'a> ReverseChunks<'a> {
             // The file may have been truncated after its size was measured.
             // Treat the remaining bytes as the start of the file instead of
             // panicking; GNU tail exits successfully in the same situation.
-            // Rewind so the caller prints whatever is left of the file.
+            // Rewind so the caller prints whatever is left of the file, but
+            // never before the position the iteration started from: those bytes
+            // were already consumed by the caller.
             Err(err) if err.kind() == ErrorKind::UnexpectedEof => {
-                self.file.seek(SeekFrom::Start(0))?;
+                self.file.seek(SeekFrom::Start(self.start))?;
                 return Ok(None);
             }
             // Propagate real I/O errors (EIO, etc.) to the caller.
@@ -691,6 +699,40 @@ mod tests {
             // The rewind must leave the file at the start so the caller can
             // print whatever is left of the truncated file.
             assert_eq!(file.stream_position().unwrap(), 0);
+        }
+    }
+
+    // WASI has no temporary directory, so this file-backed case is skipped there.
+    #[cfg(not(target_os = "wasi"))]
+    #[test]
+    fn test_reverse_chunks_rewinds_only_to_the_consumed_offset_when_truncated() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("partly-consumed");
+        {
+            let mut file = std::fs::File::create(&path).unwrap();
+            file.write_all(&vec![b'a'; BLOCK_SIZE as usize * 2 + 1])
+                .unwrap();
+        }
+
+        {
+            let mut file = std::fs::File::open(&path).unwrap();
+            // Simulate a caller which already read part of its input, like
+            // `(head -c 10; tail) < file` does.
+            file.seek(SeekFrom::Start(10)).unwrap();
+            let mut chunks = ReverseChunks::new(&mut file, SeekFrom::End(0)).unwrap();
+            assert!(matches!(chunks.next(), Some(Ok(_))));
+
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open(&path)
+                .unwrap()
+                .set_len(0)
+                .unwrap();
+            assert!(chunks.next().is_none());
+
+            // The rewind stops where the iteration started, so the caller does
+            // not print the bytes it already consumed.
+            assert_eq!(file.stream_position().unwrap(), 10);
         }
     }
 
