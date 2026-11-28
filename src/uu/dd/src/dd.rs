@@ -547,23 +547,36 @@ impl Input<'_> {
         })
     }
 
-    /// Fills a given buffer.
-    /// Reads in increments of 'self.ibs'.
-    /// The start of each ibs-sized read is aligned to multiples of ibs; remaining space is filled with the 'pad' byte.
+    /// Fills a given buffer with `ibs`-sized blocks, padding short reads with `pad`.
+    ///
+    /// `buf.len()` must be a multiple of `self.settings.ibs`. At most `byte_limit`
+    /// input bytes are read across all blocks, and any partial final block is still
+    /// padded to a full `ibs` bytes.
     /// Returns the read statistics and the total filled length (reads + padding).
-    fn fill_blocks(&mut self, buf: &mut [u8], pad: u8) -> io::Result<(ReadStat, usize)> {
+    fn fill_blocks(
+        &mut self,
+        buf: &mut [u8],
+        byte_limit: usize,
+        pad: u8,
+    ) -> io::Result<(ReadStat, usize)> {
+        let ibs = self.settings.ibs;
+        debug_assert_eq!(buf.len() % ibs, 0);
+
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut base_idx = 0;
         let mut bytes_total = 0;
 
         while base_idx < buf.len() {
-            let next_blk = cmp::min(base_idx + self.settings.ibs, buf.len());
-            let target_len = next_blk - base_idx;
+            let target_len = cmp::min(ibs, byte_limit.saturating_sub(bytes_total));
+            if target_len == 0 {
+                break;
+            }
 
-            match self.read(&mut buf[base_idx..next_blk])? {
+            let next_blk = base_idx + ibs;
+            match self.read(&mut buf[base_idx..base_idx + target_len])? {
                 0 => break,
-                rlen if rlen < target_len => {
+                rlen if rlen < ibs => {
                     bytes_total += rlen;
                     reads_partial += 1;
                     buf[base_idx + rlen..next_blk].fill(pad);
@@ -574,7 +587,7 @@ impl Input<'_> {
                 }
             }
 
-            base_idx += self.settings.ibs;
+            base_idx = next_blk;
         }
 
         Ok((
@@ -1477,16 +1490,20 @@ fn read_helper<'a>(
     }
 
     let (rstat, data_len) = {
-        let scratch = &mut read_buf.as_mut_bytes()[..bsize];
+        let full_buf = read_buf.as_mut_bytes();
         let (rstat, data_len) = if let Some(ch) = i.settings.iconv.sync {
-            i.fill_blocks(scratch, ch)?
+            i.fill_blocks(
+                &mut full_buf[..bsize.next_multiple_of(i.settings.ibs)],
+                bsize,
+                ch,
+            )?
         } else {
-            let s = i.fill_consecutive(scratch)?;
+            let s = i.fill_consecutive(&mut full_buf[..bsize])?;
             let n = s.bytes_total as usize;
             (s, n)
         };
         if !rstat.is_empty() && i.settings.iconv.swab {
-            perform_swab(&mut scratch[..data_len]);
+            perform_swab(&mut full_buf[..data_len]);
         }
         (rstat, data_len)
     };
