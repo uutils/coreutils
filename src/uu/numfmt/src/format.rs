@@ -465,16 +465,10 @@ fn transform_from(
 
     let i = i.to_f64() * (opts.from_unit as f64);
 
-    remove_suffix(i, suffix, opts.from).map(|n| {
-        let n = if opts.from == Unit::None || had_no_suffix {
-            if n == -0.0 { 0.0 } else { n }
-        } else if n < 0.0 {
-            -n.abs().ceil()
-        } else {
-            n.ceil()
-        };
-        ParsedNumber::Float(n)
-    })
+    // Keep the fraction: the --round method and the output precision decide
+    // how it is rounded, as for a number without a suffix.
+    remove_suffix(i, suffix, opts.from)
+        .map(|n| ParsedNumber::Float(if n == -0.0 { 0.0 } else { n }))
 }
 
 /// Divide numerator by denominator, with rounding.
