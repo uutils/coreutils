@@ -50,7 +50,10 @@ pub fn main(args: TokenStream, stream: TokenStream) -> TokenStream {
 
             // disable rust signal handlers (otherwise processes don't dump core after e.g. one SIGSEGV)
             #[cfg(all(#signals, unix))]
-            uucore::signals::disable_rust_signal_handlers().expect("Disabling rust signal handlers failed");
+            // SAFETY: Single-threaded; no other signal handlers have been installed.
+            let ok = unsafe { uucore::signals::disable_rust_signal_handlers() }.is_ok();
+            #[cfg(all(#signals, unix))]
+            debug_assert!(ok, "Disabling rust signal handlers failed");
             let result = uumain(args);
             match result {
                 Ok(()) => uucore::error::get_exit_code(),
