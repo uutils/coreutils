@@ -199,24 +199,20 @@ fn format_idle<'a>(when: i64, since_boot: i64) -> Cow<'a, str> {
 fn format_timestamp(ut: &UtmpxRecord) -> String {
     const FORMAT_DESCRIPTION_VERSION: usize = 2;
 
-    let pattern: Vec<time::format_description::FormatItem> = if ["LC_ALL", "LC_TIME", "LANG"]
-        .into_iter()
-        .find_map(std::env::var_os)
-        .as_deref()
-        == Some(std::ffi::OsStr::new("C"))
-    {
-        // "%b %e %H:%M"
-        time::format_description::parse_borrowed::<FORMAT_DESCRIPTION_VERSION>(
-            "[month repr:short] [day padding:space] [hour]:[minute]",
-        )
-        .unwrap()
-    } else {
-        // "%Y-%m-%d %H:%M"
-        time::format_description::parse_borrowed::<FORMAT_DESCRIPTION_VERSION>(
-            "[year]-[month]-[day] [hour]:[minute]",
-        )
-        .unwrap()
-    };
+    let pattern: Vec<time::format_description::FormatItem> =
+        if uucore::locale::is_c_locale("LC_TIME") {
+            // "%b %e %H:%M"
+            time::format_description::parse_borrowed::<FORMAT_DESCRIPTION_VERSION>(
+                "[month repr:short] [day padding:space] [hour]:[minute]",
+            )
+            .unwrap()
+        } else {
+            // "%Y-%m-%d %H:%M"
+            time::format_description::parse_borrowed::<FORMAT_DESCRIPTION_VERSION>(
+                "[year]-[month]-[day] [hour]:[minute]",
+            )
+            .unwrap()
+        };
     ut.login_time().format(&pattern).unwrap()
 }
 
