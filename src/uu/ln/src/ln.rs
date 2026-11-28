@@ -407,6 +407,20 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
         src.into()
     };
 
+    // Resolve before any backup, so a failure leaves the destination untouched.
+    let hard_link_src = if settings.symbolic {
+        None
+    } else if settings.logical && source.is_symlink() {
+        Some(fs::canonicalize(&source).map_err(|e| {
+            LnError::IoContext(
+                UIoError::from(e),
+                translate!("ln-failed-to-access", "file" => source.quote()),
+            )
+        })?)
+    } else {
+        Some(source.to_path_buf())
+    };
+
     if dst.is_symlink() || dst.exists() {
         // Never move a directory aside or replace it to make room for a link,
         // matching GNU. A symlink to a directory is a link and is replaced.
@@ -454,20 +468,6 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
             })?;
         }
     }
-
-    // Resolved once: this can fail independently of the destination.
-    let hard_link_src = if settings.symbolic {
-        None
-    } else if settings.logical && source.is_symlink() {
-        Some(fs::canonicalize(&source).map_err(|e| {
-            LnError::IoContext(
-                UIoError::from(e),
-                translate!("ln-failed-to-access", "file" => source.quote()),
-            )
-        })?)
-    } else {
-        Some(source.to_path_buf())
-    };
 
     // Link first, matching GNU. Replacing uses a temp name + `renameat`, so
     // `dst` is never briefly free for another user to claim.

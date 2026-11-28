@@ -1575,3 +1575,25 @@ fn test_hard_link_source_permission_denied() {
         .stderr_only("ln: failed to access 'dir/x': Permission denied\n");
     assert!(!at.file_exists("link"));
 }
+
+#[uutests::wasi_ignore(AbsoluteSymlinkTargetsUnfollowable)]
+#[test]
+fn test_logical_dangling_source_backup_keeps_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("dest", "CURRENT\n");
+    at.write("dest~", "PREVIOUS\n");
+    at.symlink_file("missing", "src");
+
+    for backup in ["--backup=simple", "--backup=numbered"] {
+        scene
+            .ucmd()
+            .args(&["-L", backup, "--suffix=~", "src", "dest"])
+            .fails_with_code(1)
+            .stderr_is("ln: failed to access 'src': No such file or directory\n");
+
+        assert_eq!(at.read("dest"), "CURRENT\n");
+        assert_eq!(at.read("dest~"), "PREVIOUS\n");
+        assert!(!at.file_exists("dest.~1~"));
+    }
+}
