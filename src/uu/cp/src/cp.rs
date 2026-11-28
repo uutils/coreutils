@@ -8,7 +8,7 @@
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::fs::{self, Metadata, OpenOptions, Permissions};
 #[cfg(unix)]
@@ -2145,21 +2145,20 @@ fn context_for(src: &Path, dest: &Path) -> String {
     format!("{} -> {}", src.quote(), dest.quote())
 }
 
-/// Implements a simple backup copy for the destination file .
-/// if `is_dest_symlink` flag is set to true dest will be renamed to `backup_path`
-/// TODO: for the backup, should this function be replaced by `copy_file(...)`?
-fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyResult<()> {
-    if is_dest_symlink {
-        fs::rename(dest, backup_path)?;
-    } else {
+/// Back up `dest` onto `backup_path` and report whether `dest` was moved away.
+/// When `dest` is also the source the backup is a copy and `dest` stays.
+fn backup_dest(dest: &Path, backup_path: &Path, dest_is_source: bool) -> CopyResult<bool> {
+    if dest_is_source {
         match fs::remove_file(backup_path) {
             Ok(()) => {}
             Err(err) if err.kind() == io::ErrorKind::NotFound => {}
             Err(err) => return Err(err.into()),
         }
         fs::copy(dest, backup_path)?;
+        return Ok(false);
     }
-    Ok(())
+    fs::rename(dest, backup_path)?;
+    Ok(true)
 }
 
 /// Only allow a backup or unlink of a hard link if the paths resolve to
@@ -2169,6 +2168,81 @@ fn paths_are_distinct_entries(source: &Path, dest: &Path) -> bool {
         .ok()
         .zip(canonicalize(dest, MissingHandling::Normal, ResolveMode::Physical).ok())
         .is_some_and(|(s, d)| s != d)
+}
+
+/// The directory a path lives in, with an empty parent meaning the current one.
+fn parent_dir(path: &Path) -> &Path {
+    path.parent()
+        .filter(|dir| !dir.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."))
+}
+
+/// Whether two directories are the same directory.
+fn same_directory(source_dir: &Path, dest_dir: &Path) -> bool {
+    canonicalize(source_dir, MissingHandling::Normal, ResolveMode::Physical)
+        .ok()
+        .zip(canonicalize(dest_dir, MissingHandling::Normal, ResolveMode::Physical).ok())
+        .is_some_and(|(source_dir, dest_dir)| source_dir == dest_dir)
+}
+
+/// Whether two paths name the same directory entry, without following symlinks.
+fn same_file_entry(source: &Path, dest: &Path) -> bool {
+    match (
+        FileInformation::from_path(source, false),
+        FileInformation::from_path(dest, false),
+    ) {
+        (Ok(source_info), Ok(dest_info)) => source_info == dest_info,
+        _ => false,
+    }
+}
+
+/// Whether a directory holds an entry for each of the two names.
+fn both_names_present(dir: &Path, source_name: &OsStr, dest_name: &OsStr) -> bool {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return false;
+    };
+    let mut source_found = false;
+    let mut dest_found = false;
+    for entry in entries {
+        let Ok(entry) = entry else {
+            return false;
+        };
+        let name = entry.file_name();
+        if name == *source_name {
+            source_found = true;
+        }
+        if name == *dest_name {
+            dest_found = true;
+        }
+        if source_found && dest_found {
+            return true;
+        }
+    }
+    false
+}
+
+/// Decide whether `source` and `dest` name one directory entry, comparing the
+/// final component without following symlinks.
+///
+/// Names that differ only in case name the same entry on a case-insensitive
+/// filesystem, where moving `dest` aside takes `source` with it.
+fn names_are_same_entry(source: &Path, dest: &Path) -> bool {
+    let (Some(source_name), Some(dest_name)) = (source.file_name(), dest.file_name()) else {
+        return false;
+    };
+
+    if source_name == dest_name {
+        // The same name in the same directory is the same entry.
+        return same_directory(parent_dir(source), parent_dir(dest));
+    }
+
+    // The names differ. They still name one entry when the filesystem resolves
+    // both spellings to one file, as a case-insensitive filesystem does. Two
+    // hard links to one file are two entries, though, so the directory has to
+    // tell them apart.
+    same_file_entry(source, dest)
+        && same_directory(parent_dir(source), parent_dir(dest))
+        && !both_names_present(parent_dir(source), source_name, dest_name)
 }
 
 /// Decide whether source and destination files are the same and
@@ -2256,13 +2330,15 @@ fn verify_relative_symlink_in_cwd(source: &Path, dest: &Path, options: &Options)
 }
 
 /// Back up, remove, or leave intact the destination file, depending on the options.
+///
+/// Returns whether the destination is the source file itself.
 fn handle_existing_dest(
     source: &Path,
     dest: &Path,
     options: &Options,
     source_in_command_line: bool,
     copied_files: &HashMap<FileInformation, PathBuf>,
-) -> CopyResult<()> {
+) -> CopyResult<bool> {
     // Disallow copying a file to itself, unless `--force` and
     // `--backup` are both specified.
     if is_forbidden_to_copy_to_same_file(source, dest, options, source_in_command_line) {
@@ -2283,17 +2359,28 @@ fn handle_existing_dest(
         options.overwrite.verify(dest, options.debug)?;
     }
 
-    let mut is_dest_removed = false;
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
-    if let Some(backup_path) = backup_path {
-        if backup_would_destroy_source(source, dest, &options.backup_suffix, options.backup, true) {
-            return Err(translate!("cp-error-backing-up-destroy-source", "dest" => dest.quote(), "source" => source.quote())
-            .into());
+    let (dest_moved_aside, dest_is_source) = match backup_path {
+        Some(backup_path) => {
+            if backup_would_destroy_source(
+                source,
+                dest,
+                &options.backup_suffix,
+                options.backup,
+                true,
+            ) {
+                return Err(translate!("cp-error-backing-up-destroy-source", "dest" => dest.quote(), "source" => source.quote())
+                .into());
+            }
+            let dest_is_source = names_are_same_entry(source, dest);
+            (
+                backup_dest(dest, &backup_path, dest_is_source)?,
+                dest_is_source,
+            )
         }
-        is_dest_removed = dest.is_symlink();
-        backup_dest(dest, &backup_path, is_dest_removed)?;
-    }
-    if !is_dest_removed {
+        None => (false, false),
+    };
+    if !dest_moved_aside {
         delete_dest_if_needed_and_allowed(
             source,
             dest,
@@ -2303,7 +2390,7 @@ fn handle_existing_dest(
         )?;
     }
 
-    Ok(())
+    Ok(dest_is_source)
 }
 
 /// Checks if:
@@ -2578,8 +2665,9 @@ fn handle_copy_mode(
             if dest.exists() {
                 let backup_path =
                     backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
-                if let Some(backup_path) = backup_path {
-                    backup_dest(dest, &backup_path, dest.is_symlink())?;
+                if let Some(backup_path) = backup_path
+                    && !backup_dest(dest, &backup_path, names_are_same_entry(source, dest))?
+                {
                     fs::remove_file(dest)?;
                 }
                 force = options.overwrite == OverwriteMode::Clobber(ClobberMode::Force);
@@ -2879,7 +2967,13 @@ fn copy_file(
                 }
             }
         }
-        handle_existing_dest(source, dest, options, source_in_command_line, copied_files)?;
+        let dest_is_source =
+            handle_existing_dest(source, dest, options, source_in_command_line, copied_files)?;
+        if dest_is_source && options.copy_mode == CopyMode::Copy {
+            // The destination is the source file itself: its backup was made as
+            // a copy and the file already holds the content of the source.
+            return Ok(());
+        }
         if are_hardlinks_to_same_file(source, dest) {
             if options.copy_mode == CopyMode::Copy {
                 return Ok(());
