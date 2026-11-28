@@ -117,17 +117,19 @@ pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo
             let v = parse_type_string(arg)?;
             formats.extend(v);
             expect_type_string = false;
-        } else if arg.starts_with("--") {
-            if arg.len() == 2 {
+        } else if let Some(long) = arg.strip_prefix("--") {
+            if long.is_empty() {
                 break;
             }
-            if arg.starts_with("--format=") {
-                let params: String = arg.chars().skip_while(|c| *c != '=').skip(1).collect();
-                let v = parse_type_string(&params)?;
-                formats.extend(v);
-            }
-            if arg == "--format" {
-                expect_type_string = true;
+            let (name, value) = match long.split_once('=') {
+                Some((name, value)) => (name, Some(value)),
+                None => (long, None),
+            };
+            if !name.is_empty() && "format".starts_with(name) {
+                match value {
+                    Some(params) => formats.extend(parse_type_string(params)?),
+                    None => expect_type_string = true,
+                }
             }
         } else if arg.starts_with('-') {
             let flags = arg.chars().skip(1);
@@ -545,6 +547,8 @@ fn test_short_format_combined_arg() {
 #[test]
 fn test_format_next_arg_invalid() {
     parse_format_flags_str(&["od", "--format", "-v"]).unwrap_err();
+    parse_format_flags_str(&["od", "--fo=1"]).unwrap_err();
+    parse_format_flags_str(&["od", "--f"]).unwrap_err();
     parse_format_flags_str(&["od", "--format"]).unwrap_err();
     parse_format_flags_str(&["od", "-t", "-v"]).unwrap_err();
     parse_format_flags_str(&["od", "-t"]).unwrap_err();
@@ -583,5 +587,21 @@ fn test_mixed_formats() {
             ParsedFormatterItemInfo::new(FORMAT_ITEM_F64, false),    // tf
             ParsedFormatterItemInfo::new(FORMAT_ITEM_HEX16, false),  // x
         ]
+    );
+}
+
+#[cfg(test)]
+use rstest::rstest;
+
+#[cfg(test)]
+#[rstest]
+#[case::f(&["od", "--f=x1"])]
+#[case::fo(&["od", "--fo=x1"])]
+#[case::form_separate_value(&["od", "--form", "x1"])]
+#[case::full_name(&["od", "--format=x1"])]
+fn test_abbreviated_long_format(#[case] args: &[&'static str]) {
+    assert_eq!(
+        parse_format_flags_str(args).unwrap(),
+        vec![FORMAT_ITEM_HEX8]
     );
 }
