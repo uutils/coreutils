@@ -1,10 +1,10 @@
 name: FreeBSD
 
-# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc nextest copyback logind
+# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc mlugg nextest copyback logind zigbuild
 
 env:
-  # * style job configuration
-  STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
 
 on:
   pull_request:
@@ -21,17 +21,19 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  style:
-    name: Style and Lint
+  test_zig:
+    name: test
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+    - name: Avoid no space left on device
+      shell: bash
+      run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
       with:
-        components: clippy
         targets: x86_64-unknown-freebsd
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
@@ -47,37 +49,27 @@ jobs:
     - uses: taiki-e/install-action@v2
       with:
         tool: cargo-zigbuild
-    - name: cargo clippy
-      env:
-        CARGO_INCREMENTAL: "0"
+    - name: prepare testing
       run: |
-        UTILS=$(cargo tree --depth 1 --features feat_os_unix --format '{lib}' --prefix none | sed -n 's/^uu_/-p uu_/p')
-        cargo-zigbuild clippy --target x86_64-unknown-freebsd --features feat_os_unix -p coreutils ${UTILS} --all-targets --tests --benches -- -D warnings
-
-  test:
-    name: Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      mem: 4096
-    steps:
-    - uses: actions/checkout@v7.0.1
-      with:
-        persist-credentials: false
-    - name: Avoid no space left on device (Ubuntu runner)
-      shell: bash
-      run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
-    - name: Prepare, build and test
+        set -euo pipefail
+        # Use static openssl for zigbuild and ask downstream to use vendored one if they see any issue with system one.
+        # BSD make's redirection to GNUmakefile is tested at openbsd.yml
+        cargo-zigbuild test --target x86_64-unknown-freebsd --no-run --features feat_os_unix,openssl -p uucore -p coreutils --message-format=json \
+          | jq -rs '
+            [ .[] | select(.executable != null) | .executable | select(test("/coreutils$") | not) ]
+            | unique
+            | .[]
+            ' > tests.sh
+        cat tests.sh
+    - name: test
       uses: vmactions/freebsd-vm@v1.6.0
       with:
         usesh: true
         sync: rsync
         copyback: false
-        prepare: pkg install -y gmake nextest rust sudo
+        prepare: pkg install -y sudo
         run: |
-          ## Prepare, build, and test
-          # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
-          # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
+          ## test
           set -e
           #
           # We need a file-descriptor file system to test test_ls::test_ls_io_errors
@@ -105,29 +97,15 @@ jobs:
           echo "WORKSPACE_PARENT='${WORKSPACE_PARENT}'"
           echo "WORKSPACE='${WORKSPACE}'"
           env | sort
-          # tooling info
-          echo "## tooling info"
-          cargo -V
-          cargo nextest --version
-          rustc -V
-          #
-          # To ensure that files are cleaned up, we don't want to exit on error
           set +e
           cd "${WORKSPACE}"
           unset FAULT
-          export CARGO_INCREMENTAL=0
-          export RUSTFLAGS="-C strip=symbols" # for disk space
-          # vendored OpenSSL takes many times to build. Use system one (LibreSSL is supported).
-          export OPENSSL_NO_VENDOR=1 OPENSSL_DIR=/usr
-          cargo build || FAULT=1
-          export PATH=~/.cargo/bin:${PATH}
+          # tests fail without using this path by unknown reason
+          cp -v target/x86_64-unknown-freebsd/debug/coreutils /tmp/coreutils
+          export UUTESTS_BINARY_PATH=/tmp/coreutils
           export RUST_BACKTRACE=1
-          export CARGO_TERM_COLOR=always
-          if (test -z "\$FAULT"); then cargo nextest run --hide-progress-bar --profile ci --features feat_os_unix || FAULT=1 ; fi
-          if (test -z "\$FAULT"); then cargo nextest run --hide-progress-bar --profile ci --all-features -p uucore || FAULT=1 ; fi
-          # Test building with make
-          if (test -z "\$FAULT"); then make || FAULT=1 ; fi
-          # Clean to avoid to rsync back the files
-          cargo clean
+          while IFS= read -r bin;do
+            "\${bin}" || FAULT=1
+          done < ./tests.sh
           if (test -n "\$FAULT"); then exit 1 ; fi
           EOF
