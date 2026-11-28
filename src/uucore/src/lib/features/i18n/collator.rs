@@ -88,14 +88,18 @@ pub fn compute_sort_key_utf8(input: &[u8], buf: &mut Vec<u8>) {
 }
 
 /// Compare both strings with regard to the current locale.
+///
+/// Collator ties are broken by reversed bytes, as `sort` does for whole lines,
+/// so `Equal` means identical bytes.
 pub fn locale_cmp(left: &[u8], right: &[u8]) -> Ordering {
     // If the detected locale is 'C', just do byte-wise comparison
     if get_collating_locale().0 == DEFAULT_LOCALE {
         left.cmp(right)
     } else {
         // Fall back to byte comparison if collator is not available
-        COLLATOR
-            .get()
-            .map_or_else(|| left.cmp(right), |c| c.compare_utf8(left, right))
+        COLLATOR.get().map_or_else(
+            || left.cmp(right),
+            |c| c.compare_utf8(left, right).then_with(|| right.cmp(left)),
+        )
     }
 }

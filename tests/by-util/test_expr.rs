@@ -6,7 +6,7 @@
 // spell-checker:ignore αbcdef ; (people) kkos
 // spell-checker:ignore aabcccd aabcd aabd abbb abbbd abbcabc abbcac abbcbbbd abbcbd
 // spell-checker:ignore abbccd abcabc abcac acabc andand bigcmp bignum emptysub
-// spell-checker:ignore orempty oror bcdef fedcb GHSA xjfw pqfw
+// spell-checker:ignore orempty oror bcdef fedcb GHSA xjfw pqfw zabc
 
 use rstest::rstest;
 use uutests::new_ucmd;
@@ -1699,6 +1699,26 @@ mod locale_aware {
                 .run()
                 .code_is(code)
                 .stdout_only(output);
+        }
+    }
+
+    #[uutests::wasi_ignore(NoLocaleData)]
+    #[test]
+    fn test_expr_equality_is_exact_in_locale() {
+        // The collator gives no weight to punctuation, but `=` must still
+        // tell these strings apart.
+        for (left, right) in [("/srv/uploads/../..", "/srv/uploads"), ("r.o.o.t", "root")] {
+            new_ucmd!()
+                .args(&[left, "=", right])
+                .env("LC_ALL", "en_US.UTF-8")
+                .run()
+                .code_is(1)
+                .stdout_only("0\n");
+            new_ucmd!()
+                .args(&[left, "!=", right])
+                .env("LC_ALL", "en_US.UTF-8")
+                .succeeds()
+                .stdout_only("1\n");
         }
     }
 }
