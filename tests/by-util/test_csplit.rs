@@ -1721,6 +1721,39 @@ fn suffix_format_hyphen_leading_as_separate_arg() {
 }
 
 #[test]
+fn suffix_format_errors_match_gnu() {
+    // GNU csplit 9.12, LC_ALL=C.
+    for (format, message) in [
+        ("abc", "missing % conversion specification in suffix"),
+        ("x%%y", "missing % conversion specification in suffix"),
+        ("a%", "missing conversion specifier in suffix"),
+        ("%s", "invalid conversion specifier in suffix: s"),
+        ("%#d", "invalid flags in conversion specification: %#d"),
+        ("%'x", "invalid flags in conversion specification: %'x"),
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["numbers50.txt", "10", "-b", format])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_is(format!("csplit: {message}\n"));
+        let count = glob(&at.plus_as_string("xx*"))
+            .expect("counting splits")
+            .count();
+        assert_eq!(count, 0, "{format:?} wrote splits");
+    }
+}
+
+#[test]
+fn suffix_format_thousands_flag_on_decimal() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "10", "-b", "%'02d"])
+        .succeeds()
+        .stdout_only("18\n123\n");
+    assert_eq!(at.read("xx00"), generate(1, 10));
+    assert_eq!(at.read("xx01"), generate(10, 51));
+}
+
+#[test]
 fn zero_precision_format() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "10", "--suffix-format", "%.0d"])
