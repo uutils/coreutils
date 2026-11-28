@@ -57,6 +57,7 @@ cp-error-extra-operand = opérande supplémentaire { $operand }
 cp-error-same-file = { $source } et { $dest } sont le même fichier
 cp-error-backing-up-destroy-source = sauvegarder { $dest } pourrait détruire la source ; { $source } non copié
 cp-error-cannot-open-for-reading = impossible d'ouvrir { $source } en lecture : permission refusée
+cp-error-cannot-open-source = impossible d'ouvrir { $source } en lecture
 cp-error-not-writing-dangling-symlink = ne pas écrire à travers le lien symbolique pendant { $dest }
 cp-error-failed-to-clone = échec du clonage de { $dest } depuis { $source } : { $error }
 cp-error-cannot-change-attribute = impossible de changer l'attribut { $dest } : Le fichier source n'est pas un fichier régulier
