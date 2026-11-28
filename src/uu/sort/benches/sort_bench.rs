@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
+use std::ffi::OsStr;
 use tempfile::NamedTempFile;
 use uu_sort::uumain;
 use uucore::benchmark::{get_bench_args, setup_test_file, text_data};
@@ -17,7 +18,14 @@ fn sort_ascii_only(bencher: Bencher, num_lines: usize) {
     let output_path = output_file.path();
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-o", &output_path, &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([
+                OsStr::new("-o"),
+                output_path.as_os_str(),
+                file_path.as_os_str(),
+            ])
+            .into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -30,7 +38,14 @@ fn sort_accented_data(bencher: Bencher, num_lines: usize) {
     let output_path = output_file.path();
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-o", &output_path, &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([
+                OsStr::new("-o"),
+                output_path.as_os_str(),
+                file_path.as_os_str(),
+            ])
+            .into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -43,7 +58,14 @@ fn sort_mixed_data(bencher: Bencher, num_lines: usize) {
     let output_path = output_file.path();
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-o", &output_path, &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([
+                OsStr::new("-o"),
+                output_path.as_os_str(),
+                file_path.as_os_str(),
+            ])
+            .into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -56,7 +78,14 @@ fn sort_case_sensitive(bencher: Bencher, num_lines: usize) {
     let output_path = output_file.path();
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-o", &output_path, &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([
+                OsStr::new("-o"),
+                output_path.as_os_str(),
+                file_path.as_os_str(),
+            ])
+            .into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -69,7 +98,15 @@ fn sort_case_insensitive(bencher: Bencher, num_lines: usize) {
     let output_path = output_file.path();
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-f", &"-o", &output_path, &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([
+                OsStr::new("-f"),
+                OsStr::new("-o"),
+                output_path.as_os_str(),
+                file_path.as_os_str(),
+            ])
+            .into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -82,7 +119,15 @@ fn sort_dictionary_order(bencher: Bencher, num_lines: usize) {
     let output_path = output_file.path();
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-d", &"-o", &output_path, &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([
+                OsStr::new("-d"),
+                OsStr::new("-o"),
+                output_path.as_os_str(),
+                file_path.as_os_str(),
+            ])
+            .into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -103,7 +148,15 @@ fn sort_numeric(bencher: Bencher, num_lines: usize) {
     let output_path = output_file.path();
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-n", &"-o", &output_path, &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([
+                OsStr::new("-n"),
+                OsStr::new("-o"),
+                output_path.as_os_str(),
+                file_path.as_os_str(),
+            ])
+            .into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -123,10 +176,18 @@ fn sort_general_numeric(bencher: Bencher, num_lines: usize) {
 
     let file_path = setup_test_file(&data);
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap();
+    let output_path = output_file.path();
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-g", &"-o", &output_path, &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([
+                OsStr::new("-g"),
+                OsStr::new("-o"),
+                output_path.as_os_str(),
+                file_path.as_os_str(),
+            ])
+            .into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -139,7 +200,15 @@ fn sort_reverse_locale(bencher: Bencher, num_lines: usize) {
     let output_path = output_file.path();
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-r", &"-o", &output_path, &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([
+                OsStr::new("-r"),
+                OsStr::new("-o"),
+                output_path.as_os_str(),
+                file_path.as_os_str(),
+            ])
+            .into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -164,7 +233,16 @@ fn sort_key_field(bencher: Bencher, num_lines: usize) {
 
     bencher
         // Sort by second field
-        .with_inputs(|| get_bench_args(&[&"-k", &"2", &"-o", &output_path, &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([
+                OsStr::new("-k"),
+                OsStr::new("2"),
+                OsStr::new("-o"),
+                output_path.as_os_str(),
+                file_path.as_os_str(),
+            ])
+            .into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -177,7 +255,15 @@ fn sort_unique_locale(bencher: Bencher, num_lines: usize) {
     let output_path = output_file.path();
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-u", &"-o", &output_path, &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([
+                OsStr::new("-u"),
+                OsStr::new("-o"),
+                output_path.as_os_str(),
+                file_path.as_os_str(),
+            ])
+            .into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -197,7 +283,15 @@ fn sort_long_line(bencher: Bencher, line_size: usize) {
     let output_path = output_file.path();
 
     bencher
-        .with_inputs(|| get_bench_args(&[&file_a, &file_b, &"-o", &output_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([
+                file_a.as_os_str(),
+                file_b.as_os_str(),
+                OsStr::new("-o"),
+                output_path.as_os_str(),
+            ])
+            .into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 

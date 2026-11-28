@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
+use std::ffi::OsStr;
 use uu_cksum::uumain;
 use uucore::benchmark::{get_bench_args, setup_test_file, text_data};
 
@@ -17,7 +18,12 @@ macro_rules! bench_algorithm {
 
             bencher
                 .with_inputs(|| {
-                    get_bench_args(&[&"--algorithm", &$algo_str, &file_path]).into_iter()
+                    get_bench_args([
+                        OsStr::new("--algorithm"),
+                        OsStr::new($algo_str),
+                        file_path.as_os_str(),
+                    ])
+                    .into_iter()
                 })
                 .bench_values(|args| black_box(uumain(args)));
         }
@@ -30,12 +36,12 @@ macro_rules! bench_algorithm {
 
             bencher
                 .with_inputs(|| {
-                    get_bench_args(&[
-                        &"--algorithm",
-                        &$algo_str,
-                        &"--length",
-                        &$length,
-                        &file_path,
+                    get_bench_args([
+                        OsStr::new("--algorithm"),
+                        OsStr::new($algo_str),
+                        OsStr::new("--length"),
+                        OsStr::new($length),
+                        file_path.as_os_str(),
                     ])
                     .into_iter()
                 })
@@ -115,7 +121,7 @@ fn cksum_default(bencher: Bencher) {
     let file_path = setup_test_file(&data);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&file_path]).into_iter())
+        .with_inputs(|| get_bench_args([&file_path]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -126,7 +132,7 @@ fn cksum_raw_output(bencher: Bencher) {
     let file_path = setup_test_file(&data);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"--raw", &file_path]).into_iter())
+        .with_inputs(|| get_bench_args([OsStr::new("--raw"), file_path.as_os_str()]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -142,7 +148,7 @@ fn cksum_multiple_files(bencher: Bencher) {
     let file3 = setup_test_file(&data3);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&file1, &file2, &file3]).into_iter())
+        .with_inputs(|| get_bench_args([&file1, &file2, &file3]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 

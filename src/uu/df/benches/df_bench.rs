@@ -32,7 +32,7 @@ fn df_deep_directory(bencher: Bencher) {
     let _deep_path = create_deep_directory(temp_dir.path(), DEPTH);
 
     bencher
-        .with_inputs(|| get_bench_args(&[]).into_iter())
+        .with_inputs(|| get_bench_args([] as [&str; 0]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 
     env::set_current_dir(original_dir).unwrap();

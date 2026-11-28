@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
+use std::ffi::OsStr;
 use uu_wc::uumain;
 use uucore::benchmark::{create_test_file, get_bench_args, text_data};
 
@@ -15,7 +16,7 @@ fn wc_bytes_synthetic(bencher: Bencher, size_mb: usize) {
     let file_path = create_test_file(&data, temp_dir.path());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-c", &file_path]).into_iter())
+        .with_inputs(|| get_bench_args([OsStr::new("-c"), file_path.as_os_str()]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -26,7 +27,7 @@ fn wc_words_synthetic(bencher: Bencher, size_mb: usize) {
     let file_path = create_test_file(&data, temp_dir.path());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-w", &file_path]).into_iter())
+        .with_inputs(|| get_bench_args([OsStr::new("-w"), file_path.as_os_str()]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -38,7 +39,7 @@ fn wc_bytes_lines_synthetic(bencher: Bencher, size_mb: usize) {
     let file_path = create_test_file(&data, temp_dir.path());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-cl", &file_path]).into_iter())
+        .with_inputs(|| get_bench_args([OsStr::new("-cl"), file_path.as_os_str()]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -50,7 +51,7 @@ fn wc_lines_variable_length(bencher: Bencher, (size_mb, avg_line_len): (usize, u
     let file_path = create_test_file(&data, temp_dir.path());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-l", &file_path]).into_iter())
+        .with_inputs(|| get_bench_args([OsStr::new("-l"), file_path.as_os_str()]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -62,7 +63,7 @@ fn wc_lines_large_line_count(bencher: Bencher, num_lines: usize) {
     let file_path = create_test_file(&data, temp_dir.path());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-l", &file_path]).into_iter())
+        .with_inputs(|| get_bench_args([OsStr::new("-l"), file_path.as_os_str()]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -74,7 +75,7 @@ fn wc_chars_large_line_count(bencher: Bencher, num_lines: usize) {
     let file_path = create_test_file(&data, temp_dir.path());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-m", &file_path]).into_iter())
+        .with_inputs(|| get_bench_args([OsStr::new("-m"), file_path.as_os_str()]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -85,7 +86,7 @@ fn wc_chars_utf8(bencher: Bencher, num_lines: usize) {
     let file_path = create_test_file(data.as_bytes(), temp_dir.path());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-m", &file_path]).into_iter())
+        .with_inputs(|| get_bench_args([OsStr::new("-m"), file_path.as_os_str()]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -97,7 +98,7 @@ fn wc_words_large_line_count(bencher: Bencher, num_lines: usize) {
     let file_path = create_test_file(&data, temp_dir.path());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-w", &file_path]).into_iter())
+        .with_inputs(|| get_bench_args([OsStr::new("-w"), file_path.as_os_str()]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -109,7 +110,7 @@ fn wc_default_large_line_count(bencher: Bencher, num_lines: usize) {
     let file_path = create_test_file(&data, temp_dir.path());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-lwc", &file_path]).into_iter())
+        .with_inputs(|| get_bench_args([OsStr::new("-lwc"), file_path.as_os_str()]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -121,7 +122,7 @@ fn wc_lines_extreme_line_lengths(bencher: Bencher, (num_lines, line_len): (usize
     let file_path = create_test_file(&data, temp_dir.path());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-l", &file_path]).into_iter())
+        .with_inputs(|| get_bench_args([OsStr::new("-l"), file_path.as_os_str()]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 

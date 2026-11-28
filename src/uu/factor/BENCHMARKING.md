@@ -22,10 +22,9 @@ cargo bench -p uu_factor --bench factor_bench factor_large_u64_prime
 Omit the benchmark name to run the whole suite. Pass `-- --help` to see
 Divan's options for filtering and sampling.
 
-The current benchmarks call `uu_factor::uumain` through
-`uucore::benchmark::run_util_function`. They measure argument handling and
-output as well as factorization, rather than calling internal helpers in
-isolation.
+The benchmarks prepare arguments with `uucore::benchmark::get_bench_args`
+before timing `uu_factor::uumain`. The measured call includes argument
+parsing, factorization, and output.
 
 ## Interpreting local measurements
 

@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
+use std::ffi::OsStr;
 use tempfile::TempDir;
 use uu_fold::uumain;
 use uucore::benchmark::{create_test_file, get_bench_args};
@@ -21,7 +22,7 @@ fn fold_many_lines(bencher: Bencher, num_lines: usize) {
     let file_path = create_test_file(data.as_bytes(), temp_dir.path());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&file_path]).into_iter())
+        .with_inputs(|| get_bench_args([&file_path]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -38,7 +39,9 @@ fn fold_custom_width(bencher: Bencher, num_lines: usize) {
     let file_path = create_test_file(data.as_bytes(), temp_dir.path());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-w", &"40", &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([OsStr::new("-w"), OsStr::new("40"), file_path.as_os_str()]).into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 

@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
+use std::ffi::OsStr;
 use std::fmt::Write;
 use tempfile::TempDir;
 use uu_expand::uumain;
@@ -20,7 +21,7 @@ fn expand_many_lines(bencher: Bencher, num_lines: usize) {
     let file_path = create_test_file(data.as_ref(), temp_dir.path());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&file_path]).into_iter())
+        .with_inputs(|| get_bench_args([&file_path]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -35,7 +36,9 @@ fn expand_custom_tabstops(bencher: Bencher, num_lines: usize) {
     let file_path = create_test_file(data.as_ref(), temp_dir.path());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"--tabs=4,8,12", &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([OsStr::new("--tabs=4,8,12"), file_path.as_os_str()]).into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 

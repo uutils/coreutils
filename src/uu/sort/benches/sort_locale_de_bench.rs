@@ -9,6 +9,7 @@
 //! the locale is cached on first access via `OnceLock` and cannot be changed afterwards.
 
 use divan::{Bencher, black_box};
+use std::ffi::OsStr;
 use tempfile::NamedTempFile;
 use uu_sort::uumain;
 use uucore::benchmark::{get_bench_args, setup_test_file, text_data};
@@ -22,7 +23,14 @@ fn sort_german_de_locale(bencher: Bencher) {
     let output_path = output_file.path();
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-o", &output_path, &file_path]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([
+                OsStr::new("-o"),
+                output_path.as_os_str(),
+                file_path.as_os_str(),
+            ])
+            .into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 

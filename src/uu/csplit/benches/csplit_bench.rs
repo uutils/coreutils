@@ -4,9 +4,10 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
+use std::ffi::OsStr;
 use tempfile::TempDir;
 use uu_csplit::uumain;
-use uucore::benchmark::{run_util_function, setup_test_file, text_data};
+use uucore::benchmark::{get_bench_args, setup_test_file, text_data};
 
 /// Benchmark splitting by line number
 #[divan::bench]
@@ -18,21 +19,20 @@ fn csplit_line_number(bencher: Bencher) {
         .with_inputs(|| {
             let output_dir = TempDir::new().unwrap();
             let prefix = output_dir.path().join("xx");
-            (output_dir, prefix.to_str().unwrap().to_string())
+            let args = get_bench_args([
+                OsStr::new("-f"),
+                prefix.as_os_str(),
+                file_path.as_os_str(),
+                OsStr::new("10000"),
+                OsStr::new("50000"),
+                OsStr::new("90000"),
+            ])
+            .into_iter();
+            (output_dir, args)
         })
-        .bench_values(|(output_dir, prefix)| {
-            black_box(run_util_function(
-                uumain,
-                &[
-                    "-f",
-                    &prefix,
-                    file_path.to_str().unwrap(),
-                    "10000",
-                    "50000",
-                    "90000",
-                ],
-            ));
-            drop(output_dir);
+        .bench_values(|(output_dir, args)| {
+            black_box(uumain(args));
+            output_dir
         });
 }
 
@@ -54,20 +54,19 @@ fn csplit_regex_pattern(bencher: Bencher) {
         .with_inputs(|| {
             let output_dir = TempDir::new().unwrap();
             let prefix = output_dir.path().join("xx");
-            (output_dir, prefix.to_str().unwrap().to_string())
+            let args = get_bench_args([
+                OsStr::new("-f"),
+                prefix.as_os_str(),
+                file_path.as_os_str(),
+                OsStr::new("/^SECTION/"),
+                OsStr::new("{*}"),
+            ])
+            .into_iter();
+            (output_dir, args)
         })
-        .bench_values(|(output_dir, prefix)| {
-            black_box(run_util_function(
-                uumain,
-                &[
-                    "-f",
-                    &prefix,
-                    file_path.to_str().unwrap(),
-                    "/^SECTION/",
-                    "{*}",
-                ],
-            ));
-            drop(output_dir);
+        .bench_values(|(output_dir, args)| {
+            black_box(uumain(args));
+            output_dir
         });
 }
 

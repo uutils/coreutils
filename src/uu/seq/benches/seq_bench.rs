@@ -11,7 +11,7 @@ use uucore::benchmark::get_bench_args;
 #[divan::bench]
 fn seq_integers(bencher: Bencher) {
     bencher
-        .with_inputs(|| get_bench_args(&[&"1", &"1000000"]).into_iter())
+        .with_inputs(|| get_bench_args(["1", "1000000"]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -19,7 +19,7 @@ fn seq_integers(bencher: Bencher) {
 #[divan::bench]
 fn seq_large_integers(bencher: Bencher) {
     bencher
-        .with_inputs(|| get_bench_args(&[&"4e10003", &"4e10003"]).into_iter())
+        .with_inputs(|| get_bench_args(["4e10003", "4e10003"]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -27,7 +27,7 @@ fn seq_large_integers(bencher: Bencher) {
 #[divan::bench]
 fn seq_custom_separator(bencher: Bencher) {
     bencher
-        .with_inputs(|| get_bench_args(&[&"-s", &",", &"1", &"1000000"]).into_iter())
+        .with_inputs(|| get_bench_args(["-s", ",", "1", "1000000"]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -35,7 +35,7 @@ fn seq_custom_separator(bencher: Bencher) {
 #[divan::bench]
 fn seq_with_step(bencher: Bencher) {
     bencher
-        .with_inputs(|| get_bench_args(&[&"1", &"2", &"1000000"]).into_iter())
+        .with_inputs(|| get_bench_args(["1", "2", "1000000"]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -43,7 +43,7 @@ fn seq_with_step(bencher: Bencher) {
 #[divan::bench]
 fn seq_formatted(bencher: Bencher) {
     bencher
-        .with_inputs(|| get_bench_args(&[&"-f", &"%.3f", &"1", &"0.1", &"10000"]).into_iter())
+        .with_inputs(|| get_bench_args(["-f", "%.3f", "1", "0.1", "10000"]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 

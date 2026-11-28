@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
+use std::ffi::OsStr;
 use uu_base64::uumain;
 use uucore::benchmark::{create_test_file, get_bench_args, text_data};
 
@@ -25,7 +26,7 @@ fn b64_encode_synthetic(bencher: Bencher) {
     let file_path = create_tmp_file(5_000);
 
     bencher
-        .with_inputs(|| get_bench_args(&[&file_path]).into_iter())
+        .with_inputs(|| get_bench_args([&file_path]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -39,7 +40,7 @@ fn b64_decode_synthetic(bencher: Bencher) {
     uumain([file_path.into(), redirect_in(&in_file)].into_iter());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-d", &in_file]).into_iter())
+        .with_inputs(|| get_bench_args([OsStr::new("-d"), in_file.as_os_str()]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -54,7 +55,9 @@ fn b64_decode_ignore_garbage_synthetic(bencher: Bencher) {
     uumain([file_path.into(), redirect_in(&in_file)].into_iter());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-d", &"-i", &in_file]).into_iter())
+        .with_inputs(|| {
+            get_bench_args([OsStr::new("-d"), OsStr::new("-i"), in_file.as_os_str()]).into_iter()
+        })
         .bench_values(|args| black_box(uumain(args)));
 }
 

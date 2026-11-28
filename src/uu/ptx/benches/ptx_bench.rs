@@ -6,19 +6,17 @@
 //! Benchmarks for `ptx`.
 
 use divan::{Bencher, black_box};
+use std::ffi::OsStr;
 use uu_ptx::uumain;
-use uucore::benchmark::{run_util_function, setup_test_file, text_data};
+use uucore::benchmark::{get_bench_args, setup_test_file, text_data};
 
 fn bench_ptx(bencher: Bencher, data: &[u8], args: &[&str]) {
     let file_path = setup_test_file(data);
-    let file_path_str = file_path.to_str().unwrap();
+    let full_args = get_bench_args(args.iter().map(OsStr::new).chain([file_path.as_os_str()]));
 
-    let mut full_args: Vec<&str> = args.to_vec();
-    full_args.push(file_path_str);
-
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &full_args));
-    });
+    bencher
+        .with_inputs(|| full_args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Build a fixed ~1 MiB input spread across `num_lines` lines.
