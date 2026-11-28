@@ -20,9 +20,10 @@ doctest = false
 bytecount = { workspace = true, features = ["runtime-dispatch-simd"] }
 clap = { workspace = true }
 fluent = { workspace = true }
+libc = { workspace = true }
 memchr = { workspace = true }
 nom = { workspace = true }
-uucore = { workspace = true, features = ["fs", "signals"] }
+uucore = { workspace = true, features = ["fs", "i18n-charmap", "signals"] }
 
 [dev-dependencies]
 divan = { workspace = true }

@@ -1492,6 +1492,151 @@ fn test_stdin_is_socket() {
         .stdout_is(";;");
 }
 
+// Returns (`LC_ALL`, optional `LOCPATH`): on Linux the locale is compiled
+// with localedef into the scenario tmp dir, while FreeBSD and macOS use the
+// installed system locale, as their localedef needs locale sources that are
+// not installed there.
+#[cfg(all(unix, target_os = "linux"))]
+fn locale_test_env(
+    at: &uutests::util::AtPath,
+    charmap: &str,
+    glibc_name: &str,
+    _system_name: &str,
+) -> (String, Option<String>) {
+    let compiled = std::process::Command::new("localedef")
+        .args(["-i", "en_US", "-f", charmap])
+        .arg(at.plus(glibc_name))
+        .output()
+        .is_ok_and(|output| output.status.success());
+    assert!(
+        compiled,
+        "localedef failed to compile the {glibc_name} test locale"
+    );
+    (glibc_name.to_string(), Some(at.as_string()))
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn locale_test_env(
+    _at: &uutests::util::AtPath,
+    _charmap: &str,
+    _glibc_name: &str,
+    system_name: &str,
+) -> (String, Option<String>) {
+    (system_name.to_string(), None)
+}
+
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+// macOS, Android and OpenBSD ship no single-byte locale, so this test has
+// nothing to run against there.
+#[cfg(not(any(target_os = "macos", target_os = "android", target_os = "openbsd")))]
+#[test]
+fn test_classes_follow_single_byte_locale() {
+    let (at, _ucmd) = at_and_ucmd!();
+    let (locale, locpath) =
+        locale_test_env(&at, "ISO-8859-1", "en_US.ISO-8859-1", "en_US.ISO8859-1");
+    let mut cmd = new_ucmd!();
+    if let Some(locpath) = locpath {
+        cmd.env("LOCPATH", locpath);
+    }
+    // 0xe9 is alpha in Latin-1 but not in the C locale, so a failed locale
+    // load fails this test instead of passing silently. FreeBSD's Latin-1
+    // [:cntrl:] holds no C1 controls, so 0x9b cannot be used here.
+    cmd.env("LC_ALL", locale)
+        .args(&["-d", "[:alpha:]"])
+        .pipe_in([b'h', b'e', b'l', b'l', b'o', 0xe9, b'3', b'1', b'm'])
+        .succeeds()
+        .stdout_is_bytes(b"31");
+}
+
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+// macOS, Android and OpenBSD ship no single-byte locale, so this test has
+// nothing to run against there.
+#[cfg(not(any(target_os = "macos", target_os = "android", target_os = "openbsd")))]
+#[test]
+fn test_case_folding_follows_single_byte_locale() {
+    let (at, _ucmd) = at_and_ucmd!();
+    let (locale, locpath) =
+        locale_test_env(&at, "ISO-8859-1", "en_US.ISO-8859-1", "en_US.ISO8859-1");
+    // In Latin-1, 0xE9 folds to 0xC9 and 0xC7 folds to 0xE7.
+    let mut cmd = new_ucmd!();
+    if let Some(locpath) = &locpath {
+        cmd.env("LOCPATH", locpath);
+    }
+    cmd.env("LC_ALL", &locale)
+        .args(&["[:lower:]", "[:upper:]"])
+        .pipe_in([b'a', 0xe9, b'b'])
+        .succeeds()
+        .stdout_is_bytes([b'A', 0xc9, b'B']);
+    let mut cmd = new_ucmd!();
+    if let Some(locpath) = &locpath {
+        cmd.env("LOCPATH", locpath);
+    }
+    cmd.env("LC_ALL", &locale)
+        .args(&["[:upper:]", "[:lower:]"])
+        .pipe_in([b'A', 0xc7, b'B'])
+        .succeeds()
+        .stdout_is_bytes([b'a', 0xe7, b'b']);
+    // Paired case classes must align by case, not by position: in Latin-1
+    // [:lower:] has more members than [:upper:].
+    let mut cmd = new_ucmd!();
+    if let Some(locpath) = &locpath {
+        cmd.env("LOCPATH", locpath);
+    }
+    cmd.env("LC_ALL", &locale)
+        .args(&["ab[:lower:]", "0-1[:upper:]"])
+        .pipe_in(b"abc.xyz")
+        .succeeds()
+        .stdout_is("ABC.XYZ");
+    let mut cmd = new_ucmd!();
+    if let Some(locpath) = &locpath {
+        cmd.env("LOCPATH", locpath);
+    }
+    cmd.env("LC_ALL", &locale)
+        .args(&["[:upper:]- ", "[:lower:]_"])
+        .pipe_in(b"ABC- XYZ")
+        .succeeds()
+        .stdout_is("abc__xyz");
+    let mut cmd = new_ucmd!();
+    if let Some(locpath) = &locpath {
+        cmd.env("LOCPATH", locpath);
+    }
+    cmd.env("LC_ALL", &locale)
+        .args(&["-t", "[:lower:]a", "[:upper:]0"])
+        .pipe_in(b"a")
+        .succeeds()
+        .stdout_is("0");
+}
+
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+#[test]
+fn test_classes_ignore_high_bytes_in_utf8_locale() {
+    let (at, _ucmd) = at_and_ucmd!();
+    let (locale, locpath) = locale_test_env(&at, "UTF-8", "en_US.UTF-8", "en_US.UTF-8");
+    let mut cmd = new_ucmd!();
+    if let Some(locpath) = &locpath {
+        cmd.env("LOCPATH", locpath);
+    }
+    // In UTF-8, high bytes are never class members, so -d [:alpha:] must not split é.
+    cmd.env("LC_ALL", &locale)
+        .args(&["-d", "[:alpha:]"])
+        .pipe_in([b'a', 0xc3, 0xa9, b'b'])
+        .succeeds()
+        .stdout_is_bytes([0xc3, 0xa9]);
+    // In UTF-8, case conversion only touches ASCII, so é is left alone.
+    let mut cmd = new_ucmd!();
+    if let Some(locpath) = &locpath {
+        cmd.env("LOCPATH", locpath);
+    }
+    cmd.env("LC_ALL", &locale)
+        .args(&["[:lower:]", "[:upper:]"])
+        .pipe_in([b'a', 0xc3, 0xa9, b'b'])
+        .succeeds()
+        .stdout_is_bytes([b'A', 0xc3, 0xa9, b'B']);
+}
+
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     use super::*;
