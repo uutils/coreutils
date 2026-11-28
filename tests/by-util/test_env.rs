@@ -2275,6 +2275,52 @@ fn test_shebang_error() {
 }
 
 #[test]
+fn test_shebang_hint_only_for_whitespace() {
+    let hint = "use -[v]S to pass options in shebang lines";
+
+    // A whole shebang line passed as the program name: any whitespace counts.
+    new_ucmd!()
+        .arg("cat -n")
+        .fails_with_code(127)
+        .stderr_contains(hint);
+    new_ucmd!()
+        .arg("cat\t-n")
+        .fails_with_code(127)
+        .stderr_contains(hint);
+
+    // A whole shebang line passed as an option: the rejected short option is
+    // the whitespace character after `-v`.
+    new_ucmd!()
+        .arg("-v -S cat -n")
+        .fails_with_code(125)
+        .stderr_contains(hint);
+    new_ucmd!()
+        .arg("-v\t-S cat -n")
+        .fails_with_code(125)
+        .stderr_contains(hint);
+
+    // Plain missing programs and bad options don't get the hint, and neither
+    // does an unknown option that merely contains whitespace (checked against
+    // GNU env 9.7: `-x y` is rejected at `x`, `--foo bar` is a long option).
+    new_ucmd!()
+        .arg("nosuchcmd")
+        .fails_with_code(127)
+        .stderr_is("env: 'nosuchcmd': No such file or directory\n");
+    new_ucmd!()
+        .arg("--bogus")
+        .fails_with_code(125)
+        .stderr_does_not_contain(hint);
+    new_ucmd!()
+        .args(&["-v", "-x y"])
+        .fails_with_code(125)
+        .stderr_does_not_contain(hint);
+    new_ucmd!()
+        .arg("--foo bar")
+        .fails_with_code(125)
+        .stderr_does_not_contain(hint);
+}
+
+#[test]
 #[cfg(not(windows))]
 fn test_reject_shell_style_variable_expansions() {
     for split in [
