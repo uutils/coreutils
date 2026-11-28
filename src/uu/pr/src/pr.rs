@@ -82,6 +82,7 @@ struct OutputOptions {
     form_feed_used: bool,
     col_sep_for_printing: String,
     line_width: Option<usize>,
+    header_width: usize,
     expand_tabs: Option<ExpandTabsOptions>,
 }
 
@@ -1023,15 +1024,17 @@ fn build_options(
     )
     .unwrap_or(Ok(default_column_width))?;
 
+    let given_page_width = parse_positive_option(
+        matches,
+        options::PAGE_WIDTH,
+        &translate!("pr-error-invalid-page-width"),
+    )
+    .transpose()?;
+    // -J leaves the lines alone, so the page width only sizes the header.
     let page_width = if matches.get_flag(options::JOIN_LINES) {
         None
     } else {
-        parse_positive_option(
-            matches,
-            options::PAGE_WIDTH,
-            &translate!("pr-error-invalid-page-width"),
-        )
-        .transpose()?
+        given_page_width
     };
 
     // --columns has more priority than -column
@@ -1126,6 +1129,7 @@ fn build_options(
         form_feed_used,
         col_sep_for_printing,
         line_width,
+        header_width: given_page_width.unwrap_or(column_width),
         expand_tabs,
     })
 }
@@ -1780,8 +1784,7 @@ fn header_content(options: &OutputOptions, page: usize) -> Option<Vec<u8>> {
     let filename = &options.header;
     let page_part = format!("{} {page}", translate!("pr-page"));
 
-    // Use the line width if available, otherwise use default of 72
-    let total_width = options.line_width.unwrap_or(DEFAULT_COLUMN_WIDTH);
+    let total_width = options.header_width;
 
     let date_len = date_part.chars().count();
     let filename_len = filename.to_string_lossy().chars().count();
