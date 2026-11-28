@@ -393,21 +393,19 @@ fn is_same_entry(src: &Path, dst: &Path) -> bool {
     }
 }
 
+fn failed_to_access(source: &Path, err: io::Error) -> LnError {
+    LnError::IoContext(
+        UIoError::from(err),
+        translate!("ln-failed-to-access", "file" => source.quote()),
+    )
+}
+
 /// Validate and resolve a hard-link source before modifying the destination.
 fn resolve_hard_link_source(source: &Path, logical: bool) -> LnResult<PathBuf> {
-    let metadata = fs::symlink_metadata(source).map_err(|e| {
-        LnError::IoContext(
-            UIoError::from(e),
-            translate!("ln-failed-to-access", "file" => source.quote()),
-        )
-    })?;
+    let access_err = |e| failed_to_access(source, e);
+    let metadata = fs::symlink_metadata(source).map_err(access_err)?;
     if logical && metadata.file_type().is_symlink() {
-        let resolved = fs::canonicalize(source).map_err(|e| {
-            LnError::IoContext(
-                UIoError::from(e),
-                translate!("ln-failed-to-access", "file" => source.quote()),
-            )
-        })?;
+        let resolved = fs::canonicalize(source).map_err(access_err)?;
         if resolved.is_dir() {
             return Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf()));
         }
@@ -510,27 +508,20 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
                     "dest" => dst.quote()
                 ),
             )
+        } else if hard_link_src.as_ref().is_some_and(|p| p.is_dir()) {
+            LnError::FailedToCreateHardLinkDir(source.to_path_buf())
+        } else if let Err(stat_err) = fs::symlink_metadata(link_target) {
+            // The source itself can't be accessed: name it, not the link
+            failed_to_access(&source, stat_err)
         } else {
-            match fs::symlink_metadata(link_target) {
-                Ok(meta) if meta.is_dir() => {
-                    LnError::FailedToCreateHardLinkDir(source.to_path_buf())
-                }
-                Err(stat_err) => {
-                    // The source itself can't be accessed: name it, not the link
-                    LnError::IoContext(
-                        UIoError::from(stat_err),
-                        translate!("ln-failed-to-access", "file" => source.quote()),
-                    )
-                }
-                Ok(_) => LnError::IoContext(
-                    UIoError::from(e),
-                    translate!(
-                        "ln-failed-to-create-hard-link",
-                        "source" => source.quote(),
-                        "dest" => dst.quote()
-                    ),
+            LnError::IoContext(
+                UIoError::from(e),
+                translate!(
+                    "ln-failed-to-create-hard-link",
+                    "source" => source.quote(),
+                    "dest" => dst.quote()
                 ),
-            }
+            )
         }
     });
 

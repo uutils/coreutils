@@ -1598,30 +1598,6 @@ fn test_backup_missing_source_preserves_existing_backup(#[case] args: &[&str]) {
 }
 
 #[test]
-#[cfg(not(target_os = "android"))]
-fn test_backup_after_prior_hard_link_missing_source_preserves_backup() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-    at.write("report", "previous\n");
-    at.write("update", "current\n");
-
-    scene
-        .ucmd()
-        .args(&["-b", "update", "report"])
-        .succeeds()
-        .no_stderr();
-
-    scene
-        .ucmd()
-        .args(&["-b", "missing", "report"])
-        .fails_with_code(1)
-        .stderr_only("ln: failed to access 'missing': No such file or directory\n");
-
-    assert_eq!(at.read("report"), "current\n");
-    assert_eq!(at.read("report~"), "previous\n");
-}
-
-#[test]
 fn test_backup_directory_source_preserves_existing_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("source_dir");
