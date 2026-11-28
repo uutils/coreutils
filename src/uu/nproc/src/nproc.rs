@@ -13,6 +13,12 @@ use uucore::{
     format_usage, translate,
 };
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[path = "platform/linux.rs"]
+mod linux;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use linux::available_parallelism;
+
 static OPT_ALL: &str = "all";
 static OPT_IGNORE: &str = "ignore";
 
@@ -99,36 +105,7 @@ fn num_cpus_all() -> usize {
     available_parallelism()
 }
 
-// We cannot use std::thread::available_parallelism to mimic GNU's rounding...
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn cgroups2_quota() -> Option<usize> {
-    use std::fs::read_to_string;
-    let cgroups = read_to_string("/proc/self/cgroup").ok()?;
-    let path = cgroups.lines().next()?.split(':').nth(2)?;
-    let pair = read_to_string(format!("/sys/fs/cgroup{path}/cpu.max")).ok()?;
-    let mut pair = pair.split_whitespace();
-    // map the string "max" to None as we unwrap_or(usize::MAX) later
-    let quota = pair.next()?.parse::<usize>().ok()?;
-    // kernel does not provide 0 period. But it seems GNU cares about it
-    let period = pair.next()?.parse::<usize>().ok().filter(|&p| p > 0)?;
-    // mimic GNU's rounding
-    Some(quota.saturating_add(period / 2) / period)
-}
-
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn available_parallelism() -> usize {
-    // return all online cores if sched_getaffinity syscall failed as same as GNU
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    let affinity = rustix::thread::sched_getaffinity(None).map_or_else(
-        |_| unsafe { libc::sysconf(libc::_SC_NPROCESSORS_ONLN) } as usize,
-        |s| s.count() as usize,
-    );
-    // ignore quota under some schedulers
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    match unsafe { libc::sched_getscheduler(0) } {
-        libc::SCHED_FIFO | libc::SCHED_RR | libc::SCHED_DEADLINE => affinity,
-        // GNU has no quota if /proc is masked
-        _ => affinity.min(cgroups2_quota().unwrap_or(usize::MAX)),
-    }
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get)
 }
