@@ -8,8 +8,9 @@
 use std::{
     collections::HashMap,
     ffi::OsString,
-    fs::File,
+    fs::{self, File},
     io::{self, Read, Seek, Write},
+    path::Path,
     process,
 };
 
@@ -262,7 +263,7 @@ fn main() -> io::Result<()> {
     let utils = util_map::<Box<dyn Iterator<Item = OsString>>>();
     // Initialize localization for uucore common strings (used by tldr example attribution)
     let _ = uucore::locale::setup_localization("uudoc");
-    match std::fs::create_dir("docs/src/utils/") {
+    match fs::create_dir("docs/src/utils/") {
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(()),
         x => x,
     }?;
@@ -366,6 +367,11 @@ fn main() -> io::Result<()> {
         }
     }
 
+    // Keys of every utility, so that keys shared across crates (e.g. sha224sum
+    // using ck-common-help-* from checksum_common, or base64 using
+    // base-common-help-* from base32) resolve too.
+    let shared_fluent = load_all_ftl("src/uu");
+
     println!("Writing to utils");
     for (&name, (_, command)) in utils {
         let (utils_name, usage_name, command) = match name {
@@ -376,13 +382,9 @@ fn main() -> io::Result<()> {
         };
         let p = format!("docs/src/utils/{usage_name}.md");
 
-        let fluent = File::open(format!("src/uu/{utils_name}/locales/en-US.ftl"))
-            .and_then(|mut f: File| {
-                let mut s = String::new();
-                f.read_to_string(&mut s)?;
-                Ok(s)
-            })
-            .ok();
+        let fluent = fs::read_to_string(format!("src/uu/{utils_name}/locales/en-US.ftl"))
+            .map(|content| parse_fluent(&content))
+            .unwrap_or_default();
 
         if let Ok(f) = File::create(&p) {
             MDWriter {
@@ -392,6 +394,7 @@ fn main() -> io::Result<()> {
                 tldr_zip: &mut tldr_zip,
                 utils_per_platform: &utils_per_platform,
                 fluent,
+                shared_fluent: &shared_fluent,
                 fluent_key: utils_name.to_string(),
             }
             .markdown()?;
@@ -402,6 +405,61 @@ fn main() -> io::Result<()> {
         writeln!(summary, "* [{usage_name}](utils/{usage_name}.md)")?;
     }
     Ok(())
+}
+
+/// Fluent keys mapped to their text.
+type FluentMap = HashMap<String, String>;
+
+/// Parse `.ftl` content into a [`FluentMap`]. Entries that fail to parse are
+/// skipped, and the first definition of a key wins.
+fn parse_fluent(content: &str) -> FluentMap {
+    let resource = parser::parse(content).unwrap_or_else(|(resource, _)| resource);
+    let mut map = FluentMap::new();
+    for entry in resource.body {
+        if let Entry::Message(Message {
+            id,
+            value: Some(Pattern { elements }),
+            ..
+        }) = entry
+        {
+            // Simple text extraction: variables are only known at runtime, so
+            // keep them as `{ $name }` rather than leaving a gap.
+            let mut result = String::new();
+            for element in elements {
+                match element {
+                    TextElement { value }
+                    | Placeable {
+                        expression: Expression::Inline(InlineExpression::StringLiteral { value }),
+                    } => result.push_str(value),
+                    Placeable {
+                        expression: Expression::Inline(InlineExpression::VariableReference { id }),
+                    } => result.extend(["{ $", id.name, " }"]),
+                    Placeable { .. } => {}
+                }
+            }
+            map.entry(id.name.to_string()).or_insert(result);
+        }
+    }
+    map
+}
+
+/// Parse the `en-US.ftl` files of every utility under `uu_dir`, in sorted
+/// directory order so that a key defined in several files always resolves
+/// to the same text.
+fn load_all_ftl(uu_dir: &str) -> FluentMap {
+    let mut dirs: Vec<_> = fs::read_dir(Path::new(uu_dir))
+        .map(|entries| entries.flatten().map(|entry| entry.path()).collect())
+        .unwrap_or_default();
+    dirs.sort();
+    let mut map = FluentMap::new();
+    for dir in dirs {
+        if let Ok(content) = fs::read_to_string(dir.join("locales/en-US.ftl")) {
+            for (key, value) in parse_fluent(&content) {
+                map.entry(key).or_insert(value);
+            }
+        }
+    }
+    map
 }
 
 fn fix_usage(name: &str, usage: String) -> String {
@@ -431,7 +489,10 @@ struct MDWriter<'a, 'b> {
     name: &'a str,
     tldr_zip: &'b mut Option<ZipArchive<File>>,
     utils_per_platform: &'b HashMap<&'b str, Vec<String>>,
-    fluent: Option<String>,
+    /// Keys of this utility's own `.ftl` file.
+    fluent: FluentMap,
+    /// Keys of every utility, used when the key is not in `fluent`.
+    shared_fluent: &'b FluentMap,
     fluent_key: String,
 }
 
@@ -448,37 +509,12 @@ impl MDWriter<'_, '_> {
         self.examples()
     }
 
-    /// Extract value for a Fluent key from the .ftl content
+    /// Look up a Fluent key, in the utility's own file first.
     fn extract_fluent_value(&self, key: &str) -> Option<String> {
-        let content = self.fluent.as_ref()?;
-        let resource = parser::parse(content.clone()).ok()?;
-
-        for entry in resource.body {
-            if let Entry::Message(Message {
-                id,
-                value: Some(Pattern { elements }),
-                ..
-            }) = entry
-                && id.name == key
-            {
-                // Simple text extraction - just concatenate text elements
-                let mut result = String::new();
-                for element in elements {
-                    if let TextElement { ref value } = element {
-                        result.push_str(value);
-                    }
-                    if let Placeable {
-                        expression:
-                            Expression::Inline(InlineExpression::StringLiteral { ref value }),
-                    } = element
-                    {
-                        result.push_str(value);
-                    }
-                }
-                return Some(result);
-            }
-        }
-        None
+        self.fluent
+            .get(key)
+            .or_else(|| self.shared_fluent.get(key))
+            .cloned()
     }
 
     /// # Errors
@@ -621,12 +657,9 @@ impl MDWriter<'_, '_> {
             }
             writeln!(self.w, "</dt>")?;
             let help_text = arg.get_help().unwrap_or_default().to_string();
-            // Try to resolve Fluent key if it looks like one, otherwise use as-is
-            let resolved_help = if help_text.starts_with(&format!("{}-help-", self.fluent_key)) {
-                self.extract_fluent_value(&help_text).unwrap_or(help_text)
-            } else {
-                help_text
-            };
+            // Resolve the help text as a Fluent key, or use it as-is. Shared keys
+            // (e.g. "base-common-help-*") lack the utility prefix.
+            let resolved_help = self.extract_fluent_value(&help_text).unwrap_or(help_text);
             writeln!(
                 self.w,
                 "<dd>\n\n{}\n\n</dd>",
@@ -903,5 +936,199 @@ mod tests {
 
         let result = post_process_manpage(input.to_string(), "2024-01-01");
         assert_eq!(result, expected);
+    }
+
+    /// Create an `MDWriter` with the given own and shared FTL content.
+    fn make_test_writer(
+        own_ftl: &str,
+        shared_ftl: &str,
+        fluent_key: &str,
+    ) -> MDWriter<'static, 'static> {
+        // Leak the borrowed fields to get 'static references (fine in tests)
+        let platforms: &'static HashMap<&'static str, Vec<String>> =
+            Box::leak(Box::new(HashMap::new()));
+        let tldr_zip: &'static mut Option<ZipArchive<File>> = Box::leak(Box::new(None));
+        let shared_fluent: &'static FluentMap = Box::leak(Box::new(parse_fluent(shared_ftl)));
+        MDWriter {
+            w: Box::new(Vec::new()),
+            command: Command::new("test"),
+            name: "test",
+            tldr_zip,
+            utils_per_platform: platforms,
+            fluent: parse_fluent(own_ftl),
+            shared_fluent,
+            fluent_key: fluent_key.to_string(),
+        }
+    }
+
+    #[test]
+    fn test_extract_fluent_value_resolves_utility_specific_keys() {
+        let ftl = "base32-about = encode/decode data and print to standard output\n\
+                    base32-usage = base32 [OPTION]... [FILE]\n";
+        let writer = make_test_writer(ftl, "", "base32");
+
+        assert_eq!(
+            writer.extract_fluent_value("base32-about"),
+            Some("encode/decode data and print to standard output".to_string())
+        );
+        assert_eq!(
+            writer.extract_fluent_value("base32-usage"),
+            Some("base32 [OPTION]... [FILE]".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_fluent_value_returns_none_for_missing_keys() {
+        let writer = make_test_writer("base32-about = encode/decode data\n", "", "base32");
+        assert_eq!(writer.extract_fluent_value("nonexistent-key"), None);
+
+        let writer = make_test_writer("", "", "test");
+        assert_eq!(writer.extract_fluent_value("any-key"), None);
+    }
+
+    #[test]
+    fn test_extract_fluent_value_own_key_wins() {
+        let writer = make_test_writer(
+            "shared-key = from the utility\n",
+            "shared-key = from another crate\n",
+            "test",
+        );
+
+        assert_eq!(
+            writer.extract_fluent_value("shared-key"),
+            Some("from the utility".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_fluent_skips_malformed_entries() {
+        let map = parse_fluent(
+            "base32-about = encode/decode data\n\
+             broken-key has no equals sign\n\
+             ck-common-help-check = read checksums from the FILEs and check them\n",
+        );
+
+        assert_eq!(map.get("base32-about").unwrap(), "encode/decode data");
+        assert_eq!(
+            map.get("ck-common-help-check").unwrap(),
+            "read checksums from the FILEs and check them"
+        );
+    }
+
+    #[test]
+    fn test_parse_fluent_keeps_variables() {
+        let map = parse_fluent("wrap = wrap after COLS (default {$default}, 0 to disable)\n");
+        assert_eq!(
+            map.get("wrap").unwrap(),
+            "wrap after COLS (default { $default }, 0 to disable)"
+        );
+    }
+
+    #[test]
+    fn test_parse_fluent_first_definition_wins() {
+        let map = parse_fluent("shared-key = first\nshared-key = second\n");
+        assert_eq!(map.get("shared-key").unwrap(), "first");
+    }
+
+    /// A shared buffer that implements Write for use in tests.
+    #[derive(Clone)]
+    struct SharedBuf(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl SharedBuf {
+        fn new() -> Self {
+            Self(std::sync::Arc::new(std::sync::Mutex::new(Vec::new())))
+        }
+        fn contents(&self) -> String {
+            String::from_utf8_lossy(&self.0.lock().unwrap()).into_owned()
+        }
+    }
+
+    impl Write for SharedBuf {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.0.lock().unwrap().write(buf)
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_options_resolves_cross_crate_fluent_keys() {
+        // Like sha224sum: its own FTL only has sha224sum-about/usage, while
+        // its options use ck-common-help-* keys from checksum_common's FTL.
+        let own_ftl = "\
+sha224sum-about = Print or check the SHA224 checksums
+sha224sum-usage = sha224sum [OPTIONS] [FILE]...
+";
+        let shared_ftl = "\
+ck-common-help-check = read checksums from the FILEs and check them
+ck-common-help-warn = warn about improperly formatted checksum lines
+ck-common-help-status = don't output anything, status code shows success
+";
+        let buf = SharedBuf::new();
+        let mut writer = make_test_writer(own_ftl, shared_ftl, "sha224sum");
+        writer.w = Box::new(buf.clone());
+        writer.command = Command::new("sha224sum")
+            .arg(
+                Arg::new("check")
+                    .short('c')
+                    .long("check")
+                    .help("ck-common-help-check")
+                    .action(clap::ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new("warn")
+                    .short('w')
+                    .long("warn")
+                    .help("ck-common-help-warn")
+                    .action(clap::ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new("status")
+                    .long("status")
+                    .help("ck-common-help-status")
+                    .action(clap::ArgAction::SetTrue),
+            );
+
+        writer.options().unwrap();
+        let html = buf.contents();
+
+        for text in [
+            "read checksums from the FILEs and check them",
+            "warn about improperly formatted checksum lines",
+            "don't output anything, status code shows success",
+        ] {
+            assert!(html.contains(text), "Expected {text:?}, got:\n{html}");
+        }
+        assert!(
+            !html.contains("ck-common-help-"),
+            "Raw Fluent keys should not appear, got:\n{html}"
+        );
+    }
+
+    #[test]
+    fn test_load_all_ftl_combines_files_in_sorted_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let tmp = dir.path();
+
+        for (util, ftl) in [
+            ("util_b", "key-b = value B\nshared = from B\n"),
+            ("util_a", "key-a = value A\nshared = from A\n"),
+        ] {
+            let locales = tmp.join(util).join("locales");
+            fs::create_dir_all(&locales).unwrap();
+            fs::write(locales.join("en-US.ftl"), ftl).unwrap();
+        }
+
+        let map = load_all_ftl(tmp.to_str().unwrap());
+
+        assert_eq!(map.get("key-a").unwrap(), "value A");
+        assert_eq!(map.get("key-b").unwrap(), "value B");
+        assert_eq!(map.get("shared").unwrap(), "from A");
+    }
+
+    #[test]
+    fn test_load_all_ftl_handles_missing_dir() {
+        assert!(load_all_ftl("/nonexistent/path").is_empty());
     }
 }
