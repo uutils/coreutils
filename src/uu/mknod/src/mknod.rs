@@ -3,11 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) parsemode makedev sysmacros perror IFBLK IFCHR IFIFO sflag
+// spell-checker:ignore (ToDO) parsemode makedev sysmacros perror mknodat
 
 use clap::{Arg, ArgAction, Command, value_parser};
-use nix::libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t};
-use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod};
+use rustix::fs::{CWD, Dev, Mode, mknodat};
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Write as _};
 
@@ -17,8 +16,7 @@ use uucore::format_usage;
 use uucore::fs::makedev;
 use uucore::{show_warning, translate};
 
-#[allow(clippy::unnecessary_cast)]
-const MODE_RW_UGO: u32 = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+const MODE_RW_UGO: u32 = 0o666;
 
 mod options {
     pub const MODE: &str = "mode";
@@ -29,19 +27,19 @@ mod options {
     pub const CONTEXT: &str = "context";
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 enum FileType {
     Block,
     Character,
     Fifo,
 }
 
-impl FileType {
-    fn as_sflag(&self) -> SFlag {
-        match self {
-            Self::Block => SFlag::S_IFBLK,
-            Self::Character => SFlag::S_IFCHR,
-            Self::Fifo => SFlag::S_IFIFO,
+impl From<FileType> for rustix::fs::FileType {
+    fn from(file_type: FileType) -> Self {
+        match file_type {
+            FileType::Block => Self::BlockDevice,
+            FileType::Character => Self::CharacterDevice,
+            FileType::Fifo => Self::Fifo,
         }
     }
 }
@@ -56,7 +54,7 @@ struct Config {
     /// when false, the exact mode bits will be set
     use_umask: bool,
 
-    dev: dev_t,
+    dev: Dev,
 
     /// Set security context (SELinux/SMACK).
     #[cfg(any(
@@ -70,6 +68,8 @@ struct Config {
 }
 
 fn mknod(file_name: &OsStr, config: Config) -> i32 {
+    let file_type = rustix::fs::FileType::from(config.file_type);
+
     #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
     let selinux_enabled = uucore::selinux::is_selinux_enabled();
     #[cfg(not(all(feature = "selinux", any(target_os = "android", target_os = "linux"))))]
@@ -86,7 +86,7 @@ fn mknod(file_name: &OsStr, config: Config) -> i32 {
     // Label the node at creation, as GNU does; relabelling after leaves a window.
     #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
     let _selinux_guard = if config.set_security_context && selinux_enabled {
-        let mode = config.file_type.as_sflag().bits() | config.mode.bits();
+        let mode = file_type.as_raw_mode() | config.mode.as_raw_mode();
         match uucore::selinux::FsCreateContext::new(
             std::path::Path::new(file_name),
             Some(mode),
@@ -102,15 +102,7 @@ fn mknod(file_name: &OsStr, config: Config) -> i32 {
         None
     };
 
-    let create_node = || {
-        nix_mknod(
-            file_name,
-            config.file_type.as_sflag(),
-            config.mode,
-            config.dev,
-        )
-        .err()
-    };
+    let create_node = || mknodat(CWD, file_name, file_type, config.mode, config.dev).err();
     let mknod_err = if config.use_umask {
         create_node()
     } else {
@@ -179,7 +171,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             mode
         }
     };
-    let mode = Mode::from_bits_truncate(mode_permissions as mode_t);
+    let mode = Mode::from_bits_truncate(mode_permissions as _);
 
     let file_name = matches
         .get_one::<OsString>("name")
@@ -216,7 +208,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let config = Config {
         mode,
-        file_type: file_type.clone(),
+        file_type: *file_type,
         use_umask,
         dev,
         #[cfg(any(

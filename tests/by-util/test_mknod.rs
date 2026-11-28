@@ -5,6 +5,7 @@
 
 // spell-checker:ignore nconfined
 
+use rstest::rstest;
 use std::os::unix::fs::PermissionsExt;
 
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -34,6 +35,26 @@ fn test_mknod_invalid_arg() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_contains("unexpected argument '--foo' found");
+}
+
+#[rstest]
+#[case("f")]
+#[case("d")]
+#[case("l")]
+#[case("s")]
+#[case("?")]
+#[case("regular")]
+#[case("directory")]
+#[case("symlink")]
+#[case("socket")]
+fn test_mknod_invalid_file_type(#[case] file_type: &str) {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .args(&["node", file_type, "1", "2"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("invalid device type");
+    assert!(ts.fixtures.plus("node").symlink_metadata().is_err());
 }
 
 #[test]
