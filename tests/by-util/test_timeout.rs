@@ -145,6 +145,78 @@ fn test_kill_after_preserves_timeout_exit_without_preserve_status() {
         .no_output();
 }
 
+/// When `-k` is set and the first signal ends the child, timeout must not
+/// immediately escalate to KILL; it should exit with 124 without sending KILL.
+#[test]
+fn test_kill_after_with_non_term_signal_does_not_escalate_when_child_exits() {
+    let (ts, bin) = scenario_with_bin();
+    for sig in ["INT", "HUP", "QUIT"] {
+        ts.ucmd()
+            .args(&[
+                "--verbose",
+                "-k",
+                "2",
+                "-s",
+                sig,
+                "0.05",
+                &bin,
+                "sleep",
+                "10",
+            ])
+            .fails_with_code(124)
+            .stderr_does_not_contain("KILL");
+    }
+}
+
+/// During the `-k` grace period after a non-TERM signal, an external TERM
+/// must not escalate to KILL either.
+#[test]
+#[cfg(unix)]
+fn test_kill_after_ignores_external_term_after_non_term_signal() {
+    use nix::sys::signal::{Signal, kill};
+    use nix::unistd::Pid;
+    use std::time::Instant;
+
+    let ts = TestScenario::new(util_name!());
+    let mut cmd = ts
+        .ucmd()
+        .args(&[
+            "-k",
+            "10",
+            "-s",
+            "INT",
+            "0.1",
+            "sh",
+            "-c",
+            "trap ': > interrupted' INT; while [ ! -f finish ]; do sleep .01; done; exit 42",
+        ])
+        .timeout(Duration::from_secs(10))
+        .run_no_wait();
+
+    // The 10s budget is only a hang ceiling for a starved child on loaded CI.
+    let start = Instant::now();
+    while !ts.fixtures.file_exists("interrupted") && start.elapsed() < Duration::from_secs(10) {
+        cmd.delay(10);
+    }
+    assert!(
+        ts.fixtures.file_exists("interrupted"),
+        "child never got INT"
+    );
+    kill(Pid::from_raw(cmd.id() as i32), Signal::SIGTERM).unwrap();
+
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_millis(300) {
+        if !cmd.is_alive() {
+            cmd.wait().unwrap();
+            panic!("external TERM during the grace period escalated to KILL");
+        }
+        cmd.delay(20);
+    }
+
+    ts.fixtures.touch("finish");
+    cmd.wait().unwrap().code_is(124).no_output();
+}
+
 /// A timeout signal of KILL reports 128 + 9 rather than 124, with or
 /// without `--kill-after`; other signals keep reporting 124.
 #[test]

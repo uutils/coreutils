@@ -65,12 +65,16 @@ impl ChildExt for Child {
         result.map_err(|e| io::Error::from_raw_os_error(e as i32))
     }
 
-    fn wait_or_timeout(&mut self, timeout: Duration, ignore_term: bool) -> io::Result<TimeoutRet> {
+    fn wait_or_timeout(
+        &mut self,
+        timeout: Duration,
+        ignored_signals: &[usize],
+    ) -> io::Result<TimeoutRet> {
         // .try_wait() doesn't drop stdin, so we do it manually
         drop(self.stdin.take());
 
         // Waits continuously whenever we receive an external SIGCHLD or
-        // we SIGTERM when we are ignoring them.
+        // one of the signals we are ignoring.
         let start = Instant::now();
         // Zero disables the timer, but signals must still be handled.
         let mut remaining = (!timeout.is_zero()).then_some(timeout);
@@ -83,7 +87,7 @@ impl ChildExt for Child {
                         break Ok(TimeoutRet::Exited(status));
                     } // otherwise waits again
                 }
-                Ok(Some(Signal::SIGTERM)) if ignore_term => {} // waits again
+                Ok(Some(signal)) if ignored_signals.contains(&(signal as usize)) => {} // waits again
                 Ok(Some(signal)) => break Ok(TimeoutRet::Interrupted(signal as usize)),
                 Err(e) => break Err(e),
             }
