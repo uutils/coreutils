@@ -16,6 +16,8 @@ stty-error-invalid-speed = invalid {$arg} '{$speed}'
 stty-error-invalid-argument = invalid argument '{$arg}'
 stty-error-invalid-integer-argument = invalid integer argument: {$value}
 stty-error-invalid-integer-argument-value-too-large = invalid integer argument: {$value}: Value too large for defined data type
+stty-error-unable-to-perform-all = {$device}: unable to perform all requested tcsetattr operations
+
 
 # Output format strings
 stty-output-speed = speed {$speed} baud;
