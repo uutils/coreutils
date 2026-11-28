@@ -142,9 +142,7 @@ impl Uniq {
             )?;
             first_line_printed = true;
         }
-        if (self.delimiters == Delimiters::Append || self.delimiters == Delimiters::Both)
-            && first_line_printed
-        {
+        if matches!(self.delimiters, Delimiters::Append | Delimiters::Both) && first_line_printed {
             writer
                 .write_all(&[line_terminator])
                 .map_err_context(|| translate!("uniq-error-write-line-terminator"))?;
@@ -516,16 +514,15 @@ fn handle_preceding_options(
     // capture if current slice is a preceding long option that requires value and does not use '=' to assign that value
     // following slice should be treaded as value for this option
     // even if it starts with '-' (which would be treated as hyphen prefixed value)
-    if slice.starts_with("--") {
+    if let Some(opt) = slice.strip_prefix("--") {
         use options as O;
-        *preceding_long_opt_req_value = &slice[2..] == O::SKIP_CHARS
-            || &slice[2..] == O::SKIP_FIELDS
-            || &slice[2..] == O::CHECK_CHARS;
+        *preceding_long_opt_req_value =
+            [O::SKIP_CHARS, O::SKIP_FIELDS, O::CHECK_CHARS].contains(&opt);
     }
     // capture if current slice is a preceding short option that requires value and does not have value in the same slice (value separated by whitespace)
     // following slice should be treaded as value for this option
     // even if it starts with '-' (which would be treated as hyphen prefixed value)
-    *preceding_short_opt_req_value = slice == "-s" || slice == "-f" || slice == "-w";
+    *preceding_short_opt_req_value = matches!(slice, "-s" | "-f" | "-w");
     // slice is a value
     // reset preceding option flags
     if !slice.starts_with('-') {
