@@ -399,6 +399,175 @@ impl<'a> Iterator for WhitespaceSplitter<'a, '_> {
     }
 }
 
+/// A whitespace byte, in the C `isspace` sense, which is what separates
+/// numfmt fields when a line cannot be read as UTF-8. UTF-8 continuation
+/// bytes are never ASCII whitespace, so splitting on these bytes cannot cut
+/// a multi-byte character inside a field that is left unconverted.
+fn is_field_separator_byte(b: u8) -> bool {
+    matches!(b, b' ' | b'\t' | b'\n' | b'\x0b' | b'\x0c' | b'\r')
+}
+
+fn split_next_field_bytes(s: &[u8]) -> (&[u8], &[u8], &[u8]) {
+    let prefix_len = s
+        .iter()
+        .position(|b| !is_field_separator_byte(*b))
+        .unwrap_or(s.len());
+    let field_end = s[prefix_len..]
+        .iter()
+        .position(|b| is_field_separator_byte(*b))
+        .map_or(s.len(), |i| prefix_len + i);
+    (&s[..prefix_len], &s[prefix_len..field_end], &s[field_end..])
+}
+
+/// Byte version of [`split_mergeable_suffix`]: when an explicit whitespace
+/// unit separator is set, a suffix like "K" may appear as a separate field.
+fn split_mergeable_suffix_bytes<'a>(
+    s: &'a [u8],
+    options: &NumfmtOptions,
+) -> Option<(&'a [u8], &'a [u8])> {
+    if !options.explicit_unit_separator
+        || options.unit_separator.is_empty()
+        || !options.unit_separator.bytes().all(is_field_separator_byte)
+    {
+        return None;
+    }
+
+    let separator = options.unit_separator.as_bytes();
+    if !s.starts_with(separator) {
+        return None;
+    }
+
+    let (prefix, field, _) = split_next_field_bytes(s);
+    if prefix != separator {
+        return None;
+    }
+
+    let first = *field.first()? as char;
+    RawSuffix::try_from(&first).ok()?;
+    match field.len() {
+        1 => {}
+        2 if field.ends_with(b"i") => {}
+        _ => return None,
+    }
+
+    Some((prefix, field))
+}
+
+struct WhitespaceSplitterBytes<'a, 'b> {
+    s: Option<&'a [u8]>,
+    options: &'b NumfmtOptions,
+}
+
+impl<'a> Iterator for WhitespaceSplitterBytes<'a, '_> {
+    type Item = (&'a [u8], &'a [u8]);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let haystack = self.s?;
+        let (prefix, field, rest) = split_next_field_bytes(haystack);
+
+        if field.is_empty() {
+            self.s = None;
+            return Some((prefix, field));
+        }
+
+        if let Some((suffix_prefix, suffix_field)) =
+            split_mergeable_suffix_bytes(rest, self.options)
+        {
+            let merged_len = prefix.len() + field.len() + suffix_prefix.len() + suffix_field.len();
+            let merged_field = &haystack[prefix.len()..merged_len];
+            self.s = Some(&haystack[merged_len..]).filter(|rest| !rest.is_empty());
+            return Some((prefix, merged_field));
+        }
+
+        self.s = Some(rest).filter(|rest| !rest.is_empty());
+        Some((prefix, field))
+    }
+}
+
+/// Byte version of [`write_separator`]: writes the first blank as a single
+/// space and returns the blanks that follow it.
+fn write_separator_bytes<'a, W: std::io::Write + ?Sized>(
+    writer: &mut W,
+    blanks: &'a [u8],
+) -> std::io::Result<&'a [u8]> {
+    writer.write_all(b" ")?;
+    Ok(&blanks[blanks.first().map_or(0, |_| 1)..])
+}
+
+/// Writes `input` with each selected field converted, and returns whether a
+/// field could not be converted.
+///
+/// Byte version of [`write_formatted_with_whitespace`], used when the line
+/// is not valid UTF-8: fields that are not converted are passed through
+/// byte for byte, and only a selected field has to read as a number.
+pub fn write_formatted_with_whitespace_bytes<W: std::io::Write + ?Sized>(
+    writer: &mut W,
+    input: &[u8],
+    options: &NumfmtOptions,
+    eol: Option<u8>,
+    scratch: &mut FormatScratch,
+) -> std::result::Result<bool, WriteError> {
+    let mut saw_invalid = false;
+    for (n, (prefix, field)) in (1..).zip(WhitespaceSplitterBytes {
+        s: Some(input),
+        options,
+    }) {
+        let field_selected = uucore::ranges::contain(&options.fields, n);
+
+        if field_selected {
+            let empty_prefix = prefix.is_empty();
+
+            // add delimiter before second and subsequent fields
+            let prefix = if n > 1 {
+                write_separator_bytes(writer, prefix)?
+            } else {
+                prefix
+            };
+
+            let implicit_padding = if !empty_prefix && options.padding == 0 {
+                Some((prefix.len() + field.len()) as isize)
+            } else {
+                None
+            };
+
+            // A selected field must be valid UTF-8 to read as a number.
+            let formatted = std::str::from_utf8(field)
+                .map_err(|_| {
+                    translate!("numfmt-error-invalid-number", "input" => escape_line(field).quote())
+                })
+                .and_then(|field_str| {
+                    format_string(field_str, options, implicit_padding, scratch)
+                });
+            match formatted {
+                Ok(()) => writer.write_all(scratch.buf.as_bytes())?,
+                Err(message) => {
+                    // An invalid field is written as it is, like an unselected one.
+                    report_invalid_field(options, message)?;
+                    saw_invalid = true;
+                    writer.write_all(prefix)?;
+                    writer.write_all(field)?;
+                }
+            }
+        } else {
+            // the first blank between fields is written as a space
+            let prefix = if n > 1 {
+                write_separator_bytes(writer, prefix)?
+            } else {
+                prefix
+            };
+            // add unselected field without conversion
+            writer.write_all(prefix)?;
+            writer.write_all(field)?;
+        }
+    }
+
+    if let Some(eol) = eol {
+        writer.write_all(&[eol])?;
+    }
+
+    Ok(saw_invalid)
+}
+
 /// Returns the implicit precision of a number, which is the count of digits after the dot. For
 /// example, 1.23 has an implicit precision of 2.
 fn parse_implicit_precision(s: &str) -> usize {
