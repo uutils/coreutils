@@ -1529,6 +1529,58 @@ fn test_du_one_file_system() {
     du_basics_subdir(result.stdout_str());
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_du_one_file_system_counts_skipped_directory_as_operand() {
+    use std::os::unix::fs::MetadataExt;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("local");
+    let other = unwrap_or_return!(tempfile::tempdir_in("/dev/shm"));
+    if at.plus("local").metadata().unwrap().dev() == other.path().metadata().unwrap().dev() {
+        return; // The test needs two filesystems.
+    }
+    std::fs::write(other.path().join("file"), "data").unwrap();
+    // With -L this crosses the same device boundary as a nested mount.
+    at.symlink_dir(other.path(), "local/mounted");
+
+    ts.ucmd()
+        .args(&["-Lxsc", "--inodes", "local", "local/mounted"])
+        .succeeds()
+        .stdout_only("1\tlocal\n2\tlocal/mounted\n3\ttotal\n");
+}
+
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_du_one_file_system_counts_skipped_mount_without_dereference() {
+    use std::fs;
+    use std::os::unix::fs::MetadataExt;
+
+    let dev = unwrap_or_return!(fs::metadata("/dev"));
+    let shm = unwrap_or_return!(fs::symlink_metadata("/dev/shm"));
+    if !shm.is_dir() || dev.dev() == shm.dev() {
+        return; // The test needs a real mount under /dev.
+    }
+
+    // Count just the two directory inodes, independent of the host's devices
+    // and shared memory contents.
+    let mut cmd = new_ucmd!();
+    cmd.args(&["-xsc", "--inodes", "--exclude=/dev/shm/*"]);
+    for entry in fs::read_dir("/dev").unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_name() != "shm" {
+            cmd.arg("--exclude")
+                .arg(glob::Pattern::escape(&entry.path().to_string_lossy()));
+        }
+    }
+    cmd.args(&["/dev", "/dev/shm"])
+        .succeeds()
+        .stdout_only("1\t/dev\n1\t/dev/shm\n2\ttotal\n");
+}
+
 #[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_du_threshold() {
