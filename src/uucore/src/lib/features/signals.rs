@@ -768,20 +768,45 @@ pub unsafe extern "C" fn capture_startup_state() {
     }
 
     // Capture stdio state
-    unsafe {
-        STDIN_WAS_CLOSED.store(
-            libc::fcntl(libc::STDIN_FILENO, libc::F_GETFD) == -1,
-            Ordering::Relaxed,
-        );
-        STDOUT_WAS_CLOSED.store(
-            libc::fcntl(libc::STDOUT_FILENO, libc::F_GETFD) == -1,
-            Ordering::Relaxed,
-        );
-        STDERR_WAS_CLOSED.store(
-            libc::fcntl(libc::STDERR_FILENO, libc::F_GETFD) == -1,
-            Ordering::Relaxed,
-        );
-    }
+    #[cfg(not(target_vendor = "apple"))]
+    let mut polled_fds = [
+        libc::pollfd {
+            fd: libc::STDIN_FILENO,
+            events: 0,
+            revents: 0,
+        },
+        libc::pollfd {
+            fd: libc::STDOUT_FILENO,
+            events: 0,
+            revents: 0,
+        },
+        libc::pollfd {
+            fd: libc::STDERR_FILENO,
+            events: 0,
+            revents: 0,
+        },
+    ];
+    #[cfg(not(target_vendor = "apple"))]
+    let polled = unsafe { libc::poll(polled_fds.as_mut_ptr(), polled_fds.len() as _, 0) } >= 0;
+    let is_closed = |i: libc::c_int| {
+        // try to avoid 3 `fcntl` calls
+        #[cfg(not(target_vendor = "apple"))]
+        if polled {
+            polled_fds[i as usize].revents & libc::POLLNVAL != 0
+        } else {
+            unsafe { libc::fcntl(polled_fds[i as usize].fd, libc::F_GETFD) == -1 }
+        }
+        #[cfg(target_vendor = "apple")] // does not report POLLNVAL for closed fd
+        unsafe {
+            libc::fcntl(i, libc::F_GETFD) == -1
+        }
+    };
+    let stdin_was_closed = is_closed(libc::STDIN_FILENO);
+    STDIN_WAS_CLOSED.store(stdin_was_closed, Ordering::Relaxed);
+    let stdout_was_closed = is_closed(libc::STDOUT_FILENO);
+    STDOUT_WAS_CLOSED.store(stdout_was_closed, Ordering::Relaxed);
+    let stderr_was_closed = is_closed(libc::STDERR_FILENO);
+    STDERR_WAS_CLOSED.store(stderr_was_closed, Ordering::Relaxed);
 
     // Capture SIGPIPE state
     let mut current = MaybeUninit::<libc::sigaction>::uninit();
