@@ -19,16 +19,16 @@ ignore = [
 unused-allowed-license = "allow"
 version = 2
 allow = [
-  "MIT",
   "Apache-2.0",
-  "ISC",
   "BSD-2-Clause",
   "BSD-3-Clause",
   "BSL-1.0",
   "CC0-1.0",
+  "ISC",
+  "MIT",
+  "MPL-2.0",
   "Unicode-3.0",
   "Zlib",
-  "MPL-2.0",
 ]
 confidence-threshold = 0.8
 

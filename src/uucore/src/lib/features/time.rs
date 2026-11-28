@@ -126,6 +126,7 @@ mod tests {
     // Test that very large (positive or negative) lead to just the timestamp being printed.
     #[test]
     fn test_large_system_time() {
+        #[allow(clippy::duration_suboptimal_units)]
         let time = UNIX_EPOCH + Duration::from_secs(67_768_036_191_763_200);
         let mut out = Vec::new();
         format_system_time(
@@ -137,6 +138,7 @@ mod tests {
         .expect("Formatting error.");
         assert_eq!(String::from_utf8(out).unwrap(), "67768036191763200");
 
+        #[allow(clippy::duration_suboptimal_units)]
         let time = UNIX_EPOCH - Duration::from_secs(67_768_040_922_076_800);
         let mut out = Vec::new();
         format_system_time(
@@ -152,6 +154,7 @@ mod tests {
     // Test that very large (positive or negative) lead to just the timestamp being printed.
     #[test]
     fn test_large_system_time_float() {
+        #[allow(clippy::duration_suboptimal_units)]
         let time =
             UNIX_EPOCH + Duration::from_secs(67_768_036_191_763_000) + Duration::from_nanos(123);
         let mut out = Vec::new();
@@ -167,6 +170,7 @@ mod tests {
             "67768036191763000.000000123"
         );
 
+        #[allow(clippy::duration_suboptimal_units)]
         let time =
             UNIX_EPOCH - Duration::from_secs(67_768_040_922_076_000) + Duration::from_nanos(123);
         let mut out = Vec::new();

@@ -128,10 +128,7 @@ mod tests {
 
     #[test]
     fn test_units() {
-        assert_eq!(
-            from_str("2d", true),
-            Ok(Duration::from_secs(60 * 60 * 24 * 2))
-        );
+        assert_eq!(from_str("2d", true), Ok(Duration::from_hours(24 * 2)));
         assert!(from_str("2d", false).is_err());
     }
 
@@ -247,7 +244,7 @@ mod tests {
             from_str("0x1.1p-1d", true),
             Ok(Duration::from_secs_f64(0.53125f64 * 3600.0 * 24.0))
         );
-        assert_eq!(from_str("0xfh", true), Ok(Duration::from_secs(15 * 3600)));
+        assert_eq!(from_str("0xfh", true), Ok(Duration::from_hours(15)));
     }
 
     #[test]
