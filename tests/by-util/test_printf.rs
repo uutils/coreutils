@@ -1222,6 +1222,17 @@ fn test_empty_output_succeeds_on_full_device() {
         .no_output();
 }
 
+// A warning that can't be written to stderr makes the command fail, like GNU.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_warning_write_error_sets_exit_code() {
+    new_ucmd!()
+        .args(&["x", "y"])
+        .set_stderr(std::fs::File::create("/dev/full").unwrap())
+        .fails_with_code(1)
+        .stdout_is("x");
+}
+
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     #[cfg(unix)]
