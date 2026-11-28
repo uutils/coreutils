@@ -1025,6 +1025,33 @@ fn test_closed_stdin() {
 }
 
 #[test]
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
+fn test_closed_stdio_no_dev() {
+    use std::process::Command;
+    if !Command::new("unshare")
+        .args(["-rm", "mount", "-t", "tmpfs", "tmpfs", "/dev"])
+        .status()
+        .is_ok_and(|s| s.success())
+    {
+        return; // no User NS sandbox
+    }
+    // Rust `std` cannot reopen stdout as `/dev/null` in this case
+    let res = Command::new("unshare")
+        .args([
+            "-rm",
+            "sh",
+            "-c",
+            &format!(
+                "mount -t tmpfs tmpfs /dev && {} cat <&- >&- 2>&-",
+                uutests::util::get_tests_binary()
+            ),
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(res.status.code(), Some(1));
+}
+
+#[test]
 #[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: no subprocess spawning")]
 fn test_write_only_stdin() {
