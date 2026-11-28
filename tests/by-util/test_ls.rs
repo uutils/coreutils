@@ -4445,8 +4445,8 @@ fn test_ls_quoting_style_env_var_default() {
 }
 
 // An unwritable stderr must not turn the QUOTING_STYLE warning into an abort:
-// the diagnostic is best-effort, so a failed write is dropped and the listing
-// still goes out. /dev/full is Linux-only.
+// the listing still goes out, but the failed write makes ls exit non-zero,
+// like GNU. /dev/full is Linux-only.
 #[cfg(target_os = "linux")]
 #[test]
 fn test_ls_invalid_quoting_style_env_var_with_unwritable_stderr() {
@@ -4464,7 +4464,7 @@ fn test_ls_invalid_quoting_style_env_var_with_unwritable_stderr() {
         .ucmd()
         .env("QUOTING_STYLE", "not-a-style")
         .set_stderr(dev_full)
-        .succeeds()
+        .fails_with_code(1)
         .stdout_is("alpha\nzeta\n");
 }
 
