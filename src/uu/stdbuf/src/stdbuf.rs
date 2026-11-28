@@ -153,6 +153,61 @@ fn set_command_env(command: &mut process::Command, buffer_name: &str, buffer_typ
     }
 }
 
+/// Whether nobody but root and the owner of `dir` can rename or replace `dir`
+/// or one of its ancestors. `dir` was just created by us, so its owner is our
+/// effective user.
+#[cfg(all(unix, not(feature = "feat_external_libstdbuf")))]
+fn is_out_of_reach_of_others(dir: &std::path::Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    let Ok(uid) = dir.metadata().map(|m| m.uid()) else {
+        return false;
+    };
+    dir.ancestors().skip(1).all(|ancestor| {
+        ancestor.metadata().is_ok_and(|m| {
+            let writable_by_owner_only = m.mode() & 0o022 == 0;
+            let sticky = m.mode() & 0o1000 != 0;
+            (m.uid() == uid || m.uid() == 0) && (writable_by_owner_only || sticky)
+        })
+    })
+}
+
+/// Create the directory the embedded libstdbuf is extracted to.
+///
+/// The path of that directory ends up in the preload variable of the command,
+/// so whoever can replace the directory or one of its ancestors chooses the
+/// code the command loads. `$TMPDIR` can be such a place when it is inherited
+/// across a privilege boundary, so it is only used when it is out of reach of
+/// other users, with `/tmp` as the second choice. The path is canonicalized
+/// first: the loader splits the variable as a string, `..` included.
+#[cfg(not(feature = "feat_external_libstdbuf"))]
+fn create_preload_dir() -> std::io::Result<TempDir> {
+    #[cfg(unix)]
+    {
+        let mut builder = tempfile::Builder::new();
+        builder.permissions(Permissions::from_mode(0o700));
+        for base in [std::env::temp_dir(), PathBuf::from("/tmp")] {
+            let Ok(base) = base.canonicalize() else {
+                continue;
+            };
+            let Ok(dir) = builder.tempdir_in(base) else {
+                continue;
+            };
+            if is_out_of_reach_of_others(dir.path()) {
+                return Ok(dir);
+            }
+        }
+        // Falling back to an unchecked $TMPDIR here would let whoever fills
+        // /tmp bring the old behavior back.
+        Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "other users can replace both $TMPDIR and /tmp",
+        ))
+    }
+    #[cfg(not(unix))]
+    tempfile::Builder::new().tempdir()
+}
+
 #[cfg(not(feature = "feat_external_libstdbuf"))]
 fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
     use std::fs::OpenOptions;
@@ -275,24 +330,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // library, and is removed afterwards instead of being leaked.
     #[cfg(not(feature = "feat_external_libstdbuf"))]
     let (tmp_dir, preload_env, libstdbuf) = {
-        let mut builder = tempfile::Builder::new();
-        #[cfg(unix)]
-        builder.permissions(Permissions::from_mode(0o700));
-        let tmp_dir = builder
-            .tempdir()
+        let tmp_dir = create_preload_dir()
             .map_err(|e| UUsageError::new(125, format!("failed to create temp directory: {e}")))?;
         let (preload_env, libstdbuf) = get_preload_env(&tmp_dir)?;
         (tmp_dir, preload_env, libstdbuf)
     };
     #[cfg(feature = "feat_external_libstdbuf")]
     let (preload_env, libstdbuf) = get_preload_env()?;
-    // The preload variable is a colon-separated list with no escaping mechanism,
-    // so a path containing ':' does not round-trip: the dynamic loader splits it
-    // and treats the leading component as a library to load. Since the temp
-    // directory is derived from $TMPDIR, that component would be attacker-chosen
-    // whenever TMPDIR crosses a privilege boundary. Refuse instead of preloading
-    // something we did not select.
-    if libstdbuf.as_os_str().as_encoded_bytes().contains(&b':') {
+    // The preload variable is a list separated by colons and, for the glibc and
+    // musl loaders, by whitespace too, with no escaping mechanism. A path
+    // containing a separator does not round-trip: the dynamic loader splits it
+    // and treats the leading component as a library to load. Refuse instead of
+    // preloading something we did not select.
+    if libstdbuf
+        .as_os_str()
+        .as_encoded_bytes()
+        .iter()
+        // is_ascii_whitespace() leaves out the vertical tab, the loaders do not
+        .any(|b| *b == b':' || *b == 0x0b || b.is_ascii_whitespace())
+    {
         return Err(USimpleError::new(
             125,
             translate!("stdbuf-error-preload-path-separator", "path" => libstdbuf.quote(), "var" => preload_env),

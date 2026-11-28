@@ -19,20 +19,69 @@ fn invalid_input() {
 // linux-gated to match the `at_and_ucmd` import above; the check itself is not
 // platform-specific.
 #[cfg(all(target_os = "linux", not(feature = "feat_external_libstdbuf")))]
-#[test]
-fn test_tmpdir_with_colon_is_rejected() {
-    // The preload variable is a colon-separated list with no escaping, so a
-    // libstdbuf path containing ':' would be split by the loader and its leading
-    // component loaded as a library of its own. With $TMPDIR under an attacker's
-    // control that component is attacker-chosen, so refuse instead.
+#[rstest::rstest]
+#[case::colon("evil.so:x")]
+#[case::space("evil.so x")]
+#[case::tab("evil.so\tx")]
+#[case::vertical_tab("evil.so\x0bx")]
+fn test_tmpdir_with_separator_is_rejected(#[case] name: &str) {
+    // The preload variable is a list separated by colons and whitespace with no
+    // escaping, so a libstdbuf path containing one of them would be split by the
+    // loader and its leading component loaded as a library of its own. With
+    // $TMPDIR under an attacker's control that component is attacker-chosen, so
+    // refuse instead.
     let (at, mut ucmd) = at_and_ucmd!();
-    at.mkdir("evil.so:x");
+    at.mkdir(name);
 
-    ucmd.env("TMPDIR", at.plus("evil.so:x"))
+    ucmd.env("TMPDIR", at.plus(name))
         .arg("-o0")
         .arg("true")
         .fails_with_code(125)
         .stderr_contains("contains ':'");
+}
+
+/// The loader splits the preload variable as a string, so a separator hidden
+/// behind `..` must not reach it either.
+#[cfg(all(target_os = "linux", not(feature = "feat_external_libstdbuf")))]
+#[test]
+fn test_tmpdir_is_canonicalized_before_preload() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("evil.so ");
+    at.mkdir("tmp");
+
+    let preload = ucmd
+        .env("TMPDIR", at.plus("evil.so ").join("..").join("tmp"))
+        .args(&["-o0", "printenv", "LD_PRELOAD"])
+        .succeeds()
+        .stdout_move_str();
+    assert!(
+        preload.starts_with(at.plus_as_string("tmp").as_str()),
+        "{preload:?}"
+    );
+    assert!(!preload.trim_end().contains(' '), "{preload:?}");
+}
+
+/// Whoever can write to a non-sticky `$TMPDIR` can swap the directory holding
+/// libstdbuf between its creation and the exec of the command, so stdbuf must
+/// not put the library there.
+#[cfg(all(target_os = "linux", not(feature = "feat_external_libstdbuf")))]
+#[test]
+fn test_tmpdir_writable_by_others_is_not_used() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("shared");
+    std::fs::set_permissions(at.plus("shared"), std::fs::Permissions::from_mode(0o777)).unwrap();
+
+    let preload = ucmd
+        .env("TMPDIR", at.plus("shared"))
+        .args(&["-o0", "printenv", "LD_PRELOAD"])
+        .succeeds()
+        .stdout_move_str();
+    assert!(
+        !preload.starts_with(at.plus_as_string("shared").as_str()),
+        "{preload:?}"
+    );
 }
 
 #[cfg(all(unix, not(feature = "feat_external_libstdbuf")))]
