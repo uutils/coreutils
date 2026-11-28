@@ -634,6 +634,38 @@ fn test_date_format_q() {
 }
 
 #[test]
+fn test_date_unsupported_specifiers_printed_literally() {
+    // GNU date has no %f, %.f, %Q or %:Q conversions and prints them
+    // unchanged; jiff would otherwise expand them (fractional seconds /
+    // time zone). See uutils/coreutils#16644.
+    let cases = [
+        "%f", "%.f", "%.3f", "%-f", "%:f", "%Q", "%:Q", "%::Q", "%:::Q", "%3Q", "%-Q",
+    ];
+    for spec in cases {
+        new_ucmd!()
+            .args(&["-u", "-d", "@0", &format!("+{spec}")])
+            .succeeds()
+            .stdout_is(format!("{spec}\n"));
+    }
+}
+
+#[test]
+fn test_date_unsupported_specifiers_mixed_with_valid() {
+    // The unsupported specifiers must be escaped without disturbing the
+    // surrounding valid conversions.
+    new_ucmd!()
+        .args(&["-u", "-d", "@0", "+%Y-%m-%d %Q %f end"])
+        .succeeds()
+        .stdout_is("1970-01-01 %Q %f end\n");
+    // An escaped percent (`%%`) followed by `f` is a literal `%f`, not a
+    // conversion, and must be preserved as-is.
+    new_ucmd!()
+        .args(&["-u", "-d", "@0", "+%%f"])
+        .succeeds()
+        .stdout_is("%f\n");
+}
+
+#[test]
 fn test_date_format_m() {
     let scene = TestScenario::new(util_name!());
 

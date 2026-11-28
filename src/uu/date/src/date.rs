@@ -990,6 +990,104 @@ fn strip_o_modifier(fmt: &str) -> Cow<'_, str> {
     Cow::Owned(out)
 }
 
+/// GNU `date` has no `%f`, `%.f`, `%Q` or `%:Q` conversions and prints them
+/// unchanged, but jiff renders `%f`/`%.f` as fractional seconds and `%Q`/`%:Q`
+/// as the time zone name. Escape any such specifier (with or without flags, a
+/// width or leading colons) by doubling its `%`, so jiff emits it literally
+/// like GNU. A `%` that is itself escaped (`%%`) is left untouched.
+fn escape_unsupported_specifiers(fmt: &str) -> Cow<'_, str> {
+    if !fmt.contains('%') {
+        return Cow::Borrowed(fmt);
+    }
+
+    // Fast path: if the format has no `%f`/`%Q` specifier at all (the common
+    // case, e.g. the default `%a %b %e %X %Z %Y`), return the input borrowed.
+    // This avoids allocating a new `String` for every formatted line, which is
+    // the hot path when formatting a large `-f` file.
+    let bytes = fmt.as_bytes();
+    let mut i = 0;
+    let mut needs_escape = false;
+    while i < bytes.len() {
+        if bytes[i] != b'%' {
+            i += 1;
+            continue;
+        }
+        // Skip an escaped `%%`.
+        if bytes.get(i + 1) == Some(&b'%') {
+            i += 2;
+            continue;
+        }
+        if is_unsupported_spec(&fmt[i..]) {
+            needs_escape = true;
+            break;
+        }
+        i += 1;
+    }
+    if !needs_escape {
+        return Cow::Borrowed(fmt);
+    }
+
+    // Slow path: at least one unsupported specifier is present, so build the
+    // escaped copy, doubling the `%` of each `%f`/`%Q` so jiff emits it
+    // literally like GNU. `%%` (an escaped percent) is left intact.
+    let mut out = String::with_capacity(fmt.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'%' {
+            let ch_len = fmt[i..].chars().next().map_or(1, char::len_utf8);
+            out.push_str(&fmt[i..i + ch_len]);
+            i += ch_len;
+            continue;
+        }
+        // Keep `%%` (an escaped percent) intact.
+        if bytes.get(i + 1) == Some(&b'%') {
+            out.push_str("%%");
+            i += 2;
+            continue;
+        }
+        if is_unsupported_spec(&fmt[i..]) {
+            // Double the `%` so jiff emits the specifier literally, like GNU.
+            out.push_str("%%");
+            i += 1;
+        } else {
+            out.push('%');
+            i += 1;
+        }
+    }
+    Cow::Owned(out)
+}
+
+/// Returns `true` if the `%`-sequence at the start of `s` is one of the
+/// conversions GNU `date` does not support (`%f` fractional seconds or `%Q`
+/// quarter-of-year), including flag/width/precision/colon variants such as
+/// `%.f`, `%10f` or `%:Q`. These must be printed literally rather than
+/// expanded by jiff.
+fn is_unsupported_spec(s: &str) -> bool {
+    debug_assert!(s.starts_with('%'));
+    let bytes = s.as_bytes();
+    let mut pos = 1;
+    // Flags: [_0^#+-]*.
+    while bytes.get(pos).is_some_and(|c| b"_0^#+-".contains(c)) {
+        pos += 1;
+    }
+    // Width: [0-9]*.
+    while bytes.get(pos).is_some_and(u8::is_ascii_digit) {
+        pos += 1;
+    }
+    // Precision: '.' followed by [0-9]* (GNU's `%.f` style).
+    if bytes.get(pos) == Some(&b'.') {
+        pos += 1;
+        while bytes.get(pos).is_some_and(u8::is_ascii_digit) {
+            pos += 1;
+        }
+    }
+    // Colons: up to three, then the conversion letter.
+    while bytes.get(pos) == Some(&b':') {
+        pos += 1;
+    }
+    matches!(bytes.get(pos), Some(b'f' | b'Q'))
+}
+
 /// A piece of a format string.
 ///
 /// A format string is not necessarily valid UTF-8: a locale using a legacy
@@ -1452,6 +1550,7 @@ fn format_date_with_locale_aware_months(
     // to the floored epoch second before jiff sees the format string.
     let fmt = &*substitute_epoch_seconds(fmt, date);
     let fmt = &*strip_o_modifier(fmt);
+    let fmt = &*escape_unsupported_specifiers(fmt);
 
     // Check if format string has GNU modifiers (width/flags) and format if present
     if let Some(result) = format_modifiers::format_with_modifiers_if_present(date, fmt, config) {
