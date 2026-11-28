@@ -64,6 +64,43 @@ if cp_cmd=$(util_cmd cp); then
     rm -f cp_probe_src.txt cp_probe_dst
 fi
 
+# cp -R used to look up each copied file 13 times and read the umask twice
+# for it. Copy 10 and then 20 files: the difference is what one more file
+# costs, without the fixed cost of starting up.
+if cp_cmd=$(util_cmd cp); then
+    echo ""
+    echo "Testing cp -R (lookups per copied file)..."
+    count_cp_tree() {
+        rm -rf cp_tree cp_tree_dst
+        mkdir cp_tree
+        for i in $(seq "$1"); do : > "cp_tree/f$i"; done
+        # shellcheck disable=SC2086  # $cp_cmd may be "coreutils cp"
+        strace -f -e trace=%%stat,umask -o strace_cp_tree.log \
+            $cp_cmd -R cp_tree cp_tree_dst 2>/dev/null || true
+        if [ ! -s strace_cp_tree.log ]; then
+            fail_immediately "strace produced no output for cp -R"
+        fi
+        stat_calls=$(grep -cE '\b[a-z0-9]*stat[a-z0-9]*\(' strace_cp_tree.log || true)
+        umask_calls=$(grep -cE '\bumask\(' strace_cp_tree.log || true)
+    }
+    count_cp_tree 10
+    stat_calls_10=$stat_calls
+    umask_calls_10=$umask_calls
+    count_cp_tree 20
+    per_file_stats=$(( (stat_calls - stat_calls_10) / 10 ))
+    per_file_umasks=$(( (umask_calls - umask_calls_10) / 10 ))
+    if [ "$per_file_stats" -gt 7 ]; then
+        cat strace_cp_tree.log
+        fail_immediately "cp -R made $per_file_stats stat calls per copied file, expected at most 7"
+    fi
+    echo "✓ cp -R makes $per_file_stats stat calls per copied file"
+    if [ "$per_file_umasks" -ne 0 ]; then
+        fail_immediately "cp -R read the umask $per_file_umasks times per copied file, expected once for the whole copy"
+    fi
+    echo "✓ cp -R reads the umask once for the whole copy"
+    rm -rf cp_tree cp_tree_dst
+fi
+
 # mv must not open an operand it is only going to rename, and its
 # cross-device fallback -- a copy, since rename(2) cannot cross filesystems --
 # must open the source once. mv has its own fallback rather than cp's

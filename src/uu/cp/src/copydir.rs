@@ -458,16 +458,11 @@ pub(crate) fn copy_directory(
         while let Some(direntry_result) = walker.next() {
             match direntry_result {
                 Ok(direntry) => {
-                    let direntry_type = direntry.file_type();
                     let direntry_path = direntry.path();
-                    let (entry_is_symlink, entry_is_dir_no_follow) =
-                        match direntry_path.symlink_metadata() {
-                            Ok(metadata) => {
-                                let file_type = metadata.file_type();
-                                (file_type.is_symlink(), file_type.is_dir())
-                            }
-                            Err(_) => (direntry_type.is_symlink(), direntry_type.is_dir()),
-                        };
+                    // walkdir already knows this without another stat: the
+                    // file type is the entry's own unless it is a followed symlink.
+                    let entry_is_symlink = direntry.path_is_symlink();
+                    let entry_is_dir_no_follow = !entry_is_symlink && direntry.file_type().is_dir();
                     let entry = Entry::new(&context, direntry_path, options.no_target_dir)?;
 
                     let created = match copy_direntry(
