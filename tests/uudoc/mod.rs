@@ -146,6 +146,36 @@ fn test_manpage_base64() {
     assert!(!output_str.to_ascii_lowercase().contains("base32"));
 }
 
+// The after-help text (here, what each usage form of ln does) belongs in
+// DESCRIPTION, not in a trailing EXTRA section.
+#[test]
+fn test_manpage_after_help_in_description() {
+    let output = get_uudoc_command()
+        .arg("manpage")
+        .arg("ln")
+        .env("LANG", "C") // force locale to english to avoid issues with manpage output
+        .output()
+        .expect("Failed to execute command");
+
+    assert!(
+        output.status.success(),
+        "Command failed with status: {}",
+        output.status
+    );
+
+    let output_str = String::from_utf8_lossy(&output.stdout);
+    let description = output_str
+        .split_once("\n.SH DESCRIPTION\n")
+        .and_then(|(_, rest)| rest.split_once("\n.SH OPTIONS\n"))
+        .unwrap_or_else(|| panic!("no DESCRIPTION before OPTIONS: {output_str}"))
+        .0;
+    assert!(
+        description.contains("In the 1st form, create a link to TARGET"),
+        "{output_str}"
+    );
+    assert!(!output_str.contains("\n.SH EXTRA\n"), "{output_str}");
+}
+
 // Test to ensure markdown headers are correctly formatted in generated markdown files
 // Prevents regression of https://github.com/uutils/coreutils/issues/10003
 #[test]

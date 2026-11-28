@@ -127,6 +127,19 @@ fn gen_coreutils_app<T: Args>(util_map: &UtilityMap<T>) -> Command {
     command
 }
 
+/// Move the after-help text into DESCRIPTION, since `clap_mangen` would put it
+/// in a trailing EXTRA section, and leave the after-help slot for tldr examples.
+fn description_from_after_help(cmd: Command) -> Command {
+    let Some(after_help) = cmd.get_after_help().map(ToString::to_string) else {
+        return cmd;
+    };
+    let description = match cmd.get_about() {
+        Some(about) => format!("{about}\n\n{after_help}"),
+        None => after_help,
+    };
+    cmd.long_about(description).after_help(None::<&str>)
+}
+
 /// Generate the manpage for the utility in the first parameter
 fn gen_manpage<T: Args>(
     tldr: &mut Option<ZipArchive<File>>,
@@ -152,7 +165,7 @@ fn gen_manpage<T: Args>(
         validation::setup_localization_or_exit(utility);
         let mut cmd = util_map.get(utility).unwrap().1();
         cmd.set_bin_name(utility.clone());
-        let mut cmd = cmd.display_name(utility);
+        let mut cmd = description_from_after_help(cmd.display_name(utility));
         if let Some(zip) = tldr
             && let Ok(examples) = write_zip_examples(zip, utility, false)
         {
