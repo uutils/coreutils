@@ -3108,3 +3108,16 @@ fn test_dereference_args_after_dereference_wins() {
         .succeeds()
         .stdout_contains("dir/link");
 }
+
+#[rstest::rstest]
+#[case::safe(&[])]
+#[case::regular(&["-L"])]
+#[cfg(target_os = "linux")]
+fn test_deep_directory_traversal_no_stack_overflow(#[case] extra: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    uutests::util::prepare_deep_traversal(&at.subdir, &mut ucmd);
+    ucmd.args(extra)
+        .args(&["--inodes", "-s", "d/"])
+        .succeeds()
+        .stdout_only("6020\td/\n");
+}

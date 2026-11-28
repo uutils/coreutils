@@ -10,7 +10,7 @@ use glob::{Pattern, PatternError};
 use rustc_hash::FxHashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
-use std::fs::{self, DirEntry, File, Metadata};
+use std::fs::{self, File, Metadata};
 use std::io::{self, BufRead, BufReader, Write, stdout};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
@@ -31,7 +31,7 @@ use uucore::i18n::decimal::locale_grouping_separator;
 use uucore::i18n::{UEncoding, get_numeric_locale};
 use uucore::line_ending::LineEnding;
 #[cfg(all(unix, not(target_os = "redox")))]
-use uucore::safe_traversal::{DirFd, SymlinkBehavior};
+use uucore::safe_traversal::{DirFd, DirWalker, SymlinkBehavior, WalkStep};
 use uucore::translate;
 
 use uucore::parser::parse_block_size;
@@ -116,7 +116,7 @@ impl Deref {
     fn follows(&self, path: &Path) -> bool {
         match self {
             Self::All => true,
-            Self::Args(paths) => paths.contains(&path.to_path_buf()),
+            Self::Args(paths) => paths.iter().any(|p| p.as_path() == path),
             Self::None => false,
         }
     }
@@ -141,22 +141,22 @@ struct Stat {
     blocks: u64,
     inodes: u64,
     inode: Option<FileInfo>,
-    metadata: Metadata,
+    is_dir: bool,
     latest_time: Option<SystemTime>,
 }
 
 impl Stat {
     fn new(
         path: &Path,
-        dir_entry: Option<&DirEntry>,
+        dir_meta: Option<io::Result<Metadata>>,
         options: &TraversalOptions,
     ) -> io::Result<Self> {
         let metadata = if options.dereference.follows(path) {
             // Get metadata, following symbolic links if necessary
             fs::metadata(path)
-        } else if let Some(dir_entry) = dir_entry {
-            // Get metadata directly from the DirEntry, which is faster on Windows
-            dir_entry.metadata()
+        } else if let Some(dir_meta) = dir_meta {
+            // Use metadata captured from DirEntry while it was alive
+            dir_meta
         } else {
             // Get metadata from the filesystem without following symbolic links
             fs::symlink_metadata(path)
@@ -168,13 +168,14 @@ impl Stat {
             .time
             .and_then(|time| metadata_get_time(&metadata, time));
 
+        let is_dir = metadata.is_dir();
         Ok(Self {
             path: path.to_path_buf(),
-            size: if metadata.is_dir() { 0 } else { metadata.len() },
+            size: if is_dir { 0 } else { metadata.len() },
             blocks,
             inodes: 1,
             inode: file_info,
-            metadata,
+            is_dir,
             latest_time,
         })
     }
@@ -197,26 +198,25 @@ impl Stat {
         });
 
         let blocks = safe_metadata.blocks();
-
-        // Create a temporary std::fs::Metadata by reading the same path
-        // This is still needed for compatibility but should work since we're dealing with
-        // the root path which should be accessible
-        let std_metadata = fs::symlink_metadata(full_path)?;
-        let latest_time = time.and_then(|time| metadata_get_time(&std_metadata, time));
+        let is_dir = safe_metadata.is_dir();
+        let latest_time = time.and_then(|t| time_from_raw_stat(&safe_metadata, t));
 
         Ok(Self {
             path: full_path.to_path_buf(),
-            size: if safe_metadata.is_dir() {
-                0
-            } else {
-                safe_metadata.len()
-            },
+            size: if is_dir { 0 } else { safe_metadata.len() },
             blocks,
             inodes: 1,
             inode: file_info_option,
-            metadata: std_metadata,
+            is_dir,
             latest_time,
         })
+    }
+
+    fn merge(&mut self, other: &Self) {
+        self.size += other.size;
+        self.blocks += other.blocks;
+        self.inodes += other.inodes;
+        self.latest_time = self.latest_time.max(other.latest_time);
     }
 }
 
@@ -385,259 +385,176 @@ fn time_from_raw_stat(
 
 #[cfg(all(unix, not(target_os = "redox")))]
 // Implement safe_du on Unix (except Redox which lacks full stat support)
-// This is done for TOCTOU safety
+// Iterative implementation using a heap-allocated stack to prevent stack overflow on deep directory trees (#10173).
 fn safe_du(
     path: &Path,
     options: &TraversalOptions,
-    depth: usize,
     seen_inodes: &mut FxHashSet<FileInfo>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
-    parent_fd: Option<&DirFd>,
-    initial_stat: Option<io::Result<Stat>>,
+    initial_stat: io::Result<Stat>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
-    // The caller provides an already-computed stat for this entry, which lets us
-    // avoid re-stating it here. For subdirectories this saves both a redundant
-    // `fstatat` and an expensive full-path `lstat` per directory (the dominant cost
-    // when traversing deep trees). The root directory may instead carry an error,
-    // in which case we fall back to opening it directly with a DirFd.
-    let initial_stat = initial_stat.unwrap_or_else(|| Stat::new(path, None, options));
-    let mut my_stat = match initial_stat {
-        Ok(mut s) => {
-            // For subdirectories the `metadata` field is a cheap placeholder (the
-            // parent directory's metadata). It is only consulted by `--time`, so we
-            // only pay for a real stat of this entry when time reporting is asked for.
-            if options.time.is_some()
-                && parent_fd.is_some()
-                && let Ok(md) = fs::symlink_metadata(&s.path)
-            {
-                s.metadata = md;
-            }
-            s
+    // The caller provides an already-computed stat for this root entry, which lets us
+    // avoid re-stating it here. If the stat failed, fall back to opening directly with DirFd.
+    let (my_stat, cur_fd) = if let Ok(s) = initial_stat {
+        if !s.is_dir {
+            return Ok(s);
         }
-        Err(_e) => {
-            // Only the root path can reach this branch (subdirectories always pass a
-            // valid stat). Try using our DirFd method for the root directory.
-            match DirFd::open(path, options.dereference.follows(path).into()) {
-                Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path, options.time) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        let error = e.map_err_context(
-                            || translate!("du-error-cannot-access", "path" => path.quote()),
-                        );
-                        if let Err(send_error) = print_tx.send(Err(error)) {
-                            return Err(Box::new(send_error));
-                        }
-                        return Err(Box::new(mpsc::SendError(Err(USimpleError::new(
-                            0,
-                            "Error already handled",
-                        )))));
-                    }
-                },
-                Err(e) => {
-                    let error = e.map_err_context(
-                        || translate!("du-error-cannot-access", "path" => path.quote()),
-                    );
-                    if let Err(send_error) = print_tx.send(Err(error)) {
-                        return Err(Box::new(send_error));
-                    }
-                    return Err(Box::new(mpsc::SendError(Err(USimpleError::new(
-                        0,
-                        "Error already handled",
-                    )))));
-                }
-            }
-        }
-    };
-    if !my_stat.metadata.is_dir() {
-        return Ok(my_stat);
-    }
-
-    // Open the directory using DirFd. A subdirectory is opened with O_NOFOLLOW:
-    // it was classified with a no-follow stat, so if it has been swapped for a
-    // symlink since then, the open must fail instead of walking into the target.
-    let open_result = match parent_fd {
-        Some(parent) => parent.open_subdir(
-            path.file_name().unwrap_or(path.as_os_str()),
-            SymlinkBehavior::NoFollow,
-        ),
-        None => DirFd::open(path, options.dereference.follows(path).into()),
-    };
-
-    let dir_fd = match open_result {
-        Ok(fd) => fd,
-        Err(e) => {
-            print_tx.send(Err(e.map_err_context(
-                || translate!("du-error-cannot-read-directory", "path" => path.quote()),
-            )))?;
-            return Ok(my_stat);
-        }
-    };
-
-    // Read directory entries
-    let entries = match dir_fd.read_dir() {
-        Ok(entries) => entries,
-        Err(e) => {
-            print_tx.send(Err(e.map_err_context(
-                || translate!("du-error-cannot-read-directory", "path" => path.quote()),
-            )))?;
-            return Ok(my_stat);
-        }
-    };
-
-    'file_loop: for entry_name in entries {
-        const S_IFMT: u32 = 0o170_000;
-        const S_IFDIR: u32 = 0o040_000;
-        const S_IFLNK: u32 = 0o120_000;
-
-        // First get the lstat (without following symlinks) to check if it's a symlink
-        let lstat = match dir_fd.stat_at(&entry_name, SymlinkBehavior::NoFollow) {
-            Ok(stat) => stat,
+        match DirFd::open(path, options.dereference.follows(path).into()) {
+            Ok(fd) => (s, fd),
             Err(e) => {
-                let entry_path = path.join(&entry_name);
                 print_tx.send(Err(e.map_err_context(
-                    || translate!("du-error-cannot-access", "path" => entry_path.quote()),
+                    || translate!("du-error-cannot-read-directory", "path" => path.quote()),
                 )))?;
-                continue;
-            }
-        };
-
-        // Check if it's a symlink
-        #[allow(clippy::unnecessary_cast)]
-        let is_symlink = (lstat.st_mode as u32 & S_IFMT) == S_IFLNK;
-
-        // Handle symlinks with -L option
-        // For safe traversal with -L, we skip symlinks to directories entirely
-        // and let the non-safe traversal handle them at the top level
-        if is_symlink && options.dereference == Deref::All {
-            // Skip symlinks to directories when using safe traversal with -L
-            // They will be handled by regular traversal
-            continue;
-        }
-
-        #[allow(clippy::unnecessary_cast)]
-        let is_dir = (lstat.st_mode as u32 & S_IFMT) == S_IFDIR;
-        let entry_stat = lstat;
-
-        #[allow(clippy::unnecessary_cast)]
-        let file_info = (entry_stat.st_ino != 0).then_some(FileInfo {
-            file_id: entry_stat.st_ino as u128,
-            dev_id: entry_stat.st_dev as u64,
-        });
-
-        let safe_metadata = uucore::safe_traversal::Metadata::from_stat(entry_stat);
-        let latest_time = options
-            .time
-            .and_then(|time| time_from_raw_stat(&safe_metadata, time));
-
-        // For safe traversal, we need to handle stats differently
-        // We can't use std::fs::Metadata since that requires the full path
-        let this_stat = if is_dir {
-            // For directories, recurse using safe_du
-            Stat {
-                path: path.join(&entry_name),
-                size: 0,
-                #[allow(clippy::unnecessary_cast)]
-                blocks: entry_stat.st_blocks as u64,
-                inodes: 1,
-                inode: file_info,
-                // We need a fake metadata - create one from symlink_metadata of parent
-                // This is a workaround since we can't get real metadata without the full path
-                metadata: my_stat.metadata.clone(),
-                latest_time,
-            }
-        } else {
-            // For files
-            Stat {
-                path: path.join(&entry_name),
-                #[allow(clippy::unnecessary_cast)]
-                size: entry_stat.st_size as u64,
-                #[allow(clippy::unnecessary_cast)]
-                blocks: entry_stat.st_blocks as u64,
-                inodes: 1,
-                inode: file_info,
-                metadata: my_stat.metadata.clone(),
-                latest_time,
-            }
-        };
-
-        // Check excludes
-        for pattern in &options.excludes {
-            if pattern.matches(&this_stat.path.to_string_lossy())
-                || pattern.matches(&entry_name.to_string_lossy())
-            {
-                if options.verbose {
-                    println!(
-                        "{}",
-                        translate!("du-verbose-ignored", "path" => this_stat.path.quote())
-                    );
-                }
-                continue 'file_loop;
+                return Ok(s);
             }
         }
-
-        // Handle inodes
-        if let Some(inode) = this_stat.inode
-            && !seen_inodes.insert(inode)
-            && !options.count_links
+    } else {
+        match DirFd::open(path, options.dereference.follows(path).into())
+            .and_then(|fd| Ok((Stat::new_from_dirfd(&fd, path, options.time)?, fd)))
         {
-            continue;
-        }
-
-        // Process directories recursively
-        if is_dir {
-            if options.one_file_system
-                && let (Some(this_inode), Some(my_inode)) = (this_stat.inode, my_stat.inode)
-                && this_inode.dev_id != my_inode.dev_id
-            {
-                continue;
+            Ok(pair) => pair,
+            Err(e) => {
+                print_tx.send(Err(e.map_err_context(
+                    || translate!("du-error-cannot-access", "path" => path.quote()),
+                )))?;
+                return Err(Box::new(mpsc::SendError(Err(USimpleError::new(
+                    0,
+                    "Error already handled",
+                )))));
             }
+        }
+    };
 
-            // Reuse the stat we already computed for this entry instead of
-            // re-stating it inside the recursive call.
-            let sub_path = this_stat.path.clone();
-            let this_stat = safe_du(
-                &sub_path,
-                options,
-                depth + 1,
-                seen_inodes,
-                print_tx,
-                Some(&dir_fd),
-                Some(Ok(this_stat)),
-            )?;
+    let mut walker = DirWalker::new(cur_fd, path);
+    let mut root_stat = my_stat;
+    let mut child_stats: Vec<Stat> = Vec::new();
 
-            if !options.separate_dirs {
-                my_stat.size += this_stat.size;
-                my_stat.blocks += this_stat.blocks;
-                my_stat.inodes += this_stat.inodes;
-                my_stat.latest_time = match (my_stat.latest_time, this_stat.latest_time) {
-                    (Some(a), Some(b)) => Some(a.max(b)),
-                    (a, None) => a,
-                    (None, b) => b,
+    while let Some(step) = walker.next_step() {
+        match step {
+            WalkStep::Error(err_path, e) => {
+                print_tx.send(Err(e.map_err_context(
+                    || translate!("du-error-cannot-read-directory", "path" => err_path.quote()),
+                )))?;
+            }
+            WalkStep::Leave(dir_path, depth) => {
+                if let Some(mut child_stat) = child_stats.pop() {
+                    if !options.separate_dirs {
+                        child_stats
+                            .last_mut()
+                            .unwrap_or(&mut root_stat)
+                            .merge(&child_stat);
+                    }
+                    child_stat.path = dir_path.to_path_buf();
+                    print_tx.send(Ok(StatPrintInfo {
+                        stat: child_stat,
+                        depth,
+                    }))?;
                 }
             }
-            print_tx.send(Ok(StatPrintInfo {
-                stat: this_stat,
-                depth: depth + 1,
-            }))?;
-        } else {
-            my_stat.size += this_stat.size;
-            my_stat.blocks += this_stat.blocks;
-            my_stat.inodes += 1;
-            my_stat.latest_time = match (my_stat.latest_time, this_stat.latest_time) {
-                (Some(a), Some(b)) => Some(a.max(b)),
-                (a, None) => a,
-                (None, b) => b,
-            };
-            if options.all {
-                print_tx.send(Ok(StatPrintInfo {
-                    stat: this_stat,
-                    depth: depth + 1,
-                }))?;
+            WalkStep::Entry(cur_fd, entry_name, entry_path, depth) => {
+                let cur_stat = child_stats.last_mut().unwrap_or(&mut root_stat);
+                let md = match cur_fd.metadata_at(&entry_name, SymlinkBehavior::NoFollow) {
+                    Ok(md) => md,
+                    Err(e) => {
+                        print_tx.send(Err(e.map_err_context(
+                            || translate!("du-error-cannot-access", "path" => entry_path.quote()),
+                        )))?;
+                        continue;
+                    }
+                };
+
+                let is_dir = md.is_dir();
+                let info = md.file_info();
+                let file_info = (info.inode() != 0).then_some(FileInfo {
+                    file_id: info.inode() as u128,
+                    dev_id: info.device(),
+                });
+                let latest_time = options.time.and_then(|time| time_from_raw_stat(&md, time));
+
+                if options.excludes.iter().any(|pattern| {
+                    pattern.matches(&entry_path.to_string_lossy())
+                        || pattern.matches(&entry_name.to_string_lossy())
+                }) {
+                    if options.verbose {
+                        println!(
+                            "{}",
+                            translate!("du-verbose-ignored", "path" => entry_path.quote())
+                        );
+                    }
+                    continue;
+                }
+
+                if !options.count_links
+                    && let Some(inode) = file_info
+                    && !seen_inodes.insert(inode)
+                {
+                    continue;
+                }
+
+                let mut this_stat = Stat {
+                    path: PathBuf::new(),
+                    size: if is_dir { 0 } else { md.len() },
+                    blocks: md.blocks(),
+                    inodes: 1,
+                    inode: file_info,
+                    is_dir,
+                    latest_time,
+                };
+
+                if is_dir {
+                    if options.one_file_system
+                        && let (Some(this_inode), Some(my_inode)) = (file_info, cur_stat.inode)
+                        && this_inode.dev_id != my_inode.dev_id
+                    {
+                        continue;
+                    }
+
+                    match cur_fd.open_subdir(&entry_name, SymlinkBehavior::NoFollow) {
+                        Ok(child_dir_fd) => {
+                            if walker.push_dir(child_dir_fd) {
+                                child_stats.push(this_stat);
+                            }
+                        }
+                        Err(e) => {
+                            this_stat.path = entry_path.to_path_buf();
+                            print_tx.send(Err(e.map_err_context(|| {
+                                translate!("du-error-cannot-read-directory", "path" => this_stat.path.quote())
+                            })))?;
+                            if !options.separate_dirs {
+                                cur_stat.merge(&this_stat);
+                            }
+                            print_tx.send(Ok(StatPrintInfo {
+                                stat: this_stat,
+                                depth,
+                            }))?;
+                        }
+                    }
+                } else {
+                    cur_stat.merge(&this_stat);
+                    if options.all {
+                        this_stat.path = entry_path.to_path_buf();
+                        print_tx.send(Ok(StatPrintInfo {
+                            stat: this_stat,
+                            depth,
+                        }))?;
+                    }
+                }
             }
         }
     }
+    Ok(root_stat)
+}
 
-    Ok(my_stat)
+struct RegularEntry {
+    name: OsString,
+    is_symlink: bool,
+    meta: Option<io::Result<Metadata>>,
+}
+
+struct RegularFrame {
+    my_stat: Stat,
+    symlink_depth: usize,
+    entries: std::vec::IntoIter<io::Result<RegularEntry>>,
 }
 
 // this takes `my_stat` to avoid having to stat files multiple times.
@@ -646,177 +563,157 @@ fn safe_du(
 // Used on non-Linux platforms and as fallback for symlinks on Linux
 #[allow(clippy::cognitive_complexity)]
 fn du_regular(
-    mut my_stat: Stat,
+    my_stat: Stat,
     options: &TraversalOptions,
-    depth: usize,
     seen_inodes: &mut FxHashSet<FileInfo>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
-    ancestors: Option<&mut FxHashSet<FileInfo>>,
-    symlink_depth: Option<usize>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
-    let mut default_ancestors = FxHashSet::default();
-    let ancestors = ancestors.unwrap_or(&mut default_ancestors);
-    let symlink_depth = symlink_depth.unwrap_or(0);
-
-    // Add current directory to ancestors if it's a directory
-    let my_inode = if my_stat.metadata.is_dir() {
-        my_stat.inode
-    } else {
-        None
-    };
-
-    if let Some(inode) = my_inode {
-        ancestors.insert(inode);
+    if !my_stat.is_dir {
+        return Ok(my_stat);
     }
-    if my_stat.metadata.is_dir() {
-        let read = match fs::read_dir(&my_stat.path) {
-            Ok(read) => read,
+
+    let mut ancestors = FxHashSet::default();
+    let mut stack = Vec::<RegularFrame>::new();
+    let open_frame = |my_stat: Stat,
+                      symlink_depth: usize,
+                      ancestors: &mut FxHashSet<FileInfo>|
+     -> Result<RegularFrame, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
+        if let Some(inode) = my_stat.inode {
+            ancestors.insert(inode);
+        }
+        // Extract entry name, symlink bit, and metadata then drop DirEntry so DIR* fds close.
+        let entries = match fs::read_dir(&my_stat.path) {
+            Ok(read) => read
+                .map(|r| {
+                    r.map(|e| RegularEntry {
+                        name: e.file_name(),
+                        is_symlink: matches!(options.dereference, Deref::All)
+                            && e.file_type().is_ok_and(|t| t.is_symlink()),
+                        meta: (!matches!(options.dereference, Deref::All)).then(|| e.metadata()),
+                    })
+                })
+                .collect::<Vec<_>>(),
             Err(e) => {
                 print_tx.send(Err(e.map_err_context(
                     || translate!("du-error-cannot-read-directory", "path" => my_stat.path.quote()),
                 )))?;
-                return Ok(my_stat);
+                Vec::new()
+            }
+        };
+        Ok(RegularFrame {
+            my_stat,
+            symlink_depth,
+            entries: entries.into_iter(),
+        })
+    };
+
+    let mut top_frame = open_frame(my_stat, 0, &mut ancestors)?;
+    loop {
+        let Some(f) = top_frame.entries.next() else {
+            if let Some(inode) = top_frame.my_stat.inode {
+                ancestors.remove(&inode);
+            }
+            let Some(mut parent) = stack.pop() else {
+                return Ok(top_frame.my_stat);
+            };
+            if !options.separate_dirs {
+                parent.my_stat.merge(&top_frame.my_stat);
+            }
+            print_tx.send(Ok(StatPrintInfo {
+                stat: top_frame.my_stat,
+                depth: stack.len() + 1,
+            }))?;
+            top_frame = parent;
+            continue;
+        };
+
+        let RegularEntry {
+            name: entry_name,
+            is_symlink,
+            meta: dir_meta,
+        } = match f {
+            Ok(entry) => entry,
+            Err(error) => {
+                print_tx.send(Err(error.into()))?;
+                continue;
+            }
+        };
+        let entry_path = top_frame.my_stat.path.join(&entry_name);
+        let mut current_symlink_depth = top_frame.symlink_depth;
+        if is_symlink && options.dereference == Deref::All {
+            current_symlink_depth += 1;
+            if current_symlink_depth > SYMLINK_FOLLOW_LIMIT {
+                print_tx.send(Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Too many levels of symbolic links",
+                )
+                .map_err_context(
+                    || translate!("du-error-cannot-access", "path" => entry_path.quote()),
+                )))?;
+                continue;
+            }
+        }
+
+        let this_stat = match Stat::new(&entry_path, dir_meta, options) {
+            Ok(s) => s,
+            Err(e) => {
+                print_tx.send(Err(e.map_err_context(
+                    || translate!("du-error-cannot-access", "path" => entry_path.quote()),
+                )))?;
+                continue;
             }
         };
 
-        'file_loop: for f in read {
-            match f {
-                Ok(entry) => {
-                    let entry_path = entry.path();
+        if is_symlink
+            && options.dereference == Deref::All
+            && this_stat.is_dir
+            && let Some(inode) = this_stat.inode
+            && ancestors.contains(&inode)
+        {
+            continue;
+        }
 
-                    // Check if this is a symlink when using -L
-                    let mut current_symlink_depth = symlink_depth;
-                    let is_symlink = match entry.file_type() {
-                        Ok(ft) => ft.is_symlink(),
-                        Err(_) => false,
-                    };
+        let file_name = entry_name.to_string_lossy();
+        if options.excludes.iter().any(|pattern| {
+            pattern.matches(&this_stat.path.to_string_lossy()) || pattern.matches(&file_name)
+        }) {
+            if options.verbose {
+                println!(
+                    "{}",
+                    translate!("du-verbose-ignored", "path" => this_stat.path.quote())
+                );
+            }
+            continue;
+        }
 
-                    if is_symlink && options.dereference == Deref::All {
-                        // Increment symlink depth
-                        current_symlink_depth += 1;
+        if !options.count_links
+            && let Some(inode) = this_stat.inode
+            && !seen_inodes.insert(inode)
+        {
+            continue;
+        }
 
-                        // Check symlink depth limit
-                        if current_symlink_depth > SYMLINK_FOLLOW_LIMIT {
-                            print_tx.send(Err(io::Error::new(
-                                io::ErrorKind::InvalidData,
-                                "Too many levels of symbolic links",
-                            ).map_err_context(
-                                || translate!("du-error-cannot-access", "path" => entry_path.quote()),
-                            )))?;
-                            continue 'file_loop;
-                        }
-                    }
+        if this_stat.is_dir {
+            if options.one_file_system
+                && let (Some(this_inode), Some(my_inode)) =
+                    (this_stat.inode, top_frame.my_stat.inode)
+                && this_inode.dev_id != my_inode.dev_id
+            {
+                continue;
+            }
 
-                    match Stat::new(&entry_path, Some(&entry), options) {
-                        Ok(this_stat) => {
-                            // Check if symlink with -L points to an ancestor (cycle detection)
-                            if is_symlink
-                                && options.dereference == Deref::All
-                                && this_stat.metadata.is_dir()
-                                && let Some(inode) = this_stat.inode
-                                && ancestors.contains(&inode)
-                            {
-                                // This symlink points to an ancestor directory - skip to avoid cycle
-                                continue 'file_loop;
-                            }
-
-                            // We have an exclude list
-                            for pattern in &options.excludes {
-                                // Look at all patterns with both short and long paths
-                                // if we have 'du foo' but search to exclude 'foo/bar'
-                                // we need the full path
-                                if pattern.matches(&this_stat.path.to_string_lossy())
-                                    || pattern.matches(&entry.file_name().into_string().unwrap())
-                                {
-                                    // if the directory is ignored, leave early
-                                    if options.verbose {
-                                        println!(
-                                            "{}",
-                                            translate!("du-verbose-ignored", "path" => this_stat.path.quote())
-                                        );
-                                    }
-                                    // Go to the next file
-                                    continue 'file_loop;
-                                }
-                            }
-
-                            if let Some(inode) = this_stat.inode
-                                && !seen_inodes.insert(inode)
-                                && !options.count_links
-                            {
-                                continue;
-                            }
-
-                            if this_stat.metadata.is_dir() {
-                                if options.one_file_system
-                                    && let (Some(this_inode), Some(my_inode)) =
-                                        (this_stat.inode, my_stat.inode)
-                                    && this_inode.dev_id != my_inode.dev_id
-                                {
-                                    continue;
-                                }
-
-                                let this_stat = du_regular(
-                                    this_stat,
-                                    options,
-                                    depth + 1,
-                                    seen_inodes,
-                                    print_tx,
-                                    Some(ancestors),
-                                    Some(current_symlink_depth),
-                                )?;
-
-                                if !options.separate_dirs {
-                                    my_stat.size += this_stat.size;
-                                    my_stat.blocks += this_stat.blocks;
-                                    my_stat.inodes += this_stat.inodes;
-                                    my_stat.latest_time =
-                                        match (my_stat.latest_time, this_stat.latest_time) {
-                                            (Some(a), Some(b)) => Some(a.max(b)),
-                                            (a, None) => a,
-                                            (None, b) => b,
-                                        };
-                                }
-                                print_tx.send(Ok(StatPrintInfo {
-                                    stat: this_stat,
-                                    depth: depth + 1,
-                                }))?;
-                            } else {
-                                my_stat.size += this_stat.size;
-                                my_stat.blocks += this_stat.blocks;
-                                my_stat.inodes += 1;
-                                my_stat.latest_time =
-                                    match (my_stat.latest_time, this_stat.latest_time) {
-                                        (Some(a), Some(b)) => Some(a.max(b)),
-                                        (a, None) => a,
-                                        (None, b) => b,
-                                    };
-                                if options.all {
-                                    print_tx.send(Ok(StatPrintInfo {
-                                        stat: this_stat,
-                                        depth: depth + 1,
-                                    }))?;
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            print_tx.send(Err(e.map_err_context(
-                                    || translate!("du-error-cannot-access", "path" => entry_path.quote()),
-                                )))?;
-                        }
-                    }
-                }
-                Err(error) => print_tx.send(Err(error.into()))?,
+            let child_frame = open_frame(this_stat, current_symlink_depth, &mut ancestors)?;
+            stack.push(std::mem::replace(&mut top_frame, child_frame));
+        } else {
+            top_frame.my_stat.merge(&this_stat);
+            if options.all {
+                print_tx.send(Ok(StatPrintInfo {
+                    stat: this_stat,
+                    depth: stack.len() + 1,
+                }))?;
             }
         }
     }
-
-    // Remove current directory from ancestors before returning
-    if let Some(inode) = my_inode {
-        ancestors.remove(&inode);
-    }
-
-    Ok(my_stat)
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -1286,15 +1183,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // Use safe traversal (Unix except Redox, when not using -L)
             #[cfg(all(unix, not(target_os = "redox")))]
             {
-                match safe_du(
-                    &path,
-                    &traversal_options,
-                    0,
-                    &mut seen_inodes,
-                    &print_tx,
-                    None,
-                    Some(stat),
-                ) {
+                match safe_du(&path, &traversal_options, &mut seen_inodes, &print_tx, stat) {
                     Ok(stat) => {
                         print_tx
                             .send(Ok(StatPrintInfo { stat, depth: 0 }))
@@ -1315,16 +1204,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             // Use regular traversal (non-Linux or when -L is used)
             if let Ok(stat) = stat {
-                let stat = du_regular(
-                    stat,
-                    &traversal_options,
-                    0,
-                    &mut seen_inodes,
-                    &print_tx,
-                    None,
-                    None,
-                )
-                .map_err(|e| USimpleError::new(1, e.to_string()))?;
+                let stat = du_regular(stat, &traversal_options, &mut seen_inodes, &print_tx)
+                    .map_err(|e| USimpleError::new(1, e.to_string()))?;
 
                 print_tx
                     .send(Ok(StatPrintInfo { stat, depth: 0 }))

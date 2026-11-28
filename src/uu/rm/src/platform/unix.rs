@@ -17,7 +17,9 @@ use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
 use uucore::prompt_yes;
-use uucore::safe_traversal::{DirFd, FileInfo, FileStat, SymlinkBehavior};
+use uucore::safe_traversal::{
+    DirFd, FileInfo, FileStat, OPEN_DIR_FDS, SymlinkBehavior, path_of, path_push,
+};
 use uucore::show_error;
 use uucore::translate;
 
@@ -415,26 +417,6 @@ struct Frame {
     path_len: usize,
 }
 
-#[cfg(not(target_os = "redox"))]
-const OPEN_DIR_FDS: usize = 16;
-
-/// The path of the directory being walked, kept as raw bytes so that stepping
-/// into an entry and back out again is a truncation rather than a fresh
-/// allocation: a tree deep enough to need this walk has paths long enough that
-/// copying one per entry dominates the removal.
-#[cfg(not(target_os = "redox"))]
-fn path_of(buf: &[u8]) -> &Path {
-    Path::new(OsStr::from_bytes(buf))
-}
-
-#[cfg(not(target_os = "redox"))]
-fn path_push(buf: &mut Vec<u8>, name: &OsStr) {
-    if !buf.is_empty() && buf.last() != Some(&b'/') {
-        buf.push(b'/');
-    }
-    buf.extend_from_slice(name.as_bytes());
-}
-
 /// Whether `name` is an empty directory in `dir_fd`, asked through the
 /// descriptor rather than the path: past `PATH_MAX` a path-based check just
 /// fails, and a failure counts as non-empty, so rm would prompt before
@@ -446,18 +428,6 @@ fn is_subdir_empty(dir_fd: &DirFd, name: &OsStr) -> bool {
         .open_subdir(name, SymlinkBehavior::NoFollow)
         .and_then(|fd| fd.read_dir())
         .is_ok_and(|entries| entries.is_empty())
-}
-
-/// Reopen the parent of `child_fd` through "..", checking it is still the
-/// directory we descended from and not one swapped in mid-walk.
-#[cfg(not(target_os = "redox"))]
-fn reopen_parent(child_fd: &DirFd, id: FileInfo) -> std::io::Result<DirFd> {
-    let parent_fd = child_fd.open_subdir(OsStr::new(".."), SymlinkBehavior::NoFollow)?;
-    if parent_fd.metadata()?.file_info() == id {
-        Ok(parent_fd)
-    } else {
-        Err(std::io::Error::from(std::io::ErrorKind::NotFound))
-    }
 }
 
 #[cfg(not(target_os = "redox"))]
@@ -501,7 +471,7 @@ pub fn safe_remove_dir_recursive_impl(
             cur_fd = if let Some(fd) = parent.dir_fd {
                 fd
             } else {
-                match reopen_parent(&cur_fd, parent.id) {
+                match cur_fd.reopen_parent(parent.id) {
                     Ok(fd) => fd,
                     Err(e) => {
                         // Name the parent, not the entry we came up from.

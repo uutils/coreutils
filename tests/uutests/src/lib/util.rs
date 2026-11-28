@@ -3431,6 +3431,38 @@ pub fn run_ucmd_as_root_with_stdin_stdout(
     }
 }
 
+/// Builds a 1500-deep directory tree plus a 20-deep sibling subtree and caps
+/// child NOFILE/STACK limits so both stack overflow and EMFILE are exercised.
+/// Linux-only: `perms::safe_traverse_dir` is gated to Linux and macOS rejects small `RLIMIT_STACK` values with `EINVAL`.
+#[cfg(target_os = "linux")]
+pub fn prepare_deep_traversal(root: &Path, ucmd: &mut UCommand) -> (PathBuf, PathBuf) {
+    let (soft, hard) = rlimit::getrlimit(Resource::NOFILE).expect("read NOFILE limit");
+    let (stack_soft, stack_hard) = rlimit::getrlimit(Resource::STACK).expect("read STACK limit");
+    ucmd.limit(Resource::NOFILE, soft.min(1024), hard).limit(
+        Resource::STACK,
+        stack_soft.min(256 * 1024),
+        stack_hard,
+    );
+
+    let mut current = root.to_path_buf();
+    for _ in 0..1500 {
+        current.push("d");
+        fs::create_dir(&current).expect("failed to create deep directory");
+        for name in ["a", "b", "z"] {
+            File::create(current.join(name)).expect("failed to create entry");
+        }
+    }
+    let mut sibling = root.join("d");
+    for _ in 0..20 {
+        sibling.push("s");
+        fs::create_dir(&sibling).expect("failed to create deep sibling directory");
+    }
+    let top = root.join("top");
+    fs::create_dir(&top).expect("failed to create top directory");
+    std::os::unix::fs::symlink("../d/s", top.join("link")).expect("failed to create symlink");
+    (current, sibling)
+}
+
 /// Sanity checks for test utils
 #[cfg(test)]
 mod tests {
