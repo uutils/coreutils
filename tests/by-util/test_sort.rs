@@ -3026,6 +3026,32 @@ fn test_g_float_locale_decimal_separator() {
         .stdout_is("1.10\n1.9\n");
 }
 
+// In de_DE, `,` is the decimal point and `.` groups thousands, so these are
+// 9, 100, 1000 and 9. The whole-line shortcut read `1.000` as one, which put
+// it below 9 and let the second 9 through `-u` (#16735).
+#[test]
+fn test_n_locale_thousands_sep_is_not_a_decimal_point() {
+    let input = "9\n100,0\n1.000\n9\n";
+    let ts = TestScenario::new("sort");
+    ts.ucmd()
+        .env("LC_ALL", "de_DE.UTF-8")
+        .arg("-nu")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("9\n100,0\n1.000\n");
+    ts.ucmd()
+        .env("LC_ALL", "de_DE.UTF-8")
+        .arg("-nCu")
+        .pipe_in(input)
+        .fails_with_code(1);
+    ts.ucmd()
+        .env("LC_ALL", "de_DE.UTF-8")
+        .arg("-n")
+        .pipe_in("1.000\n9,5\n")
+        .succeeds()
+        .stdout_is("9,5\n1.000\n");
+}
+
 #[test]
 #[cfg(unix)]
 fn test_human_numeric_blank_thousands_sep_locale() {
