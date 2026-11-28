@@ -46,6 +46,9 @@ action-creating = creating
 action-reading = reading
 action-writing = writing
 
+# systemd-logind error messages
+systemd-logind-error-load-library = Failed to load libsystemd: { $error }
+
 # SELinux error messages
 selinux-error-not-enabled = SELinux is not enabled on this system
 selinux-error-file-open-failure = failed to open the file: { $error }
