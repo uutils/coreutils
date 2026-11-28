@@ -668,6 +668,30 @@ fn test_numbering_matched_lines() {
     }
 }
 
+#[rstest]
+#[case::body("-b", "aa\na{2}\n", "1:aa\n  a{2}\n", r"p^a\{2\}$")]
+#[case::header(
+    "-h",
+    "\\:\\:\\:\naa\na{2}\n\\:\\:\n",
+    "\n1:aa\n  a{2}\n\n",
+    r"p^a\{2\}$"
+)]
+#[case::footer("-f", "\\:\naa\na{2}\n", "\n1:aa\n  a{2}\n", r"p^a\{2\}$")]
+#[case::backreference("-b", "aa\na\n", "1:aa\n  a\n", r"p^\(a\)\1$")]
+#[case::literal_ere_metacharacters("-b", "a(b)+\naaa\n", "1:a(b)+\n  aaa\n", r"p^a(b)+$")]
+fn test_numbering_patterns_use_basic_regex(
+    #[case] option: &str,
+    #[case] input: &str,
+    #[case] expected: &str,
+    #[case] pattern: &str,
+) {
+    new_ucmd!()
+        .args(&[option, pattern, "-w1", "-s:"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
 #[test]
 fn test_invalid_numbering() {
     let invalid_args = [

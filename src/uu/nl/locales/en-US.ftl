@@ -33,5 +33,6 @@ nl-error-could-not-read-line = could not read line
 nl-error-could-not-write = could not write output
 nl-error-line-number-overflow = line number overflow
 nl-error-invalid-regex = invalid regular expression
+nl-error-regex-match = regular expression matching failed: { $error }
 nl-error-invalid-numbering-style = invalid numbering style: '{ $style }'
 nl-error-is-directory = { $path }: Is a directory
