@@ -322,6 +322,21 @@ fn test_install_mode_symbolic_ignore_umask() {
     assert_eq!(0o100_222_u32, PermissionsExt::mode(&permissions));
 }
 
+#[rstest]
+#[case::minus_w_plus_x(&["-m", "-w+x"], 0o111)]
+#[case::long_minus_x(&["--mode", "-x,u+rw"], 0o600)]
+#[case::minus_octal(&["-m", "-7,u+r"], 0o400)]
+fn test_install_mode_starting_with_hyphen(#[case] mode_args: &[&str], #[case] expected: u32) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+    ucmd.args(mode_args)
+        .args(&["src", "dst"])
+        .umask(0o022)
+        .succeeds()
+        .no_output();
+    assert_eq!(at.metadata("dst").permissions().mode() & 0o7777, expected);
+}
+
 #[test]
 fn test_install_mode_failing() {
     let (at, mut ucmd) = at_and_ucmd!();

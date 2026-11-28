@@ -5,6 +5,7 @@
 
 // spell-checker:ignore nconfined
 
+use rstest::rstest;
 use std::os::unix::fs::PermissionsExt;
 
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -240,6 +241,25 @@ fn test_mknod_mode_capital_x_adds_no_execute() {
             "mode {mode}"
         );
     }
+}
+
+#[rstest]
+#[case::minus_w(&["-m", "-w"], 0o466)]
+#[case::long_minus_w_plus_x(&["--mode", "-w+x"], 0o577)]
+#[case::minus_octal(&["-m", "-7,u+r"], 0o660)]
+fn test_mknod_mode_starting_with_hyphen(#[case] mode_args: &[&str], #[case] expected: u32) {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .args(mode_args)
+        .args(&["test_fifo", "p"])
+        .umask(0o022)
+        .succeeds()
+        .no_output();
+    assert!(ts.fixtures.is_fifo("test_fifo"));
+    assert_eq!(
+        ts.fixtures.metadata("test_fifo").permissions().mode() & 0o777,
+        expected
+    );
 }
 
 #[test]

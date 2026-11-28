@@ -267,7 +267,8 @@ pub fn uu_app() -> Command {
                 .short('m')
                 .long(OPT_MODE)
                 .help(translate!("install-help-mode"))
-                .value_name("MODE"),
+                .value_name("MODE")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(OPT_OWNER)
