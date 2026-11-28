@@ -454,7 +454,7 @@ fn is_modifier(c: char) -> bool {
 
 /// Parse a size string with optional modifier symbol as its first character.
 ///
-/// A size string is as described in [`Parser::parse_u64`]. The first character
+/// Leading zeros in the size are decimal padding. The first character
 /// of `size_string` might be a modifier symbol, like `'+'` or
 /// `'<'`. The first element of the pair returned by this function
 /// indicates which modifier symbol was present, or
@@ -488,7 +488,7 @@ fn parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ParseSizeError
         let allow_list_ref = allow_list.iter().map(AsRef::as_ref).collect::<Vec<&str>>();
         Parser::default()
             .with_allow_list(&allow_list_ref)
-            .parse_u64(size_string)
+            .parse_u64_with_decimal_leading_zeros(size_string)
             .map(match c {
                 '+' => TruncateMode::Extend,
                 '-' => TruncateMode::Reduce,
