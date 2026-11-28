@@ -31,7 +31,7 @@ use uucore::fs::FileInformation;
 
 use crate::{
     GlobalSettings, Output, SortError,
-    chunks::{self, Chunk, RecycledChunk},
+    chunks::{self, Chunk, ReadStatus, RecycledChunk},
     current_open_fd_count, fd_soft_limit, merge_compare, open,
     tmp_dir::{TmpDirWrapper, TmpPath},
 };
@@ -267,7 +267,7 @@ fn reader(
             carry_over,
         }) = &mut files[file_idx]
         {
-            let should_continue = chunks::read(
+            let status = chunks::read(
                 sender,
                 recycled_chunk,
                 None,
@@ -277,7 +277,7 @@ fn reader(
                 separator,
                 settings,
             )?;
-            if !should_continue {
+            if status == ReadStatus::End {
                 // Remove the file from the list by replacing it with `None`.
                 let ReaderFile { file, .. } = files[file_idx].take().unwrap();
                 // Depending on the kind of the `MergeInput`, this may delete the file:

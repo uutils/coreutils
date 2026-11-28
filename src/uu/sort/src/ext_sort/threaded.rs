@@ -17,7 +17,7 @@ use itertools::Itertools;
 use uucore::error::{UResult, strip_errno};
 
 use crate::Output;
-use crate::chunks::RecycledChunk;
+use crate::chunks::{ReadStatus, RecycledChunk};
 use crate::merge::WriteableCompressedTmpFile;
 use crate::merge::WriteablePlainTmpFile;
 use crate::merge::WriteableTmpFile;
@@ -219,10 +219,9 @@ fn read_write_loop<I: WriteableTmpFile>(
 ) -> UResult<ReadResult<I>> {
     let mut file = files.next().unwrap()?;
 
-    let mut carry_over = vec![];
-    // kick things off with two reads
+    let mut carry_over = Vec::new();
     for _ in 0..2 {
-        let should_continue = chunks::read(
+        let status = chunks::read(
             &sender,
             RecycledChunk::new(buffer_size.min(DEFAULT_BUF_SIZE)),
             Some(buffer_size),
@@ -233,11 +232,13 @@ fn read_write_loop<I: WriteableTmpFile>(
             settings,
         )?;
 
-        if !should_continue {
+        if status == ReadStatus::Spill {
+            break;
+        }
+        if status == ReadStatus::End {
             drop(sender);
-            // We have already read the whole input. Since we are in our first two reads,
-            // this means that we can fit the whole input into memory. Bypass writing below and
-            // handle this case in a more straightforward way.
+            // The entire input fit into the initial chunks. Output it without
+            // writing temporary runs.
             return Ok(if let Ok(first_chunk) = receiver.recv() {
                 if let Ok(second_chunk) = receiver.recv() {
                     ReadResult::SortedTwoChunks([first_chunk, second_chunk])
@@ -268,7 +269,7 @@ fn read_write_loop<I: WriteableTmpFile>(
         let recycled_chunk = chunk.recycle();
 
         if let Some(sender) = &sender_option {
-            let should_continue = chunks::read(
+            let status = chunks::read(
                 sender,
                 recycled_chunk,
                 None,
@@ -278,7 +279,7 @@ fn read_write_loop<I: WriteableTmpFile>(
                 separator,
                 settings,
             )?;
-            if !should_continue {
+            if status == ReadStatus::End {
                 sender_option = None;
             }
         }
