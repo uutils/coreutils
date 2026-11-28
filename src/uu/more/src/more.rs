@@ -92,9 +92,9 @@ pub mod options {
 
 struct Options {
     silent: bool,
-    _logical: bool,     // not implemented
-    _exit_on_eof: bool, // not implemented
-    _no_pause: bool,    // not implemented
+    _logical: bool, // not implemented
+    exit_on_eof: bool,
+    _no_pause: bool, // not implemented
     print_over: bool,
     clean_print: bool,
     squeeze: bool,
@@ -119,10 +119,15 @@ impl Options {
             _ => 0,
         };
         let pattern = matches.get_one::<String>(options::PATTERN).cloned();
+        // exit_on_eof is enabled by default unless POSIXLY_CORRECT is set and stdout is a tty.
+        // The -e/--exit-on-eof flag re-enables it explicitly.
+        let posixly_correct = std::env::var_os("POSIXLY_CORRECT").is_some();
+        let is_tty = stdout().is_terminal();
+        let exit_on_eof = !posixly_correct || !is_tty || matches.get_flag(options::EXIT_ON_EOF);
         Self {
             silent: matches.get_flag(options::SILENT),
             _logical: matches.get_flag(options::LOGICAL),
-            _exit_on_eof: matches.get_flag(options::EXIT_ON_EOF),
+            exit_on_eof,
             _no_pause: matches.get_flag(options::NO_PAUSE),
             print_over: matches.get_flag(options::PRINT_OVER),
             clean_print: matches.get_flag(options::CLEAN_PRINT),
@@ -430,11 +435,17 @@ fn more(
         pager.display_multi_file_header()?;
     }
     // Initial display
+    let first_line = pager.upper_mark;
     pager.draw(None)?;
     // Reset multi-file settings after initial display
     if multiple_file {
         pager.reset_multi_file_header();
         options.from_line = 0;
+    }
+    // Exit immediately if the last file fit on the first page and exit_on_eof is enabled.
+    // Otherwise wait at the "(Next file: ...)" prompt, like util-linux.
+    if pager.exit_on_eof && pager.eof_reached && pager.next_file.is_none() {
+        return pager.print_to_main_screen(first_line, multiple_file);
     }
     // Main event loop
     pager.process_events(options)
@@ -459,6 +470,7 @@ struct Pager<'a> {
     eof_reached: bool,
     silent: bool,
     squeeze: bool,
+    exit_on_eof: bool,
     stdout: OutputType,
 }
 
@@ -486,6 +498,7 @@ impl<'a> Pager<'a> {
             eof_reached: false,
             silent: options.silent,
             squeeze: options.squeeze,
+            exit_on_eof: options.exit_on_eof,
             stdout,
         }
     }
@@ -671,7 +684,10 @@ impl<'a> Pager<'a> {
                     modifiers: KeyModifiers::NONE,
                     ..
                 }) => {
-                    if self.eof_reached {
+                    // util-linux stays on the file here when exit_on_eof is off and
+                    // uses `:n` to move on. `:n` is not implemented yet, so still go
+                    // to the next file to avoid getting stuck.
+                    if self.eof_reached && (self.exit_on_eof || self.next_file.is_some()) {
                         return Ok(());
                     }
                     self.page_down();
@@ -681,7 +697,10 @@ impl<'a> Pager<'a> {
                     modifiers: KeyModifiers::NONE,
                     ..
                 }) => {
-                    if self.eof_reached {
+                    // util-linux stays on the file here when exit_on_eof is off and
+                    // uses `:n` to move on. `:n` is not implemented yet, so still go
+                    // to the next file to avoid getting stuck.
+                    if self.eof_reached && (self.exit_on_eof || self.next_file.is_some()) {
                         return Ok(());
                     }
                     self.next_line();
@@ -724,7 +743,12 @@ impl<'a> Pager<'a> {
                 _ => continue,
             }
             self.update_display(options)?;
+            let first_line = self.upper_mark;
             self.draw(wrong_key)?;
+            // Like util-linux, exit as soon as the last file reaches EOF
+            if self.exit_on_eof && self.eof_reached && self.next_file.is_none() {
+                return self.print_to_main_screen(first_line, false);
+            }
         }
     }
 
@@ -798,11 +822,7 @@ impl<'a> Pager<'a> {
                 continue;
             }
             // Display the line
-            let mut line = self.lines[index].clone();
-            if let Some(pattern) = &self.pattern {
-                let highlighted = self.highlight_text(pattern);
-                line = line.replace(pattern, &highlighted);
-            }
+            let line = self.display_line(index);
             self.stdout.write_all(format!("\r{line}\n").as_bytes())?;
             lines_printed += 1;
             index += 1;
@@ -813,6 +833,39 @@ impl<'a> Pager<'a> {
             lines_printed += 1;
         }
         Ok(())
+    }
+
+    /// Leave the alternate screen and print the lines shown on the first page
+    /// to the main screen, so they stay visible after exiting at EOF.
+    fn print_to_main_screen(&mut self, first_line: usize, multiple_file: bool) -> UResult<()> {
+        if !self.stdout.is_tty() {
+            return Ok(());
+        }
+        reset_term()?;
+        let mut stdout = stdout().lock();
+        if multiple_file {
+            stdout.write_all(
+                MULTI_FILE_TOP_PROMPT
+                    .replace("{}", self.file_name.unwrap_or_default())
+                    .as_bytes(),
+            )?;
+        }
+        for index in first_line..self.lines.len() {
+            if !self.should_squeeze_line(index) {
+                writeln!(stdout, "{}", self.display_line(index))?;
+            }
+        }
+        stdout.flush()?;
+        Ok(())
+    }
+
+    /// Return the line at `index` with the search pattern highlighted.
+    fn display_line(&self, index: usize) -> String {
+        let line = &self.lines[index];
+        match &self.pattern {
+            Some(pattern) => line.replace(pattern, &self.highlight_text(pattern)),
+            None => line.clone(),
+        }
     }
 
     fn should_squeeze_line(&self, index: usize) -> bool {
@@ -928,7 +981,7 @@ mod tests {
                 options: Options {
                     silent: false,
                     _logical: false,
-                    _exit_on_eof: false,
+                    exit_on_eof: false,
                     _no_pause: false,
                     print_over: false,
                     clean_print: false,
