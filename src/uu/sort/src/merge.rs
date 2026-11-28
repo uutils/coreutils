@@ -26,7 +26,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use uucore::error::{FromIo, UResult};
+use uucore::error::{FromIo, UError, UResult};
 use uucore::fs::FileInformation;
 
 use crate::{
@@ -155,10 +155,17 @@ pub fn merge_with_file_limit<
         while files.len() > 0 {
             // Create the output before opening this batch's inputs, so that
             // creating it doesn't compete with them for file descriptors.
-            let mut tmp_file =
-                Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
+            let (file, tmp_path) = tmp_dir.next_file()?;
+            let failed_path = tmp_path.path().to_owned();
+            let mut tmp_file = Tmp::create((file, tmp_path), settings.compress_prog.as_deref())?;
             let merger = merge_without_limit(files.by_ref().take(batch_size), settings)?;
-            merger.write_all_to(settings, tmp_file.as_write(), || "write failed".into())?;
+            merger.write_all_to(settings, tmp_file.as_write(), |error| {
+                SortError::TmpFileCloseFailed {
+                    path: failed_path,
+                    error,
+                }
+                .into()
+            })?;
             temporary_files.push(tmp_file.finished_writing()?);
         }
         merge_with_file_limit::<_, _, Tmp>(
@@ -353,16 +360,18 @@ impl FileMerger<'_> {
     fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
         let ctx = output.write_failed_context();
         let mut out = output.into_write()?;
-        self.write_all_to(settings, &mut out, &ctx)?;
+        self.write_all_to(settings, &mut out, |error| {
+            error.map_err_context(&ctx) as Box<dyn UError>
+        })?;
         out.flush().map_err_context(ctx)
     }
 
-    /// Write the merged contents to `out`, reporting write errors with `ctx`.
+    /// Write the merged contents to `out`, reporting write errors with `map_err`.
     fn write_all_to(
         mut self,
         settings: &GlobalSettings,
         out: &mut impl Write,
-        ctx: impl FnOnce() -> String,
+        map_err: impl FnOnce(io::Error) -> Box<dyn UError>,
     ) -> UResult<()> {
         let write_result = loop {
             match self.write_next(out, settings) {
@@ -400,7 +409,7 @@ impl FileMerger<'_> {
         let reader_result = reader_join_handle.join().unwrap();
         // A write failure is what the user needs to hear about; the reader hitting an error
         // on the way down is secondary.
-        write_result.map_err_context(ctx).and(reader_result)
+        write_result.map_err(map_err).and(reader_result)
     }
 
     fn write_next(
@@ -463,6 +472,34 @@ impl FileMerger<'_> {
     }
 }
 
+/// Close `file` and return an error from `close`.
+///
+/// `File`'s destructor ignores that error. Non-Unix targets drop the handle;
+/// the caller has already flushed. That drop cannot fail, but the signature
+/// stays a `Result` so every caller reports a close failure the same way.
+#[cfg_attr(not(unix), allow(clippy::unnecessary_wraps))]
+fn close_tmp_file(file: File) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::fd::IntoRawFd;
+        let fd = file.into_raw_fd();
+        // SAFETY: `fd` is exclusively owned and is not used after this call.
+        // Do not retry on EINTR. On Linux the descriptor is already closed,
+        // and a retry could close a descriptor the process has reused.
+        let rc = unsafe { libc::close(fd) };
+        if rc == 0 {
+            Ok(())
+        } else {
+            Err(io::Error::last_os_error())
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        drop(file);
+        Ok(())
+    }
+}
+
 /// Wait for the child to exit and check its exit code.
 fn check_child_success(mut child: Child, program: &str) -> UResult<()> {
     if matches!(child.wait().map(|e| e.code()), Ok(Some(0) | None) | Err(_)) {
@@ -522,6 +559,19 @@ impl WriteableTmpFile for WriteablePlainTmpFile {
     }
 
     fn finished_writing(self) -> UResult<Self::Closed> {
+        let path = self.path.path().to_owned();
+        // `BufWriter`'s destructor drops a flush error, and `File`'s destructor
+        // drops a close error. GNU `sort` reports either as
+        // `close failed: <temp file>`, which is the ENOSPC seen with `-T` on a
+        // full temporary filesystem.
+        let file = self
+            .file
+            .into_inner()
+            .map_err(|err| SortError::TmpFileCloseFailed {
+                path: path.clone(),
+                error: err.into_error(),
+            })?;
+        close_tmp_file(file).map_err(|error| SortError::TmpFileCloseFailed { path, error })?;
         Ok(ClosedPlainTmpFile { path: self.path })
     }
 
@@ -599,7 +649,12 @@ impl WriteableTmpFile for WriteableCompressedTmpFile {
     }
 
     fn finished_writing(self) -> UResult<Self::Closed> {
-        drop(self.child_stdin);
+        let path = self.path.path().to_owned();
+        let mut stdin = self.child_stdin;
+        stdin
+            .flush()
+            .map_err(|error| SortError::TmpFileCloseFailed { path, error })?;
+        drop(stdin);
         check_child_success(self.child, &self.compress_prog)?;
         Ok(ClosedCompressedTmpFile {
             path: self.path,

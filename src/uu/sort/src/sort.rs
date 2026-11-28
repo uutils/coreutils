@@ -160,6 +160,14 @@ pub enum SortError {
     #[error("{}", translate!("sort-open-tmp-file-failed", "error" => strip_errno(.error)))]
     OpenTmpFileFailed { error: std::io::Error },
 
+    /// Writing, flushing, or closing a temporary file failed.
+    /// GNU `sort` reports all of these as `close failed: <file>` and exits 2.
+    #[error("{}", translate_text!("sort-tmp-file-close-failed", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
+    TmpFileCloseFailed {
+        path: PathBuf,
+        error: std::io::Error,
+    },
+
     #[error("{}", translate!("sort-compress-prog-execution-failed", "prog" => .prog, "error" => strip_errno(.error)))]
     CompressProgExecutionFailed { prog: String, error: std::io::Error },
 
@@ -3468,6 +3476,28 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
 mod tests {
 
     use super::*;
+
+    #[test]
+    fn tmp_file_enospc_names_the_file_and_exits_2() {
+        uucore::locale::setup_localization("sort").unwrap();
+        // A raw errno is not portable: 28 is ENOSPC on Unix and
+        // ERROR_OUT_OF_PAPER on Windows. The message test checks the
+        // `close failed: <path>: <error>` shape with a disk-full error.
+        let error = std::io::Error::new(std::io::ErrorKind::StorageFull, "No space left on device");
+        let expected = strip_errno(&error);
+        let err = SortError::TmpFileCloseFailed {
+            path: PathBuf::from("t/chunk"),
+            error,
+        };
+        assert_eq!(UError::code(&err), 2);
+        let message = err.to_string();
+        assert!(
+            message.starts_with("close failed: "),
+            "unexpected message: {message}"
+        );
+        assert!(message.contains("t/chunk"), "unexpected message: {message}");
+        assert!(message.contains(&expected), "unexpected message: {message}");
+    }
 
     fn tokenize_helper(line: &[u8], separator: Option<u8>) -> Vec<Field> {
         let mut buffer = vec![];
