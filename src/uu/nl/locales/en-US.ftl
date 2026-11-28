@@ -28,7 +28,6 @@ nl-help-starting-line-number = first line number on each logical page
 nl-help-number-width = use NUMBER columns for line numbers
 
 # Error messages
-nl-error-invalid-arguments = Invalid arguments supplied.
 nl-error-could-not-read-line = could not read line
 nl-error-could-not-write = could not write output
 nl-error-line-number-overflow = line number overflow
