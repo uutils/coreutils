@@ -397,7 +397,10 @@ where
                     state = ParseState::Continue;
                 }
                 if state != ParseState::Pass {
-                    append_entry(&mut result, fmt, key, &lower, val)?;
+                    append_entry(&mut result, fmt, key, &lower, val)
+                        .map_err(|()| {
+                            translate!("dircolors-error-unrecognized-keyword", "file" => fp.maybe_quote(), "line" => num, "keyword" => key)
+                        })?;
                 }
             }
         }
@@ -418,7 +421,7 @@ fn append_entry(
     key: &str,
     lower: &str,
     val: &str,
-) -> Result<(), String> {
+) -> Result<(), ()> {
     if key.starts_with(['.', '*']) {
         let entry = if key.starts_with('.') {
             format!("*{key}")
@@ -446,7 +449,7 @@ fn append_entry(
                 result.push_str(&disp);
                 Ok(())
             } else {
-                Err(translate!("dircolors-error-unrecognized-keyword", "keyword" => key))
+                Err(())
             }
         }
     }
