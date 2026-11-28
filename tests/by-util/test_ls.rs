@@ -8830,3 +8830,14 @@ fn test_dereferenced_context_reports_error_once(
         .fails_with_code(if command_line { 2 } else { 1 })
         .stderr_is("ls: cannot access 'dir/broken': No such file or directory\n");
 }
+
+// Windows has no SIGPIPE: a reader that goes away must not make ls complain.
+#[cfg(windows)]
+#[test]
+fn test_ls_broken_pipe_is_quiet_on_windows() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    let (read, write) = std::io::pipe().unwrap();
+    drop(read);
+    ucmd.arg("-la").set_stdout(write).succeeds().no_stderr();
+}

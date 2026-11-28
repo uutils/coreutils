@@ -280,6 +280,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match result {
         Ok(()) => Ok(()),
+        // On Windows the error is returned, and `uucore::main` stays quiet.
+        #[cfg(not(windows))]
         Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
             // GNU seq prints the Broken pipe message but still exits with status 0
             // unless SIGPIPE was explicitly ignored, in which case it should fail.

@@ -1364,3 +1364,16 @@ fn test_locale_decimal_point_operands(#[case] args: &[&str], #[case] expected: &
         .succeeds()
         .stdout_only(expected);
 }
+
+// Windows has no SIGPIPE: a reader that goes away must not make seq complain.
+#[cfg(windows)]
+#[test]
+fn test_broken_pipe_is_quiet_on_windows() {
+    let (read, write) = std::io::pipe().unwrap();
+    drop(read);
+    new_ucmd!()
+        .args(&["1", "100000"])
+        .set_stdout(write)
+        .succeeds()
+        .no_stderr();
+}
