@@ -84,6 +84,31 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn test_chown_fakeroot() {
+    if !uutests::util::has_fakeroot_support() {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir = "dir";
+    let file = "dir/file";
+    at.mkdir(dir);
+    at.touch(file);
+    let coreutils = uutests::util::get_tests_binary();
+    scene
+        .cmd("fakeroot")
+        .current_dir(at.plus(dir))
+        .args(&[
+            "sh",
+            "-c",
+            &format!("{coreutils} chown -R 7:11 . && stat -c '%u:%g' file"),
+        ])
+        .succeeds()
+        .stdout_only("7:11\n");
+}
+
+#[test]
 fn test_chown_only_owner() {
     // test chown username file.txt
 
