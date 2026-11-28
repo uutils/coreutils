@@ -898,6 +898,23 @@ fn test_touch_dash_updates_stdout_file() {
     assert!(age.as_secs() < 60, "touch - left mtime stale: {age:?}");
 }
 
+// `-h` does not apply to `-`: the time that is not being changed must not be
+// read from the `/dev/stdout` symlink itself and written to the file.
+#[uutests::wasi_ignore(NoStdoutFileRedirection)]
+#[test]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_touch_no_dereference_dash_keeps_the_other_time() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("c");
+    let old = FileTime::from_unix_time(1_000_000_000, 0);
+    set_file_times(&at, "c", old, old);
+
+    let file = std::fs::File::open(at.plus("c")).unwrap();
+    ucmd.set_stdout(file).args(&["-h", "-a", "-"]).succeeds();
+
+    assert_eq!(get_file_times(&at, "c").1, old);
+}
+
 #[test]
 #[cfg(not(windows))]
 fn test_touch_trailing_slash() {
