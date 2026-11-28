@@ -1854,6 +1854,53 @@ fn test_du_exclude_several_components() {
 }
 
 #[test]
+#[cfg(not(windows))]
+fn test_du_exclude_matches_after_slash() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("target/debug");
+    at.mkdir_all("docs/debug");
+    at.mkdir_all("a/target/debug");
+
+    // As in GNU, the pattern is also tried on each part of the path after a
+    // '/', so a leading "./" or a parent directory doesn't stop it matching
+    for pattern in ["target/debug", "t*t/debug"] {
+        for dir in [".", "./target", ".//target", "a", "./a/target"] {
+            let result = ts
+                .ucmd()
+                .arg(format!("--exclude={pattern}"))
+                .arg(dir)
+                .succeeds();
+            assert!(
+                !result.stdout_str().contains("target/debug"),
+                "du --exclude={pattern} {dir}"
+            );
+        }
+    }
+    ts.ucmd()
+        .arg("--exclude=t*t/debug")
+        .arg(".")
+        .succeeds()
+        .stdout_contains("docs/debug")
+        .stdout_contains("a/target\n");
+
+    // The same applies to the operands
+    ts.ucmd()
+        .arg("--exclude=target")
+        .arg("./target")
+        .succeeds()
+        .no_output();
+
+    // A pattern that starts with '/' only matches a whole path
+    ts.ucmd()
+        .arg("--exclude=/target")
+        .arg(".")
+        .succeeds()
+        .stdout_contains("target/debug");
+}
+
+#[test]
 fn test_du_exclude_invalid_syntax() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
