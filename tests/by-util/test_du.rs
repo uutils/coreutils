@@ -1853,6 +1853,77 @@ fn test_du_exclude_several_components() {
     assert!(!result.stdout_str().contains("a/b"));
 }
 
+// A pattern also matches the trailing components of a path, whatever
+// the operand puts in front of them, but never part of a component.
+#[cfg(not(windows))]
+#[test]
+fn test_du_exclude_trailing_components() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("a/b/c");
+    at.mkdir_all("a/u");
+    at.mkdir_all("xa/b");
+
+    for (operand, excluded, kept) in [
+        (".", "./a/b", "./xa/b"),
+        ("a", "a/b", "a/u"),
+        ("./a", "./a/b", "./a/u"),
+    ] {
+        let result = ts.ucmd().arg("--exclude=a/b").arg(operand).succeeds();
+        let paths: Vec<_> = result
+            .stdout_str()
+            .lines()
+            .filter_map(|l| l.split_once('\t').map(|(_, p)| p))
+            .collect();
+        assert!(!paths.contains(&excluded), "{operand}: {paths:?}");
+        assert!(!paths.contains(&format!("{excluded}/c").as_str()));
+        assert!(paths.contains(&kept), "{operand}: {paths:?}");
+    }
+}
+
+// Like GNU, `?` and `*` match a separator, so a pattern without `/` can
+// still match several trailing components.
+#[cfg(not(windows))]
+#[test]
+fn test_du_exclude_wildcard_spans_components() {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkdir_all("x/a/b");
+    ts.fixtures.mkdir_all("x/c");
+
+    ts.ucmd()
+        .args(&["--exclude=a?b", "x"])
+        .succeeds()
+        .stdout_does_not_contain("x/a/b")
+        .stdout_contains("x/a\n")
+        .stdout_contains("x/c");
+}
+
+// Trailing slashes on an operand collapse to one, so entries are `a/x`
+// and not `a//x`, and excludes see the same paths.
+#[cfg(not(windows))]
+#[test]
+fn test_du_operand_trailing_slashes() {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkdir_all("a/target");
+
+    for (args, expected) in [
+        (&["a/"][..], &["a/target", "a/"][..]),
+        (&["a//"], &["a/target", "a/"]),
+        (&["a///"], &["a/target", "a/"]),
+        (&["--exclude=/target", "a//"], &["a/target", "a/"]),
+        (&["--exclude=*/a/target", "./a//"], &["./a/"]),
+    ] {
+        let result = ts.ucmd().args(args).succeeds();
+        let paths: Vec<_> = result
+            .stdout_str()
+            .lines()
+            .filter_map(|l| l.split_once('\t').map(|(_, p)| p))
+            .collect();
+        assert_eq!(paths, expected, "{args:?}");
+    }
+}
+
 #[test]
 fn test_du_exclude_invalid_syntax() {
     let ts = TestScenario::new(util_name!());
