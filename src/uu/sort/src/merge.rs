@@ -37,51 +37,81 @@ use crate::{
 };
 
 /// If the output file occurs in the input files as well, copy the contents of the output file
-/// and replace its occurrences in the inputs with that copy, which is returned.
+/// and replace its occurrences in the inputs with that copy. Standard input that reads the
+/// output file (`sort -m -o f - < f`) is copied as well, from where it is now, to a copy of
+/// its own. The copies are returned.
 fn replace_output_file_in_input_files(
     files: &mut [OsString],
     output: Option<&OsStr>,
     tmp_dir: &mut TmpDirWrapper,
-) -> UResult<Option<TmpPath>> {
-    let mut copy: Option<TmpPath> = None;
+) -> UResult<Vec<TmpPath>> {
+    let mut copies = Vec::new();
     if let Some(output_path) = output.map(Path::new)
         && let Ok(output_info) = FileInformation::from_path(output_path, true)
     {
+        // `-` is read from the descriptor, which may be the output file under
+        // any name, so compare what it is open on.
+        let stdin_is_output = FileInformation::from_file(&io::stdin())
+            .is_ok_and(|stdin_info| stdin_info == output_info);
+        // One copy of the output file for its path operands, and one of
+        // standard input, taken from where it stands.
+        let mut path_copy: Option<OsString> = None;
+        let mut stdin_copy: Option<OsString> = None;
         for file in files {
+            let is_stdin = file == "-";
             // Different hard links have different canonical paths but still
             // share the file that will be truncated when output begins.
-            if FileInformation::from_path(Path::new(file), true)
-                .is_ok_and(|input_info| input_info == output_info)
-            {
-                if let Some(copy) = &copy {
-                    *file = copy.path().into();
+            let reads_output = if is_stdin {
+                stdin_is_output
+            } else {
+                FileInformation::from_path(Path::new(file), true)
+                    .is_ok_and(|input_info| input_info == output_info)
+            };
+            if !reads_output {
+                continue;
+            }
+            let slot = if is_stdin {
+                &mut stdin_copy
+            } else {
+                &mut path_copy
+            };
+            if slot.is_none() {
+                let copy = if is_stdin {
+                    copy_to_tmp_file(&mut io::stdin().lock(), tmp_dir)?
                 } else {
-                    // Write through the descriptor `next_file` just opened rather
-                    // than `fs::copy`, which would put the source's permission bits
-                    // on the temporary file and undo the 0600 it was created with.
-                    let (mut copy_file, copy_path) = tmp_dir.next_file()?;
                     let mut source = File::open(output_path)
                         .map_err(|error| SortError::OpenTmpFileFailed { error })?;
-                    io::copy(&mut source, &mut copy_file)
-                        .map_err(|error| SortError::OpenTmpFileFailed { error })?;
-                    *file = copy_path.path().into();
-                    copy = Some(copy_path);
-                }
+                    copy_to_tmp_file(&mut source, tmp_dir)?
+                };
+                *slot = Some(copy.path().into());
+                copies.push(copy);
+            }
+            if let Some(copy) = slot {
+                file.clone_from(copy);
             }
         }
     }
-    Ok(copy)
+    Ok(copies)
 }
 
-/// Open the merge input `file`. `copy` is the copy of the output file returned by
+/// Copy `source` to a new temporary file. Write through the descriptor
+/// `next_file` just opened rather than `fs::copy`, which would put the source's
+/// permission bits on the temporary file and undo the 0600 it was created with.
+fn copy_to_tmp_file(source: &mut impl Read, tmp_dir: &mut TmpDirWrapper) -> UResult<TmpPath> {
+    let (mut copy_file, copy_path) = tmp_dir.next_file()?;
+    io::copy(source, &mut copy_file).map_err(|error| SortError::OpenTmpFileFailed { error })?;
+    Ok(copy_path)
+}
+
+/// Open the merge input `file`. `copies` are the copies returned by
 /// [`replace_output_file_in_input_files`].
-fn open_input(file: &OsStr, copy: Option<&TmpPath>) -> UResult<Box<dyn Read + Send>> {
-    match copy {
-        Some(copy) if Path::new(file) == copy.path() => Ok(Box::new(
+fn open_input(file: &OsStr, copies: &[TmpPath]) -> UResult<Box<dyn Read + Send>> {
+    match copies.iter().find(|copy| Path::new(file) == copy.path()) {
+        Some(copy) => Ok(Box::new(
             copy.open()
                 .map_err(|error| SortError::OpenTmpFileFailed { error })?,
         )),
-        _ => open(file),
+        None => open(file),
     }
 }
 
@@ -122,10 +152,10 @@ pub fn merge(
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
-    let copy = replace_output_file_in_input_files(files, output.as_output_name(), tmp_dir)?;
+    let copies = replace_output_file_in_input_files(files, output.as_output_name(), tmp_dir)?;
     let files = files
         .iter()
-        .map(|file| open_input(file, copy.as_ref()).map(|inner| PlainMergeInput { inner }));
+        .map(|file| open_input(file, &copies).map(|inner| PlainMergeInput { inner }));
     if settings.compress_prog.is_none() {
         merge_with_file_limit::<_, _, WriteablePlainTmpFile>(files, settings, output, tmp_dir)
     } else {
@@ -711,14 +741,14 @@ mod tests {
 
         let mut tmp_dir = TmpDirWrapper::new(dir.path().to_owned());
         let mut files = vec![out.clone().into_os_string()];
-        let copy =
+        let copies =
             replace_output_file_in_input_files(&mut files, Some(out.as_os_str()), &mut tmp_dir)
                 .unwrap();
-        let tmp = copy.as_ref().unwrap().path().parent().unwrap();
+        let tmp = copies[0].path().parent().unwrap();
         fs::rename(tmp, dir.path().join("moved")).unwrap();
         std::os::unix::fs::symlink(other.path(), tmp).unwrap();
 
-        assert!(open_input(&files[0], copy.as_ref()).is_err());
+        assert!(open_input(&files[0], &copies).is_err());
     }
 
     /// A temporary file that is being merged when the directory's path is made
