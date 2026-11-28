@@ -1404,3 +1404,28 @@ fn test_header_quotes_name_with_control_char() {
         .succeeds()
         .stdout_only("==> 'tab'$'\\t''here' <==\nt\n");
 }
+
+#[test]
+fn test_invalid_overridden_count_is_rejected() {
+    for (args, message) in [
+        (
+            &["-c1-3", "-n1"][..],
+            "head: invalid number of bytes: '1-3'\n",
+        ),
+        (
+            &["--byte=1-3", "-n1"][..],
+            "head: invalid number of bytes: '1-3'\n",
+        ),
+        (
+            &["-n1-3", "-c1"][..],
+            "head: invalid number of lines: '1-3'\n",
+        ),
+        (
+            &["--line", "1,2", "-c1"][..],
+            "head: invalid number of lines: '1,2'\n",
+        ),
+        (&["-vc1-3"][..], "head: invalid number of bytes: '1-3'\n"),
+    ] {
+        new_ucmd!().args(args).fails_with_code(1).stderr_is(message);
+    }
+}

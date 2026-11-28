@@ -31,7 +31,7 @@ pub fn uu_app() -> Command {
                 .long("bytes")
                 .value_name("[-]NUM")
                 .help(translate!("head-help-bytes"))
-                .overrides_with_all([options::BYTES, options::LINES])
+                .action(ArgAction::Append)
                 .allow_hyphen_values(true),
         )
         .arg(
@@ -40,7 +40,7 @@ pub fn uu_app() -> Command {
                 .long("lines")
                 .value_name("[-]NUM")
                 .help(translate!("head-help-lines"))
-                .overrides_with_all([options::LINES, options::BYTES])
+                .action(ArgAction::Append)
                 .allow_hyphen_values(true),
         )
         .arg(

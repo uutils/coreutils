@@ -14,6 +14,7 @@ use std::num::IntErrorKind;
 use std::time::Duration;
 use uucore::diagnostics::OptionValue;
 use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::parser::count_option::{CountOption, count_option_arguments};
 use uucore::parser::parse_signed_num::{SignPrefix, number_offset, parse_signed_num_max};
 use uucore::parser::parse_size::ParseSizeError;
 use uucore::parser::parse_time;
@@ -89,34 +90,40 @@ impl FilterMode {
         };
 
         let zero_term = matches.get_flag(options::ZERO_TERM);
-        let mode = if let Some(arg) = matches.get_one::<String>(options::BYTES) {
-            match parse_num(arg) {
-                Ok(signum) => Self::Bytes(signum),
-                Err(e) => {
+        let mut mode = None;
+
+        for argument in count_option_arguments(matches, options::BYTES, options::LINES) {
+            let option = argument.option;
+            let arg = argument.value;
+            let signum = parse_num(&arg).map_err(|e| match option {
+                CountOption::Bytes => {
                     let message =
                         translate!("tail-error-invalid-number-of-bytes", "arg" => e.to_string());
-                    return Err(raise(message, arg, 'c', "bytes", &e));
+                    raise(message, &arg, 'c', "bytes", &e)
                 }
-            }
-        } else if let Some(arg) = matches.get_one::<String>(options::LINES) {
-            match parse_num(arg) {
-                Ok(signum) => {
+                CountOption::Lines => {
+                    let message =
+                        translate!("tail-error-invalid-number-of-lines", "arg" => arg.quote());
+                    raise(message, &arg, 'n', "lines", &e)
+                }
+            })?;
+
+            mode = Some(match option {
+                CountOption::Bytes => Self::Bytes(signum),
+                CountOption::Lines => {
                     let delimiter = if zero_term { 0 } else { b'\n' };
                     Self::Lines(signum, delimiter)
                 }
-                Err(e) => {
-                    let message =
-                        translate!("tail-error-invalid-number-of-lines", "arg" => arg.quote());
-                    return Err(raise(message, arg, 'n', "lines", &e));
-                }
-            }
-        } else if zero_term {
-            Self::default_zero()
-        } else {
-            Self::default()
-        };
+            });
+        }
 
-        Ok(mode)
+        Ok(mode.unwrap_or_else(|| {
+            if zero_term {
+                Self::default_zero()
+            } else {
+                Self::default()
+            }
+        }))
     }
 
     fn default_zero() -> Self {
@@ -519,7 +526,7 @@ pub fn uu_app() -> Command {
                 .long(options::BYTES)
                 .value_name("[+]NUM")
                 .allow_hyphen_values(true)
-                .overrides_with_all([options::BYTES, options::LINES])
+                .action(ArgAction::Append)
                 .help(translate!("tail-help-bytes")),
         )
         .arg(
@@ -539,7 +546,7 @@ pub fn uu_app() -> Command {
                 .long(options::LINES)
                 .value_name("[+]NUM")
                 .allow_hyphen_values(true)
-                .overrides_with_all([options::BYTES, options::LINES])
+                .action(ArgAction::Append)
                 .help(translate!("tail-help-lines")),
         )
         .arg(
