@@ -22,9 +22,26 @@ jobs:
               per_page: 100,
             });
 
-            const results = await Promise.allSettled(
-              runs.filter(({ status }) => status !== 'completed').map(({ id }) =>
-                github.rest.actions.cancelWorkflowRun({ ...context.repo, run_id: id })));
+            const unfinished = runs.filter(({ status }) => status !== 'completed');
+            if (unfinished.length === 0) {
+              core.info(`No unfinished runs to cancel for ${context.payload.pull_request.head.sha}`);
+              return;
+            }
+
+            const results = await Promise.allSettled(unfinished.map(({ id }) =>
+              github.rest.actions.cancelWorkflowRun({ ...context.repo, run_id: id })));
+
+            results.forEach((result, index) => {
+              const { id, name, status, html_url } = unfinished[index];
+              if (result.status === 'fulfilled') {
+                core.info(`Cancelled ${name} (run ${id}, was ${status}): ${html_url}`);
+              } else if (result.reason?.status === 409) {
+                core.info(`Already finished before cancelling: ${name} (run ${id}): ${html_url}`);
+              } else {
+                core.warning(`Could not cancel ${name} (run ${id}): ${result.reason?.message ?? result.reason}`);
+              }
+            });
+
             const failure = results.find(({ status, reason }) =>
               status === 'rejected' && reason?.status !== 409);
             if (failure) {
