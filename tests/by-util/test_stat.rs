@@ -1198,3 +1198,13 @@ fn test_alternate_octal_adds_a_single_zero(#[case] format: &str, #[case] expecte
         .succeeds()
         .stdout_is(expected);
 }
+
+#[cfg(unix)]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
+fn test_default_format_device_type_label() {
+    new_ucmd!()
+        .arg("/dev/null")
+        .succeeds()
+        .stdout_contains(" Device type: ");
+}
