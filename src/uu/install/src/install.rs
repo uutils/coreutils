@@ -202,7 +202,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<OsString> = args.collect();
     // Kept for the caret in mode diagnostics, which needs the mode as typed.
     let diag_args = uucore::diagnostics::operands(&args);
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let app = uu_app();
+    let matches = uucore::clap_localization::handle_clap_result(app, args)?;
 
     let paths: Vec<OsString> = matches
         .get_many::<OsString>(ARG_FILES)
@@ -341,7 +342,8 @@ pub fn uu_app() -> Command {
                 .help(translate!("install-help-context"))
                 .value_name("CONTEXT")
                 .value_parser(clap::value_parser!(String))
-                .num_args(0..=1),
+                .num_args(0..=1)
+                .require_equals(true),
         )
         .arg(
             Arg::new(ARG_FILES)
@@ -463,12 +465,19 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
     #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
     let selinux_enabled = false;
 
-    let mut context = matches.get_one::<String>(OPT_CONTEXT).cloned();
+    // A bare `--context` means "use the default context", while an explicit
+    // `--context=` is an empty context that still has to be reported. Without
+    // a default missing value, clap reports the former as `get_one() == None`
+    // with `contains_id() == true`, and the latter as `Some("")`.
+    let context_value = matches.get_one::<String>(OPT_CONTEXT);
+    let bare_context = matches.contains_id(OPT_CONTEXT) && context_value.is_none();
+    let mut context = context_value.cloned();
     if context.is_some() && !selinux_enabled {
         show_warning!("{}", translate!("install-warning-context-ignored"));
         context = None;
     }
-    let default_context = matches.get_flag(OPT_DEFAULT_CONTEXT) && selinux_enabled;
+    let default_context =
+        (matches.get_flag(OPT_DEFAULT_CONTEXT) || bare_context) && selinux_enabled;
     let privileged = !matches.get_flag(OPT_UNPRIVILEGED);
 
     Ok(Behavior {
