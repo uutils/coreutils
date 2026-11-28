@@ -408,6 +408,7 @@ rlimit = { workspace = true }
 rustix = { workspace = true, features = ["net", "process"] }
 
 [build-dependencies]
+cfg_aliases.workspace = true
 phf_codegen.workspace = true
 
 [features]
