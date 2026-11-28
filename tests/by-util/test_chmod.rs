@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) dirfd subdirs openat FDCWD rwxr Nofile
+// spell-checker:ignore (words) dirfd subdirs openat FDCWD rwxr Nofile fchmodat fchmodat2
 
 use std::fs::{OpenOptions, Permissions, metadata, set_permissions};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
@@ -2529,4 +2529,76 @@ fn test_recursive_dereference_changes_link_targets() {
         .succeeds()
         .no_output();
     assert_eq!(at.metadata("target").permissions().mode() & 0o777, 0o640);
+}
+
+/// Runs `chmod -R 750` over a tree of three 0o755 files while `strace` makes the second
+/// chmod call fail with `error`, as if that entry had just changed under chmod's feet.
+/// Returns `None` (after saying so) if `strace` cannot inject errors on this machine.
+#[cfg(target_os = "linux")]
+fn run_recursive_chmod_with_injected_error(error: &str) -> Option<std::process::Output> {
+    use std::process::Command;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let bin = ts.bin_path.to_string_lossy().into_owned();
+    let names = ["a", "b", "gone.txt"];
+
+    at.mkdir("tree");
+    for name in names {
+        at.touch(format!("tree/{name}"));
+        set_permissions(
+            at.plus(format!("tree/{name}")),
+            Permissions::from_mode(0o755),
+        )
+        .unwrap();
+    }
+
+    // One expression: separate `-e inject=` options for the same syscalls override
+    // each other instead of combining.
+    let inject = format!("inject=chmod,fchmodat,fchmodat2:error={error}:when=2");
+    let Ok(output) = Command::new("strace")
+        .args(["-o", "/dev/null", "-e", &inject])
+        .args([&bin, "chmod", "-R", "750", &at.plus_as_string("tree")])
+        .output()
+    else {
+        eprintln!("TEST SKIPPED: strace is not available");
+        return None;
+    };
+
+    // With injection working, exactly one file keeps its old mode. Which one depends
+    // on the order the filesystem lists the directory, so it counts instead of naming it.
+    let changed = names
+        .iter()
+        .filter(|name| at.metadata(format!("tree/{name}")).permissions().mode() & 0o777 == 0o750)
+        .count();
+    if changed != 2 {
+        eprintln!("TEST SKIPPED: strace syscall injection is not available");
+        return None;
+    }
+    Some(output)
+}
+
+/// An entry that disappears while `chmod -R` walks a tree is skipped silently,
+/// as GNU chmod does (issue #16644).
+#[cfg(target_os = "linux")]
+#[test]
+fn test_chmod_recursive_skips_entry_removed_during_walk() {
+    let Some(output) = run_recursive_chmod_with_injected_error("ENOENT") else {
+        return;
+    };
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    assert!(stderr.is_empty(), "{stderr}");
+}
+
+/// Only a vanished entry is skipped: other errors during the walk are still reported.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_chmod_recursive_still_reports_other_errors_during_walk() {
+    let Some(output) = run_recursive_chmod_with_injected_error("EACCES") else {
+        return;
+    };
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stderr}");
+    assert!(stderr.contains("Permission denied"), "{stderr}");
 }
