@@ -520,9 +520,7 @@ fn handle_preceding_options(
         use options as O;
         *preceding_long_opt_req_value = &slice[2..] == O::SKIP_CHARS
             || &slice[2..] == O::SKIP_FIELDS
-            || &slice[2..] == O::CHECK_CHARS
-            || &slice[2..] == O::GROUP
-            || &slice[2..] == O::ALL_REPEATED;
+            || &slice[2..] == O::CHECK_CHARS;
     }
     // capture if current slice is a preceding short option that requires value and does not have value in the same slice (value separated by whitespace)
     // following slice should be treaded as value for this option
