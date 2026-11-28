@@ -25,7 +25,6 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 ))]
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
-use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::io::{self, IsTerminal};
@@ -190,8 +189,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let overwrite_mode = determine_overwrite_mode(&matches);
-    let backup_mode =
-        backup_control::determine_backup_mode(env::var("VERSION_CONTROL").ok(), &matches)?;
+    let backup_mode = backup_control::determine_backup_mode(&matches)?;
     let update_mode = update_control::determine_update_mode(&matches);
 
     if backup_mode != BackupMode::None

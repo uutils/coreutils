@@ -98,8 +98,6 @@ cp-error-cannot-create-directory = impossible de créer le répertoire { $path }
 cp-error-invalid-attribute = attribut invalide { $value }
 cp-error-failed-to-create-whole-tree = échec de la création de l'arborescence complète
 cp-error-failed-to-create-directory = Échec de la création du répertoire : { $error }
-cp-error-backup-format = cp : { $error }
-  Tentez '{ $exec } --help' pour plus d'informations.
 
 # Debug enum strings
 cp-debug-enum-no = non
