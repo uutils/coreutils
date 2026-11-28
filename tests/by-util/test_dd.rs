@@ -1270,14 +1270,12 @@ fn test_bytes_oseek_bytes_oflag() {
 #[test]
 #[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
 fn test_bytes_oseek_bytes_trunc_oflag() {
-    // The test harness hands stdout over as a regular file. Where dd detects
-    // that (Linux, OpenBSD), it seeks in the file and, like GNU, writes
-    // nothing. Elsewhere the seek on stdout is emulated by writing zeros.
-    let expected: &[u8] = if cfg!(any(target_os = "linux", target_os = "openbsd")) {
-        b""
-    } else {
-        &[0; 8]
-    };
+    // The test harness hands stdout over as a regular file, which is seekable
+    // on every platform. dd detects that and seeks in the file, so — like GNU
+    // with a seekable stdout — it writes nothing and the captured stdout is
+    // empty. (Only a non-seekable stdout, e.g. a pipe, would have the seek
+    // emulated by writing zero bytes.)
+    let expected: &[u8] = b"";
     new_ucmd!()
         .args(&["oseek=8", "oflag=seek_bytes", "bs=2", "count=0"])
         .pipe_in("abcdefghijklm")
@@ -1699,6 +1697,136 @@ fn test_failed_truncate_is_reported_and_copy_goes_on() {
             "dd: failed to truncate to 512 bytes in output file '/dev/stdout': Operation not permitted\n",
         )
         .stderr_contains("1+0 records in\n1+0 records out\n");
+}
+
+/// A write-only stdout redirection target is still seekable, so `seek=` must not zero-fill the prefix (#16550).
+#[test]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_seek_count_zero_on_write_only_stdout() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("out", "KEEPtail");
+
+    // Open read/write before dropping read permission so the descriptor stays valid and seekable.
+    let stdout = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().read(true).write(true),
+        at.plus("out").as_path(),
+    )
+    .unwrap();
+    std::fs::set_permissions(at.plus("out"), std::fs::Permissions::from_mode(0o200)).unwrap();
+
+    ts.ucmd()
+        .args(&["bs=1", "seek=4", "count=0", "conv=notrunc", "status=none"])
+        .set_stdout(Stdio::from(stdout))
+        .succeeds()
+        .no_output();
+
+    std::fs::set_permissions(at.plus("out"), std::fs::Permissions::from_mode(0o600)).unwrap();
+    assert_eq!(at.read("out"), "KEEPtail");
+}
+
+/// A stdout already at a non-zero offset must not be rewound by the seekability probe (#16550).
+#[test]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_seek_count_zero_does_not_rewind_nonzero_stdout_offset() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("out", "KEEP");
+
+    // Start at offset 4 so a rewind() in the probe would be observable.
+    let stdout = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().read(true).write(true),
+        at.plus("out").as_path(),
+    )
+    .unwrap();
+    let raw = stdout.as_raw();
+    assert_eq!(
+        nix::unistd::lseek(raw, 4, nix::unistd::Whence::SeekSet),
+        Ok(4)
+    );
+
+    ts.ucmd()
+        .args(&["bs=1", "count=2", "conv=notrunc", "status=none"])
+        .pipe_in(b"XY")
+        .set_stdout(Stdio::from(stdout))
+        .succeeds()
+        .no_output();
+
+    // The probe must not have moved stdout back to 0; the prefix is intact.
+    assert_eq!(at.read("out"), "KEEPXY");
+}
+
+/// A non-zero stdout offset combined with `seek=` must be honoured relative to
+/// the current position, not from zero: the non-destructive probe must leave the
+/// offset where it was, so `seek=` advances from there (#16550).
+#[test]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_seek_count_zero_does_not_rewind_nonzero_stdout_offset_with_seek() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("out", "KEEP");
+
+    // Start the descriptor at offset 4 (end of the prefix).
+    let stdout = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().read(true).write(true),
+        at.plus("out").as_path(),
+    )
+    .unwrap();
+    let raw = stdout.as_raw();
+    assert_eq!(
+        nix::unistd::lseek(raw, 4, nix::unistd::Whence::SeekSet),
+        Ok(4)
+    );
+
+    // `seek=2` must advance from offset 4 to offset 6, leaving a two-byte gap.
+    // A rewinding probe would instead write at offset 2 and clobber the prefix.
+    ts.ucmd()
+        .args(&["bs=1", "seek=2", "count=1", "conv=notrunc", "status=none"])
+        .pipe_in(b"Z")
+        .set_stdout(Stdio::from(stdout))
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read_bytes("out"), b"KEEP\x00\x00Z");
+}
+
+/// A write-only seekable stdout (as produced by a `> file` redirection) combined
+/// with `seek=` and a non-zero `count=` must create a hole and write the data at
+/// the sought offset. The non-destructive `stream_position` probe must leave the
+/// offset usable for the subsequent seek+write; a rewinding probe would clobber
+/// the prefix. The existing write-only test uses `count=0`, so it never exercises
+/// the actual data-write path on a write-only descriptor (#16550).
+#[test]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_seek_write_only_stdout_writes_data_at_offset() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("out", "0123456789");
+
+    // Open read/write first, then drop read permission so the descriptor is
+    // write-only yet still seekable, matching a `> file` redirection target.
+    let stdout = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().read(true).write(true),
+        at.plus("out").as_path(),
+    )
+    .unwrap();
+    std::fs::set_permissions(at.plus("out"), std::fs::Permissions::from_mode(0o200)).unwrap();
+
+    // `seek=4` must write "XY" at offset 4..6, leaving the "0123" prefix and the
+    // "6789" tail intact (conv=notrunc). A rewinding probe would write at 0.
+    ts.ucmd()
+        .args(&["bs=1", "seek=4", "count=2", "conv=notrunc", "status=none"])
+        .pipe_in(b"XY")
+        .set_stdout(Stdio::from(stdout))
+        .succeeds()
+        .no_output();
+
+    std::fs::set_permissions(at.plus("out"), std::fs::Permissions::from_mode(0o600)).unwrap();
+    assert_eq!(at.read("out"), "0123XY6789");
 }
 
 /// Test that a seek on an output FIFO results in a read.
