@@ -6,7 +6,6 @@
 // spell-checker:ignore tailable stdlib (stdlib)
 
 use crate::args::Settings;
-use crate::chunks::BytesChunkBuffer;
 use crate::open_file;
 use crate::paths::{HeaderPrinter, PathExtTail, stdout_writer};
 use crate::read::ReadAvailable;
@@ -14,7 +13,7 @@ use crate::text;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::collections::hash_map::Keys;
 use std::fs::Metadata;
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
 
@@ -131,8 +130,8 @@ impl FileHandling {
             use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
 
             // Without --pid, preserve blocking reads after the nonblocking open.
-            let flags = fcntl_getfl(&file).map_err(std::io::Error::from)?;
-            fcntl_setfl(&file, flags & !OFlags::NONBLOCK).map_err(std::io::Error::from)?;
+            let flags = fcntl_getfl(&file).map_err(io::Error::from)?;
+            fcntl_setfl(&file, flags & !OFlags::NONBLOCK).map_err(io::Error::from)?;
         }
         let data = self.get_mut(path);
         data.reader.replace(Box::new(BufReader::new(file)));
@@ -151,26 +150,43 @@ impl FileHandling {
 
     /// Read new data from `path` and print it to stdout
     pub fn tail_file(&mut self, path: &Path, verbose: bool) -> UResult<bool> {
-        let mut chunks = BytesChunkBuffer::new(u64::MAX);
-        if let Some(reader) = self.get_mut(path).reader.as_mut() {
-            chunks.fill(&mut ReadAvailable::new(reader))?;
-        }
-        if chunks.has_data() {
-            if self.needs_header(path, verbose) {
-                let display_name = self.get(path).display_name.clone();
-                self.header_printer.print(display_name.as_str())?;
-            }
+        let Some(mut reader) = self.get_mut(path).reader.take() else {
+            return Ok(false);
+        };
 
-            let mut writer = BufWriter::new(stdout_writer());
-            chunks.write(&mut writer)?;
-            writer.flush()?;
+        let result = self.print_new_data(path, verbose, &mut ReadAvailable::new(&mut reader));
 
+        self.get_mut(path).reader = Some(reader);
+
+        if result? {
             self.last.replace(path.to_owned());
             self.update_metadata(path, None);
             Ok(true)
         } else {
             Ok(false)
         }
+    }
+
+    fn print_new_data(
+        &mut self,
+        path: &Path,
+        verbose: bool,
+        reader: &mut impl BufRead,
+    ) -> UResult<bool> {
+        if reader.fill_buf()?.is_empty() {
+            return Ok(false);
+        }
+
+        if self.needs_header(path, verbose) {
+            let display_name = self.get(path).display_name.clone();
+            self.header_printer.print(display_name.as_str())?;
+        }
+
+        let mut writer = BufWriter::new(stdout_writer());
+        io::copy(&mut *reader, &mut writer)?;
+        writer.flush()?;
+
+        Ok(true)
     }
 
     /// Decide if printing `path` needs a header based on when it was last printed
