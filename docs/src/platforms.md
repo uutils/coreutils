@@ -45,3 +45,11 @@ Note that for some utilities, not all functionality is supported on each
 platform. This is documented per utility.
 
 {{ #include platform_table.md }}
+
+## Linux login records
+
+On Linux, `who`, `pinky`, `users`, and `uptime` prefer traditional login records
+and try systemd-logind when the default file is empty or unavailable. Because
+musl's `utmpx` functions are stubs, musl builds query systemd-logind directly for
+the default login database, using D-Bus on static musl builds where `libsystemd`
+cannot be loaded at runtime.

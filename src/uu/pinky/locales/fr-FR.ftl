@@ -1,9 +1,6 @@
 pinky-about = Affiche des informations brèves sur les utilisateurs des systèmes Unix
 pinky-usage = pinky [OPTION]... [UTILISATEUR]...
-pinky-about-musl-warning = Avertissement : Lorsque compilé avec musl libc, l'utilitaire `pinky` peut afficher des
-    informations utilisateur incomplètes ou manquantes en raison de l'implémentation
-    factice des fonctions `utmpx` de musl. Cette limitation affecte la capacité
-    à récupérer des détails précis sur les utilisateurs connectés.
+pinky-about-musl-warning = Avec musl libc, l'affichage des utilisateurs connectés nécessite un accès à systemd-logind.
 
 # Description d'utilisation longue
 pinky-long-usage-description = Un programme 'finger' léger ; affiche les informations utilisateur.

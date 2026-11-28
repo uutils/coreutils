@@ -2,9 +2,7 @@ uptime-about = Afficher l'heure actuelle, la durée pendant laquelle le système
   le nombre d'utilisateurs sur le système, et le nombre moyen de tâches
   dans la file d'attente d'exécution au cours des 1, 5 et 15 dernières minutes.
 uptime-usage = uptime [OPTION]...
-uptime-about-musl-warning = Avertissement : Lorsque compilé avec musl libc, l'utilitaire `uptime` peut afficher '0 utilisateur'
-    en raison de l'implémentation stub des fonctions utmpx de musl. L'heure de démarrage et les moyennes de charge
-    sont toujours calculées en utilisant des mécanismes alternatifs.
+uptime-about-musl-warning = Avec musl libc, le comptage des utilisateurs connectés nécessite un accès à systemd-logind.
 
 # Messages d'aide
 uptime-help-since = système actif depuis
