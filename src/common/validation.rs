@@ -28,6 +28,8 @@ unsafe extern "C" {
 /// Terminates the process with `code`, flushing the PGO counters when the
 /// binary was built for profile training on Windows.
 pub fn exit(code: i32) -> ! {
+    #[cfg(target_os = "wasi")]
+    let code = uucore::error::wasi_safe_exit_code(code);
     #[cfg(all(pgo_training, windows))]
     // SAFETY: `__llvm_profile_write_file` is provided by the LLVM profiling
     // runtime, which is linked in whenever this cfg is set (the same build
