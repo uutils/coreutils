@@ -13,6 +13,40 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+#[test]
+fn test_from_accepts_unambiguous_prefix() {
+    for (prefix, input, expected) in [
+        ("a", "1K", "1000\n"),
+        ("s", "1K", "1000\n"),
+        ("iec", "1K", "1024\n"),
+        ("n", "5", "5\n"),
+    ] {
+        new_ucmd!()
+            .arg(format!("--from={prefix}"))
+            .arg(input)
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+fn test_from_rejects_ambiguous_prefix() {
+    new_ucmd!()
+        .args(&["--from=i", "5"])
+        .fails_with_code(1)
+        .stderr_contains("invalid argument 'i' for '--from'");
+}
+
+#[test]
+fn test_invalid_accepts_unambiguous_prefix() {
+    for prefix in ["a", "f", "w", "ig"] {
+        new_ucmd!()
+            .args(&["--invalid", prefix, "5"])
+            .succeeds()
+            .stdout_is("5\n");
+    }
+}
+
 #[rstest]
 // This test failed when fixing #11653.
 // Add a `--` separator to ensure floats are not rounded (it matches the gnu pattern).
