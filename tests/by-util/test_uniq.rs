@@ -216,6 +216,18 @@ fn test_all_repeated_followed_by_filename() {
         .stdout_is("a\na\n");
 }
 
+#[rstest]
+#[case::all_repeated_skip_fields(&["--all-repeated", "-1"], "x a\ny a\nz b\nw b\n")]
+#[case::all_repeated_skip_chars(&["--all-repeated", "+1"], "x a\ny a\nz b\nw b\n")]
+#[case::group_skip_fields(&["--group", "-1"], "x a\ny a\n\nz b\nw b\n\nv c\n")]
+fn test_obsolete_skip_after_optional_method(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in("x a\ny a\nz b\nw b\nv c\n")
+        .succeeds()
+        .stdout_only(expected);
+}
+
 #[test]
 fn test_stdin_all_repeated_separate() {
     new_ucmd!()
