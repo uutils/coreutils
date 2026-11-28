@@ -33,7 +33,6 @@
 
 pub extern crate time;
 
-use std::ffi::CString;
 use std::io::Result as IOResult;
 use std::marker::PhantomData;
 use std::os::unix::ffi::OsStrExt;
@@ -48,15 +47,8 @@ pub use self::ut::*;
 
 // See the FAQ at https://wiki.musl-libc.org/faq#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?
 // Musl implements only stubs for the utmp functions, and the libc crate issues a deprecation warning about this.
-// However, calling these stubs is the correct approach to maintain consistent behavior with GNU coreutils.
-#[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
-pub use libc::endutxent;
-#[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
-pub use libc::getutxent;
 #[cfg(target_os = "freebsd")]
 use libc::setutxdb;
-#[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
-pub use libc::setutxent;
 use libc::utmpx;
 #[cfg(any(
     target_vendor = "apple",
@@ -64,10 +56,12 @@ use libc::utmpx;
     target_os = "netbsd",
     target_os = "cygwin"
 ))]
-#[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
+#[cfg(not(any(target_env = "musl", target_env = "ohos")))]
 pub use libc::utmpxname;
 
 use crate::libc; // import macros from `../../macros.rs`
+#[cfg(not(any(target_env = "musl", target_env = "ohos")))]
+pub use libc::{endutxent, getutxent, setutxent};
 
 // In case the c_char array doesn't end with NULL
 macro_rules! chars2string {
@@ -311,11 +305,11 @@ impl Utmpx {
         #[cfg(not(all(feature = "systemd_logind", target_os = "linux")))]
         {
             let iter = UtmpxIter::new();
+            #[cfg(not(any(target_env = "musl", target_env = "ohos")))]
+            // This can technically fail, and it would be nice to detect that,
+            // but it doesn't return anything so we'd have to do nasty things
+            // with errno.
             unsafe {
-                // This can technically fail, and it would be nice to detect that,
-                // but it doesn't return anything so we'd have to do nasty things
-                // with errno.
-                #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
                 setutxent();
             }
             iter
@@ -343,8 +337,9 @@ impl Utmpx {
         }
 
         let iter = UtmpxIter::new();
-        let path = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
+        #[cfg(not(any(target_env = "musl", target_env = "ohos")))]
         unsafe {
+            let path = std::ffi::CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
             #[cfg(target_os = "freebsd")]
             setutxdb(libc::UTXDB_ACTIVE, path.as_ptr());
 
@@ -357,10 +352,7 @@ impl Utmpx {
             // So this function is pretty crazy and we don't try to detect errors.
             // Not much we can do besides pray.
             #[cfg(not(target_os = "freebsd"))]
-            #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
             utmpxname(path.as_ptr());
-
-            #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
             setutxent();
         }
         iter
@@ -536,8 +528,10 @@ impl Iterator for UtmpxIter {
         }
 
         // Traditional utmp path
+        #[cfg(any(target_env = "musl", target_env = "ohos"))]
+        return None;
+        #[cfg(not(any(target_env = "musl", target_env = "ohos")))]
         unsafe {
-            #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
             let res = getutxent();
             if res.is_null() {
                 None
@@ -554,11 +548,9 @@ impl Iterator for UtmpxIter {
     }
 }
 
+#[cfg(not(any(target_env = "musl", target_env = "ohos")))]
 impl Drop for UtmpxIter {
     fn drop(&mut self) {
-        unsafe {
-            #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
-            endutxent();
-        }
+        unsafe { endutxent() };
     }
 }
