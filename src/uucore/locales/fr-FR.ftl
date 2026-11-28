@@ -83,6 +83,13 @@ checksum-failed-open-file = { $count ->
 uudoc-tldr-attribution = Les exemples sont fournis par le [projet tldr-pages](https://tldr.sh) sous la [licence CC BY 4.0](https://github.com/tldr-pages/tldr/blob/main/LICENSE.md).
 uudoc-tldr-disclaimer = Veuillez noter que, uutils étant en cours de développement, certains exemples peuvent échouer.
 
+# Diagnostics chown/chgrp/chmod récursifs partagés (uucore::perms)
+perms-cannot-access = impossible d'accéder à { $file } : { $error }
+perms-cannot-access-replaced = impossible d'accéder à { $file } : remplacé pendant son traitement
+
+# Message d'erreur en cas d'échec du déréférencement dans perms
+perms-cannot-dereference = impossible de déréférencer { $file } : { $error }
+
 # Messages d'analyse des modes symboliques
 mode-error-unexpected-end = fin de mode inattendue
 mode-error-invalid-operator = opérateur invalide (+, - ou = attendu, mais { $operator } trouvé)
