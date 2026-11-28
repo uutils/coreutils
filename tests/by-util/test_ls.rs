@@ -2155,6 +2155,26 @@ fn test_ls_sort_none() {
 }
 
 #[test]
+fn test_ls_sort_none_ignores_reverse() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("b");
+    at.touch("a");
+    at.touch("c");
+
+    for args in [["-U", "-r"], ["-r", "--sort=none"], ["-f", "-r"]] {
+        scene
+            .ucmd()
+            .arg("-1")
+            .args(&args)
+            .args(&["b", "a", "c"])
+            .succeeds()
+            .stdout_only("b\na\nc\n");
+    }
+}
+
+#[test]
 fn test_ls_sort_name() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4166,34 +4186,21 @@ fn test_ls_version_sort() {
         "b20",
         "b20a",
         "b20b",
-        "", // because of '\n' at the end of the output
     ];
 
     let result = scene.ucmd().arg("-1v").succeeds();
-    assert_eq!(
-        result.stdout_str().split('\n').collect::<Vec<_>>(),
-        expected
-    );
+    assert_eq!(result.stdout_str().lines().collect::<Vec<_>>(), expected);
 
     let result = scene.ucmd().arg("-1").arg("--sort=version").succeeds();
-    assert_eq!(
-        result.stdout_str().split('\n').collect::<Vec<_>>(),
-        expected
-    );
+    assert_eq!(result.stdout_str().lines().collect::<Vec<_>>(), expected);
 
     let result = scene.ucmd().arg("-1").arg("--sort=v").succeeds();
-    assert_eq!(
-        result.stdout_str().split('\n').collect::<Vec<_>>(),
-        expected
-    );
+    assert_eq!(result.stdout_str().lines().collect::<Vec<_>>(), expected);
 
     let result = scene.ucmd().arg("-a1v").succeeds();
     expected.insert(0, "..");
     expected.insert(0, ".");
-    assert_eq!(
-        result.stdout_str().split('\n').collect::<Vec<_>>(),
-        expected,
-    );
+    assert_eq!(result.stdout_str().lines().collect::<Vec<_>>(), expected);
 }
 
 #[test]
@@ -5168,17 +5175,17 @@ fn test_ls_sort_extension() {
         "file.debug",
         "anotherFile.ext",
         "anotherFile.debug",
+        "file-1.ext",
     ] {
         at.touch(filename);
     }
 
     let expected = vec![
-        ".",
-        "..",
-        ".hidden",
         "anotherFile",
         "file1",
         "file2",
+        ".",
+        "..",
         ".file.1",
         "anotherFile.1",
         "file.1",
@@ -5188,21 +5195,16 @@ fn test_ls_sort_extension() {
         "anotherFile.debug",
         "file.debug",
         "anotherFile.ext",
+        "file-1.ext",
         "file.ext",
-        "", // because of '\n' at the end of the output
+        ".hidden",
     ];
 
     let result = scene.ucmd().arg("-1aX").succeeds();
-    assert_eq!(
-        result.stdout_str().split('\n').collect::<Vec<_>>(),
-        expected,
-    );
+    assert_eq!(result.stdout_str().lines().collect::<Vec<_>>(), expected);
 
     let result = scene.ucmd().arg("-1a").arg("--sort=extension").succeeds();
-    assert_eq!(
-        result.stdout_str().split('\n').collect::<Vec<_>>(),
-        expected,
-    );
+    assert_eq!(result.stdout_str().lines().collect::<Vec<_>>(), expected);
 }
 
 #[uutests::wasi_ignore(HostPathsNotVisible)]

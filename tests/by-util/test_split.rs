@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit NOFILE
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit NOFILE xdigit FSIZE sigxfsz
 
 use rand::{RngExt as _, SeedableRng, rng};
 use regex::Regex;
@@ -1189,7 +1189,6 @@ fn test_number_kth_of_n() {
         .args(&["--number=3/10", "/dev/null"])
         .succeeds()
         .stdout_only("");
-    #[cfg(target_pointer_width = "64")]
     new_ucmd!()
         .args(&[
             "--number=r/9223372036854775807/18446744073709551615",
@@ -1205,7 +1204,6 @@ fn test_number_kth_of_n() {
         .args(&["--number=10/5", "asciilowercase.txt"])
         .fails()
         .stderr_contains("split: invalid chunk number: '10'");
-    #[cfg(target_pointer_width = "64")]
     new_ucmd!()
         .args(&[
             "--number=9223372036854775807/18446744073709551616",
@@ -1229,7 +1227,10 @@ fn test_number_kth_of_n_round_robin() {
         .args(&["-e", "--number", "r/7/7", "fivelines.txt"])
         .succeeds()
         .stdout_only("");
-    #[cfg(target_pointer_width = "64")]
+    new_ucmd!()
+        .args(&["--number", "r/1/4294967296", "fivelines.txt"])
+        .succeeds()
+        .stdout_only("1\n");
     new_ucmd!()
         .args(&[
             "--number",
@@ -1238,7 +1239,6 @@ fn test_number_kth_of_n_round_robin() {
         ])
         .succeeds()
         .stdout_only("");
-    #[cfg(target_pointer_width = "64")]
     new_ucmd!()
         .args(&[
             "--number",
@@ -2660,6 +2660,50 @@ fn test_number_with_plus_prefix(
         .map(|(name, contents)| (name.to_string(), contents.to_string()))
         .collect();
     assert_eq!(files, expected_files, "-n {number}");
+}
+
+#[test]
+fn test_unbuffered() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-u", "-n", "r/2"])
+        .pipe_in("1\n2\n3\n4\n5\n")
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("xaa"), "1\n3\n5\n");
+    assert_eq!(at.read("xab"), "2\n4\n");
+
+    new_ucmd!()
+        .args(&["--unbuffered", "-t", "\\0", "-n", "r/2/3"])
+        .pipe_in("1\x002\x003\x004\x005\x00")
+        .succeeds()
+        .stdout_is("2\x005\x00");
+
+    // The other modes accept it too, where it changes nothing.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-u", "-l", "2"])
+        .pipe_in("1\n2\n3\n")
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("xaa"), "1\n2\n");
+    assert_eq!(at.read("xab"), "3\n");
+}
+
+#[test]
+fn test_unbuffered_record_longer_than_buffer() {
+    let input = "abcde\nf\nghijk\nl\n";
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-u", "---io-blksize=2", "-n", "r/2"])
+        .pipe_in(input)
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("xaa"), "abcde\nghijk\n");
+    assert_eq!(at.read("xab"), "f\nl\n");
+
+    new_ucmd!()
+        .args(&["-u", "---io-blksize=2", "-n", "r/1/2"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("abcde\nghijk\n");
 }
 
 #[cfg(unix)]

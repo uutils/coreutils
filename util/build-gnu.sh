@@ -209,9 +209,6 @@ sed -i 's/^print_ver_.*/require_selinux_/' tests/runcon/runcon-compute.sh
 sed -i 's/^print_ver_.*/require_selinux_/' tests/runcon/runcon-no-reorder.sh
 sed -i 's/^print_ver_.*/require_selinux_/' tests/chcon/chcon-fail.sh
 
-# We use coreutils yes
-sed -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
-
 # Do not skip
 sed -i "s|skip_|true|g" tests/install/stdin.sh
 

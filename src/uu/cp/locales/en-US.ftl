@@ -94,6 +94,7 @@ cp-error-selinux-context-conflict = cannot combine --context (-Z) with --preserv
 cp-error-cannot-create-fifo = cannot create fifo { $path }: File exists
 cp-error-cannot-create-special-file = cannot create special file { $path }: { $error }
 cp-error-cannot-create-regular-file = cannot create regular file { $path }
+cp-error-cannot-create-directory = cannot create directory { $path }
 cp-error-invalid-attribute = invalid attribute { $value }
 cp-error-failed-to-create-whole-tree = failed to create whole tree
 cp-error-failed-to-create-directory = Failed to create directory: { $error }

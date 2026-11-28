@@ -316,6 +316,41 @@ impl Observer {
         Ok(())
     }
 
+    /// The directory holding `path` is gone, so no event will report the
+    /// file coming back: poll for it instead.
+    fn orphan_after_parent_removed(&mut self, path: &Path, settings: &Settings) {
+        show_error!(
+            "{}",
+            translate!("tail-status-directory-containing-watched-file-removed")
+        );
+        show_error!(
+            "{}",
+            translate!("tail-status-backend-cannot-be-used-reverting-to-polling", "backend" => text::BACKEND)
+        );
+        if settings.debug && !self.reported_polling {
+            self.reported_polling = true;
+            show_error!("{}", translate!("tail-debug-using-polling-mode"));
+        }
+        self.orphans.push(path.to_owned());
+        let _ = self.watcher_rx.as_mut().unwrap().unwatch(path);
+    }
+
+    /// A watched directory was removed. The removal of a followed file in it
+    /// may have been handled while the directory still existed, so poll for
+    /// the files it held that are not polled for yet.
+    fn handle_parent_removed(&mut self, dir: &Path, settings: &Settings) {
+        let lost: Vec<PathBuf> = self
+            .files
+            .keys()
+            .filter(|p| p.parent() == Some(dir) && !self.orphans.contains(p))
+            .cloned()
+            .collect();
+        for path in lost {
+            self.files.reset_reader(&path);
+            self.orphan_after_parent_removed(&path, settings);
+        }
+    }
+
     #[allow(clippy::cognitive_complexity)]
     fn handle_event(
         &mut self,
@@ -452,17 +487,7 @@ impl Observer {
                                 report_inaccessible(&display_name);
                         }
                         if !event_path.has_active_parent() && !self.orphans.contains(event_path) {
-                            show_error!("{}", translate!("tail-status-directory-containing-watched-file-removed"));
-                            show_error!(
-                                "{}",
-                                translate!("tail-status-backend-cannot-be-used-reverting-to-polling", "backend" => text::BACKEND)
-                            );
-                            if settings.debug && !self.reported_polling {
-                                self.reported_polling = true;
-                                show_error!("{}", translate!("tail-debug-using-polling-mode"));
-                            }
-                            self.orphans.push(event_path.clone());
-                            let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
+                            self.orphan_after_parent_removed(event_path, settings);
                         } else if event_path.is_symlink() && !self.orphans.contains(event_path) {
                             // The target of the link is gone, and nothing
                             // reports the name it will come back under: poll
@@ -655,6 +680,11 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                         paths.push(p);
                     }
                 }
+            } else if observer.follow_name_retry()
+                && event.kind == notify::EventKind::Remove(notify::event::RemoveKind::Folder)
+                && let Some(dir) = event.paths.first()
+            {
+                observer.handle_parent_removed(dir, settings);
             }
             Ok(())
         };

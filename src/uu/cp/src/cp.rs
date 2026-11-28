@@ -39,8 +39,8 @@ use uucore::display::Quotable;
 use uucore::error::{UError, UResult, UUsageError, set_exit_code, strip_errno};
 use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, are_hardlinks_to_same_file, canonicalize,
-    get_filename, is_symlink_loop, normalize_path, path_ends_with_terminator,
-    paths_refer_to_same_file, replace_link,
+    is_symlink_loop, normalize_path, path_ends_with_terminator, paths_refer_to_same_file,
+    replace_link,
 };
 use uucore::{backup_control, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
@@ -2131,8 +2131,8 @@ fn symlink_file(
         CpError::IoErrContext(
             e,
             translate!("cp-error-cannot-create-symlink",
-                           "dest" => get_filename(dest).unwrap_or("?").quote(),
-                           "source" => get_filename(source).unwrap_or("?").quote()),
+                           "dest" => dest.quote(),
+                           "source" => source.quote()),
         )
     })?;
     if let Ok(file_info) = FileInformation::from_path(dest, false) {
@@ -2599,7 +2599,7 @@ fn handle_copy_mode(
             .map_err(|e| {
                 CpError::IoErrContext(
                     e,
-                    translate!("cp-error-cannot-create-hard-link", "dest" => get_filename(dest).unwrap_or("?").quote(), "source" => get_filename(source).unwrap_or("?").quote())
+                    translate!("cp-error-cannot-create-hard-link", "dest" => dest.quote(), "source" => source.quote())
                 )
             })?;
         }

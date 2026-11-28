@@ -910,6 +910,46 @@ fn test_cp_arg_update_short_overwrite() {
     assert_eq!(at.read(old), "new content\n");
 }
 
+#[rstest]
+#[case::all(&["--update=all", "-u"])]
+#[case::none_with_backup(&["--update=none", "-u", "-b"])]
+#[case::all_between_short(&["-u", "--update=all", "-u"])]
+fn test_cp_arg_update_short_after_long(#[case] args: &[&str]) {
+    // the last of -u and --update decides
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.make_file("src")
+        .set_modified(std::time::UNIX_EPOCH)
+        .unwrap();
+    at.write("dest", "dest\n");
+
+    ucmd.args(args)
+        .args(&["src", "dest"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("dest"), "dest\n");
+}
+
+#[rstest]
+#[case::all(&["-u", "--update=all"])]
+#[case::all_after_two_short(&["-u", "-u", "--update=all"])]
+#[case::all_with_backup(&["-u", "--update=all", "-b"])]
+fn test_cp_arg_update_long_after_short(#[case] args: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut src = at.make_file("src");
+    src.write_all(b"src\n").unwrap();
+    src.set_modified(std::time::UNIX_EPOCH).unwrap();
+    at.write("dest", "dest\n");
+
+    ucmd.args(args)
+        .args(&["src", "dest"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("dest"), "src\n");
+    assert_eq!(at.file_exists("dest~"), args.contains(&"-b"));
+}
+
 #[test]
 fn test_cp_arg_update_none_then_all() {
     // take last if multiple update args are supplied,
@@ -1159,6 +1199,25 @@ fn test_cp_arg_link_keeps_source_mode() {
     scene.ucmd().args(&["-lf", "orig", "dest"]).succeeds();
     assert_eq!(at.metadata("orig").permissions().mode() & 0o777, 0o600);
     assert_eq!(at.metadata("dest").permissions().mode() & 0o777, 0o600);
+}
+
+// Android's app-private filesystem refuses hard links.
+#[cfg(all(unix, not(target_os = "android")))]
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
+#[rstest]
+#[case::hard_link("-l", "hard link")]
+#[case::symlink("-s", "symlink")]
+fn test_cp_link_error_names_full_paths(#[case] option: &str, #[case] kind: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("s");
+    at.mkdir("d");
+    at.write("s/n", "a");
+    at.write("d/n", "b");
+    // -s only accepts a relative source when the destination is in the cwd.
+    let source = at.plus_as_string("s/n");
+    ucmd.args(&[option, &source, "d"])
+        .fails_with_code(1)
+        .stderr_contains(format!("cp: cannot create {kind} 'd/n' to '{source}'"));
 }
 
 #[test]
@@ -5602,6 +5661,19 @@ fn test_cp_no_such() {
         .arg("no-such/")
         .fails()
         .stderr_is("cp: 'no-such/' is not a directory\n");
+}
+
+#[cfg(not(windows))]
+#[rstest]
+#[case::recursive(&["-r", "dir", "no-such/dir"])]
+#[case::archive(&["-a", "dir", "no-such/dir"])]
+#[case::no_target_directory(&["-rT", "dir", "no-such/dir"])]
+fn test_cp_recursive_missing_target_parent(#[case] args: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    ucmd.args(args)
+        .fails()
+        .stderr_only("cp: cannot create directory 'no-such/dir': No such file or directory\n");
 }
 
 #[cfg(any(

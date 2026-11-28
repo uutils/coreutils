@@ -16,12 +16,12 @@ use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint};
 use uucore::checksum::compute::{
     ChecksumComputeOptions, OutputFormat, perform_checksum_computation,
 };
-use uucore::checksum::validate::{self, ChecksumValidateOptions, ChecksumVerbose};
+use uucore::checksum::validate::{self, ChecksumTool, ChecksumValidateOptions, ChecksumVerbose};
 use uucore::checksum::{AlgoKind, ChecksumError, HashLength, SizedAlgoKind};
 use uucore::error::UResult;
 use uucore::line_ending::LineEnding;
 use uucore::quoting_style::terminal_filename_quoting_style;
-use uucore::{crate_version, format_usage, localized_help_template, util_name};
+use uucore::{crate_version, format_usage, localized_help_template, stdout_writer, util_name};
 
 mod cli;
 pub use cli::ChecksumCommand;
@@ -67,7 +67,7 @@ pub fn standalone_with_length_main(
     cmd: Command,
     args: impl uucore::Args,
     validate_len: fn(&str) -> UResult<HashLength>,
-    allow_empty_filename: bool,
+    tool: ChecksumTool,
 ) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(cmd, args)?;
     let algo = Some(algo);
@@ -83,7 +83,7 @@ pub fn standalone_with_length_main(
     let tag = matches.get_flag(options::TAG);
     let format = OutputFormat::from_standalone(text, tag);
 
-    checksum_main(algo, length, matches, format, allow_empty_filename)
+    checksum_main(algo, length, matches, format, tool)
 }
 
 /// Entrypoint for standalone checksums *NOT* accepting the `--length` argument
@@ -95,8 +95,7 @@ pub fn standalone_main(algo: AlgoKind, cmd: Command, args: impl uucore::Args) ->
     let tag = matches.get_flag(options::TAG);
     let format = OutputFormat::from_standalone(text, tag);
 
-    // md5sum and sha*sum report an untagged line with no file name as improperly formatted.
-    checksum_main(algo, None, matches, format, false)
+    checksum_main(algo, None, matches, format, ChecksumTool::Other)
 }
 
 /// Base command processing for all the checksum executables.
@@ -149,7 +148,7 @@ pub fn checksum_main(
     length: Option<HashLength>,
     matches: ArgMatches,
     output_format: OutputFormat,
-    allow_empty_filename: bool,
+    tool: ChecksumTool,
 ) -> UResult<()> {
     let check = matches.get_flag("check");
 
@@ -197,7 +196,7 @@ pub fn checksum_main(
 
         let verbose = ChecksumVerbose::new(status, quiet, warn);
         let opts = ChecksumValidateOptions {
-            allow_empty_filename,
+            tool,
             ignore_missing,
             strict,
             verbose,
@@ -228,7 +227,7 @@ pub fn checksum_main(
         has_file_operands,
     };
 
-    perform_checksum_computation(stdout, opts, files)?;
+    perform_checksum_computation(stdout_writer(), opts, files)?;
 
     Ok(())
 }

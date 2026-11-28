@@ -20,6 +20,7 @@ clap = { workspace = true }
 fluent = { workspace = true }
 nix = { workspace = true, features = ["ioctl", "term"] }
 rustix = { workspace = true, features = ["fs", "termios"] }
+thiserror = { workspace = true }
 uucore = { workspace = true, features = ["parser"] }
 
 [build-dependencies]

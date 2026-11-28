@@ -618,20 +618,30 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     if LOCALIZED_UTIL.with_borrow(|util| util.as_deref() == Some(p)) {
         return Ok(());
     }
-    let locales_dir = get_locales_dir(p);
-    // Callers such as the help template pass the invoked name (`dir`, `[`,
-    // a prefixed binary name...), which has no strings of its own: keep the
-    // utility that is already set up instead of switching to nothing
-    if LOCALIZED_UTIL.with_borrow(Option::is_some)
-        && locales_dir.is_err()
-        && get_embedded_locale(&format!("{p}/{DEFAULT_LOCALE}.ftl")).is_none()
-    {
-        return Ok(());
-    }
 
     let locale = detect_system_locale().unwrap_or_else(|_| {
         LanguageIdentifier::from_str(DEFAULT_LOCALE).expect("Default locale should always be valid")
     });
+
+    // English is embedded at build time, so there is no need to look for
+    // the locales directory (a readlink and several stats) or read files
+    let has_embedded_strings = get_embedded_locale(&format!("{p}/{DEFAULT_LOCALE}.ftl")).is_some();
+    if locale == DEFAULT_LOCALE && has_embedded_strings {
+        set_localizer(Localizer::new(create_english_bundle_from_embedded(
+            &locale, p,
+        )?));
+        LOCALIZED_UTIL.with_borrow_mut(|util| *util = Some(p.to_string()));
+        return Ok(());
+    }
+
+    let locales_dir = get_locales_dir(p);
+    // Callers such as the help template pass the invoked name (`dir`, `[`,
+    // a prefixed binary name...), which has no strings of its own: keep the
+    // utility that is already set up instead of switching to nothing
+    if LOCALIZED_UTIL.with_borrow(Option::is_some) && locales_dir.is_err() && !has_embedded_strings
+    {
+        return Ok(());
+    }
 
     // Load common strings along with utility-specific strings
     if let Ok(locales_dir) = locales_dir {

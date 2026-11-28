@@ -313,7 +313,6 @@ fn test_print_database_ignores_term() {
 }
 
 #[test]
-#[ignore = "--csh must escape '!' to prevent history substitution"]
 fn test_csh_output_escapes_bang() {
     let scene = uutests::util::TestScenario::new(uutests::util_name!());
     scene.fixtures.write("db", "*.hey! 01;33\n");

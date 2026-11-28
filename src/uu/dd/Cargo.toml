@@ -27,6 +27,7 @@ uucore = { workspace = true, features = [
   "quoting-style",
   "fs",
   "signals",
+  "zeroed-alloc",
 ] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))'.dependencies]

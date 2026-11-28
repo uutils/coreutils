@@ -163,7 +163,7 @@ fn sparse_copy_without_hole_fd(src_file: &File, dst_file: &File, context: &str) 
     // At least 1 byte, so that a source that was empty at fstat time but
     // gained data before the SEEK_DATA loop cannot make `step_by` panic.
     let step = size.clamp(1, 16 * 1024 * 1024) as usize;
-    let mut buf: Vec<u8> = vec![0x0; step];
+    let mut buf = uucore::zeroed_alloc::try_new_vec(step).map_err(ctx_err)?;
     while let Ok(data) = seek(src_file, SeekFrom::Data(current_offset)) {
         current_offset = data;
         let Ok(hole) = seek(src_file, SeekFrom::Hole(current_offset)) else {
