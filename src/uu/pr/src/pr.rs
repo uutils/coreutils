@@ -10,7 +10,7 @@ use itertools::Itertools;
 use regex::Regex;
 use std::ffi::{OsStr, OsString};
 use std::fs::metadata;
-use std::io::{self, Read, Write, stderr, stdin, stdout};
+use std::io::{self, BufWriter, Read, Write, stderr, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::PathBuf;
 use std::str::Utf8Error;
@@ -136,6 +136,17 @@ impl FileLine {
             unterminated: false,
         })
     }
+}
+
+struct PageLine {
+    line_number: usize,
+    content: Vec<u8>,
+    unterminated: bool,
+}
+
+struct InputPage {
+    page_number: usize,
+    lines: Vec<PageLine>,
 }
 
 struct ColumnModeOptions {
@@ -1145,6 +1156,168 @@ fn read_to_end(name: &OsStr) -> Result<Vec<u8>, PrError> {
     }
 }
 
+fn should_use_streaming_pr(path: &OsStr, options: &OutputOptions) -> bool {
+    let is_simple_layout = options.number.is_none()
+        && options.expand_tabs.is_none()
+        && options.column_mode_options.is_none()
+        && options.merge_files_print.is_none()
+        && options.line_width.is_none()
+        && options.offset_spaces == 0;
+
+    if !is_simple_layout {
+        return false;
+    }
+
+    if path == FILE_STDIN {
+        return should_stream_stdin();
+    }
+
+    metadata(path).is_ok_and(|meta| !meta.file_type().is_file())
+}
+
+#[cfg(any(unix, target_os = "wasi"))]
+fn should_stream_stdin() -> bool {
+    rustix::fs::fstat(stdin())
+        .is_ok_and(|stat| !rustix::fs::FileType::from_raw_mode(stat.st_mode).is_file())
+}
+
+#[cfg(not(any(unix, target_os = "wasi")))]
+fn should_stream_stdin() -> bool {
+    // Platforms without this stdin type detection, including Windows,
+    // still read piped stdin entirely into memory.
+    false
+}
+
+fn write_page_header(out: &mut impl Write, options: &OutputOptions, page: usize) -> io::Result<()> {
+    let line_separator = options.line_separator.as_bytes();
+    if let Some(header_line) = header_content(options, page) {
+        // The left margin goes on the first blank line and the header text.
+        write_offset_spaces(out, options.offset_spaces)?;
+        out.write_all(line_separator)?;
+        out.write_all(line_separator)?;
+        write_offset_spaces(out, options.offset_spaces)?;
+        out.write_all(&header_line)?;
+        out.write_all(line_separator)?;
+        out.write_all(line_separator)?;
+        out.write_all(line_separator)?;
+    }
+    Ok(())
+}
+
+fn write_page_trailer(out: &mut impl Write, options: &OutputOptions) -> io::Result<()> {
+    let line_separator = options.line_separator.as_bytes();
+    let trailer = trailer_content(options);
+    for (index, line) in trailer.iter().enumerate() {
+        out.write_all(line.as_bytes())?;
+        if index + 1 != trailer.len() {
+            out.write_all(line_separator)?;
+        }
+    }
+    if options.display_header_and_trailer || options.form_feed_used {
+        out.write_all(options.page_separator_char.as_bytes())?;
+    }
+    Ok(())
+}
+
+fn write_stream_page(
+    out: &mut impl Write,
+    options: &OutputOptions,
+    page: &InputPage,
+    streamed_lines: Option<usize>,
+) -> io::Result<()> {
+    if streamed_lines.is_none() {
+        write_page_header(out, options, page.page_number + 1)?;
+    }
+    write_stream_lines(out, options, &page.lines[streamed_lines.unwrap_or(0)..])?;
+
+    if options.display_header_and_trailer && !options.form_feed_used {
+        // Pad the final rows just as write_columns does for buffered pages.
+        for _ in page.lines.len()..text_lines_per_page(options) {
+            out.write_all(options.content_line_separator.as_bytes())?;
+        }
+    }
+    write_page_trailer(out, options)
+}
+
+fn write_stream_lines(
+    out: &mut impl Write,
+    options: &OutputOptions,
+    lines: &[PageLine],
+) -> io::Result<()> {
+    for line in lines {
+        out.write_all(&line.content)?;
+        out.write_all(content_line_ending(options, line.unterminated))?;
+    }
+    Ok(())
+}
+
+fn pr_stream_simple_with_reader<R: Read>(
+    mut reader: R,
+    options: &OutputOptions,
+) -> Result<i32, PrError> {
+    let out = stdout();
+    let mut out = BufWriter::new(out.lock());
+    let mut page_builder = PageBuilder::new(options);
+    // Some means the header and this many complete lines have been written.
+    let mut streamed_lines = None;
+
+    let mut buf = [0_u8; 8192];
+    loop {
+        let n = reader.read(&mut buf).map_err(PrError::Read)?;
+        if n == 0 {
+            break;
+        }
+
+        for page in page_builder.push_chunk(&buf[..n]) {
+            write_stream_page(&mut out, options, &page, streamed_lines.take())
+                .map_err(PrError::Write)?;
+        }
+
+        if let Some(pending) = page_builder.take_pending_for_streaming()
+            && page_builder.current_page_in_range()
+        {
+            if streamed_lines.is_none() {
+                write_page_header(&mut out, options, page_builder.page_number + 1)
+                    .map_err(PrError::Write)?;
+            }
+            // Complete lines from this chunk must precede the partial line.
+            write_stream_lines(
+                &mut out,
+                options,
+                &page_builder.page[streamed_lines.unwrap_or(0)..],
+            )
+            .map_err(PrError::Write)?;
+            streamed_lines = Some(page_builder.page.len());
+            out.write_all(&pending).map_err(PrError::Write)?;
+        }
+
+        if page_builder.should_stop() {
+            break;
+        }
+    }
+
+    if !page_builder.should_stop()
+        && let Some(page) = page_builder.finish()
+    {
+        write_stream_page(&mut out, options, &page, streamed_lines).map_err(PrError::Write)?;
+    }
+
+    out.flush().map_err(PrError::Write)?;
+    Ok(0)
+}
+
+fn pr_stream_simple(path: &OsStr, options: &OutputOptions) -> Result<i32, PrError> {
+    let read_error = |error| PrError::ReadPath {
+        path: PathBuf::from(path),
+        error,
+    };
+    let file = std::fs::File::open(path).map_err(read_error)?;
+    pr_stream_simple_with_reader(file, options).map_err(|error| match error {
+        PrError::Read(error) => read_error(error),
+        other => other,
+    })
+}
+
 /// How many bytes `byte` takes once expanded, written at column `len`.
 fn expanded_byte_width(len: usize, byte: u8, expand_options: &ExpandTabsOptions) -> usize {
     if byte == expand_options.input_char as u8 {
@@ -1171,11 +1344,18 @@ fn apply_expand_tab(chunk: &mut Vec<u8>, byte: u8, expand_options: &ExpandTabsOp
     }
 }
 
-fn pr(name: &OsStr, options: &OutputOptions) -> Result<i32, PrError> {
+fn pr(path: &OsStr, options: &OutputOptions) -> Result<i32, PrError> {
+    if should_use_streaming_pr(path, options) {
+        if path == FILE_STDIN {
+            return pr_stream_simple_with_reader(stdin(), options);
+        }
+        return pr_stream_simple(path, options);
+    }
+
     // Read the entire contents of the file into a buffer.
     //
     // TODO Read incrementally.
-    let buf = read_to_end(name)?;
+    let buf = read_to_end(path)?;
 
     let mut writer = stdout().lock();
     let (pages, page_count) = get_pages(options, 0, &buf)?;
@@ -1201,6 +1381,142 @@ fn pr(name: &OsStr, options: &OutputOptions) -> Result<i32, PrError> {
     Ok(0)
 }
 
+struct PageBuilder<'a> {
+    options: &'a OutputOptions,
+    lines_needed_per_page: usize,
+    line_number: usize,
+    page_number: usize,
+    page: Vec<PageLine>,
+    pending: Vec<u8>,
+    current_line_has_content: bool,
+    last_delimiter: Option<u8>,
+}
+
+impl<'a> PageBuilder<'a> {
+    fn new(options: &'a OutputOptions) -> Self {
+        Self {
+            options,
+            lines_needed_per_page: lines_to_read_for_page(options),
+            line_number: get_start_line_number(options),
+            page_number: 0,
+            page: Vec::new(),
+            pending: Vec::new(),
+            current_line_has_content: false,
+            last_delimiter: None,
+        }
+    }
+
+    fn push_chunk(&mut self, chunk: &[u8]) -> Vec<InputPage> {
+        let mut pages = Vec::new();
+        let mut prev = 0;
+
+        for index in memchr::memchr2_iter(FF, NL, chunk) {
+            self.pending.extend_from_slice(&chunk[prev..index]);
+            let delimiter = chunk[index];
+
+            if delimiter == FF {
+                if !(self.pending.is_empty()
+                    && !self.current_line_has_content
+                    && matches!(self.last_delimiter, Some(NL)))
+                {
+                    self.push_pending_line(false);
+                    self.line_number += 1;
+                }
+                self.last_delimiter = Some(FF);
+                if let Some(page) = self.finish_page() {
+                    pages.push(page);
+                }
+            } else {
+                if !(self.pending.is_empty()
+                    && !self.current_line_has_content
+                    && matches!(self.last_delimiter, Some(FF)))
+                {
+                    self.push_pending_line(false);
+                    self.line_number += 1;
+                }
+                self.last_delimiter = Some(NL);
+
+                if self.page.len() >= self.lines_needed_per_page
+                    && let Some(page) = self.finish_page()
+                {
+                    pages.push(page);
+                }
+            }
+
+            prev = index + 1;
+        }
+
+        self.pending.extend_from_slice(&chunk[prev..]);
+        if !self.pending.is_empty() {
+            self.last_delimiter = None;
+        }
+
+        pages
+    }
+
+    fn finish(&mut self) -> Option<InputPage> {
+        if !self.pending.is_empty() || self.current_line_has_content {
+            self.push_pending_line(true);
+        }
+
+        if self.page.is_empty() {
+            None
+        } else {
+            self.finish_page()
+        }
+    }
+
+    fn should_stop(&self) -> bool {
+        self.options
+            .end_page
+            .is_some_and(|end| self.page_number >= end)
+    }
+
+    fn current_page_in_range(&self) -> bool {
+        self.page_is_in_range(self.page_number)
+    }
+
+    fn take_pending_for_streaming(&mut self) -> Option<Vec<u8>> {
+        if self.pending.is_empty() {
+            None
+        } else {
+            self.current_line_has_content = true;
+            self.last_delimiter = None;
+            Some(std::mem::take(&mut self.pending))
+        }
+    }
+
+    fn push_pending_line(&mut self, unterminated: bool) {
+        self.page.push(PageLine {
+            line_number: self.line_number,
+            content: std::mem::take(&mut self.pending),
+            unterminated,
+        });
+        self.current_line_has_content = false;
+    }
+
+    fn finish_page(&mut self) -> Option<InputPage> {
+        let page_number = self.page_number;
+        let lines = std::mem::take(&mut self.page);
+        self.page_number += 1;
+
+        if self.page_is_in_range(page_number) {
+            Some(InputPage { page_number, lines })
+        } else {
+            // An explicit -N starts numbering on the first printed page.
+            if let Some(first_number) = self.options.number.as_ref().and_then(|n| n.first_number) {
+                self.line_number = first_number;
+            }
+            None
+        }
+    }
+
+    fn page_is_in_range(&self, page_number: usize) -> bool {
+        self.options.start_page <= page_number + 1
+            && self.options.end_page.is_none_or(|end| page_number < end)
+    }
+}
+
 /// A page of lines, along with its page number.
 type NumberedPage = (usize, Vec<FileLine>);
 
@@ -1212,109 +1528,34 @@ fn get_pages(
     file_id: usize,
     buf: &[u8],
 ) -> Result<(Vec<NumberedPage>, usize), PrError> {
-    let start_page = options.start_page;
-    let end_page = options.end_page;
-    let lines_needed_per_page = lines_to_read_for_page(options);
+    let mut builder = PageBuilder::new(options);
+    let mut pages = builder.push_chunk(buf);
+    let page_count = builder.page_number + 1;
+    pages.extend(builder.finish());
 
-    // Keep a running total of the number of lines read, starting with
-    // 0 or another specified number.
-    let mut line_num = get_start_line_number(options);
-    // An explicit `-N` numbers from the first printed page, so lines on
-    // skipped pages must not count towards it.
-    let explicit_first_number = options.number.as_ref().and_then(|n| n.first_number);
+    let pages = pages
+        .into_iter()
+        .map(|page| {
+            let lines = page
+                .lines
+                .into_iter()
+                .map(|line| {
+                    let mut file_line = FileLine::from_buf(
+                        file_id,
+                        page.page_number,
+                        line.line_number,
+                        &line.content,
+                        options,
+                    )?;
+                    file_line.unterminated = line.unterminated;
+                    Ok(file_line)
+                })
+                .collect::<Result<_, PrError>>()?;
+            Ok((page.page_number, lines))
+        })
+        .collect::<Result<_, PrError>>()?;
 
-    // We will collect each page into a list of pages, along with
-    // its page number.
-    let mut pages: Vec<(usize, Vec<FileLine>)> = vec![];
-
-    // We will build each page iteratively, since one page may
-    // contain multiple lines and may be interrupted by either a
-    // form feed or by reaching a line limit.
-    let mut page = vec![];
-    let mut page_num = 0;
-
-    // Remember the index of the end of the last line to use as the
-    // beginning of the next line.
-    let mut prev = 0;
-
-    // Keep a finished page if it is printed and start the next one. With an
-    // explicit `-N`, a skipped page restarts the line numbering (pages past
-    // `end_page` are never printed, so resetting there is harmless).
-    let mut finish_page = |page_num: &mut usize, page: &mut Vec<FileLine>, line_num: &mut usize| {
-        if start_page <= *page_num + 1 && end_page.is_none_or(|e| *page_num < e) {
-            pages.push((*page_num, std::mem::take(page)));
-        } else if let Some(n) = explicit_first_number {
-            *line_num = n;
-        }
-        *page_num += 1;
-        page.clear();
-    };
-
-    // Search for either the form feed character `\f` or the newline
-    // character `\n`. The newline character marks the end of a line,
-    // and a page comprises several lines. A form feed character marks
-    // the end of a page regardless of how many lines have been read.
-    for i in memchr::memchr2_iter(FF, NL, buf) {
-        if buf[i] == FF {
-            // Treat everything up to (but not including) the form feed
-            // character as the last line of the page.
-            if i > 0 && i == prev && buf[i - 1] == NL {
-                // If the file has the pattern `\n\f`, don't treat the
-                // `\f` as its own line; instead ignore the empty line.
-            } else {
-                let file_line =
-                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options)?;
-                page.push(file_line);
-                line_num += 1;
-            }
-
-            // Remember where the last line ended.
-            prev = i + 1;
-
-            // The page is finished, so we add it to the list of
-            // pages and clear the `page` buffer for the next
-            // iteration.
-            //
-            // TODO Optimization opportunity: don't bother pushing
-            // lines and pages if we aren't going to display it.
-            finish_page(&mut page_num, &mut page, &mut line_num);
-        } else {
-            // Add everything up to (but not including) the newline
-            // character as one line of the page.
-            if i > 0 && i == prev && buf[i - 1] == FF {
-                // If the file has the pattern `\f\n`, don't treat the
-                // `\n` as its own line; instead ignore the empty line.
-            } else {
-                let file_line =
-                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options)?;
-                page.push(file_line);
-                line_num += 1;
-            }
-
-            // Remember where the last line ended.
-            prev = i + 1;
-
-            // If the page is finished, add it to the list of pages
-            // and clear the `page` buffer for the next iteration.
-            if page.len() >= lines_needed_per_page {
-                finish_page(&mut page_num, &mut page, &mut line_num);
-            }
-        }
-    }
-
-    // Consider all trailing bytes as the last line.
-    if prev < buf.len() {
-        let mut file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..], options)?;
-        file_line.unterminated = true;
-        page.push(file_line);
-    }
-
-    // Consider all trailing lines as the last page.
-    if !page.is_empty() && start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-        pages.push((page_num, std::mem::take(&mut page)));
-    }
-
-    Ok((pages, page_num + 1))
+    Ok((pages, page_count))
 }
 
 /// Key used to group lines together according to their file and page number.
@@ -1416,38 +1657,10 @@ fn write_page(
     options: &OutputOptions,
     page: usize,
 ) -> io::Result<()> {
-    let line_separator = options.line_separator.as_bytes();
-    let page_separator = options.page_separator_char.as_bytes();
-
-    let trailer_content = trailer_content(options);
-
-    if let Some(header_line) = header_content(options, page) {
-        // The header is a blank line, another blank line, the header text and
-        // two more blank lines. The left margin goes on the first blank line
-        // and on the header text line, and is streamed rather than allocated.
-        write_offset_spaces(writer, options.offset_spaces)?;
-        writer.write_all(line_separator)?;
-        writer.write_all(line_separator)?;
-        write_offset_spaces(writer, options.offset_spaces)?;
-        writer.write_all(&header_line)?;
-        writer.write_all(line_separator)?;
-        writer.write_all(line_separator)?;
-        writer.write_all(line_separator)?;
-    }
-
+    write_page_header(writer, options, page)?;
     write_columns(writer, lines, options)?;
-
-    for (index, x) in trailer_content.iter().enumerate() {
-        writer.write_all(x.as_bytes())?;
-        if index + 1 != trailer_content.len() {
-            writer.write_all(line_separator)?;
-        }
-    }
-    if options.display_header_and_trailer || options.form_feed_used {
-        writer.write_all(page_separator)?;
-    }
-    writer.flush()?;
-    Ok(())
+    write_page_trailer(writer, options)?;
+    writer.flush()
 }
 
 /// Group the lines of the input file in columns read left-to-right.
@@ -1559,8 +1772,6 @@ fn write_columns(
     lines: &[FileLine],
     options: &OutputOptions,
 ) -> io::Result<()> {
-    let line_separator = options.content_line_separator.as_bytes();
-
     let content_lines_per_page = text_lines_per_page(options);
 
     let columns = options
@@ -1665,21 +1876,22 @@ fn write_columns(
         if cells_written == 0 && not_found_break && no_trailer {
             break;
         }
-        // Like GNU pr, -d adds its blank line only after a line that ended
-        // with a newline, so an input whose last line lacks one ends there.
-        // With a header and trailer the page is padded to its length anyway.
-        let single_unterminated = !options.display_header_and_trailer
-            && !merge
-            && columns == 1
-            && matches!(row.first(), Some(Some(line)) if line.unterminated);
-        if single_unterminated {
-            writer.write_all(b"\n")?;
-        } else {
-            writer.write_all(line_separator)?;
-        }
+        let single_unterminated =
+            !merge && columns == 1 && matches!(row.first(), Some(Some(line)) if line.unterminated);
+        writer.write_all(content_line_ending(options, single_unterminated))?;
     }
 
     Ok(())
+}
+
+fn content_line_ending(options: &OutputOptions, single_unterminated: bool) -> &[u8] {
+    // Without headers and trailers, -d omits the extra blank line after
+    // an unterminated input line in single-column output.
+    if single_unterminated && !options.display_header_and_trailer {
+        b"\n"
+    } else {
+        options.content_line_separator.as_bytes()
+    }
 }
 
 fn get_line_for_printing(
