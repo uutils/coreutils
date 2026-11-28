@@ -23,6 +23,48 @@ fn run(args: &[impl AsRef<OsStr>], expected: &[u8]) {
 }
 
 #[test]
+#[cfg(all(unix, not(wasi_runner)))]
+fn test_closed_stdout() {
+    let res = std::process::Command::new("sh")
+        .args([
+            "-c",
+            &format!("{} yes >&-", uutests::util::get_tests_binary()),
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(res.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&res.stderr);
+    assert_eq!(stderr, "yes: standard output: Bad file descriptor\n");
+}
+
+#[test]
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
+fn test_closed_stdio_no_dev() {
+    use std::process::Command;
+    if !Command::new("unshare")
+        .args(["-rm", "mount", "-t", "tmpfs", "tmpfs", "/dev"])
+        .status()
+        .is_ok_and(|s| s.success())
+    {
+        return; // no User NS sandbox
+    }
+    // Rust `std` cannot reopen stdout as `/dev/null` in this case
+    let res = Command::new("unshare")
+        .args([
+            "-rm",
+            "sh",
+            "-c",
+            &format!(
+                "mount -t tmpfs tmpfs /dev && {} yes 0>&- 1>&- 2>&-",
+                uutests::util::get_tests_binary()
+            ),
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(res.status.code(), Some(1));
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }

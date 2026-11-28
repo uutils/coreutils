@@ -147,14 +147,7 @@ impl MultiWriter {
         #[cfg(not(any(unix, target_os = "wasi")))]
         use io::Read as _;
         const BUF_SIZE: usize = 32 * 1024;
-        #[cfg(all(unix, not(target_os = "fuchsia")))]
-        if uucore::signals::stdin_was_closed() {
-            show_error!(
-                "{}",
-                translate!("tee-error-stdin", "error" => strip_errno(&rustix::io::Errno::BADF.into()))
-            );
-            return Err(());
-        }
+        // rustix::io::read catches `EBADF`
         #[cfg(any(unix, target_os = "wasi"))]
         let input = rustix::stdio::stdin();
         #[cfg(not(any(unix, target_os = "wasi")))]
