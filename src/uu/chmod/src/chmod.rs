@@ -35,6 +35,9 @@ enum ChmodError {
     ReferenceStat(PathBuf, std::io::Error),
     #[error("{}", translate!("chmod-error-dangling-symlink", "file" => _0.quote()))]
     DanglingSymlink(PathBuf),
+    #[cfg(not(target_os = "redox"))]
+    #[error("{}", translate!("chmod-error-cannot-dereference", "file" => _0.quote(), "error" => strip_errno(_1)))]
+    CannotDereference(PathBuf, std::io::Error),
     #[error("{}", translate!("chmod-error-no-such-file", "file" => _0.quote()))]
     NoSuchFile(PathBuf),
     #[error("{}", translate!("chmod-error-preserve-root", "file" => _0.quote()))]
@@ -210,6 +213,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         option_like_mode,
         traverse_symlinks,
         dereference,
+        #[cfg(not(target_os = "redox"))]
+        dereference_in_tree: matches.get_flag(uucore::perms::options::dereference::DEREFERENCE),
         args: mode_args,
         mode_indices,
     };
@@ -314,6 +319,11 @@ struct Chmoder {
     option_like_mode: bool,
     traverse_symlinks: TraverseSymlinks,
     dereference: bool,
+    /// Set when `--dereference` is given: a symlink met while recursing then
+    /// has its referent changed too. Dereferencing is otherwise the default
+    /// for the operands only.
+    #[cfg(not(target_os = "redox"))]
+    dereference_in_tree: bool,
     /// The arguments as typed, kept only when a diagnostic may be rendered.
     args: Option<Vec<OsString>>,
     /// Where each extracted negative mode sat in `args`, in the order they
@@ -883,12 +893,47 @@ impl Chmoder {
                     }
                 }
             }
+            // `-R -P --dereference` is refused, so only -H gets here with it.
+            TraverseSymlinks::First if self.dereference_in_tree => {
+                self.chmod_referent(path, dir_fd, entry_name)
+            }
             TraverseSymlinks::First | TraverseSymlinks::None => {
                 // Don't follow symlinks encountered during recursion
                 // For these symlinks, don't dereference them even if dereference is normally true
                 self.chmod_file_internal(path, false)
             }
         }
+    }
+
+    /// Change the mode of the referent of a symlink met under `-R --dereference`.
+    /// Unlike with `-L`, a directory it points to is not descended into.
+    #[cfg(not(target_os = "redox"))]
+    fn chmod_referent(
+        &self,
+        path: &Path,
+        dir_fd: &DirFd,
+        entry_name: &std::ffi::OsStr,
+    ) -> UResult<()> {
+        let meta = match dir_fd.metadata_at(entry_name, SymlinkBehavior::Follow) {
+            Ok(meta) => meta,
+            Err(err) => {
+                self.report_failure(ChmodError::CannotDereference(path.into(), err).into());
+                self.report_not_accessed(path);
+                return Ok(());
+            }
+        };
+        // The referent is what changes, so a link to "/" is "/" here.
+        if self.preserve_root && uucore::fs::metadata_is_root_dir(&meta) {
+            show!(ChmodError::PreserveRootSameAs(path.into()));
+            return Ok(());
+        }
+        self.safe_chmod_file(
+            path,
+            dir_fd,
+            entry_name,
+            meta.mode() & 0o7777,
+            SymlinkBehavior::Follow,
+        )
     }
 
     #[cfg(not(target_os = "redox"))]
