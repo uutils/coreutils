@@ -34,6 +34,82 @@ fn test_mv_missing_dest() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
+fn test_mv_no_open_same_file_system() {
+    let (at, mut _ucmd) = at_and_ucmd!();
+    let file = "source_file";
+    at.touch(file);
+    if std::process::Command::new("strace")
+        .args([
+            "-e",
+            "trace=open,openat",
+            "-o",
+            "strace.out",
+            uutests::util::get_tests_binary(),
+            "mv",
+            file,
+            "target_file",
+        ])
+        .current_dir(at.as_string())
+        .output()
+        .is_err()
+    {
+        return; // missing strace
+    }
+
+    let open_count = at
+        .read("strace.out")
+        .lines()
+        .filter(|l| {
+            let trimmed = l.trim();
+            trimmed.starts_with("open(")
+                || trimmed.starts_with("openat(")
+                    && (trimmed.contains(file) || trimmed.contains("target_file"))
+        })
+        .count();
+    assert_eq!(open_count, 0);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
+fn test_mv_open_once() {
+    let (at, mut _ucmd) = at_and_ucmd!();
+    let file = "source_file";
+    at.touch(file);
+    if std::process::Command::new("strace")
+        .args([
+            "-e",
+            "trace=open,openat",
+            "-o",
+            "strace.out",
+            uutests::util::get_tests_binary(),
+            "mv",
+            file,
+            "/dev/shm/target_file",
+        ])
+        .current_dir(at.as_string())
+        .output()
+        .is_err()
+    {
+        return; // missing strace
+    }
+
+    let open_count = at
+        .read("strace.out")
+        .lines()
+        .filter(|l| {
+            let trimmed = l.trim();
+            trimmed.starts_with("open(")
+                || trimmed.starts_with("openat(")
+                    && (trimmed.contains(file) || trimmed.contains("target_file"))
+        })
+        .count();
+    assert_eq!(open_count, 2);
+}
+
+#[test]
 fn test_mv_rename_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir1 = "test_mv_rename_dir";
