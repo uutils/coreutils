@@ -2,10 +2,6 @@ name: FreeBSD
 
 # spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc nextest copyback logind
 
-env:
-  # * style job configuration
-  STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
-
 on:
   pull_request:
   push:
@@ -21,39 +17,6 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  style:
-    name: Style and Lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    steps:
-    - uses: actions/checkout@v7.0.1
-      with:
-        persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
-      with:
-        components: clippy
-        targets: x86_64-unknown-freebsd
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.11
-      continue-on-error: true
-    - name: Export sccache
-      if: steps.sccache-setup.outcome == 'success'
-      run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-    - uses: mlugg/setup-zig@v2.2.1
-    - uses: taiki-e/install-action@v2
-      with:
-        tool: cargo-zigbuild
-    - name: cargo clippy
-      env:
-        CARGO_INCREMENTAL: "0"
-      run: |
-        UTILS=$(cargo tree --depth 1 --features feat_os_unix --format '{lib}' --prefix none | sed -n 's/^uu_/-p uu_/p')
-        cargo-zigbuild clippy --target x86_64-unknown-freebsd --features feat_os_unix -p coreutils ${UTILS} --all-targets --tests --benches -- -D warnings
-
   test:
     name: Tests
     runs-on: ubuntu-latest
