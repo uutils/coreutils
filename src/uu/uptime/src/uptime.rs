@@ -90,7 +90,7 @@ pub fn uu_app() -> Command {
 fn uptime_since() -> UResult<()> {
     let uptime = platform::system_uptime()?;
 
-    let since_date = (Timestamp::now() - uptime).to_zoned(TimeZone::system());
+    let since_date = (Timestamp::now() - uptime).to_zoned_datetime(TimeZone::system());
     writeln!(stdout(), "{}", since_date.strftime("%Y-%m-%d %H:%M:%S"))?;
 
     Ok(())

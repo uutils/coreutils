@@ -5,8 +5,6 @@
 
 // spell-checker:ignore AEDT AEST EEST CET EET NZDT NZST Kolkata Iseconds Shanghai Taipei Dublin Havana févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST MESZ KST uueuu ueuu vasárnap június január distros Wednes Ihours uppercases xffx
 
-use std::cmp::Ordering;
-
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
@@ -1157,7 +1155,7 @@ fn test_negative_offset() {
                 let date = out.trim().parse::<Timestamp>().unwrap();
                 // Is the resulting date roughly what is expected?
                 let expected_date = Timestamp::now() - offset;
-                (date - expected_date).abs().compare(10.minutes()).unwrap() == Ordering::Less
+                (date - expected_date).abs() < jiff::SignedDuration::from_secs(10 * 60)
             });
     }
 }
@@ -1169,7 +1167,7 @@ fn test_relative_weekdays() {
         for direction in ["last", "this", "next"] {
             // `date` reads the clock itself; run it again if UTC midnight passed meanwhile
             for _ in 0..2 {
-                let today = Timestamp::now().to_zoned(TimeZone::UTC).date();
+                let today = Timestamp::now().to_zoned_datetime(TimeZone::UTC).date();
                 let weekday = today
                     .checked_add(offset.days())
                     .unwrap()
@@ -1181,7 +1179,7 @@ fn test_relative_weekdays() {
                     .arg("--rfc-3339=seconds")
                     .arg("--utc")
                     .succeeds();
-                if Timestamp::now().to_zoned(TimeZone::UTC).date() != today {
+                if Timestamp::now().to_zoned_datetime(TimeZone::UTC).date() != today {
                     continue;
                 }
                 let expected = match (direction, offset) {
@@ -1190,7 +1188,10 @@ fn test_relative_weekdays() {
                     ("next", 0) => today.checked_add(7.days()).unwrap(),
                     _ => today.checked_add(offset.days()).unwrap(),
                 };
-                let expected_ts = expected.to_zoned(TimeZone::UTC).unwrap().timestamp();
+                let expected_ts = expected
+                    .to_zoned_datetime(TimeZone::UTC)
+                    .unwrap()
+                    .timestamp();
                 let got = result.stdout_str().trim().parse::<Timestamp>().unwrap();
                 assert_eq!(got, expected_ts);
                 break;
@@ -1551,7 +1552,7 @@ fn test_date_numeric_d_basic_utc() {
     // Verify GNU-compatible pure-digit parsing for -d STRING under UTC
     // 0/00 -> today at 00:00; 7/07 -> today at 07:00; 0700 -> today at 07:00
     for (input, hour, minute) in [("0", 0, 0), ("7", 7, 0), ("0700", 7, 0)] {
-        let before = Timestamp::now().to_zoned(TimeZone::UTC).date();
+        let before = Timestamp::now().to_zoned_datetime(TimeZone::UTC).date();
         let out = new_ucmd!()
             .env("TZ", "UTC0")
             .arg("-d")
@@ -1559,7 +1560,7 @@ fn test_date_numeric_d_basic_utc() {
             .arg("+%F %T %Z")
             .succeeds();
 
-        let after = Timestamp::now().to_zoned(TimeZone::UTC).date();
+        let after = Timestamp::now().to_zoned_datetime(TimeZone::UTC).date();
         let expected = |day: jiff::civil::Date| {
             format!(
                 "{:04}-{:02}-{:02} {hour:02}:{minute:02}:00 UTC\n",
@@ -2004,7 +2005,7 @@ fn test_date_military_timezone_with_offset_and_date() {
     ];
 
     for (input, day_delta) in test_cases {
-        let before = Timestamp::now().to_zoned(TimeZone::UTC).date();
+        let before = Timestamp::now().to_zoned_datetime(TimeZone::UTC).date();
         let out = new_ucmd!()
             .env("TZ", "UTC")
             .arg("-d")
@@ -2012,7 +2013,7 @@ fn test_date_military_timezone_with_offset_and_date() {
             .arg("+%F")
             .succeeds();
 
-        let after = Timestamp::now().to_zoned(TimeZone::UTC).date();
+        let after = Timestamp::now().to_zoned_datetime(TimeZone::UTC).date();
         let expected = |day: jiff::civil::Date| {
             format!(
                 "{}\n",

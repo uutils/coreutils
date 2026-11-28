@@ -54,7 +54,7 @@ impl UError for UptimeError {
 /// Returns the formatted time string, e.g. "12:34:56"
 pub fn get_formatted_time() -> String {
     Timestamp::now()
-        .to_zoned(TimeZone::system())
+        .to_zoned_datetime(TimeZone::system())
         .strftime("%H:%M:%S")
         .to_string()
 }

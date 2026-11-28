@@ -19,7 +19,7 @@ use filetime::set_symlink_file_times;
 use jiff::civil::Time;
 use jiff::fmt::strtime;
 use jiff::tz::TimeZone;
-use jiff::{Timestamp, ToSpan, Zoned};
+use jiff::{Timestamp, ToSpan, ZonedDateTime};
 #[cfg(unix)]
 use libc::O_NONBLOCK;
 #[cfg(unix)]
@@ -141,7 +141,9 @@ mod format {
 }
 
 fn timestamp_to_filetime(ts: Timestamp) -> FileTime {
-    FileTime::from_system_time(SystemTime::from(ts))
+    SystemTime::try_from(ts)
+        .map(FileTime::from_system_time)
+        .unwrap()
 }
 
 /// A [`FileTime`] holding the `UTIME_NOW` sentinel, which only needs write permission.
@@ -150,9 +152,9 @@ fn utime_now() -> FileTime {
     FileTime::from_unix_time(0, libc::UTIME_NOW as u32)
 }
 
-fn filetime_to_zoned(ft: &FileTime) -> Option<Zoned> {
+fn filetime_to_zoned(ft: &FileTime) -> Option<ZonedDateTime> {
     let ts = Timestamp::new(ft.unix_seconds(), ft.nanoseconds() as i32).ok()?;
-    Some(Zoned::new(ts, TimeZone::system()))
+    Some(ZonedDateTime::new(ts, TimeZone::system()))
 }
 
 /// Whether all characters in the string are digits.
@@ -797,7 +799,7 @@ fn stat(path: &Path, follow: bool) -> std::io::Result<(FileTime, FileTime)> {
     ))
 }
 
-fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
+fn parse_date(ref_zoned: ZonedDateTime, s: &str) -> Result<FileTime, TouchError> {
     // This isn't actually compatible with GNU touch, but there doesn't seem to
     // be any simple specification for what format this parameter allows and I'm
     // not about to implement GNU parse_datetime.
@@ -814,7 +816,7 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
     //
     if let Ok(parsed) = strtime::parse(format::POSIX_LOCALE, s)
         .and_then(|tm| tm.to_datetime())
-        .and_then(|dt| TimeZone::UTC.to_zoned(dt))
+        .and_then(|dt| TimeZone::UTC.to_zoned_datetime(dt))
     {
         return Ok(timestamp_to_filetime(parsed.timestamp()));
     }
@@ -829,7 +831,7 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
     ] {
         if let Ok(parsed) = strtime::parse(fmt, s)
             .and_then(|tm| tm.to_datetime())
-            .and_then(|dt| TimeZone::UTC.to_zoned(dt))
+            .and_then(|dt| TimeZone::UTC.to_zoned_datetime(dt))
         {
             return Ok(timestamp_to_filetime(parsed.timestamp()));
         }
@@ -837,16 +839,15 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
 
     // "Equivalent to %Y-%m-%d (the ISO 8601 date format). (C99)"
     // ("%F", ISO_8601_FORMAT),
-    if let Ok(filetime) = strtime::parse(format::ISO_8601, s)
+    if let Ok(zoned) = strtime::parse(format::ISO_8601, s)
         .and_then(|tm| tm.to_date())
         .and_then(|date| {
             TimeZone::system()
-                .to_ambiguous_zoned(date.to_datetime(Time::midnight()))
+                .to_ambiguous_zoned_datetime(date.to_datetime(Time::midnight()))
                 .unambiguous()
         })
-        .map(|zdt| timestamp_to_filetime(zdt.timestamp()))
     {
-        return Ok(filetime);
+        return Ok(timestamp_to_filetime(zoned.timestamp()));
     }
 
     // "@%s" is "The number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC). (TZ) (Calculated from mktime(tm).)"
@@ -898,7 +899,11 @@ fn prepend_century(s: &str) -> UResult<String> {
 fn parse_timestamp(s: &str) -> UResult<FileTime> {
     use format::{YYYYMMDDHHMM, YYYYMMDDHHMM_DOT_SS};
 
-    let current_year = || Timestamp::now().to_zoned(TimeZone::system()).year();
+    let current_year = || {
+        Timestamp::now()
+            .to_zoned_datetime(TimeZone::system())
+            .year()
+    };
 
     let (format, ts) = match s.chars().count() {
         15 => (YYYYMMDDHHMM_DOT_SS, s.to_owned()),
@@ -940,9 +945,9 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
 
     // Due to daylight saving time switch, local time can jump from 1:59 AM to
     // 3:00 AM, in which case any time between 2:00 AM and 2:59 AM is not valid.
-    // Jiff's `to_ambiguous_zoned(...).unambiguous()` handles this case.
+    // Jiff's `to_ambiguous_zoned_datetime(...).unambiguous()` handles this case.
     let local = TimeZone::system()
-        .to_ambiguous_zoned(dt)
+        .to_ambiguous_zoned_datetime(dt)
         .unambiguous()
         .map_err(|_| {
             USimpleError::new(

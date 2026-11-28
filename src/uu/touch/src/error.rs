@@ -16,7 +16,7 @@ pub enum TouchError {
     #[error("{}", translate!("touch-error-unable-to-parse-date", "date" => .0))]
     InvalidDateFormat(String),
 
-    /// The source time couldn't be converted to a [`jiff::Zoned`]
+    /// The source time couldn't be converted to a [`jiff::ZonedDateTime`]
     #[error("{}", translate!("touch-error-invalid-filetime", "time" => .0))]
     InvalidFiletime(FileTime),
 
