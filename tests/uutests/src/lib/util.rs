@@ -178,16 +178,23 @@ pub fn is_ci() -> bool {
     env::var("CI").is_ok_and(|s| s.eq_ignore_ascii_case("true"))
 }
 
-/// Check if a locale is available on the system by verifying that
-/// `locale charmap` returns `"UTF-8"` when `LC_ALL` is set to the given locale.
+/// Check if a locale is installed: `locale charmap` must report the codeset
+/// in its name (`ru_RU.KOI8-R` → `KOI8-R`, UTF-8 when there is none), since
+/// a missing locale silently falls back to C.
 #[cfg(unix)]
 pub fn is_locale_available(locale: &str) -> bool {
     use std::process::Command;
+    // C / POSIX are always available.
+    if locale == "C" || locale == "POSIX" {
+        return true;
+    }
+    let codeset = locale.split('@').next().unwrap_or(locale);
+    let expected = codeset.split_once('.').map_or("UTF-8", |(_, enc)| enc);
     Command::new("locale")
         .env("LC_ALL", locale)
         .arg("charmap")
         .output()
-        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).trim() == "UTF-8")
+        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).trim() == expected)
 }
 
 /// Read a test scenario fixture, returning its bytes
