@@ -3672,6 +3672,7 @@ dependencies = [
  "clap",
  "crossterm",
  "fluent",
+ "rustix",
  "tempfile",
  "uucore",
 ]
