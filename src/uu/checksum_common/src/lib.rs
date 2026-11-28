@@ -7,6 +7,7 @@
 
 use std::borrow::Borrow;
 use std::ffi::OsString;
+use std::io::stdout;
 
 use clap::builder::ValueParser;
 use clap::parser::ValueSource;
@@ -19,6 +20,7 @@ use uucore::checksum::validate::{self, ChecksumTool, ChecksumValidateOptions, Ch
 use uucore::checksum::{AlgoKind, ChecksumError, HashLength, SizedAlgoKind};
 use uucore::error::UResult;
 use uucore::line_ending::LineEnding;
+use uucore::quoting_style::terminal_filename_quoting_style;
 use uucore::{crate_version, format_usage, localized_help_template, stdout_writer, util_name};
 
 mod cli;
@@ -211,12 +213,17 @@ pub fn checksum_main(
     let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
+    let stdout = stdout();
+    let quoting_style = (line_ending != LineEnding::Nul)
+        .then(|| terminal_filename_quoting_style(&stdout))
+        .flatten();
     let has_file_operands = matches.value_source(options::FILE) == Some(ValueSource::CommandLine);
 
     let opts = ChecksumComputeOptions {
         algo_kind: algo,
         output_format,
         line_ending,
+        quoting_style,
         has_file_operands,
     };
 

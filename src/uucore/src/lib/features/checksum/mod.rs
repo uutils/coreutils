@@ -710,13 +710,17 @@ pub fn unescape_filename(filename: &[u8]) -> (Vec<u8>, &'static str) {
     (unescaped, prefix)
 }
 
+// On Windows, backslashes are path separators. Normalize them to forward
+// slashes so that the checksum output is portable across platforms.
+#[cfg(windows)]
+fn normalize_windows_path_separators(filename: &str) -> String {
+    filename.replace('\\', "/")
+}
+
 pub fn escape_filename(filename: &OsStr) -> (String, &'static str) {
     let original = filename.to_string_lossy();
-
-    // On Windows, backslashes are path separators. Normalize them to forward
-    // slashes so that the checksum output is portable across platforms.
     #[cfg(windows)]
-    let original = original.replace('\\', "/");
+    let original = normalize_windows_path_separators(&original);
 
     let escaped = original
         .replace('\\', "\\\\")

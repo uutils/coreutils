@@ -7,6 +7,10 @@
 use std::os::unix::ffi::OsStringExt;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
+#[cfg(unix)]
+use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
@@ -64,6 +68,36 @@ fn test_sysv_stdin() {
         .pipe_in_fixture("lorem_ipsum.txt")
         .succeeds()
         .stdout_only_fixture("sysv_stdin.expected");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_terminal_output_quotes_names() {
+    let scene = TestScenario::new(util_name!());
+    let filename = "my file.txt";
+    scene.fixtures.touch(filename);
+
+    scene
+        .ucmd()
+        .arg(filename)
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("00000     0 'my file.txt'\r\n");
+
+    scene
+        .ucmd()
+        .args(&["-s", filename])
+        .env("QUOTING_STYLE", "c")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("0 0 \"my file.txt\"\r\n");
+
+    scene
+        .ucmd()
+        .args(&["-s", filename])
+        .env("QUOTING_STYLE", "c")
+        .succeeds()
+        .stdout_only("0 0 my file.txt\n");
 }
 
 #[test]

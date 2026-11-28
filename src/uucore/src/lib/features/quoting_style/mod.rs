@@ -220,6 +220,13 @@ pub fn quoting_style_from_env() -> Option<QuotingStyle> {
     Some(qs)
 }
 
+/// Select a filename quoting style for terminal output, defaulting to shell escaping.
+pub fn terminal_filename_quoting_style(output: &impl IsTerminal) -> Option<QuotingStyle> {
+    output
+        .is_terminal()
+        .then(|| quoting_style_from_env().unwrap_or(QuotingStyle::SHELL_ESCAPE))
+}
+
 /// Return `cli_style` (from `--quoting-style`) if given, otherwise the style
 /// from `QUOTING_STYLE`, which is only honored when stdout is a terminal.
 pub fn quoting_style_or_tty_env(cli_style: Option<QuotingStyle>) -> Option<QuotingStyle> {

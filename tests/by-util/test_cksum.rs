@@ -4206,7 +4206,6 @@ fn test_check_improperly_formatted_line_does_not_select_format() {
 
 #[cfg(unix)]
 #[test]
-#[ignore = "file names must be quoted when stdout is a terminal"]
 fn test_terminal_output_quotes_names() {
     let scene = TestScenario::new(util_name!());
     scene.fixtures.touch("my file.txt");
@@ -4238,4 +4237,45 @@ fn test_terminal_output_quotes_names() {
             .succeeds()
             .stdout_only(expected);
     }
+
+    // --zero disables quoting even when stdout is a terminal.
+    scene
+        .ucmd()
+        .args(&["-a", "md5", "--zero", "my file.txt"])
+        .env("QUOTING_STYLE", "c")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only(format!("MD5 (my file.txt) = {md5}\0"));
+
+    // QUOTING_STYLE must not affect output when stdout is not a terminal.
+    scene
+        .ucmd()
+        .args(&["-a", "md5", "my file.txt"])
+        .env("QUOTING_STYLE", "c")
+        .succeeds()
+        .stdout_only(format!("MD5 (my file.txt) = {md5}\n"));
+}
+
+#[cfg(unix)]
+#[test]
+fn test_terminal_output_quotes_newline_and_backslash() {
+    let scene = TestScenario::new(util_name!());
+    let filename = "line\nbreak\\file.txt";
+    scene.fixtures.touch(filename);
+    let md5 = "d41d8cd98f00b204e9800998ecf8427e";
+
+    scene
+        .ucmd()
+        .args(&["-a", "md5", filename])
+        .env("QUOTING_STYLE", "c")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only(format!("MD5 (\"line\\nbreak\\\\file.txt\") = {md5}\r\n"));
+
+    scene
+        .ucmd()
+        .args(&["-a", "md5", filename])
+        .env("QUOTING_STYLE", "c")
+        .succeeds()
+        .stdout_only(format!("\\MD5 (line\\nbreak\\\\file.txt) = {md5}\n"));
 }

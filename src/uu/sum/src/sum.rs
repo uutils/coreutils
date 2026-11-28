@@ -12,6 +12,7 @@ use std::io::{ErrorKind, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::{OsWrite, Quotable};
 use uucore::error::{UResult, USimpleError, strip_errno};
+use uucore::quoting_style::{locale_aware_escape_name, terminal_filename_quoting_style};
 use uucore::translate;
 
 use uucore::{format_usage, show};
@@ -128,6 +129,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let print_names = files.len() > 1 || files[0] != "-";
     let width = if sysv { 1 } else { 5 };
+    let stdout = stdout();
+    let quoting_style = print_names
+        .then(|| terminal_filename_quoting_style(&stdout))
+        .flatten();
 
     for file in &files {
         let reader = match open(file) {
@@ -152,10 +157,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 continue;
             }
         };
-        let mut stdout = stdout().lock();
+        let mut stdout = stdout.lock();
         if print_names {
             write!(stdout, "{sum:0width$} {blocks:width$} ")?;
-            stdout.write_all_os(file)?;
+            if let Some(style) = quoting_style {
+                stdout.write_all_os(&locale_aware_escape_name(file, style))?;
+            } else {
+                stdout.write_all_os(file)?;
+            }
             stdout.write_all(b"\n")?;
         } else {
             writeln!(stdout, "{sum:0width$} {blocks:width$}")?;
