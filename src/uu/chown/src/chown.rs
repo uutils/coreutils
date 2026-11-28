@@ -46,13 +46,11 @@ fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> 
             entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string())
         );
     } else {
-        raw_owner = matches
-            .get_one::<String>(options::ARG_OWNER)
-            .unwrap()
-            .into();
-        let (u, g) = parse_spec(&raw_owner, ':')?;
-        dest_uid = u;
-        dest_gid = g;
+        let owner = matches.get_one::<String>(options::ARG_OWNER).unwrap();
+        let spec = parse_spec_with_display(owner, ':')?;
+        raw_owner = spec.display;
+        dest_uid = spec.uid;
+        dest_gid = spec.gid;
     }
     Ok(GidUidOwnerFilter {
         dest_gid,
@@ -151,40 +149,59 @@ pub fn uu_app() -> Command {
         .args(uucore::perms::common_args())
 }
 
-/// Parses the user string to extract the UID.
-fn parse_uid(user: &str, spec: &str) -> UResult<Option<u32>> {
-    if user.is_empty() {
-        return Ok(None);
+fn display_id(input: &str, id: u32, numeric: Option<u32>) -> String {
+    if input.starts_with('+') && numeric.is_some() {
+        id.to_string()
+    } else {
+        input.to_owned()
     }
-
-    if let Ok(u) = Passwd::locate(user) {
-        return Ok(Some(u.uid));
-    }
-
-    // Fallback: `user` string contains a numeric user ID
-    user.parse().map(Some).map_err(|_| {
-        USimpleError::new(
-            1,
-            translate!("chown-error-invalid-user", "user" => spec.quote()),
-        )
-    })
 }
 
-/// Parses the group string to extract the GID.
-fn parse_gid(group: &str, spec: &str) -> UResult<Option<u32>> {
-    if group.is_empty() {
-        return Ok(None);
+/// Parses the user string to extract the UID and its display form.
+fn parse_uid(user: &str, spec: &str) -> UResult<(Option<u32>, String)> {
+    if user.is_empty() {
+        return Ok((None, String::new()));
     }
-    match Group::locate(group) {
-        Ok(g) => Ok(Some(g.gid)),
-        Err(_) => match group.parse() {
-            Ok(gid) => Ok(Some(gid)),
-            Err(_) => Err(USimpleError::new(
+
+    let numeric = user.parse::<u32>().ok();
+    let uid = Passwd::locate_name(user)
+        .ok()
+        .map(|u| u.uid)
+        .or_else(|| numeric.map(|id| Passwd::locate(id).map_or(id, |u| u.uid)))
+        .ok_or_else(|| {
+            USimpleError::new(
+                1,
+                translate!("chown-error-invalid-user", "user" => spec.quote()),
+            )
+        })?;
+    Ok((Some(uid), display_id(user, uid, numeric)))
+}
+
+/// Parses the group string to extract the GID and its display form.
+fn parse_gid(group: &str, spec: &str) -> UResult<(Option<u32>, String)> {
+    if group.is_empty() {
+        return Ok((None, String::new()));
+    }
+
+    let numeric = group.parse::<u32>().ok();
+    let gid = Group::locate_name(group)
+        .ok()
+        .map(|g| g.gid)
+        .or_else(|| numeric.map(|id| Group::locate(id).map_or(id, |g| g.gid)))
+        .ok_or_else(|| {
+            USimpleError::new(
                 1,
                 translate!("chown-error-invalid-group", "group" => spec.quote()),
-            )),
-        },
-    }
+            )
+        })?;
+    Ok((Some(gid), display_id(group, gid, numeric)))
+}
+
+#[derive(Debug)]
+struct ParsedSpec {
+    uid: Option<u32>,
+    gid: Option<u32>,
+    display: String,
 }
 
 /// Parse the owner/group specifier string into a user ID and a group ID.
@@ -202,6 +219,11 @@ fn parse_gid(group: &str, spec: &str) -> UResult<Option<u32>> {
 /// this to `':'`. If a separator is given but the group is omitted
 /// (as in `"owner:"`), the group is set to the owner's login group.
 fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
+    let spec = parse_spec_with_display(spec, sep)?;
+    Ok((spec.uid, spec.gid))
+}
+
+fn parse_spec_with_display(spec: &str, sep: char) -> UResult<ParsedSpec> {
     assert!(['.', ':'].contains(&sep));
     let mut args = spec.splitn(2, sep);
     let user = args.next().unwrap_or("");
@@ -209,23 +231,30 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
 
     // dot separator: try as username first, fall back to owner.group (like GNU)
     if sep == ':' && !spec.contains(':') && spec.contains('.') {
-        if let Ok(uid) = parse_uid(user, spec) {
-            let gid = parse_gid(group, spec)?;
-            return Ok((uid, gid));
+        if let Ok((uid, display)) = parse_uid(user, spec) {
+            return Ok(ParsedSpec {
+                uid,
+                gid: None,
+                display,
+            });
         }
         show_warning!(
             "{}",
             translate!("chown-warning-dot-separator", "spec" => spec.quote())
         );
-        return parse_spec(spec, '.');
+        return parse_spec_with_display(spec, '.');
     }
 
     if !user.is_empty() && group.is_empty() && spec != user {
         // A separator was given but the group was not ("owner:"), so the
         // group is set to the owner's login group.
-        return match Passwd::locate(user) {
+        return match Passwd::locate_name(user) {
             // Lookup must occur through name, not ID, to be valid here.
-            Ok(passwd) if passwd.name == user => Ok((Some(passwd.uid), Some(passwd.gid))),
+            Ok(passwd) if passwd.name == user => Ok(ParsedSpec {
+                uid: Some(passwd.uid),
+                gid: Some(passwd.gid),
+                display: format!("{}{sep}", display_id(user, passwd.uid, user.parse().ok())),
+            }),
             _ => Err(USimpleError::new(
                 1,
                 translate!("chown-error-invalid-spec", "spec" => spec.quote()),
@@ -233,7 +262,16 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
         };
     }
 
-    Ok((parse_uid(user, spec)?, parse_gid(group, spec)?))
+    let (uid, user_display) = parse_uid(user, spec)?;
+    let (gid, group_display) = parse_gid(group, spec)?;
+    let display = if uid.is_none() && gid.is_some() {
+        group_display
+    } else if spec != user {
+        format!("{user_display}{sep}{group_display}")
+    } else {
+        user_display
+    };
+    Ok(ParsedSpec { uid, gid, display })
 }
 
 #[cfg(test)]
@@ -274,5 +312,12 @@ mod test {
             parse_spec("12345:54321", ':'),
             Ok((Some(12345), Some(54321)))
         ));
+    }
+
+    #[test]
+    fn test_display_id_keeps_plus_prefixed_names() {
+        assert_eq!(display_id("+alice", 42, None), "+alice");
+        assert_eq!(display_id("+4294967296", 42, None), "+4294967296");
+        assert_eq!(display_id("+00042", 42, Some(42)), "42");
     }
 }
