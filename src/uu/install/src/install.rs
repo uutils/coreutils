@@ -289,6 +289,7 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(OPT_STRIP)
                 .help(translate!("install-help-strip"))
+                .conflicts_with(OPT_DIRECTORY)
                 .action(ArgAction::SetTrue),
         )
         .arg(
