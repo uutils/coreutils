@@ -270,15 +270,67 @@ impl ChownExecutor {
         Ok(())
     }
 
+    fn format_target_ownership(&self) -> (&'static str, String) {
+        // Returns the numeric ID if the spec part starts with '+', otherwise the spec itself.
+        fn resolve_part(spec: &str, id: u32) -> String {
+            if spec.starts_with('+') {
+                id.to_string()
+            } else {
+                spec.to_string()
+            }
+        }
+
+        let action =
+            if self.verbosity.groups_only || (self.dest_uid.is_none() && self.dest_gid.is_some()) {
+                "group"
+            } else {
+                "ownership"
+            };
+
+        // Split on ':' always; only split on '.' when a group is expected, to avoid
+        // misidentifying dotted user names like "john.doe" as "user.group" specs.
+        let dest = if let Some((u, g)) = self.raw_owner.split_once(':').or_else(|| {
+            if self.dest_gid.is_some() {
+                self.raw_owner.split_once('.')
+            } else {
+                None
+            }
+        }) {
+            let user = self
+                .dest_uid
+                .map(|id| resolve_part(u, id))
+                .unwrap_or_default();
+            let group = self
+                .dest_gid
+                .map(|id| resolve_part(g, id))
+                .unwrap_or_default();
+            if user.is_empty() {
+                group
+            } else if group.is_empty() {
+                user
+            } else {
+                format!("{user}:{group}")
+            }
+        } else if let Some(id) = self.dest_uid {
+            resolve_part(&self.raw_owner, id)
+        } else if let Some(id) = self.dest_gid {
+            resolve_part(&self.raw_owner, id)
+        } else {
+            self.raw_owner.clone()
+        };
+
+        (action, dest)
+    }
+
     #[allow(clippy::cognitive_complexity)]
     fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
         let path = root.as_ref();
         let Some(meta) = self.obtain_meta(path, self.dereference) else {
             if self.verbosity.level == VerbosityLevel::Verbose {
+                let (action, dest) = self.format_target_ownership();
                 self.write_verbose_line(&format!(
-                    "failed to change ownership of {} to {}",
-                    path.quote(),
-                    self.raw_owner
+                    "failed to change {action} of {} to {dest}",
+                    path.quote()
                 ));
             }
             return 1;
