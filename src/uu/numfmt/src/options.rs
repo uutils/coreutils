@@ -234,6 +234,12 @@ impl FromStr for FormatOptions {
         let mut padding = String::new();
         let mut precision = String::new();
         let mut double_percentage_counter = 0;
+        // Whether the prefix scan stopped on a lone '%' (the start of a
+        // directive that never completed) rather than running out of input.
+        // This distinguishes "ends in %" from "has no % directive" even when
+        // the prefix contains '%%' escapes, which the old `prefix == s` check
+        // could not tell apart.
+        let mut broke_on_lone_percent = false;
 
         // '%' chars in the prefix, if any, must appear in blocks of even length, for example: "%%%%" and
         // "%% %%" are ok, "%%% %" is not ok. A single '%' is treated as the beginning of the
@@ -248,7 +254,10 @@ impl FromStr for FormatOptions {
                         options.prefix.push('%');
                     }
                 }
-                '%' => break,
+                '%' => {
+                    broke_on_lone_percent = true;
+                    break;
+                }
                 _ => options.prefix.push(c),
             }
         }
@@ -261,16 +270,16 @@ impl FromStr for FormatOptions {
         if iter.peek().is_none() {
             // Nothing to point inside: the directive is missing from the whole
             // format, or it is the trailing '%' that never became one.
-            return Err(if options.prefix == s {
+            return Err(if broke_on_lone_percent {
                 error(
-                    translate!("numfmt-error-format-no-percent", "format" => quoted.as_str()),
-                    0..s.len(),
+                    translate!("numfmt-error-format-ends-in-percent", "format" => quoted.as_str()),
+                    s.len().saturating_sub(1)..s.len(),
                     FormatErrorKind::MissingDirective,
                 )
             } else {
                 error(
-                    translate!("numfmt-error-format-ends-in-percent", "format" => quoted.as_str()),
-                    s.len().saturating_sub(1)..s.len(),
+                    translate!("numfmt-error-format-no-percent", "format" => quoted.as_str()),
+                    0..s.len(),
                     FormatErrorKind::MissingDirective,
                 )
             });
