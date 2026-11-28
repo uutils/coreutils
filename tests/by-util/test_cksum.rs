@@ -767,6 +767,16 @@ fn test_closed_stdout(#[case] args: &str, #[case] stderr_before: &str) {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_write_error_reported_once() {
+    new_ucmd!()
+        .arg("/dev/null")
+        .set_stdout(dev_full())
+        .fails_with_code(1)
+        .stderr_is("cksum: write error: No space left on device\n");
+}
+
+#[test]
 fn test_check_tagged_blanks_around_equal_sign() {
     // Like GNU, accept any blanks, or none, around the '=' of a tagged line,
     // with or without a space before the '('.

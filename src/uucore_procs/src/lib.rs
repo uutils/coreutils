@@ -23,11 +23,14 @@ use quote::quote;
 /// - SIGPIPE restoration to default if parent didn't explicitly ignore it
 /// - Disabling Rust signal handlers for proper core dumps
 /// - Error handling and exit code management
+/// - Flushing stdout at the end, turning a write error into exit code 1,
+///   unless `no_flush` is given for a utility reporting its own write errors
 #[proc_macro_attribute]
 pub fn main(args: TokenStream, stream: TokenStream) -> TokenStream {
     let stream = proc_macro2::TokenStream::from(stream);
     // Some utils e.g. true does not require signals
     let signals = !args.to_string().contains("no_signals");
+    let flush = !args.to_string().contains("no_flush");
 
     let new = quote!(
         // Initialize SIGPIPE state capture at process startup (Unix only).
@@ -52,7 +55,7 @@ pub fn main(args: TokenStream, stream: TokenStream) -> TokenStream {
             #[cfg(all(#signals, unix))]
             uucore::signals::disable_rust_signal_handlers().expect("Disabling rust signal handlers failed");
             let result = uumain(args);
-            match result {
+            let code = match result {
                 Ok(()) => uucore::error::get_exit_code(),
                 Err(e) => {
                     let s = format!("{e}");
@@ -65,6 +68,12 @@ pub fn main(args: TokenStream, stream: TokenStream) -> TokenStream {
                     }
                     e.code()
                 }
+            };
+            // see <https://github.com/rust-lang/rust/issues/23818>
+            if #flush {
+                uucore::flush_at_exit(&mut std::io::stdout(), code)
+            } else {
+                code
             }
         }
     );

@@ -62,7 +62,7 @@ fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> 
     })
 }
 
-#[uucore::main]
+#[uucore::main(no_flush)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     chown_base(
         uu_app(),

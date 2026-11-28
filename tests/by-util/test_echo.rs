@@ -747,3 +747,15 @@ fn test_emoji_output() {
         .succeeds()
         .stdout_only("こんにちは世界\n");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_when_flushing_at_exit() {
+    // Without a newline, the output is only written when stdout is flushed
+    // at exit, which must still report the error.
+    new_ucmd!()
+        .args(&["-n", "hi"])
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails_with_code(1)
+        .stderr_is("echo: write error: No space left on device\n");
+}

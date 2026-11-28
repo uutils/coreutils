@@ -311,3 +311,13 @@ fn test_emoji_handling() {
         .succeeds()
         .stdout_only("file🎯\n");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_when_flushing_at_exit() {
+    new_ucmd!()
+        .args(&["-z", "a/b"])
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails_with_code(1)
+        .stderr_is("basename: write error: No space left on device\n");
+}
