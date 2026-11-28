@@ -737,6 +737,19 @@ fn test_debug_reports_sse2_on_x86_64() {
         .stderr_contains("SSE2");
 }
 
+#[test]
+#[cfg(target_os = "linux")]
+fn test_debug_write_error_sets_exit_code() {
+    // A --debug line that can't be written makes wc fail, like GNU,
+    // but the counts are still printed.
+    new_ucmd!()
+        .args(&["-l", "--debug"])
+        .pipe_in("line\n")
+        .set_stderr(std::fs::File::create("/dev/full").unwrap())
+        .fails_with_code(1)
+        .stdout_is("1\n");
+}
+
 #[cfg(unix)]
 #[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
