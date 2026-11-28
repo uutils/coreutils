@@ -638,6 +638,7 @@ fn process_chunk<
     current_len: &mut usize,
     in_word: &mut bool,
     is_posixly_correct: bool,
+    is_utf8: bool,
     count_chars_as_bytes: bool,
 ) {
     for ch in text.chars() {
@@ -645,7 +646,7 @@ fn process_chunk<
             let is_space = if is_posixly_correct {
                 matches!(ch, '\t'..='\r' | ' ')
             } else {
-                ch.is_whitespace()
+                ch.is_whitespace() || (is_utf8 && ch == '\u{2060}')
             };
 
             if is_space {
@@ -723,6 +724,7 @@ fn word_count_from_reader_specialized<
     let mut in_word = false;
     let mut current_len = 0;
     let is_posixly_correct = *IS_POSIXLY_CORRECT;
+    let is_utf8 = SHOW_WORDS && locale_encoding() == Encoding::Utf8;
     while let Some(chunk) = reader.next_strict() {
         match chunk {
             Ok(text) => {
@@ -732,6 +734,7 @@ fn word_count_from_reader_specialized<
                     &mut current_len,
                     &mut in_word,
                     is_posixly_correct,
+                    is_utf8,
                     count_chars_as_bytes,
                 );
             }
