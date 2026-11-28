@@ -344,6 +344,31 @@ fn test_ignore_case_orders_punctuation_after_letters() {
 }
 
 #[test]
+#[cfg(all(target_os = "linux", target_pointer_width = "32"))]
+fn test_unique_sort_under_address_space_limit() {
+    // On i686, 36 MiB of these short records fits for an ordinary sort
+    // under a 96 MiB address-space limit. The former stable sorter aborted
+    // here trying to allocate about 24 MiB of scratch space.
+    const MEMORY_LIMIT: u64 = 96 * 1024 * 1024;
+    const INPUT_SIZE: usize = 36 * 1024 * 1024;
+    const RECORD_PAIR: &[u8] = b"zzzzzzzzzzzzzzz\naaaaaaaaaaaaaaa\n";
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("input", &RECORD_PAIR.repeat(INPUT_SIZE / RECORD_PAIR.len()));
+
+    // A file-backed stdin lets the test report sort's exit status and stderr
+    // even if sort exits before consuming all of the input.
+    ucmd.args(&["--parallel=1", "--buffer-size=64M", "--unique"])
+        .set_stdin(at.open("input"))
+        .env("LC_ALL", "C")
+        .env("MALLOC_ARENA_MAX", "1")
+        .limit(Resource::AS, MEMORY_LIMIT, MEMORY_LIMIT)
+        .limit(Resource::CORE, 0, 0)
+        .timeout(Duration::from_secs(120))
+        .succeeds()
+        .stdout_only("aaaaaaaaaaaaaaa\nzzzzzzzzzzzzzzz\n");
+}
+
+#[test]
 fn test_ignore_case_unique_orders_punctuation_after_letters() {
     new_ucmd!()
         .arg("-fu")

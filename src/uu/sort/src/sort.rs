@@ -2749,7 +2749,8 @@ fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_dat
     // rayon's thread pool which triggers an unreachable trap.
     if settings.stable || settings.unique {
         #[cfg(not(target_os = "wasi"))]
-        unsorted.par_sort_by(cmp);
+        // Retain stable ordering without a second allocation proportional to the chunk.
+        unsorted.par_sort_unstable_by(|a, b| cmp(a, b).then_with(|| a.index.cmp(&b.index)));
         #[cfg(target_os = "wasi")]
         unsorted.sort_by(cmp);
     } else {
