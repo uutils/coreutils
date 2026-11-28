@@ -1339,29 +1339,96 @@ mod options {
     pub const NO_PARTIAL: &str = "no-partial";
 }
 
+/// Return whether `long` (without its leading `--` and with no `=`)
+/// unambiguously matches a long option that consumes the next argument.
+fn is_value_taking_long_option(long: &[u8]) -> bool {
+    const VALUE_LONG_OPTS: &[&[u8]] = &[
+        b"bytes",
+        b"characters",
+        b"delimiter",
+        b"fields",
+        b"output-delimiter",
+    ];
+    const NON_VALUE_LONG_OPTS: &[&[u8]] = &[
+        b"whitespace-delimited",
+        b"complement",
+        b"only-delimited",
+        b"zero-terminated",
+        b"no-partial",
+        b"help",
+        b"version",
+    ];
+
+    !long.is_empty()
+        && VALUE_LONG_OPTS.iter().any(|opt| opt.starts_with(long))
+        && !NON_VALUE_LONG_OPTS.iter().any(|opt| opt.starts_with(long))
+}
+
+/// Keep a leading `=` in an attached short option value. Clap strips the first
+/// `=` after a short option as an option/value separator, whereas GNU `cut`
+/// takes everything after the short option letter as its value (e.g., `-d=`,
+/// `-b=1`, `-O=x`).
+fn preserve_short_option_equals(args: &mut [OsString]) -> UResult<()> {
+    let mut expecting_value = false;
+
+    for arg in args.iter_mut().skip(1) {
+        if expecting_value {
+            expecting_value = false;
+            continue;
+        }
+        if arg == "--" {
+            break;
+        }
+
+        let bytes = arg.as_encoded_bytes();
+        if let Some(long) = bytes.strip_prefix(b"--") {
+            if !long.contains(&b'=') {
+                expecting_value = is_value_taking_long_option(long);
+            }
+            continue;
+        }
+
+        let Some(short) = bytes.strip_prefix(b"-") else {
+            continue;
+        };
+
+        for (index, option) in short.iter().enumerate() {
+            match option {
+                b'b' | b'c' | b'd' | b'f' | b'F' | b'O' => {
+                    if short.get(index + 1) == Some(&b'=') {
+                        let mut value = bytes.to_vec();
+                        value.insert(index + 2, b'=');
+                        *arg = uucore::os_str_from_bytes(&value)?.to_os_string();
+                    } else if index + 1 == short.len() {
+                        expecting_value = true;
+                    }
+                    break;
+                }
+                // `-w` (`--whitespace-delimited`) uses `require_equals(true)`
+                // for its optional value, so clap's `=` handling is intended.
+                b'w' => {
+                    if short.get(index + 1) == Some(&b'=') {
+                        break;
+                    }
+                }
+                b's' | b'z' | b'n' => {}
+                _ => break,
+            }
+        }
+    }
+    Ok(())
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args: Vec<OsString> = args.collect();
+    let mut args: Vec<OsString> = args.collect();
     // Kept for the caret in list diagnostics, which needs the arguments as
     // they were typed, before the rewrite below edits one of them.
     let diag_args = uucore::diagnostics::capture(&args);
 
-    // GNU `cut` supports `-d=` to set the delimiter to `=`.
-    // Clap parsing is limited in this situation, see:
-    // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
-    // Arguments after `--` are file operands and must be left untouched.
-    let args = args.into_iter().scan(false, |seen_double_dash, x| {
-        Some(if *seen_double_dash {
-            x
-        } else if x == "--" {
-            *seen_double_dash = true;
-            x
-        } else if x == "-d=" {
-            "--delimiter==".into()
-        } else {
-            x
-        })
-    });
+    // Clap strips `=` after a short option; double it so GNU-style values like
+    // `-d=`, `-d=x`, `-b=1`, and `-O=x` keep their leading `=`.
+    preserve_short_option_equals(&mut args)?;
 
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
@@ -1713,5 +1780,66 @@ mod tests {
         assert_eq!(cut.advance(wide, 0, 0, 11), (12, 11));
         // An empty line has nothing to walk.
         assert_eq!(cut.advance(b"", 0, 0, 4), (0, 0));
+    }
+
+    #[test]
+    fn preserve_short_option_equals_cases() {
+        use super::preserve_short_option_equals;
+        use std::ffi::OsString;
+
+        let rewrite = |input: &[&str]| -> Vec<String> {
+            let mut args: Vec<OsString> = input.iter().map(OsString::from).collect();
+            preserve_short_option_equals(&mut args).unwrap();
+            args.into_iter()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect()
+        };
+
+        assert_eq!(rewrite(&["cut", "-d=", "-f1"]), ["cut", "-d==", "-f1"]);
+        assert_eq!(rewrite(&["cut", "-d=x", "-f1"]), ["cut", "-d==x", "-f1"]);
+        assert_eq!(rewrite(&["cut", "-b=1"]), ["cut", "-b==1"]);
+        assert_eq!(rewrite(&["cut", "-c=1"]), ["cut", "-c==1"]);
+        assert_eq!(rewrite(&["cut", "-f=1"]), ["cut", "-f==1"]);
+        assert_eq!(rewrite(&["cut", "-F=1"]), ["cut", "-F==1"]);
+        assert_eq!(rewrite(&["cut", "-O=x", "-f1"]), ["cut", "-O==x", "-f1"]);
+        assert_eq!(rewrite(&["cut", "-sb=1"]), ["cut", "-sb==1"]);
+        assert_eq!(
+            rewrite(&["cut", "-w=trimmed", "-f1"]),
+            ["cut", "-w=trimmed", "-f1"]
+        );
+        assert_eq!(
+            rewrite(&["cut", "-sw=trimmed", "-f1"]),
+            ["cut", "-sw=trimmed", "-f1"]
+        );
+        assert_eq!(rewrite(&["cut", "-db=1", "-f1"]), ["cut", "-db=1", "-f1"]);
+        assert_eq!(
+            rewrite(&["cut", "-O", "-b=1", "-f1"]),
+            ["cut", "-O", "-b=1", "-f1"]
+        );
+        assert_eq!(
+            rewrite(&["cut", "--output-delimiter", "-b=1", "-f1"]),
+            ["cut", "--output-delimiter", "-b=1", "-f1"]
+        );
+        assert_eq!(
+            rewrite(&["cut", "-f1", "--", "-b=1"]),
+            ["cut", "-f1", "--", "-b=1"]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn preserve_short_option_equals_non_utf8() {
+        use super::preserve_short_option_equals;
+        use std::ffi::OsString;
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+        for (input, expected) in [
+            (b"-d=\xff".as_slice(), b"-d==\xff".as_slice()),
+            (b"-sO=\xff".as_slice(), b"-sO==\xff".as_slice()),
+        ] {
+            let mut args = vec![OsString::from("cut"), OsString::from_vec(input.to_vec())];
+            preserve_short_option_equals(&mut args).unwrap();
+            assert_eq!(args[1].as_bytes(), expected);
+        }
     }
 }
