@@ -1492,14 +1492,11 @@ fn read_helper<'a>(
     let (rstat, data_len) = {
         let full_buf = read_buf.as_mut_bytes();
         let (rstat, data_len) = if let Some(ch) = i.settings.iconv.sync {
-            // With byte-counted input, `bsize` caps input bytes while padded
-            // blocks may fill up to the full `ibs`-aligned buffer.
-            let buf_len = if matches!(i.settings.count, Some(Num::Bytes(_))) {
-                full_buf.len()
-            } else {
-                bsize
-            };
-            i.fill_blocks(&mut full_buf[..buf_len], bsize, ch)?
+            i.fill_blocks(
+                &mut full_buf[..bsize.next_multiple_of(i.settings.ibs)],
+                bsize,
+                ch,
+            )?
         } else {
             let s = i.fill_consecutive(&mut full_buf[..bsize])?;
             let n = s.bytes_total as usize;
