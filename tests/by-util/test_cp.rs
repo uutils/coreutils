@@ -1736,6 +1736,32 @@ fn test_cp_numbered_if_existing_backup(#[case] backup_arg: &str) {
     );
 }
 
+// #16772: `.~1~` has been pruned, but `.~2~` is still there. The backup is
+// numbered and continues at `.~3~`; the simple backup `report~` is kept.
+#[rstest]
+#[case::default("-b")]
+#[case::existing("--backup=existing")]
+#[case::numbered("--backup=numbered")]
+fn test_cp_numbered_backup_after_pruned_first_version(#[case] backup_arg: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("incoming", "new\n");
+    at.write("report", "current\n");
+    at.write("report~", "keep\n");
+    at.write("report.~2~", "prior\n");
+
+    ucmd.arg(backup_arg)
+        .arg("incoming")
+        .arg("report")
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read("report"), "new\n");
+    assert_eq!(at.read("report~"), "keep\n");
+    assert_eq!(at.read("report.~2~"), "prior\n");
+    assert_eq!(at.read("report.~3~"), "current\n");
+    assert!(!at.file_exists("report.~1~"));
+}
+
 #[test]
 fn test_cp_backup_simple_protect_source() {
     let (at, mut ucmd) = at_and_ucmd!();
