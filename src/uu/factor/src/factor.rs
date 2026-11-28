@@ -177,13 +177,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let print_exponents = matches.get_flag(options::EXPONENTS);
 
     let stdout = stdout();
-    // Flush every number only for a terminal, so results show up while typing.
-    let flush_each = stdout.is_terminal();
+    let values = matches.get_many::<String>(options::NUMBER);
+    // Show each result while typing, including when output is piped elsewhere.
+    let flush_each = stdout.is_terminal() || (values.is_none() && stdin().is_terminal());
     // use a smaller buffer here to pass a GNU test.
     let mut w = io::BufWriter::with_capacity(4 * 1024, stdout.lock());
     let mut out = Vec::new();
 
-    if let Some(values) = matches.get_many::<String>(options::NUMBER) {
+    if let Some(values) = values {
         for number in values {
             write_factors_str(
                 number.as_bytes(),
@@ -268,8 +269,7 @@ pub fn uu_app() -> Command {
 
 #[cfg(test)]
 mod tests {
-    use crate::Number;
-    use crate::parse_num;
+    use super::*;
 
     #[test]
     fn test_correct_parsing() {
@@ -296,5 +296,35 @@ mod tests {
     fn test_incorrect_parsing() {
         parse_num(b"abcd").unwrap();
         parse_num(b"12\x00\xFF\x1D").unwrap();
+    }
+
+    #[derive(Default)]
+    struct RecordWriter(Vec<Vec<u8>>);
+
+    impl Write for RecordWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.0.push(buf.to_vec());
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn batch_output_without_splitting_records() {
+        let mut writer = io::BufWriter::with_capacity(32, RecordWriter::default());
+        let mut record = Vec::new();
+        for _ in 0..50 {
+            write_factors_str(b"2", &mut writer, &mut record, false, false).unwrap();
+        }
+        // A record larger than the buffer is still one write.
+        write_factors_str(b"1048576", &mut writer, &mut record, false, false).unwrap();
+        writer.flush().unwrap();
+        let writes = &writer.get_ref().0;
+        assert!(writes.len() < 50);
+        assert!(writes.iter().all(|write| write.ends_with(b"\n")));
+        let expected = format!("{}1048576:{}\n", "2: 2\n".repeat(50), " 2".repeat(20));
+        assert_eq!(writes.concat(), expected.as_bytes());
     }
 }

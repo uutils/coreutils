@@ -420,7 +420,7 @@ fn short_circuit_write_error() {
         .arg("12")
         .arg("10")
         .set_stdout(f)
-        .fails()
+        .fails_with_code(1)
         .stderr_is("factor: write error: No space left on device\n");
 }
 
@@ -1777,4 +1777,24 @@ fn test_stdin_clean_error_message() {
         .set_stdin(dir_as_file)
         .fails()
         .stderr_is("factor: error reading input: Is a directory\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_terminal_input_flushes_before_eof() {
+    let mut child = new_ucmd!()
+        .terminal_sim_stdio(uutests::util::TerminalSimulation {
+            stdin: true,
+            ..Default::default()
+        })
+        .run_no_wait();
+    child.write_in("12\n");
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while child.stdout_all().is_empty() && std::time::Instant::now() < deadline {
+        child.delay(10);
+    }
+    let output_before_eof = child.stdout_all();
+    child.close_stdin();
+    child.wait().unwrap().success().no_stderr();
+    assert_eq!(output_before_eof, "12: 2 2 3\n");
 }
