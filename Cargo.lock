@@ -3763,6 +3763,7 @@ dependencies = [
  "fluent",
  "half",
  "libc",
+ "rstest",
  "rustix",
  "tempfile",
  "uucore",
