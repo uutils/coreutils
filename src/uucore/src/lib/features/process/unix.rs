@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore sigset sigemptyset sigaddset sigpending sigismember
 // spell-checker:ignore sigwait KTIME timeval itimerval setitimer itimer timerid
 // spell-checker:ignore sigevent sigev sigval itimerspec signo clockid sevp
 
@@ -24,6 +25,27 @@ use timer::Timer;
 
 #[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use super::{ChildExt, TimeoutRet};
+
+/// Discard a pending instance of `sig`. Only reaps one that is blocked and
+/// pending, so `sigwait` returns at once.
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
+fn discard_pending(sig: libc::c_int) {
+    // SAFETY: both sets are initialized before use, and `sigwait` is only reached
+    // once `sig` is pending (hence blocked), so it does not block.
+    unsafe {
+        let mut pending: libc::sigset_t = std::mem::zeroed();
+        if libc::sigpending(&raw mut pending) == -1
+            || libc::sigismember(&raw const pending, sig) != 1
+        {
+            return;
+        }
+        let mut set: libc::sigset_t = std::mem::zeroed();
+        libc::sigemptyset(&raw mut set);
+        libc::sigaddset(&raw mut set, sig);
+        let mut caught = 0;
+        libc::sigwait(&raw const set, &raw mut caught);
+    }
+}
 
 #[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 impl ChildExt for Child {
@@ -60,6 +82,9 @@ impl ChildExt for Child {
         let old_handler = unsafe { nix_signal::signal(signal, SigHandler::SigIgn) }
             .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
         let result = nix_signal::kill(Pid::from_raw(0), Some(signal));
+        // SIG_IGN only discards a signal that is not blocked: timeout blocks these
+        // to sigwait for them, so drop the instance we just sent ourselves.
+        discard_pending(signal as libc::c_int);
         // Restore the old handler
         let _ = unsafe { nix_signal::signal(signal, old_handler) };
         result.map_err(|e| io::Error::from_raw_os_error(e as i32))
