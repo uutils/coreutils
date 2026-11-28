@@ -265,6 +265,24 @@ fn test_realpath_default_forbids_non_final_non_existent() {
 
 #[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
+fn test_realpath_default_reports_a_final_component_too_long() {
+    // Only a missing final component is allowed: a name longer than file
+    // systems take (255 bytes) is an error, and the other operands are
+    // still resolved.
+    let long = "A".repeat(256);
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("ok");
+    let ok = path_concat!(at.root_dir_resolved(), "ok");
+    let result = ucmd.args(&["ok", &long, "ok"]).fails_with_code(1);
+    result
+        .stdout_is(format!("{ok}\n{ok}\n"))
+        .stderr_contains(&long);
+    #[cfg(unix)]
+    result.stderr_contains("File name too long");
+}
+
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
 fn test_realpath_existing() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg("-e")
