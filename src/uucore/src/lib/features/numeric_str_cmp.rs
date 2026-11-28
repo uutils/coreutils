@@ -130,7 +130,8 @@ impl NumInfo {
             }
             first_char = false;
 
-            if parse_settings.thousands_separator == Some(char) {
+            // Thousands separators are only valid in the integer part (before the decimal point).
+            if !had_decimal_pt && parse_settings.thousands_separator == Some(char) {
                 continue;
             }
 
@@ -558,5 +559,16 @@ mod tests {
                 0..0
             )
         );
+    }
+
+    #[test]
+    fn thousands_separator_after_decimal_pt_stops_parse() {
+        let settings = NumInfoParseSettings {
+            thousands_separator: Some(b','),
+            ..Default::default()
+        };
+        assert_eq!(NumInfo::parse(b"1.2,9", &settings).1, 0..3);
+        assert_eq!(NumInfo::parse(b"1,200.5,9", &settings).1, 0..7);
+        assert_eq!(NumInfo::parse(b"0.0,5", &settings).1, 3..3);
     }
 }

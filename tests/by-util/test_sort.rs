@@ -4533,3 +4533,26 @@ fn test_debug_incompatible_with_check() {
             .stderr_only(format!("sort: options '-{opt} --debug' are incompatible\n"));
     }
 }
+
+#[rstest]
+#[case("en_US.UTF-8", &["-nu"], "1.2,9\n1.29,0\n", "1.2,9\n1.29,0\n")]
+#[case("en_US.UTF-8", &["-k1,1n", "-u"], "1.2,9\n1.29,0\n", "1.2,9\n1.29,0\n")]
+#[case("en_US.UTF-8", &["-n"], "1.2,9\n1.21,0\n", "1.2,9\n1.21,0\n")]
+#[case("en_US.UTF-8", &["-nu"], "1,200.5\n1200.50\n", "1,200.5\n")]
+#[case("en_US.UTF-8", &["-nu"], "-1.2,9\n-1.29,0\n", "-1.29,0\n-1.2,9\n")]
+#[case("en_US.UTF-8", &["-hu"], "1.2,9K\n1.29,0K\n", "1.2,9K\n1.29,0K\n")]
+#[case("de_DE.UTF-8", &["-nu"], "1,2.9\n1,29.0\n", "1,2.9\n1,29.0\n")]
+#[case("de_DE.UTF-8", &["-nu"], "1.200,5\n1200,50\n", "1.200,5\n")]
+fn test_numeric_thousands_sep_after_decimal_point(
+    #[case] locale: &str,
+    #[case] args: &[&str],
+    #[case] input: &str,
+    #[case] expected: &str,
+) {
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .args(args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected);
+}
