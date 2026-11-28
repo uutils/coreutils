@@ -3032,7 +3032,7 @@ fn test_cp_archive_recursive() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", wasi_runner))]
 fn test_cp_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();
     let previous = std::time::SystemTime::now() - Duration::from_secs(3600);
@@ -3042,11 +3042,12 @@ fn test_cp_preserve_timestamps() {
         .open(at.plus(TEST_HELLO_WORLD_SOURCE))
         .unwrap();
     file.set_times(
-        std_fs::FileTimes::new()
+        std::fs::FileTimes::new()
             .set_accessed(previous)
             .set_modified(previous),
     )
     .unwrap();
+
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--preserve=timestamps")
         .arg(TEST_HOW_ARE_YOU_SOURCE)
@@ -3054,17 +3055,15 @@ fn test_cp_preserve_timestamps() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
 
-    let metadata = std_fs::metadata(at.subdir.join(TEST_HELLO_WORLD_SOURCE)).unwrap();
-    let creation = metadata.modified().unwrap();
-
-    let metadata2 = std_fs::metadata(at.subdir.join(TEST_HOW_ARE_YOU_SOURCE)).unwrap();
-    let creation2 = metadata2.modified().unwrap();
-
-    let scene2 = TestScenario::new("ls");
-    let result = scene2.cmd("ls").arg("-al").arg(at.subdir).run();
-
-    println!("ls dest {}", result.stdout_str());
-    assert_eq!(creation, creation2);
+    let src_mtime = std::fs::metadata(at.subdir.join(TEST_HELLO_WORLD_SOURCE))
+        .unwrap()
+        .modified()
+        .unwrap();
+    let dst_mtime = std::fs::metadata(at.subdir.join(TEST_HOW_ARE_YOU_SOURCE))
+        .unwrap()
+        .modified()
+        .unwrap();
+    assert_eq!(src_mtime, dst_mtime);
 }
 
 #[test]
@@ -3113,45 +3112,6 @@ fn test_cp_no_preserve_timestamps() {
     // Some margins with time check
     assert!(res.as_secs() > 3595);
     assert!(res.as_secs() < 3605);
-}
-
-// `filetime::FileTime::from_last_{access,modification}_time` panics on WASI
-// (the crate has no WASI-specific backend). `cp --preserve=timestamps` must
-// instead read timestamps via `Metadata::accessed`/`modified` there. See
-// `source_times` in src/uu/cp/src/cp.rs.
-#[test]
-#[cfg(wasi_runner)]
-fn test_cp_preserve_timestamps_wasi() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let previous = std::time::SystemTime::now() - Duration::from_secs(3600);
-    // set the file creation/modification an hour ago
-    let file = std::fs::OpenOptions::new()
-        .write(true)
-        .open(at.plus(TEST_HELLO_WORLD_SOURCE))
-        .unwrap();
-    file.set_times(
-        std::fs::FileTimes::new()
-            .set_accessed(previous)
-            .set_modified(previous),
-    )
-    .unwrap();
-
-    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
-        .arg("--preserve=timestamps")
-        .arg(TEST_HOW_ARE_YOU_SOURCE)
-        .succeeds();
-
-    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
-
-    let src_mtime = std::fs::metadata(at.subdir.join(TEST_HELLO_WORLD_SOURCE))
-        .unwrap()
-        .modified()
-        .unwrap();
-    let dst_mtime = std::fs::metadata(at.subdir.join(TEST_HOW_ARE_YOU_SOURCE))
-        .unwrap()
-        .modified()
-        .unwrap();
-    assert_eq!(src_mtime, dst_mtime);
 }
 
 // WASI has no chmod syscall at all, so `fs::set_permissions` always fails
