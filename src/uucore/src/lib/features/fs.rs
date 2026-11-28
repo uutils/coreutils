@@ -10,7 +10,7 @@
 use crate::translate;
 #[cfg(all(unix, not(target_os = "haiku")))]
 pub use libc::{major, makedev, minor};
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::ffi::{OsStr, OsString};
 use std::fs::read_dir;
 use std::hash::Hash;
@@ -303,6 +303,7 @@ fn resolve_symlink<P: AsRef<Path>>(path: P) -> IOResult<Option<PathBuf>> {
     Ok(result)
 }
 
+#[derive(Clone)]
 enum OwningComponent {
     Prefix(OsString),
     RootDir,
@@ -401,6 +402,7 @@ pub fn canonicalize<P: AsRef<Path>>(
     };
     let mut parts: VecDeque<OwningComponent> = path.components().map(Into::into).collect();
     let mut result = PathBuf::new();
+    let mut visited_targets: HashSet<PathBuf> = HashSet::new();
     let mut followed_symlinks = 0;
     while let Some(part) = parts.pop_front() {
         match part {
@@ -421,6 +423,28 @@ pub fn canonicalize<P: AsRef<Path>>(
         }
         match resolve_symlink(&result) {
             Ok(Some(link_path)) => {
+                let resolved_target = if link_path.is_absolute() {
+                    link_path.clone()
+                } else {
+                    result
+                        .parent()
+                        .map(|p| p.join(&link_path))
+                        .unwrap_or_else(|| link_path.clone())
+                };
+                if visited_targets.contains(&resolved_target) {
+                    if miss_mode == MissingHandling::Missing {
+                        let mut loop_result = result.clone();
+                        for part in &parts {
+                            loop_result.push(part.as_os_str());
+                        }
+                        return Ok(normalize_path(&loop_result));
+                    }
+                    return Err(Error::new(
+                        ErrorKind::InvalidInput,
+                        translate!("error-too-many-symlink-levels"),
+                    )); // TODO use ErrorKind::FilesystemLoop when stable
+                }
+                visited_targets.insert(resolved_target);
                 for link_part in link_path.components().rev() {
                     parts.push_front(link_part.into());
                 }
