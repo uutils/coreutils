@@ -825,6 +825,33 @@ fn test_posixly_correct_whitespace() {
         .stdout_is("1\n");
 }
 
+#[test]
+fn test_word_joiner_separator() {
+    let input = "a\u{2060}b\n";
+
+    new_ucmd!()
+        .arg("-w")
+        .env("LC_ALL", "C.UTF-8")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("2\n");
+
+    new_ucmd!()
+        .arg("-w")
+        .env("LC_ALL", "C.UTF-8")
+        .env("POSIXLY_CORRECT", "1")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("1\n");
+
+    new_ucmd!()
+        .arg("-w")
+        .env("LC_ALL", "C")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("1\n");
+}
+
 #[cfg(unix)]
 #[rstest::rstest]
 #[case::partial(6, 1)]
