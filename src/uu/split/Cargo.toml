@@ -21,7 +21,12 @@ fluent = { workspace = true }
 memchr = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["fs", "parser-size", "zeroed-alloc"] }
+uucore = { workspace = true, features = [
+  "fs",
+  "parser-size",
+  "signals",
+  "zeroed-alloc",
+] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))'.dependencies]
 rustix = { workspace = true, features = ["fs"] }
