@@ -1097,7 +1097,7 @@ impl EnvAppData {
                     }
                 }
                 writer.flush()?;
-            } else if let Some(style) = quoting_style_or_tty_env(opts.quoting_style) {
+            } else if let Some(style) = opts.quoting_style {
                 print_all_env_vars_quoted(
                     io::stdout(),
                     opts.line_ending,
@@ -1312,10 +1312,21 @@ fn make_options<'a>(
     #[cfg(all(unix, not(target_os = "fuchsia")))] signal_apply_all: &BTreeSet<&'static str>,
 ) -> UResult<Options<'a>> {
     let ignore_env = matches.get_flag("ignore-environment");
-    let line_ending = LineEnding::from_zero_flag(matches.get_flag("null"));
-    let quoting_style = matches
-        .get_one::<String>(qs_parser::QUOTING_STYLE)
-        .and_then(QuotingStyle::parse);
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::NULL));
+    let last_index = |id| matches.indices_of(id).and_then(Iterator::last);
+    // Like GNU, -0 means literal output unless --quoting-style comes after it.
+    // Otherwise read QUOTING_STYLE now, before -i or -u can unset it.
+    let quoting_style = if line_ending == LineEnding::Nul
+        && last_index(options::NULL) > last_index(qs_parser::QUOTING_STYLE)
+    {
+        None
+    } else {
+        quoting_style_or_tty_env(
+            matches
+                .get_one::<String>(qs_parser::QUOTING_STYLE)
+                .and_then(QuotingStyle::parse),
+        )
+    };
     let running_directory = matches
         .get_one::<OsString>("chdir")
         .map(OsString::as_os_str);
