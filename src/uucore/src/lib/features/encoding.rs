@@ -152,6 +152,29 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
     fn valid_decoding_multiple(&self) -> usize {
         self.valid_decoding_multiple
     }
+
+    fn decode_lenient_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
+        let start = output.len();
+        if self.decode_into_vec(input, output).is_ok() {
+            return Ok(());
+        }
+        output.truncate(start);
+
+        // A 2- or 3-character tail can still hold one or two bytes when its
+        // leftover bits are non-zero. Strict decode rejects that tail; write
+        // the bytes anyway.
+        let remainder = input.len() % 4;
+        let aligned = input.len() - remainder;
+        if aligned > 0 {
+            self.decode_into_vec(&input[..aligned], output)?;
+        }
+        if remainder == 2 || remainder == 3 {
+            let tail = base64_simd::forgiving_decode_to_vec(&input[aligned..])
+                .map_err(|_| USimpleError::new(1, translate!("encoding-error-invalid-input")))?;
+            output.extend_from_slice(&tail);
+        }
+        Ok(())
+    }
 }
 
 // Re-export for the faster decoding/encoding logic
@@ -267,6 +290,13 @@ pub trait SupportsFastDecodeAndEncode {
     /// before the final decode attempt. The default implementation opts out.
     fn pad_remainder(&self, _remainder: &[u8]) -> Option<PadResult> {
         None
+    }
+
+    /// Like [`decode_into_vec`](Self::decode_into_vec), but keep complete output
+    /// bytes when trailing padding bits are non-zero. Used when an invalid byte
+    /// ends the input: those bytes are written, then the decode still fails.
+    fn decode_lenient_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
+        self.decode_into_vec(input, output)
     }
 }
 
@@ -539,6 +569,56 @@ impl SupportsFastDecodeAndEncode for Base32Wrapper {
     fn supports_partial_decode(&self) -> bool {
         true
     }
+
+    fn decode_lenient_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
+        let start = output.len();
+        if self.decode_into_vec(input, output).is_ok() {
+            return Ok(());
+        }
+        output.truncate(start);
+
+        if let Some(padded) = self.pad_remainder(input)
+            && self.decode_into_vec(&padded.chunk, output).is_ok()
+        {
+            return Ok(());
+        }
+        output.truncate(start);
+
+        let full = input.len() - (input.len() % 8);
+        if full > 0 {
+            self.decode_into_vec(&input[..full], output)?;
+        }
+
+        let tail = &input[full..];
+        let tail_len = [7usize, 5, 4, 2].into_iter().find(|len| *len <= tail.len());
+        let Some(tail_len) = tail_len else {
+            return Ok(());
+        };
+
+        let mut chunk = tail[..tail_len].to_vec();
+        clear_base32_leftover_bits(self.alphabet(), &mut chunk);
+        chunk.resize(8, b'=');
+        self.decode_into_vec(&chunk, output)?;
+        Ok(())
+    }
+}
+
+/// Zero bits that do not belong to a complete output byte so a strict
+/// decoder will accept the quantum. The data bytes themselves stay put.
+fn clear_base32_leftover_bits(alphabet: &[u8], chunk: &mut [u8]) {
+    let mask: usize = match chunk.len() {
+        2 => 0b1_1100, // 2 leftover bits
+        4 => 0b1_0000, // 4 leftover bits
+        5 => 0b1_1110, // 1 leftover bit
+        7 => 0b1_1000, // 3 leftover bits
+        _ => return,
+    };
+    let symbols = &alphabet[..alphabet.len().min(32)];
+    let last = chunk.len() - 1;
+    let Some(value) = symbols.iter().position(|&symbol| symbol == chunk[last]) else {
+        return;
+    };
+    chunk[last] = symbols[value & mask];
 }
 
 #[cfg(test)]

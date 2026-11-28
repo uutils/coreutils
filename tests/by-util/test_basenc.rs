@@ -96,6 +96,22 @@ fn test_base64url_decode_rejects_standard_alphabet() {
 }
 
 #[test]
+fn test_base64url_decode_invalid_byte() {
+    // Bytes before a CR are written, but `+` or `/` rejects all of the input.
+    new_ucmd!()
+        .args(&["--base64url", "-d"])
+        .pipe_in("aGVsbG8=\r")
+        .fails_with_code(1)
+        .stdout_is("hello")
+        .stderr_is("basenc: invalid input\n");
+    new_ucmd!()
+        .args(&["--base64url", "-d"])
+        .pipe_in("aGVsbG8=\r+")
+        .fails_with_code(1)
+        .stderr_only("basenc: invalid input\n");
+}
+
+#[test]
 fn test_base32() {
     new_ucmd!()
         .arg("--base32")
