@@ -5128,6 +5128,21 @@ fn test_preserve_hardlink_attributes_in_directory() {
     );
 }
 
+/// Without `--preserve=links`, `-R` copies hard links as separate files.
+#[test]
+#[cfg(unix)]
+fn test_cp_recursive_copies_hardlinks_as_separate_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("src");
+    at.write("src/f", "x");
+    at.hard_link("src/f", "src/link");
+
+    ucmd.args(&["-R", "src", "dest"]).succeeds().no_output();
+
+    assert_ne!(at.metadata("dest/f").ino(), at.metadata("dest/link").ino());
+    assert_eq!(at.read("dest/link"), "x");
+}
+
 #[test]
 #[cfg(not(any(windows, target_os = "android")))]
 fn test_hard_link_file() {
