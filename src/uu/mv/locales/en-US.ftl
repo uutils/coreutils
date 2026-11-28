@@ -42,6 +42,7 @@ mv-error-setting-attribute = setting attribute {$name}: {$err}
 mv-error-setting-attributes = setting attributes for {$path}: {$err}
 mv-error-exchange-two-operands = --exchange requires exactly two operands
 mv-error-exchange-not-supported = --exchange is not supported on this platform
+mv-error-standard-output = standard output: {$error}
 
 # Help messages
 mv-help-force = do not prompt before overwriting
