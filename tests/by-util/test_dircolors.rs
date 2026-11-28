@@ -139,6 +139,30 @@ fn test_quoting() {
         .stdout_only("LS_COLORS='ex='\\''echo Hello;\\:'\\'':';\nexport LS_COLORS\n");
 }
 
+#[test]
+fn test_escape_colon_and_equals() {
+    for (input, expected) in [
+        ("exec x=y 01;33\n", r"ex=x\=y 01;33:"),
+        ("exec ^:x 01;33\n", "ex=^:x 01;33:"),
+        ("exec x\\\\:y 01;33\n", r"ex=x\\\:y 01;33:"),
+    ] {
+        new_ucmd!()
+            .pipe_in(input)
+            .args(&["-b", "-"])
+            .succeeds()
+            .stdout_only(format!("LS_COLORS='{expected}';\nexport LS_COLORS\n"));
+    }
+}
+
+#[test]
+fn test_print_ls_colors_does_not_escape() {
+    new_ucmd!()
+        .pipe_in("exec a:b=c\n")
+        .args(&["--print-ls-colors", "-"])
+        .succeeds()
+        .stdout_only("\x1B[a:b=cmex\ta:b=c\x1B[0m\n");
+}
+
 /*
 #[test]
 fn test_print_ls_colors() {

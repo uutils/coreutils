@@ -358,7 +358,12 @@ where
             continue;
         }
 
-        let line = escape(line, fmt);
+        // --print-ls-colors only displays the entries, so nothing is quoted there.
+        let line = if fmt == OutputFmt::Display {
+            line.to_string()
+        } else {
+            escape(line, fmt)
+        };
 
         let (key, val) = line.split_two();
         if val.is_empty() {
@@ -452,26 +457,30 @@ fn append_entry(
     }
 }
 
-/// Escape single quotes because they are not allowed between single quotes in shell code, and code
-/// enclosed by single quotes is what is returned by `parse()`.
+/// Escapes a config line for the shell code that `parse()` returns.
 ///
-/// We also escape ":" to make the "quote" test pass in the GNU test suite:
-/// <https://github.com/coreutils/coreutils/blob/master/tests/misc/dircolors.pl>
+/// Single quotes are escaped because the value is enclosed in single quotes. `ls` reads a `:` or
+/// `=` in an `LS_COLORS` entry as the end of a field, unless a `\` or a `^` right before it makes
+/// it part of an escape sequence (see `parse_funky_string` in `ls`). So a backslash goes before
+/// every `:` and `=` that is not already taken by such a sequence.
 ///
 /// For csh, "!" is escaped as well, because csh performs history substitution
 /// even inside single quotes.
 fn escape(s: &str, fmt: OutputFmt) -> String {
     let mut result = String::new();
-    let mut previous = ' ';
+    let mut in_escape = false;
 
     for c in s.chars() {
         match c {
             '\'' => result.push_str("'\\''"),
-            ':' if previous != '\\' => result.push_str("\\:"),
+            ':' | '=' if !in_escape => {
+                result.push('\\');
+                result.push(c);
+            }
             '!' if fmt == OutputFmt::CShell => result.push_str("\\!"),
             _ => result.push(c),
         }
-        previous = c;
+        in_escape = !in_escape && matches!(c, '\\' | '^');
     }
 
     result
@@ -543,6 +552,10 @@ mod tests {
         assert_eq!("'\\''", escape("'", sh));
         assert_eq!("\\:", escape(":", sh));
         assert_eq!("\\:", escape("\\:", sh));
+        assert_eq!("x\\=y", escape("x=y", sh));
+        assert_eq!("^:x", escape("^:x", sh));
+        assert_eq!("x\\\\\\:y", escape("x\\\\:y", sh));
+        assert_eq!("^^\\:", escape("^^:", sh));
         assert_eq!("!", escape("!", sh));
         assert_eq!("\\!", escape("!", OutputFmt::CShell));
     }
