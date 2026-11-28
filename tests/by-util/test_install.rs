@@ -3440,3 +3440,28 @@ fn test_install_strip_program_sees_caller_umask() {
         "strip program saw umask {reported}"
     );
 }
+
+#[test]
+#[cfg(all(target_os = "linux", feature = "feat_selinux", feature = "feat_smack"))]
+fn test_security_contexts_disabled() {
+    if !uutests::util::security_contexts_disabled() {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("source", "contents");
+    for (option, warning) in [
+        ("-Z", ""),
+        (
+            "--context=some_context",
+            "install: warning: ignoring --context; it requires an SELinux-enabled kernel\n",
+        ),
+    ] {
+        scene
+            .ucmd()
+            .args(&[option, "source", "dest"])
+            .succeeds()
+            .no_stdout()
+            .stderr_is(warning);
+        assert_eq!(scene.fixtures.read("dest"), "contents");
+    }
+}

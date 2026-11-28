@@ -10,7 +10,7 @@ use uucore::display::Quotable;
 use uucore::error::{ExitCode, UResult, USimpleError, strip_errno};
 use uucore::translate;
 
-use uucore::{format_usage, show};
+use uucore::{format_usage, show, show_warning};
 
 mod options {
     pub static MODE: &str = "mode";
@@ -54,13 +54,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .cloned()
         .collect();
 
+    let context = matches.get_one::<String>(options::CONTEXT);
+    #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
+    let selinux_enabled = uucore::selinux::is_selinux_enabled();
+    #[cfg(not(all(feature = "selinux", any(target_os = "android", target_os = "linux"))))]
+    let selinux_enabled = false;
+    #[cfg(all(feature = "smack", target_os = "linux"))]
+    let smack_enabled = uucore::smack::is_smack_enabled();
+    #[cfg(not(all(feature = "smack", target_os = "linux")))]
+    let smack_enabled = false;
+
+    if context.is_some() && !selinux_enabled && !smack_enabled {
+        show_warning!("{}", translate!("mkfifo-warning-context-ignored"));
+    }
+
     for f in fifos {
         // Label the FIFO at creation, as GNU does; relabelling after leaves a window.
         #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
         let _selinux_guard = {
             let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
-            let context = matches.get_one::<String>(options::CONTEXT);
-            if set_security_context || context.is_some() {
+            if (set_security_context || context.is_some()) && selinux_enabled {
                 let mode = uucore::libc::S_IFIFO | mode as uucore::libc::mode_t;
                 match uucore::selinux::FsCreateContext::new(
                     std::path::Path::new(&f),
@@ -97,7 +110,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             #[cfg(all(feature = "smack", target_os = "linux"))]
             {
                 let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
-                let context = matches.get_one::<String>(options::CONTEXT);
                 if set_security_context || context.is_some() {
                     uucore::smack::set_smack_label_and_cleanup(&f, context, |p| {
                         std::fs::remove_file(p)

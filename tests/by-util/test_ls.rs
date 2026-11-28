@@ -8830,3 +8830,18 @@ fn test_dereferenced_context_reports_error_once(
         .fails_with_code(if command_line { 2 } else { 1 })
         .stderr_is("ls: cannot access 'dir/broken': No such file or directory\n");
 }
+
+#[test]
+#[cfg(all(target_os = "linux", feature = "feat_selinux", feature = "feat_smack"))]
+fn test_security_contexts_disabled() {
+    if !uutests::util::security_contexts_disabled() {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("file");
+    scene
+        .ucmd()
+        .args(&["-Z", "file"])
+        .succeeds()
+        .stdout_only("? file\n");
+}
