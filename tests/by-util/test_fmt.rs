@@ -808,3 +808,38 @@ fn test_fmt_tagged_one_line_paragraph_indent() {
             .stdout_only(expected);
     }
 }
+
+#[test]
+fn test_fmt_tab_between_words_keeps_input_width() {
+    for (args, input, expected) in [
+        (vec!["-c"], "hello\nworld\tbye\n", "hello world   bye\n"),
+        (vec!["-c"], "a\tb\n\tc\td\n", "a\tb c\t  d\n"),
+        (vec![], "a\tb\na\tc\n", "a\tb a\t  c\n"),
+        (vec!["-q"], "a\tb\na\tc\n", "a\tb a\t  c\n"),
+        (vec![], "aaaaaaaaaaa\na\t\tb\n", "aaaaaaaaaaa a\t\t    b\n"),
+        (vec![], "a  \t  b\n", "a\t  b\n"),
+        (vec!["-s"], "x \tb\n", "x\tb\n"),
+        (vec!["-t"], "aaaaaaaaaa\n  b\tc\n", "aaaaaaaaaa b\t c\n"),
+        // a lone tab that would only advance one column is written as a space
+        (
+            vec![],
+            "aaaaaaaaaaaaa\na \tb\n",
+            "aaaaaaaaaaaaa a       b\n",
+        ),
+        (
+            vec![],
+            "aaaaaaaaaaaaa\na\t\t\tb\n",
+            "aaaaaaaaaaaaa a\t\t\t      b\n",
+        ),
+        (vec!["-w10"], "aaaaaaa bbbbbbb\tc\n", "aaaaaaa\nbbbbbbb c\n"),
+        (vec!["-w10"], "aaaaaaa b\tc\n", "aaaaaaa\nb\tc\n"),
+        (vec!["-p", ">"], "> a\tb\n> c\td\n", "> a\tb c\td\n"),
+        (vec!["-u"], "a\tb\nc\td\n", "a b c d\n"),
+    ] {
+        new_ucmd!()
+            .args(&args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
