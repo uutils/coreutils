@@ -302,6 +302,7 @@ fn test_sentence_regexp_newlines_are_spaces() {
 #[rstest]
 #[case::sentence("-S", "ab[c")]
 #[case::word("-W", "(wrong")]
+#[case::character_class("-W", "[")]
 fn test_invalid_regexp(#[case] option: &str, #[case] pattern: &str) {
     new_ucmd!()
         .args(&[option, pattern])
@@ -536,4 +537,44 @@ fn test_repeated_flags_are_accepted() {
             "                                       hello world\n",
             "                               hello   world\n"
         ));
+}
+
+#[test]
+fn test_default_word_scanner_matches_explicit_regex() {
+    // Include combining marks, connector punctuation and join controls, which
+    // are word characters even though char::is_alphanumeric does not cover them.
+    let text = "123abc abc_42 café a\u{301} _élan α\u{200c}β 字词 foo-bar\n";
+    let ts = uutests::util::TestScenario::new(uutests::util_name!());
+    for flags in [vec![], vec!["-r"], vec!["-f"]] {
+        let default = ts.ucmd().args(&flags).pipe_in(text).succeeds();
+        ts.ucmd()
+            .args(&flags)
+            .args(&["-W", "\\w+"])
+            .pipe_in(text)
+            .succeeds()
+            .stdout_is(default.stdout_str());
+    }
+}
+
+#[test]
+fn test_traditional_word_scanner_matches_explicit_regex() {
+    let ts = uutests::util::TestScenario::new(uutests::util_name!());
+    let text = "ref abc_123 café,foo\tbar\n";
+    let default = ts.ucmd().args(&["-G", "-r"]).pipe_in(text).succeeds();
+    ts.ucmd()
+        .args(&["-G", "-r", "-W", "[^ \t\n]+"])
+        .pipe_in(text)
+        .succeeds()
+        .stdout_is(default.stdout_str());
+}
+
+#[test]
+fn test_empty_break_file_keeps_whole_line() {
+    let ts = uutests::util::TestScenario::new(uutests::util_name!());
+    ts.fixtures.touch("empty-breaks");
+    ts.ucmd()
+        .args(&["-b", "empty-breaks"])
+        .pipe_in("alpha beta\n")
+        .succeeds()
+        .stdout_only("                                       alpha beta\n");
 }
