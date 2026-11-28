@@ -28,7 +28,7 @@ use uucore::buf_copy::copy_fast;
 use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
-use uucore::fs::{are_files_identical, dir_strip_dot_for_creation};
+use uucore::fs::{are_files_identical, dir_strip_dot_for_creation, paths_refer_to_same_file};
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 #[cfg(not(target_os = "redox"))]
 use uucore::safe_traversal::{DirFd, FileInfo, SymlinkBehavior, create_dir_all_safe};
@@ -999,6 +999,16 @@ fn perform_backup(from: &Path, to: &Path, b: &Behavior) -> UResult<Option<PathBu
 
     // A dangling symlink is still a destination entry to back up.
     if to.symlink_metadata().is_ok() {
+        // Renaming the source's own directory entry would remove it before
+        // the copy. Distinct hard links can safely be backed up.
+        if b.backup_mode != BackupMode::None
+            && from.file_name() == to.file_name()
+            && let (Some(src_dir), Some(dst_dir)) = (from.parent(), to.parent())
+            // A bare filename has an empty parent, which denotes ".".
+            && paths_refer_to_same_file(src_dir.join("."), dst_dir.join("."), true)
+        {
+            return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
+        }
         if b.verbose {
             writeln!(
                 stdout(),
