@@ -49,4 +49,7 @@ platform. This is documented per utility.
 ## Linux login records
 
 On Linux, `who`, `pinky`, `users`, and `uptime` prefer traditional login records
-and try systemd-logind when the default file is empty or unavailable.
+and try systemd-logind when the default file is empty or unavailable. Because
+musl's `utmpx` functions are stubs, musl builds query systemd-logind directly for
+the default login database, using D-Bus on static musl builds where `libsystemd`
+cannot be loaded at runtime.

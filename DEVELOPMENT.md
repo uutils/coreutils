@@ -156,10 +156,14 @@ Use the executable path printed by Cargo. This runs the otherwise ignored
 `sessions_match_loginctl` test as a system service, using sudo when needed.
 An empty utmp is mounted only inside that service's namespace. The test creates
 a temporary PAM/TTY session with systemd-run, compares session metadata with
-loginctl and the four utilities, then stops its session. The Logind CI jobs run
-this comparison on Ubuntu 22.04 and 24.04 to cover older and newer sd-login APIs.
-Older libraries cannot supply session timestamps or PIDs; the comparison checks
-that the utilities show `?` for these fields.
+loginctl and the four utilities, then stops its session. The Logind CI job runs
+this comparison on `ubuntu-latest`. When run against older sd-login libraries
+that cannot supply session timestamps or PIDs, the comparison checks that the
+utilities show `?` for these fields.
+For the static musl backend, build the same test for a static musl target, such
+as `--target x86_64-unknown-linux-musl`, and run it on a host with systemd-logind.
+The musl test expects D-Bus to supply timestamps and PIDs even on older logind
+releases.
 
 If you also want to test the core utilities:
 

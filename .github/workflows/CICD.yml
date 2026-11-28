@@ -43,11 +43,8 @@ jobs:
     - uses: EmbarkStudios/cargo-deny-action@v2
 
   logind:
-    name: Logind/${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
+    name: Logind
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -55,6 +52,7 @@ jobs:
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ env.RUST_MIN_SRV }}
+        targets: x86_64-unknown-linux-musl
     - uses: Swatinem/rust-cache@v2
     - name: Compare with systemd commands
       shell: bash
@@ -62,6 +60,14 @@ jobs:
         cargo test --locked --no-default-features --features test_logind --test tests --no-run --message-format=json > "$RUNNER_TEMP/logind-tests.json"
         logind_test_binary=$(jq -r 'select(.reason == "compiler-artifact" and .target.name == "tests" and .executable != null) | .executable' "$RUNNER_TEMP/logind-tests.json")
         bash util/test-logind.sh "$logind_test_binary"
+    - name: Test static musl logind
+      shell: bash
+      run: |
+        cargo test -p uucore --lib --locked --features systemd-logind --target x86_64-unknown-linux-musl
+        cargo test --locked --no-default-features --features test_logind --test tests --target x86_64-unknown-linux-musl --no-run --message-format=json > "$RUNNER_TEMP/logind-musl-tests.json"
+        logind_musl_test_binary=$(jq -r 'select(.reason == "compiler-artifact" and .target.name == "tests" and .executable != null) | .executable' "$RUNNER_TEMP/logind-musl-tests.json")
+        "$logind_musl_test_binary" --exact test_who::unavailable_bus_leaves_the_login_list_empty
+        bash util/test-logind.sh "$logind_musl_test_binary"
 
   style_deps:
     ## ToDO: [2021-11-10; rivy] 'Style/deps' needs more informative output and better integration of results into the GHA dashboard

@@ -18,7 +18,14 @@ use uutests::unwrap_or_return;
 use uutests::util::{TestScenario, expected_result, gnu_cmd_result};
 use uutests::util_name;
 
-#[cfg(all(target_os = "linux", target_env = "gnu", feature = "test_logind"))]
+#[cfg(all(
+    target_os = "linux",
+    any(
+        target_env = "gnu",
+        all(target_env = "musl", target_feature = "crt-static")
+    ),
+    feature = "test_logind"
+))]
 mod logind {
     use std::collections::HashMap;
     use std::process::{Child, Command, Stdio};
@@ -147,7 +154,8 @@ mod logind {
         assert_eq!(&record.user, name);
         let version = systemd("systemctl", &["--version"]);
         let version: u32 = version.split_whitespace().nth(1).unwrap().parse().unwrap();
-        let has_metadata = version >= 254;
+        // The D-Bus properties also exist on logind versions older than 254.
+        let has_metadata = cfg!(target_env = "musl") || version >= 254;
         assert_eq!(record.try_login_time_offset().is_some(), has_metadata);
         assert_eq!(record.pid, if has_metadata { pid } else { 0 });
         let displayed = if let Some(timestamp) = record.try_login_time_offset() {
@@ -205,15 +213,24 @@ mod logind {
             .succeeds()
             .stdout_contains(format!("{users} user"));
 
+        check_utmp_handling(&ts, name, users);
+    }
+
+    fn check_utmp_handling(ts: &TestScenario, name: &str, users: usize) {
         let traditional = support::utmpx_record("traditional");
         let custom = ts.fixtures.plus("custom-utmp");
         std::fs::write(&custom, &traditional).unwrap();
+        let expected_custom = if cfg!(target_env = "musl") {
+            "\n# users=0\n"
+        } else {
+            "traditional\n# user=1\n"
+        };
         ts.ucmd()
             .arg("-q")
             .arg(&custom)
             .env("LC_ALL", "C")
             .succeeds()
-            .stdout_is("traditional\n# user=1\n");
+            .stdout_is(expected_custom);
         std::fs::write(&custom, []).unwrap();
         ts.ucmd()
             .arg("-q")
@@ -224,25 +241,61 @@ mod logind {
 
         // This file is bound inside the private test service's namespace.
         std::fs::write(uucore::utmpx::DEFAULT_FILE, &traditional).unwrap();
-        ts.ucmd()
-            .arg("-q")
-            .env("LC_ALL", "C")
-            .succeeds()
-            .stdout_is("traditional\n# user=1\n");
-        ts.ccmd("users").succeeds().stdout_is("traditional\n");
+        #[cfg(target_env = "gnu")]
+        {
+            let _ = (name, users);
+            ts.ucmd()
+                .arg("-q")
+                .env("LC_ALL", "C")
+                .succeeds()
+                .stdout_is("traditional\n# user=1\n");
+            ts.ccmd("users").succeeds().stdout_is("traditional\n");
+        }
+        #[cfg(target_env = "musl")]
+        {
+            ts.ucmd()
+                .arg("-q")
+                .env("LC_ALL", "C")
+                .succeeds()
+                .stdout_contains(format!("={users}"));
+            let names = ts.ccmd("users").succeeds().stdout_move_str();
+            assert!(names.split_whitespace().any(|user| user == name));
+            assert!(!names.split_whitespace().any(|user| user == "traditional"));
+        }
         std::fs::write(uucore::utmpx::DEFAULT_FILE, []).unwrap();
 
-        // A failed runtime load must quietly return to the traditional reader.
-        let invalid_library = tempfile::tempdir().unwrap();
-        std::fs::write(invalid_library.path().join("libsystemd.so.0"), b"invalid").unwrap();
-        ts.ucmd()
-            .arg("-q")
-            .env("LC_ALL", "C")
-            .env("LD_LIBRARY_PATH", invalid_library.path())
-            .succeeds()
-            .stdout_is("\n# users=0\n")
-            .no_stderr();
+        #[cfg(target_env = "gnu")]
+        {
+            // A failed runtime load must quietly return to the traditional reader.
+            let invalid_library = tempfile::tempdir().unwrap();
+            std::fs::write(invalid_library.path().join("libsystemd.so.0"), b"invalid").unwrap();
+            ts.ucmd()
+                .arg("-q")
+                .env("LC_ALL", "C")
+                .env("LD_LIBRARY_PATH", invalid_library.path())
+                .succeeds()
+                .stdout_is("\n# users=0\n")
+                .no_stderr();
+        }
     }
+}
+
+#[cfg(all(
+    target_os = "linux",
+    target_env = "musl",
+    target_feature = "crt-static"
+))]
+#[test]
+fn unavailable_bus_leaves_the_login_list_empty() {
+    let ts = TestScenario::new(util_name!());
+    let missing_bus = format!("unix:path={}", ts.fixtures.plus("missing-bus").display());
+    ts.ucmd()
+        .arg("-q")
+        .env("LC_ALL", "C")
+        .env("DBUS_SYSTEM_BUS_ADDRESS", missing_bus)
+        .succeeds()
+        .stdout_is("\n# users=0\n")
+        .no_stderr();
 }
 
 #[test]

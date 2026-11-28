@@ -14,6 +14,7 @@ uumain
 rlimit
 mkfifo
 logind
+dbus
 urandom
 uchild
 ello

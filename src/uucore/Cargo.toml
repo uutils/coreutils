@@ -125,6 +125,10 @@ time = { workspace = true, optional = true, features = [
 libloading = { workspace = true, optional = true }
 procfs = { workspace = true, optional = true }
 
+[target.'cfg(all(target_os = "linux", target_env = "musl"))'.dependencies]
+zbus = { workspace = true, optional = true }
+zruntime = { workspace = true, optional = true }
+
 [target.'cfg(windows)'.dependencies]
 wild = { workspace = true }
 windows-sys = { workspace = true, optional = true, default-features = false, features = [
@@ -243,7 +247,7 @@ openssl = ["dep:openssl"]
 update-control = ["parser"]
 utf8 = []
 utmpx = ["time", "time/macros", "libc", "dns-lookup"]
-systemd-logind = ["utmpx", "dep:libloading"]
+systemd-logind = ["utmpx", "dep:libloading", "dep:zbus", "dep:zruntime"]
 version-cmp = []
 wide = []
 zeroed-alloc = ["dep:zerocopy"]
