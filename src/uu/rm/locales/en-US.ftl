@@ -49,6 +49,7 @@ rm-error-skipping-different-device = skipping {$file}, since it's on a different
 rm-error-and-preserve-root-all-in-effect = and --preserve-root=all is in effect
 rm-error-cannot-remove = cannot remove {$file}
 rm-error-cannot-remove-changed = cannot remove {$file}: File changed while removing
+rm-error-traversal-failed = traversal failed: {$file}: {$error}
 rm-error-may-not-abbreviate-no-preserve-root = you may not abbreviate the --no-preserve-root option
 rm-error-standard-output = standard output: {$error}
 
