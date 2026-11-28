@@ -837,6 +837,22 @@ struct Output<'a> {
     settings: &'a Settings,
 }
 
+/// Whether a failed `ftruncate` means the output cannot be truncated at
+/// all, rather than a real failure: on Unix, `ftruncate` fails with
+/// `EINVAL` for outputs such as `/dev/null` or a pipe.
+#[cfg(unix)]
+fn truncate_not_supported(e: &io::Error) -> bool {
+    e.raw_os_error() == Some(libc::EINVAL)
+}
+
+/// Whether a failed `ftruncate` means the output cannot be truncated at
+/// all, rather than a real failure: without Unix errnos, go by the
+/// error kind instead.
+#[cfg(not(unix))]
+fn truncate_not_supported(e: &io::Error) -> bool {
+    e.kind() == io::ErrorKind::InvalidInput
+}
+
 impl<'a> Output<'a> {
     /// Instantiate this struct with stdout as a destination.
     fn new_stdout(settings: &'a Settings) -> UResult<Self> {
@@ -849,30 +865,63 @@ impl<'a> Output<'a> {
 
     /// Instantiate this struct with the named file as a destination.
     fn new_file(filename: &Path, settings: &'a Settings) -> UResult<Self> {
-        fn open_dst(path: &Path, cflags: &OConvFlags, oflags: &OFlags) -> Result<File, io::Error> {
+        fn open_dst(
+            path: &Path,
+            cflags: &OConvFlags,
+            oflags: &OFlags,
+            truncate: bool,
+        ) -> Result<File, io::Error> {
             let mut opts = OpenOptions::new();
             opts.write(true)
                 .create(!cflags.nocreat)
                 .create_new(cflags.excl)
                 .append(oflags.append);
 
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            if let Some(libc_flags) = make_linux_oflags(oflags) {
+            // `OpenOptions` refuses `truncate` together with `append`, so pass
+            // `O_TRUNC` directly on Unix.
+            #[cfg(unix)]
+            {
+                #[allow(unused_mut)]
+                let mut libc_flags = if truncate { libc::O_TRUNC } else { 0 };
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                if let Some(flags) = make_linux_oflags(oflags) {
+                    libc_flags |= flags;
+                }
                 opts.custom_flags(libc_flags);
             }
+            #[cfg(not(unix))]
+            opts.truncate(truncate);
 
             opts.open(path)
         }
 
-        let dst = open_dst(filename, &settings.oconv, &settings.oflags).map_err_context(
-            || translate!("dd-error-failed-to-open", "path" => filename.quote()),
-        )?;
+        // Without a seek, truncate when opening so that no `ftruncate` is needed.
+        let truncate_on_open = !settings.oconv.notrunc
+            && settings.seek == 0
+            && (cfg!(unix) || !settings.oflags.append);
+        let dst = open_dst(
+            filename,
+            &settings.oconv,
+            &settings.oflags,
+            truncate_on_open,
+        )
+        .map_err_context(|| translate!("dd-error-failed-to-open", "path" => filename.quote()))?;
 
-        // Failures on special outputs such as `/dev/null` are ignored, as GNU does.
+        // If truncating to the seek offset fails, the error itself says
+        // whether the output can be truncated at all: `EINVAL` means it
+        // cannot (e.g. `/dev/null`, a pipe), so ignore that as GNU does.
+        // For any other error, stat the output as GNU does: if even
+        // that fails, report it and stop before writing anything;
+        // otherwise report the truncate failure, keep copying, and
+        // exit 1 in the end.
         if !settings.oconv.notrunc
+            && !truncate_on_open
             && let Err(e) = dst.set_len(settings.seek)
-            && dst.metadata().is_ok_and(|m| m.is_file())
+            && !truncate_not_supported(&e)
         {
+            dst.metadata().map_err_context(
+                || translate!("dd-error-cannot-fstat", "file" => filename.quote()),
+            )?;
             show_error!(
                 "{}",
                 e.map_err_context(|| translate!(
