@@ -497,6 +497,12 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
                 UIoError::from(stat_err),
                 translate!("ln-failed-to-access", "file" => source.quote()),
             )
+        } else if e.kind() == io::ErrorKind::AlreadyExists {
+            // Only the destination is at fault, so the source isn't named
+            LnError::IoContext(
+                UIoError::from(e),
+                translate!("ln-failed-to-create-hard-link-exists", "dest" => dst.quote()),
+            )
         } else {
             LnError::IoContext(
                 UIoError::from(e),
