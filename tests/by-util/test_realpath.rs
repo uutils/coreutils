@@ -17,6 +17,13 @@ use std::path::{MAIN_SEPARATOR, Path};
 
 static GIBBERISH: &str = "supercalifragilisticexpialidocious";
 
+// The ENOTDIR message differs between platforms: Unix uses strerror(ENOTDIR)
+// while Windows reports it as an invalid directory name.
+#[cfg(not(windows))]
+static NOT_A_DIRECTORY: &str = "Not a directory";
+#[cfg(windows)]
+static NOT_A_DIRECTORY: &str = "The directory name is invalid.";
+
 #[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_realpath_current_directory() {
@@ -686,4 +693,63 @@ fn test_realpath_canonicalize_vs_existing() {
             ucmd.fails();
         }
     }
+}
+
+#[uutests::wasi_ignore(AbsoluteSymlinkTargetsUnfollowable)]
+#[test]
+fn test_realpath_no_symlinks_existing_dangling_symlink_fails() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // An absolute target, which is what the WASI sandbox cannot follow.
+    let target = at.plus("missing");
+    at.symlink_file(target, "dangling");
+    ucmd.args(&["-s", "-e", "dangling"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("No such file or directory");
+}
+
+#[test]
+fn test_realpath_no_symlinks_parent_of_file_fails() {
+    // `..` may only leave a directory, so `file/..` is an error rather than
+    // the parent directory of `file`, whether or not `-e` is given.
+    for args in [&["-s", "-e"][..], &["-s"][..]] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("file");
+        ucmd.args(args)
+            .arg("file/..")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains(NOT_A_DIRECTORY);
+    }
+}
+
+#[test]
+fn test_realpath_no_symlinks_parent_of_missing_fails() {
+    // `..` also requires the component it leaves to exist, so a missing one
+    // cannot be skipped over.
+    for args in [&["-s", "-e"][..], &["-s"][..]] {
+        let (_at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(args)
+            .arg("missing/..")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("No such file or directory");
+    }
+}
+
+#[test]
+fn test_realpath_no_symlinks_parent_of_directory_succeeds() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    ucmd.args(&["-s", "-e", "dir/.."])
+        .succeeds()
+        .stdout_is(at.root_dir_resolved() + "\n");
+}
+
+#[test]
+fn test_realpath_no_symlinks_missing_allows_parent_of_file() {
+    // `-m` never inspects the filesystem, so `file/..` still resolves.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    ucmd.args(&["-s", "-m", "file/.."]).succeeds();
 }
