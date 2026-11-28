@@ -722,13 +722,23 @@ mod tests {
     fn test_french_localization() {
         use crate::locale::{get_message, setup_localization};
 
-        temp_env::with_var("LANG", Some("fr_FR.UTF-8"), || {
-            if setup_localization("test").is_ok() {
-                assert_eq!(get_message("common-error"), "erreur");
-                assert_eq!(get_message("common-usage"), "Utilisation");
-                assert_eq!(get_message("common-tip"), "conseil");
-            }
-        });
+        // LC_ALL, LC_MESSAGES and LANGUAGE take precedence over LANG, so clear
+        // them for the duration of the test (CI runners may set LC_ALL).
+        temp_env::with_vars(
+            [
+                ("LC_ALL", None),
+                ("LC_MESSAGES", None),
+                ("LANGUAGE", None),
+                ("LANG", Some("fr_FR.UTF-8")),
+            ],
+            || {
+                if setup_localization("test").is_ok() {
+                    assert_eq!(get_message("common-error"), "erreur");
+                    assert_eq!(get_message("common-usage"), "Utilisation");
+                    assert_eq!(get_message("common-tip"), "conseil");
+                }
+            },
+        );
     }
 }
 // spell-checker:enable
