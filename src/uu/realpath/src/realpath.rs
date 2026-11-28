@@ -11,7 +11,8 @@ use clap::{
 };
 use std::{
     ffi::{OsStr, OsString},
-    io::{Write, stdout},
+    fs,
+    io::{ErrorKind, Write, stdout},
     path::{Path, PathBuf},
 };
 use uucore::translate;
@@ -300,6 +301,13 @@ fn resolve_path(
 ) -> std::io::Result<()> {
     let abs = canonicalize(p, can_mode, resolve)?;
     if can_mode == MissingHandling::Normal {
+        // Only a missing final component is allowed: any other error looking
+        // it up, such as a name too long for the file system, is reported.
+        if let Err(e) = fs::symlink_metadata(&abs)
+            && e.kind() != ErrorKind::NotFound
+        {
+            return Err(e);
+        }
         let path_bytes = p.as_os_str().as_encoded_bytes();
         if path_bytes.ends_with(b"/.") || path_bytes.ends_with(b"/./") {
             abs.metadata()?; // raise no such file or directory error
