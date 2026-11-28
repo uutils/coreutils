@@ -123,13 +123,23 @@ pub fn uu_app() -> Command {
                 .short('f')
                 .long(OPT_CANONICALIZE)
                 .help(translate!("readlink-help-canonicalize"))
+                .overrides_with_all([
+                    OPT_CANONICALIZE,
+                    OPT_CANONICALIZE_EXISTING,
+                    OPT_CANONICALIZE_MISSING,
+                ])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_CANONICALIZE_EXISTING)
                 .short('e')
-                .long("canonicalize-existing")
+                .long(OPT_CANONICALIZE_EXISTING)
                 .help(translate!("readlink-help-canonicalize-existing"))
+                .overrides_with_all([
+                    OPT_CANONICALIZE,
+                    OPT_CANONICALIZE_EXISTING,
+                    OPT_CANONICALIZE_MISSING,
+                ])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -137,6 +147,11 @@ pub fn uu_app() -> Command {
                 .short('m')
                 .long(OPT_CANONICALIZE_MISSING)
                 .help(translate!("readlink-help-canonicalize-missing"))
+                .overrides_with_all([
+                    OPT_CANONICALIZE,
+                    OPT_CANONICALIZE_EXISTING,
+                    OPT_CANONICALIZE_MISSING,
+                ])
                 .action(ArgAction::SetTrue),
         )
         .arg(
