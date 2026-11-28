@@ -246,7 +246,15 @@ version-cmp = []
 wide = []
 zeroed-alloc = ["dep:zerocopy"]
 time = ["jiff"]
-uptime = ["jiff", "libc", "rustix/time", "utmp-classic", "utmpx", "windows-sys"]
+uptime = [
+  "jiff",
+  "libc",
+  "rustix/system",
+  "rustix/time",
+  "utmp-classic",
+  "utmpx",
+  "windows-sys",
+]
 benchmark = ["itertools", "tempfile"]
 
 [lints]

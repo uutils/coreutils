@@ -220,7 +220,7 @@ pub(crate) fn default_nusers() -> usize {
 ///
 /// Returns a `UResult` with the load average if successful, otherwise an [`UptimeError`].
 /// The load average is a tuple of three floating point numbers representing the 1-minute, 5-minute, and 15-minute load averages.
-#[cfg(not(any(target_arch = "wasm32", target_os = "android")))]
+#[cfg(not(any(target_arch = "wasm32", target_os = "android", target_os = "linux")))]
 pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
     use core::ffi::c_double;
     use libc::getloadavg;
@@ -236,9 +236,25 @@ pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
     }
 }
 
-#[cfg(any(target_arch = "wasm32", target_os = "android"))]
+#[cfg(any(target_os = "android", target_os = "linux"))]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "fn sig must match on all platforms"
+)]
+pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
+    let loads = rustix::system::sysinfo().loads;
+    let scale = (1 << libc::SI_LOAD_SHIFT) as f64;
+    Ok(loads.map(|l| l as f64 / scale).into())
+}
+
+#[cfg(target_arch = "wasm32")]
 pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
     Err(UptimeError::SystemLoadavg)?
+}
+
+#[test]
+fn test_get_load_average() {
+    assert!(matches!(get_loadavg(), Ok((0.0.., 0.0.., 0.0..))));
 }
 
 #[cfg(all(test, target_vendor = "apple"))]
