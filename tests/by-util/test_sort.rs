@@ -4226,6 +4226,30 @@ fn test_sort_locale_punctuation() {
     }
 }
 
+#[rstest]
+#[case(&[])]
+#[case(&["--parallel", "1", "-S", "1K"])]
+fn test_locale_collation_long_lines(#[case] args: &[&str]) {
+    // Moderately long lines still reuse collation keys.
+    // Interleave them with short lines and exercise case and accent ordering.
+    const LONG: usize = 70_000;
+
+    let long_e_acute = "é".repeat(LONG / 2);
+    let long_upper_a = "A".repeat(LONG);
+    let long_lower_a = "a".repeat(LONG);
+    let input = format!("f\n{long_upper_a}\nb\n{long_lower_a}\n{long_e_acute}\na\n");
+    // Locale order: a < aa… < AA… < b < éé… < f.
+    // Byte order would instead yield AA… < a < aa… < b < f < éé….
+    let expected = format!("a\n{long_lower_a}\n{long_upper_a}\nb\n{long_e_acute}\nf\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
 #[test]
 fn test_locale_empty_env_vars_hungarian_lc_collate() {
     // Regression test for issue #11136
