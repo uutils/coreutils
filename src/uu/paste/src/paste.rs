@@ -7,7 +7,7 @@ use clap::{Arg, ArgAction, Command};
 use std::cell::{OnceCell, RefCell};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Stdin, Write, stdin, stdout};
+use std::io::{self, BufRead, BufReader, BufWriter, IsTerminal, Read, Stdin, Write, stdin, stdout};
 use std::iter::Cycle;
 use std::path::Path;
 use std::rc::Rc;
@@ -117,7 +117,14 @@ fn paste(
 
     let line_ending_byte = u8::from(line_ending);
     let input_source_vec_len = input_source_vec.len();
-    let mut stdout = stdout().lock();
+    let stdout_lock = stdout().lock();
+    // The locked stdout is already line buffered: keep that on a terminal so
+    // interactive use shows each line at once, and buffer fully otherwise.
+    let mut stdout: Box<dyn Write> = if stdout_lock.is_terminal() {
+        Box::new(stdout_lock)
+    } else {
+        Box::new(BufWriter::new(stdout_lock))
+    };
 
     if !serial && input_source_vec_len == 1 {
         // With a single input source (no -s), `paste` output is identical to input,
@@ -131,8 +138,6 @@ fn paste(
             line_ending_byte,
         );
     }
-
-    let line_ending_byte_array_ref = &[line_ending_byte];
 
     let mut delimiter_state = DelimiterState::new(&unescaped_and_encoded_delimiters);
 
@@ -149,8 +154,8 @@ fn paste(
 
             delimiter_state.remove_trailing_delimiter(&mut output);
 
-            stdout.write_all(&output)?;
-            stdout.write_all(line_ending_byte_array_ref)?;
+            output.push(line_ending_byte);
+            stdout.write_all(&output).or_write_error()?;
 
             // In serial mode each input file is concatenated onto its own
             // output line, so the delimiter list has to restart from its first
@@ -189,8 +194,8 @@ fn paste(
 
             delimiter_state.remove_trailing_delimiter(&mut output);
 
-            stdout.write_all(&output)?;
-            stdout.write_all(line_ending_byte_array_ref)?;
+            output.push(line_ending_byte);
+            stdout.write_all(&output).or_write_error()?;
 
             // Quote:
             //     When the -s option is not specified:
@@ -200,6 +205,8 @@ fn paste(
             delimiter_state.reset_to_first_delimiter();
         }
     }
+
+    stdout.flush().or_write_error()?;
 
     Ok(())
 }
@@ -217,14 +224,27 @@ fn write_single_input_source(
         has_data = true;
         last_byte = buffer[bytes_read - 1];
 
-        writer.write_all(&buffer[..bytes_read])?;
+        writer.write_all(&buffer[..bytes_read]).or_write_error()?;
     }
 
     if has_data && last_byte != line_ending_byte {
-        writer.write_all(&[line_ending_byte])?;
+        writer.write_all(&[line_ending_byte]).or_write_error()?;
     }
 
+    writer.flush().or_write_error()?;
+
     Ok(())
+}
+
+/// Turns an output failure into the "write error" diagnostic.
+trait OrWriteError<T> {
+    fn or_write_error(self) -> UResult<T>;
+}
+
+impl<T> OrWriteError<T> for io::Result<T> {
+    fn or_write_error(self) -> UResult<T> {
+        self.map_err_context(|| translate!("common-write-error"))
+    }
 }
 
 fn parse_delimiters(delimiters: &OsString) -> UResult<Box<[Box<[u8]>]>> {
