@@ -816,9 +816,95 @@ pub fn uu_app() -> Command {
         )
 }
 
+/// Short options of `cp` that take a value, so the characters after them are part of
+/// that value rather than further flags in the same cluster.
+const SHORT_OPTIONS_WITH_VALUE: &[char] = &['S', 't'];
+
+/// Resolve a long option name the way clap reads `--infer-long-args` arguments: an
+/// exact match wins, otherwise a unique prefix of a long name or of one of its
+/// visible aliases.
+fn resolve_long_option(app: &Command, name: &str) -> Option<String> {
+    let mut exact = None;
+    let mut prefixed: Option<String> = None;
+    let mut ambiguous = false;
+
+    for arg in app.get_arguments() {
+        for candidate in arg.get_long_and_visible_aliases().unwrap_or_default() {
+            if candidate == name {
+                exact = Some(arg.get_id().as_str().to_owned());
+            } else if candidate.starts_with(name) {
+                let id = arg.get_id().as_str().to_owned();
+                match &prefixed {
+                    Some(previous) if previous != &id => ambiguous = true,
+                    Some(_) => {}
+                    None => prefixed = Some(id),
+                }
+            }
+        }
+    }
+
+    exact.or(if ambiguous { None } else { prefixed })
+}
+
+/// Whether the arguments ask for hard links and symbolic links at the same time.
+///
+/// Only the arguments up to `--` are inspected, and a scan of a short cluster stops at
+/// the first option that takes a value, so that `-t./backups`, `-S.s` or an operand
+/// like `-s.txt` are not mistaken for `--symbolic-link`. Long options are resolved the
+/// way clap resolves them, so `--sym` counts as `--symbolic-link`.
+fn has_both_link_modes(args: &[OsString]) -> bool {
+    let app = uu_app();
+    let mut link = false;
+    let mut symbolic_link = false;
+
+    for arg in args {
+        let arg = arg.to_string_lossy();
+        if arg == "--" {
+            break;
+        }
+        if let Some(name) = arg.strip_prefix("--") {
+            let name = name.split('=').next().unwrap_or(name);
+            if let Some(id) = resolve_long_option(&app, name) {
+                if id == options::LINK {
+                    link = true;
+                } else if id == options::SYMBOLIC_LINK {
+                    symbolic_link = true;
+                }
+            }
+        } else if let Some(flags) = arg.strip_prefix('-') {
+            for flag in flags.chars() {
+                if flag == 'l' {
+                    link = true;
+                } else if flag == 's' {
+                    symbolic_link = true;
+                }
+                if SHORT_OPTIONS_WITH_VALUE.contains(&flag) {
+                    break;
+                }
+            }
+        }
+    }
+
+    link && symbolic_link
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let args: Vec<OsString> = args.collect();
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args.clone())?;
+
+    // `-s`/`--symbolic-link` and `-l`/`--link` are mutually exclusive, and both belong
+    // to the mode group, so clap's overrides would let the later flag silently replace
+    // the earlier one instead of reporting a conflict. Detect the combination on the
+    // raw arguments instead, but follow clap's reading of them: characters after an
+    // option that takes a value (`-t./backups`, `-S.s`) are that value, and everything
+    // after `--` is an operand.
+    if has_both_link_modes(&args) {
+        return Err(UUsageError::new(
+            EXIT_ERR,
+            translate!("cp-error-cannot-make-both-hard-and-symbolic-links"),
+        ));
+    }
 
     let options = Options::from_matches(&matches)?;
 
