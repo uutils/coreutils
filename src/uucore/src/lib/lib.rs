@@ -7,6 +7,10 @@
 
 //! library ~ (core/bundler file)
 
+#[cfg(target_os = "linux")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 // #![deny(missing_docs)] //TODO: enable this
 #![cfg_attr(
     any(
