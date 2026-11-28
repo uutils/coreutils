@@ -3628,6 +3628,15 @@ mod debug_flag {
                     .stderr_contains(expected);
             }
         }
+
+        if is_x86_feature_detected!("avx") && is_x86_feature_detected!("pclmulqdq") {
+            new_ucmd!()
+                .arg("--debug")
+                .arg("lorem_ipsum.txt")
+                .env("GLIBC_TUNABLES", "glibc.cpu.hwcaps=-AVX")
+                .succeeds()
+                .stderr_contains("cksum: pclmul support not detected");
+        }
     }
 
     #[uutests::wasi_ignore(HostSystemStateDiffers)]
