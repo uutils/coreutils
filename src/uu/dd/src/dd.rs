@@ -27,6 +27,7 @@ use uucore::translate;
 
 use std::cmp;
 use std::env;
+#[cfg(not(unix))]
 use std::ffi::OsString;
 #[cfg(unix)]
 use std::fs::Metadata;
@@ -1546,6 +1547,7 @@ fn below_count_limit(count: Option<Num>, rstat: &ReadStat) -> bool {
 /// `"/dev/stdout"`. However, if this process were invoked as `dd >
 /// outfile`, then this function returns the canonicalized path to
 /// `outfile`, something like `"/path/to/outfile"`.
+#[cfg(not(unix))]
 fn stdout_canonicalized() -> OsString {
     match Path::new("/dev/stdout").canonicalize() {
         Ok(p) => p.into_os_string(),
@@ -1570,13 +1572,23 @@ fn stdout_canonicalized() -> OsString {
 ///
 /// then this function would return false.
 fn is_stdout_redirected_to_seekable_file() -> bool {
-    let s = stdout_canonicalized();
-    let p = Path::new(&s);
-    match File::open(p) {
-        Ok(mut f) => {
-            f.stream_position().is_ok() && f.seek(SeekFrom::End(0)).is_ok() && f.rewind().is_ok()
+    #[cfg(unix)]
+    {
+        // Seeking the fd works on write-only stdout; reopening the path needs read access.
+        rustix::fs::seek(io::stdout(), rustix::fs::SeekFrom::Current(0)).is_ok()
+    }
+    #[cfg(not(unix))]
+    {
+        let s = stdout_canonicalized();
+        let p = Path::new(&s);
+        match File::open(p) {
+            Ok(mut f) => {
+                f.stream_position().is_ok()
+                    && f.seek(SeekFrom::End(0)).is_ok()
+                    && f.rewind().is_ok()
+            }
+            Err(_) => false,
         }
-        Err(_) => false,
     }
 }
 
